@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #0F0F13;
+    --foreground: #ffffff;
+    --card: #1A1A24;
+    --card-foreground: #ffffff;
+    --popover: #1A1A24;
+    --popover-foreground: #ffffff;
+    --primary: #7C3AED;
+    --primary-foreground: #ffffff;
+    --secondary: #16161D;
+    --secondary-foreground: #ffffff;
+    --muted: #16161D;
+    --muted-foreground: #9CA3AF;
+    --accent: #21212F;
+    --accent-foreground: #ffffff;
+    --destructive: #EF4444;
+    --destructive-foreground: #ffffff;
+    --border: #1E1E2A;
+    --input: #1E1E2A;
+    --ring: #7C3AED;
+    --chart-1: #7C3AED;
+    --chart-2: #A78BFA;
+    --chart-3: #5B21B6;
+    --chart-4: #6D28D9;
+    --chart-5: #8B5CF6;
+    --sidebar: #16161D;
+    --sidebar-foreground: #ffffff;
+    --sidebar-primary: #7C3AED;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #21212F;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #1E1E2A;
+    --sidebar-ring: #7C3AED;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: #0F0F13;
+    --foreground: #ffffff;
+    --card: #1A1A24;
+    --card-foreground: #ffffff;
+    --popover: #1A1A24;
+    --popover-foreground: #ffffff;
+    --primary: #7C3AED;
+    --primary-foreground: #ffffff;
+    --secondary: #16161D;
+    --secondary-foreground: #ffffff;
+    --muted: #16161D;
+    --muted-foreground: #9CA3AF;
+    --accent: #21212F;
+    --accent-foreground: #ffffff;
+    --destructive: #EF4444;
+    --destructive-foreground: #ffffff;
+    --border: #1E1E2A;
+    --input: #1E1E2A;
+    --ring: #7C3AED;
+    --sidebar: #16161D;
+    --sidebar-foreground: #ffffff;
+    --sidebar-primary: #7C3AED;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #21212F;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #1E1E2A;
+    --sidebar-ring: #7C3AED;
+  }
+
+  * {
+    border-color: var(--border);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--muted);
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: Inter, ui-sans-serif, sans-serif;
+  }
+}

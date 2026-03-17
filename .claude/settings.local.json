@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(rm -rf node_modules/.cache)",
+      "Bash(npm install:*)",
+      "Bash(npx next:*)",
+      "Bash(npm -v)",
+      "Bash(command -v nvm)",
+      "Read(//Users/RobertoLino/.nvm/**)",
+      "Bash(rm -rf .next)",
+      "Bash(grep '\"\"type\"\"' package.json)",
+      "Bash(npm uninstall:*)",
+      "Bash(node -e \"require\\(''''./node_modules/next/dist/cli/next-dev.js''''\\)\")",
+      "Bash(lsof -ti:3000)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e \":*)",
+      "Bash(pkill -f 'next dev')",
+      "Bash(lsof -ti:3000,3001,3002)",
+      "Bash(xargs kill:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(node -e \"const pkg = require\\(''./node_modules/tailwindcss/package.json''\\); console.log\\(''tailwindcss version:'', pkg.version\\)\")"
+    ]
+  }
+}
