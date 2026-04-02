@@ -33,3 +33,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# iCloud Drive / Next.js cache workaround
+/.next.nosync/
+.next
+
+# Claude Code local settings (may contain secrets)
+.claude/
