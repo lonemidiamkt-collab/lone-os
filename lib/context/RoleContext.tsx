@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { supabase } from "@/lib/supabase/client";
 import type { Role } from "@/lib/types";
 
 export interface UserProfile {
@@ -8,17 +9,20 @@ export interface UserProfile {
   name: string;
   role: Role;
   initials: string;
-  color: string; // tailwind text color class
+  color: string;
+  email: string;
+  teamMemberId?: string; // UUID from team_members table
 }
 
+// Hardcoded profiles for the login dropdown (emails match seed.sql)
 export const USER_PROFILES: UserProfile[] = [
-  { id: "admin",    name: "Admin CEO",       role: "admin",    initials: "AC", color: "text-purple-400" },
-  { id: "manager",  name: "Gerente Ops",     role: "manager",  initials: "GO", color: "text-blue-400" },
-  { id: "ana",      name: "Ana Lima",        role: "traffic",  initials: "AL", color: "text-green-400" },
-  { id: "pedro",    name: "Pedro Alves",     role: "traffic",  initials: "PA", color: "text-green-400" },
-  { id: "carlos",   name: "Carlos Melo",     role: "social",   initials: "CM", color: "text-pink-400" },
-  { id: "mariana",  name: "Mariana Costa",   role: "social",   initials: "MC", color: "text-pink-400" },
-  { id: "rafael",   name: "Rafael Designer", role: "designer", initials: "RD", color: "text-yellow-400" },
+  { id: "admin",   name: "Admin CEO",       role: "admin",    initials: "AC", color: "text-[#0a34f5]", email: "admin@loneos.com" },
+  { id: "manager", name: "Gerente Ops",     role: "manager",  initials: "GO", color: "text-[#0a34f5]", email: "gerente@loneos.com" },
+  { id: "ana",     name: "Ana Lima",        role: "traffic",  initials: "AL", color: "text-[#0a34f5]", email: "ana@loneos.com" },
+  { id: "pedro",   name: "Pedro Alves",     role: "traffic",  initials: "PA", color: "text-[#0a34f5]", email: "pedro@loneos.com" },
+  { id: "carlos",  name: "Carlos Melo",     role: "social",   initials: "CM", color: "text-[#3b6ff5]", email: "carlos@loneos.com" },
+  { id: "mariana", name: "Mariana Costa",   role: "social",   initials: "MC", color: "text-[#3b6ff5]", email: "mariana@loneos.com" },
+  { id: "rafael",  name: "Rafael Designer", role: "designer", initials: "RD", color: "text-[#3b6ff5]", email: "rafael@loneos.com" },
 ];
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -34,10 +38,13 @@ interface RoleContextValue {
   currentUser: string;
   currentProfile: UserProfile;
   setProfile: (profile: UserProfile) => void;
-  // keep setRole/setCurrentUser for backward compat
   setRole: (role: Role) => void;
   setCurrentUser: (name: string) => void;
   roleLabel: string;
+  isAuthenticated: boolean;
+  hydrated: boolean;
+  login: (userId: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
 }
 
 const DEFAULT_PROFILE = USER_PROFILES[0];
@@ -50,25 +57,229 @@ const RoleContext = createContext<RoleContextValue>({
   setRole: () => {},
   setCurrentUser: () => {},
   roleLabel: "CEO",
+  isAuthenticated: false,
+  hydrated: false,
+  login: async () => false,
+  logout: async () => {},
 });
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [currentProfile, setCurrentProfileState] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
-  const setProfile = (profile: UserProfile) => {
+  // Track if Supabase is reachable (fallback to local auth if not)
+  const [supabaseAvailable, setSupabaseAvailable] = useState<boolean | null>(null);
+
+  // Restore session from Supabase or sessionStorage on mount
+  useEffect(() => {
+    let mounted = true;
+    let subscription: { unsubscribe: () => void } | null = null;
+
+    async function restoreSession() {
+      // 1. Check sessionStorage for local (fallback) auth first — instant restore
+      try {
+        const localSession = sessionStorage.getItem("lone_local_session");
+        if (localSession) {
+          const profile = USER_PROFILES.find((p) => p.id === localSession);
+          if (profile && mounted) {
+            setCurrentProfileState(profile);
+            setIsAuthenticated(true);
+            setSupabaseAvailable(false);
+            setHydrated(true);
+            return; // skip Supabase entirely
+          }
+        }
+      } catch { /* sessionStorage not available */ }
+
+      // 2. Quick Supabase connectivity check with timeout
+      let isReachable = false;
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1200);
+        const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://localhost:54321"}/rest/v1/`, {
+          method: "HEAD",
+          signal: controller.signal,
+          headers: {
+            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+          },
+        });
+        clearTimeout(timeout);
+        isReachable = res.ok || res.status === 401 || res.status === 403;
+      } catch {
+        isReachable = false;
+      }
+
+      if (mounted) setSupabaseAvailable(isReachable);
+
+      if (isReachable) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user && mounted) {
+            const profile = USER_PROFILES.find(
+              (p) => p.email === session.user.email
+            );
+            if (profile) {
+              let teamMemberId: string | undefined;
+              try {
+                const { data: member } = await supabase
+                  .from("team_members")
+                  .select("id")
+                  .eq("auth_id", session.user.id)
+                  .single();
+                teamMemberId = member?.id ?? undefined;
+              } catch { /* DB query failed */ }
+
+              setCurrentProfileState({ ...profile, teamMemberId });
+              setIsAuthenticated(true);
+            }
+          }
+        } catch { /* session restore failed */ }
+
+        // Listen for auth state changes only when Supabase is reachable
+        try {
+          const { data } = supabase.auth.onAuthStateChange(
+            async (event, session) => {
+              if (!mounted) return;
+              if (event === "SIGNED_OUT") {
+                // Only reset if was previously authenticated to avoid loops
+                setIsAuthenticated((prev) => {
+                  if (prev) {
+                    setCurrentProfileState(DEFAULT_PROFILE);
+                    try { sessionStorage.removeItem("lone_local_session"); } catch {}
+                  }
+                  return false;
+                });
+              } else if (event === "SIGNED_IN" && session?.user) {
+                const profile = USER_PROFILES.find(
+                  (p) => p.email === session.user.email
+                );
+                if (profile) {
+                  let teamMemberId: string | undefined;
+                  try {
+                    const { data: member } = await supabase
+                      .from("team_members")
+                      .select("id")
+                      .eq("auth_id", session.user.id)
+                      .single();
+                    teamMemberId = member?.id ?? undefined;
+                  } catch { /* DB query failed */ }
+                  setCurrentProfileState({ ...profile, teamMemberId });
+                  setIsAuthenticated(true);
+                }
+              }
+            }
+          );
+          subscription = data.subscription;
+        } catch { /* onAuthStateChange failed */ }
+      }
+
+      if (mounted) setHydrated(true);
+    }
+
+    restoreSession();
+
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
+  }, []);
+
+  const setProfile = useCallback((profile: UserProfile) => {
     setCurrentProfileState(profile);
-  };
+  }, []);
 
-  // backward compat: setRole picks the first user with that role
-  const setRole = (role: Role) => {
+  const setRole = useCallback((role: Role) => {
     const found = USER_PROFILES.find((p) => p.role === role);
     if (found) setCurrentProfileState(found);
-  };
+  }, []);
 
-  const setCurrentUser = (name: string) => {
+  const setCurrentUser = useCallback((name: string) => {
     const found = USER_PROFILES.find((p) => p.name === name);
     if (found) setCurrentProfileState(found);
-  };
+  }, []);
+
+  const FALLBACK_PASSWORD = "1234";
+
+  const login = useCallback(async (userId: string, password: string): Promise<boolean> => {
+    const profile = USER_PROFILES.find((p) => p.id === userId);
+    if (!profile) return false;
+
+    // Try Supabase auth first — if it fails with network error, fall back to local
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: profile.email,
+        password,
+      });
+
+      if (!error && data.session) {
+        // Supabase auth succeeded
+        setSupabaseAvailable(true);
+
+        // Fetch team_member ID
+        let teamMemberId: string | undefined;
+        try {
+          const { data: member } = await supabase
+            .from("team_members")
+            .select("id")
+            .eq("auth_id", data.user.id)
+            .single();
+          teamMemberId = member?.id ?? undefined;
+        } catch {
+          // DB query failed, continue without teamMemberId
+        }
+
+        setCurrentProfileState({ ...profile, teamMemberId });
+        setIsAuthenticated(true);
+        return true;
+      }
+
+      // Determine if this is a network error (Supabase down) or an auth error (wrong password)
+      if (error) {
+        const msg = (error.message ?? "").toLowerCase();
+        // Only treat as "wrong password" if it's clearly an auth error
+        const isAuthError =
+          msg.includes("invalid login") ||
+          msg.includes("invalid password") ||
+          msg.includes("invalid credentials") ||
+          msg.includes("email not confirmed") ||
+          (error as any)?.status === 400;
+
+        if (isAuthError) {
+          setSupabaseAvailable(true);
+          return false;
+        }
+
+        // Everything else (rate limit, service unavailable, network) → fallback
+        const isDefinitelyReachable =
+          (error as any)?.status >= 400 && (error as any)?.status < 500;
+        if (isDefinitelyReachable) {
+          setSupabaseAvailable(true);
+          return false;
+        }
+      }
+    } catch {
+      // Network error — Supabase not running
+    }
+
+    // Fallback: local auth when Supabase is not reachable
+    setSupabaseAvailable(false);
+    if (password !== FALLBACK_PASSWORD) return false;
+
+    setCurrentProfileState(profile);
+    setIsAuthenticated(true);
+    try { sessionStorage.setItem("lone_local_session", profile.id); } catch {}
+    return true;
+  }, []);
+
+  const logout = useCallback(async () => {
+    if (supabaseAvailable) {
+      try { await supabase.auth.signOut(); } catch { /* ignore */ }
+    }
+    try { sessionStorage.removeItem("lone_local_session"); } catch {}
+    setIsAuthenticated(false);
+    setCurrentProfileState(DEFAULT_PROFILE);
+  }, [supabaseAvailable]);
 
   return (
     <RoleContext.Provider
@@ -80,6 +291,10 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         setRole,
         setCurrentUser,
         roleLabel: ROLE_LABELS[currentProfile.role],
+        isAuthenticated,
+        hydrated,
+        login,
+        logout,
       }}
     >
       {children}

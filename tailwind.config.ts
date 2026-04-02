@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  darkMode: "class",
+  // Dark-only, no toggle needed
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -10,6 +10,20 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        /* Override zinc palette → Cyber-Dark (Black & Blue) */
+        zinc: {
+          50:  "#f0f0f4",
+          100: "#dcdce4",
+          200: "#b0b0c0",
+          300: "#8a8a9e",
+          400: "#6a6a80",
+          500: "#4a4a5e",
+          600: "#333344",
+          700: "#222230",
+          800: "#141420",
+          900: "#0a0a10",
+          950: "#050508",
+        },
         background: "var(--background)",
         foreground: "var(--foreground)",
         card: {
@@ -58,11 +72,12 @@ const config: Config = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
-        xl: "calc(var(--radius) + 4px)",
-        "2xl": "calc(var(--radius) + 8px)",
+        xl: "1rem",
+        "2xl": "1.25rem",
+        "3xl": "1.5rem",
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "sans-serif"],
+        sans: ["Montserrat", "Inter", "ui-sans-serif", "sans-serif"],
       },
       animation: {
         "fade-in": "fadeIn 0.3s ease-out",

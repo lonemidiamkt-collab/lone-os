@@ -3,11 +3,13 @@
 import { useState, useRef } from "react";
 import {
   Upload, Calendar, FileText, User, Tag,
-  Save, ImageIcon,
+  Save, ImageIcon, Hash, AlignLeft, Globe,
+  Send, MessageSquare,
 } from "lucide-react";
 import { useAppState } from "@/lib/context/AppStateContext";
+import { useRole } from "@/lib/context/RoleContext";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
-import type { ContentCard } from "@/lib/types";
+import type { ContentCard, SocialPlatform } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -20,14 +22,39 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 
-const STATUS_OPTIONS: { value: ContentCard["status"]; label: string; color: string }[] = [
-  { value: "ideas", label: "Ideias", color: "bg-gray-400" },
-  { value: "script", label: "Roteiro", color: "bg-purple-400" },
-  { value: "in_production", label: "Em Produção", color: "bg-blue-400" },
-  { value: "approval", label: "Aprovação", color: "bg-yellow-400" },
-  { value: "scheduled", label: "Agendado", color: "bg-teal-400" },
-  { value: "published", label: "Publicado", color: "bg-green-400" },
+const PLATFORM_OPTIONS: { value: SocialPlatform; label: string; emoji: string }[] = [
+  { value: "instagram", label: "Instagram", emoji: "📸" },
+  { value: "tiktok",    label: "TikTok",    emoji: "🎵" },
+  { value: "linkedin",  label: "LinkedIn",  emoji: "💼" },
+  { value: "youtube",   label: "YouTube",   emoji: "▶️" },
+  { value: "facebook",  label: "Facebook",  emoji: "👥" },
 ];
+
+const STATUS_OPTIONS: { value: ContentCard["status"]; label: string; color: string }[] = [
+  { value: "ideas", label: "Ideias", color: "bg-zinc-500" },
+  { value: "script", label: "Roteiro", color: "bg-zinc-500" },
+  { value: "in_production", label: "Em Produção", color: "bg-primary" },
+  { value: "approval", label: "Aprovação", color: "bg-zinc-500" },
+  { value: "client_approval", label: "Aprovação Cliente", color: "bg-zinc-500" },
+  { value: "scheduled", label: "Agendado", color: "bg-zinc-500" },
+  { value: "published", label: "Publicado", color: "bg-primary" },
+];
+
+const ROLE_COLORS: Record<string, string> = {
+  admin: "text-[#0a34f5]",
+  manager: "text-[#0a34f5]",
+  traffic: "text-[#0a34f5]",
+  social: "text-[#0a34f5]",
+  designer: "text-[#3b6ff5]",
+};
+
+function timeAgo(iso: string): string {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return "agora";
+  if (diff < 3600) return `${Math.floor(diff / 60)}min`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+  return `${Math.floor(diff / 86400)}d`;
+}
 
 interface Props {
   card: ContentCard;
@@ -35,25 +62,49 @@ interface Props {
 }
 
 export default function ContentCardModal({ card, onClose }: Props) {
-  const { updateContentCard } = useAppState();
+  const { updateContentCard, addCardComment } = useAppState();
+  const { role, currentUser } = useRole();
   const [observations, setObservations] = useState(card.observations ?? "");
+  const [caption, setCaption] = useState(card.caption ?? "");
+  const [hashtags, setHashtags] = useState(card.hashtags ?? "");
+  const [platform, setPlatform] = useState<SocialPlatform | "">(card.platform ?? "");
   const [dueDate, setDueDate] = useState(card.dueDate ?? "");
   const [status, setStatus] = useState(card.status);
   const [imageUrl, setImageUrl] = useState(card.imageUrl ?? "");
   const [saved, setSaved] = useState(false);
+  const [commentText, setCommentText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const commentsEndRef = useRef<HTMLDivElement>(null);
+
+  const comments = card.comments ?? [];
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (imageUrl && imageUrl.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
     const url = URL.createObjectURL(file);
     setImageUrl(url);
   };
 
   const handleSave = () => {
-    updateContentCard(card.id, { observations, dueDate: dueDate || undefined, status, imageUrl: imageUrl || undefined });
+    updateContentCard(card.id, {
+      observations,
+      caption: caption || undefined,
+      hashtags: hashtags || undefined,
+      platform: (platform as SocialPlatform) || undefined,
+      dueDate: dueDate || undefined,
+      status,
+      imageUrl: imageUrl || undefined,
+    });
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+  };
+
+  const handleComment = () => {
+    if (!commentText.trim()) return;
+    addCardComment(card.id, currentUser, role, commentText.trim());
+    setCommentText("");
+    setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   };
 
   const currentStatus = STATUS_OPTIONS.find((s) => s.value === status);
@@ -130,6 +181,30 @@ export default function ContentCardModal({ card, onClose }: Props) {
               </div>
             </div>
 
+            {/* Platform */}
+            <div>
+              <Label className="flex items-center gap-1.5 mb-2">
+                <Globe size={12} />
+                Rede Social
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {PLATFORM_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setPlatform(platform === opt.value ? "" : opt.value)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      platform === opt.value
+                        ? "bg-primary/20 text-primary border border-primary/30"
+                        : "bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <span>{opt.emoji}</span>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Status selector */}
             <div>
               <Label className="block mb-2">Status</Label>
@@ -178,15 +253,98 @@ export default function ContentCardModal({ card, onClose }: Props) {
               </div>
             )}
 
+            {/* Caption */}
+            <div>
+              <Label className="flex items-center gap-1.5 mb-2">
+                <AlignLeft size={12} />
+                Legenda / Caption
+              </Label>
+              <Textarea
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                rows={3}
+                placeholder="Digite a legenda que será publicada..."
+              />
+            </div>
+
+            {/* Hashtags */}
+            <div>
+              <Label className="flex items-center gap-1.5 mb-2">
+                <Hash size={12} />
+                Hashtags
+              </Label>
+              <Textarea
+                value={hashtags}
+                onChange={(e) => setHashtags(e.target.value)}
+                rows={2}
+                placeholder="#marketing #socialmedia #agencia..."
+              />
+            </div>
+
             {/* Observations */}
             <div>
               <Label className="block mb-2">Observações / Notas</Label>
               <Textarea
                 value={observations}
                 onChange={(e) => setObservations(e.target.value)}
-                rows={4}
+                rows={3}
                 placeholder="Adicione observações, feedbacks, ajustes necessários..."
               />
+            </div>
+
+            {/* Comments Thread */}
+            <div className="pt-4 border-t border-border">
+              <Label className="flex items-center gap-1.5 mb-3">
+                <MessageSquare size={12} />
+                Discussão ({comments.length})
+              </Label>
+
+              {comments.length === 0 && (
+                <p className="text-xs text-zinc-600 mb-3">Nenhum comentário ainda. Inicie a discussão sobre este conteúdo.</p>
+              )}
+
+              {comments.length > 0 && (
+                <div className="space-y-2.5 mb-3 max-h-48 overflow-auto">
+                  {comments.map((cmt) => (
+                    <div key={cmt.id} className="flex gap-2.5">
+                      <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                        <span className={`text-[9px] font-bold ${ROLE_COLORS[cmt.role] ?? "text-primary"}`}>
+                          {cmt.author.split(" ").map((w) => w[0]).join("").slice(0, 2)}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-foreground">{cmt.author}</span>
+                          <span className="text-[10px] text-zinc-600">{timeAgo(cmt.createdAt)}</span>
+                        </div>
+                        <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">{cmt.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={commentsEndRef} />
+                </div>
+              )}
+
+              {/* Comment input */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleComment()}
+                  placeholder="Escreva um comentário..."
+                  className="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleComment}
+                  disabled={!commentText.trim()}
+                  className="shrink-0 px-3"
+                >
+                  <Send size={14} />
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -197,7 +355,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
           </Button>
           <Button
             onClick={handleSave}
-            className={`flex items-center gap-2 ${saved ? "bg-green-600 hover:bg-green-600" : ""}`}
+            className={`flex items-center gap-2 ${saved ? "bg-[#0a34f5] hover:bg-[#0a34f5]" : ""}`}
           >
             <Save size={14} />
             {saved ? "Salvo!" : "Salvar alterações"}

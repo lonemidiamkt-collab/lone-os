@@ -30,6 +30,7 @@ export interface Client {
   tags: string[];
   assignedTraffic: string;
   assignedSocial: string;
+  assignedDesigner: string;
   lastPostDate?: string;
   joinDate: string;
   paymentMethod: "pix" | "boleto" | "cartao" | "transferencia";
@@ -43,6 +44,11 @@ export interface Client {
   postsGoal?: number;
   lastKanbanActivity?: string; // ISO datetime
   campaignBriefing?: string;
+  // Fixed briefing — things that never change (brand colors, fonts, do's/don'ts)
+  fixedBriefing?: string;
+  // Meta Ads — linked ad account
+  metaAdAccountId?: string;
+  metaAdAccountName?: string;
 }
 
 export interface MoodEntry {
@@ -77,6 +83,8 @@ export interface Task {
   attachments?: string[];
 }
 
+export type SocialPlatform = "instagram" | "tiktok" | "linkedin" | "youtube" | "facebook";
+
 export interface ContentCard {
   id: string;
   title: string;
@@ -86,11 +94,47 @@ export interface ContentCard {
   status: "ideas" | "script" | "in_production" | "approval" | "client_approval" | "scheduled" | "published";
   priority: Priority;
   dueDate?: string;
+  dueTime?: string;       // "HH:mm" — posting time
   format: string;
+  platform?: SocialPlatform;
   briefing?: string;
+  caption?: string;
+  hashtags?: string;
   imageUrl?: string;
   observations?: string;
   trafficSuggestion?: string;
+  statusChangedAt?: string; // ISO datetime — tracks SLA per column
+  comments?: CardComment[];
+  designRequestId?: string; // links to DesignRequest for designer tracking
+  // Handoff tracking
+  designerDeliveredAt?: string; // ISO — when designer uploaded the art
+  designerDeliveredBy?: string; // designer name
+  socialConfirmedAt?: string;   // ISO — when social media confirmed receipt
+  socialConfirmedBy?: string;   // social media name
+  // Non-delivery tracking
+  nonDeliveryReason?: string;   // reason when card wasn't delivered on time
+  nonDeliveryReportedBy?: string;
+  nonDeliveryReportedAt?: string;
+  // Traffic request — when traffic manager requests content
+  requestedByTraffic?: string;     // traffic manager name
+  trafficRequestNote?: string;     // briefing/reason from traffic
+  trafficRequestAt?: string;       // ISO datetime
+  // Post verification — confirms scheduled post actually went live
+  scheduledAt?: string;            // ISO — when card moved to "scheduled"
+  publishVerifiedAt?: string;      // ISO — when social confirmed post is live
+  publishVerifiedBy?: string;      // who verified
+  publishVerifyChecks?: {          // checklist items
+    postLive: boolean;             // post está no ar
+    copyCorrect: boolean;          // copy/legenda correta
+  };
+}
+
+export interface CardComment {
+  id: string;
+  author: string;
+  role: Role;
+  text: string;
+  createdAt: string; // ISO
 }
 
 export interface DesignRequest {
@@ -107,15 +151,6 @@ export interface DesignRequest {
   deadline?: string;
 }
 
-export interface Activity {
-  id: string;
-  user: string;
-  action: string;
-  target: string;
-  timestamp: string;
-  type: "task" | "post" | "client" | "report";
-}
-
 export interface Notice {
   id: string;
   title: string;
@@ -123,6 +158,8 @@ export interface Notice {
   createdBy: string;
   createdAt: string;
   urgent: boolean;
+  scheduledAt?: string; // ISO — for alerts like "meeting at 14:00"
+  category?: "general" | "meeting" | "deadline" | "reminder";
 }
 
 export interface QuinzReport {
@@ -171,4 +208,237 @@ export interface OnboardingItem {
   completed: boolean;
   completedBy?: string;
   completedAt?: string;
+}
+
+// --- Client Access / Credentials (non-financial) ---
+
+export interface ClientAccess {
+  clientId: string;
+  instagramLogin?: string;
+  instagramPassword?: string;
+  facebookLogin?: string;
+  facebookPassword?: string;
+  tiktokLogin?: string;
+  tiktokPassword?: string;
+  linkedinLogin?: string;
+  linkedinPassword?: string;
+  youtubeLogin?: string;
+  youtubePassword?: string;
+  mlabsLogin?: string;
+  mlabsPassword?: string;
+  canvaLink?: string;
+  driveLink?: string;
+  otherNotes?: string;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+// --- Social team auth ---
+
+export interface SocialTeamMember {
+  id: string;
+  name: string;
+  password: string;
+}
+
+// --- Fase 3: New strategic features ---
+
+export interface SocialProofEntry {
+  id: string;
+  clientId: string;
+  metric1Label: string;
+  metric1Value: string;
+  metric2Label: string;
+  metric2Value: string;
+  metric3Label: string;
+  metric3Value: string;
+  period: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface CrisisNote {
+  id: string;
+  clientId: string;
+  note: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+// --- Traffic Monthly Reports ---
+
+export interface TrafficMonthlyReport {
+  id: string;
+  clientId: string;
+  clientName: string;
+  month: string; // "2026-01", "2026-02", etc.
+  createdBy: string;
+  createdAt: string;
+  // Core metrics
+  messages: number;        // mensagens / leads
+  messageCost: number;     // custo por mensagem/lead
+  impressions: number;     // visualizações/impressões
+  observations?: string;   // notas do gestor
+}
+
+// --- Traffic Routine Checks ---
+
+export interface TrafficRoutineCheck {
+  id: string;
+  clientId: string;
+  clientName: string;
+  date: string;            // "2026-03-21"
+  type: "support" | "report" | "feedback" | "analysis";
+  completedBy: string;
+  completedAt: string;
+  note?: string;
+}
+
+// --- Social Monthly Reports ---
+
+export interface SocialMonthlyReport {
+  id: string;
+  clientId: string;
+  clientName: string;
+  month: string;
+  createdBy: string;
+  createdAt: string;
+  postsPublished: number;
+  postsGoal: number;
+  reelsCount: number;
+  storiesCount: number;
+  reach: number;
+  impressions: number;
+  engagement: number;       // total interactions
+  engagementRate: number;   // %
+  followersGained: number;
+  followersLost: number;
+  topPost?: string;
+  observations?: string;
+}
+
+// --- Content Approval ---
+
+export interface ContentApproval {
+  id: string;
+  cardId: string;
+  status: "pending" | "approved" | "rejected";
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reason?: string;
+}
+
+// --- Social Media Monthly Delivery Report (auto-generated) ---
+
+export interface MonthlyDeliveryReport {
+  id: string;
+  clientId: string;
+  clientName: string;
+  socialMedia: string;       // who was responsible
+  month: string;             // "2026-01", "2026-02"
+  postsGoal: number;         // expected deliveries
+  postsDelivered: number;    // actual published count
+  completionRate: number;    // % (delivered/goal * 100)
+  cardsByStatus: {
+    published: number;
+    scheduled: number;
+    inProduction: number;
+    ideas: number;
+  };
+  formats: { format: string; count: number }[];  // breakdown by format
+  generatedAt: string;       // ISO when report was auto-generated
+}
+
+// --- Social Media Performance Score ---
+
+export type PerformanceLevel = "excellent" | "good" | "warning" | "critical";
+
+export interface SocialPerformanceScore {
+  socialMedia: string;
+  totalClients: number;
+  totalPostsGoal: number;
+  totalPostsDelivered: number;
+  overallRate: number;       // % across all clients
+  level: PerformanceLevel;   // excellent >=95, good >=80, warning >=70, critical <70
+  clientBreakdown: {
+    clientId: string;
+    clientName: string;
+    goal: number;
+    delivered: number;
+    rate: number;
+  }[];
+}
+
+// --- Notifications ---
+
+export type NotificationType = "sla" | "status" | "content" | "checkin" | "system";
+
+export interface AppNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  clientId?: string;
+  read: boolean;
+  createdAt: string; // ISO
+}
+
+// --- Ad Analytics (Meta Ads mock — Phase 1) ---
+
+export type AdObjective = "messages" | "traffic" | "conversions" | "reach" | "engagement" | "leads";
+export type AdStatus = "active" | "paused" | "completed" | "error";
+
+export interface AdAccount {
+  id: string;
+  clientId: string;
+  clientName: string;
+  platform: "meta" | "google";
+  accountId: string;
+  accountName: string;
+  currency: "BRL";
+}
+
+export interface AdCampaign {
+  id: string;
+  accountId: string;
+  clientId: string;
+  clientName: string;
+  name: string;
+  objective: AdObjective;
+  status: AdStatus;
+  dailyBudget: number;
+  totalBudget: number;
+  startDate: string;
+  endDate?: string;
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  conversions: number;
+  costPerConversion: number;
+  messages?: number;
+  costPerMessage?: number;
+  leads?: number;
+  costPerLead?: number;
+  // "result" = the primary KPI for this campaign's objective
+  results?: number;
+  costPerResult?: number;
+  frequency?: number;
+  dailyMetrics: AdDailyMetric[];
+  // Data quality flags
+  hasData?: boolean;          // false if API returned no insights
+  lastSyncAt?: string;        // ISO timestamp of when data was fetched
+}
+
+export interface AdDailyMetric {
+  date: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  messages?: number;
+  leads?: number;
 }

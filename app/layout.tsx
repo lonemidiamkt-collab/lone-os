@@ -12,12 +12,13 @@ const montserrat = Montserrat({
 export const metadata: Metadata = {
   title: "Lone OS",
   description: "Sistema de Gestão Operacional Interna",
+  icons: { icon: "/logo.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className="dark">
-      <body className={`${montserrat.variable} bg-background text-foreground`}>
+    <html lang="pt-BR">
+      <body className={`${montserrat.className} bg-background text-foreground`}>
         <AppShell>{children}</AppShell>
       </body>
     </html>

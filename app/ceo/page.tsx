@@ -1,47 +1,33 @@
 "use client";
 
 import Header from "@/components/Header";
-import { mockClients } from "@/lib/mockData";
-import { formatCurrency, getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel } from "@/lib/utils";
-import { Lock, Unlock, BarChart2, TrendingUp, TrendingDown, DollarSign, FileText, Eye, EyeOff, Shield } from "lucide-react";
-import { useState } from "react";
-
-// Mock quinzennial reports
-const mockQuinzReports = [
-  {
-    id: "qr1", clientId: "c1", clientName: "TechVision Soluções",
-    period: "01–15 Mar/2026", createdBy: "Ana Lima", createdAt: "2026-03-15",
-    communicationHealth: 4, clientEngagement: 5,
-    highlights: "Cliente muito satisfeito com os leads gerados pela campanha de Search. ROI de 4.2x no período.",
-    challenges: "Criativos estão saturando rapidamente, precisamos de novos assets.",
-    nextSteps: "Criar 5 novos criativos em vídeo e testar novas audiências no Meta.",
-  },
-  {
-    id: "qr2", clientId: "c4", clientName: "Fitness Power Academia",
-    period: "01–15 Mar/2026", createdBy: "Pedro Alves", createdAt: "2026-03-15",
-    communicationHealth: 2, clientEngagement: 1,
-    highlights: "Nenhum resultado significativo a destacar no período.",
-    challenges: "CPA está 3x acima do meta. Cliente ameaçou cancelar. Budget reduzido sem aviso.",
-    nextSteps: "Reunião de alinhamento urgente. Proposta de reestruturação completa da estratégia.",
-  },
-  {
-    id: "qr3", clientId: "c3", clientName: "LuxHome Imóveis",
-    period: "01–15 Mar/2026", createdBy: "Carlos Melo", createdAt: "2026-03-15",
-    communicationHealth: 5, clientEngagement: 4,
-    highlights: "3 imóveis vendidos com atribuição direta às campanhas. Ticket médio de R$850k.",
-    challenges: "Aprovação de artes demora muito por parte do cliente.",
-    nextSteps: "Propor fluxo de aprovação mais ágil. Ampliar verba para campanhas de vídeo.",
-  },
-];
+import { useAppState } from "@/lib/context/AppStateContext";
+import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel } from "@/lib/utils";
+import { exportReportAsPdf } from "@/lib/exportPdf";
+import {
+  Lock, Unlock, BarChart2, TrendingUp, TrendingDown, FileText,
+  Eye, EyeOff, Shield, Download, Users, CheckCircle, Target,
+  Instagram, Palette, Zap, UserPlus, Trash2, Edit3, Save, X,
+  KeyRound, Mail, UserCog, AlertCircle, ChevronRight, ZapOff,
+  Calendar as CalendarIcon, ShieldCheck,
+} from "lucide-react";
+import { useState, useMemo, useCallback } from "react";
+import { USER_PROFILES } from "@/lib/context/RoleContext";
+import type { Role } from "@/lib/types";
+import { mockAdCampaigns } from "@/lib/mockData";
 
 const CORRECT_PIN = "1234";
 
 export default function CEOPage() {
+  const {
+    clients, tasks, contentCards, designRequests, trafficRoutineChecks, quinzReports,
+  } = useAppState();
+
   const [pin, setPin] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [pinError, setPinError] = useState(false);
   const [showPin, setShowPin] = useState(false);
-  const [activeSection, setActiveSection] = useState<"overview" | "reports" | "ltv">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "team" | "reports" | "ltv" | "manage">("overview");
 
   const handleUnlock = () => {
     if (pin === CORRECT_PIN) {
@@ -53,8 +39,187 @@ export default function CEOPage() {
     }
   };
 
-  const totalMRR = mockClients.reduce((sum, c) => sum + c.monthlyBudget, 0);
-  const avgTicket = totalMRR / mockClients.length;
+  // Employee delivery metrics
+  const teamMetrics = useMemo(() => {
+    const employees = USER_PROFILES.filter((p) => p.role !== "admin");
+
+    return employees.map((profile) => {
+      const memberTasks = tasks.filter((t) => t.assignedTo === profile.name);
+      const totalTasks = memberTasks.length;
+      const doneTasks = memberTasks.filter((t) => t.status === "done").length;
+      const pendingTasks = memberTasks.filter((t) => t.status === "pending").length;
+      const inProgressTasks = memberTasks.filter((t) => t.status === "in_progress").length;
+      const taskRate = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+      let published = 0;
+      let totalCards = 0;
+      let designDone = 0;
+      let designTotal = 0;
+      let supportDone = 0;
+      let supportTotal = 0;
+
+      if (profile.role === "social") {
+        const memberCards = contentCards.filter((c) => c.socialMedia === profile.name);
+        totalCards = memberCards.length;
+        published = memberCards.filter((c) => c.status === "published").length;
+      }
+
+      if (profile.role === "designer") {
+        designTotal = designRequests.length;
+        designDone = designRequests.filter((r) => r.status === "done").length;
+      }
+
+      if (profile.role === "traffic") {
+        const today = new Date().toISOString().slice(0, 10);
+        const memberClients = clients.filter((c) => c.assignedTraffic === profile.name && c.status !== "onboarding");
+        supportTotal = memberClients.length;
+        supportDone = trafficRoutineChecks.filter((c) => c.date === today && c.completedBy === profile.name && c.type === "support").length;
+      }
+
+      // Overall score: weighted average of task completion + role-specific
+      let overallScore = taskRate;
+      if (profile.role === "social" && totalCards > 0) {
+        const publishRate = Math.round((published / totalCards) * 100);
+        overallScore = Math.round((taskRate * 0.5) + (publishRate * 0.5));
+      }
+      if (profile.role === "traffic" && supportTotal > 0) {
+        const supportRate = Math.round((supportDone / supportTotal) * 100);
+        overallScore = Math.round((taskRate * 0.5) + (supportRate * 0.5));
+      }
+
+      const level = overallScore >= 80 ? "excellent" : overallScore >= 60 ? "good" : overallScore >= 40 ? "warning" : "critical";
+
+      return {
+        ...profile,
+        totalTasks,
+        doneTasks,
+        pendingTasks,
+        inProgressTasks,
+        taskRate,
+        published,
+        totalCards,
+        designDone,
+        designTotal,
+        supportDone,
+        supportTotal,
+        overallScore,
+        level,
+      };
+    });
+  }, [tasks, contentCards, designRequests, trafficRoutineChecks, clients]);
+
+  // ═══ TEAM MANAGEMENT STATE ═══
+  const ROLE_OPTIONS: { value: Role; label: string }[] = [
+    { value: "admin", label: "CEO / Admin" },
+    { value: "manager", label: "Gerente de Operações" },
+    { value: "traffic", label: "Gestor de Tráfego" },
+    { value: "social", label: "Social Media" },
+    { value: "designer", label: "Designer" },
+  ];
+
+  interface TeamMember {
+    id: string;
+    name: string;
+    email: string;
+    role: Role;
+    initials: string;
+    password: string;
+    active: boolean;
+    createdAt: string;
+  }
+
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() =>
+    USER_PROFILES.map((p) => ({
+      id: p.id,
+      name: p.name,
+      email: p.email,
+      role: p.role,
+      initials: p.initials,
+      password: "1234",
+      active: true,
+      createdAt: "2026-01-01",
+    }))
+  );
+
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // New member form
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newRole, setNewRole] = useState<Role>("social");
+  const [newPassword, setNewPassword] = useState("1234");
+
+  // Edit form
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editRole, setEditRole] = useState<Role>("social");
+  const [editPassword, setEditPassword] = useState("");
+
+  const generateInitials = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  const handleAddMember = useCallback(() => {
+    if (!newName.trim() || !newEmail.trim()) return;
+    const member: TeamMember = {
+      id: `member-${Date.now()}`,
+      name: newName.trim(),
+      email: newEmail.trim().toLowerCase(),
+      role: newRole,
+      initials: generateInitials(newName),
+      password: newPassword || "1234",
+      active: true,
+      createdAt: new Date().toISOString().slice(0, 10),
+    };
+    setTeamMembers((prev) => [...prev, member]);
+    setNewName("");
+    setNewEmail("");
+    setNewRole("social");
+    setNewPassword("1234");
+    setShowAddForm(false);
+  }, [newName, newEmail, newRole, newPassword]);
+
+  const handleStartEdit = useCallback((member: TeamMember) => {
+    setEditingId(member.id);
+    setEditName(member.name);
+    setEditEmail(member.email);
+    setEditRole(member.role);
+    setEditPassword(member.password);
+  }, []);
+
+  const handleSaveEdit = useCallback(() => {
+    if (!editingId || !editName.trim() || !editEmail.trim()) return;
+    setTeamMembers((prev) =>
+      prev.map((m) =>
+        m.id === editingId
+          ? {
+              ...m,
+              name: editName.trim(),
+              email: editEmail.trim().toLowerCase(),
+              role: editRole,
+              initials: generateInitials(editName),
+              password: editPassword || m.password,
+            }
+          : m
+      )
+    );
+    setEditingId(null);
+  }, [editingId, editName, editEmail, editRole, editPassword]);
+
+  const handleToggleActive = useCallback((id: string) => {
+    setTeamMembers((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, active: !m.active } : m))
+    );
+  }, []);
+
+  const handleDeleteMember = useCallback((id: string) => {
+    setTeamMembers((prev) => prev.filter((m) => m.id !== id));
+    setConfirmDeleteId(null);
+  }, []);
 
   if (!unlocked) {
     return (
@@ -62,17 +227,16 @@ export default function CEOPage() {
         <Header title="Área da Diretoria" subtitle="Acesso restrito" />
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="card max-w-sm w-full text-center space-y-6">
-            <div className="w-16 h-16 rounded-2xl bg-brand/20 flex items-center justify-center mx-auto">
-              <Lock size={28} className="text-brand-light" />
+            <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto">
+              <Lock size={28} className="text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Área Restrita</h2>
-              <p className="text-gray-400 text-sm mt-1">
+              <h2 className="text-xl font-bold text-foreground">Área Restrita</h2>
+              <p className="text-muted-foreground text-sm mt-1">
                 Esta área é exclusiva para a Diretoria/CEO.<br />
                 Insira o PIN de acesso para continuar.
               </p>
             </div>
-
             <div className="space-y-3">
               <div className="relative">
                 <input
@@ -82,30 +246,26 @@ export default function CEOPage() {
                   onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
                   placeholder="••••"
                   maxLength={8}
-                  className={`w-full bg-surface-border border ${
-                    pinError ? "border-red-500" : "border-surface-border"
-                  } rounded-xl px-4 py-3 text-center text-xl font-bold text-white tracking-[0.5em] placeholder-gray-600 outline-none focus:ring-2 focus:ring-brand`}
+                  className={`w-full bg-muted border ${
+                    pinError ? "border-red-500" : "border-border"
+                  } rounded-xl px-4 py-3 text-center text-xl font-bold text-foreground tracking-[0.5em] placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary`}
                 />
                 <button
                   onClick={() => setShowPin(!showPin)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-[#c0c0cc]"
                 >
                   {showPin ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-
               {pinError && (
-                <p className="text-red-400 text-sm">PIN incorreto. Tente novamente.</p>
+                <p className="text-red-500 text-sm">PIN incorreto. Tente novamente.</p>
               )}
-
               <button onClick={handleUnlock} className="btn-primary w-full py-3 text-base">
                 Acessar
               </button>
-
-              <p className="text-gray-600 text-xs">PIN padrão de demonstração: 1234</p>
+              <p className="text-muted-foreground/50 text-xs">PIN padrão de demonstração: 1234</p>
             </div>
-
-            <div className="flex items-center justify-center gap-2 text-gray-600 text-xs">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground/50 text-xs">
               <Shield size={12} />
               <span>Acesso monitorado e registrado</span>
             </div>
@@ -115,18 +275,32 @@ export default function CEOPage() {
     );
   }
 
+  const LEVEL_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
+    excellent: { color: "text-[#0a34f5]", bg: "bg-[#0a34f5]", label: "Excelente" },
+    good:      { color: "text-primary",     bg: "bg-primary",     label: "Bom" },
+    warning:   { color: "text-[#3b6ff5]",  bg: "bg-[#3b6ff5]",  label: "Atenção" },
+    critical:  { color: "text-red-500",     bg: "bg-red-500",     label: "Crítico" },
+  };
+
+  const ROLE_ICON: Record<string, typeof Users> = {
+    manager: Users,
+    traffic: TrendingUp,
+    social: Instagram,
+    designer: Palette,
+  };
+
   return (
     <div className="flex flex-col flex-1 overflow-auto">
       <Header title="Área da Diretoria" subtitle="Visão confidencial da operação" />
 
       <div className="p-6 space-y-6 animate-fade-in">
         {/* Unlock banner */}
-        <div className="bg-brand/10 border border-brand/30 rounded-xl px-4 py-3 flex items-center gap-3">
-          <Unlock size={16} className="text-brand-light" />
-          <span className="text-sm text-brand-light font-medium">Acesso CEO ativo</span>
+        <div className="bg-primary/10 border border-primary/30 rounded-xl px-4 py-3 flex items-center gap-3">
+          <Unlock size={16} className="text-primary" />
+          <span className="text-sm text-primary font-medium">Acesso CEO ativo</span>
           <button
             onClick={() => { setUnlocked(false); setPin(""); }}
-            className="ml-auto text-xs text-gray-400 hover:text-white transition-colors"
+            className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Sair da área restrita
           </button>
@@ -135,65 +309,93 @@ export default function CEOPage() {
         {/* KPIs */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="card">
-            <p className="text-xs text-gray-400">MRR Total</p>
-            <p className="text-2xl font-bold text-green-400 mt-1">{formatCurrency(totalMRR)}</p>
-            <p className="text-xs text-gray-500 mt-1">receita mensal recorrente</p>
+            <p className="text-xs text-muted-foreground">Total de Clientes</p>
+            <p className="text-2xl font-bold text-primary mt-1">{clients.length}</p>
+            <p className="text-xs text-muted-foreground mt-1">na carteira</p>
           </div>
           <div className="card">
-            <p className="text-xs text-gray-400">ARR Projetado</p>
-            <p className="text-2xl font-bold text-blue-400 mt-1">{formatCurrency(totalMRR * 12)}</p>
-            <p className="text-xs text-gray-500 mt-1">anualizado</p>
+            <p className="text-xs text-muted-foreground">Clientes Ativos</p>
+            <p className="text-2xl font-bold text-primary mt-1">{clients.filter((c) => c.status !== "onboarding").length}</p>
+            <p className="text-xs text-muted-foreground mt-1">em operação</p>
           </div>
           <div className="card">
-            <p className="text-xs text-gray-400">Ticket Médio</p>
-            <p className="text-2xl font-bold text-purple-400 mt-1">{formatCurrency(avgTicket)}</p>
-            <p className="text-xs text-gray-500 mt-1">por cliente</p>
+            <p className="text-xs text-muted-foreground">Bons Resultados</p>
+            <p className="text-2xl font-bold text-primary mt-1">{clients.filter((c) => c.status === "good").length}</p>
+            <p className="text-xs text-muted-foreground mt-1">clientes satisfeitos</p>
           </div>
           <div className="card">
-            <p className="text-xs text-gray-400">Risco de Churn</p>
-            <p className="text-2xl font-bold text-red-400 mt-1">
-              {mockClients.filter((c) => c.status === "at_risk").length} clientes
+            <p className="text-xs text-muted-foreground">Risco de Churn</p>
+            <p className="text-2xl font-bold text-red-500 mt-1">
+              {clients.filter((c) => c.status === "at_risk").length} clientes
             </p>
-            <p className="text-xs text-gray-500 mt-1">
-              {formatCurrency(mockClients.filter((c) => c.status === "at_risk").reduce((s, c) => s + c.monthlyBudget, 0))} em risco
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">precisam de atenção</p>
           </div>
         </div>
 
         {/* Tabs */}
         <div>
-          <div className="flex gap-1 mb-5 border-b border-surface-border">
-            {(["overview", "reports", "ltv"] as const).map((tab) => (
+          <div className="flex gap-1 mb-5 border-b border-border">
+            {(["overview", "team", "manage", "reports", "ltv"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveSection(tab)}
-                className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${
                   activeSection === tab
-                    ? "border-brand text-brand-light"
-                    : "border-transparent text-gray-400 hover:text-white"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {tab === "overview" ? "Visão Geral" : tab === "reports" ? "Relatórios Quinzenais" : "Análise LTV"}
+                {tab === "manage" && <UserCog size={14} />}
+                {tab === "overview" ? "Visão Geral" : tab === "team" ? "Desempenho" : tab === "manage" ? "Gestão da Equipe" : tab === "reports" ? "Relatórios" : "Retenção"}
               </button>
             ))}
           </div>
 
           {activeSection === "overview" && (
             <div className="space-y-4 animate-fade-in">
+              {/* Ad Rejection Alert */}
+              {mockAdCampaigns.filter((c) => c.status === "error").length > 0 && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 kpi-danger animate-fade-in">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-red-500/15 flex items-center justify-center shrink-0">
+                      <AlertCircle size={18} className="text-red-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="text-sm font-bold text-red-400">Anúncios com Erro / Rejeitados</h4>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/20 font-bold">
+                          {mockAdCampaigns.filter((c) => c.status === "error").length}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {mockAdCampaigns.filter((c) => c.status === "error").map((camp) => (
+                          <div key={camp.id} className="flex items-center gap-2 text-xs">
+                            <ZapOff size={12} className="text-red-400 shrink-0" />
+                            <span className="text-foreground font-medium">{camp.name}</span>
+                            <span className="text-muted-foreground">·</span>
+                            <span className="text-muted-foreground">{camp.clientName}</span>
+                            <span className="text-muted-foreground">· Gasto: R$ {camp.spend.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-surface-border">
-                      {["Cliente", "Investimento", "Status", "Atenção", "Tags", "Tráfego", "Social"].map((h) => (
-                        <th key={h} className="text-left py-2.5 px-3 text-gray-500 font-medium text-xs">{h}</th>
+                    <tr className="border-b border-border">
+                      {["Cliente", "Segmento", "Status", "Atenção", "Tags", "Tráfego", "Social"].map((h) => (
+                        <th key={h} className="text-left py-2.5 px-3 text-muted-foreground font-medium text-xs">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {mockClients.map((client) => (
-                      <tr key={client.id} className="border-b border-surface-border/50 hover:bg-surface-hover/50 transition-colors">
-                        <td className="py-3 px-3 font-medium text-white">{client.name}</td>
-                        <td className="py-3 px-3 font-semibold text-green-400">{formatCurrency(client.monthlyBudget)}</td>
+                    {clients.map((client) => (
+                      <tr key={client.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                        <td className="py-3 px-3 font-medium text-foreground">{client.name}</td>
+                        <td className="py-3 px-3 text-muted-foreground text-xs">{client.industry}</td>
                         <td className="py-3 px-3">
                           <span className={`badge border text-xs ${getStatusColor(client.status)}`}>
                             {getStatusLabel(client.status)}
@@ -213,63 +415,853 @@ export default function CEOPage() {
                             ))}
                           </div>
                         </td>
-                        <td className="py-3 px-3 text-gray-400 text-xs">{client.assignedTraffic}</td>
-                        <td className="py-3 px-3 text-gray-400 text-xs">{client.assignedSocial}</td>
+                        <td className="py-3 px-3 text-muted-foreground text-xs">{client.assignedTraffic}</td>
+                        <td className="py-3 px-3 text-muted-foreground text-xs">{client.assignedSocial}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* ── BOTTLENECK ANALYZER ── */}
+              <div className="space-y-4 mt-6">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Target size={16} className="text-primary" /> Análise de Gargalos
+                </h3>
+
+                {/* Pipeline funnel */}
+                {(() => {
+                  const pipeline = [
+                    { key: "ideas", label: "Ideias", count: contentCards.filter((c) => c.status === "ideas").length },
+                    { key: "script", label: "Roteiro", count: contentCards.filter((c) => c.status === "script").length },
+                    { key: "in_production", label: "Produção", count: contentCards.filter((c) => c.status === "in_production").length },
+                    { key: "approval", label: "Aprovação", count: contentCards.filter((c) => c.status === "approval").length },
+                    { key: "client_approval", label: "Aprov. Cliente", count: contentCards.filter((c) => c.status === "client_approval").length },
+                    { key: "scheduled", label: "Agendado", count: contentCards.filter((c) => c.status === "scheduled").length },
+                    { key: "published", label: "Publicado", count: contentCards.filter((c) => c.status === "published").length },
+                  ];
+                  const maxCount = Math.max(...pipeline.map((p) => p.count), 1);
+                  const bottleneck = pipeline.filter((p) => p.key !== "published" && p.key !== "scheduled").sort((a, b) => b.count - a.count)[0];
+
+                  const designPending = designRequests.filter((r) => r.status !== "done").length;
+                  const designDone = designRequests.filter((r) => r.status === "done").length;
+                  const cardsWithoutArt = contentCards.filter((c) => !c.imageUrl && ["in_production", "approval", "client_approval"].includes(c.status)).length;
+
+                  // SLA: cards stuck > 3 days
+                  const stuckCards = contentCards.filter((c) => {
+                    if (c.status === "published" || c.status === "scheduled") return false;
+                    if (!c.statusChangedAt) return false;
+                    const daysInColumn = (Date.now() - new Date(c.statusChangedAt).getTime()) / 86400000;
+                    return daysInColumn > 3;
+                  });
+
+                  // Workload per person
+                  const workload = [...new Set(contentCards.map((c) => c.socialMedia))].map((person) => {
+                    const cards = contentCards.filter((c) => c.socialMedia === person);
+                    const active = cards.filter((c) => c.status !== "published").length;
+                    const published = cards.filter((c) => c.status === "published").length;
+                    return { person, active, published, total: cards.length };
+                  }).sort((a, b) => b.active - a.active);
+
+                  return (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {/* Pipeline funnel */}
+                      <div className="card space-y-3">
+                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Pipeline de Conteúdo</p>
+                        {pipeline.map((stage) => (
+                          <div key={stage.key} className="flex items-center gap-3">
+                            <span className="text-xs text-muted-foreground w-24 text-right shrink-0">{stage.label}</span>
+                            <div className="flex-1 h-5 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  stage.key === bottleneck?.key ? "bg-red-500" : stage.key === "published" ? "bg-[#0a34f5]" : "bg-primary"
+                                }`}
+                                style={{ width: `${(stage.count / maxCount) * 100}%` }}
+                              />
+                            </div>
+                            <span className={`text-xs font-bold w-8 ${stage.key === bottleneck?.key ? "text-red-500" : "text-foreground"}`}>
+                              {stage.count}
+                            </span>
+                          </div>
+                        ))}
+                        {bottleneck && bottleneck.count > 0 && (
+                          <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mt-2">
+                            Gargalo: <strong>{bottleneck.count} cards</strong> acumulados em &ldquo;{bottleneck.label}&rdquo;
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Design vs. Content stats */}
+                      <div className="card space-y-3">
+                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Design vs. Demanda</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-muted rounded-lg p-3 text-center">
+                            <p className="text-2xl font-bold text-foreground">{designPending}</p>
+                            <p className="text-[10px] text-muted-foreground">Designs pendentes</p>
+                          </div>
+                          <div className="bg-muted rounded-lg p-3 text-center">
+                            <p className="text-2xl font-bold text-[#0a34f5]">{designDone}</p>
+                            <p className="text-[10px] text-muted-foreground">Designs concluídos</p>
+                          </div>
+                          <div className="bg-muted rounded-lg p-3 text-center">
+                            <p className="text-2xl font-bold text-[#3b6ff5]">{cardsWithoutArt}</p>
+                            <p className="text-[10px] text-muted-foreground">Cards sem arte</p>
+                          </div>
+                          <div className="bg-muted rounded-lg p-3 text-center">
+                            <p className={`text-2xl font-bold ${stuckCards.length > 0 ? "text-red-500" : "text-foreground"}`}>{stuckCards.length}</p>
+                            <p className="text-[10px] text-muted-foreground">Cards parados +3 dias</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Workload distribution */}
+                      <div className="card space-y-3 lg:col-span-2">
+                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Carga de Trabalho — Social Media</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {workload.map((w) => {
+                            const isOverloaded = w.active >= 6;
+                            const isIdle = w.active === 0;
+                            return (
+                              <div key={w.person} className={`bg-muted rounded-lg p-3 border ${
+                                isOverloaded ? "border-red-500/30" : isIdle ? "border-[#3b6ff5]/30" : "border-border"
+                              }`}>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-medium text-foreground">{w.person}</span>
+                                  {isOverloaded && <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded">Sobrecarregado</span>}
+                                  {isIdle && <span className="text-[10px] text-[#3b6ff5] bg-[#0a34f5]/10 px-2 py-0.5 rounded">Ocioso</span>}
+                                </div>
+                                <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                                  <span>{w.active} ativos</span>
+                                  <span>{w.published} publicados</span>
+                                  <span>{w.total} total</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* ── POST VERIFICATION METRICS + CALENDAR ── */}
+                      {(() => {
+                        const now = new Date();
+                        const year = now.getFullYear();
+                        const month = now.getMonth();
+                        const daysInMonth = new Date(year, month + 1, 0).getDate();
+                        const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0=Sun
+                        const today = now.getDate();
+                        const monthStr = now.toLocaleString("pt-BR", { month: "long" });
+
+                        // Build per-client per-day map
+                        const publishedCards = contentCards.filter((c) => c.status === "published");
+                        const scheduledCards = contentCards.filter((c) => c.status === "scheduled");
+                        const unverifiedScheduled = scheduledCards.filter((c) => !c.publishVerifiedAt);
+                        const verifiedCount = publishedCards.filter((c) => c.publishVerifiedAt).length;
+                        const publishedWithoutVerify = publishedCards.filter((c) => !c.publishVerifiedAt).length;
+
+                        // Per-client daily post map
+                        const clientPostDays = new Map<string, Set<number>>();
+                        clients.filter((c) => c.status !== "onboarding").forEach((client) => {
+                          const days = new Set<number>();
+                          const cards = publishedCards.filter((c) => c.clientId === client.id);
+                          cards.forEach((card) => {
+                            if (card.statusChangedAt) {
+                              const d = new Date(card.statusChangedAt);
+                              if (d.getMonth() === month && d.getFullYear() === year) {
+                                days.add(d.getDate());
+                              }
+                            }
+                          });
+                          // Also count scheduled
+                          scheduledCards.filter((c) => c.clientId === client.id).forEach((card) => {
+                            if (card.dueDate) {
+                              const d = new Date(card.dueDate);
+                              if (d.getMonth() === month && d.getFullYear() === year) {
+                                days.add(d.getDate());
+                              }
+                            }
+                          });
+                          clientPostDays.set(client.id, days);
+                        });
+
+                        // Global day map: any client posted
+                        const globalPostDays = new Set<number>();
+                        for (const days of clientPostDays.values()) {
+                          days.forEach((d) => globalPostDays.add(d));
+                        }
+
+                        const weekDays = ["D", "S", "T", "Q", "Q", "S", "S"];
+
+                        return (
+                          <>
+                            {/* Verification KPIs */}
+                            <div className="card space-y-3 lg:col-span-2">
+                              <div className="flex items-center gap-2 mb-1">
+                                <ShieldCheck size={14} className="text-primary" />
+                                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Verificação de Publicações — {monthStr}</p>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div className="bg-muted rounded-lg p-3 text-center">
+                                  <p className="text-2xl font-bold text-[#0a34f5]">{verifiedCount}</p>
+                                  <p className="text-[10px] text-muted-foreground">Verificados ✓</p>
+                                </div>
+                                <div className={`bg-muted rounded-lg p-3 text-center ${publishedWithoutVerify > 0 ? "border border-amber-500/30" : ""}`}>
+                                  <p className={`text-2xl font-bold ${publishedWithoutVerify > 0 ? "text-amber-400" : "text-foreground"}`}>{publishedWithoutVerify}</p>
+                                  <p className="text-[10px] text-muted-foreground">Sem verificação</p>
+                                </div>
+                                <div className={`bg-muted rounded-lg p-3 text-center ${unverifiedScheduled.length > 0 ? "border border-red-500/30" : ""}`}>
+                                  <p className={`text-2xl font-bold ${unverifiedScheduled.length > 0 ? "text-red-400" : "text-foreground"}`}>{unverifiedScheduled.length}</p>
+                                  <p className="text-[10px] text-muted-foreground">Agendados pendentes</p>
+                                </div>
+                                <div className="bg-muted rounded-lg p-3 text-center">
+                                  <p className="text-2xl font-bold text-foreground">{publishedCards.length + scheduledCards.length}</p>
+                                  <p className="text-[10px] text-muted-foreground">Total posts mês</p>
+                                </div>
+                              </div>
+
+                              {/* Per-member verification */}
+                              {(() => {
+                                const members = [...new Set(contentCards.map((c) => c.socialMedia))];
+                                return (
+                                  <div className="space-y-1.5 mt-2">
+                                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Por membro</p>
+                                    {members.map((name) => {
+                                      const cards = contentCards.filter((c) => c.socialMedia === name);
+                                      const pub = cards.filter((c) => c.status === "published").length;
+                                      const verified = cards.filter((c) => c.publishVerifiedAt).length;
+                                      const sched = cards.filter((c) => c.status === "scheduled" && !c.publishVerifiedAt).length;
+                                      const rate = pub > 0 ? Math.round((verified / pub) * 100) : 100;
+                                      return (
+                                        <div key={name} className="flex items-center gap-3 bg-muted/50 rounded-lg p-2.5">
+                                          <span className="text-xs font-medium text-foreground w-32 shrink-0">{name}</span>
+                                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                            <div className={`h-full rounded-full ${rate >= 80 ? "bg-[#0a34f5]" : rate >= 50 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${rate}%` }} />
+                                          </div>
+                                          <span className={`text-xs font-bold w-10 text-right ${rate >= 80 ? "text-[#0a34f5]" : rate >= 50 ? "text-amber-400" : "text-red-400"}`}>{rate}%</span>
+                                          <span className="text-[10px] text-muted-foreground w-20 text-right">{pub} pub · {sched} pend</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+
+                            {/* Post Calendar Grid — per client */}
+                            <div className="card space-y-3 lg:col-span-2">
+                              <div className="flex items-center gap-2 mb-1">
+                                <CalendarIcon size={14} className="text-primary" />
+                                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Calendário de Posts — {monthStr} {year}</p>
+                              </div>
+                              <div className="space-y-3">
+                                {clients.filter((c) => c.status !== "onboarding").map((client) => {
+                                  const days = clientPostDays.get(client.id) ?? new Set();
+                                  const totalDays = Math.min(today, daysInMonth);
+                                  const daysWithPost = [...days].filter((d) => d <= today).length;
+                                  const daysWithout = totalDays - daysWithPost;
+                                  return (
+                                    <div key={client.id}>
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-xs font-medium text-foreground">{client.name}</span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[10px] text-[#0a34f5] font-semibold">{daysWithPost}d com post</span>
+                                          <span className="text-[10px] text-red-400 font-semibold">{daysWithout}d sem post</span>
+                                        </div>
+                                      </div>
+                                      {/* Week header */}
+                                      <div className="grid grid-cols-7 gap-0.5 mb-0.5">
+                                        {weekDays.map((d, i) => (
+                                          <div key={i} className="text-[8px] text-muted-foreground text-center font-medium">{d}</div>
+                                        ))}
+                                      </div>
+                                      {/* Calendar grid */}
+                                      <div className="grid grid-cols-7 gap-0.5">
+                                        {/* Empty cells for offset */}
+                                        {Array.from({ length: firstDayOfWeek }).map((_, i) => (
+                                          <div key={`empty-${i}`} className="w-full aspect-square" />
+                                        ))}
+                                        {Array.from({ length: daysInMonth }).map((_, i) => {
+                                          const day = i + 1;
+                                          const hasPost = days.has(day);
+                                          const isFuture = day > today;
+                                          const isToday = day === today;
+                                          return (
+                                            <div
+                                              key={day}
+                                              title={`Dia ${day}: ${isFuture ? "futuro" : hasPost ? "com post" : "sem post"}`}
+                                              className={`w-full aspect-square rounded-sm flex items-center justify-center text-[8px] font-bold transition-all ${
+                                                isFuture
+                                                  ? "bg-muted/30 text-muted-foreground/30"
+                                                  : hasPost
+                                                    ? "bg-[#0a34f5]/20 text-[#0a34f5] border border-[#0a34f5]/30"
+                                                    : "bg-red-500/10 text-red-400 border border-red-500/20"
+                                              } ${isToday ? "ring-1 ring-foreground/30" : ""}`}
+                                            >
+                                              {day}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {/* Legend */}
+                              <div className="flex items-center gap-4 pt-2 border-t border-border">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-3 h-3 rounded-sm bg-[#0a34f5]/20 border border-[#0a34f5]/30" />
+                                  <span className="text-[10px] text-muted-foreground">Com post</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-3 h-3 rounded-sm bg-red-500/10 border border-red-500/20" />
+                                  <span className="text-[10px] text-muted-foreground">Sem post</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-3 h-3 rounded-sm bg-muted/30" />
+                                  <span className="text-[10px] text-muted-foreground">Futuro</span>
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+
+                      {/* Stuck cards detail */}
+                      {stuckCards.length > 0 && (
+                        <div className="card space-y-3 lg:col-span-2">
+                          <p className="text-xs text-red-400 font-medium uppercase tracking-wider">Cards Parados (+3 dias no mesmo status)</p>
+                          <div className="space-y-2">
+                            {stuckCards.slice(0, 8).map((card) => {
+                              const days = Math.round((Date.now() - new Date(card.statusChangedAt!).getTime()) / 86400000);
+                              return (
+                                <div key={card.id} className="flex items-center gap-3 bg-muted rounded-lg p-2.5">
+                                  <div className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-foreground truncate">{card.title}</p>
+                                    <p className="text-[10px] text-muted-foreground">{card.clientName} · {card.socialMedia}</p>
+                                  </div>
+                                  <span className="text-xs text-red-400 font-medium shrink-0">{days}d em &ldquo;{card.status}&rdquo;</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* ── TEAM PERFORMANCE TAB ── */}
+          {activeSection === "team" && (
+            <div className="space-y-6 animate-fade-in">
+              <p className="text-muted-foreground text-sm">
+                Medidor de entregas e desempenho de cada colaborador, baseado em tarefas concluídas e entregas específicas do cargo.
+              </p>
+
+              {/* Team overview cards */}
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+                <div className="bg-card border border-border rounded-xl p-4 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Tarefas</p>
+                  <p className="text-2xl font-bold text-foreground mt-1">{tasks.length}</p>
+                  <p className="text-xs text-muted-foreground">{tasks.filter((t) => t.status === "done").length} concluídas</p>
+                </div>
+                <div className="bg-card border border-border rounded-xl p-4 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Taxa Geral</p>
+                  <p className="text-2xl font-bold text-primary mt-1">
+                    {tasks.length > 0 ? Math.round((tasks.filter((t) => t.status === "done").length / tasks.length) * 100) : 0}%
+                  </p>
+                  <p className="text-xs text-muted-foreground">de conclusão</p>
+                </div>
+                <div className="bg-card border border-border rounded-xl p-4 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Posts Publicados</p>
+                  <p className="text-2xl font-bold text-primary mt-1">{contentCards.filter((c) => c.status === "published").length}</p>
+                  <p className="text-xs text-muted-foreground">este mês</p>
+                </div>
+                <div className="bg-card border border-border rounded-xl p-4 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Colaboradores</p>
+                  <p className="text-2xl font-bold text-foreground mt-1">{teamMetrics.length}</p>
+                  <p className="text-xs text-muted-foreground">ativos</p>
+                </div>
+              </div>
+
+              {/* Individual employee cards */}
+              <div className="space-y-4">
+                {teamMetrics.map((member) => {
+                  const levelConfig = LEVEL_CONFIG[member.level];
+                  const RoleIcon = ROLE_ICON[member.role] ?? Users;
+                  const roleLabel = member.role === "manager" ? "Gerente" : member.role === "traffic" ? "Tráfego" : member.role === "social" ? "Social" : "Designer";
+
+                  return (
+                    <div key={member.id} className="card border border-border">
+                      <div className="flex items-start gap-4">
+                        {/* Avatar + score ring */}
+                        <div className="relative shrink-0">
+                          <div className="w-16 h-16 relative">
+                            <svg className="w-16 h-16 -rotate-90" viewBox="0 0 100 100">
+                              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--muted)" strokeWidth="6" />
+                              <circle
+                                cx="50" cy="50" r="42" fill="none"
+                                stroke={levelConfig.bg === "bg-[#0a34f5]" ? "#0a34f5" : levelConfig.bg === "bg-primary" ? "var(--primary)" : levelConfig.bg === "bg-[#3b6ff5]" ? "#3b6ff5" : "#ef4444"}
+                                strokeWidth="6"
+                                strokeLinecap="round"
+                                strokeDasharray={`${member.overallScore * 2.64} 264`}
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className={`text-lg font-black ${levelConfig.color}`}>{member.overallScore}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h4 className="font-bold text-foreground">{member.name}</h4>
+                            <div className="flex items-center gap-1.5">
+                              <RoleIcon size={12} className="text-muted-foreground" />
+                              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{roleLabel}</span>
+                            </div>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${levelConfig.color} ${levelConfig.bg}/15 border border-current/20`}>
+                              {levelConfig.label}
+                            </span>
+                          </div>
+
+                          {/* Progress bars */}
+                          <div className="space-y-2.5">
+                            {/* Tasks */}
+                            <div>
+                              <div className="flex items-center justify-between text-xs mb-1">
+                                <span className="text-muted-foreground flex items-center gap-1.5">
+                                  <CheckCircle size={11} />
+                                  Tarefas
+                                </span>
+                                <span className="text-foreground font-medium">
+                                  {member.doneTasks}/{member.totalTasks} concluídas ({member.taskRate}%)
+                                </span>
+                              </div>
+                              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    member.taskRate >= 80 ? "bg-[#0a34f5]" : member.taskRate >= 50 ? "bg-[#3b6ff5]" : "bg-red-500"
+                                  }`}
+                                  style={{ width: `${member.taskRate}%` }}
+                                />
+                              </div>
+                              <div className="flex gap-3 mt-1">
+                                <span className="text-[10px] text-muted-foreground">{member.pendingTasks} pendentes</span>
+                                <span className="text-[10px] text-primary">{member.inProgressTasks} em progresso</span>
+                              </div>
+                            </div>
+
+                            {/* Role-specific metrics */}
+                            {member.role === "social" && (
+                              <div>
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span className="text-muted-foreground flex items-center gap-1.5">
+                                    <Instagram size={11} />
+                                    Conteúdo Publicado
+                                  </span>
+                                  <span className="text-foreground font-medium">
+                                    {member.published}/{member.totalCards} ({member.totalCards > 0 ? Math.round((member.published / member.totalCards) * 100) : 0}%)
+                                  </span>
+                                </div>
+                                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-[#0a34f5] transition-all"
+                                    style={{ width: `${member.totalCards > 0 ? Math.round((member.published / member.totalCards) * 100) : 0}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {member.role === "traffic" && (
+                              <div>
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span className="text-muted-foreground flex items-center gap-1.5">
+                                    <Zap size={11} />
+                                    Suporte Diário
+                                  </span>
+                                  <span className="text-foreground font-medium">
+                                    {member.supportDone}/{member.supportTotal} clientes atendidos
+                                  </span>
+                                </div>
+                                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all ${
+                                      member.supportDone >= member.supportTotal ? "bg-[#0a34f5]" : "bg-[#3b6ff5]"
+                                    }`}
+                                    style={{ width: `${member.supportTotal > 0 ? Math.round((member.supportDone / member.supportTotal) * 100) : 0}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {member.role === "designer" && (
+                              <div>
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span className="text-muted-foreground flex items-center gap-1.5">
+                                    <Palette size={11} />
+                                    Design Entregues
+                                  </span>
+                                  <span className="text-foreground font-medium">
+                                    {member.designDone}/{member.designTotal} pedidos
+                                  </span>
+                                </div>
+                                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-[#3b6ff5] transition-all"
+                                    style={{ width: `${member.designTotal > 0 ? Math.round((member.designDone / member.designTotal) * 100) : 0}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── TEAM MANAGEMENT TAB ── */}
+          {activeSection === "manage" && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-foreground">Gestão de Funcionários</h3>
+                  <p className="text-muted-foreground text-sm mt-0.5">Cadastre, edite ou remova membros da equipe. Gerencie acessos e funções.</p>
+                </div>
+                <button
+                  onClick={() => { setShowAddForm(true); setEditingId(null); }}
+                  className="btn-primary flex items-center gap-2 text-sm"
+                >
+                  <UserPlus size={15} />
+                  Novo Funcionário
+                </button>
+              </div>
+
+              {/* Summary cards */}
+              <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+                {ROLE_OPTIONS.map((r) => {
+                  const count = teamMembers.filter((m) => m.role === r.value && m.active).length;
+                  return (
+                    <div key={r.value} className="bg-card border border-border rounded-xl p-3 text-center">
+                      <p className="text-2xl font-bold text-foreground">{count}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{r.label}</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add new member form */}
+              {showAddForm && (
+                <div className="card border-primary/30 space-y-4 animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-foreground flex items-center gap-2">
+                      <UserPlus size={16} className="text-primary" />
+                      Cadastrar Novo Funcionário
+                    </h4>
+                    <button onClick={() => setShowAddForm(false)} className="text-muted-foreground hover:text-foreground">
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-muted-foreground font-medium block mb-1.5">Nome completo *</label>
+                      <input
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        placeholder="Ex: João Silva"
+                        className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground font-medium block mb-1.5">E-mail *</label>
+                      <input
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        placeholder="joao@loneos.com"
+                        type="email"
+                        className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground font-medium block mb-1.5">Função *</label>
+                      <select
+                        value={newRole}
+                        onChange={(e) => setNewRole(e.target.value as Role)}
+                        className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        {ROLE_OPTIONS.map((r) => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground font-medium block mb-1.5">Senha inicial</label>
+                      <input
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Senha padrão: 1234"
+                        className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => setShowAddForm(false)} className="btn-ghost text-sm px-4 py-2">
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleAddMember}
+                      disabled={!newName.trim() || !newEmail.trim()}
+                      className="btn-primary text-sm px-4 py-2 flex items-center gap-2 disabled:opacity-30"
+                    >
+                      <Save size={14} />
+                      Cadastrar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Members list */}
+              <div className="space-y-2">
+                {teamMembers.map((member) => {
+                  const isEditing = editingId === member.id;
+                  const isConfirmingDelete = confirmDeleteId === member.id;
+                  const roleLabel = ROLE_OPTIONS.find((r) => r.value === member.role)?.label ?? member.role;
+                  const RoleIcon = ROLE_ICON[member.role] ?? Users;
+
+                  if (isEditing) {
+                    return (
+                      <div key={member.id} className="card border-primary/30 space-y-4 animate-fade-in">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-semibold text-foreground flex items-center gap-2">
+                            <Edit3 size={14} className="text-primary" />
+                            Editando: {member.name}
+                          </h4>
+                          <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground">
+                            <X size={16} />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs text-muted-foreground font-medium block mb-1.5">Nome</label>
+                            <input
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground font-medium block mb-1.5">E-mail</label>
+                            <input
+                              value={editEmail}
+                              onChange={(e) => setEditEmail(e.target.value)}
+                              type="email"
+                              className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground font-medium block mb-1.5">Função</label>
+                            <select
+                              value={editRole}
+                              onChange={(e) => setEditRole(e.target.value as Role)}
+                              className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                            >
+                              {ROLE_OPTIONS.map((r) => (
+                                <option key={r.value} value={r.value}>{r.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground font-medium block mb-1.5">Nova senha (deixe vazio para manter)</label>
+                            <input
+                              value={editPassword}
+                              onChange={(e) => setEditPassword(e.target.value)}
+                              placeholder="••••"
+                              className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => setEditingId(null)} className="btn-ghost text-sm px-4 py-2">Cancelar</button>
+                          <button
+                            onClick={handleSaveEdit}
+                            disabled={!editName.trim() || !editEmail.trim()}
+                            className="btn-primary text-sm px-4 py-2 flex items-center gap-2 disabled:opacity-30"
+                          >
+                            <Save size={14} />
+                            Salvar Alterações
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={member.id}
+                      className={`card flex items-center gap-4 transition-opacity ${!member.active ? "opacity-50" : ""}`}
+                    >
+                      {/* Avatar */}
+                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                        member.active ? "bg-primary/15 border border-primary/20" : "bg-muted border border-border"
+                      }`}>
+                        <span className={`text-sm font-bold ${member.active ? "text-primary" : "text-muted-foreground"}`}>
+                          {member.initials}
+                        </span>
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-foreground text-sm">{member.name}</p>
+                          {!member.active && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 font-bold uppercase">Desativado</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                          <span className="flex items-center gap-1"><Mail size={10} /> {member.email}</span>
+                          <span className="flex items-center gap-1"><RoleIcon size={10} /> {roleLabel}</span>
+                          <span className="flex items-center gap-1"><KeyRound size={10} /> ••••</span>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => handleStartEdit(member)}
+                          className="p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                          title="Editar"
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleToggleActive(member.id)}
+                          className={`p-2 rounded-lg transition-colors ${
+                            member.active
+                              ? "text-muted-foreground hover:text-[#3b6ff5] hover:bg-[#0a34f5]/10"
+                              : "text-primary hover:bg-primary/10"
+                          }`}
+                          title={member.active ? "Desativar acesso" : "Reativar acesso"}
+                        >
+                          {member.active ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+
+                        {isConfirmingDelete ? (
+                          <div className="flex items-center gap-1 animate-fade-in">
+                            <span className="text-xs text-red-400 mr-1">Confirmar?</span>
+                            <button
+                              onClick={() => handleDeleteMember(member.id)}
+                              className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors text-xs font-medium"
+                            >
+                              Sim
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors text-xs"
+                            >
+                              Não
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDeleteId(member.id)}
+                            className="p-2 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            title="Remover"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Info note */}
+              <div className="flex items-start gap-3 bg-[#0a34f5]/5 border border-[#0a34f5]/15 rounded-xl px-4 py-3">
+                <Shield size={16} className="text-primary mt-0.5 shrink-0" />
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p><strong className="text-foreground">Nota sobre persistência:</strong> Alterações feitas aqui são salvas na sessão atual. Com Supabase ativo, os dados persistem no banco de dados.</p>
+                  <p>Para alterar a senha de um funcionário no Supabase, use a aba de edição acima ou acesse o painel do Supabase diretamente.</p>
+                </div>
               </div>
             </div>
           )}
 
           {activeSection === "reports" && (
             <div className="space-y-4 animate-fade-in">
-              <p className="text-gray-400 text-sm">Relatórios quinzenais preenchidos pela equipe. Visão exclusiva da diretoria.</p>
-              {mockQuinzReports.map((report) => {
+              <p className="text-muted-foreground text-sm">Relatórios quinzenais preenchidos pela equipe. Visão exclusiva da diretoria.</p>
+              {quinzReports.map((report) => {
                 const isGood = report.communicationHealth >= 4;
                 const isBad = report.communicationHealth <= 2;
                 return (
-                  <div key={report.id} className={`card border ${isBad ? "border-red-500/30" : isGood ? "border-green-500/20" : "border-surface-border"}`}>
+                  <div key={report.id} className={`card border ${isBad ? "border-red-500/20" : isGood ? "border-primary/20" : "border-border"}`}>
                     <div className="flex items-start justify-between gap-4 mb-4">
                       <div>
-                        <h4 className="font-semibold text-white">{report.clientName}</h4>
-                        <p className="text-xs text-gray-400 mt-0.5">
+                        <h4 className="font-semibold text-foreground">{report.clientName}</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           Período: {report.period} · por {report.createdBy}
                         </p>
                       </div>
-                      <div className="flex gap-4 text-center">
+                      <div className="flex items-start gap-4 text-center">
+                        <button
+                          onClick={() => exportReportAsPdf({
+                            title: "Relatório Quinzenal",
+                            subtitle: report.period,
+                            clientName: report.clientName,
+                            period: report.period,
+                            createdBy: report.createdBy,
+                            createdAt: report.createdAt,
+                            sections: [
+                              { label: "Saúde da Comunicação", value: report.communicationHealth, type: "score" },
+                              { label: "Engajamento do Cliente", value: report.clientEngagement, type: "score" },
+                              { label: "Destaques", value: report.highlights, type: "text" },
+                              { label: "Desafios", value: report.challenges, type: "text" },
+                              { label: "Próximos Passos", value: report.nextSteps, type: "text" },
+                            ],
+                          })}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                          title="Exportar PDF"
+                        >
+                          <Download size={14} />
+                        </button>
                         <div>
                           <div className="flex gap-1 justify-center">
                             {[1,2,3,4,5].map((s) => (
-                              <span key={s} className={`w-4 h-4 rounded-sm ${s <= report.communicationHealth ? (isBad ? "bg-red-400" : isGood ? "bg-green-400" : "bg-yellow-400") : "bg-surface-border"}`} />
+                              <span key={s} className={`w-4 h-4 rounded-sm ${s <= report.communicationHealth ? (isBad ? "bg-red-500" : isGood ? "bg-primary" : "bg-zinc-500") : "bg-muted"}`} />
                             ))}
                           </div>
-                          <p className="text-xs text-gray-500 mt-1">Saúde da Comunicação</p>
+                          <p className="text-xs text-muted-foreground mt-1">Saúde da Comunicação</p>
                         </div>
                         <div>
                           <div className="flex gap-1 justify-center">
                             {[1,2,3,4,5].map((s) => (
-                              <span key={s} className={`w-4 h-4 rounded-sm ${s <= report.clientEngagement ? "bg-blue-400" : "bg-surface-border"}`} />
+                              <span key={s} className={`w-4 h-4 rounded-sm ${s <= report.clientEngagement ? "bg-primary" : "bg-muted"}`} />
                             ))}
                           </div>
-                          <p className="text-xs text-gray-500 mt-1">Engajamento do Cliente</p>
+                          <p className="text-xs text-muted-foreground mt-1">Engajamento do Cliente</p>
                         </div>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-4 text-sm">
                       <div>
-                        <p className="text-xs text-green-400 font-medium mb-1">✅ Destaques</p>
-                        <p className="text-gray-300 leading-relaxed">{report.highlights}</p>
+                        <p className="text-xs text-primary font-medium mb-1">Destaques</p>
+                        <p className="text-[#c0c0cc] leading-relaxed">{report.highlights}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-red-400 font-medium mb-1">⚠️ Desafios</p>
-                        <p className="text-gray-300 leading-relaxed">{report.challenges}</p>
+                        <p className="text-xs text-red-500 font-medium mb-1">Desafios</p>
+                        <p className="text-[#c0c0cc] leading-relaxed">{report.challenges}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-blue-400 font-medium mb-1">🎯 Próximos Passos</p>
-                        <p className="text-gray-300 leading-relaxed">{report.nextSteps}</p>
+                        <p className="text-xs text-primary font-medium mb-1">Próximos Passos</p>
+                        <p className="text-[#c0c0cc] leading-relaxed">{report.nextSteps}</p>
                       </div>
                     </div>
                   </div>
@@ -280,42 +1272,45 @@ export default function CEOPage() {
 
           {activeSection === "ltv" && (
             <div className="space-y-4 animate-fade-in">
-              <p className="text-gray-400 text-sm">Análise de LTV e rentabilidade por cliente.</p>
+              <p className="text-muted-foreground text-sm">Tempo de retenção e saúde por cliente.</p>
               <div className="space-y-3">
-                {mockClients
-                  .sort((a, b) => b.monthlyBudget - a.monthlyBudget)
+                {clients
+                  .sort((a, b) => new Date(a.joinDate).getTime() - new Date(b.joinDate).getTime())
                   .map((client) => {
                     const monthsActive = Math.max(1, Math.floor(
                       (new Date().getTime() - new Date(client.joinDate).getTime()) / (1000 * 60 * 60 * 24 * 30)
                     ));
-                    const ltv = client.monthlyBudget * monthsActive;
-                    const percentage = (client.monthlyBudget / totalMRR) * 100;
+                    const maxMonths = Math.max(...clients.map((c) => Math.floor((new Date().getTime() - new Date(c.joinDate).getTime()) / (1000 * 60 * 60 * 24 * 30))));
+                    const barPct = Math.min(100, (monthsActive / maxMonths) * 100);
 
                     return (
                       <div key={client.id} className="card">
                         <div className="flex items-center gap-4 mb-3">
-                          <div className="w-9 h-9 rounded-xl bg-brand/20 flex items-center justify-center font-bold text-brand-light">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
+                            client.status === "at_risk" ? "bg-red-500/20 text-red-500" : "bg-primary/20 text-primary"
+                          }`}>
                             {client.name[0]}
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center justify-between">
-                              <span className="font-medium text-white">{client.name}</span>
-                              <span className="font-bold text-green-400">{formatCurrency(client.monthlyBudget)}/mês</span>
+                              <span className="font-medium text-foreground">{client.name}</span>
+                              <span className={`text-xs font-medium ${client.status === "at_risk" ? "text-red-500" : "text-primary"}`}>
+                                {getStatusLabel(client.status)}
+                              </span>
                             </div>
-                            <div className="flex items-center gap-4 text-xs text-gray-400 mt-0.5">
+                            <div className="flex items-center gap-4 text-xs text-muted-foreground mt-0.5">
                               <span>{monthsActive} meses ativo</span>
-                              <span>LTV acumulado: <span className="text-blue-400 font-medium">{formatCurrency(ltv)}</span></span>
-                              <span>{percentage.toFixed(1)}% do MRR</span>
+                              <span>Desde {client.joinDate}</span>
+                              <span>{client.industry}</span>
                             </div>
                           </div>
                         </div>
-                        <div className="h-2 bg-surface-border rounded-full overflow-hidden">
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${
-                              client.status === "at_risk" ? "bg-red-400" :
-                              client.status === "good" ? "bg-green-400" : "bg-brand"
+                              client.status === "at_risk" ? "bg-red-500" : "bg-primary"
                             }`}
-                            style={{ width: `${percentage}%` }}
+                            style={{ width: `${barPct}%` }}
                           />
                         </div>
                       </div>

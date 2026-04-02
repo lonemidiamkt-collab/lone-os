@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   Instagram, Link as LinkIcon, Smile,
   MessageCircle, Sparkles, Megaphone,
-  ChevronRight,
+  ChevronRight, Key, Palette,
 } from "lucide-react";
 import Link from "next/link";
 import { useAppState } from "@/lib/context/AppStateContext";
@@ -27,8 +27,8 @@ const HEALTH_CONFIG: Record<string, { label: string; icon: string; variant: "suc
 };
 
 const MOOD_CONFIG = {
-  happy:   { emoji: "😄", label: "Satisfeito", color: "text-green-400" },
-  neutral: { emoji: "😐", label: "Neutro",     color: "text-yellow-400" },
+  happy:   { emoji: "😄", label: "Satisfeito", color: "text-[#0a34f5]" },
+  neutral: { emoji: "😐", label: "Neutro",     color: "text-[#3b6ff5]" },
   angry:   { emoji: "😠", label: "Irritado",   color: "text-red-400" },
 };
 
@@ -45,7 +45,7 @@ interface Props {
 }
 
 export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCampaign, onOpenMood }: Props) {
-  const { clientChats, moodHistory, onboarding, timeline } = useAppState();
+  const { clientChats, moodHistory, onboarding, timeline, clientAccess, designRequests } = useAppState();
   const [activeTab, setActiveTab] = useState<"overview" | "history">("overview");
   const health = HEALTH_CONFIG[client.status] ?? HEALTH_CONFIG.good;
 
@@ -56,7 +56,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
   const postsNow = client.postsThisMonth ?? 0;
   const postsGoal = client.postsGoal ?? 12;
   const postsPct = Math.min(100, Math.round((postsNow / postsGoal) * 100));
-  const postsColor = postsPct >= 80 ? "bg-green-400" : postsPct >= 50 ? "bg-yellow-400" : "bg-red-400";
+  const postsColor = postsPct >= 80 ? "bg-[#0a34f5]" : postsPct >= 50 ? "bg-[#3b6ff5]" : "bg-red-400";
   const postsRemaining = postsGoal - postsNow;
 
   const obItems = onboarding[client.id] ?? [];
@@ -79,7 +79,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
               <span>{client.industry}</span>
-              {client.instagramUser && <span className="text-pink-400">{client.instagramUser}</span>}
+              {client.instagramUser && <span className="text-[#0a34f5]">{client.instagramUser}</span>}
               {client.toneOfVoice && <span>Tom: {TONE_LABELS[client.toneOfVoice]}</span>}
             </div>
           </div>
@@ -145,7 +145,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
                   {client.instagramUser && (
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">Instagram</span>
-                      <span className="text-pink-300 font-medium">{client.instagramUser}</span>
+                      <span className="text-[#3b6ff5] font-medium">{client.instagramUser}</span>
                     </div>
                   )}
                   {client.assignedSocial && (
@@ -156,7 +156,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
                   )}
                   {client.driveLink && (
                     <a href={client.driveLink} target="_blank" rel="noreferrer"
-                      className="flex items-center gap-1.5 text-xs text-blue-300 hover:text-blue-200 mt-1">
+                      className="flex items-center gap-1.5 text-xs text-[#3b6ff5] hover:text-[#3b6ff5] mt-1">
                       <LinkIcon size={11} />
                       Drive / Canva
                     </a>
@@ -164,17 +164,77 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
                 </div>
               </Card>
 
+              {/* Client access quick view */}
+              {(() => {
+                const access = clientAccess[client.id];
+                if (!access) return null;
+                const fields = [
+                  { key: "instagramLogin", label: "Instagram", icon: "📸" },
+                  { key: "facebookLogin", label: "Facebook", icon: "👥" },
+                  { key: "tiktokLogin", label: "TikTok", icon: "🎵" },
+                  { key: "mlabsLogin", label: "mLabs", icon: "📊" },
+                ].filter((f) => (access as unknown as Record<string, string | undefined>)[f.key]);
+                if (fields.length === 0) return null;
+                return (
+                  <Card className="p-4">
+                    <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <Key size={11} />
+                      Acessos Cadastrados
+                    </p>
+                    <div className="space-y-1.5">
+                      {fields.map((f) => (
+                        <div key={f.key} className="flex items-center gap-2 text-xs">
+                          <span>{f.icon}</span>
+                          <span className="text-muted-foreground">{f.label}</span>
+                          <span className="text-foreground font-medium">{(access as unknown as Record<string, string>)[f.key]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                );
+              })()}
+
+              {/* Designer requests for this client */}
+              {(() => {
+                const clientDRs = designRequests.filter((dr) => dr.clientId === client.id);
+                if (clientDRs.length === 0) return null;
+                return (
+                  <Card className="p-4">
+                    <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <Palette size={11} />
+                      Artes no Designer ({clientDRs.length})
+                    </p>
+                    <div className="space-y-1.5">
+                      {clientDRs.map((dr) => {
+                        const statusCfg = dr.status === "done"
+                          ? { label: "Pronta", color: "text-primary" }
+                          : dr.status === "in_progress"
+                          ? { label: "Produzindo", color: "text-zinc-400" }
+                          : { label: "Na fila", color: "text-zinc-500" };
+                        return (
+                          <div key={dr.id} className="flex items-center gap-2 text-xs">
+                            <span className={`w-1.5 h-1.5 rounded-full ${dr.status === "done" ? "bg-primary" : dr.status === "in_progress" ? "bg-zinc-400" : "bg-zinc-600"}`} />
+                            <span className="text-foreground flex-1 truncate">{dr.title}</span>
+                            <span className={statusCfg.color}>{statusCfg.label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                );
+              })()}
+
               {/* Onboarding progress (only if onboarding) */}
               {client.status === "onboarding" && obItems.length > 0 && (
-                <Card className="p-4 bg-blue-500/10 border-blue-500/20">
+                <Card className="p-4 bg-[#0a34f5]/10 border-[#0a34f5]/20">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-medium text-blue-400">Onboarding</p>
-                    <span className="text-xs font-bold text-blue-400">{obPct}%</span>
+                    <p className="text-xs font-medium text-[#0a34f5]">Onboarding</p>
+                    <span className="text-xs font-bold text-[#0a34f5]">{obPct}%</span>
                   </div>
                   <div className="h-2 bg-blue-500/20 rounded-full overflow-hidden mb-1">
                     <div className="h-full bg-blue-400 rounded-full transition-all" style={{ width: `${obPct}%` }} />
                   </div>
-                  <p className="text-xs text-blue-400/70">{obDone}/{obItems.length} etapas</p>
+                  <p className="text-xs text-[#0a34f5]/70">{obDone}/{obItems.length} etapas</p>
                 </Card>
               )}
 
@@ -205,7 +265,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
               <Card className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-medium text-muted-foreground">Posts do Mês</p>
-                  <span className={`text-lg font-bold ${postsPct >= 80 ? "text-green-400" : postsPct >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                  <span className={`text-lg font-bold ${postsPct >= 80 ? "text-[#0a34f5]" : postsPct >= 50 ? "text-[#3b6ff5]" : "text-red-400"}`}>
                     {postsNow}/{postsGoal}
                   </span>
                 </div>
@@ -217,7 +277,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
                     Faltam <span className="text-foreground font-medium">{postsRemaining} post{postsRemaining > 1 ? "s" : ""}</span> para completar o mês
                   </p>
                 ) : (
-                  <p className="text-xs text-green-400 font-medium">✓ Meta do mês atingida!</p>
+                  <p className="text-xs text-[#0a34f5] font-medium">✓ Meta do mês atingida!</p>
                 )}
               </Card>
 
@@ -269,7 +329,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
             Pautas IA
           </Button>
           <Button variant="ghost" size="sm" onClick={onOpenCampaign} className="flex items-center gap-1.5">
-            <Megaphone size={13} className="text-yellow-400" />
+            <Megaphone size={13} className="text-[#3b6ff5]" />
             Campanha IA
           </Button>
           <Button variant="ghost" size="sm" onClick={onOpenMood} className="flex items-center gap-1.5">
