@@ -147,14 +147,14 @@ export const mockClients: Client[] = [
 ];
 
 export const mockTasks: Task[] = [
-  { id: "t1", title: "Revisar campanhas Google Ads", clientId: "c1", clientName: "TechVision", assignedTo: "Ana Lima", role: "traffic", status: "in_progress", priority: "high", dueDate: "2026-03-16" },
-  { id: "t2", title: "Otimizar criativos Meta Ads", clientId: "c4", clientName: "Fitness Power", assignedTo: "Pedro Alves", role: "traffic", status: "pending", priority: "critical", dueDate: "2026-03-16" },
-  { id: "t3", title: "Configurar pixel de conversão", clientId: "c5", clientName: "Bella Vista", assignedTo: "Ana Lima", role: "traffic", status: "pending", priority: "medium", dueDate: "2026-03-17" },
-  { id: "t4", title: "Relatório mensal de performance", clientId: "c2", clientName: "Clínica Saúde+", assignedTo: "Pedro Alves", role: "traffic", status: "review", priority: "medium", dueDate: "2026-03-18" },
-  { id: "t5", title: "Criar reels para feed", clientId: "c3", clientName: "LuxHome", assignedTo: "Carlos Melo", role: "social", status: "in_progress", priority: "high", dueDate: "2026-03-16" },
-  { id: "t6", title: "Elaborar calendário de conteúdo", clientId: "c5", clientName: "Bella Vista", assignedTo: "Carlos Melo", role: "social", status: "pending", priority: "medium", dueDate: "2026-03-18" },
+  { id: "t1", title: "Revisar campanhas Google Ads", clientId: "c1", clientName: "TechVision", assignedTo: "Ana Lima", role: "traffic", status: "in_progress", priority: "high", startDate: "2026-03-12", dueDate: "2026-03-16" },
+  { id: "t2", title: "Otimizar criativos Meta Ads", clientId: "c4", clientName: "Fitness Power", assignedTo: "Pedro Alves", role: "traffic", status: "pending", priority: "critical", startDate: "2026-03-14", dueDate: "2026-03-16" },
+  { id: "t3", title: "Configurar pixel de conversão", clientId: "c5", clientName: "Bella Vista", assignedTo: "Ana Lima", role: "traffic", status: "pending", priority: "medium", startDate: "2026-03-15", dueDate: "2026-03-17" },
+  { id: "t4", title: "Relatório mensal de performance", clientId: "c2", clientName: "Clínica Saúde+", assignedTo: "Pedro Alves", role: "traffic", status: "review", priority: "medium", startDate: "2026-03-14", dueDate: "2026-03-18" },
+  { id: "t5", title: "Criar reels para feed", clientId: "c3", clientName: "LuxHome", assignedTo: "Carlos Melo", role: "social", status: "in_progress", priority: "high", startDate: "2026-03-13", dueDate: "2026-03-16" },
+  { id: "t6", title: "Elaborar calendário de conteúdo", clientId: "c5", clientName: "Bella Vista", assignedTo: "Carlos Melo", role: "social", status: "pending", priority: "medium", startDate: "2026-03-15", dueDate: "2026-03-18" },
   { id: "t7", title: "Responder comentários e DMs", clientId: "c1", clientName: "TechVision", assignedTo: "Mariana Costa", role: "social", status: "done", priority: "low" },
-  { id: "t8", title: "Banner campanha Black Friday antecipada", clientId: "c6", clientName: "EduPro", assignedTo: "Rafael Designer", role: "designer", status: "in_progress", priority: "high", dueDate: "2026-03-17" },
+  { id: "t8", title: "Banner campanha Black Friday antecipada", clientId: "c6", clientName: "EduPro", assignedTo: "Rafael Designer", role: "designer", status: "in_progress", priority: "high", startDate: "2026-03-14", dueDate: "2026-03-17" },
 ];
 
 export const mockContentCards: ContentCard[] = [

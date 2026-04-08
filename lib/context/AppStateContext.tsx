@@ -151,6 +151,7 @@ interface AppStateContextValue {
     assignedTraffic: string;
     assignedSocial: string;
     assignedDesigner: string;
+    driveLink?: string;
     notes?: string;
     metaAdAccountId?: string;
     metaAdAccountName?: string;
@@ -441,6 +442,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       assignedTraffic: string;
       assignedSocial: string;
       assignedDesigner: string;
+      driveLink?: string;
       notes?: string;
       metaAdAccountId?: string;
       metaAdAccountName?: string;

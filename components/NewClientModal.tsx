@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { UserPlus, Building2, Users, Facebook, Link2, ChevronDown, Check, Loader2, Unlink, ExternalLink } from "lucide-react";
+import { UserPlus, Building2, Users, Facebook, Link2, ChevronDown, Check, Loader2, Unlink, ExternalLink, FolderOpen } from "lucide-react";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useMetaConnection, fetchAdAccounts } from "@/lib/meta/useMetaAds";
 import type { Client } from "@/lib/types";
@@ -60,6 +60,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
     assignedTraffic: TEAM_MEMBERS.traffic[0],
     assignedSocial: TEAM_MEMBERS.social[0],
     assignedDesigner: TEAM_MEMBERS.designer[0],
+    driveLink: "",
     notes: "",
   });
   const [error, setError] = useState("");
@@ -107,6 +108,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
       assignedTraffic: form.assignedTraffic,
       assignedSocial: form.assignedSocial,
       assignedDesigner: form.assignedDesigner,
+      driveLink: form.driveLink || undefined,
       notes: form.notes || undefined,
       metaAdAccountId: selectedAdAccount?.id,
       metaAdAccountName: selectedAdAccount?.name,
@@ -233,6 +235,23 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* ═══ GOOGLE DRIVE LINK ═══ */}
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-1.5">
+              <FolderOpen size={12} /> Link da Pasta Drive (Conteúdo)
+              <span className="text-muted-foreground font-normal">(opcional)</span>
+            </Label>
+            <Input
+              value={form.driveLink}
+              onChange={(e) => set("driveLink", e.target.value)}
+              placeholder="https://drive.google.com/drive/folders/..."
+              type="url"
+            />
+            {form.driveLink && !form.driveLink.includes("drive.google.com") && (
+              <p className="text-[10px] text-amber-400">O link deve ser do Google Drive</p>
+            )}
           </div>
 
           {/* ═══ META AD ACCOUNT LINK ═══ */}

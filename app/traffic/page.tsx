@@ -3,6 +3,7 @@
 import Header from "@/components/Header";
 import MetricCard from "@/components/MetricCard";
 import KanbanBoard from "@/components/KanbanBoard";
+import DriveButton from "@/components/DriveButton";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
@@ -381,6 +382,14 @@ export default function TrafficPage() {
           )}
 
           {/* Anuncios Tab */}
+          {activeTab === "anuncios" && (
+            <div className="flex items-center gap-2 flex-wrap mb-4">
+              <span className="text-xs text-muted-foreground mr-1">Criativos:</span>
+              {filteredClients.map((c) => (
+                <DriveButton key={c.id} driveLink={c.driveLink} clientName={c.name} size="md" />
+              ))}
+            </div>
+          )}
           {activeTab === "anuncios" && (
             <AdAnalyticsTab
               clients={filteredClients}

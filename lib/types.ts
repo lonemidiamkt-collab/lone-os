@@ -78,6 +78,7 @@ export interface Task {
   role: Role;
   status: TaskStatus;
   priority: Priority;
+  startDate?: string;
   dueDate?: string;
   description?: string;
   attachments?: string[];

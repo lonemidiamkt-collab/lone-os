@@ -3,12 +3,13 @@
 import Header from "@/components/Header";
 import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
+import DriveButton from "@/components/DriveButton";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import {
   Palette, Filter, Clock, CheckCircle, Loader, Paperclip, X,
   AlertTriangle, Zap, LayoutList, Columns3, Upload, Download,
-  ImageIcon, Eye, ChevronDown, User, FileText, FileWarning,
+  ImageIcon, Eye, ChevronDown, User, FileText, FileWarning, FolderOpen,
 } from "lucide-react";
 import { useState, useMemo, useRef } from "react";
 import { useRole } from "@/lib/context/RoleContext";
@@ -299,6 +300,25 @@ export default function DesignPage() {
             </div>
           </div>
         </div>
+
+        {/* ═══ PASTAS DRIVE — Acesso rápido por cliente ═══ */}
+        {(() => {
+          const uniqueClientIds = [...new Set(myContentCards.map((c) => c.clientId))];
+          const driveClients = uniqueClientIds
+            .map((id) => clients.find((c) => c.id === id))
+            .filter(Boolean) as typeof clients;
+          if (driveClients.length === 0) return null;
+          return (
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mr-1">
+                <FolderOpen size={12} /> Drive:
+              </div>
+              {driveClients.map((c) => (
+                <DriveButton key={c.id} driveLink={c.driveLink} clientName={c.name} size="md" />
+              ))}
+            </div>
+          );
+        })()}
 
         {/* ═══ KANBANS TAB ═══ */}
         {tab === "kanbans" && (
