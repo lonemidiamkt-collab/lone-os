@@ -16,9 +16,10 @@ import {
   Key, MessageCircle, Send, Eye, EyeOff, Save,
   Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle,
 } from "lucide-react";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
 import { useAppState } from "@/lib/context/AppStateContext";
+import { useNav } from "@/lib/context/NavContext";
 import SocialAuthModal from "@/components/SocialAuthModal";
 import Link from "next/link";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -1542,7 +1543,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function SocialPage() {
-  const [activeTab, setActiveTab] = useState<"carteira" | "kanban" | "calendar" | "onboarding" | "acessos" | "chat" | "metricas" | "entregas" | "relatorios">("carteira");
+  const [activeTab, setActiveTab] = useState<"carteira" | "kanban" | "calendar" | "onboarding" | "acessos" | "chat" | "metricas" | "entregas" | "relatorios">("carteira"); // SocialTab — kept inline for readability
   const [adminWorkspace, setAdminWorkspace] = useState("Todos");
   const [selectedCard, setSelectedCard] = useState<ContentCard | null>(null);
   const [nonDeliveryCard, setNonDeliveryCard] = useState<ContentCard | null>(null);
@@ -1588,6 +1589,23 @@ export default function SocialPage() {
     monthlyDeliveryReports,
     socialPerformanceScores,
   } = useAppState();
+
+  // ── NavContext: secondary sidebar tab navigation ──────────────
+  const { pendingTab, setPendingTab, setCurrentTab } = useNav();
+  const VALID_SOCIAL_TABS = ["carteira","kanban","calendar","onboarding","acessos","chat","metricas","entregas","relatorios"] as const;
+  type SocialTab = typeof VALID_SOCIAL_TABS[number];
+
+  useEffect(() => {
+    if (!pendingTab) return;
+    if ((VALID_SOCIAL_TABS as readonly string[]).includes(pendingTab)) {
+      setActiveTab(pendingTab as SocialTab);
+    }
+    setPendingTab("");
+  }, [pendingTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setCurrentTab(activeTab);
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auth gate: non-admin must authenticate
   const isAdmin = role === "admin" || role === "manager";
@@ -1851,24 +1869,38 @@ export default function SocialPage() {
         <div className="flex gap-1 border-b border-border overflow-x-auto">
           {(["carteira", "kanban", "calendar", "onboarding", "acessos", "chat", "metricas", "entregas", "relatorios"] as const).map((tab) => {
             const LABELS: Record<typeof tab, string> = {
-              carteira: "Carteira", kanban: "Kanban", calendar: "Calendário",
-              onboarding: "Onboarding", acessos: "Acessos", chat: "Chat Interno", metricas: "Métricas",
-              entregas: "Entregas", relatorios: "Relatórios",
+              carteira: "Carteira", kanban: "Board", calendar: "Calendário",
+              onboarding: "Onboarding", acessos: "Acessos", chat: "Chat", metricas: "Métricas",
+              entregas: "Entregas", relatorios: "Aprovação & Relatórios",
             };
+            // Live badge counts per tab
+            const pendingKanban = filteredCards.filter((c) => !["scheduled","published"].includes(c.status)).length;
+            const approvalCount = filteredCards.filter((c) => c.status === "approval" || c.status === "client_approval").length;
+            const badgeMap: Partial<Record<typeof tab, number>> = {
+              carteira:   filteredClients.length,
+              kanban:     pendingKanban,
+              onboarding: counts.onboarding,
+              relatorios: approvalCount,
+            };
+            const badge = badgeMap[tab];
+            const isApprovalTab = tab === "relatorios" && approvalCount > 0;
             return (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
                   activeTab === tab ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {LABELS[tab]}
-                {tab === "carteira" && filteredClients.length > 0 && (
-                  <span className="ml-1.5 text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{filteredClients.length}</span>
-                )}
-                {tab === "onboarding" && counts.onboarding > 0 && (
-                  <span className="ml-1.5 text-xs bg-primary/15 text-primary px-1.5 py-0.5 rounded-full">{counts.onboarding}</span>
+                {badge !== undefined && badge > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold tabular-nums ${
+                    isApprovalTab
+                      ? "bg-[#0a34f5]/20 text-[#3b6ff5] shadow-[0_0_8px_rgba(10,52,245,0.3)]"
+                      : "bg-muted text-muted-foreground"
+                  }`}>
+                    {badge}
+                  </span>
                 )}
               </button>
             );

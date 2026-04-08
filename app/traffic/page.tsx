@@ -5,6 +5,7 @@ import MetricCard from "@/components/MetricCard";
 import KanbanBoard from "@/components/KanbanBoard";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
+import { useNav } from "@/lib/context/NavContext";
 import {
   TrendingUp, AlertTriangle, CheckCircle, Users,
   Calendar, User, Save,
@@ -15,9 +16,10 @@ import {
   Pause, AlertCircle, Download, ChevronDown, ChevronUp,
   Settings2, GripVertical, Zap, Activity, TrendingDown,
   Brain, ShieldAlert, Sparkles, CircleDot, Bell, FolderDown, Loader2, Facebook,
+  Wallet, CreditCard, Banknote, AlertOctagon, Info,
 } from "lucide-react";
 import { getAttentionColor, getAttentionLabel, getPriorityColor, getPriorityLabel } from "@/lib/utils";
-import type { Client, Task, TrafficMonthlyReport, AdCampaign, AdAccount } from "@/lib/types";
+import type { Client, Task, TrafficMonthlyReport, AdCampaign, AdAccount, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
 import { mockAdAccounts, mockAdCampaigns } from "@/lib/mockData";
 import { useMetaConnection, fetchAdAccounts, fetchCampaignInsights, TokenExpiredError } from "@/lib/meta/useMetaAds";
 import { useState, useMemo, useEffect, useCallback } from "react";
@@ -40,7 +42,7 @@ const TASK_COLUMNS = [
   { id: "done", title: "Concluido", color: "bg-primary" },
 ];
 
-type TabType = "rotina" | "status" | "kanban" | "relatorios" | "report" | "anuncios";
+type TabType = "rotina" | "status" | "kanban" | "relatorios" | "report" | "anuncios" | "investimento";
 
 function getTodayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -92,9 +94,26 @@ export default function TrafficPage() {
     clients, tasks, updateClientData, updateClientStatus, addTask, updateTask,
     trafficReports, trafficRoutineChecks, addTrafficReport, updateTrafficReport, addTrafficRoutineCheck,
     addDesignRequest, addContentCard,
+    investmentData, updateInvestmentData,
   } = useAppState();
   const { currentUser, role } = useRole();
+  const { pendingTab, setPendingTab, setCurrentTab } = useNav();
   const [activeTab, setActiveTab] = useState<TabType>("rotina");
+
+  // Consume pendingTab from secondary sidebar navigation
+  useEffect(() => {
+    if (!pendingTab) return;
+    const VALID: TabType[] = ["rotina","status","kanban","relatorios","report","anuncios","investimento"];
+    if (VALID.includes(pendingTab as TabType)) {
+      setActiveTab(pendingTab as TabType);
+    }
+    setPendingTab("");
+  }, [pendingTab, setPendingTab]);
+
+  // Keep NavContext in sync so sidebar can highlight active item
+  useEffect(() => {
+    setCurrentTab(activeTab);
+  }, [activeTab, setCurrentTab]);
 
   // Shared real campaigns state — AdAnalyticsTab writes, RoutineTab reads
   const [sharedRealCampaigns, setSharedRealCampaigns] = useState<AdCampaign[]>([]);
@@ -134,6 +153,7 @@ export default function TrafficPage() {
     { key: "relatorios", label: "Relatorios Mensais", icon: <BarChart2 size={14} /> },
     { key: "report", label: "Analise" },
     { key: "anuncios", label: "Anuncios", icon: <Megaphone size={14} /> },
+    { key: "investimento", label: "Controle de Investimento", icon: <Wallet size={14} /> },
   ];
 
   return (
@@ -373,6 +393,18 @@ export default function TrafficPage() {
                 setSharedRealCampaigns(campaigns);
                 setSharedIsUsingRealData(isReal);
               }}
+            />
+          )}
+
+          {/* Controle de Investimento Tab */}
+          {activeTab === "investimento" && (
+            <InvestmentControlTab
+              clients={filteredClients}
+              adCampaigns={sharedIsUsingRealData ? sharedRealCampaigns : mockAdCampaigns}
+              investmentData={investmentData}
+              onSave={updateInvestmentData}
+              isUsingRealData={sharedIsUsingRealData}
+              currentUser={currentUser}
             />
           )}
         </div>
@@ -2137,9 +2169,20 @@ function AdAnalyticsTab({
               )}
 
               {loadingAccounts ? (
-                <div className="flex items-center justify-center py-8 gap-3">
-                  <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  <span className="text-sm text-muted-foreground">Buscando contas de anúncio...</span>
+                <div className="space-y-3 py-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="p-4 rounded-xl border border-border bg-muted/30 space-y-2">
+                        <div className="h-4 w-32 bg-white/[0.06] rounded animate-pulse" />
+                        <div className="h-3 w-24 bg-white/[0.06] rounded animate-pulse" />
+                        <div className="h-3 w-16 bg-white/[0.06] rounded animate-pulse" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-4 h-4 border-2 border-[#0a34f5] border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs text-muted-foreground">Buscando contas de anúncio...</span>
+                  </div>
                 </div>
               ) : visibleAccounts.length === 0 && metaAccounts.length === 0 ? (
                 <div className="text-center py-8">
@@ -2213,10 +2256,25 @@ function AdAnalyticsTab({
           )}
 
           {loadingCampaigns && (
-            <div className="card border border-border animate-fade-in">
-              <div className="flex items-center justify-center py-8 gap-3">
-                <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm text-muted-foreground">Carregando campanhas e métricas...</span>
+            <div className="card border border-border animate-fade-in space-y-3 p-4">
+              {/* Skeleton header */}
+              <div className="flex items-center justify-between">
+                <div className="h-4 w-40 bg-white/[0.06] rounded-md animate-pulse" />
+                <div className="h-4 w-20 bg-white/[0.06] rounded-md animate-pulse" />
+              </div>
+              {/* Skeleton rows */}
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3 py-3 border-t border-border/50">
+                  <div className="h-3 w-3 rounded-full bg-white/[0.06] animate-pulse shrink-0" />
+                  <div className="h-3 flex-1 bg-white/[0.06] rounded animate-pulse" style={{ maxWidth: `${200 + i * 30}px` }} />
+                  <div className="h-3 w-16 bg-white/[0.06] rounded animate-pulse" />
+                  <div className="h-3 w-20 bg-white/[0.06] rounded animate-pulse" />
+                  <div className="h-3 w-14 bg-white/[0.06] rounded animate-pulse" />
+                </div>
+              ))}
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <div className="w-4 h-4 border-2 border-[#0a34f5] border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs text-muted-foreground">Carregando campanhas e métricas...</span>
               </div>
             </div>
           )}
@@ -2978,6 +3036,693 @@ function AdAnalyticsTab({
       </div>
       </>
       )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// INVESTMENT CONTROL TAB
+// ══════════════════════════════════════════════════════════════
+
+const INVESTMENT_BLUE = "#0a34f5";
+const INVESTMENT_BLUE_LIGHT = "#3b6ff5";
+
+function fmtBRL(value: number): string {
+  return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function parseBRL(raw: string): number {
+  // Remove R$, dots (thousands), then replace comma with dot
+  const cleaned = raw.replace(/[R$\s.]/g, "").replace(",", ".");
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+
+function formatInputBRL(raw: string): string {
+  // While typing, keep numbers and a single comma/dot
+  const digits = raw.replace(/[^0-9,\.]/g, "");
+  return digits;
+}
+
+interface InvestmentForm {
+  monthlyRaw: string;   // raw input string
+  dailyRaw: string;
+  paymentMethod: InvestmentPaymentMethod;
+  nextPaymentDate: string;
+  dirty: boolean;
+}
+
+function InvestmentControlTab({
+  clients,
+  adCampaigns,
+  investmentData,
+  onSave,
+  isUsingRealData,
+  currentUser,
+}: {
+  clients: Client[];
+  adCampaigns: AdCampaign[];
+  investmentData: Record<string, ClientInvestmentData>;
+  onSave: (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => void;
+  isUsingRealData: boolean;
+  currentUser: string;
+}) {
+  const [selectedId, setSelectedId] = useState(clients[0]?.id ?? "");
+  const [forms, setForms] = useState<Record<string, InvestmentForm>>({});
+  const [savedFlash, setSavedFlash] = useState<string | null>(null);
+
+  // Compute days in current month
+  const daysInMonth = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  }, []);
+
+  // Initialize forms from investmentData whenever it changes
+  useEffect(() => {
+    setForms((prev) => {
+      const next = { ...prev };
+      clients.forEach((c) => {
+        if (!next[c.id]) {
+          const stored = investmentData[c.id];
+          const monthly = stored?.monthlyBudget ?? c.monthlyBudget;
+          const daily = stored?.dailyBudget ?? parseFloat((monthly / daysInMonth).toFixed(2));
+          const pm: InvestmentPaymentMethod = stored?.paymentMethod ??
+            (c.paymentMethod === "transferencia" ? "pix" : c.paymentMethod as InvestmentPaymentMethod);
+          next[c.id] = {
+            monthlyRaw: fmtBRL(monthly),
+            dailyRaw: fmtBRL(daily),
+            paymentMethod: pm,
+            nextPaymentDate: stored?.nextPaymentDate ?? "",
+            dirty: false,
+          };
+        }
+      });
+      return next;
+    });
+  }, [clients, investmentData, daysInMonth]);
+
+  const form = forms[selectedId];
+  const selectedClient = clients.find((c) => c.id === selectedId);
+
+  // Get total monthly spend from campaigns
+  const getMonthlySpend = useCallback((clientId: string): number => {
+    return adCampaigns
+      .filter((c) => c.clientId === clientId)
+      .reduce((sum, c) => sum + (c.spend ?? 0), 0);
+  }, [adCampaigns]);
+
+  // Get today's spend
+  const getTodaySpend = useCallback((clientId: string): number => {
+    const today = new Date().toISOString().slice(0, 10);
+    return adCampaigns
+      .filter((c) => c.clientId === clientId)
+      .flatMap((c) => c.dailyMetrics ?? [])
+      .filter((m) => m.date === today)
+      .reduce((sum, m) => sum + (m.spend ?? 0), 0);
+  }, [adCampaigns]);
+
+  function updateForm(clientId: string, patch: Partial<InvestmentForm>) {
+    setForms((prev) => ({
+      ...prev,
+      [clientId]: { ...prev[clientId], ...patch, dirty: true },
+    }));
+  }
+
+  function handleMonthlyChange(raw: string) {
+    const monthly = parseBRL(raw);
+    const daily = monthly > 0 ? parseFloat((monthly / daysInMonth).toFixed(2)) : 0;
+    updateForm(selectedId, {
+      monthlyRaw: formatInputBRL(raw),
+      dailyRaw: fmtBRL(daily),
+    });
+  }
+
+  function handleDailyChange(raw: string) {
+    const daily = parseBRL(raw);
+    const monthly = daily > 0 ? parseFloat((daily * daysInMonth).toFixed(2)) : 0;
+    updateForm(selectedId, {
+      dailyRaw: formatInputBRL(raw),
+      monthlyRaw: fmtBRL(monthly),
+    });
+  }
+
+  function handleSave() {
+    if (!form || !selectedId) return;
+    const monthly = parseBRL(form.monthlyRaw);
+    const daily = parseBRL(form.dailyRaw);
+    onSave(selectedId, {
+      monthlyBudget: monthly,
+      dailyBudget: daily,
+      paymentMethod: form.paymentMethod,
+      nextPaymentDate: form.nextPaymentDate || undefined,
+    }, currentUser);
+    setForms((prev) => ({
+      ...prev,
+      [selectedId]: { ...prev[selectedId], dirty: false },
+    }));
+    setSavedFlash(selectedId);
+    setTimeout(() => setSavedFlash(null), 2000);
+  }
+
+  // Summary stats across all clients
+  const totalMonthly = clients.reduce((sum, c) => {
+    const stored = investmentData[c.id];
+    return sum + (stored?.monthlyBudget ?? c.monthlyBudget);
+  }, 0);
+  const totalSpend = clients.reduce((sum, c) => sum + getMonthlySpend(c.id), 0);
+
+  if (!form || !selectedClient) return null;
+
+  const monthlyBudget = parseBRL(form.monthlyRaw);
+  const dailyBudget = parseBRL(form.dailyRaw);
+  const monthlySpend = getMonthlySpend(selectedId);
+  const todaySpend = getTodaySpend(selectedId);
+  const remaining = Math.max(0, monthlyBudget - monthlySpend);
+  const currentDay = new Date().getDate();
+  const daysLeft = daysInMonth - currentDay;
+
+  // ── Pacing logic ──────────────────────────────────────────────
+  // timePct: how far into the month we are (0–1)
+  const timePct = currentDay / daysInMonth;
+  // expectedSpend: what should have been spent by today at a linear pace
+  const expectedSpend = monthlyBudget * timePct;
+  // actual spend % of budget (used for bar fill)
+  const spendPct = monthlyBudget > 0 ? Math.min(100, (monthlySpend / monthlyBudget) * 100) : 0;
+  // time marker position (%) — always represents "today" on the bar
+  const timePctBar = Math.min(100, timePct * 100);
+  // deviation of actual vs expected (positive = over-pacing, negative = under-pacing)
+  const deviationPct = expectedSpend > 0 ? ((monthlySpend - expectedSpend) / expectedSpend) * 100 : 0;
+  // projected end day: at the current daily burn rate, when does the budget run out?
+  const avgDailyBurn = currentDay > 0 ? monthlySpend / currentDay : 0;
+  const projectedEndDay = avgDailyBurn > 0
+    ? currentDay + Math.floor(remaining / avgDailyBurn)
+    : daysInMonth;
+  // ideal daily spend
+  const idealDailyBudget = monthlyBudget > 0 ? monthlyBudget / daysInMonth : 0;
+
+  // Pacing health status
+  type PacingStatus = "ok" | "warning" | "critical" | "slow";
+  const pacingStatus: PacingStatus = (() => {
+    if (monthlyBudget === 0 || monthlySpend === 0) return "ok";
+    if (deviationPct > 30 || projectedEndDay < 25) return "critical";
+    if (deviationPct > 15) return "warning";
+    if (deviationPct < -15) return "slow"; // significantly under-pacing
+    return "ok";
+  })();
+
+  const pacingColor = {
+    ok:       INVESTMENT_BLUE,       // #0a34f5
+    warning:  "#f59e0b",             // amber
+    critical: "#ef4444",             // red
+    slow:     "#a78bfa",             // purple — underperforming
+  }[pacingStatus];
+
+  const pacingLabel = {
+    ok:       "No ritmo esperado",
+    warning:  "Acima do ritmo — atenção",
+    critical: "Verba acabando rápido",
+    slow:     "Abaixo do ritmo — campanha travada",
+  }[pacingStatus];
+
+  const needsPaymentDate = form.paymentMethod === "pix" || form.paymentMethod === "boleto";
+  const boletoAt80 = form.paymentMethod === "boleto" && spendPct >= 80;
+
+  // Days until next payment
+  const daysUntilPayment = form.nextPaymentDate
+    ? Math.ceil((new Date(form.nextPaymentDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
+  const balanceWarnDays = daysUntilPayment !== null && daysUntilPayment <= 5 && remaining < dailyBudget * 3;
+
+  return (
+    <div className="animate-fade-in space-y-5">
+      {/* Header summary cards */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Investimento Total / Mês</p>
+          <p className="text-xl font-bold text-foreground tabular-nums">R$ {fmtBRL(totalMonthly)}</p>
+          <p className="text-xs text-muted-foreground mt-1">{clients.length} clientes</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Gasto Total (Meta)</p>
+          <p className="text-xl font-bold tabular-nums" style={{ color: INVESTMENT_BLUE_LIGHT }}>
+            R$ {fmtBRL(totalSpend)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {totalMonthly > 0 ? ((totalSpend / totalMonthly) * 100).toFixed(1) : 0}% do orçamento total
+          </p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Saldo Restante</p>
+          <p className="text-xl font-bold text-primary tabular-nums">R$ {fmtBRL(Math.max(0, totalMonthly - totalSpend))}</p>
+          {/* Total pacing bar with time marker */}
+          <div className="mt-1.5 relative h-1.5 bg-muted rounded-full overflow-visible">
+            <div
+              className="absolute top-0 left-0 h-full rounded-full transition-all"
+              style={{
+                width: `${totalMonthly > 0 ? Math.min(100, (totalSpend / totalMonthly) * 100) : 0}%`,
+                backgroundColor: INVESTMENT_BLUE,
+              }}
+            />
+            {/* Time marker */}
+            <div
+              className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 rounded-full bg-white/60"
+              style={{ left: `${timePctBar}%` }}
+              title={`Dia ${currentDay} de ${daysInMonth}`}
+            />
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">Dia {currentDay}/{daysInMonth} · marcador = hoje</p>
+        </div>
+      </div>
+
+      {/* Main panel */}
+      <div className="flex gap-5">
+        {/* Left: Client list */}
+        <div className="w-72 shrink-0 space-y-2">
+          <p className="text-xs text-muted-foreground font-medium px-1">Clientes ({clients.length})</p>
+          {clients.map((c) => {
+            const spend = getMonthlySpend(c.id);
+            const budget = investmentData[c.id]?.monthlyBudget ?? c.monthlyBudget;
+            const pct = budget > 0 ? Math.min(100, (spend / budget) * 100) : 0;
+            const isSelected = c.id === selectedId;
+            const isDirty = forms[c.id]?.dirty ?? false;
+            // Per-client pacing
+            const cExpected = budget * timePct;
+            const cDeviation = cExpected > 0 ? ((spend - cExpected) / cExpected) * 100 : 0;
+            const cAvgBurn = currentDay > 0 ? spend / currentDay : 0;
+            const cRemaining = Math.max(0, budget - spend);
+            const cProjectedEnd = cAvgBurn > 0 ? currentDay + Math.floor(cRemaining / cAvgBurn) : daysInMonth;
+            const cStatus: "ok"|"warning"|"critical"|"slow" =
+              budget === 0 || spend === 0 ? "ok"
+              : cDeviation > 30 || cProjectedEnd < 25 ? "critical"
+              : cDeviation > 15 ? "warning"
+              : cDeviation < -15 ? "slow"
+              : "ok";
+            const cColor = { ok: INVESTMENT_BLUE, warning: "#f59e0b", critical: "#ef4444", slow: "#a78bfa" }[cStatus];
+            return (
+              <button
+                key={c.id}
+                onClick={() => setSelectedId(c.id)}
+                className={`w-full text-left p-3 rounded-xl border transition-all ${
+                  isSelected
+                    ? "border-[#0a34f5]/40 bg-[#0a34f5]/8"
+                    : "border-border bg-card hover:border-[#0a34f5]/20"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                      isSelected ? "bg-[#0a34f5]/20 text-[#3b6ff5]" : "bg-muted text-muted-foreground"
+                    }`}>
+                      {c.name[0]}
+                    </div>
+                    <span className="text-xs font-semibold text-foreground truncate">{c.name}</span>
+                    {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Alterações não salvas" />}
+                  </div>
+                  <span className="text-[10px] tabular-nums shrink-0 ml-1 font-semibold" style={{ color: cColor }}>
+                    {pct.toFixed(0)}%
+                  </span>
+                </div>
+                {/* Pacing bar with time marker */}
+                <div className="relative h-1 bg-muted rounded-full overflow-visible">
+                  <div
+                    className="absolute top-0 left-0 h-full rounded-full transition-all"
+                    style={{ width: `${pct}%`, backgroundColor: cColor }}
+                  />
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 rounded-full bg-white/50"
+                    style={{ left: `${timePctBar}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="text-[10px] text-muted-foreground">R$ {fmtBRL(spend)}</span>
+                  <span className="text-[10px] text-muted-foreground">/ R$ {fmtBRL(budget)}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right: Detail panel */}
+        <div className="flex-1 min-w-0">
+          <div className="bg-card border rounded-2xl overflow-hidden"
+            style={{ borderColor: `${INVESTMENT_BLUE}25` }}
+          >
+            {/* Panel header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b"
+              style={{ borderColor: `${INVESTMENT_BLUE}20`, background: `linear-gradient(to right, ${INVESTMENT_BLUE}08, transparent)` }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold"
+                  style={{ backgroundColor: `${INVESTMENT_BLUE}20`, color: INVESTMENT_BLUE_LIGHT }}
+                >
+                  {selectedClient.name[0]}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">{selectedClient.name}</h3>
+                  <p className="text-[10px] text-muted-foreground">
+                    {selectedClient.metaAdAccountName ?? "Sem conta Meta vinculada"} · {selectedClient.assignedTraffic}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {!isUsingRealData && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold uppercase tracking-wider">
+                    Dados simulados
+                  </span>
+                )}
+                {isUsingRealData && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-bold uppercase tracking-wider">
+                    Meta API
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="p-5 space-y-5">
+              {/* ALERTS — pacing-aware */}
+              {pacingStatus === "critical" && (
+                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-red-500/25 bg-red-500/8">
+                  <AlertOctagon size={16} className="text-red-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-red-400">
+                      {projectedEndDay < 25
+                        ? `Verba acaba no dia ~${projectedEndDay} — antes do fim do mês`
+                        : "Gasto acima de 30% do ritmo esperado"}
+                    </p>
+                    <p className="text-xs text-red-400/70 mt-0.5">
+                      Esperado até hoje: <strong>R$ {fmtBRL(expectedSpend)}</strong> · Gasto real: <strong>R$ {fmtBRL(monthlySpend)}</strong> · Desvio: +{deviationPct.toFixed(0)}%
+                    </p>
+                  </div>
+                </div>
+              )}
+              {pacingStatus === "warning" && (
+                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-amber-500/25 bg-amber-500/8">
+                  <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-400">Ritmo de gasto elevado — monitorar</p>
+                    <p className="text-xs text-amber-400/70 mt-0.5">
+                      Esperado até hoje: <strong>R$ {fmtBRL(expectedSpend)}</strong> · Gasto real: <strong>R$ {fmtBRL(monthlySpend)}</strong> · Desvio: +{deviationPct.toFixed(0)}%
+                    </p>
+                  </div>
+                </div>
+              )}
+              {pacingStatus === "slow" && (
+                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-purple-500/25 bg-purple-500/8">
+                  <AlertCircle size={16} className="text-purple-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-purple-400">Campanha abaixo do ritmo — verba sobrando</p>
+                    <p className="text-xs text-purple-400/70 mt-0.5">
+                      Esperado até hoje: <strong>R$ {fmtBRL(expectedSpend)}</strong> · Gasto real: <strong>R$ {fmtBRL(monthlySpend)}</strong> · Desvio: {deviationPct.toFixed(0)}%
+                    </p>
+                  </div>
+                </div>
+              )}
+              {boletoAt80 && (
+                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10">
+                  <Banknote size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-400">Gerar novo boleto para {selectedClient.name}</p>
+                    <p className="text-xs text-amber-400/70 mt-0.5">
+                      {spendPct.toFixed(0)}% do orçamento consumido · Pagamento via Boleto — providencie o próximo aporte.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {balanceWarnDays && (
+                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-amber-500/25 bg-amber-500/8">
+                  <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-400">Saldo baixo — aporte próximo</p>
+                    <p className="text-xs text-amber-400/70 mt-0.5">
+                      Saldo restante <strong>R$ {fmtBRL(remaining)}</strong> pode não cobrir os próximos {daysLeft} dias.
+                      {daysUntilPayment !== null && <> Próximo aporte em <strong>{daysUntilPayment} dia(s)</strong>.</>}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* PACING BAR — Barra de Saúde do Orçamento */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Activity size={13} style={{ color: pacingColor }} />
+                    Barra de Saúde do Orçamento
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold border"
+                      style={{ color: pacingColor, borderColor: `${pacingColor}40`, backgroundColor: `${pacingColor}12` }}
+                    >
+                      {pacingLabel}
+                    </span>
+                    <span className="text-xs font-bold tabular-nums" style={{ color: pacingColor }}>
+                      {spendPct.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* Main pacing bar */}
+                <div className="relative h-5 bg-muted rounded-full overflow-visible">
+                  {/* Spend fill */}
+                  <div
+                    className="absolute top-0 left-0 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${spendPct}%`, backgroundColor: pacingColor, opacity: 0.85 }}
+                  />
+                  {/* Time marker — thin white line at "today" position */}
+                  <div
+                    className="absolute top-0 bottom-0 w-0.5 rounded-full z-10"
+                    style={{
+                      left: `${timePctBar}%`,
+                      backgroundColor: "rgba(255,255,255,0.8)",
+                      boxShadow: "0 0 4px rgba(255,255,255,0.5)",
+                    }}
+                    title={`Dia ${currentDay} de ${daysInMonth} (${timePctBar.toFixed(0)}% do mês)`}
+                  />
+                  {/* Day label on the marker */}
+                  <div
+                    className="absolute -top-5 text-[9px] font-bold text-white/70 -translate-x-1/2 whitespace-nowrap"
+                    style={{ left: `${timePctBar}%` }}
+                  >
+                    dia {currentDay}
+                  </div>
+                </div>
+
+                {/* Legend row */}
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>0%</span>
+                  <span className="flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: pacingColor }} />
+                    Gasto real: {spendPct.toFixed(1)}%
+                    <span className="mx-1">·</span>
+                    <span className="w-px h-3 inline-block bg-white/50 align-middle" />
+                    Hoje: {timePctBar.toFixed(0)}% do mês
+                  </span>
+                  <span>100%</span>
+                </div>
+
+                {/* Daily comparison row */}
+                <div className="grid grid-cols-3 gap-2 mt-1">
+                  <div className="bg-muted/40 rounded-lg p-2.5 text-center border border-border">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Diária Ideal</p>
+                    <p className="text-sm font-bold tabular-nums mt-0.5 text-foreground">R$ {fmtBRL(idealDailyBudget)}</p>
+                    <p className="text-[9px] text-muted-foreground">{monthlyBudget > 0 ? `÷ ${daysInMonth} dias` : "—"}</p>
+                  </div>
+                  <div className="bg-muted/40 rounded-lg p-2.5 text-center border border-border">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Diária Real (Meta)</p>
+                    <p className="text-sm font-bold tabular-nums mt-0.5"
+                      style={{ color: avgDailyBurn > idealDailyBudget * 1.15 ? "#ef4444" : avgDailyBurn < idealDailyBudget * 0.85 ? "#a78bfa" : pacingColor }}
+                    >
+                      R$ {fmtBRL(avgDailyBurn)}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground">média {currentDay}d</p>
+                  </div>
+                  <div className="bg-muted/40 rounded-lg p-2.5 text-center border border-border">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Projeção Fim</p>
+                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${projectedEndDay < 25 ? "text-red-400" : projectedEndDay <= daysInMonth ? "text-foreground" : "text-primary"}`}>
+                      {avgDailyBurn > 0 ? `Dia ~${Math.min(projectedEndDay, 99)}` : "—"}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground">
+                      {avgDailyBurn > 0 ? (projectedEndDay < daysInMonth ? "acaba antes do mês" : "cobre o mês") : "sem dados"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Metric cards row */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-muted/50 rounded-lg p-2.5 text-center border border-border">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Gasto Mês</p>
+                    <p className="text-sm font-bold tabular-nums mt-0.5" style={{ color: pacingColor }}>
+                      R$ {fmtBRL(monthlySpend)}
+                    </p>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg p-2.5 text-center border border-border">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Saldo</p>
+                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${remaining > 0 ? "text-primary" : "text-red-400"}`}>
+                      R$ {fmtBRL(remaining)}
+                    </p>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg p-2.5 text-center border border-border">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Hoje</p>
+                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${todaySpend > idealDailyBudget * 1.15 ? "text-red-400" : "text-foreground"}`}>
+                      R$ {fmtBRL(todaySpend)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* DIVIDER */}
+              <div className="border-t border-border" />
+
+              {/* BUDGET INPUTS */}
+              <div>
+                <p className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5">
+                  <DollarSign size={13} className="text-primary" />
+                  Orçamento Planejado
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                      Investimento Mensal (R$)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-medium">R$</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={form.monthlyRaw}
+                        onChange={(e) => handleMonthlyChange(e.target.value)}
+                        onBlur={() => {
+                          const monthly = parseBRL(form.monthlyRaw);
+                          updateForm(selectedId, { monthlyRaw: fmtBRL(monthly) });
+                        }}
+                        placeholder="0,00"
+                        className="w-full bg-muted border border-border rounded-lg pl-8 pr-3 py-2.5 text-sm text-foreground outline-none focus:border-[#0a34f5]/60 font-mono tabular-nums transition-colors"
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Alterar atualiza a diária automaticamente</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                      Valor Diário (R$) — {daysInMonth}d
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-medium">R$</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={form.dailyRaw}
+                        onChange={(e) => handleDailyChange(e.target.value)}
+                        onBlur={() => {
+                          const daily = parseBRL(form.dailyRaw);
+                          updateForm(selectedId, { dailyRaw: fmtBRL(daily) });
+                        }}
+                        placeholder="0,00"
+                        className="w-full bg-muted border border-border rounded-lg pl-8 pr-3 py-2.5 text-sm text-foreground outline-none focus:border-[#0a34f5]/60 font-mono tabular-nums transition-colors"
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Alterar recalcula o mensal proporcional</p>
+                  </div>
+                </div>
+
+                {/* Calculation preview */}
+                {monthlyBudget > 0 && (
+                  <div className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 border border-border">
+                    <Info size={11} />
+                    <span>
+                      R$ {fmtBRL(monthlyBudget)} ÷ {daysInMonth} dias = <span className="text-foreground font-semibold">R$ {fmtBRL(idealDailyBudget)}/dia</span>
+                      {avgDailyBurn > 0 && (
+                        <> · Queima real: <span className={avgDailyBurn > idealDailyBudget * 1.15 ? "text-red-400 font-semibold" : "text-primary font-semibold"}>R$ {fmtBRL(avgDailyBurn)}/dia</span></>
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* PAYMENT METHOD */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1">
+                    <CreditCard size={11} />
+                    Forma de Pagamento
+                  </label>
+                  <select
+                    value={form.paymentMethod}
+                    onChange={(e) => updateForm(selectedId, { paymentMethod: e.target.value as InvestmentPaymentMethod })}
+                    className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#0a34f5]/60 transition-colors"
+                  >
+                    <option value="pix">PIX</option>
+                    <option value="boleto">Boleto</option>
+                    <option value="cartao">Cartão de Crédito</option>
+                  </select>
+                </div>
+
+                {needsPaymentDate && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1">
+                      <Calendar size={11} />
+                      Data do Próximo Aporte
+                    </label>
+                    <input
+                      type="date"
+                      value={form.nextPaymentDate}
+                      onChange={(e) => updateForm(selectedId, { nextPaymentDate: e.target.value })}
+                      className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#0a34f5]/60 transition-colors"
+                    />
+                    {daysUntilPayment !== null && (
+                      <p className={`text-[10px] font-medium ${daysUntilPayment <= 3 ? "text-amber-400" : "text-muted-foreground"}`}>
+                        {daysUntilPayment <= 0 ? "Aporte vencido!" : `Em ${daysUntilPayment} dia(s)`}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {!needsPaymentDate && (
+                  <div className="flex items-end pb-1">
+                    <div className="flex items-center gap-2 text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-3 py-2.5 w-full">
+                      <CheckCircle size={13} />
+                      Cartão — débito automático
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Meta account link info */}
+              {selectedClient.metaAdAccountId && (
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 border border-border">
+                  <Facebook size={12} style={{ color: INVESTMENT_BLUE_LIGHT }} />
+                  <span>Conta de anúncios: <span className="text-foreground font-medium">{selectedClient.metaAdAccountName}</span> · ID: {selectedClient.metaAdAccountId}</span>
+                </div>
+              )}
+
+              {/* SAVE */}
+              <div className="flex items-center justify-between pt-2 border-t border-border">
+                {savedFlash === selectedId ? (
+                  <span className="text-xs text-primary flex items-center gap-1.5 font-semibold">
+                    <CheckCircle size={13} /> Salvo com sucesso!
+                  </span>
+                ) : form.dirty ? (
+                  <span className="text-xs text-amber-400 flex items-center gap-1.5">
+                    <AlertCircle size={13} /> Alterações não salvas
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Sem alterações pendentes</span>
+                )}
+                <button
+                  onClick={handleSave}
+                  disabled={!form.dirty}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+                  style={{
+                    backgroundColor: form.dirty ? INVESTMENT_BLUE : undefined,
+                    color: form.dirty ? "#fff" : undefined,
+                  }}
+                >
+                  <Save size={13} />
+                  Salvar Alterações
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

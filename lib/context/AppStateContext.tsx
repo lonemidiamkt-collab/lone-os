@@ -31,6 +31,8 @@ import type {
   MonthlyDeliveryReport,
   SocialPerformanceScore,
   PerformanceLevel,
+  ClientInvestmentData,
+  InvestmentPaymentMethod,
 } from "@/lib/types";
 import {
   mockClients,
@@ -163,6 +165,10 @@ interface AppStateContextValue {
   monthlyDeliveryReports: MonthlyDeliveryReport[];
   socialPerformanceScores: SocialPerformanceScore[];
 
+  // Investment Control
+  investmentData: Record<string, ClientInvestmentData>;
+  updateInvestmentData: (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => void;
+
   // DB loading state
   dbReady: boolean;
 }
@@ -174,6 +180,28 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   // ---------- State ----------
   const [clients, setClients] = useState<Client[]>(() => mockClients);
+
+  // Investment Control — initialized from localStorage or client.monthlyBudget + paymentMethod
+  const [investmentData, setInvestmentData] = useState<Record<string, ClientInvestmentData>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("lone_investmentData");
+        if (saved) return JSON.parse(saved) as Record<string, ClientInvestmentData>;
+      } catch {}
+    }
+    const result: Record<string, ClientInvestmentData> = {};
+    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    mockClients.forEach((c) => {
+      const pm: InvestmentPaymentMethod = c.paymentMethod === "transferencia" ? "pix" : (c.paymentMethod as InvestmentPaymentMethod);
+      result[c.id] = {
+        clientId: c.id,
+        monthlyBudget: c.monthlyBudget,
+        dailyBudget: parseFloat((c.monthlyBudget / daysInMonth).toFixed(2)),
+        paymentMethod: pm,
+      };
+    });
+    return result;
+  });
   const [contentCards, setContentCards] = useState<ContentCard[]>(() => mockContentCards);
   const [timeline, setTimeline] = useState<Record<string, TimelineEntry[]>>(() => mockTimeline);
   const [moodHistory, setMoodHistory] = useState<Record<string, MoodEntry[]>>(() => mockMoodHistory);
@@ -218,6 +246,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [dbReady, setDbReady] = useState(false);
+
+  // ---------- Persist investmentData to localStorage ----------
+  useEffect(() => {
+    try {
+      localStorage.setItem("lone_investmentData", JSON.stringify(investmentData));
+    } catch {}
+  }, [investmentData]);
 
   // ---------- Load from Supabase when authenticated ----------
   useEffect(() => {
@@ -630,6 +665,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           if (updates.status === "published" && !card.publishVerifiedAt && !updates.publishVerifiedAt) {
             pushNotification("system", "Verificação obrigatória", `"${card.title}" precisa de verificação de publicação antes de ser marcado como publicado. Use o painel de verificação.`, card.clientId);
           }
+          // Success toast for status change
+          const CARD_STATUS_LABELS: Record<string, string> = {
+            script: "Roteiro", in_production: "Produção", approval: "Aprovação",
+            scheduled: "Agendado", published: "Publicado", revision: "Revisão",
+          };
+          const newLabel = CARD_STATUS_LABELS[updates.status!] ?? updates.status;
+          pushNotification("content", "Card movido", `"${card.title}" → ${newLabel}`, card.clientId);
+
           setClients((cls) =>
             cls.map((c) => {
               if (c.id !== card.clientId) return c;
@@ -729,6 +772,27 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         prev.map((c) => (c.id === clientId ? { ...c, ...updates } : c))
       );
       db.updateClientDb(clientId, updates).catch(() => {});
+    },
+    []
+  );
+
+  const updateInvestmentData = useCallback(
+    (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => {
+      setInvestmentData((prev) => ({
+        ...prev,
+        [clientId]: {
+          ...(prev[clientId] ?? { clientId, monthlyBudget: 0, dailyBudget: 0, paymentMethod: "pix" as InvestmentPaymentMethod }),
+          ...data,
+          updatedBy: actor,
+          updatedAt: new Date().toISOString(),
+        },
+      }));
+      // Also sync monthlyBudget back to the Client record for consistency
+      if (data.monthlyBudget !== undefined) {
+        setClients((prev) =>
+          prev.map((c) => (c.id === clientId ? { ...c, monthlyBudget: data.monthlyBudget! } : c))
+        );
+      }
     },
     []
   );
@@ -1377,6 +1441,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         toggleOnboardingItem,
         monthlyDeliveryReports,
         socialPerformanceScores,
+        investmentData,
+        updateInvestmentData,
         dbReady,
       }}
     >

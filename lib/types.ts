@@ -383,6 +383,20 @@ export interface AppNotification {
   createdAt: string; // ISO
 }
 
+// --- Client Investment Control ---
+
+export type InvestmentPaymentMethod = "pix" | "boleto" | "cartao";
+
+export interface ClientInvestmentData {
+  clientId: string;
+  monthlyBudget: number;       // Investimento mensal total (R$)
+  dailyBudget: number;         // Valor diário calculado (R$)
+  paymentMethod: InvestmentPaymentMethod;
+  nextPaymentDate?: string;    // "YYYY-MM-DD" — relevante para PIX/Boleto
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
 // --- Ad Analytics (Meta Ads mock — Phase 1) ---
 
 export type AdObjective = "messages" | "traffic" | "conversions" | "reach" | "engagement" | "leads";

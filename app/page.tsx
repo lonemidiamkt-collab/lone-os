@@ -543,6 +543,56 @@ function AdminDashboard() {
         </div>
       )}
 
+      {/* Urgências do Dia */}
+      {(pendingApproval > 0 || urgentTasks.length > 0 || stuckCards.length > 0 || atRiskClients.length > 0) && (
+        <div className="rounded-xl border border-[#0a34f5]/20 bg-[#0a34f5]/[0.03] p-4 animate-fade-in">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-[#0a34f5]/15 flex items-center justify-center">
+              <Zap size={14} className="text-[#0a34f5]" />
+            </div>
+            <h4 className="text-sm font-bold text-foreground">Urgências do Dia</h4>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            {pendingApproval > 0 && (
+              <Link href="/social" className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/15 hover:border-amber-500/30 transition-all">
+                <Clock size={13} className="text-amber-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground">{pendingApproval} aguardando aprovação</p>
+                  <p className="text-[10px] text-muted-foreground">posts sem validação</p>
+                </div>
+              </Link>
+            )}
+            {urgentTasks.length > 0 && (
+              <Link href="/calendar" className="flex items-center gap-2 p-2.5 rounded-lg bg-red-500/5 border border-red-500/15 hover:border-red-500/30 transition-all">
+                <AlertCircle size={13} className="text-red-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground">{urgentTasks.length} tarefas críticas</p>
+                  <p className="text-[10px] text-muted-foreground">prioridade máxima</p>
+                </div>
+              </Link>
+            )}
+            {stuckCards.length > 0 && (
+              <Link href="/social" className="flex items-center gap-2 p-2.5 rounded-lg bg-orange-500/5 border border-orange-500/15 hover:border-orange-500/30 transition-all">
+                <AlertTriangle size={13} className="text-orange-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground">{stuckCards.length} cards parados</p>
+                  <p className="text-[10px] text-muted-foreground">mais de 48h sem mover</p>
+                </div>
+              </Link>
+            )}
+            {atRiskClients.length > 0 && (
+              <button onClick={() => setStatusFilter("at_risk")} className="flex items-center gap-2 p-2.5 rounded-lg bg-red-500/5 border border-red-500/15 hover:border-red-500/30 transition-all text-left">
+                <Users size={13} className="text-red-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground">{atRiskClients.length} clientes em risco</p>
+                  <p className="text-[10px] text-muted-foreground">atenção imediata</p>
+                </div>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Pipeline Quick Stats */}
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
         <Link href="/social" className="bg-card border border-border rounded-xl p-4 hover:border-[#0a34f5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
