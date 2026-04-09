@@ -19,7 +19,7 @@ import {
   Brain, ShieldAlert, Sparkles, CircleDot, Bell, FolderDown, Loader2, Facebook,
   Wallet, CreditCard, Banknote, AlertOctagon, Info,
 } from "lucide-react";
-import { getAttentionColor, getAttentionLabel, getPriorityColor, getPriorityLabel } from "@/lib/utils";
+import { getAttentionColor, getAttentionLabel, getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import type { Client, Task, TrafficMonthlyReport, AdCampaign, AdAccount, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
 import { mockAdAccounts, mockAdCampaigns } from "@/lib/mockData";
 import { useMetaConnection, fetchAdAccounts, fetchCampaignInsights, TokenExpiredError } from "@/lib/meta/useMetaAds";
@@ -357,6 +357,17 @@ export default function TrafficPage() {
                       {task.status === "done" && (
                         <span className="text-xs text-primary flex items-center gap-1"><CheckCircle size={11} /> Concluido</span>
                       )}
+                      {/* Timesheet — manager/admin only */}
+                      {(role === "admin" || role === "manager") && (() => {
+                        const timeMs = getLiveTimeSpentMs(task.workStartedAt, task.totalTimeSpentMs);
+                        if (timeMs <= 0) return null;
+                        const isOvertime = timeMs >= OVERTIME_THRESHOLD_MS;
+                        return (
+                          <span className={`ml-auto text-[10px] flex items-center gap-1 ${isOvertime ? "text-amber-400 font-bold" : "text-zinc-600"}`}>
+                            {isOvertime ? "⚠️" : "⏱️"} {formatTimeSpent(timeMs)}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}

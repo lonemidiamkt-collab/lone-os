@@ -82,6 +82,9 @@ export interface Task {
   dueDate?: string;
   description?: string;
   attachments?: string[];
+  // Timesheet Invisível
+  workStartedAt?: string;          // ISO — when work started (in_progress)
+  totalTimeSpentMs?: number;       // accumulated milliseconds of active work
 }
 
 export interface Reminder {
@@ -140,6 +143,9 @@ export interface ContentCard {
     postLive: boolean;             // post está no ar
     copyCorrect: boolean;          // copy/legenda correta
   };
+  // Timesheet Invisível
+  workStartedAt?: string;          // ISO — when work started (in_production)
+  totalTimeSpentMs?: number;       // accumulated milliseconds of active work
 }
 
 export interface CardComment {

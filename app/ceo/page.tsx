@@ -2,10 +2,10 @@
 
 import Header from "@/components/Header";
 import { useAppState } from "@/lib/context/AppStateContext";
-import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel } from "@/lib/utils";
+import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import { exportReportAsPdf } from "@/lib/exportPdf";
 import {
-  Lock, Unlock, BarChart2, TrendingUp, TrendingDown, FileText,
+  Lock, Unlock, BarChart2, TrendingUp, TrendingDown, FileText, Clock,
   Eye, EyeOff, Shield, Download, Users, CheckCircle, Target,
   Instagram, Palette, Zap, UserPlus, Trash2, Edit3, Save, X,
   KeyRound, Mail, UserCog, AlertCircle, ChevronRight, ZapOff,
@@ -27,7 +27,7 @@ export default function CEOPage() {
   const [unlocked, setUnlocked] = useState(false);
   const [pinError, setPinError] = useState(false);
   const [showPin, setShowPin] = useState(false);
-  const [activeSection, setActiveSection] = useState<"overview" | "team" | "reports" | "ltv" | "manage">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "team" | "reports" | "ltv" | "manage" | "timesheet">("overview");
 
   const handleUnlock = () => {
     if (pin === CORRECT_PIN) {
@@ -335,7 +335,7 @@ export default function CEOPage() {
         {/* Tabs */}
         <div>
           <div className="flex gap-1 mb-5 border-b border-border">
-            {(["overview", "team", "manage", "reports", "ltv"] as const).map((tab) => (
+            {(["overview", "team", "manage", "timesheet", "reports", "ltv"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveSection(tab)}
@@ -346,7 +346,8 @@ export default function CEOPage() {
                 }`}
               >
                 {tab === "manage" && <UserCog size={14} />}
-                {tab === "overview" ? "Visão Geral" : tab === "team" ? "Desempenho" : tab === "manage" ? "Gestão da Equipe" : tab === "reports" ? "Relatórios" : "Retenção"}
+                {tab === "timesheet" && <Clock size={14} />}
+                {tab === "overview" ? "Visão Geral" : tab === "team" ? "Desempenho" : tab === "manage" ? "Gestão da Equipe" : tab === "timesheet" ? "Performance Operacional" : tab === "reports" ? "Relatórios" : "Retenção"}
               </button>
             ))}
           </div>
@@ -1270,6 +1271,10 @@ export default function CEOPage() {
             </div>
           )}
 
+          {activeSection === "timesheet" && (
+            <TimesheetTab clients={clients} contentCards={contentCards} tasks={tasks} />
+          )}
+
           {activeSection === "ltv" && (
             <div className="space-y-4 animate-fade-in">
               <p className="text-muted-foreground text-sm">Tempo de retenção e saúde por cliente.</p>
@@ -1320,6 +1325,201 @@ export default function CEOPage() {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Timesheet / Performance Operacional ───────────────────────
+function TimesheetTab({
+  clients,
+  contentCards,
+  tasks,
+}: {
+  clients: import("@/lib/types").Client[];
+  contentCards: import("@/lib/types").ContentCard[];
+  tasks: import("@/lib/types").Task[];
+}) {
+  // Aggregate hours by client
+  const hoursByClient = useMemo(() => {
+    const map: Record<string, { name: string; ms: number }> = {};
+    contentCards.forEach((c) => {
+      const ms = getLiveTimeSpentMs(c.workStartedAt, c.totalTimeSpentMs);
+      if (ms > 0) {
+        if (!map[c.clientId]) map[c.clientId] = { name: c.clientName, ms: 0 };
+        map[c.clientId].ms += ms;
+      }
+    });
+    tasks.forEach((t) => {
+      const ms = getLiveTimeSpentMs(t.workStartedAt, t.totalTimeSpentMs);
+      if (ms > 0) {
+        if (!map[t.clientId]) map[t.clientId] = { name: t.clientName, ms: 0 };
+        map[t.clientId].ms += ms;
+      }
+    });
+    return Object.values(map).sort((a, b) => b.ms - a.ms);
+  }, [contentCards, tasks]);
+
+  const maxClientMs = hoursByClient.length > 0 ? hoursByClient[0].ms : 1;
+
+  // Average time by content format
+  const avgByFormat = useMemo(() => {
+    const map: Record<string, { total: number; count: number }> = {};
+    contentCards.forEach((c) => {
+      const ms = (c.totalTimeSpentMs ?? 0);
+      if (ms > 0 && c.format) {
+        if (!map[c.format]) map[c.format] = { total: 0, count: 0 };
+        map[c.format].total += ms;
+        map[c.format].count += 1;
+      }
+    });
+    return Object.entries(map)
+      .map(([format, { total, count }]) => ({ format, avgMs: Math.round(total / count), count }))
+      .sort((a, b) => b.avgMs - a.avgMs);
+  }, [contentCards]);
+
+  // Ranking by team member (high priority hours)
+  const teamRanking = useMemo(() => {
+    const map: Record<string, { name: string; totalMs: number; highPriorityMs: number; taskCount: number }> = {};
+    const addEntry = (assignedTo: string, ms: number, isHighPriority: boolean) => {
+      if (ms <= 0) return;
+      if (!map[assignedTo]) map[assignedTo] = { name: assignedTo, totalMs: 0, highPriorityMs: 0, taskCount: 0 };
+      map[assignedTo].totalMs += ms;
+      map[assignedTo].taskCount += 1;
+      if (isHighPriority) map[assignedTo].highPriorityMs += ms;
+    };
+    contentCards.forEach((c) => {
+      const ms = getLiveTimeSpentMs(c.workStartedAt, c.totalTimeSpentMs);
+      addEntry(c.socialMedia, ms, c.priority === "high" || c.priority === "critical");
+    });
+    tasks.forEach((t) => {
+      const ms = getLiveTimeSpentMs(t.workStartedAt, t.totalTimeSpentMs);
+      addEntry(t.assignedTo, ms, t.priority === "high" || t.priority === "critical");
+    });
+    return Object.values(map).sort((a, b) => b.totalMs - a.totalMs);
+  }, [contentCards, tasks]);
+
+  // Over-time items
+  const overtimeItems = useMemo(() => {
+    const items: { title: string; clientName: string; assignedTo: string; ms: number; type: "card" | "task" }[] = [];
+    contentCards.forEach((c) => {
+      const ms = getLiveTimeSpentMs(c.workStartedAt, c.totalTimeSpentMs);
+      if (ms >= OVERTIME_THRESHOLD_MS) items.push({ title: c.title, clientName: c.clientName, assignedTo: c.socialMedia, ms, type: "card" });
+    });
+    tasks.forEach((t) => {
+      const ms = getLiveTimeSpentMs(t.workStartedAt, t.totalTimeSpentMs);
+      if (ms >= OVERTIME_THRESHOLD_MS) items.push({ title: t.title, clientName: t.clientName, assignedTo: t.assignedTo, ms, type: "task" });
+    });
+    return items.sort((a, b) => b.ms - a.ms);
+  }, [contentCards, tasks]);
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <p className="text-muted-foreground text-sm">Timesheet invisível — tempo de dedicação por cliente, formato e colaborador.</p>
+
+      {/* Over-time alerts */}
+      {overtimeItems.length > 0 && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-amber-400">⚠️</span>
+            <h3 className="text-sm font-bold text-foreground">Alertas de Over-Time ({overtimeItems.length})</h3>
+          </div>
+          <div className="space-y-2">
+            {overtimeItems.map((item, i) => (
+              <div key={i} className="flex items-center gap-3 text-xs">
+                <span className="text-amber-400 font-bold w-16 text-right">{formatTimeSpent(item.ms)}</span>
+                <span className="text-foreground font-medium flex-1 truncate">{item.title}</span>
+                <span className="text-muted-foreground">{item.clientName}</span>
+                <span className="text-muted-foreground">· {item.assignedTo}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Hours by client */}
+      <div className="card">
+        <h3 className="font-semibold text-foreground text-sm mb-4 flex items-center gap-2">
+          <BarChart2 size={14} className="text-[#0a34f5]" />
+          Alocação por Cliente (horas)
+        </h3>
+        {hoursByClient.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Nenhum tempo registrado ainda. O timesheet começa a contar quando cards entram em produção.</p>
+        ) : (
+          <div className="space-y-3">
+            {hoursByClient.map((entry) => {
+              const pct = Math.round((entry.ms / maxClientMs) * 100);
+              return (
+                <div key={entry.name}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-foreground font-medium">{entry.name}</span>
+                    <span className="text-xs text-[#0a34f5] font-bold">{formatTimeSpent(entry.ms)}</span>
+                  </div>
+                  <div className="h-3 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#0a34f5] rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Average by format */}
+      <div className="card">
+        <h3 className="font-semibold text-foreground text-sm mb-4 flex items-center gap-2">
+          <Clock size={14} className="text-[#0a34f5]" />
+          Tempo Médio por Formato de Conteúdo
+        </h3>
+        {avgByFormat.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Dados insuficientes. O sistema precisa de cards concluídos para calcular médias.</p>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            {avgByFormat.map(({ format, avgMs, count }) => (
+              <div key={format} className="p-3 rounded-xl border border-border bg-muted/30">
+                <p className="text-xs text-muted-foreground">{format}</p>
+                <p className="text-lg font-bold text-foreground mt-1">{formatTimeSpent(avgMs)}</p>
+                <p className="text-[10px] text-zinc-600">média · {count} {count === 1 ? "card" : "cards"}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Team ranking */}
+      <div className="card">
+        <h3 className="font-semibold text-foreground text-sm mb-4 flex items-center gap-2">
+          <Users size={14} className="text-[#0a34f5]" />
+          Ranking de Dedicação
+        </h3>
+        {teamRanking.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Nenhum dado disponível.</p>
+        ) : (
+          <div className="space-y-2">
+            {teamRanking.map((member, i) => (
+              <div key={member.name} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                  i === 0 ? "bg-[#0a34f5]/20 text-[#0a34f5]" : "bg-muted text-muted-foreground"
+                }`}>
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground">{member.name}</p>
+                  <p className="text-[10px] text-muted-foreground">{member.taskCount} tarefas/cards</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-foreground">{formatTimeSpent(member.totalMs)}</p>
+                  {member.highPriorityMs > 0 && (
+                    <p className="text-[10px] text-amber-400">{formatTimeSpent(member.highPriorityMs)} em alta prioridade</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

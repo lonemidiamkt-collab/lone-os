@@ -8,7 +8,7 @@ import Client360Modal from "@/components/Client360Modal";
 import CampaignModal from "@/components/CampaignModal";
 import DriveButton from "@/components/DriveButton";
 import type { ContentCard, Client, MoodType, Priority, SocialMonthlyReport, MonthlyDeliveryReport, SocialPerformanceScore } from "@/lib/types";
-import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
+import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import {
   AlertTriangle, Calendar, Instagram, ImageIcon,
   Smile, UserPlus, X, ExternalLink,
@@ -1341,9 +1341,10 @@ interface KanbanByClientProps {
   onNonDelivery: (card: ContentCard) => void;
   onMoveCard: (cardId: string, toStatus: string) => void;
   currentUser: string;
+  role: string;
 }
 
-function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, currentUser }: KanbanByClientProps) {
+function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, currentUser, role }: KanbanByClientProps) {
   const [activeClientId, setActiveClientId] = useState(clients[0]?.id ?? "");
 
   const activeClient = allClients.find((c) => c.id === activeClientId);
@@ -1524,8 +1525,24 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                       </button>
                     )}
                   </div>
+                  {/* Timesheet indicator — manager/admin only */}
+                  {(role === "admin" || role === "manager") && (() => {
+                    const timeMs = getLiveTimeSpentMs(card.workStartedAt, card.totalTimeSpentMs);
+                    if (timeMs <= 0) return null;
+                    const isOvertime = timeMs >= OVERTIME_THRESHOLD_MS;
+                    return (
+                      <div className={`flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/40 text-[10px] ${isOvertime ? "text-amber-400" : "text-zinc-600"}`}>
+                        <span>{isOvertime ? "⚠️" : "⏱️"}</span>
+                        <span className={isOvertime ? "font-bold" : ""}>{formatTimeSpent(timeMs)}</span>
+                        {isOvertime && <span className="text-[9px] ml-auto font-medium">OVER-TIME</span>}
+                      </div>
+                    );
+                  })()}
                 </div>
-                <div className={`h-0.5 w-full ${STATUS_DOT[card.status]}`} />
+                <div className={`h-0.5 w-full ${STATUS_DOT[card.status]} ${(() => {
+                  const t = getLiveTimeSpentMs(card.workStartedAt, card.totalTimeSpentMs);
+                  return t >= OVERTIME_THRESHOLD_MS ? "!bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)]" : "";
+                })()}`} />
               </div>
             );
           }}
@@ -2096,6 +2113,7 @@ export default function SocialPage() {
               onNonDelivery={setNonDeliveryCard}
               onMoveCard={(cardId, toStatus) => updateContentCard(cardId, { status: toStatus as ContentCard["status"], statusChangedAt: new Date().toISOString() })}
               currentUser={currentUser}
+              role={role}
             />
           </div>
         )}

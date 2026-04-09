@@ -117,3 +117,24 @@ export function formatNumber(value: number): string {
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
   return value.toString();
 }
+
+/** Format milliseconds into human-readable time (e.g. "2h 15m", "45m", "3d 2h") */
+export function formatTimeSpent(ms: number): string {
+  if (ms <= 0) return "0m";
+  const minutes = Math.floor(ms / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d ${hours % 24}h`;
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  return `${minutes}m`;
+}
+
+/** Get live time spent (accumulated + current session if in progress) */
+export function getLiveTimeSpentMs(workStartedAt?: string, totalTimeSpentMs?: number): number {
+  const accumulated = totalTimeSpentMs ?? 0;
+  if (!workStartedAt) return accumulated;
+  return accumulated + (Date.now() - new Date(workStartedAt).getTime());
+}
+
+/** Over-time threshold in ms (8 hours) */
+export const OVERTIME_THRESHOLD_MS = 8 * 60 * 60 * 1000;

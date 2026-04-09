@@ -669,6 +669,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             );
             return prev;
           }
+          // ── Timesheet Invisível (ContentCard) ──
+          if (updates.status === "in_production" && card.status !== "in_production") {
+            // Entering production → start timer
+            updates.workStartedAt = new Date().toISOString();
+          } else if (card.status === "in_production" && updates.status !== "in_production") {
+            // Leaving production → accumulate time
+            if (card.workStartedAt) {
+              const elapsed = Date.now() - new Date(card.workStartedAt).getTime();
+              updates.totalTimeSpentMs = (card.totalTimeSpentMs ?? 0) + elapsed;
+              updates.workStartedAt = undefined;
+            }
+          }
+
           // Prerequisite checks — warn but don't block
           if (updates.status === "approval" && !card.imageUrl && !updates.imageUrl) {
             pushNotification("system", "Atenção: sem arte", `"${card.title}" foi para aprovação sem arte do designer. Solicite ao designer.`, card.clientId);
@@ -1062,6 +1075,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setTasks((prev) => {
         const task = prev.find((t) => t.id === id);
         if (task && updates.status && updates.status !== task.status) {
+          // ── Timesheet Invisível (Task) ──
+          if (updates.status === "in_progress" && task.status !== "in_progress") {
+            updates.workStartedAt = new Date().toISOString();
+          } else if (task.status === "in_progress" && updates.status !== "in_progress") {
+            if (task.workStartedAt) {
+              const elapsed = Date.now() - new Date(task.workStartedAt).getTime();
+              updates.totalTimeSpentMs = (task.totalTimeSpentMs ?? 0) + elapsed;
+              updates.workStartedAt = undefined;
+            }
+          }
+
           if (updates.status === "done") {
             pushNotification("system", "Tarefa concluída", `"${task.title}" de ${task.clientName} foi concluída por ${task.assignedTo}.`, task.clientId);
             pushTimeline({ clientId: task.clientId, type: "task", actor: task.assignedTo, description: `Tarefa concluída: "${task.title}"`, timestamp: now() });
