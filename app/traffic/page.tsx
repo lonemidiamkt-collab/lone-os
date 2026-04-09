@@ -394,14 +394,6 @@ export default function TrafficPage() {
 
           {/* Anuncios Tab */}
           {activeTab === "anuncios" && (
-            <div className="flex items-center gap-2 flex-wrap mb-4">
-              <span className="text-xs text-muted-foreground mr-1">Criativos:</span>
-              {filteredClients.map((c) => (
-                <DriveButton key={c.id} driveLink={c.driveLink} clientName={c.name} size="md" />
-              ))}
-            </div>
-          )}
-          {activeTab === "anuncios" && (
             <AdAnalyticsTab
               clients={filteredClients}
               accounts={mockAdAccounts}

@@ -1390,6 +1390,11 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
         })}
       </div>
 
+      {/* Drive button for active client */}
+      {activeClient && (
+        <DriveButton driveLink={activeClient.driveLink} clientName={activeClient.name} size="md" />
+      )}
+
       {/* Client fixed briefing banner */}
       {activeClient?.fixedBriefing && (
         <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-start gap-3">
@@ -2029,13 +2034,6 @@ export default function SocialPage() {
         {/* ── KANBAN TAB ────────────────────────────────────────────────────── */}
         {activeTab === "kanban" && (
           <div className="animate-fade-in">
-            {/* ── DRIVE QUICK ACCESS ── */}
-            <div className="flex items-center gap-2 flex-wrap mb-4">
-              {filteredClients.map((c) => (
-                <DriveButton key={c.id} driveLink={c.driveLink} clientName={c.name} size="md" />
-              ))}
-            </div>
-
             {/* ── POST VERIFICATION PANEL ── */}
             {(() => {
               const scheduledCards = filteredCards.filter((c) => c.status === "scheduled" && !c.publishVerifiedAt);
@@ -2121,12 +2119,6 @@ export default function SocialPage() {
         {/* ── CALENDAR TAB ──────────────────────────────────────────────────── */}
         {activeTab === "calendar" && (
           <div className="animate-fade-in max-w-lg">
-            {/* Drive quick access */}
-            <div className="flex items-center gap-2 flex-wrap mb-4">
-              {filteredClients.map((c) => (
-                <DriveButton key={c.id} driveLink={c.driveLink} clientName={c.name} size="md" />
-              ))}
-            </div>
             <CalendarView
               cards={filteredCards}
               onDayClick={(day, dayCards) => {

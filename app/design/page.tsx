@@ -337,12 +337,12 @@ export default function DesignPage() {
           </div>
         </div>
 
-        {/* ═══ PASTAS DRIVE — Acesso rápido por cliente ═══ */}
+        {/* ═══ PASTAS DRIVE — Acesso rápido (só clientes com link) ═══ */}
         {(() => {
           const uniqueClientIds = [...new Set(myContentCards.map((c) => c.clientId))];
           const driveClients = uniqueClientIds
             .map((id) => clients.find((c) => c.id === id))
-            .filter(Boolean) as typeof clients;
+            .filter((c): c is NonNullable<typeof c> => !!c && !!c.driveLink);
           if (driveClients.length === 0) return null;
           return (
             <div className="flex items-center gap-2 flex-wrap">
