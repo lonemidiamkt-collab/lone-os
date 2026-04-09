@@ -84,6 +84,18 @@ export interface Task {
   attachments?: string[];
 }
 
+export interface Reminder {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  time?: string; // HH:mm
+  description?: string;
+  createdBy: string;
+  clientId?: string;
+  clientName?: string;
+  done: boolean;
+}
+
 export type SocialPlatform = "instagram" | "tiktok" | "linkedin" | "youtube" | "facebook";
 
 export interface ContentCard {

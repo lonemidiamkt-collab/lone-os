@@ -33,6 +33,7 @@ import type {
   PerformanceLevel,
   ClientInvestmentData,
   InvestmentPaymentMethod,
+  Reminder,
 } from "@/lib/types";
 import {
   mockClients,
@@ -166,6 +167,11 @@ interface AppStateContextValue {
   monthlyDeliveryReports: MonthlyDeliveryReport[];
   socialPerformanceScores: SocialPerformanceScore[];
 
+  // Reminders
+  reminders: Reminder[];
+  addReminder: (reminder: Omit<Reminder, "id">) => Reminder;
+  toggleReminder: (id: string) => void;
+
   // Investment Control
   investmentData: Record<string, ClientInvestmentData>;
   updateInvestmentData: (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => void;
@@ -246,7 +252,22 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return result;
   });
 
+  const [reminders, setReminders] = useState<Reminder[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("lone_reminders");
+        if (saved) return JSON.parse(saved) as Reminder[];
+      } catch {}
+    }
+    return [];
+  });
+
   const [dbReady, setDbReady] = useState(false);
+
+  // ---------- Persist reminders to localStorage ----------
+  useEffect(() => {
+    try { localStorage.setItem("lone_reminders", JSON.stringify(reminders)); } catch {}
+  }, [reminders]);
 
   // ---------- Persist investmentData to localStorage ----------
   useEffect(() => {
@@ -1057,6 +1078,22 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     [pushNotification, pushTimeline, now]
   );
 
+  const addReminder = useCallback(
+    (reminder: Omit<Reminder, "id">): Reminder => {
+      const newReminder: Reminder = { ...reminder, id: `rem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` };
+      setReminders((prev) => [newReminder, ...prev]);
+      return newReminder;
+    },
+    []
+  );
+
+  const toggleReminder = useCallback(
+    (id: string) => {
+      setReminders((prev) => prev.map((r) => r.id === id ? { ...r, done: !r.done } : r));
+    },
+    []
+  );
+
   const addTrafficReport = useCallback(
     (report: Omit<TrafficMonthlyReport, "id" | "createdAt">): TrafficMonthlyReport => {
       const newReport: TrafficMonthlyReport = {
@@ -1443,6 +1480,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         toggleOnboardingItem,
         monthlyDeliveryReports,
         socialPerformanceScores,
+        reminders,
+        addReminder,
+        toggleReminder,
         investmentData,
         updateInvestmentData,
         dbReady,
