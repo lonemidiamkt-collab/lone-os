@@ -5,7 +5,7 @@ import { useAppState } from "@/lib/context/AppStateContext";
 import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import { exportReportAsPdf } from "@/lib/exportPdf";
 import {
-  Lock, Unlock, BarChart2, TrendingUp, TrendingDown, FileText, Clock,
+  Lock, Unlock, BarChart2, TrendingUp, TrendingDown, FileText, Clock, AlertTriangle,
   Eye, EyeOff, Shield, Download, Users, CheckCircle, Target,
   Instagram, Palette, Zap, UserPlus, Trash2, Edit3, Save, X,
   KeyRound, Mail, UserCog, AlertCircle, ChevronRight, ZapOff,
@@ -27,7 +27,7 @@ export default function CEOPage() {
   const [unlocked, setUnlocked] = useState(false);
   const [pinError, setPinError] = useState(false);
   const [showPin, setShowPin] = useState(false);
-  const [activeSection, setActiveSection] = useState<"overview" | "team" | "reports" | "ltv" | "manage" | "timesheet">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "team" | "reports" | "ltv" | "manage" | "timesheet" | "workload">("overview");
 
   const handleUnlock = () => {
     if (pin === CORRECT_PIN) {
@@ -335,7 +335,7 @@ export default function CEOPage() {
         {/* Tabs */}
         <div>
           <div className="flex gap-1 mb-5 border-b border-border">
-            {(["overview", "team", "manage", "timesheet", "reports", "ltv"] as const).map((tab) => (
+            {(["overview", "team", "manage", "timesheet", "workload", "reports", "ltv"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveSection(tab)}
@@ -347,7 +347,8 @@ export default function CEOPage() {
               >
                 {tab === "manage" && <UserCog size={14} />}
                 {tab === "timesheet" && <Clock size={14} />}
-                {tab === "overview" ? "Visão Geral" : tab === "team" ? "Desempenho" : tab === "manage" ? "Gestão da Equipe" : tab === "timesheet" ? "Performance Operacional" : tab === "reports" ? "Relatórios" : "Retenção"}
+                {tab === "workload" && <BarChart2 size={14} />}
+                {tab === "overview" ? "Visão Geral" : tab === "team" ? "Desempenho" : tab === "manage" ? "Gestão da Equipe" : tab === "timesheet" ? "Timesheet" : tab === "workload" ? "Carga de Trabalho" : tab === "reports" ? "Relatórios" : "Retenção"}
               </button>
             ))}
           </div>
@@ -1268,6 +1269,94 @@ export default function CEOPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {activeSection === "workload" && (
+            <div className="space-y-6 animate-fade-in">
+              <p className="text-muted-foreground text-sm">Visão de capacidade e carga de trabalho por colaborador.</p>
+
+              {(() => {
+                const CAPACITY_PER_WEEK = 8; // max cards/tasks per week
+                const members = [...new Set([
+                  ...clients.map((c) => c.assignedSocial),
+                  ...clients.map((c) => c.assignedTraffic),
+                  ...clients.map((c) => c.assignedDesigner),
+                ])].sort();
+
+                return (
+                  <div className="space-y-4">
+                    {members.map((name) => {
+                      const memberTasks = tasks.filter((t) => t.assignedTo === name && t.status !== "done");
+                      const memberCards = contentCards.filter((c) => c.socialMedia === name && c.status !== "published");
+                      const memberDesign = designRequests.filter((r) => clients.some((c) => c.assignedDesigner === name && c.id === r.clientId) && r.status !== "done");
+                      const totalActive = memberTasks.length + memberCards.length + memberDesign.length;
+                      const utilPct = Math.round((totalActive / CAPACITY_PER_WEEK) * 100);
+                      const isOverloaded = utilPct > 120;
+                      const isHigh = utilPct > 80;
+
+                      const memberClients = [...new Set([
+                        ...clients.filter((c) => c.assignedSocial === name || c.assignedTraffic === name || c.assignedDesigner === name).map((c) => c.name)
+                      ])];
+
+                      return (
+                        <div key={name} className={`card border ${isOverloaded ? "border-red-500/30" : isHigh ? "border-amber-500/20" : "border-border"}`}>
+                          <div className="flex items-center gap-4 mb-3">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${
+                              isOverloaded ? "bg-red-500/15 text-red-400" : isHigh ? "bg-amber-500/15 text-amber-400" : "bg-[#0a34f5]/15 text-[#0a34f5]"
+                            }`}>
+                              {name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-foreground text-sm">{name}</p>
+                              <p className="text-[10px] text-muted-foreground">{memberClients.slice(0, 3).join(", ")}{memberClients.length > 3 ? ` +${memberClients.length - 3}` : ""}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className={`text-lg font-bold ${isOverloaded ? "text-red-400" : isHigh ? "text-amber-400" : "text-foreground"}`}>
+                                {utilPct}%
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">{totalActive}/{CAPACITY_PER_WEEK} itens</p>
+                            </div>
+                          </div>
+
+                          {/* Capacity bar */}
+                          <div className="h-2.5 bg-muted rounded-full overflow-hidden mb-3">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                isOverloaded ? "bg-red-500" : isHigh ? "bg-amber-500" : "bg-[#0a34f5]"
+                              }`}
+                              style={{ width: `${Math.min(utilPct, 100)}%` }}
+                            />
+                          </div>
+
+                          {/* Breakdown */}
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="text-center p-2 rounded-lg bg-muted/30">
+                              <p className="text-xs font-bold text-foreground">{memberTasks.length}</p>
+                              <p className="text-[9px] text-muted-foreground">Tarefas</p>
+                            </div>
+                            <div className="text-center p-2 rounded-lg bg-muted/30">
+                              <p className="text-xs font-bold text-foreground">{memberCards.length}</p>
+                              <p className="text-[9px] text-muted-foreground">Cards</p>
+                            </div>
+                            <div className="text-center p-2 rounded-lg bg-muted/30">
+                              <p className="text-xs font-bold text-foreground">{memberDesign.length}</p>
+                              <p className="text-[9px] text-muted-foreground">Design</p>
+                            </div>
+                          </div>
+
+                          {isOverloaded && (
+                            <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                              <AlertTriangle size={12} className="text-red-400 shrink-0" />
+                              <span className="text-[10px] text-red-400 font-medium">Sobrecarregado — considere redistribuir tarefas</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           )}
 

@@ -11,6 +11,7 @@ import LoginScreen from "@/components/LoginScreen";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { Menu } from "lucide-react";
 import NotificationToast from "@/components/NotificationToast";
+import NotificationCenter from "@/components/NotificationCenter";
 import ScheduledNoticePopup from "@/components/ScheduledNoticePopup";
 import GlobalSearch from "@/components/GlobalSearch";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
@@ -65,6 +66,11 @@ function MainLayout({ children }: { children: React.ReactNode }) {
 
       {/* Double Sidebar */}
       <Sidebar />
+
+      {/* Notification bell — fixed top-right */}
+      <div className="fixed top-4 right-4 z-30">
+        <NotificationCenter />
+      </div>
 
       {/* Main content — shifts right when secondary is open */}
       <main

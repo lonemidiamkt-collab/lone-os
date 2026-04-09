@@ -6,7 +6,7 @@ import {
   LayoutDashboard, TrendingUp, Instagram, Palette, Users, Lock,
   MessageCircle, Calendar, LogOut, Sun, Moon,
   ClipboardCheck, BarChart2, Wallet, Megaphone, Brain, FileText,
-  ChevronLeft, Activity, Layers, AlertTriangle,
+  ChevronLeft, Activity, Layers, AlertTriangle, Settings,
   Users2, Globe, Target, Inbox, ShieldCheck, Package,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -28,6 +28,7 @@ interface PrimaryItem {
 
 const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/",              icon: LayoutDashboard, label: "Dashboard",  roles: ["admin","manager","traffic","social","designer"] },
+  { href: "/my-work",       icon: Inbox,           label: "Meu Trabalho", roles: ["admin","manager","traffic","social","designer"] },
   { href: "/traffic",       icon: TrendingUp,      label: "Tráfego",    roles: ["admin","manager","traffic"],                    hasSecondary: true },
   { href: "/social",        icon: Instagram,       label: "Social",     roles: ["admin","manager","social","designer"],          hasSecondary: true },
   { href: "/design",        icon: Palette,         label: "Designer",   roles: ["admin","manager","designer","social"],          hasSecondary: true },
@@ -305,6 +306,19 @@ export default function Sidebar() {
             title={theme === "dark" ? "Modo claro" : "Modo escuro"}
           >
             {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
+
+          <button
+            onClick={() => { router.push("/settings"); setMobileOpen(false); }}
+            className={cn(
+              "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
+              pathname === "/settings"
+                ? "text-[#0a34f5] bg-[#0a34f5]/10"
+                : "text-zinc-700 hover:text-zinc-300 hover:bg-white/[0.04]"
+            )}
+            title="Configurações"
+          >
+            <Settings size={15} />
           </button>
 
           <button
