@@ -3,7 +3,6 @@
 import Header from "@/components/Header";
 import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
-import DriveButton from "@/components/DriveButton";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import {
@@ -336,25 +335,6 @@ export default function DesignPage() {
             </div>
           </div>
         </div>
-
-        {/* ═══ PASTAS DRIVE — Acesso rápido (só clientes com link) ═══ */}
-        {(() => {
-          const uniqueClientIds = [...new Set(myContentCards.map((c) => c.clientId))];
-          const driveClients = uniqueClientIds
-            .map((id) => clients.find((c) => c.id === id))
-            .filter((c): c is NonNullable<typeof c> => !!c && !!c.driveLink);
-          if (driveClients.length === 0) return null;
-          return (
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mr-1">
-                <FolderOpen size={12} /> Drive:
-              </div>
-              {driveClients.map((c) => (
-                <DriveButton key={c.id} driveLink={c.driveLink} clientName={c.name} size="md" />
-              ))}
-            </div>
-          );
-        })()}
 
         {/* ═══ KANBANS TAB ═══ */}
         {tab === "kanbans" && (
