@@ -7,7 +7,7 @@ import {
   Activity, Megaphone, Clock, Bell, Send, X,
   AlertCircle, ZapOff, LayoutList,
   CheckCircle, CheckCircle2, Palette, Instagram, BarChart2,
-  Target, Zap, FileText, ChevronRight,
+  Target, Zap, FileText, ChevronRight, Plus, Inbox,
 } from "lucide-react";
 import { getStatusLed, getStatusLabel } from "@/lib/utils";
 import { useAppState } from "@/lib/context/AppStateContext";
@@ -509,6 +509,21 @@ function AdminDashboard() {
         <MetricCard icon={AlertTriangle} label="Em Risco" value={atRiskClients.length} sub="precisam de atenção" iconColor="text-red-500" iconBg="bg-red-500/10" onClick={() => setStatusFilter("at_risk")} />
         <MetricCard icon={UserPlus} label="Onboarding" value={onboardingClients.length} sub="novos clientes" iconColor="text-primary" iconBg="bg-primary/10" onClick={() => setStatusFilter("onboarding")} />
         <MetricCard icon={Clock} label="Tarefas Urgentes" value={urgentTasks.length} sub="prioridade crítica" iconColor="text-primary" iconBg="bg-primary/10" href="/calendar" />
+      </div>
+
+      {/* Quick Actions */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-muted-foreground mr-1">Ações rápidas:</span>
+        <Link href="/calendar" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#0a34f5]/10 text-[#0a34f5] border border-[#0a34f5]/20 hover:bg-[#0a34f5]/20 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all">
+          <Plus size={12} /> Nova Tarefa
+        </Link>
+        <Link href="/social" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-foreground border border-white/10 hover:bg-white/10 transition-all">
+          <FileText size={12} /> Novo Card
+        </Link>
+        <Link href="/my-work" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-foreground border border-white/10 hover:bg-white/10 transition-all">
+          <Inbox size={12} /> Meu Trabalho
+        </Link>
+        <span className="ml-auto text-[10px] text-zinc-700">⌘K para buscar</span>
       </div>
 
       {/* Ad Rejection Alert */}

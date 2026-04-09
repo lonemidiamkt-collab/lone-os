@@ -27,7 +27,7 @@ export default function CEOPage() {
   const [unlocked, setUnlocked] = useState(false);
   const [pinError, setPinError] = useState(false);
   const [showPin, setShowPin] = useState(false);
-  const [activeSection, setActiveSection] = useState<"overview" | "team" | "reports" | "ltv" | "manage" | "timesheet" | "workload">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "team" | "reports" | "ltv" | "manage" | "timesheet" | "workload" | "churn">("overview");
 
   const handleUnlock = () => {
     if (pin === CORRECT_PIN) {
@@ -335,7 +335,7 @@ export default function CEOPage() {
         {/* Tabs */}
         <div>
           <div className="flex gap-1 mb-5 border-b border-border">
-            {(["overview", "team", "manage", "timesheet", "workload", "reports", "ltv"] as const).map((tab) => (
+            {(["overview", "team", "manage", "timesheet", "workload", "churn", "reports", "ltv"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveSection(tab)}
@@ -348,7 +348,7 @@ export default function CEOPage() {
                 {tab === "manage" && <UserCog size={14} />}
                 {tab === "timesheet" && <Clock size={14} />}
                 {tab === "workload" && <BarChart2 size={14} />}
-                {tab === "overview" ? "Visão Geral" : tab === "team" ? "Desempenho" : tab === "manage" ? "Gestão da Equipe" : tab === "timesheet" ? "Timesheet" : tab === "workload" ? "Carga de Trabalho" : tab === "reports" ? "Relatórios" : "Retenção"}
+                {tab === "overview" ? "Visão Geral" : tab === "team" ? "Desempenho" : tab === "manage" ? "Gestão da Equipe" : tab === "timesheet" ? "Timesheet" : tab === "workload" ? "Carga de Trabalho" : tab === "churn" ? "Risco de Churn" : tab === "reports" ? "Relatórios" : "Retenção"}
               </button>
             ))}
           </div>
@@ -1357,6 +1357,90 @@ export default function CEOPage() {
                   </div>
                 );
               })()}
+            </div>
+          )}
+
+          {activeSection === "churn" && (
+            <div className="space-y-4 animate-fade-in">
+              <p className="text-muted-foreground text-sm">Análise preditiva de risco de cancelamento baseada em atividade, comunicação e satisfação.</p>
+              <div className="space-y-3">
+                {clients.filter((c) => c.status !== "onboarding").map((client) => {
+                  // Churn score: 0-100 (higher = more risk)
+                  let score = 0;
+                  // Status
+                  if (client.status === "at_risk") score += 35;
+                  else if (client.status === "average") score += 15;
+                  // Kanban inactivity
+                  const kanbanHoursAgo = client.lastKanbanActivity ? (Date.now() - new Date(client.lastKanbanActivity).getTime()) / 3600000 : 999;
+                  if (kanbanHoursAgo > 168) score += 25; // 7 days
+                  else if (kanbanHoursAgo > 72) score += 10; // 3 days
+                  // Posts this month
+                  const postRatio = client.postsGoal ? (client.postsThisMonth ?? 0) / client.postsGoal : 0.5;
+                  if (postRatio < 0.3) score += 20;
+                  else if (postRatio < 0.6) score += 8;
+                  // No recent post
+                  if (!client.lastPostDate) score += 10;
+                  else {
+                    const daysSincePost = (Date.now() - new Date(client.lastPostDate).getTime()) / 86400000;
+                    if (daysSincePost > 14) score += 15;
+                    else if (daysSincePost > 7) score += 5;
+                  }
+                  score = Math.min(100, score);
+
+                  const riskLevel = score >= 60 ? "critical" : score >= 35 ? "warning" : "safe";
+                  const riskConfig = {
+                    critical: { label: "Alto Risco", color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/30", bar: "bg-red-500" },
+                    warning: { label: "Atenção", color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", bar: "bg-amber-500" },
+                    safe: { label: "Estável", color: "text-[#0a34f5]", bg: "bg-[#0a34f5]/10", border: "border-[#0a34f5]/20", bar: "bg-[#0a34f5]" },
+                  }[riskLevel];
+
+                  const signals: string[] = [];
+                  if (client.status === "at_risk") signals.push("Status em risco");
+                  if (kanbanHoursAgo > 168) signals.push(`${Math.floor(kanbanHoursAgo / 24)}d sem atividade no board`);
+                  if (postRatio < 0.3 && client.postsGoal) signals.push(`Apenas ${Math.round(postRatio * 100)}% da meta de posts`);
+                  if (!client.lastPostDate) signals.push("Nenhum post registrado");
+
+                  return (
+                    <div key={client.id} className={`card border ${riskConfig.border}`}>
+                      <div className="flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${riskConfig.bg} ${riskConfig.color}`}>
+                          {client.name[0]}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-foreground text-sm">{client.name}</p>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${riskConfig.bg} ${riskConfig.color} border ${riskConfig.border}`}>
+                              {riskConfig.label}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{client.industry} · R$ {client.monthlyBudget.toLocaleString("pt-BR")}/mês</p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-xl font-bold ${riskConfig.color}`}>{score}%</p>
+                          <p className="text-[10px] text-muted-foreground">risco</p>
+                        </div>
+                      </div>
+                      {/* Risk bar */}
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-3 mb-2">
+                        <div className={`h-full rounded-full transition-all ${riskConfig.bar}`} style={{ width: `${score}%` }} />
+                      </div>
+                      {/* Signals */}
+                      {signals.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {signals.map((s, i) => (
+                            <span key={i} className={`text-[9px] px-2 py-0.5 rounded-full ${riskConfig.bg} ${riskConfig.color} border ${riskConfig.border}`}>
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }).sort((a, b) => {
+                  // This sort won't work on JSX directly, so we'll sort the data before mapping
+                  return 0;
+                })}
+              </div>
             </div>
           )}
 

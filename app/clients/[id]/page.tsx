@@ -23,7 +23,7 @@ import {
   CheckSquare, GitCommitHorizontal, MessageCircle,
   BarChart2, PenLine, Star, Upload, Image as ImageIcon,
   Link as LinkIcon, Mic, Palette, Award, ShieldAlert, Plus, Download, Pencil,
-  Facebook, Settings, Link2, Unlink, ChevronDown, Check, Loader2,
+  Facebook, Settings, Link2, Unlink, ChevronDown, Check, Loader2, Target,
 } from "lucide-react";
 import EditClientModal from "@/components/EditClientModal";
 import Link from "next/link";
@@ -86,7 +86,7 @@ export default function ClientDetailPage() {
   const params = useParams();
   const clientId = params.id as string;
   const { role, currentUser } = useRole();
-  const { clients, contentCards, timeline, clientChats, onboarding, creativeAssets, socialProofs, crisisNotes, quinzReports, designRequests, addCreativeAsset, sendClientMessage, addTimelineEntry, toggleOnboardingItem, updateClientStatus, updateClientData, addSocialProof, addCrisisNote, addQuinzReport, addDesignRequest } = useAppState();
+  const { clients, contentCards, tasks, timeline, clientChats, onboarding, creativeAssets, socialProofs, crisisNotes, quinzReports, designRequests, addCreativeAsset, sendClientMessage, addTimelineEntry, toggleOnboardingItem, updateClientStatus, updateClientData, addSocialProof, addCrisisNote, addQuinzReport, addDesignRequest } = useAppState();
 
   const client = clients.find((c) => c.id === clientId);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -527,6 +527,41 @@ export default function ClientDetailPage() {
                 </div>
               </div>
             </div>
+
+              {/* Metas / OKRs */}
+              <div className="card">
+                <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                  <Target size={14} className="text-[#0a34f5]" />
+                  Metas do Mês
+                </h3>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {(() => {
+                    const postsPublished = contentCards.filter((c) => c.clientId === clientId && c.status === "published").length;
+                    const postsGoal = client.postsGoal ?? 12;
+                    const postsPct = Math.min(100, Math.round((postsPublished / postsGoal) * 100));
+
+                    const cardsInPipeline = contentCards.filter((c) => c.clientId === clientId && c.status !== "published").length;
+                    const tasksCompleted = tasks.filter((t) => t.clientId === clientId && t.status === "done").length;
+                    const totalTasks = tasks.filter((t) => t.clientId === clientId).length;
+                    const taskPct = totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0;
+
+                    return [
+                      { label: "Posts Publicados", value: `${postsPublished}/${postsGoal}`, pct: postsPct, color: postsPct >= 80 ? "bg-[#0a34f5]" : postsPct >= 50 ? "bg-amber-500" : "bg-red-500" },
+                      { label: "Pipeline Ativo", value: `${cardsInPipeline}`, pct: Math.min(100, cardsInPipeline * 10), color: "bg-[#3b6ff5]" },
+                      { label: "Tarefas Concluídas", value: `${tasksCompleted}/${totalTasks}`, pct: taskPct, color: taskPct >= 80 ? "bg-[#0a34f5]" : "bg-amber-500" },
+                      { label: "Engajamento", value: client.postsThisMonth ? `${client.postsThisMonth} posts` : "—", pct: Math.min(100, (client.postsThisMonth ?? 0) * 8), color: "bg-[#0a34f5]" },
+                    ].map(({ label, value, pct, color }) => (
+                      <div key={label} className="p-3 rounded-xl bg-muted/30 border border-border/50">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+                        <p className="text-lg font-bold text-foreground">{value}</p>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-2">
+                          <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
 
               {/* Observação de Crise — only for at_risk clients */}
               {client.status === "at_risk" && (
