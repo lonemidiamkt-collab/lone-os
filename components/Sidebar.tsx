@@ -112,9 +112,9 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
     sections: [
       {
         items: [
-          { label: "Fila de Pedidos",  icon: Layers,        href: "/design" },
-          { label: "Minhas Tarefas",   icon: ClipboardCheck,href: "/design" },
-          { label: "Performance",      icon: Activity,      href: "/design" },
+          { label: "Fila de Pedidos",  icon: Layers,        tab: "requests" },
+          { label: "Minhas Tarefas",   icon: ClipboardCheck, tab: "kanbans" },
+          { label: "Performance",      icon: Activity,      tab: "performance" },
         ],
       },
     ],

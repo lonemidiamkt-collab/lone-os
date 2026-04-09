@@ -10,9 +10,11 @@ import {
   Palette, Filter, Clock, CheckCircle, Loader, Paperclip, X,
   AlertTriangle, Zap, LayoutList, Columns3, Upload, Download,
   ImageIcon, Eye, ChevronDown, User, FileText, FileWarning, FolderOpen,
+  ExternalLink, BarChart2,
 } from "lucide-react";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
+import { useNav } from "@/lib/context/NavContext";
 import type { ContentCard, DesignRequest } from "@/lib/types";
 
 // ── Content card columns (same pipeline as social page) ──────────────────────
@@ -35,7 +37,7 @@ const DESIGN_COLUMNS = [
   { id: "done",        title: "Concluído",     color: "bg-[#0a34f5]" },
 ];
 
-type TabView = "kanbans" | "requests";
+type TabView = "kanbans" | "requests" | "performance";
 
 function getDeadlineUrgency(dueDate?: string): "overdue" | "today" | "soon" | "ok" | null {
   if (!dueDate) return null;
@@ -53,7 +55,7 @@ const URGENCY_BADGE: Record<string, { label: string; cls: string }> = {
   ok:      { label: "",       cls: "text-muted-foreground" },
 };
 
-// ── Upload Modal ─────────────────────────────────────────────────────────────
+// ── Upload Modal (Link Drive) ────────────────────────────────────────────────
 
 function UploadArtModal({
   card,
@@ -62,27 +64,26 @@ function UploadArtModal({
   card: ContentCard;
   onClose: () => void;
 }) {
-  const { updateContentCard, updateDesignRequest } = useAppState();
+  const { updateContentCard, updateDesignRequest, clients } = useAppState();
   const { currentUser } = useRole();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState(card.imageUrl ?? "");
+  const [artLink, setArtLink] = useState(
+    card.imageUrl && card.imageUrl.includes("drive.google.com") ? card.imageUrl : ""
+  );
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-  };
+  const clientDriveLink = clients.find((c) => c.id === card.clientId)?.driveLink;
 
   const handleSave = () => {
-    if (!preview) return;
+    if (!artLink.trim()) { setError("Insira o link da arte."); return; }
+    if (!artLink.includes("drive.google.com") && !artLink.includes("docs.google.com") && !artLink.includes("http")) {
+      setError("Insira um link válido (Google Drive ou URL)."); return;
+    }
     updateContentCard(card.id, {
-      imageUrl: preview,
+      imageUrl: artLink.trim(),
       designerDeliveredAt: new Date().toISOString(),
       designerDeliveredBy: currentUser,
     });
-    // Auto-complete linked design request
     if (card.designRequestId) {
       updateDesignRequest(card.designRequestId, { status: "done" });
     }
@@ -94,11 +95,14 @@ function UploadArtModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-border">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-black border border-[#1a1a1a] rounded-2xl w-full max-w-md mx-4 shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0a34f5]/40 to-transparent" />
+        <div className="flex items-center justify-between p-5 border-b border-[#1a1a1a]">
           <div>
-            <h3 className="font-semibold text-foreground text-sm">Enviar Arte</h3>
+            <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
+              <Upload size={14} className="text-[#0a34f5]" /> Entregar Arte
+            </h3>
             <p className="text-xs text-primary mt-0.5">{card.title} — {card.clientName}</p>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
@@ -107,40 +111,50 @@ function UploadArtModal({
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Preview area */}
-          <div className="relative aspect-square rounded-xl border-2 border-dashed border-border bg-muted overflow-hidden">
-            {preview ? (
-              <img src={preview} alt="Preview" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                <ImageIcon size={40} />
-                <p className="text-xs">Clique para selecionar arquivo</p>
+          {/* Client Drive quick access */}
+          {clientDriveLink && (
+            <a
+              href={clientDriveLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#0a34f5]/[0.04] border border-[#0a34f5]/20 hover:border-[#0a34f5]/40 hover:shadow-[0_0_15px_rgba(10,52,245,0.1)] transition-all"
+            >
+              <FolderOpen size={14} className="text-[#0a34f5] drop-shadow-[0_0_4px_rgba(10,52,245,0.6)]" />
+              <div className="flex-1">
+                <p className="text-xs text-foreground font-medium">Pasta do cliente no Drive</p>
+                <p className="text-[9px] text-muted-foreground">Abrir para fazer upload da arte</p>
               </div>
-            )}
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="absolute inset-0 bg-transparent hover:bg-black/20 transition-colors cursor-pointer"
+              <ExternalLink size={12} className="text-[#0a34f5]" />
+            </a>
+          )}
+
+          {/* Art link input */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Link da Arte (Google Drive)</label>
+            <input
+              value={artLink}
+              onChange={(e) => { setArtLink(e.target.value); setError(""); }}
+              placeholder="https://drive.google.com/file/d/..."
+              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0a34f5]/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
+              autoFocus
             />
+            {error && <p className="text-[10px] text-red-400">{error}</p>}
           </div>
 
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*,video/*,.pdf,.psd,.ai,.svg"
-            className="hidden"
-            onChange={handleFile}
-          />
-
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="btn-ghost w-full text-sm flex items-center justify-center gap-2"
-          >
-            <Upload size={14} />
-            {preview ? "Trocar arquivo" : "Selecionar arquivo"}
-          </button>
+          {/* Preview link */}
+          {artLink && artLink.includes("http") && (
+            <a
+              href={artLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-xs text-[#0a34f5] hover:underline"
+            >
+              <ExternalLink size={11} /> Verificar link antes de enviar
+            </a>
+          )}
 
           {/* Card info */}
-          <div className="bg-muted rounded-lg p-3 space-y-1.5 text-xs">
+          <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3 space-y-1.5 text-xs">
             <div className="flex items-center gap-2">
               <User size={11} className="text-muted-foreground" />
               <span className="text-muted-foreground">Social:</span>
@@ -152,24 +166,24 @@ function UploadArtModal({
               <span className="text-foreground">{card.format}</span>
             </div>
             {card.briefing && (
-              <div className="pt-1.5 border-t border-border mt-1.5">
+              <div className="pt-1.5 border-t border-[#1a1a1a] mt-1.5">
                 <p className="text-muted-foreground leading-relaxed line-clamp-3">{card.briefing}</p>
               </div>
             )}
           </div>
         </div>
 
-        <div className="p-5 border-t border-border flex gap-2">
-          <button onClick={onClose} className="btn-ghost flex-1 text-sm">Cancelar</button>
+        <div className="p-5 border-t border-[#1a1a1a] flex gap-2">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all">Cancelar</button>
           <button
             onClick={handleSave}
-            disabled={!preview || saved}
-            className="btn-primary flex-1 text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+            disabled={!artLink.trim() || saved}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0a34f5] text-white text-xs font-medium hover:bg-[#0a34f5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] disabled:opacity-30 disabled:shadow-none"
           >
             {saved ? (
-              <><CheckCircle size={14} /> Salvo!</>
+              <><CheckCircle size={14} /> Entregue!</>
             ) : (
-              <><Upload size={14} /> Enviar Arte</>
+              <><Upload size={14} /> Entregar Arte</>
             )}
           </button>
         </div>
@@ -184,6 +198,20 @@ export default function DesignPage() {
   const { clients, contentCards, designRequests, updateDesignRequest, updateContentCard } = useAppState();
   const { role, currentUser } = useRole();
   const [tab, setTab] = useState<TabView>("kanbans");
+  const { pendingTab, setPendingTab, setCurrentTab } = useNav();
+
+  // NavContext wiring — sidebar tab switching
+  useEffect(() => {
+    if (pendingTab && ["kanbans", "requests", "performance"].includes(pendingTab)) {
+      setTab(pendingTab as TabView);
+      setPendingTab("");
+    }
+  }, [pendingTab, setPendingTab]);
+
+  useEffect(() => {
+    setCurrentTab(tab);
+  }, [tab, setCurrentTab]);
+
   const [uploadCard, setUploadCard] = useState<ContentCard | null>(null);
   const [detailCard, setDetailCard] = useState<ContentCard | null>(null);
   const [briefingReq, setBriefingReq] = useState<DesignRequest | null>(null);
@@ -257,6 +285,14 @@ export default function DesignPage() {
               }`}
             >
               <LayoutList size={13} /> Solicitações de Design
+            </button>
+            <button
+              onClick={() => setTab("performance")}
+              className={`text-xs px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
+                tab === "performance" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <BarChart2 size={13} /> Performance
             </button>
           </div>
         </div>
@@ -583,6 +619,96 @@ export default function DesignPage() {
           />
         )}
       </div>
+
+      {/* ═══ PERFORMANCE TAB ═══ */}
+      {tab === "performance" && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="card">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Entregues</p>
+              <p className="text-2xl font-bold text-foreground">{myContentCards.filter((c) => c.designerDeliveredAt).length}</p>
+              <p className="text-xs text-muted-foreground">artes finalizadas</p>
+            </div>
+            <div className="card">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">No Prazo</p>
+              <p className="text-2xl font-bold text-[#0a34f5]">
+                {myContentCards.filter((c) => c.designerDeliveredAt && c.dueDate && c.designerDeliveredAt.slice(0, 10) <= c.dueDate).length}
+              </p>
+              <p className="text-xs text-muted-foreground">entregas antes do deadline</p>
+            </div>
+            <div className="card">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Atrasadas</p>
+              <p className="text-2xl font-bold text-red-400">
+                {myContentCards.filter((c) => c.designerDeliveredAt && c.dueDate && c.designerDeliveredAt.slice(0, 10) > c.dueDate).length}
+              </p>
+              <p className="text-xs text-muted-foreground">entregas após deadline</p>
+            </div>
+            <div className="card">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pendentes</p>
+              <p className="text-2xl font-bold text-amber-400">{needsArt}</p>
+              <p className="text-xs text-muted-foreground">aguardando arte</p>
+            </div>
+          </div>
+
+          {/* Delivery rate by social media person */}
+          <div className="card">
+            <h3 className="font-semibold text-foreground text-sm mb-4">Entregas por Social Media</h3>
+            <div className="space-y-3">
+              {socialPeople.map((person) => {
+                const personCards = cardsBySocial[person] ?? [];
+                const delivered = personCards.filter((c) => c.designerDeliveredAt).length;
+                const total = personCards.filter((c) => !["ideas", "script"].includes(c.status)).length;
+                const pct = total > 0 ? Math.round((delivered / total) * 100) : 0;
+                return (
+                  <div key={person}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-foreground">{person}</span>
+                      <span className="text-xs text-muted-foreground">{delivered}/{total} ({pct}%)</span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[#0a34f5] rounded-full transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Recent deliveries */}
+          <div className="card">
+            <h3 className="font-semibold text-foreground text-sm mb-4">Entregas Recentes</h3>
+            {myContentCards.filter((c) => c.designerDeliveredAt).length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhuma entrega registrada ainda.</p>
+            ) : (
+              <div className="space-y-2">
+                {myContentCards
+                  .filter((c) => c.designerDeliveredAt)
+                  .sort((a, b) => (b.designerDeliveredAt ?? "").localeCompare(a.designerDeliveredAt ?? ""))
+                  .slice(0, 10)
+                  .map((c) => {
+                    const onTime = c.dueDate && c.designerDeliveredAt && c.designerDeliveredAt.slice(0, 10) <= c.dueDate;
+                    return (
+                      <div key={c.id} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${onTime ? "bg-[#0a34f5]" : "bg-red-400"}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-foreground truncate">{c.title}</p>
+                          <p className="text-[10px] text-muted-foreground">{c.clientName} · {c.socialMedia}</p>
+                        </div>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${onTime ? "bg-[#0a34f5]/10 text-[#0a34f5] border border-[#0a34f5]/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
+                          {onTime ? "No prazo" : "Atrasado"}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Upload Art Modal */}
       {uploadCard && (

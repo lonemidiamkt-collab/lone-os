@@ -2173,10 +2173,15 @@ export default function SocialPage() {
                             {item.label}
                           </span>
                           {item.completed && item.completedBy && (
-                            <p className="text-xs text-muted-foreground/60 mt-0.5">
-                              Concluído por {item.completedBy}
-                              {item.completedAt ? ` · ${item.completedAt}` : ""}
-                            </p>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <div className="w-5 h-5 rounded-full bg-[#0a34f5]/15 flex items-center justify-center shrink-0">
+                                <span className="text-[8px] font-bold text-[#0a34f5]">
+                                  {item.completedBy.split(" ").map((w: string) => w[0]).join("").slice(0, 2)}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-muted-foreground">{item.completedBy}</span>
+                              {item.completedAt && <span className="text-[10px] text-zinc-600">· {item.completedAt}</span>}
+                            </div>
                           )}
                         </div>
                       </label>

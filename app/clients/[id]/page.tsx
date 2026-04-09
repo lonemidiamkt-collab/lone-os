@@ -935,12 +935,22 @@ export default function ClientDetailPage() {
                             {item.label}
                           </span>
                           {item.completed && item.completedBy && (
-                            <p className="text-xs text-muted-foreground/50 mt-0.5">
-                              por {item.completedBy} · {item.completedAt}
-                            </p>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <div className="w-5 h-5 rounded-full bg-[#0a34f5]/15 flex items-center justify-center shrink-0">
+                                <span className="text-[8px] font-bold text-[#0a34f5]">
+                                  {item.completedBy.split(" ").map((w) => w[0]).join("").slice(0, 2)}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-muted-foreground">
+                                {item.completedBy}
+                              </span>
+                              <span className="text-[10px] text-zinc-600">
+                                · {item.completedAt}
+                              </span>
+                            </div>
                           )}
                         </div>
-                        {item.completed && <CheckCircle size={15} className="text-primary shrink-0 mt-0.5" />}
+                        {item.completed && <CheckCircle size={15} className="text-[#0a34f5] shrink-0 mt-0.5 drop-shadow-[0_0_4px_rgba(10,52,245,0.5)]" />}
                       </label>
                     ))}
                   </div>

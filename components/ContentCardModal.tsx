@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import {
   Upload, Calendar, FileText, User, Tag,
   Save, ImageIcon, Hash, AlignLeft, Globe,
-  Send, MessageSquare,
+  Send, MessageSquare, CheckCircle, XCircle, ExternalLink,
 } from "lucide-react";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
@@ -62,8 +62,10 @@ interface Props {
 }
 
 export default function ContentCardModal({ card, onClose }: Props) {
-  const { updateContentCard, addCardComment } = useAppState();
+  const { updateContentCard, addCardComment, approveContent, rejectContent } = useAppState();
   const { role, currentUser } = useRole();
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
   const [observations, setObservations] = useState(card.observations ?? "");
   const [caption, setCaption] = useState(card.caption ?? "");
   const [hashtags, setHashtags] = useState(card.hashtags ?? "");
@@ -348,6 +350,78 @@ export default function ContentCardModal({ card, onClose }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Approval Actions — visible when card is in approval or client_approval */}
+        {(card.status === "approval" || card.status === "client_approval") && (
+          <div className="px-6 py-4 border-t border-border space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-semibold text-foreground">Ação de Aprovação</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-medium">
+                {card.status === "approval" ? "Aprovação Interna" : "Aprovação Cliente"}
+              </span>
+            </div>
+
+            {/* Drive link if available */}
+            {card.imageUrl && card.imageUrl.includes("drive.google.com") && (
+              <a
+                href={card.imageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0a34f5]/[0.04] border border-[#0a34f5]/20 hover:border-[#0a34f5]/40 transition-all text-xs text-[#0a34f5]"
+              >
+                <ExternalLink size={12} /> Abrir arte no Drive
+              </a>
+            )}
+
+            {!showRejectInput ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { approveContent(card.id, currentUser); onClose(); }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0a34f5] text-white text-xs font-medium hover:bg-[#0a34f5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] hover:shadow-[0_0_25px_rgba(10,52,245,0.5)]"
+                >
+                  <CheckCircle size={14} /> Aprovar Arte
+                </button>
+                <button
+                  onClick={() => setShowRejectInput(true)}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40 transition-all"
+                >
+                  <XCircle size={14} /> Solicitar Alteração
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && rejectReason.trim()) {
+                      rejectContent(card.id, currentUser, rejectReason.trim());
+                      onClose();
+                    }
+                  }}
+                  placeholder="Descreva o motivo da alteração..."
+                  className="w-full bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-600 focus:border-red-500/40 outline-none"
+                  autoFocus
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setShowRejectInput(false); setRejectReason(""); }}
+                    className="px-3 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-foreground transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => { if (rejectReason.trim()) { rejectContent(card.id, currentUser, rejectReason.trim()); onClose(); } }}
+                    disabled={!rejectReason.trim()}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20 hover:bg-red-500/20 transition-all disabled:opacity-30"
+                  >
+                    <XCircle size={12} /> Enviar Rejeição
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <DialogFooter className="px-6 py-4 border-t border-border">
           <Button variant="ghost" onClick={onClose}>
