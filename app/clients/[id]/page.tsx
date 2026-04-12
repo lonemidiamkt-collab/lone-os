@@ -14,6 +14,7 @@ import {
   getPriorityColor,
   getPriorityLabel,
   daysSince,
+  calcHealthScore,
 } from "@/lib/utils";
 import type { TimelineEntryType, ClientStatus, CreativeAsset, SocialProofEntry } from "@/lib/types";
 import {
@@ -43,19 +44,8 @@ const TIMELINE_ICONS: Record<TimelineEntryType, { icon: React.ElementType; color
   meeting:    { icon: User,               color: "text-zinc-400",  bg: "bg-[#111118]" },
 };
 
-// ── Health score ─────────────────────────────────────────────────────────────
-function calcHealth(client: ReturnType<typeof useAppState>["clients"][0]): number {
-  let s = 50;
-  if (client.status === "good") s += 20;
-  else if (client.status === "at_risk") s -= 30;
-  if (client.attentionLevel === "low") s += 10;
-  else if (client.attentionLevel === "critical") s -= 25;
-  if (client.lastPostDate) {
-    const d = daysSince(client.lastPostDate);
-    if (d <= 3) s += 10; else if (d > 7) s -= 15;
-  }
-  return Math.max(0, Math.min(100, s));
-}
+// Health score: uses shared calcHealthScore from lib/utils.ts
+const calcHealth = calcHealthScore;
 
 const TONE_LABELS: Record<string, string> = {
   formal: "Formal", funny: "Engraçado", authoritative: "Autoritário", casual: "Casual",

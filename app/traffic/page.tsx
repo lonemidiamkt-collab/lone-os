@@ -904,13 +904,43 @@ function MonthlyReportsTab({
             </button>
           ))}
         </div>
-        <button
-          onClick={() => { setShowForm(!showForm); setEditingReport(null); }}
-          className="btn-primary text-xs flex items-center gap-1.5 ml-auto"
-        >
-          <Plus size={13} />
-          Novo Relatorio
-        </button>
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            onClick={() => {
+              if (!selectedClientData) return;
+              const now = new Date();
+              const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+              // Auto-generate from mock campaign data
+              const clientCampaigns = mockAdCampaigns.filter((c) => c.clientId === selectedClient);
+              const totalSpend = clientCampaigns.reduce((s, c) => s + c.dailyMetrics.reduce((ds, m) => ds + m.spend, 0), 0);
+              const totalImpressions = clientCampaigns.reduce((s, c) => s + c.dailyMetrics.reduce((ds, m) => ds + m.impressions, 0), 0);
+              const totalMessages = clientCampaigns.reduce((s, c) => s + c.dailyMetrics.reduce((ds, m) => ds + (m.messages ?? m.leads ?? 0), 0), 0);
+              const costPerMsg = totalMessages > 0 ? totalSpend / totalMessages : 0;
+              onAddReport({
+                clientId: selectedClient,
+                clientName: selectedClientData.name,
+                month,
+                createdBy: currentUser,
+                messages: totalMessages,
+                messageCost: Math.round(costPerMsg * 100) / 100,
+                impressions: totalImpressions,
+                observations: `Relatorio auto-gerado. ${clientCampaigns.length} campanha(s), investimento total R$ ${totalSpend.toFixed(2)}.`,
+              });
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all"
+            title="Gerar relatorio automaticamente a partir dos dados de campanha"
+          >
+            <Zap size={13} />
+            Auto-gerar
+          </button>
+          <button
+            onClick={() => { setShowForm(!showForm); setEditingReport(null); }}
+            className="btn-primary text-xs flex items-center gap-1.5"
+          >
+            <Plus size={13} />
+            Novo Relatorio
+          </button>
+        </div>
       </div>
 
       {/* New Report Form */}

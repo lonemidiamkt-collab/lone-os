@@ -125,7 +125,7 @@ function NoticeFormBlock() {
       )}
       <div className="space-y-2 max-h-64 overflow-auto">
         {notices.length === 0 && (
-          <p className="text-xs text-muted-foreground/50 text-center py-4">Nenhum aviso no momento</p>
+          <p className="text-xs text-zinc-600 text-center py-5">Nenhum aviso. Tudo sob controle.</p>
         )}
         {notices.slice(0, 8).map((notice) => {
           const catIcon = notice.category === "meeting" ? "📅" : notice.category === "deadline" ? "⏰" : notice.category === "reminder" ? "🔔" : "";
@@ -316,7 +316,12 @@ function EmployeeDashboard() {
           </div>
           <div className="space-y-2">
             {myTasks.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-6">Nenhuma tarefa pendente. Bom trabalho!</p>
+              <div className="flex flex-col items-center py-8">
+                <div className="w-10 h-10 rounded-xl bg-zinc-900/50 flex items-center justify-center mb-3">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-700"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                </div>
+                <p className="text-xs text-zinc-600">Nenhuma tarefa pendente. Respire.</p>
+              </div>
             )}
             {myTasks.slice(0, 8).map((task) => (
               <div key={task.id} className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
@@ -444,7 +449,10 @@ function AdminDashboard() {
 
   const pipelineCards = contentCards.filter((c) => c.status !== "published");
   const publishedThisMonth = contentCards.filter((c) => c.status === "published").length;
-  const stuckCards = pipelineCards.filter((c) => hoursSince(c.statusChangedAt) >= 48);
+  const stuckCards = pipelineCards.filter((c) => {
+    const enteredAt = c.columnEnteredAt?.[c.status] ?? c.statusChangedAt;
+    return hoursSince(enteredAt) >= 48;
+  });
   const pendingApproval = contentCards.filter((c) => c.status === "approval" || c.status === "client_approval").length;
 
   const designQueued = designRequests.filter((r) => r.status === "queued").length;

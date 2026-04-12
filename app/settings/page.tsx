@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useRole } from "@/lib/context/RoleContext";
 import { useTheme } from "@/lib/context/ThemeContext";
+import { RestartTourButton } from "@/components/OnboardingTour";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "CEO / Administrador",
@@ -177,12 +178,22 @@ export default function SettingsPage() {
 
                   <div className="p-4 rounded-xl border border-border bg-muted/30">
                     <p className="text-sm font-medium text-foreground mb-1">Cor de Destaque</p>
-                    <p className="text-xs text-muted-foreground mb-3">Azul #0a34f5 — padrão do Lone OS</p>
+                    <p className="text-xs text-muted-foreground mb-3">Azul #0a34f5 — padrao do Lone OS</p>
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-[#0a34f5] shadow-[0_0_12px_rgba(10,52,245,0.4)]" />
                       <div className="w-8 h-8 rounded-lg bg-[#3b6ff5]" />
                       <div className="w-8 h-8 rounded-lg bg-[#0a34f5]/50" />
                       <span className="text-[10px] text-muted-foreground ml-2">Palette fixa</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-border bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Tour do Sistema</p>
+                        <p className="text-xs text-muted-foreground">Refaca o tour interativo para conhecer o Lone OS</p>
+                      </div>
+                      <RestartTourButton className="px-3 py-1.5 rounded-lg text-xs text-[#0a34f5] bg-[#0a34f5]/10 border border-[#0a34f5]/20 hover:bg-[#0a34f5]/20 transition-all" />
                     </div>
                   </div>
                 </div>

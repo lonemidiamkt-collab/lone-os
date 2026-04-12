@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { AttentionLevel, ClientStatus, Priority } from "./types";
+import type { AttentionLevel, Client, ClientStatus, Priority } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -138,3 +138,23 @@ export function getLiveTimeSpentMs(workStartedAt?: string, totalTimeSpentMs?: nu
 
 /** Over-time threshold in ms (8 hours) */
 export const OVERTIME_THRESHOLD_MS = 8 * 60 * 60 * 1000;
+
+/** Unified Health Score calculation (0-100). Single source of truth. */
+export function calcHealthScore(client: Pick<Client, "status" | "attentionLevel" | "lastPostDate">): number {
+  let score = 50;
+  // Status
+  if (client.status === "good") score += 20;
+  else if (client.status === "average") score -= 5;
+  else if (client.status === "at_risk") score -= 30;
+  // Attention level
+  if (client.attentionLevel === "low") score += 10;
+  else if (client.attentionLevel === "high") score -= 10;
+  else if (client.attentionLevel === "critical") score -= 25;
+  // Post recency
+  if (client.lastPostDate) {
+    const days = daysSince(client.lastPostDate);
+    if (days <= 3) score += 10;
+    else if (days > 7) score -= 15;
+  }
+  return Math.max(0, Math.min(100, score));
+}

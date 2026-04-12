@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import {
   Upload, Calendar, FileText, User, Tag,
   Save, ImageIcon, Hash, AlignLeft, Globe,
-  Send, MessageSquare, CheckCircle, XCircle, ExternalLink,
+  Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Palette,
 } from "lucide-react";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
@@ -62,7 +62,7 @@ interface Props {
 }
 
 export default function ContentCardModal({ card, onClose }: Props) {
-  const { updateContentCard, addCardComment, approveContent, rejectContent } = useAppState();
+  const { updateContentCard, addCardComment, approveContent, rejectContent, addDesignRequest, pushNotification } = useAppState();
   const { role, currentUser } = useRole();
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -424,6 +424,47 @@ export default function ContentCardModal({ card, onClose }: Props) {
         )}
 
         <DialogFooter className="px-6 py-4 border-t border-border">
+          {/* Solicitar Design — only if card has no design request yet */}
+          {!card.designRequestId && !card.designerDeliveredAt && (
+            <Button
+              variant="outline"
+              className="mr-auto flex items-center gap-2 text-[#8b5cf6] border-[#8b5cf6]/30 hover:bg-[#8b5cf6]/10"
+              onClick={() => {
+                const req = addDesignRequest({
+                  title: `Arte: ${card.title}`,
+                  clientId: card.clientId,
+                  clientName: card.clientName,
+                  requestedBy: currentUser,
+                  priority: card.priority || "medium",
+                  status: "queued",
+                  format: card.format || "Post Feed",
+                  briefing: card.briefing || card.observations || `Criar arte para: ${card.title}`,
+                });
+                updateContentCard(card.id, { designRequestId: req.id });
+                pushNotification("content", "Design solicitado", `Pedido de arte para "${card.title}" enviado ao designer.`, card.clientId);
+              }}
+            >
+              <Palette size={14} />
+              Solicitar Design
+            </Button>
+          )}
+          {card.designRequestId && !card.designerDeliveredAt && (
+            <span className="mr-auto text-xs text-amber-400 flex items-center gap-1.5">
+              <Palette size={12} /> Aguardando design...
+            </span>
+          )}
+          {card.designerDeliveredAt && !card.socialConfirmedAt && (
+            <Button
+              variant="outline"
+              className="mr-auto flex items-center gap-2 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+              onClick={() => {
+                updateContentCard(card.id, { socialConfirmedAt: new Date().toISOString(), socialConfirmedBy: currentUser });
+              }}
+            >
+              <CheckCircle size={14} />
+              Confirmar Arte
+            </Button>
+          )}
           <Button variant="ghost" onClick={onClose}>
             Fechar
           </Button>
@@ -432,7 +473,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
             className={`flex items-center gap-2 ${saved ? "bg-[#0a34f5] hover:bg-[#0a34f5]" : ""}`}
           >
             <Save size={14} />
-            {saved ? "Salvo!" : "Salvar alterações"}
+            {saved ? "Salvo!" : "Salvar alteracoes"}
           </Button>
         </DialogFooter>
       </DialogContent>

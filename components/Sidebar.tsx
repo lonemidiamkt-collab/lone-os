@@ -7,7 +7,7 @@ import {
   MessageCircle, Calendar, LogOut, Sun, Moon,
   ClipboardCheck, BarChart2, Wallet, Megaphone, Brain, FileText,
   ChevronLeft, Activity, Layers, AlertTriangle, Settings,
-  Users2, Globe, Target, Inbox, ShieldCheck, Package,
+  Users2, Globe, Target, Inbox, ShieldCheck, Package, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,8 @@ const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/clients",       icon: Users,           label: "Clientes",   roles: ["admin","manager"],                              hasSecondary: true },
   { href: "/calendar",      icon: Calendar,        label: "Calendário", roles: ["admin","manager","traffic","social","designer"] },
   { href: "/communications",icon: MessageCircle,   label: "Comunicação",roles: ["admin","manager","traffic","social","designer"] },
+  { href: "/automations",   icon: Zap,             label: "Automações", roles: ["admin","manager"] },
+  { href: "/goals",         icon: Target,          label: "Metas & OKRs", roles: ["admin","manager"] },
   { href: "/ceo",           icon: Lock,            label: "Área CEO",   roles: ["admin"] },
 ];
 
@@ -126,8 +128,8 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
       {
         items: [
           { label: "Todos os Clientes", icon: Users,         href: "/clients" },
-          { label: "Em Risco",          icon: AlertTriangle, href: "/clients", badgeKey: "atRisk" },
-          { label: "Objetivos",         icon: Target,        href: "/clients" },
+          { label: "Em Risco",          icon: AlertTriangle, href: "/clients?filter=at_risk", badgeKey: "atRisk" },
+          { label: "Objetivos",         icon: Target,        href: "/clients?filter=goals" },
         ],
       },
     ],
@@ -228,9 +230,10 @@ export default function Sidebar() {
 
   function handleSecondaryItemClick(item: SecondaryItem) {
     const targetHref = item.href ?? activePrimary ?? "/";
+    const targetPath = targetHref.split("?")[0];
     if (item.tab) {
       setPendingTab(item.tab);
-      if (!pathname.startsWith(targetHref)) {
+      if (!pathname.startsWith(targetPath)) {
         router.push(targetHref);
       }
     } else {
@@ -254,7 +257,8 @@ export default function Sidebar() {
       )}
 
       <aside className={cn(
-        "fixed left-0 top-0 bottom-0 z-50 flex flex-col items-center justify-between py-5 w-[72px] bg-black transition-transform duration-300",
+        "fixed left-0 top-0 bottom-0 z-50 flex flex-col items-center justify-between py-5 w-[72px] bg-black transition-transform duration-[400ms]",
+        "ease-[cubic-bezier(0.16,1,0.3,1)]",
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         {/* Right-edge glow */}
@@ -279,7 +283,7 @@ export default function Sidebar() {
                 onClick={() => handlePrimaryClick(item)}
                 title={item.label}
                 className={cn(
-                  "relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 group",
+                  "relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ease-out group",
                   isPage
                     ? "text-white"
                     : isSection
@@ -342,7 +346,7 @@ export default function Sidebar() {
       <aside
         className={cn(
           "fixed left-[72px] top-0 bottom-0 z-40 w-[240px] bg-[#0c0c0c] border-r border-[#181818] flex flex-col",
-          "transition-all duration-300 ease-in-out",
+          "transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform",
           secondaryOpen && secondaryConfig
             ? "translate-x-0 opacity-100"
             : "-translate-x-full opacity-0 pointer-events-none",
@@ -355,7 +359,7 @@ export default function Sidebar() {
         {secondaryConfig && (
           <>
             {/* Secondary header */}
-            <div className="flex items-center justify-between px-4 pt-[22px] pb-4">
+            <div className="flex items-center justify-between px-4 pt-6 pb-4">
               <span className="text-[11px] font-semibold text-zinc-400 tracking-tight">
                 {secondaryConfig.title}
               </span>
@@ -376,17 +380,18 @@ export default function Sidebar() {
               {secondaryConfig.sections.map((section, si) => (
                 <div key={si} className={si > 0 ? "pt-4" : ""}>
                   {section.title && (
-                    <p className="text-[10px] font-semibold text-zinc-700 uppercase tracking-[0.12em] px-2 pb-1.5">
+                    <p className="text-[11px] font-semibold text-zinc-600 uppercase tracking-[0.08em] px-2 pb-2">
                       {section.title}
                     </p>
                   )}
                   {section.items.map((item, ii) => {
                     const Icon    = item.icon;
                     const badge   = item.badgeKey ? (badges[item.badgeKey] ?? 0) : 0;
+                    const itemPath = item.href?.split("?")[0];
                     const isActive = item.tab
                       ? currentTab === item.tab
-                      : item.href
-                      ? pathname === item.href
+                      : itemPath
+                      ? pathname === itemPath
                       : false;
 
                     return (
@@ -394,7 +399,7 @@ export default function Sidebar() {
                         key={ii}
                         onClick={() => handleSecondaryItemClick(item)}
                         className={cn(
-                          "w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-left transition-all duration-100 group",
+                          "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all duration-150 ease-out group",
                           isActive
                             ? "bg-[#1a1a1a] text-white"
                             : "text-zinc-500 hover:text-zinc-200 hover:bg-[#151515]"

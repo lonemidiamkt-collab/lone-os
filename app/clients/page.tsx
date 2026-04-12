@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import NewClientModal from "@/components/NewClientModal";
@@ -13,6 +13,7 @@ import {
   getStatusColor,
   getStatusLabel,
   getStatusLed,
+  calcHealthScore,
 } from "@/lib/utils";
 import {
   Search, UserPlus, ChevronRight, MessageSquare,
@@ -21,22 +22,7 @@ import {
 import Link from "next/link";
 import { mockAdCampaigns } from "@/lib/mockData";
 
-// Simple health score per client (0-100)
-function calcHealthScore(client: Client): number {
-  let score = 50;
-  if (client.status === "good") score += 20;
-  else if (client.status === "average") score -= 5;
-  else if (client.status === "at_risk") score -= 30;
-  if (client.attentionLevel === "low") score += 10;
-  else if (client.attentionLevel === "high") score -= 10;
-  else if (client.attentionLevel === "critical") score -= 25;
-  if (client.lastPostDate) {
-    const days = Math.floor((Date.now() - new Date(client.lastPostDate).getTime()) / 86400000);
-    if (days <= 3) score += 10;
-    else if (days > 7) score -= 15;
-  }
-  return Math.max(0, Math.min(100, score));
-}
+// Health score: uses shared calcHealthScore from lib/utils.ts
 
 function HealthBar({ score }: { score: number }) {
   return (
@@ -59,6 +45,16 @@ export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [responsibleFilter, setResponsibleFilter] = useState("mine");
+
+  // Read URL filter on mount (avoids useSearchParams Suspense requirement)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const filter = params.get("filter");
+    if (filter === "at_risk") {
+      setStatusFilter("at_risk");
+      setResponsibleFilter("all");
+    }
+  }, []);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [showNewModal, setShowNewModal] = useState(false);

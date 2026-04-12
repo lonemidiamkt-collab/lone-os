@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import {
   Calendar,
   ChevronLeft,
@@ -23,6 +23,7 @@ import {
   Briefcase,
   Clock,
   ExternalLink,
+  GripVertical,
 } from "lucide-react";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
@@ -121,8 +122,8 @@ type CreateType = "task" | "social" | "reminder";
 export default function CalendarPage() {
   const {
     contentCards, tasks, trafficRoutineChecks, clients, updateTask,
-    reminders, addReminder, toggleReminder,
-    addTask, addContentCard,
+    reminders, addReminder, toggleReminder, updateReminder,
+    addTask, addContentCard, updateContentCard,
   } = useAppState();
   const { role, currentUser } = useRole();
 
@@ -133,6 +134,66 @@ export default function CalendarPage() {
   const [filterTypes, setFilterTypes] = useState<EventType[]>(["content", "task", "routine", "reminder"]);
   const [filterClient, setFilterClient] = useState<string>("all");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  // Drag & Drop state
+  const [dragOverDay, setDragOverDay] = useState<number | null>(null);
+  const draggedEventRef = useRef<CalendarEvent | null>(null);
+
+  const handleDragStart = useCallback((e: React.DragEvent, event: CalendarEvent) => {
+    if (event.type === "routine") return; // routine checks are not draggable
+    draggedEventRef.current = event;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", event.id);
+    (e.target as HTMLElement).style.opacity = "0.4";
+  }, []);
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    (e.target as HTMLElement).style.opacity = "1";
+    draggedEventRef.current = null;
+    setDragOverDay(null);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, day: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverDay(day);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverDay(null);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, day: number) => {
+    e.preventDefault();
+    setDragOverDay(null);
+    const event = draggedEventRef.current;
+    if (!event) return;
+    draggedEventRef.current = null;
+
+    const newDate = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (newDate === event.date) return; // same day, no-op
+
+    if (event.type === "content") {
+      const card = event.raw as ContentCard;
+      updateContentCard(card.id, { dueDate: newDate });
+    } else if (event.type === "task") {
+      const task = event.raw as Task;
+      const updates: Partial<Task> = { dueDate: newDate };
+      // If task has a start date, shift it proportionally
+      if (task.startDate && task.dueDate) {
+        const oldStart = new Date(task.startDate + "T00:00:00");
+        const oldEnd = new Date(task.dueDate + "T00:00:00");
+        const diff = oldEnd.getTime() - oldStart.getTime();
+        const newEnd = new Date(newDate + "T00:00:00");
+        const newStart = new Date(newEnd.getTime() - diff);
+        updates.startDate = newStart.toISOString().slice(0, 10);
+      }
+      updateTask(task.id, updates);
+    } else if (event.type === "reminder") {
+      const rem = event.raw as Reminder;
+      updateReminder(rem.id, { date: newDate });
+    }
+  }, [viewYear, viewMonth, updateContentCard, updateTask, updateReminder]);
 
   // Quick Create state
   const [showCreate, setShowCreate] = useState(false);
@@ -481,8 +542,13 @@ export default function CalendarPage() {
                 <div
                   key={i}
                   onClick={() => day && handleDayClick(day)}
+                  onDragOver={day ? (e) => handleDragOver(e, day) : undefined}
+                  onDragLeave={day ? handleDragLeave : undefined}
+                  onDrop={day ? (e) => handleDrop(e, day) : undefined}
                   className={`group min-h-[90px] rounded-lg p-1.5 flex flex-col transition-all border relative ${
-                    todayFlag
+                    dragOverDay === day
+                      ? "bg-[#0a34f5]/15 border-[#0a34f5]/50 ring-1 ring-[#0a34f5]/30"
+                      : todayFlag
                       ? "bg-[#0a34f5]/10 border-[#0a34f5]/30"
                       : selected
                       ? "bg-white/5 border-white/10"
@@ -517,12 +583,17 @@ export default function CalendarPage() {
                       {/* Reminder dots */}
                       {dayReminders.length > 0 && filterTypes.includes("reminder") && (
                         <div className="flex items-center gap-1 mb-0.5">
-                          {dayReminders.slice(0, 3).map((rem) => (
+                          {dayReminders.slice(0, 3).map((rem) => {
+                            const remEvent: CalendarEvent = { id: `rem-${rem.id}`, type: "reminder", title: rem.title, clientName: rem.clientName || "", date: rem.date, color: TYPE_COLORS.reminder, detail: "", raw: rem };
+                            return (
                             <button
                               key={rem.id}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, remEvent)}
+                              onDragEnd={handleDragEnd}
                               onClick={(e) => { e.stopPropagation(); toggleReminder(rem.id); }}
-                              title={`${rem.done ? "✓ " : ""}${rem.title}${rem.time ? ` às ${rem.time}` : ""}`}
-                              className={`w-[18px] h-[18px] rounded-md flex items-center justify-center transition-all ${
+                              title={`${rem.done ? "✓ " : ""}${rem.title}${rem.time ? ` às ${rem.time}` : ""} — arraste para reagendar`}
+                              className={`w-[18px] h-[18px] rounded-md flex items-center justify-center transition-all cursor-grab active:cursor-grabbing ${
                                 rem.done
                                   ? "bg-emerald-500/15 border border-emerald-500/30"
                                   : "bg-[#0a34f5]/10 border border-[#0a34f5]/25 shadow-[0_0_6px_rgba(10,52,245,0.3)] hover:shadow-[0_0_10px_rgba(10,52,245,0.5)]"
@@ -534,7 +605,8 @@ export default function CalendarPage() {
                                 <Bell size={8} className="text-[#0a34f5] drop-shadow-[0_0_3px_rgba(10,52,245,0.8)]" />
                               )}
                             </button>
-                          ))}
+                            );
+                          })}
                           {dayReminders.length > 3 && (
                             <span className="text-[8px] text-muted-foreground">+{dayReminders.length - 3}</span>
                           )}
@@ -572,11 +644,15 @@ export default function CalendarPage() {
                       <div className="flex flex-col gap-0.5 flex-1">
                         {nonReminderEvents.slice(0, 2).map((e) => {
                           const isTaskDeadline = e.type === "task" && e.isDeadline && (e.raw as Task).status !== "done";
+                          const isDraggable = e.type !== "routine";
                           return (
                             <button
                               key={e.id}
+                              draggable={isDraggable}
+                              onDragStart={isDraggable ? (ev) => handleDragStart(ev, e) : undefined}
+                              onDragEnd={isDraggable ? handleDragEnd : undefined}
                               onClick={(ev) => { ev.stopPropagation(); handleEventClick(e); }}
-                              className={`flex items-center gap-1 px-1 py-0.5 rounded text-[10px] truncate text-left transition-all ${
+                              className={`flex items-center gap-1 px-1 py-0.5 rounded text-[10px] truncate text-left transition-all ${isDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${
                                 isTaskDeadline
                                   ? "bg-red-500/15 text-[#ff2d55] font-bold drop-shadow-[0_0_4px_rgba(255,45,85,0.5)]"
                                   : e.type === "content" ? "bg-primary/15 text-primary" :
@@ -796,6 +872,10 @@ export default function CalendarPage() {
                 <AlertTriangle size={10} className="text-[#ff2d55]" />
                 <span className="text-[10px] text-[#ff2d55] font-medium">Prazo final</span>
               </div>
+              <div className="flex items-center gap-2 pt-1 border-t border-border/50 mt-1">
+                <GripVertical size={12} className="text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">Arraste eventos para reagendar</span>
+              </div>
             </div>
           </div>
         </div>
@@ -917,6 +997,7 @@ function QuickCreateModal({
         dueDate: endDate,
         briefing: briefing || undefined,
         statusChangedAt: new Date().toISOString(),
+        columnEnteredAt: { ideas: new Date().toISOString() },
       } as Omit<ContentCard, "id">);
       return;
     }

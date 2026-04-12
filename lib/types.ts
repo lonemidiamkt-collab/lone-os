@@ -120,6 +120,7 @@ export interface ContentCard {
   observations?: string;
   trafficSuggestion?: string;
   statusChangedAt?: string; // ISO datetime — tracks SLA per column
+  columnEnteredAt?: Record<string, string>; // maps status → ISO timestamp of when card entered that column
   comments?: CardComment[];
   designRequestId?: string; // links to DesignRequest for designer tracking
   // Handoff tracking
@@ -234,16 +235,22 @@ export interface OnboardingItem {
 export interface ClientAccess {
   clientId: string;
   instagramLogin?: string;
+  /** @deprecated Use external vault. Stored as masked hint only (e.g. "****56") */
   instagramPassword?: string;
   facebookLogin?: string;
+  /** @deprecated Use external vault. */
   facebookPassword?: string;
   tiktokLogin?: string;
+  /** @deprecated Use external vault. */
   tiktokPassword?: string;
   linkedinLogin?: string;
+  /** @deprecated Use external vault. */
   linkedinPassword?: string;
   youtubeLogin?: string;
+  /** @deprecated Use external vault. */
   youtubePassword?: string;
   mlabsLogin?: string;
+  /** @deprecated Use external vault. */
   mlabsPassword?: string;
   canvaLink?: string;
   driveLink?: string;
@@ -474,4 +481,46 @@ export interface AdDailyMetric {
   conversions: number;
   messages?: number;
   leads?: number;
+}
+
+// ─── Automations ───────────────────────────────────────────────
+export type AutomationTrigger =
+  | "client_status_change"
+  | "task_overdue"
+  | "content_approval_pending"
+  | "budget_threshold"
+  | "onboarding_stalled";
+
+export type AutomationAction =
+  | "send_notification"
+  | "assign_task"
+  | "change_status"
+  | "send_chat_message";
+
+export interface AutomationRule {
+  id: string;
+  name: string;
+  description: string;
+  trigger: AutomationTrigger;
+  triggerConfig: Record<string, string>;
+  action: AutomationAction;
+  actionConfig: Record<string, string>;
+  enabled: boolean;
+  createdAt: string;
+  lastTriggeredAt?: string;
+  triggerCount: number;
+}
+
+// ─── OKRs ──────────────────────────────────────────────────────
+export type OKRStatus = "on_track" | "at_risk" | "off_track";
+
+export interface OKR {
+  id: string;
+  title: string;
+  team: string;
+  target: number;
+  current: number;
+  unit: string;
+  quarter: string;
+  status: OKRStatus;
 }

@@ -175,26 +175,42 @@
     @apply bg-background text-foreground antialiased tracking-tight;
     font-family: "Montserrat", "Inter", ui-sans-serif, sans-serif;
   }
+
+  /* ─── FOCUS-VISIBLE — accessibility ring for keyboard nav ─── */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius);
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Suppress focus ring on mouse click */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
 }
 
 @layer components {
-  /* ─── CARD — Dark Graphite with High-Glow ─────────────────── */
+  /* ─── CARD — Dark Graphite, clean & minimal ─────────────────── */
   .card {
     @apply rounded-2xl p-5;
-    background: #121212;
-    border: 1px solid #2a2a2a;
-    box-shadow:
-      0 0 0 1px rgba(255,255,255,0.02) inset,
-      0 4px 24px -4px rgba(0,0,0,0.6),
-      0 1px 2px rgba(0,0,0,0.3);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    background: var(--card);
+    border: 1px solid #1e1e1e;
+    box-shadow: 0 2px 12px -2px rgba(0,0,0,0.5);
+    transition: border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: border-color, box-shadow;
   }
   .card:hover {
-    border-color: rgba(10, 52, 245, 0.25);
-    box-shadow:
-      0 0 0 1px rgba(10, 52, 245, 0.06) inset,
-      0 4px 24px -4px rgba(0,0,0,0.6),
-      0 0 20px -4px rgba(10, 52, 245, 0.1);
+    border-color: #2a2a2a;
+    box-shadow: 0 4px 20px -4px rgba(0,0,0,0.7);
   }
 
   .theme-light .card {
@@ -206,14 +222,12 @@
       0 1px 2px rgba(0,0,0,0.04);
   }
 
-  /* Card with glow border highlight (top edge) */
+  /* Card with glow border highlight (top edge) — use ONLY for focal cards */
   .card-glow {
     @apply rounded-2xl p-5 relative overflow-hidden;
-    background: #121212;
-    border: 1px solid #2a2a2a;
-    box-shadow:
-      0 0 0 1px rgba(255,255,255,0.02) inset,
-      0 4px 24px -4px rgba(0,0,0,0.6);
+    background: var(--card);
+    border: 1px solid #1e1e1e;
+    box-shadow: 0 2px 12px -2px rgba(0,0,0,0.5);
   }
   .card-glow::before {
     content: "";
@@ -241,53 +255,57 @@
     @apply inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold tracking-normal;
   }
 
-  /* ─── BUTTONS — High-Glow ────────────────────────────────────── */
+  /* ─── BUTTONS — Glow only on hover, clean at rest ────────────── */
   .btn-primary {
     @apply px-5 py-2.5 rounded-xl text-sm font-semibold tracking-normal
-           transition-all duration-200 relative overflow-hidden;
+           transition-all relative overflow-hidden;
+    transition-duration: 0.2s;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     background: #0a34f5;
     color: white;
-    border: 1px solid rgba(59, 111, 245, 0.4);
-    box-shadow:
-      0 0 20px rgba(10, 52, 245, 0.3),
-      0 4px 14px rgba(10, 52, 245, 0.25);
+    border: 1px solid rgba(59, 111, 245, 0.3);
+    box-shadow: 0 2px 8px rgba(10, 52, 245, 0.2);
   }
   .btn-primary:hover {
     background: #0c3cff;
-    border-color: rgba(59, 111, 245, 0.6);
+    border-color: rgba(59, 111, 245, 0.5);
     box-shadow:
-      0 0 40px rgba(10, 52, 245, 0.5),
-      0 6px 20px rgba(10, 52, 245, 0.35),
-      0 0 0 1px rgba(59, 111, 245, 0.3) inset;
+      0 0 30px rgba(10, 52, 245, 0.4),
+      0 4px 16px rgba(10, 52, 245, 0.25);
     transform: translateY(-1px);
   }
   .btn-primary:active {
     transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(10, 52, 245, 0.2);
+  }
+  .btn-primary:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
   }
 
   .btn-ghost {
-    @apply px-3.5 py-2 rounded-xl text-sm font-medium text-muted-foreground
-           transition-all duration-200 tracking-normal;
+    @apply px-3.5 py-2 rounded-xl text-sm font-medium text-muted-foreground tracking-normal;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     border: 1px solid transparent;
   }
   .btn-ghost:hover {
-    background: #0e0e0e;
+    background: rgba(255,255,255,0.04);
     color: var(--foreground);
-    border-color: rgba(10, 52, 245, 0.15);
-    box-shadow: 0 0 12px rgba(10, 52, 245, 0.06);
+    border-color: #1e1e1e;
   }
 
   .btn-outline {
-    @apply px-4 py-2 rounded-xl text-sm font-medium tracking-normal
-           transition-all duration-200;
+    @apply px-4 py-2 rounded-xl text-sm font-medium tracking-normal;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     background: transparent;
     color: var(--foreground);
     border: 1px solid #2a2a2a;
   }
   .btn-outline:hover {
-    background: #0e0e0e;
-    border-color: rgba(10, 52, 245, 0.25);
-    box-shadow: 0 0 15px rgba(10, 52, 245, 0.08);
+    background: rgba(255,255,255,0.03);
+    border-color: #3a3a3a;
   }
 
   /* ─── TAGS ───────────────────────────────────────────────────── */
@@ -348,26 +366,28 @@
   }
   .input-glass:focus {
     border-color: #0a34f5;
-    box-shadow: 0 0 0 3px rgba(10, 52, 245, 0.15), 0 0 25px rgba(10, 52, 245, 0.1);
+    box-shadow: 0 0 0 3px rgba(10, 52, 245, 0.12), 0 0 20px rgba(10, 52, 245, 0.06);
+  }
+  .input-glass:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
-  /* ─── METRIC CARD ──────────────────────────────────────────── */
+  /* ─── METRIC CARD — clean with subtle top accent ────────────── */
   .metric-card {
     @apply rounded-2xl p-5 relative overflow-hidden;
-    background: #121212;
-    border: 1px solid #2a2a2a;
-    box-shadow:
-      0 0 0 1px rgba(255,255,255,0.02) inset,
-      0 8px 32px -8px rgba(0,0,0,0.6);
+    background: var(--card);
+    border: 1px solid #1e1e1e;
+    box-shadow: 0 2px 12px -2px rgba(0,0,0,0.5);
   }
   .metric-card::after {
     content: "";
     position: absolute;
     top: -1px;
-    left: 15%;
-    right: 15%;
+    left: 20%;
+    right: 20%;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(10,52,245,0.3), transparent);
+    background: linear-gradient(90deg, transparent, rgba(10,52,245,0.2), transparent);
     border-radius: 1px;
   }
 
@@ -424,10 +444,10 @@
 
 @layer utilities {
   .animate-fade-in {
-    animation: fadeIn 0.3s ease-out;
+    animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .animate-slide-up {
-    animation: slideUp 0.3s ease-out;
+    animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   /* Glow text effect */
@@ -437,8 +457,8 @@
 
   /* Glass background shorthand */
   .glass {
-    background: #121212;
-    border: 1px solid #2a2a2a;
+    background: var(--card);
+    border: 1px solid #1e1e1e;
   }
 }
 
@@ -448,17 +468,17 @@
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(100%); }
+  from { opacity: 0; transform: translateX(40px); }
   to { opacity: 1; transform: translateX(0); }
 }
 
 .animate-slide-in-right {
-  animation: slideInRight 0.3s ease-out;
+  animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes progress {

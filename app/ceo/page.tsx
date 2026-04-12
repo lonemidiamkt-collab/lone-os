@@ -452,8 +452,9 @@ export default function CEOPage() {
                   // SLA: cards stuck > 3 days
                   const stuckCards = contentCards.filter((c) => {
                     if (c.status === "published" || c.status === "scheduled") return false;
-                    if (!c.statusChangedAt) return false;
-                    const daysInColumn = (Date.now() - new Date(c.statusChangedAt).getTime()) / 86400000;
+                    const enteredAt = c.columnEnteredAt?.[c.status] ?? c.statusChangedAt;
+                    if (!enteredAt) return false;
+                    const daysInColumn = (Date.now() - new Date(enteredAt).getTime()) / 86400000;
                     return daysInColumn > 3;
                   });
 
@@ -733,7 +734,8 @@ export default function CEOPage() {
                           <p className="text-xs text-red-400 font-medium uppercase tracking-wider">Cards Parados (+3 dias no mesmo status)</p>
                           <div className="space-y-2">
                             {stuckCards.slice(0, 8).map((card) => {
-                              const days = Math.round((Date.now() - new Date(card.statusChangedAt!).getTime()) / 86400000);
+                              const enteredAt = card.columnEnteredAt?.[card.status] ?? card.statusChangedAt!;
+                              const days = Math.round((Date.now() - new Date(enteredAt).getTime()) / 86400000);
                               return (
                                 <div key={card.id} className="flex items-center gap-3 bg-muted rounded-lg p-2.5">
                                   <div className="w-2 h-2 rounded-full bg-red-500 shrink-0" />

@@ -56,9 +56,11 @@ function getDeadlineUrgency(dueDate?: string): "overdue" | "today" | "tomorrow" 
   return "ok";
 }
 
-function getSlaBadge(statusChangedAt?: string): { label: string; level: "warning" | "critical" } | null {
-  if (!statusChangedAt) return null;
-  const hours = (Date.now() - new Date(statusChangedAt).getTime()) / 3600000;
+function getSlaBadge(status: string, columnEnteredAt?: Record<string, string>, statusChangedAt?: string): { label: string; level: "warning" | "critical" } | null {
+  // Prefer per-column timestamp; fall back to legacy statusChangedAt
+  const enteredAt = columnEnteredAt?.[status] ?? statusChangedAt;
+  if (!enteredAt) return null;
+  const hours = (Date.now() - new Date(enteredAt).getTime()) / 3600000;
   if (hours >= 48) return { label: `${Math.floor(hours / 24)}d parado`, level: "critical" };
   if (hours >= 24) return { label: `${Math.floor(hours)}h parado`, level: "warning" };
   return null;
@@ -361,7 +363,7 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
 
   // SLA alerts: cards stuck 24h+
   const slaAlerts = activeCards.filter((c) => {
-    const sla = getSlaBadge(c.statusChangedAt);
+    const sla = getSlaBadge(c.status, c.columnEnteredAt, c.statusChangedAt);
     return sla !== null;
   });
 
@@ -1428,7 +1430,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
           columns={kanbanCols}
           onMove={(cardId, _from, toStatus) => onMoveCard(cardId, toStatus)}
           renderCard={(card) => {
-            const sla = getSlaBadge(card.statusChangedAt);
+            const sla = getSlaBadge(card.status, card.columnEnteredAt, card.statusChangedAt);
             return (
               <div
                 className={`bg-card border rounded-lg overflow-hidden hover:border-primary/40 transition-colors cursor-pointer group ${
@@ -1611,6 +1613,7 @@ export default function SocialPage() {
     rejectContent,
     monthlyDeliveryReports,
     socialPerformanceScores,
+    pushNotification,
   } = useAppState();
 
   // ── NavContext: secondary sidebar tab navigation ──────────────
@@ -1801,12 +1804,17 @@ export default function SocialPage() {
               <button
                 onClick={() => {
                   if (!verifyChecks.postLive || !verifyChecks.copyCorrect) return;
+                  const now = new Date().toISOString();
                   updateContentCard(verifyingCard.id, {
-                    publishVerifiedAt: new Date().toISOString(),
+                    publishVerifiedAt: now,
                     publishVerifiedBy: currentUser,
                     publishVerifyChecks: { ...verifyChecks },
                     status: "published",
-                    statusChangedAt: new Date().toISOString(),
+                    statusChangedAt: now,
+                    columnEnteredAt: {
+                      ...(verifyingCard.columnEnteredAt ?? {}),
+                      published: now,
+                    },
                   });
                   setVerifyingCard(null);
                 }}
@@ -2109,7 +2117,26 @@ export default function SocialPage() {
               onCardClick={setSelectedCard}
               onConfirmArt={(card) => updateContentCard(card.id, { socialConfirmedAt: new Date().toISOString(), socialConfirmedBy: currentUser })}
               onNonDelivery={setNonDeliveryCard}
-              onMoveCard={(cardId, toStatus) => updateContentCard(cardId, { status: toStatus as ContentCard["status"], statusChangedAt: new Date().toISOString() })}
+              onMoveCard={(cardId, toStatus) => {
+                // Block scheduling/publishing without art confirmation
+                if ((toStatus === "scheduled" || toStatus === "published") ) {
+                  const card = contentCards.find((c) => c.id === cardId);
+                  if (card?.designRequestId && !card.socialConfirmedAt) {
+                    pushNotification("sla", "Arte nao confirmada", `O card "${card.title}" precisa ter a arte confirmada antes de ser ${toStatus === "scheduled" ? "agendado" : "publicado"}.`, card.clientId);
+                    return;
+                  }
+                }
+                const card = contentCards.find((c) => c.id === cardId);
+                const now = new Date().toISOString();
+                updateContentCard(cardId, {
+                  status: toStatus as ContentCard["status"],
+                  statusChangedAt: now,
+                  columnEnteredAt: {
+                    ...(card?.columnEnteredAt ?? {}),
+                    [toStatus]: now,
+                  },
+                });
+              }}
               currentUser={currentUser}
               role={role}
             />
@@ -2290,7 +2317,7 @@ export default function SocialPage() {
               {(() => {
                 const active = filteredCards.filter((c) => c.status !== "published");
                 const published = filteredCards.filter((c) => c.status === "published");
-                const slaIssues = active.filter((c) => getSlaBadge(c.statusChangedAt) !== null);
+                const slaIssues = active.filter((c) => getSlaBadge(c.status, c.columnEnteredAt, c.statusChangedAt) !== null);
                 const overdue = active.filter((c) => getDeadlineUrgency(c.dueDate) === "overdue");
                 return [
                   { label: "Em andamento", value: active.length, color: "text-primary" },
@@ -2372,7 +2399,7 @@ export default function SocialPage() {
                 {(() => {
                   const slaCards = filteredCards
                     .filter((c) => c.status !== "published")
-                    .map((c) => ({ card: c, sla: getSlaBadge(c.statusChangedAt) }))
+                    .map((c) => ({ card: c, sla: getSlaBadge(c.status, c.columnEnteredAt, c.statusChangedAt) }))
                     .filter((x) => x.sla !== null)
                     .sort((a, b) => {
                       if (a.sla!.level === "critical" && b.sla!.level !== "critical") return -1;

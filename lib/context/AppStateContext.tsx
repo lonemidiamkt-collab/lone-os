@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useMemo, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from "react";
 import type {
   Client,
   Role,
@@ -34,6 +34,7 @@ import type {
   ClientInvestmentData,
   InvestmentPaymentMethod,
   Reminder,
+  AutomationRule,
 } from "@/lib/types";
 import {
   mockClients,
@@ -54,6 +55,61 @@ import {
 } from "@/lib/mockData";
 import * as db from "@/lib/supabase/queries";
 import { useRole } from "@/lib/context/RoleContext";
+
+// ============================================
+// localStorage Persistence Layer
+// ============================================
+
+const STORAGE_KEY = "lone-os-state";
+
+interface PersistedState {
+  clients: Client[];
+  investmentData: Record<string, ClientInvestmentData>;
+  contentCards: ContentCard[];
+  timeline: Record<string, TimelineEntry[]>;
+  moodHistory: Record<string, MoodEntry[]>;
+  creativeAssets: Record<string, CreativeAsset[]>;
+  clientChats: Record<string, ChatMessage[]>;
+  globalChat: GlobalChatMessage[];
+  onboarding: Record<string, OnboardingItem[]>;
+  notices: Notice[];
+  socialProofs: Record<string, SocialProofEntry[]>;
+  crisisNotes: Record<string, CrisisNote[]>;
+  socialTeam: SocialTeamMember[];
+  socialAuthUser: string | null;
+  notifications: AppNotification[];
+  quinzReports: QuinzReport[];
+  designRequests: DesignRequest[];
+  tasks: Task[];
+  trafficReports: TrafficMonthlyReport[];
+  trafficRoutineChecks: TrafficRoutineCheck[];
+  socialReports: SocialMonthlyReport[];
+  contentApprovals: ContentApproval[];
+  clientAccess: Record<string, ClientAccess>;
+  reminders: Reminder[];
+}
+
+function loadFromStorage(): Partial<PersistedState> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as Partial<PersistedState>;
+  } catch (err) {
+    console.warn("[Lone OS] Failed to load from localStorage:", err);
+    return null;
+  }
+}
+
+function clearStorage() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    // Also clear the legacy per-field keys
+    localStorage.removeItem("lone_reminders");
+    localStorage.removeItem("lone_investmentData");
+  } catch {}
+}
 
 // ============================================
 // Fallback init functions (used when DB is unavailable)
@@ -83,6 +139,50 @@ function initOnboarding(): Record<string, OnboardingItem[]> {
       }));
     });
   return result;
+}
+
+function initInvestmentData(): Record<string, ClientInvestmentData> {
+  const result: Record<string, ClientInvestmentData> = {};
+  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  mockClients.forEach((c) => {
+    const pm: InvestmentPaymentMethod = c.paymentMethod === "transferencia" ? "pix" : (c.paymentMethod as InvestmentPaymentMethod);
+    result[c.id] = {
+      clientId: c.id,
+      monthlyBudget: c.monthlyBudget,
+      dailyBudget: parseFloat((c.monthlyBudget / daysInMonth).toFixed(2)),
+      paymentMethod: pm,
+    };
+  });
+  return result;
+}
+
+function initClientAccess(): Record<string, ClientAccess> {
+  const result: Record<string, ClientAccess> = {};
+  mockClients.forEach((c) => {
+    if (c.status !== "onboarding") {
+      result[c.id] = {
+        clientId: c.id,
+        instagramLogin: c.instagramUser,
+        driveLink: c.driveLink,
+      };
+    }
+  });
+  return result;
+}
+
+function initNotifications(): AppNotification[] {
+  return [
+    { id: "notif-1", type: "status", title: "Cliente em risco", body: "Fitness Power foi marcado como Em Risco", clientId: "c4", read: false, createdAt: "2026-03-20T14:00:00" },
+    { id: "notif-2", type: "content", title: "Card publicado", body: "Reels lançamento do novo curso — EduPro foi publicado", read: false, createdAt: "2026-03-20T10:00:00" },
+    { id: "notif-3", type: "sla", title: "Gargalo detectado", body: "Reel: 5 dicas de investimento está parado há 7 dias em Produção", clientId: "c6", read: true, createdAt: "2026-03-19T09:00:00" },
+  ];
+}
+
+function initSocialTeam(): SocialTeamMember[] {
+  return [
+    { id: "sm-1", name: "Carlos Melo", password: "00" },
+    { id: "sm-2", name: "Mariana Costa", password: "00" },
+  ];
 }
 
 // ============================================
@@ -171,6 +271,14 @@ interface AppStateContextValue {
   reminders: Reminder[];
   addReminder: (reminder: Omit<Reminder, "id">) => Reminder;
   toggleReminder: (id: string) => void;
+  updateReminder: (id: string, updates: Partial<Reminder>) => void;
+
+  // Automations
+  automationRules: AutomationRule[];
+  addAutomationRule: (rule: Omit<AutomationRule, "id" | "createdAt" | "triggerCount">) => AutomationRule;
+  updateAutomationRule: (id: string, updates: Partial<AutomationRule>) => void;
+  toggleAutomationRule: (id: string) => void;
+  deleteAutomationRule: (id: string) => void;
 
   // Investment Control
   investmentData: Record<string, ClientInvestmentData>;
@@ -178,6 +286,9 @@ interface AppStateContextValue {
 
   // DB loading state
   dbReady: boolean;
+
+  // Reset state — clears localStorage and reloads mock data
+  resetState: () => void;
 }
 
 const AppStateContext = createContext<AppStateContextValue>({} as AppStateContextValue);
@@ -185,74 +296,51 @@ const AppStateContext = createContext<AppStateContextValue>({} as AppStateContex
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useRole();
 
-  // ---------- State ----------
-  const [clients, setClients] = useState<Client[]>(() => mockClients);
+  // Load persisted state once at init
+  const cached = useRef(loadFromStorage());
 
-  // Investment Control — initialized from localStorage or client.monthlyBudget + paymentMethod
+  // ---------- State (initialized from localStorage → fallback to mock) ----------
+  const [clients, setClients] = useState<Client[]>(() => cached.current?.clients ?? mockClients);
+
   const [investmentData, setInvestmentData] = useState<Record<string, ClientInvestmentData>>(() => {
+    if (cached.current?.investmentData) return cached.current.investmentData;
+    // Legacy localStorage key migration
     if (typeof window !== "undefined") {
       try {
         const saved = localStorage.getItem("lone_investmentData");
         if (saved) return JSON.parse(saved) as Record<string, ClientInvestmentData>;
       } catch {}
     }
-    const result: Record<string, ClientInvestmentData> = {};
-    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-    mockClients.forEach((c) => {
-      const pm: InvestmentPaymentMethod = c.paymentMethod === "transferencia" ? "pix" : (c.paymentMethod as InvestmentPaymentMethod);
-      result[c.id] = {
-        clientId: c.id,
-        monthlyBudget: c.monthlyBudget,
-        dailyBudget: parseFloat((c.monthlyBudget / daysInMonth).toFixed(2)),
-        paymentMethod: pm,
-      };
-    });
-    return result;
+    return initInvestmentData();
   });
-  const [contentCards, setContentCards] = useState<ContentCard[]>(() => mockContentCards);
-  const [timeline, setTimeline] = useState<Record<string, TimelineEntry[]>>(() => mockTimeline);
-  const [moodHistory, setMoodHistory] = useState<Record<string, MoodEntry[]>>(() => mockMoodHistory);
-  const [creativeAssets, setCreativeAssets] = useState<Record<string, CreativeAsset[]>>(() => mockCreativeAssets);
-  const [clientChats, setClientChats] = useState<Record<string, ChatMessage[]>>(() => initClientChats());
-  const [globalChat, setGlobalChat] = useState<GlobalChatMessage[]>(() => mockGlobalChat);
-  const [onboarding, setOnboarding] = useState<Record<string, OnboardingItem[]>>(() => initOnboarding());
-  const [notices, setNotices] = useState<Notice[]>(() => mockNotices);
-  const [socialProofs, setSocialProofs] = useState<Record<string, SocialProofEntry[]>>({});
-  const [crisisNotes, setCrisisNotes] = useState<Record<string, CrisisNote[]>>({});
-  const [socialTeam, setSocialTeam] = useState<SocialTeamMember[]>([
-    { id: "sm-1", name: "Carlos Melo", password: "00" },
-    { id: "sm-2", name: "Mariana Costa", password: "00" },
-  ]);
-  const [socialAuthUser, setSocialAuthUser] = useState<string | null>(null);
-  const [notifications, setNotifications] = useState<AppNotification[]>(() => [
-    { id: "notif-1", type: "status", title: "Cliente em risco", body: "Fitness Power foi marcado como Em Risco", clientId: "c4", read: false, createdAt: "2026-03-20T14:00:00" },
-    { id: "notif-2", type: "content", title: "Card publicado", body: "Reels lançamento do novo curso — EduPro foi publicado", read: false, createdAt: "2026-03-20T10:00:00" },
-    { id: "notif-3", type: "sla", title: "Gargalo detectado", body: "Reel: 5 dicas de investimento está parado há 7 dias em Produção", clientId: "c6", read: true, createdAt: "2026-03-19T09:00:00" },
-  ]);
 
-  const [quinzReports, setQuinzReports] = useState<QuinzReport[]>(() => mockQuinzReports);
-  const [designRequests, setDesignRequests] = useState<DesignRequest[]>(() => mockDesignRequests);
-  const [tasks, setTasks] = useState<Task[]>(() => mockTasks);
-  const [trafficReports, setTrafficReports] = useState<TrafficMonthlyReport[]>(() => mockTrafficReports);
-  const [trafficRoutineChecks, setTrafficRoutineChecks] = useState<TrafficRoutineCheck[]>(() => mockTrafficRoutineChecks);
-  const [socialReports, setSocialReports] = useState<SocialMonthlyReport[]>(() => mockSocialReports);
-  const [contentApprovals, setContentApprovals] = useState<ContentApproval[]>([]);
+  const [contentCards, setContentCards] = useState<ContentCard[]>(() => cached.current?.contentCards ?? mockContentCards);
+  const [timeline, setTimeline] = useState<Record<string, TimelineEntry[]>>(() => cached.current?.timeline ?? mockTimeline);
+  const [moodHistory, setMoodHistory] = useState<Record<string, MoodEntry[]>>(() => cached.current?.moodHistory ?? mockMoodHistory);
+  const [creativeAssets, setCreativeAssets] = useState<Record<string, CreativeAsset[]>>(() => cached.current?.creativeAssets ?? mockCreativeAssets);
+  const [clientChats, setClientChats] = useState<Record<string, ChatMessage[]>>(() => cached.current?.clientChats ?? initClientChats());
+  const [globalChat, setGlobalChat] = useState<GlobalChatMessage[]>(() => cached.current?.globalChat ?? mockGlobalChat);
+  const [onboarding, setOnboarding] = useState<Record<string, OnboardingItem[]>>(() => cached.current?.onboarding ?? initOnboarding());
+  const [notices, setNotices] = useState<Notice[]>(() => cached.current?.notices ?? mockNotices);
+  const [socialProofs, setSocialProofs] = useState<Record<string, SocialProofEntry[]>>(() => cached.current?.socialProofs ?? {});
+  const [crisisNotes, setCrisisNotes] = useState<Record<string, CrisisNote[]>>(() => cached.current?.crisisNotes ?? {});
+  const [socialTeam, setSocialTeam] = useState<SocialTeamMember[]>(() => cached.current?.socialTeam ?? initSocialTeam());
+  const [socialAuthUser, setSocialAuthUser] = useState<string | null>(() => cached.current?.socialAuthUser ?? null);
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => cached.current?.notifications ?? initNotifications());
 
-  const [clientAccess, setClientAccess] = useState<Record<string, ClientAccess>>(() => {
-    const result: Record<string, ClientAccess> = {};
-    mockClients.forEach((c) => {
-      if (c.status !== "onboarding") {
-        result[c.id] = {
-          clientId: c.id,
-          instagramLogin: c.instagramUser,
-          driveLink: c.driveLink,
-        };
-      }
-    });
-    return result;
-  });
+  const [quinzReports, setQuinzReports] = useState<QuinzReport[]>(() => cached.current?.quinzReports ?? mockQuinzReports);
+  const [designRequests, setDesignRequests] = useState<DesignRequest[]>(() => cached.current?.designRequests ?? mockDesignRequests);
+  const [tasks, setTasks] = useState<Task[]>(() => cached.current?.tasks ?? mockTasks);
+  const [trafficReports, setTrafficReports] = useState<TrafficMonthlyReport[]>(() => cached.current?.trafficReports ?? mockTrafficReports);
+  const [trafficRoutineChecks, setTrafficRoutineChecks] = useState<TrafficRoutineCheck[]>(() => cached.current?.trafficRoutineChecks ?? mockTrafficRoutineChecks);
+  const [socialReports, setSocialReports] = useState<SocialMonthlyReport[]>(() => cached.current?.socialReports ?? mockSocialReports);
+  const [contentApprovals, setContentApprovals] = useState<ContentApproval[]>(() => cached.current?.contentApprovals ?? []);
+
+  const [clientAccess, setClientAccess] = useState<Record<string, ClientAccess>>(() => cached.current?.clientAccess ?? initClientAccess());
 
   const [reminders, setReminders] = useState<Reminder[]>(() => {
+    if (cached.current?.reminders) return cached.current.reminders;
+    // Legacy localStorage key migration
     if (typeof window !== "undefined") {
       try {
         const saved = localStorage.getItem("lone_reminders");
@@ -262,21 +350,311 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return [];
   });
 
+  const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
+    { id: "auto-1", name: "Risco de Churn", description: "Cliente marcado como em risco de cancelamento — notifica CS + Gerente imediatamente", trigger: "client_status_change", triggerConfig: { status: "at_risk" }, action: "send_notification", actionConfig: { target: "cs,manager", message: "Cliente em risco de churn" }, enabled: true, createdAt: new Date().toISOString(), triggerCount: 3 },
+    { id: "auto-2", name: "Task Vencida", description: "Tarefa passou do prazo de entrega — notifica o responsavel", trigger: "task_overdue", triggerConfig: {}, action: "send_notification", actionConfig: { target: "assignee", message: "Tarefa vencida" }, enabled: true, createdAt: new Date().toISOString(), triggerCount: 7 },
+    { id: "auto-3", name: "SLA de Aprovacao (48h)", description: "Conteudo aguardando aprovacao ha mais de 48h — alerta o time social", trigger: "content_approval_pending", triggerConfig: { hours: "48" }, action: "send_notification", actionConfig: { target: "social", message: "Conteudo parado em aprovacao alem do SLA" }, enabled: true, createdAt: new Date().toISOString(), triggerCount: 2 },
+    { id: "auto-4", name: "Limite de Verba (90%)", description: "Investimento atingiu 90% do orcamento mensal — alerta trafego + gerente", trigger: "budget_threshold", triggerConfig: { percent: "90" }, action: "send_notification", actionConfig: { target: "traffic,manager", message: "Verba acima de 90% do orcamento" }, enabled: true, createdAt: new Date().toISOString(), triggerCount: 1 },
+    { id: "auto-5", name: "SLA de Onboarding (7 Dias)", description: "Funil de onboarding com SLA por fase: Setup 24h, Coleta 72h, Kickoff 168h", trigger: "onboarding_stalled", triggerConfig: { phase1: "24", phase2: "72", phase3: "168" }, action: "send_notification", actionConfig: { target: "cs,manager", message: "[Urgente] Gargalo no onboarding" }, enabled: true, createdAt: new Date().toISOString(), triggerCount: 0 },
+  ];
+
+  const [automationRules, setAutomationRules] = useState<AutomationRule[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("lone_automations");
+        if (saved) return JSON.parse(saved) as AutomationRule[];
+      } catch {}
+    }
+    return DEFAULT_AUTOMATION_RULES;
+  });
+
   const [dbReady, setDbReady] = useState(false);
 
-  // ---------- Persist reminders to localStorage ----------
+  // ---------- Debounced save to localStorage ----------
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialMount = useRef(true);
+
+  useEffect(() => {
+    // Skip saving on the very first render (initial load)
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+
+    saveTimerRef.current = setTimeout(() => {
+      try {
+        // Sanitize passwords before persisting to localStorage
+        const sanitizedAccess: typeof clientAccess = {};
+        for (const [k, v] of Object.entries(clientAccess)) {
+          const clean = { ...v };
+          for (const field of ["instagramPassword","facebookPassword","tiktokPassword","linkedinPassword","youtubePassword","mlabsPassword"] as const) {
+            if (clean[field]) clean[field] = "••••" + (clean[field]?.slice(-2) ?? "");
+          }
+          sanitizedAccess[k] = clean;
+        }
+        const sanitizedTeam = socialTeam.map((m) => ({ ...m, password: "••••" }));
+
+        const stateToSave: PersistedState = {
+          clients,
+          investmentData,
+          contentCards,
+          timeline,
+          moodHistory,
+          creativeAssets,
+          clientChats,
+          globalChat,
+          onboarding,
+          notices,
+          socialProofs,
+          crisisNotes,
+          socialTeam: sanitizedTeam,
+          socialAuthUser,
+          notifications,
+          quinzReports,
+          designRequests,
+          tasks,
+          trafficReports,
+          trafficRoutineChecks,
+          socialReports,
+          contentApprovals,
+          clientAccess: sanitizedAccess,
+          reminders,
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+      } catch (err) {
+        console.warn("[Lone OS] Failed to save to localStorage:", err);
+      }
+    }, 500);
+
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, [
+    clients, investmentData, contentCards, timeline, moodHistory,
+    creativeAssets, clientChats, globalChat, onboarding, notices,
+    socialProofs, crisisNotes, socialTeam, socialAuthUser, notifications,
+    quinzReports, designRequests, tasks, trafficReports, trafficRoutineChecks,
+    socialReports, contentApprovals, clientAccess, reminders,
+  ]);
+
+  // ---------- Legacy persistence (keep for backwards compat, will be superseded by STORAGE_KEY) ----------
   useEffect(() => {
     try { localStorage.setItem("lone_reminders", JSON.stringify(reminders)); } catch {}
   }, [reminders]);
 
-  // ---------- Persist investmentData to localStorage ----------
   useEffect(() => {
     try {
       localStorage.setItem("lone_investmentData", JSON.stringify(investmentData));
     } catch {}
   }, [investmentData]);
 
-  // ---------- Load from Supabase when authenticated ----------
+  // ---------- Automation Rules Engine ----------
+  // Refs to hold latest state so the interval callback never goes stale
+  const automationRulesRef = useRef(automationRules);
+  automationRulesRef.current = automationRules;
+  const clientsRef = useRef(clients);
+  clientsRef.current = clients;
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+  const contentCardsRef = useRef(contentCards);
+  contentCardsRef.current = contentCards;
+  const investmentDataRef = useRef(investmentData);
+  investmentDataRef.current = investmentData;
+  const onboardingRef = useRef(onboarding);
+  onboardingRef.current = onboarding;
+
+  // Track which (ruleId, itemId) pairs have already been triggered to avoid duplicates
+  const automationTriggeredRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    function evaluateAutomationRules() {
+      const rules = automationRulesRef.current;
+      const enabledRules = rules.filter((r) => r.enabled);
+      if (enabledRules.length === 0) return;
+
+      const now = new Date();
+      const triggered = automationTriggeredRef.current;
+      let rulesUpdated = false;
+      const ruleUpdates: Record<string, { triggerCount: number; lastTriggeredAt: string }> = {};
+
+      for (const rule of enabledRules) {
+        let matchedIds: string[] = [];
+
+        switch (rule.trigger) {
+          case "client_status_change": {
+            const targetStatus = rule.triggerConfig.status;
+            if (!targetStatus) break;
+            matchedIds = clientsRef.current
+              .filter((c) => c.status === targetStatus)
+              .map((c) => c.id);
+            break;
+          }
+
+          case "task_overdue": {
+            const todayStr = now.toISOString().split("T")[0];
+            matchedIds = tasksRef.current
+              .filter((t) => t.status !== "done" && t.dueDate && t.dueDate < todayStr)
+              .map((t) => t.id);
+            break;
+          }
+
+          case "content_approval_pending": {
+            const thresholdHours = parseInt(rule.triggerConfig.hours || "48", 10);
+            matchedIds = contentCardsRef.current
+              .filter((card) => {
+                if (card.status !== "approval" && card.status !== "client_approval") return false;
+                if (!card.statusChangedAt) return false;
+                const changedAt = new Date(card.statusChangedAt);
+                const hoursElapsed = (now.getTime() - changedAt.getTime()) / (1000 * 60 * 60);
+                return hoursElapsed >= thresholdHours;
+              })
+              .map((card) => card.id);
+            break;
+          }
+
+          case "budget_threshold": {
+            // Budget threshold requires actual spend data.
+            // Currently investmentData only has monthlyBudget/dailyBudget without actual spend tracking.
+            // This trigger will activate when spend tracking is implemented.
+            break;
+          }
+
+          case "onboarding_stalled": {
+            // Phase-based SLA: check each onboarding phase threshold
+            const phase1h = parseInt(rule.triggerConfig.phase1 || "24", 10);
+            const phase2h = parseInt(rule.triggerConfig.phase2 || "72", 10);
+            const phase3h = parseInt(rule.triggerConfig.phase3 || "168", 10);
+            const fallbackDays = parseInt(rule.triggerConfig.days || "7", 10);
+
+            clientsRef.current.forEach((c) => {
+              if (c.status !== "onboarding" || !c.joinDate) return;
+              const joinDate = new Date(c.joinDate);
+              const hoursElapsed = (now.getTime() - joinDate.getTime()) / (1000 * 60 * 60);
+
+              // Check which phase is breached (most urgent first)
+              if (hoursElapsed >= phase3h) {
+                matchedIds.push(`${c.id}::phase3`);
+              } else if (hoursElapsed >= phase2h) {
+                matchedIds.push(`${c.id}::phase2`);
+              } else if (hoursElapsed >= phase1h) {
+                matchedIds.push(`${c.id}::phase1`);
+              } else if (hoursElapsed >= fallbackDays * 24) {
+                matchedIds.push(`${c.id}::general`);
+              }
+            });
+            break;
+          }
+        }
+
+        // Filter out already-triggered (ruleId + itemId) combos
+        const newMatches = matchedIds.filter((itemId) => !triggered.has(`${rule.id}::${itemId}`));
+
+        if (newMatches.length > 0) {
+          // Mark as triggered
+          for (const itemId of newMatches) {
+            triggered.add(`${rule.id}::${itemId}`);
+          }
+
+          // Execute action — build notification body
+          const actionMessage = rule.actionConfig.message || rule.name;
+          let body: string;
+          let clientId: string | undefined;
+
+          if (rule.trigger === "onboarding_stalled") {
+            // Onboarding: include phase info in notification
+            const phaseLabels: Record<string, string> = { phase1: "Setup", phase2: "Coleta de Dados", phase3: "Kickoff Operacional", general: "Geral" };
+            const details = newMatches.map((m) => {
+              const [cId, phase] = m.split("::");
+              const client = clientsRef.current.find((c) => c.id === cId);
+              return `${client?.name ?? cId} na fase ${phaseLabels[phase] ?? phase}`;
+            });
+            body = `[Urgente] Gargalo no onboarding: ${details.join(", ")}`;
+            clientId = newMatches[0]?.split("::")[0];
+          } else {
+            const matchCount = newMatches.length;
+            body = matchCount === 1 ? actionMessage : `${actionMessage} (${matchCount} itens)`;
+            if (rule.trigger === "client_status_change") clientId = newMatches[0];
+          }
+
+          // Use the pushNotification via a direct state update to avoid stale closure
+          const notif: AppNotification = {
+            id: `notif-auto-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+            type: "system",
+            title: `[Auto] ${rule.name}`,
+            body,
+            clientId,
+            read: false,
+            createdAt: new Date().toISOString(),
+          };
+          setNotifications((prev) => [notif, ...prev]);
+
+          // Track rule update
+          const prevCount = ruleUpdates[rule.id]?.triggerCount ?? rule.triggerCount;
+          ruleUpdates[rule.id] = {
+            triggerCount: prevCount + newMatches.length,
+            lastTriggeredAt: new Date().toISOString(),
+          };
+          rulesUpdated = true;
+        }
+      }
+
+      // Batch-update rules that fired
+      if (rulesUpdated) {
+        setAutomationRules((prev) => {
+          const next = prev.map((r) =>
+            ruleUpdates[r.id]
+              ? { ...r, triggerCount: ruleUpdates[r.id].triggerCount, lastTriggeredAt: ruleUpdates[r.id].lastTriggeredAt }
+              : r
+          );
+          try { localStorage.setItem("lone_automations", JSON.stringify(next)); } catch {}
+          return next;
+        });
+      }
+    }
+
+    // Run once on mount, then every 60 seconds
+    evaluateAutomationRules();
+    const intervalId = setInterval(evaluateAutomationRules, 60_000);
+
+    return () => clearInterval(intervalId);
+  }, []); // Empty deps — uses refs for latest state
+
+  // ---------- Reset state — clears localStorage and reloads mock data ----------
+  const resetState = useCallback(() => {
+    clearStorage();
+    setClients(mockClients);
+    setInvestmentData(initInvestmentData());
+    setContentCards(mockContentCards);
+    setTimeline(mockTimeline);
+    setMoodHistory(mockMoodHistory);
+    setCreativeAssets(mockCreativeAssets);
+    setClientChats(initClientChats());
+    setGlobalChat(mockGlobalChat);
+    setOnboarding(initOnboarding());
+    setNotices(mockNotices);
+    setSocialProofs({});
+    setCrisisNotes({});
+    setSocialTeam(initSocialTeam());
+    setSocialAuthUser(null);
+    setNotifications(initNotifications());
+    setQuinzReports(mockQuinzReports);
+    setDesignRequests(mockDesignRequests);
+    setTasks(mockTasks);
+    setTrafficReports(mockTrafficReports);
+    setTrafficRoutineChecks(mockTrafficRoutineChecks);
+    setSocialReports(mockSocialReports);
+    setContentApprovals([]);
+    setClientAccess(initClientAccess());
+    setReminders([]);
+  }, []);
+
+  // ---------- Load from Supabase when authenticated (takes priority over localStorage) ----------
   useEffect(() => {
     if (!isAuthenticated) {
       setDbReady(false);
@@ -337,7 +715,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
         if (cancelled) return;
 
-        // Only update state if we got data from DB
+        // Supabase data takes priority over localStorage when available
         if (dbClients.length > 0) setClients(dbClients);
         if (dbTasks.length > 0) setTasks(dbTasks);
         if (dbCards.length > 0) setContentCards(dbCards);
@@ -361,8 +739,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
         setDbReady(true);
       } catch (err) {
-        console.warn("[Lone OS] DB load failed, using mock data:", err);
-        // Keep mock data as fallback
+        console.warn("[Lone OS] DB load failed, using localStorage/mock data:", err);
+        // Keep localStorage/mock data as fallback
         setDbReady(true);
       }
     }
@@ -598,10 +976,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const addContentCard = useCallback(
     (card: Omit<ContentCard, "id">): ContentCard => {
+      const now = new Date().toISOString();
       const newCard: ContentCard = {
         ...card,
         id: `cc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        statusChangedAt: new Date().toISOString(),
+        statusChangedAt: now,
+        columnEnteredAt: { [card.status]: now, ...(card.columnEnteredAt ?? {}) },
       };
       setContentCards((prev) => [...prev, newCard]);
       setClients((prev) =>
@@ -792,7 +1172,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           if (c.id !== id) return c;
           const merged = { ...c, ...updates };
           if (updates.status && updates.status !== c.status) {
-            merged.statusChangedAt = new Date().toISOString();
+            const now = new Date().toISOString();
+            merged.statusChangedAt = now;
+            // Track per-column entry timestamps for accurate SLA
+            merged.columnEnteredAt = {
+              ...(c.columnEnteredAt ?? {}),
+              [updates.status]: now,
+            };
           }
           return merged;
         });
@@ -1114,6 +1500,60 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const toggleReminder = useCallback(
     (id: string) => {
       setReminders((prev) => prev.map((r) => r.id === id ? { ...r, done: !r.done } : r));
+    },
+    []
+  );
+
+  const updateReminder = useCallback(
+    (id: string, updates: Partial<Reminder>) => {
+      setReminders((prev) => prev.map((r) => r.id === id ? { ...r, ...updates } : r));
+    },
+    []
+  );
+
+  // ─── Automation Rules ───────────────────────────────────────
+  const addAutomationRule = useCallback(
+    (rule: Omit<AutomationRule, "id" | "createdAt" | "triggerCount">): AutomationRule => {
+      const newRule: AutomationRule = { ...rule, id: `auto-${Date.now()}`, createdAt: new Date().toISOString(), triggerCount: 0 };
+      setAutomationRules((prev) => {
+        const next = [newRule, ...prev];
+        try { localStorage.setItem("lone_automations", JSON.stringify(next)); } catch {}
+        return next;
+      });
+      return newRule;
+    },
+    []
+  );
+
+  const updateAutomationRule = useCallback(
+    (id: string, updates: Partial<AutomationRule>) => {
+      setAutomationRules((prev) => {
+        const next = prev.map((r) => r.id === id ? { ...r, ...updates } : r);
+        try { localStorage.setItem("lone_automations", JSON.stringify(next)); } catch {}
+        return next;
+      });
+    },
+    []
+  );
+
+  const toggleAutomationRule = useCallback(
+    (id: string) => {
+      setAutomationRules((prev) => {
+        const next = prev.map((r) => r.id === id ? { ...r, enabled: !r.enabled } : r);
+        try { localStorage.setItem("lone_automations", JSON.stringify(next)); } catch {}
+        return next;
+      });
+    },
+    []
+  );
+
+  const deleteAutomationRule = useCallback(
+    (id: string) => {
+      setAutomationRules((prev) => {
+        const next = prev.filter((r) => r.id !== id);
+        try { localStorage.setItem("lone_automations", JSON.stringify(next)); } catch {}
+        return next;
+      });
     },
     []
   );
@@ -1507,9 +1947,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         reminders,
         addReminder,
         toggleReminder,
+        updateReminder,
+        automationRules,
+        addAutomationRule,
+        updateAutomationRule,
+        toggleAutomationRule,
+        deleteAutomationRule,
         investmentData,
         updateInvestmentData,
         dbReady,
+        resetState,
       }}
     >
       {children}

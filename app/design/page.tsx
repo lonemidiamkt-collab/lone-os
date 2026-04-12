@@ -577,9 +577,15 @@ export default function DesignPage() {
                       );
                     }}
                     onMove={(itemId, _from, to) => {
+                      const card = contentCards.find((c) => c.id === itemId);
+                      const now = new Date().toISOString();
                       updateContentCard(itemId, {
                         status: to as ContentCard["status"],
-                        statusChangedAt: new Date().toISOString(),
+                        statusChangedAt: now,
+                        columnEnteredAt: {
+                          ...(card?.columnEnteredAt ?? {}),
+                          [to]: now,
+                        },
                       });
                     }}
                   />
