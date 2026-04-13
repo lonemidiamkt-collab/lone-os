@@ -307,16 +307,21 @@ export default function GoalsPage() {
     setShowExportMenu(false);
     try {
       const el = pageRef.current;
-      if (!el) return;
-      const html2canvas = (await import("html2canvas")).default;
-      const jsPDF = (await import("jspdf")).default;
-      const canvas = await html2canvas(el, { backgroundColor: "#000000", scale: 2 });
+      if (!el) { setExporting(false); return; }
+      const h2cModule = await import("html2canvas");
+      const html2canvas = h2cModule.default ?? h2cModule;
+      const jspdfModule = await import("jspdf");
+      const JsPDF = jspdfModule.jsPDF ?? jspdfModule.default;
+      const canvas = await html2canvas(el, { backgroundColor: "#000000", scale: 2, useCORS: true, logging: false });
       const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [canvas.width / 2, canvas.height / 2] });
-      pdf.addImage(imgData, "PNG", 0, 0, canvas.width / 2, canvas.height / 2);
+      const w = canvas.width / 2;
+      const h = canvas.height / 2;
+      const pdf = new JsPDF({ orientation: w > h ? "landscape" : "portrait", unit: "px", format: [w, h] });
+      pdf.addImage(imgData, "PNG", 0, 0, w, h);
       pdf.save(`OKRs_${periodLabel.replace(/\s/g, "_")}.pdf`);
-    } catch {
-      alert("Erro ao gerar PDF. Verifique se as dependencias estao instaladas (html2canvas, jspdf).");
+    } catch (err) {
+      console.error("[Lone OS] PDF export failed:", err);
+      alert("Erro ao gerar PDF: " + (err instanceof Error ? err.message : "Erro desconhecido"));
     } finally {
       setExporting(false);
     }

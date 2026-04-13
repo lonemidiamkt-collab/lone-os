@@ -63,7 +63,7 @@ function UploadArtModal({
   card: ContentCard;
   onClose: () => void;
 }) {
-  const { updateContentCard, updateDesignRequest, clients } = useAppState();
+  const { updateContentCard, updateDesignRequest, clients, pushNotification } = useAppState();
   const { currentUser } = useRole();
   const [artLink, setArtLink] = useState(
     card.imageUrl && card.imageUrl.includes("drive.google.com") ? card.imageUrl : ""
@@ -86,6 +86,10 @@ function UploadArtModal({
     if (card.designRequestId) {
       updateDesignRequest(card.designRequestId, { status: "done" });
     }
+    // Notify Social Media that art is ready
+    pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmacao. Clique no card para confirmar.`, card.clientId);
+    // Audio ping
+    import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -776,6 +780,18 @@ export default function DesignPage() {
                   {briefingReq.briefing}
                 </p>
               </div>
+              {/* Client brand guidelines */}
+              {(() => {
+                const client = clients.find((c) => c.id === briefingReq.clientId);
+                return client?.fixedBriefing ? (
+                  <div>
+                    <p className="text-xs text-[#0d4af5]/70 font-medium mb-1.5 uppercase tracking-wider">Guidelines do Cliente</p>
+                    <p className="text-xs text-zinc-400 leading-relaxed bg-[#0d4af5]/[0.03] border border-[#0d4af5]/[0.08] rounded-lg p-3">
+                      {client.fixedBriefing}
+                    </p>
+                  </div>
+                ) : null;
+              })()}
               {briefingReq.deadline && (
                 <div className="flex items-center gap-2">
                   <Clock size={13} className="text-muted-foreground" />
@@ -844,9 +860,15 @@ function RequestsView({
 }) {
   const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
   const [statusFilter, setStatusFilter] = useState<"all" | "queued" | "in_progress" | "done">("all");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | "critical" | "high" | "medium" | "low">("all");
+  const [clientFilter, setClientFilter] = useState("all");
+
+  const uniqueClients = [...new Set(designRequests.map((r) => r.clientName))].sort();
 
   const filtered = designRequests.filter((r) => {
     if (statusFilter !== "all" && r.status !== statusFilter) return false;
+    if (priorityFilter !== "all" && r.priority !== priorityFilter) return false;
+    if (clientFilter !== "all" && r.clientName !== clientFilter) return false;
     return true;
   });
 
@@ -867,6 +889,25 @@ function RequestsView({
             <option value="queued">Na Fila</option>
             <option value="in_progress">Em Produção</option>
             <option value="done">Concluído</option>
+          </select>
+          <select
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value as typeof priorityFilter)}
+            className="bg-card border border-border text-sm text-[#c0c0cc] rounded-lg px-3 py-1.5 outline-none focus:border-primary"
+          >
+            <option value="all">Prioridade: Todas</option>
+            <option value="critical">Critica</option>
+            <option value="high">Alta</option>
+            <option value="medium">Media</option>
+            <option value="low">Baixa</option>
+          </select>
+          <select
+            value={clientFilter}
+            onChange={(e) => setClientFilter(e.target.value)}
+            className="bg-card border border-border text-sm text-[#c0c0cc] rounded-lg px-3 py-1.5 outline-none focus:border-primary"
+          >
+            <option value="all">Cliente: Todos</option>
+            {uniqueClients.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
 
