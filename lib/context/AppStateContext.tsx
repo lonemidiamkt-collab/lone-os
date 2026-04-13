@@ -610,10 +610,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Run once on mount, then every 60 seconds
-    evaluateAutomationRules();
-    const intervalId = setInterval(evaluateAutomationRules, 60_000);
+    // Run once after 5s delay (not immediately, to avoid spam on page load)
+    const initTimer = setTimeout(evaluateAutomationRules, 5000);
+    // Then check every 10 minutes (was 60s — too aggressive)
+    const intervalId = setInterval(evaluateAutomationRules, 600_000);
 
-    return () => clearInterval(intervalId);
+    return () => { clearTimeout(initTimer); clearInterval(intervalId); };
   }, []); // Empty deps — uses refs for latest state
 
   // ---------- Reset state — clears localStorage and reloads mock data ----------

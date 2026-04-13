@@ -165,35 +165,11 @@ export default function Header({ title, subtitle }: HeaderProps) {
       </div>
 
       {/* Notifications */}
-      <div className="relative" ref={notifRef}>
-        <button
-          onClick={() => { setShowNotif(!showNotif); setShowQuick(false); }}
-          className="relative w-8 h-8 rounded-xl bg-[#0e0e0e] border border-[#1a1a1a] flex items-center justify-center hover:border-[#0d4af5]/40 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all" aria-label="Notificações"
-        >
-          <Bell size={15} className="text-zinc-600" aria-hidden="true" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-[#0d4af5] rounded-full flex items-center justify-center shadow-[0_0_10px_rgba(10,52,245,0.5)]">
-              <span className="text-[9px] font-bold text-white">{unreadCount > 9 ? "9+" : unreadCount}</span>
-            </span>
-          )}
-        </button>
-
-        {showNotif && (
-          <div className="absolute right-0 top-full mt-2 w-96 bg-[#0e0e0e] border border-[#2a2a2a] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.7)] z-50 animate-fade-in">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a]">
-              <h3 className="text-xs font-semibold text-foreground tracking-tight">Central de Notificações</h3>
-              <div className="flex items-center gap-2">
-                {unreadCount > 0 && (
-                  <button onClick={markAllNotificationsRead} className="text-[10px] text-[#0d4af5] hover:text-[#0d4af5]/80 font-medium">
-                    Marcar todas como lidas
-                  </button>
-                )}
-              </div>
-            </div>
-            {/* Filter tabs */}
-            <NotifFilterTabs notifications={notifications} />
-          </div>
-        )}
+      {/* Notification bell — badge only, opens NotificationCenter drawer via AppShell */}
+      <div className="relative">
+        <span className="text-[9px] text-zinc-700 tabular-nums">
+          {unreadCount > 0 && `${unreadCount} novo(s)`}
+        </span>
       </div>
 
       {/* Profile */}
