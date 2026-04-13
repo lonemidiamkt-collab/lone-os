@@ -50,8 +50,8 @@ export default function ClientsPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const filter = params.get("filter");
-    if (filter === "at_risk") {
-      setStatusFilter("at_risk");
+    if (filter === "at_risk" || filter === "onboarding") {
+      setStatusFilter(filter);
       setResponsibleFilter("all");
     }
   }, []);

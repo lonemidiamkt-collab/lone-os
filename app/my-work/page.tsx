@@ -253,21 +253,31 @@ export default function MyWorkPage() {
 }
 
 function TaskRow({ task }: { task: Task }) {
+  const { updateTask } = useAppState();
   const statusConfig: Record<string, { label: string; color: string }> = {
     pending: { label: "Pendente", color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
     in_progress: { label: "Em andamento", color: "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" },
-    review: { label: "Em revisão", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+    review: { label: "Em revisao", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+    done: { label: "Concluida", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
   };
   const s = statusConfig[task.status] ?? statusConfig.pending;
   const timeMs = getLiveTimeSpentMs(task.workStartedAt, task.totalTimeSpentMs);
+  const isDone = task.status === "done";
+  const route = task.role === "social" ? "/social" : task.role === "designer" ? "/design" : "/traffic";
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-[#0d4af5]/20 transition-all">
-      <span className={`w-2 h-2 rounded-full shrink-0 ${
-        task.status === "in_progress" ? "bg-[#0d4af5]" : task.status === "review" ? "bg-amber-400" : "bg-zinc-500"
-      }`} />
+    <Link href={route} className={`flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-[#0d4af5]/20 transition-all cursor-pointer ${isDone ? "opacity-50" : ""}`}>
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); updateTask(task.id, { status: isDone ? "pending" : "done" }); }}
+        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
+          isDone ? "bg-[#0d4af5] border-[#0d4af5] text-white" : "border-zinc-600 hover:border-[#0d4af5]"
+        }`}
+        title={isDone ? "Reabrir" : "Concluir"}
+      >
+        {isDone && <Check size={10} />}
+      </button>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-foreground truncate">{task.title}</p>
+        <p className={`text-xs font-medium text-foreground truncate ${isDone ? "line-through text-zinc-500" : ""}`}>{task.title}</p>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[10px] text-muted-foreground">{task.clientName}</span>
           {task.dueDate && (
@@ -276,7 +286,7 @@ function TaskRow({ task }: { task: Task }) {
             </span>
           )}
           {timeMs > 0 && (
-            <span className="text-[10px] text-zinc-600">⏱️ {formatTimeSpent(timeMs)}</span>
+            <span className="text-[10px] text-zinc-600">{formatTimeSpent(timeMs)}</span>
           )}
         </div>
       </div>
@@ -286,7 +296,8 @@ function TaskRow({ task }: { task: Task }) {
       <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium shrink-0 ${getPriorityColor(task.priority)}`}>
         {getPriorityLabel(task.priority)}
       </span>
-    </div>
+      <ChevronRight size={12} className="text-zinc-700 shrink-0" />
+    </Link>
   );
 }
 
@@ -298,7 +309,7 @@ function CardRow({ card, isApproval }: { card: ContentCard; isApproval?: boolean
   };
 
   return (
-    <div className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+    <Link href="/social" className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${
       isApproval
         ? "bg-amber-500/[0.03] border-amber-500/20 hover:border-amber-500/40"
         : "bg-muted/30 border-border/50 hover:border-[#0d4af5]/20"
@@ -330,6 +341,7 @@ function CardRow({ card, isApproval }: { card: ContentCard; isApproval?: boolean
       }`}>
         {STATUS_LABELS[card.status] ?? card.status}
       </span>
-    </div>
+      <ChevronRight size={12} className="text-zinc-700 shrink-0" />
+    </Link>
   );
 }

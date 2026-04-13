@@ -514,10 +514,10 @@ function AdminDashboard() {
     <>
       {/* Metrics Row */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        <MetricCard icon={Users} label="Clientes Ativos" value={activeClients.length} sub="clientes em operação" iconColor="text-primary" iconBg="bg-primary/10" href="/clients" />
-        <MetricCard icon={AlertTriangle} label="Em Risco" value={atRiskClients.length} sub="precisam de atenção" iconColor="text-red-500" iconBg="bg-red-500/10" onClick={() => setStatusFilter("at_risk")} />
-        <MetricCard icon={UserPlus} label="Onboarding" value={onboardingClients.length} sub="novos clientes" iconColor="text-primary" iconBg="bg-primary/10" onClick={() => setStatusFilter("onboarding")} />
-        <MetricCard icon={Clock} label="Tarefas Urgentes" value={urgentTasks.length} sub="prioridade crítica" iconColor="text-primary" iconBg="bg-primary/10" href="/calendar" />
+        <MetricCard icon={Users} label="Clientes Ativos" value={activeClients.length} sub="clientes em operacao" iconColor="text-primary" iconBg="bg-primary/10" href="/clients" />
+        <MetricCard icon={AlertTriangle} label="Em Risco" value={atRiskClients.length} sub="precisam de atencao" iconColor="text-red-500" iconBg="bg-red-500/10" href="/clients?filter=at_risk" />
+        <MetricCard icon={UserPlus} label="Onboarding" value={onboardingClients.length} sub="novos clientes" iconColor="text-primary" iconBg="bg-primary/10" href="/clients?filter=onboarding" />
+        <MetricCard icon={Clock} label="Tarefas Urgentes" value={urgentTasks.length} sub="prioridade critica" iconColor="text-primary" iconBg="bg-primary/10" href="/my-work" />
       </div>
 
       {/* Quick Actions */}
