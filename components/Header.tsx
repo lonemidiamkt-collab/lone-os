@@ -122,7 +122,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
               <>
                 <p className="text-[10px] text-zinc-600 uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium border-t border-[#1a1a1a] mt-1">Tarefas</p>
                 {taskResults.map((t) => (
-                  <Link key={t.id} href="/traffic" onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#0d4af5]/5 transition-colors">
+                  <Link key={t.id} href={t.role === "social" ? "/social" : t.role === "designer" ? "/design" : "/traffic"} onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#0d4af5]/5 transition-colors">
                     <div className="w-6 h-6 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center text-[10px] font-bold text-[#0d4af5]">T</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{t.title}</p>

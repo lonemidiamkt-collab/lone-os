@@ -27,8 +27,8 @@ export default function MetricCard({
   href,
   onClick,
 }: MetricCardProps) {
-  const Wrapper = href ? Link : "div";
-  const wrapperProps = href ? { href } : onClick ? { onClick, role: "button", tabIndex: 0 } : {};
+  const Wrapper = href ? Link : onClick ? "button" : "div";
+  const wrapperProps = href ? { href } : onClick ? { onClick, type: "button" as const } : {};
   return (
     <Wrapper {...wrapperProps as any} className={cn(
       "relative rounded-2xl border border-[#2a2a2a] p-5 overflow-hidden bg-[#121212] shadow-[0_8px_32px_-8px_rgba(0,0,0,0.6)] hover:border-[#0d4af5]/30 hover:shadow-[0_4px_14px_0_rgba(10,52,245,0.15),0_8px_32px_-8px_rgba(0,0,0,0.6)] transition-all duration-300",

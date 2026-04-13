@@ -332,9 +332,20 @@ export default function TrafficPage() {
                   updateTask(taskId, { status: toStatus as Task["status"] });
                 }}
                 renderCard={(task) => (
-                  <div className="bg-card border border-border rounded-lg p-3 hover:border-primary/30 transition-colors">
+                  <div className={`bg-card border border-border rounded-lg p-3 hover:border-primary/30 transition-colors ${task.status === "done" ? "opacity-60" : ""}`}>
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <p className="font-medium text-foreground text-sm leading-tight">{task.title}</p>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); updateTask(task.id, { status: task.status === "done" ? "pending" : "done" }); }}
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5 transition-all ${
+                          task.status === "done"
+                            ? "bg-[#0d4af5] border-[#0d4af5] text-white"
+                            : "border-zinc-600 hover:border-[#0d4af5]"
+                        }`}
+                        title={task.status === "done" ? "Reabrir tarefa" : "Marcar como concluida"}
+                      >
+                        {task.status === "done" && <Check size={10} />}
+                      </button>
+                      <p className={`font-medium text-foreground text-sm leading-tight flex-1 ${task.status === "done" ? "line-through text-zinc-500" : ""}`}>{task.title}</p>
                       <span className={`badge border text-xs shrink-0 ${getPriorityColor(task.priority)}`}>
                         {getPriorityLabel(task.priority)}
                       </span>

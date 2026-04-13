@@ -237,6 +237,9 @@ interface AppStateContextValue {
 
   addTask: (task: Omit<Task, "id">) => Task;
   updateTask: (id: string, updates: Partial<Task>) => void;
+  deleteTask: (id: string) => void;
+  deleteContentCard: (id: string) => void;
+  deleteDesignRequest: (id: string) => void;
 
   updateContentCard: (id: string, updates: Partial<ContentCard>) => void;
   addContentCard: (card: Omit<ContentCard, "id">) => ContentCard;
@@ -1464,6 +1467,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     [pushNotification, pushTimeline, now]
   );
 
+  // ─── Delete functions ─────────────────────────────────────
+  const deleteTask = useCallback((id: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const deleteContentCard = useCallback((id: string) => {
+    setContentCards((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
+  const deleteDesignRequest = useCallback((id: string) => {
+    setDesignRequests((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
   const addReminder = useCallback(
     (reminder: Omit<Reminder, "id">): Reminder => {
       const newReminder: Reminder = { ...reminder, id: `rem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` };
@@ -1914,6 +1930,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         updateClientAccess,
         addTask,
         updateTask,
+        deleteTask,
+        deleteContentCard,
+        deleteDesignRequest,
         addTimelineEntry,
         sendClientMessage,
         sendGlobalMessage,

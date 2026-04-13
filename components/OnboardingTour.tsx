@@ -55,7 +55,17 @@ const STEPS: TourStep[] = [
   },
 ];
 
-const STORAGE_KEY = "lone-os-tour-completed";
+function getTourKey(): string {
+  // Per-user key: uses the session user ID from sessionStorage
+  try {
+    const session = sessionStorage.getItem("lone_local_session");
+    if (session) {
+      const parsed = JSON.parse(session);
+      return `lone-os-tour-completed-${parsed.id ?? "default"}`;
+    }
+  } catch {}
+  return "lone-os-tour-completed-default";
+}
 
 export default function OnboardingTour() {
   const [active, setActive] = useState(false);
@@ -63,15 +73,16 @@ export default function OnboardingTour() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // Check if tour was already completed
+    // Check if tour was already completed for THIS user
     if (typeof window !== "undefined") {
-      const completed = localStorage.getItem(STORAGE_KEY);
+      const key = getTourKey();
+      const completed = localStorage.getItem(key);
       if (!completed) {
         // Small delay to let the app render first
         const timer = setTimeout(() => {
           setActive(true);
           setIsVisible(true);
-        }, 1500);
+        }, 2000);
         return () => clearTimeout(timer);
       }
     }
@@ -97,7 +108,7 @@ export default function OnboardingTour() {
     setIsVisible(false);
     setTimeout(() => {
       setActive(false);
-      localStorage.setItem(STORAGE_KEY, "true");
+      localStorage.setItem(getTourKey(), "true");
     }, 300);
   };
 
