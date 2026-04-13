@@ -5,11 +5,13 @@ import {
   Target, TrendingUp, Users, ChevronDown,
   Instagram, Palette, BarChart2, ArrowUp, ArrowDown, Minus,
   Download, Monitor, X, Calendar, Clock,
-  Maximize2, Minimize2,
+  Maximize2, Minimize2, Brain, AlertTriangle, Zap,
+  Activity, CheckCircle, TrendingDown, Shield,
 } from "lucide-react";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { calcHealthScore } from "@/lib/utils";
 import { useOKRMetrics, type KPIValue } from "@/lib/hooks/useOKRMetrics";
+import { useSnapshots, type Delta } from "@/lib/hooks/useSnapshots";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -193,7 +195,9 @@ function SimTag({ isReal, source }: { isReal?: boolean; source?: string }) {
 export default function GoalsPage() {
   const { clients } = useAppState();
   const metrics = useOKRMetrics();
+  const { currentSnapshot, previousSnapshot, deltas, feedback, churnAlerts, saveCurrentSnapshot } = useSnapshots();
   const pageRef = useRef<HTMLDivElement>(null);
+  const [activeLayer, setActiveLayer] = useState<"strategy" | "operations">("strategy");
 
   // Time controls
   const [timeView, setTimeView] = useState<TimeView>("atual");
@@ -685,6 +689,204 @@ export default function GoalsPage() {
             </div>
           </div>
         </div>
+
+        {/* ─── INTELLIGENCE PANEL — AI Feedback + Deltas ───── */}
+        {timeView === "atual" && (
+          <div className="space-y-6 animate-fade-in">
+            {/* Layer switcher */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center bg-zinc-900/30 rounded-xl p-0.5 border border-white/[0.04]">
+                {([
+                  { key: "strategy" as const, label: "Estrategia", icon: Target },
+                  { key: "operations" as const, label: "Operacoes", icon: Activity },
+                ]).map((tab) => {
+                  const Icon = tab.icon;
+                  return (
+                    <button key={tab.key} onClick={() => setActiveLayer(tab.key)}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+                        activeLayer === tab.key
+                          ? "bg-[#0d4af5] text-white shadow-[0_2px_8px_rgba(13,74,245,0.25)]"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}>
+                      <Icon size={12} /> {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="h-5 w-px bg-white/[0.06]" />
+              <button onClick={saveCurrentSnapshot}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium text-zinc-500 hover:text-foreground border border-white/[0.06] hover:border-white/[0.1] transition-all"
+                title="Salvar snapshot do periodo atual">
+                <Download size={11} /> Salvar Snapshot
+              </button>
+              {previousSnapshot && (
+                <span className="text-[10px] text-zinc-600">
+                  Comparando com {previousSnapshot.period}
+                </span>
+              )}
+            </div>
+
+            {/* AI Feedback Card */}
+            <div className="card-glow p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-xl bg-[#0d4af5]/10 flex items-center justify-center shrink-0">
+                  <Brain size={18} className="text-[#0d4af5]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-sm font-semibold text-foreground">Analista Virtual</h3>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium tabular-nums ${
+                      feedback.score >= 80 ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" :
+                      feedback.score >= 60 ? "text-amber-400 bg-amber-500/10 border-amber-500/20" :
+                      "text-red-400 bg-red-500/10 border-red-500/20"
+                    }`}>
+                      Score: {feedback.score}/100
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 leading-relaxed mb-3">{feedback.summary}</p>
+
+                  {/* Highlights + Bottlenecks */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {feedback.highlights.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] text-emerald-400/70 uppercase tracking-wider font-semibold flex items-center gap-1">
+                          <CheckCircle size={10} /> Destaques
+                        </p>
+                        {feedback.highlights.map((h, i) => (
+                          <p key={i} className="text-[11px] text-zinc-400 pl-4">+ {h}</p>
+                        ))}
+                      </div>
+                    )}
+                    {feedback.bottlenecks.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] text-red-400/70 uppercase tracking-wider font-semibold flex items-center gap-1">
+                          <AlertTriangle size={10} /> Gargalos
+                        </p>
+                        {feedback.bottlenecks.map((b, i) => (
+                          <p key={i} className="text-[11px] text-zinc-400 pl-4">- {b}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Suggestion */}
+                  <div className="mt-3 p-3 rounded-xl bg-[#0d4af5]/[0.04] border border-[#0d4af5]/[0.08]">
+                    <p className="text-[10px] text-[#3b6ff5] uppercase tracking-wider font-semibold mb-1 flex items-center gap-1">
+                      <Zap size={10} /> Recomendacao
+                    </p>
+                    <p className="text-xs text-zinc-300">{feedback.suggestion}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Churn Alerts */}
+            {churnAlerts.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-foreground flex items-center gap-2">
+                  <Shield size={12} className="text-red-400" />
+                  Alertas Preditivos de Churn
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {churnAlerts.map((alert) => (
+                    <div key={alert.metric}
+                      className={`p-3 rounded-xl border ${
+                        alert.severity === "critical"
+                          ? "bg-red-500/[0.04] border-red-500/[0.12]"
+                          : "bg-amber-500/[0.04] border-amber-500/[0.12]"
+                      }`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          alert.severity === "critical" ? "bg-red-400" : "bg-amber-400"
+                        }`} />
+                        <span className={`text-[10px] font-semibold ${
+                          alert.severity === "critical" ? "text-red-400" : "text-amber-400"
+                        }`}>
+                          {alert.label}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400">{alert.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Delta Grid */}
+            {deltas.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold text-foreground flex items-center gap-2">
+                  <TrendingUp size={12} className="text-[#0d4af5]" />
+                  Evolucao vs Periodo Anterior ({previousSnapshot?.period ?? "—"})
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {deltas.map((d) => (
+                    <div key={d.metric} className="card p-4">
+                      <p className="text-[10px] text-zinc-500 mb-1">{d.label}</p>
+                      <div className="flex items-end gap-2">
+                        <span className="text-lg font-bold text-foreground tabular-nums">
+                          {d.current}{d.unit !== "pts" ? d.unit : ""}
+                        </span>
+                        {d.direction !== "stable" && (
+                          <span className={`flex items-center gap-0.5 text-[11px] font-medium mb-0.5 ${
+                            d.isGood ? "text-emerald-400" : d.severity === "critical" ? "text-red-400" : "text-amber-400"
+                          }`}>
+                            {d.direction === "up" ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
+                            {Math.abs(d.delta).toFixed(1)}%
+                          </span>
+                        )}
+                        {d.direction === "stable" && (
+                          <span className="text-[11px] text-zinc-600 mb-0.5">estavel</span>
+                        )}
+                      </div>
+                      <div className="mt-2 h-1 rounded-full bg-zinc-900 overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-700 ${
+                          d.isGood ? "bg-emerald-500" : d.severity === "critical" ? "bg-red-500" : "bg-amber-500"
+                        }`} style={{ width: `${Math.min(100, Math.max(5, 50 + d.delta))}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Operational KPIs (when Operations tab is active) */}
+            {activeLayer === "operations" && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { label: "Posts Publicados", value: currentSnapshot.postsPublished, target: currentSnapshot.postsTarget, unit: `/${currentSnapshot.postsTarget}`, icon: Instagram },
+                  { label: "SLA Compliance", value: currentSnapshot.slaCompliancePct, target: 85, unit: "%", icon: Clock },
+                  { label: "Design no Prazo", value: currentSnapshot.designOnTimePct, target: 90, unit: "%", icon: Palette },
+                  { label: "Tasks Vencidas", value: currentSnapshot.tasksOverdue, target: 0, unit: "", icon: AlertTriangle },
+                ].map((kpi) => {
+                  const Icon = kpi.icon;
+                  const isGood = kpi.label === "Tasks Vencidas" ? kpi.value <= kpi.target : kpi.value >= kpi.target;
+                  return (
+                    <div key={kpi.label} className={`card p-5 ${!isGood ? "border-amber-500/[0.15]" : ""}`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Icon size={14} className={isGood ? "text-[#0d4af5]" : "text-amber-400"} />
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider">{kpi.label}</span>
+                      </div>
+                      <div className="flex items-end gap-1.5">
+                        <span className={`text-2xl font-bold tabular-nums ${isGood ? "text-foreground" : "text-amber-400"}`}>
+                          {kpi.value}
+                        </span>
+                        <span className="text-xs text-zinc-600 mb-0.5">{kpi.unit}</span>
+                      </div>
+                      {kpi.label !== "Tasks Vencidas" && (
+                        <div className="mt-3 h-1.5 rounded-full bg-zinc-900 overflow-hidden">
+                          <div className={`h-full rounded-full transition-all duration-700 ${
+                            isGood ? "bg-[#0d4af5]" : "bg-amber-500"
+                          }`} style={{ width: `${Math.min(100, (kpi.value / kpi.target) * 100)}%` }} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Close month picker on outside click */}
