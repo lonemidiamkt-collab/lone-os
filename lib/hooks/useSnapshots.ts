@@ -73,11 +73,49 @@ function getCurrentPeriod(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// Seed snapshot: previous month baseline so comparisons work immediately
+function getSeedSnapshot(): Snapshot {
+  const now = new Date();
+  const prevMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+  const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+  const period = `${prevYear}-${String(prevMonth + 1).padStart(2, "0")}`;
+
+  return {
+    id: `snap-seed-${period}`,
+    period,
+    periodType: "monthly",
+    createdAt: new Date(prevYear, prevMonth, 28).toISOString(),
+    totalClients: 5,
+    activeClients: 4,
+    atRiskClients: 0,
+    churnRate: 0,
+    avgHealthScore: 62,
+    postsPublished: 42,
+    postsTarget: 96,
+    avgDeliverySLAHours: 38,
+    slaCompliancePct: 88,
+    designCompleted: 35,
+    designAvgDays: 2.5,
+    designOnTimePct: 91,
+    tasksCompleted: 28,
+    tasksOverdue: 2,
+    avgOnboardingDays: 8,
+    onboardingCompleted: 3,
+    avgDaysSinceLastInteraction: 4.2,
+  };
+}
+
 function loadSnapshots(): Snapshot[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) as Snapshot[] : [];
+    // If empty, seed with previous month baseline
+    if (parsed.length === 0) {
+      const seed = getSeedSnapshot();
+      return [seed];
+    }
+    return parsed;
   } catch { return []; }
 }
 

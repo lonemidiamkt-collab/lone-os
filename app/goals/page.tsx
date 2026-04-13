@@ -697,8 +697,8 @@ export default function GoalsPage() {
             <div className="flex items-center gap-3">
               <div className="flex items-center bg-zinc-900/30 rounded-xl p-0.5 border border-white/[0.04]">
                 {([
-                  { key: "strategy" as const, label: "Estrategia", icon: Target },
-                  { key: "operations" as const, label: "Operacoes", icon: Activity },
+                  { key: "strategy" as const, label: "Cockpit Estrategico", icon: Target },
+                  { key: "operations" as const, label: "Chao de Fabrica", icon: Activity },
                 ]).map((tab) => {
                   const Icon = tab.icon;
                   return (
