@@ -89,7 +89,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
           )}
         </div>
         {hasResults && (
-          <div className="absolute top-full mt-1 left-0 w-72 bg-[#0e0e0e] border border-[#2a2a2a] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.7)] z-50 py-1 animate-fade-in max-h-80 overflow-y-auto">
+          <div className="absolute top-full mt-1 left-0 w-72 bg-[#0a0a0e] border border-white/[0.08] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.8)] z-[200] py-1 animate-fade-in max-h-80 overflow-y-auto">
             {clientResults.length > 0 && (
               <>
                 <p className="text-[10px] text-zinc-600 uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium">Clientes</p>
@@ -147,7 +147,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
         </button>
 
         {showQuick && (
-          <div className="absolute right-0 top-full mt-2 w-52 bg-[#0e0e0e] border border-[#2a2a2a] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.7)] z-50 py-2 animate-fade-in">
+          <div className="absolute right-0 top-full mt-2 w-52 bg-[#0a0a0e] border border-white/[0.08] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.8)] z-[200] py-2 animate-fade-in">
             <p className="text-[10px] text-zinc-600 uppercase tracking-[0.15em] px-3 pb-2 mb-1 border-b border-[#1a1a1a] font-medium">
               Ações Rápidas
             </p>
@@ -187,7 +187,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
         {showMenu && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-            <div className="absolute right-0 top-full mt-2 w-52 bg-[#0e0e0e] border border-[#2a2a2a] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.7)] z-50 py-2 animate-fade-in">
+            <div className="absolute right-0 top-full mt-2 w-52 bg-[#0a0a0e] border border-white/[0.08] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.8)] z-[200] py-2 animate-fade-in">
               <div className="flex items-center gap-2.5 px-3 py-2 border-b border-[#1a1a1a] mb-1">
                 <div className="w-8 h-8 rounded-full bg-[#0d4af5]/15 flex items-center justify-center shrink-0">
                   <span className="text-[11px] font-bold text-[#0d4af5]">{currentProfile.initials}</span>

@@ -167,7 +167,7 @@ export default function LoginScreen() {
             <img src="/logo.png" alt="Lone" width={32} height={32} className="object-contain" />
           </div>
           <h1 className="text-lg font-black text-white tracking-tight">LONE MÍDIA</h1>
-          <p className="text-[10px] text-zinc-600 tracking-[0.25em] uppercase mt-1">Assessoria Digital</p>
+          <p className="text-[10px] text-zinc-400 tracking-[0.25em] uppercase mt-1">Assessoria Digital</p>
         </div>
 
         {/* Form container */}
@@ -178,7 +178,7 @@ export default function LoginScreen() {
             <div className="animate-fade-in space-y-6">
               <div>
                 <h2 className="text-xl font-bold text-white">Acesse sua conta</h2>
-                <p className="text-xs text-zinc-600 mt-1">Selecione seu perfil para continuar</p>
+                <p className="text-xs text-zinc-400 mt-1">Selecione seu perfil para continuar</p>
               </div>
 
               {/* Custom dropdown */}
@@ -201,13 +201,13 @@ export default function LoginScreen() {
                         </div>
                         <div>
                           <p className="text-white font-medium text-sm">{selectedProfile.name}</p>
-                          <p className="text-zinc-600 text-[10px]">{ROLE_LABELS[selectedProfile.role]}</p>
+                          <p className="text-zinc-400 text-[10px]">{ROLE_LABELS[selectedProfile.role]}</p>
                         </div>
                       </div>
                     ) : (
-                      <span className="text-zinc-700">Selecione um usuário...</span>
+                      <span className="text-zinc-400">Selecione um usuário...</span>
                     )}
-                    <ChevronDown size={16} className={`text-zinc-600 transition-transform ${showDropdown ? "rotate-180" : ""}`} />
+                    <ChevronDown size={16} className={`text-zinc-400 transition-transform ${showDropdown ? "rotate-180" : ""}`} />
                   </button>
 
                   {/* Dropdown list */}
@@ -234,7 +234,7 @@ export default function LoginScreen() {
                             <p className={`text-sm font-medium ${selectedUser === profile.id ? "text-[#0d4af5]" : "text-white"}`}>
                               {profile.name}
                             </p>
-                            <p className="text-[10px] text-zinc-600">{ROLE_LABELS[profile.role]}</p>
+                            <p className="text-[10px] text-zinc-400">{ROLE_LABELS[profile.role]}</p>
                           </div>
                           {selectedUser === profile.id && (
                             <Check size={14} className="text-[#0d4af5] shrink-0" />
@@ -266,7 +266,7 @@ export default function LoginScreen() {
               <div>
                 <button
                   onClick={handleBack}
-                  className="text-xs text-zinc-600 hover:text-[#0d4af5] transition-colors flex items-center gap-1 mb-4"
+                  className="text-xs text-zinc-400 hover:text-[#0d4af5] transition-colors flex items-center gap-1 mb-4"
                 >
                   <ArrowLeft size={12} />
                   Trocar conta
@@ -275,7 +275,7 @@ export default function LoginScreen() {
                 <h2 className="text-xl font-bold text-white">
                   Olá, <span className="text-[#0d4af5]">{selectedProfile.name.split(" ")[0]}</span>
                 </h2>
-                <p className="text-xs text-zinc-600 mt-1">{ROLE_LABELS[selectedProfile.role]}</p>
+                <p className="text-xs text-zinc-400 mt-1">{ROLE_LABELS[selectedProfile.role]}</p>
               </div>
 
               <div className="space-y-2">
@@ -289,7 +289,7 @@ export default function LoginScreen() {
                     onKeyDown={handleKeyDown}
                     placeholder="Digite sua senha"
                     autoComplete="off"
-                    className={`w-full bg-[#0a0a0a] border rounded-xl px-4 py-3.5 text-sm text-white outline-none transition-all placeholder:text-zinc-800 ${
+                    className={`w-full bg-[#0a0a0a] border rounded-xl px-4 py-3.5 text-sm text-white outline-none transition-all placeholder:text-zinc-500 ${
                       error
                         ? "border-red-500/50 shadow-[0_0_0_3px_rgba(239,68,68,0.06)]"
                         : "border-[#1a1a1a] focus:border-[#0d4af5] focus:shadow-[0_0_0_3px_rgba(10,52,245,0.1)]"
@@ -298,7 +298,7 @@ export default function LoginScreen() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-700 hover:text-zinc-400 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-400 transition-colors"
                   >
                     {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
@@ -326,7 +326,7 @@ export default function LoginScreen() {
                 )}
               </button>
 
-              <p className="text-[10px] text-zinc-800 text-center">
+              <p className="text-[10px] text-zinc-500 text-center">
                 Esqueceu a senha? Fale com o administrador.
               </p>
             </div>
@@ -335,7 +335,7 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <div className="mt-8 text-center">
-          <p className="text-zinc-800 text-[9px] uppercase tracking-[0.2em]">
+          <p className="text-zinc-500 text-[9px] uppercase tracking-[0.2em]">
             Lone Mídia Assessoria © 2026
           </p>
         </div>

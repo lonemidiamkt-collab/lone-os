@@ -94,7 +94,7 @@ export default function TrafficPage() {
   const {
     clients, tasks, updateClientData, updateClientStatus, addTask, updateTask,
     trafficReports, trafficRoutineChecks, addTrafficReport, updateTrafficReport, addTrafficRoutineCheck,
-    addDesignRequest, addContentCard, pushNotification,
+    addDesignRequest, addContentCard, pushNotification, deleteTask,
     investmentData, updateInvestmentData,
   } = useAppState();
 
@@ -330,6 +330,7 @@ export default function TrafficPage() {
               </div>
               <KanbanBoard<Task>
                 columns={taskKanbanCols}
+                onDelete={(taskId) => deleteTask(taskId)}
                 onMove={(taskId, _from, toStatus) => {
                   updateTask(taskId, { status: toStatus as Task["status"] });
                 }}
