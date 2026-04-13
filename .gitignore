@@ -40,3 +40,6 @@ next-env.d.ts
 
 # Claude Code local settings (may contain secrets)
 .claude/
+
+# Supabase self-hosted secrets
+infrastructure/supabase/.env
