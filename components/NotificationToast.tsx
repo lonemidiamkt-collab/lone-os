@@ -2,21 +2,47 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAppState } from "@/lib/context/AppStateContext";
-import { X, Bell, AlertTriangle, FileText, Activity, Settings } from "lucide-react";
+import { X, Bell, AlertTriangle, FileText, Activity, Settings, CheckCircle, Zap } from "lucide-react";
 import type { AppNotification } from "@/lib/types";
-import { playNotificationSound } from "@/components/ScheduledNoticePopup";
 
-const TYPE_CONFIG: Record<string, { icon: typeof Bell; color: string; bg: string; border: string }> = {
-  sla:     { icon: AlertTriangle, color: "text-red-500",    bg: "bg-red-500/10",    border: "border-red-500/30" },
-  status:  { icon: Activity,      color: "text-[#3b6ff5]", bg: "bg-[#0d4af5]/10", border: "border-yellow-500/30" },
-  content: { icon: FileText,      color: "text-primary",    bg: "bg-primary/10",    border: "border-primary/30" },
-  checkin: { icon: Bell,           color: "text-[#0d4af5]",   bg: "bg-[#0d4af5]/10",   border: "border-[#0d4af5]/20" },
-  system:  { icon: Settings,      color: "text-zinc-400",   bg: "bg-[#111118]",      border: "border-[#1e1e2a]" },
+const TYPE_CONFIG: Record<string, { icon: typeof Bell; color: string; accent: string }> = {
+  sla:     { icon: AlertTriangle, color: "text-red-400",    accent: "border-l-red-500" },
+  status:  { icon: Activity,      color: "text-[#3b6ff5]",  accent: "border-l-[#0d4af5]" },
+  content: { icon: FileText,      color: "text-[#0d4af5]",  accent: "border-l-[#0d4af5]" },
+  checkin: { icon: Bell,          color: "text-[#0d4af5]",  accent: "border-l-[#0d4af5]" },
+  system:  { icon: Settings,      color: "text-zinc-400",   accent: "border-l-zinc-600" },
 };
 
+const CRITICAL_TYPES = new Set(["sla"]);
+
 interface ToastItem {
-  notification: AppNotification;
+  id: string;
+  title: string;
+  body: string;
+  type: string;
+  count: number;
   dismissing: boolean;
+  isCritical: boolean;
+  timestamp: number;
+}
+
+// Play premium ping for critical notifications only
+function playPremiumPing() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1320, ctx.currentTime + 0.06);
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.2);
+    osc.onended = () => ctx.close();
+  } catch {}
 }
 
 export default function NotificationToast() {
@@ -25,7 +51,7 @@ export default function NotificationToast() {
   const seenRef = useRef<Set<string>>(new Set());
   const initialLoadRef = useRef(true);
 
-  // On first render, mark all existing notifications as "seen" so they don't popup
+  // Mark existing notifications as seen on first render
   useEffect(() => {
     if (initialLoadRef.current) {
       notifications.forEach((n) => seenRef.current.add(n.id));
@@ -33,7 +59,7 @@ export default function NotificationToast() {
     }
   }, [notifications]);
 
-  // Watch for new notifications
+  // Watch for new notifications — GROUP by type
   useEffect(() => {
     if (initialLoadRef.current) return;
 
@@ -42,92 +68,135 @@ export default function NotificationToast() {
 
     newOnes.forEach((n) => seenRef.current.add(n.id));
 
-    // Play sound for new notifications
-    playNotificationSound();
+    // Group by type — if multiple of same type arrive together, merge
+    const grouped = new Map<string, AppNotification[]>();
+    newOnes.forEach((n) => {
+      const key = n.type;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(n);
+    });
 
-    setToasts((prev) => [
-      ...newOnes.map((n) => ({ notification: n, dismissing: false })),
-      ...prev,
-    ].slice(0, 5)); // max 5 visible toasts
+    const newToasts: ToastItem[] = [];
+    grouped.forEach((items, type) => {
+      const isCritical = CRITICAL_TYPES.has(type) || items.some((i) => i.title.includes("[Urgente]") || i.title.includes("[Auto]"));
+
+      if (items.length === 1) {
+        newToasts.push({
+          id: items[0].id,
+          title: items[0].title,
+          body: items[0].body,
+          type,
+          count: 1,
+          dismissing: false,
+          isCritical,
+          timestamp: Date.now(),
+        });
+      } else {
+        // Grouped notification
+        newToasts.push({
+          id: `group-${type}-${Date.now()}`,
+          title: `${items.length} novas notificacoes`,
+          body: items.map((i) => i.title).slice(0, 3).join(" · ") + (items.length > 3 ? ` +${items.length - 3}` : ""),
+          type,
+          count: items.length,
+          dismissing: false,
+          isCritical,
+          timestamp: Date.now(),
+        });
+      }
+    });
+
+    // Play sound only for critical
+    if (newToasts.some((t) => t.isCritical)) {
+      playPremiumPing();
+    }
+
+    setToasts((prev) => [...newToasts, ...prev].slice(0, 4));
   }, [notifications]);
 
-  // Auto-dismiss after 6 seconds
+  // Auto-dismiss: 4s for normal, critical stays until clicked
   useEffect(() => {
     if (toasts.length === 0) return;
 
-    const timer = setTimeout(() => {
+    const timer = setInterval(() => {
+      const now = Date.now();
       setToasts((prev) => {
-        if (prev.length === 0) return prev;
-        // Start dismissing the oldest toast
-        const oldest = prev[prev.length - 1];
-        if (oldest.dismissing) {
-          return prev.slice(0, -1); // remove it
-        }
-        return prev.map((t, i) =>
-          i === prev.length - 1 ? { ...t, dismissing: true } : t
-        );
+        const updated = prev.map((t) => {
+          if (t.dismissing) return t;
+          const age = now - t.timestamp;
+          // Auto-dismiss non-critical after 4s
+          if (!t.isCritical && age > 4000) return { ...t, dismissing: true };
+          return t;
+        });
+        return updated;
       });
-    }, 5000);
+    }, 500);
 
-    return () => clearTimeout(timer);
-  }, [toasts]);
+    return () => clearInterval(timer);
+  }, [toasts.length]);
 
-  // Remove dismissing toasts after animation
+  // Remove dismissed toasts after animation
   useEffect(() => {
     const dismissing = toasts.filter((t) => t.dismissing);
     if (dismissing.length === 0) return;
-
     const timer = setTimeout(() => {
       setToasts((prev) => prev.filter((t) => !t.dismissing));
     }, 300);
-
     return () => clearTimeout(timer);
   }, [toasts]);
 
   const dismiss = useCallback((id: string) => {
-    setToasts((prev) =>
-      prev.map((t) => t.notification.id === id ? { ...t, dismissing: true } : t)
-    );
-    markNotificationRead(id);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.notification.id !== id));
-    }, 300);
+    setToasts((prev) => prev.map((t) => t.id === id ? { ...t, dismissing: true } : t));
+    // Mark as read if it's a real notification ID
+    if (!id.startsWith("group-")) markNotificationRead(id);
   }, [markNotificationRead]);
 
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none" style={{ maxWidth: 380 }}>
-      {toasts.map((toast) => {
-        const config = TYPE_CONFIG[toast.notification.type] ?? TYPE_CONFIG.system;
-        const Icon = config.icon;
+    <div className="fixed bottom-6 right-6 z-[100] flex flex-col-reverse gap-2 pointer-events-none" style={{ maxWidth: 360 }}>
+      {toasts.map((toast, i) => {
+        const config = TYPE_CONFIG[toast.type] ?? TYPE_CONFIG.system;
+        const Icon = toast.count > 1 ? Zap : config.icon;
 
         return (
           <div
-            key={toast.notification.id}
-            className={`pointer-events-auto flex items-start gap-3 p-4 rounded-xl border shadow-2xl backdrop-blur-md transition-all duration-300 ${config.bg} ${config.border} ${
+            key={toast.id}
+            className={`pointer-events-auto flex items-start gap-3 p-4 rounded-xl border-l-2 ${config.accent} transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
               toast.dismissing
-                ? "opacity-0 translate-x-8 scale-95"
-                : "opacity-100 translate-x-0 scale-100 animate-slide-in-right"
+                ? "opacity-0 translate-x-12 scale-95"
+                : "opacity-100 translate-x-0 scale-100 animate-slide-up"
             }`}
-            style={{ backgroundColor: "var(--card, #1A1A24)" }}
+            style={{
+              transitionDelay: `${i * 50}ms`,
+              background: "rgba(0, 0, 0, 0.85)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              border: "0.5px solid rgba(255,255,255,0.06)",
+              borderLeftWidth: "2px",
+            }}
           >
-            <div className={`w-8 h-8 rounded-lg ${config.bg} flex items-center justify-center shrink-0`}>
-              <Icon size={16} className={config.color} />
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+              toast.isCritical ? "bg-red-500/10" : "bg-white/[0.04]"
+            }`}>
+              <Icon size={14} className={toast.isCritical ? "text-red-400" : config.color} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground leading-tight">
-                {toast.notification.title}
+              <p className="text-[12px] font-semibold text-foreground leading-tight">
+                {toast.title}
+                {toast.count > 1 && (
+                  <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] text-zinc-400 font-medium">
+                    {toast.count}x
+                  </span>
+                )}
               </p>
-              <p className="text-xs text-muted-foreground mt-0.5 leading-snug line-clamp-2">
-                {toast.notification.body}
-              </p>
+              <p className="text-[11px] text-zinc-500 mt-0.5 leading-snug line-clamp-2">{toast.body}</p>
             </div>
             <button
-              onClick={() => dismiss(toast.notification.id)}
-              className="text-muted-foreground hover:text-foreground transition-colors p-0.5 shrink-0"
+              onClick={() => dismiss(toast.id)}
+              className="text-zinc-700 hover:text-foreground transition-colors p-0.5 shrink-0"
             >
-              <X size={14} />
+              <X size={12} />
             </button>
           </div>
         );
