@@ -19,6 +19,8 @@ export type TimelineEntryType =
 export type ToneOfVoice = "formal" | "funny" | "authoritative" | "casual";
 export type MoodType = "happy" | "neutral" | "angry";
 
+export type LeadSource = "indicacao" | "trafego" | "organico" | "outros";
+
 export interface Client {
   id: string;
   name: string;
@@ -42,13 +44,25 @@ export interface Client {
   instagramUser?: string;
   postsThisMonth?: number;
   postsGoal?: number;
-  lastKanbanActivity?: string; // ISO datetime
+  lastKanbanActivity?: string;
   campaignBriefing?: string;
-  // Fixed briefing — things that never change (brand colors, fonts, do's/don'ts)
   fixedBriefing?: string;
-  // Meta Ads — linked ad account
+  // Meta Ads
   metaAdAccountId?: string;
   metaAdAccountName?: string;
+  // ─── Dados Pessoais (RBAC: admin only) ─────────────────
+  cpfCnpj?: string;
+  birthDate?: string;
+  phone?: string;           // WhatsApp
+  email?: string;            // Gmail de contato
+  leadSource?: LeadSource;
+  // ─── Cofre de Acessos (RBAC: admin + staff) ────────────
+  facebookLogin?: string;
+  facebookPassword?: string;
+  googleAdsLogin?: string;
+  googleAdsPassword?: string;
+  instagramLogin?: string;
+  instagramPassword?: string;
 }
 
 export interface MoodEntry {

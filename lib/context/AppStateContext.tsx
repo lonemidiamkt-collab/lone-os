@@ -244,19 +244,7 @@ interface AppStateContextValue {
   addMoodEntry: (clientId: string, mood: MoodType, note: string, actor: string) => void;
   addCreativeAsset: (asset: Omit<CreativeAsset, "id">) => void;
 
-  addClient: (data: {
-    name: string;
-    industry: string;
-    monthlyBudget: number;
-    paymentMethod: Client["paymentMethod"];
-    assignedTraffic: string;
-    assignedSocial: string;
-    assignedDesigner: string;
-    driveLink?: string;
-    notes?: string;
-    metaAdAccountId?: string;
-    metaAdAccountName?: string;
-  }) => Client;
+  addClient: (data: Omit<Client, "id" | "status" | "attentionLevel" | "tags" | "joinDate" | "lastPostDate">) => Client;
 
   updateClientStatus: (clientId: string, status: ClientStatus, actor: string) => void;
   addTimelineEntry: (entry: Omit<TimelineEntry, "id">) => void;
@@ -833,19 +821,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addClient = useCallback(
-    (data: {
-      name: string;
-      industry: string;
-      monthlyBudget: number;
-      paymentMethod: Client["paymentMethod"];
-      assignedTraffic: string;
-      assignedSocial: string;
-      assignedDesigner: string;
-      driveLink?: string;
-      notes?: string;
-      metaAdAccountId?: string;
-      metaAdAccountName?: string;
-    }): Client => {
+    (data: Omit<Client, "id" | "status" | "attentionLevel" | "tags" | "joinDate" | "lastPostDate">): Client => {
       const id = `c-${Date.now()}`;
       const newClient: Client = {
         ...data,
