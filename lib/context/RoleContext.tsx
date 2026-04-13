@@ -246,6 +246,15 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           (error as any)?.status === 400;
 
         if (isAuthError) {
+          // Supabase auth failed — but allow fallback with local password
+          // This handles the case where Supabase is running but users aren't created yet
+          if (password === FALLBACK_PASSWORD) {
+            setSupabaseAvailable(false);
+            setCurrentProfileState(profile);
+            setIsAuthenticated(true);
+            try { sessionStorage.setItem("lone_local_session", profile.id); } catch {}
+            return true;
+          }
           setSupabaseAvailable(true);
           return false;
         }
@@ -253,7 +262,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         // Everything else (rate limit, service unavailable, network) → fallback
         const isDefinitelyReachable =
           (error as any)?.status >= 400 && (error as any)?.status < 500;
-        if (isDefinitelyReachable) {
+        if (isDefinitelyReachable && password !== FALLBACK_PASSWORD) {
           setSupabaseAvailable(true);
           return false;
         }
