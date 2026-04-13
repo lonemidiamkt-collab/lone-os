@@ -2,6 +2,7 @@
 
 import Header from "@/components/Header";
 import MetricCard from "@/components/MetricCard";
+import MorningBriefing from "@/components/MorningBriefing";
 import {
   Users, TrendingUp, AlertTriangle, UserPlus,
   Activity, Megaphone, Clock, Bell, Send, X,
@@ -564,6 +565,19 @@ function AdminDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Morning Briefing (AI) — only for traffic/admin/manager */}
+      {(role === "admin" || role === "manager" || role === "traffic") && (
+        <MorningBriefing
+          clients={clients.filter((c) => c.status !== "onboarding").map((c) => ({
+            id: c.id,
+            name: c.name,
+            campaigns: mockAdCampaigns.filter((camp) => camp.clientId === c.id),
+            totalSpend: mockAdCampaigns.filter((camp) => camp.clientId === c.id).reduce((s, camp) => s + camp.spend, 0),
+            totalBudget: mockAdCampaigns.filter((camp) => camp.clientId === c.id).reduce((s, camp) => s + camp.totalBudget, 0),
+          }))}
+        />
       )}
 
       {/* Urgências do Dia */}
