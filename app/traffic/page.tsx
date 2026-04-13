@@ -15,7 +15,7 @@ import {
   Check, Megaphone, Eye, MousePointerClick, DollarSign, Target,
   Pause, AlertCircle, Download, ChevronDown, ChevronUp,
   Settings2, GripVertical, Zap, Activity, TrendingDown,
-  Brain, ShieldAlert, Sparkles, CircleDot, Bell, FolderDown, Loader2, Facebook,
+  Brain, ShieldAlert, Sparkles, CircleDot, Bell, FolderDown, Loader2, Facebook, Send,
   Wallet, CreditCard, Banknote, AlertOctagon, Info,
 } from "lucide-react";
 import { getAttentionColor, getAttentionLabel, getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
@@ -93,9 +93,15 @@ export default function TrafficPage() {
   const {
     clients, tasks, updateClientData, updateClientStatus, addTask, updateTask,
     trafficReports, trafficRoutineChecks, addTrafficReport, updateTrafficReport, addTrafficRoutineCheck,
-    addDesignRequest, addContentCard,
+    addDesignRequest, addContentCard, pushNotification,
     investmentData, updateInvestmentData,
   } = useAppState();
+
+  // Creative request modal state
+  const [creativeModal, setCreativeModal] = useState<{
+    campaign: import("@/lib/types").AdCampaign;
+    client: import("@/lib/types").Client;
+  } | null>(null);
   const { currentUser, role } = useRole();
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();
   const [activeTab, setActiveTab] = useState<TabType>("rotina");
@@ -404,6 +410,7 @@ export default function TrafficPage() {
                 setSharedRealCampaigns(campaigns);
                 setSharedIsUsingRealData(isReal);
               }}
+              onRequestCreative={(camp, cl) => setCreativeModal({ campaign: camp, client: cl })}
             />
           )}
 
@@ -441,6 +448,258 @@ export default function TrafficPage() {
           onSave={(task) => { addTask(task); setShowNewTask(false); }}
         />
       )}
+
+      {/* Creative Request Modal */}
+      {creativeModal && (
+        <CreativeRequestModal
+          campaign={creativeModal.campaign}
+          client={creativeModal.client}
+          currentUser={currentUser}
+          onClose={() => setCreativeModal(null)}
+          onSubmit={(req) => {
+            addDesignRequest(req);
+            pushNotification("content", "Criativo solicitado ao Design", `Pedido de criativo para campanha "${creativeModal.campaign.name}" enviado para a fila do Designer com prioridade ${req.priority === "critical" ? "critica" : "alta"}.`, creativeModal.client.id);
+            // Audio feedback
+            import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
+            setCreativeModal(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// CREATIVE REQUEST MODAL (Traffic → Design bridge)
+// ══════════════════════════════════════════════════════════════
+
+const OBJECTIVE_LABELS: Record<string, string> = {
+  messages: "Mensagens (WhatsApp/DM)",
+  traffic: "Visitas ao Perfil/Site",
+  conversions: "Conversoes",
+  reach: "Alcance/Visibilidade",
+  engagement: "Engajamento",
+  leads: "Geracao de Leads",
+};
+
+const SMART_SUGGESTIONS: Record<string, { format: string; description: string }[]> = {
+  messages: [
+    { format: "Video Selfie (9:16)", description: "Dono do negocio falando direto com a camera, CTA forte para WhatsApp" },
+    { format: "Carrossel Prova Social", description: "4-5 slides com depoimentos reais + botao de mensagem no final" },
+    { format: "Story Interativo", description: "Enquete/Quiz nos stories com link de contato no swipe up" },
+  ],
+  traffic: [
+    { format: "Post Estatico Premium", description: "Imagem de alto valor visual com curiosidade/gancho irresistivel" },
+    { format: "Reel Bastidores (9:16)", description: "Video mostrando o dia-a-dia, autenticidade gera cliques" },
+    { format: "Carrossel Educativo", description: "5 dicas rapidas com CTA de 'saiba mais no perfil'" },
+  ],
+  conversions: [
+    { format: "Video Demonstracao", description: "Produto/servico em acao com oferta limitada e CTA urgente" },
+    { format: "Antes/Depois", description: "Transformacao visual do resultado com prova social" },
+    { format: "Reel Oferta Flash", description: "Contagem regressiva + beneficio claro + link de compra" },
+  ],
+  reach: [
+    { format: "Reel Viral (9:16)", description: "Conteudo de entretenimento/educacao com gancho nos 3 primeiros segundos" },
+    { format: "Post Carrossel Valor", description: "Informacao gratuita de alto valor que as pessoas compartilham" },
+    { format: "Meme Contextual", description: "Humor relacionado ao nicho com branding sutil" },
+  ],
+  engagement: [
+    { format: "Post Pergunta", description: "Imagem provocativa com pergunta que gera debate nos comentarios" },
+    { format: "Reel Tutorial Rapido", description: "Dica pratica em 15 segundos que gera saves e shares" },
+    { format: "Carrossel Controverso", description: "Opiniao forte do nicho que polariza e gera engajamento" },
+  ],
+  leads: [
+    { format: "Video Isca Digital", description: "Preview de material gratuito (PDF, aula) com CTA para cadastro" },
+    { format: "Carrossel Case Study", description: "Resultado de um cliente com formulario de 'quero igual'" },
+    { format: "Story Urgencia", description: "Vagas limitadas + timer + swipe para formulario" },
+  ],
+};
+
+function CreativeRequestModal({
+  campaign, client, currentUser, onClose, onSubmit,
+}: {
+  campaign: import("@/lib/types").AdCampaign;
+  client: import("@/lib/types").Client;
+  currentUser: string;
+  onClose: () => void;
+  onSubmit: (req: Omit<import("@/lib/types").DesignRequest, "id">) => void;
+}) {
+  const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
+  const [customFormat, setCustomFormat] = useState("Post Feed (1:1)");
+  const [observations, setObservations] = useState("");
+  const [priority, setPriority] = useState<"high" | "critical">(
+    campaign.ctr < 1 || campaign.cpc > 5 ? "critical" : "high"
+  );
+
+  const suggestions = SMART_SUGGESTIONS[campaign.objective] ?? SMART_SUGGESTIONS.engagement;
+  const objectiveLabel = OBJECTIVE_LABELS[campaign.objective] ?? campaign.objective;
+
+  const handleSubmit = () => {
+    const suggestion = selectedSuggestion !== null ? suggestions[selectedSuggestion] : null;
+    const format = suggestion ? suggestion.format : customFormat;
+    const briefingParts = [
+      `[SOLICITACAO DE TRAFEGO]`,
+      ``,
+      `Origem: Modulo de Trafego`,
+      `Campanha: ${campaign.name}`,
+      `Objetivo: ${objectiveLabel}`,
+      ``,
+      `Metricas atuais:`,
+      `  CTR: ${campaign.ctr.toFixed(2)}%  |  CPC: R$${campaign.cpc.toFixed(2)}  |  CPM: R$${campaign.cpm.toFixed(2)}`,
+      campaign.costPerResult ? `  Custo/Resultado: R$${campaign.costPerResult.toFixed(2)}` : null,
+      campaign.spend > 0 ? `  Investimento: R$${campaign.spend.toFixed(2)}` : null,
+      ``,
+      suggestion ? `Sugestao IA: ${suggestion.format} — ${suggestion.description}` : null,
+      observations ? `\nObservacoes do Gestor:\n${observations}` : null,
+    ].filter(Boolean).join("\n");
+
+    onSubmit({
+      title: `[TRAFEGO] Criativo — ${campaign.name}`,
+      clientId: client.id,
+      clientName: client.name,
+      requestedBy: currentUser,
+      priority,
+      status: "queued",
+      format,
+      briefing: briefingParts,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-xl mx-4 bg-black border border-[#1a1a1a] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0a34f5]/30 to-transparent shrink-0" />
+
+        <div className="p-6 space-y-5 overflow-y-auto flex-1">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <Sparkles size={18} className="text-[#0a34f5]" />
+                Solicitar Reforco Criativo
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                O pedido ira direto para a fila do Designer com tag [TRAFEGO]
+              </p>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5">
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Campaign context */}
+          <div className="p-4 rounded-xl bg-[#0a34f5]/[0.03] border border-[#0a34f5]/10 space-y-2">
+            <p className="text-[10px] text-[#3b6ff5] uppercase tracking-wider font-semibold">Contexto da Campanha</p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: "Campanha", value: campaign.name },
+                { label: "Cliente", value: client.name },
+                { label: "Objetivo", value: objectiveLabel },
+                { label: "Performance", value: `CTR ${campaign.ctr.toFixed(2)}% · CPC R$${campaign.cpc.toFixed(2)}` },
+              ].map((item) => (
+                <div key={item.label}>
+                  <p className="text-[10px] text-muted-foreground">{item.label}</p>
+                  <p className="text-xs font-medium text-foreground">{item.value}</p>
+                </div>
+              ))}
+            </div>
+            {(campaign.ctr < 1 || campaign.cpc > 5) && (
+              <div className="flex items-center gap-1.5 mt-1 text-[10px] text-red-400">
+                <AlertTriangle size={10} />
+                Performance abaixo do esperado — criativo urgente
+              </div>
+            )}
+          </div>
+
+          {/* Smart Suggestions */}
+          <div className="space-y-2">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold flex items-center gap-1.5">
+              <Brain size={10} className="text-[#0a34f5]" />
+              Sugestoes do Sistema — {objectiveLabel}
+            </p>
+            <div className="space-y-1.5">
+              {suggestions.map((s, i) => {
+                const active = selectedSuggestion === i;
+                return (
+                  <button key={i} onClick={() => setSelectedSuggestion(active ? null : i)}
+                    className={`w-full text-left p-3 rounded-xl border transition-all ${
+                      active ? "border-[#0a34f5]/40 bg-[#0a34f5]/[0.05]" : "border-[#1a1a1a] hover:border-[#2a2a2a]"
+                    }`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                        active ? "bg-[#0a34f5] text-white" : "bg-zinc-900 text-zinc-500"
+                      }`}>{i + 1}</span>
+                      <div>
+                        <p className={`text-xs font-medium ${active ? "text-foreground" : "text-zinc-400"}`}>{s.format}</p>
+                        <p className="text-[10px] text-zinc-600 mt-0.5">{s.description}</p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {selectedSuggestion === null && (
+            <div className="space-y-1.5">
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Formato Manual</label>
+              <select value={customFormat} onChange={(e) => setCustomFormat(e.target.value)}
+                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0a34f5]/50 outline-none">
+                {["Post Feed (1:1)", "Reel (9:16)", "Story (9:16)", "Carrossel", "Video", "Banner"].map((f) => (
+                  <option key={f}>{f}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Prioridade</label>
+            <div className="flex gap-2">
+              {([
+                { value: "high" as const, label: "Alta", color: "text-amber-400 border-amber-500/20 bg-amber-500/5" },
+                { value: "critical" as const, label: "Critica (Verba Rodando)", color: "text-red-400 border-red-500/20 bg-red-500/5" },
+              ]).map((p) => (
+                <button key={p.value} onClick={() => setPriority(p.value)}
+                  className={`flex-1 py-2 rounded-xl border text-xs font-medium transition-all ${
+                    priority === p.value ? p.color : "border-[#1a1a1a] text-zinc-600"
+                  }`}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Observacoes (opcional)</label>
+            <textarea value={observations} onChange={(e) => setObservations(e.target.value)}
+              placeholder="Ex: CPA alto, precisamos de video mais agressivo com CTA direto..."
+              rows={3}
+              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0a34f5]/50 outline-none resize-none" />
+          </div>
+
+          {/* Preview */}
+          <div className="p-3 rounded-xl bg-zinc-900/30 border border-zinc-800/30">
+            <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">Preview no board do Designer</p>
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20 font-bold">TRAFEGO</span>
+              <span className="text-xs text-foreground font-medium">Criativo — {campaign.name}</span>
+            </div>
+            <p className="text-[10px] text-zinc-500 mt-1">
+              {client.name} · {selectedSuggestion !== null ? suggestions[selectedSuggestion].format : customFormat} · {priority === "critical" ? "Critica" : "Alta"}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[#1a1a1a] shrink-0">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all">
+            Cancelar
+          </button>
+          <button onClick={handleSubmit}
+            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#0a34f5] text-white text-xs font-semibold hover:bg-[#0c3cff] transition-all">
+            <Send size={12} /> Enviar para Producao
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1510,6 +1769,7 @@ function AdAnalyticsTab({
   updateClientData,
   currentUser,
   onRealDataChange,
+  onRequestCreative,
 }: {
   clients: Client[];
   accounts: AdAccount[];
@@ -1518,6 +1778,7 @@ function AdAnalyticsTab({
   updateClientData: (id: string, data: Partial<Client>) => void;
   currentUser: string;
   onRealDataChange?: (campaigns: AdCampaign[], isReal: boolean) => void;
+  onRequestCreative?: (campaign: AdCampaign, client: Client) => void;
 }) {
   const OBJECTIVE_LABELS: Record<string, string> = {
     messages: "Mensagens", traffic: "Tráfego", conversions: "Conversões",
@@ -3051,17 +3312,7 @@ function AdAnalyticsTab({
                     <button
                       onClick={() => {
                         const cl = clients.find((c) => c.id === camp.clientId);
-                        if (!cl) return;
-                        addDesignRequest({
-                          title: `Novo criativo — ${camp.name}`,
-                          clientId: cl.id,
-                          clientName: cl.name,
-                          requestedBy: currentUser,
-                          priority: camp.ctr < 1 || camp.cpc > 5 ? "high" : "medium",
-                          status: "queued",
-                          format: "Post Feed",
-                          briefing: `Campanha "${camp.name}" (${camp.objective}) precisa de novo criativo. CTR: ${camp.ctr.toFixed(2)}%, CPC: R$${camp.cpc.toFixed(2)}. Objetivo: melhorar performance.`,
-                        });
+                        if (cl && onRequestCreative) onRequestCreative(camp, cl);
                       }}
                       className="btn-primary text-xs flex items-center gap-1.5 w-fit"
                     >

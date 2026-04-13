@@ -2118,21 +2118,19 @@ export default function SocialPage() {
               onConfirmArt={(card) => updateContentCard(card.id, { socialConfirmedAt: new Date().toISOString(), socialConfirmedBy: currentUser })}
               onNonDelivery={setNonDeliveryCard}
               onMoveCard={(cardId, toStatus) => {
-                // Block scheduling/publishing without art confirmation
-                if ((toStatus === "scheduled" || toStatus === "published") ) {
-                  const card = contentCards.find((c) => c.id === cardId);
-                  if (card?.designRequestId && !card.socialConfirmedAt) {
-                    pushNotification("sla", "Arte nao confirmada", `O card "${card.title}" precisa ter a arte confirmada antes de ser ${toStatus === "scheduled" ? "agendado" : "publicado"}.`, card.clientId);
-                    return;
-                  }
-                }
                 const card = contentCards.find((c) => c.id === cardId);
+                if (!card) return;
+                // Block scheduling/publishing without art confirmation
+                if ((toStatus === "scheduled" || toStatus === "published") && card.designRequestId && !card.socialConfirmedAt) {
+                  pushNotification("sla", "Arte nao confirmada", `O card "${card.title}" precisa ter a arte confirmada antes de ser ${toStatus === "scheduled" ? "agendado" : "publicado"}.`, card.clientId);
+                  return;
+                }
                 const now = new Date().toISOString();
                 updateContentCard(cardId, {
                   status: toStatus as ContentCard["status"],
                   statusChangedAt: now,
                   columnEnteredAt: {
-                    ...(card?.columnEnteredAt ?? {}),
+                    ...(card.columnEnteredAt ?? {}),
                     [toStatus]: now,
                   },
                 });

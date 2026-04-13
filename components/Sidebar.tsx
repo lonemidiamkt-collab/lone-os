@@ -115,7 +115,7 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
     sections: [
       {
         items: [
-          { label: "Fila de Pedidos",  icon: Layers,        tab: "requests" },
+          { label: "Fila de Pedidos",  icon: Layers,        tab: "requests", badgeKey: "designQueued" },
           { label: "Minhas Tarefas",   icon: ClipboardCheck, tab: "kanbans" },
           { label: "Performance",      icon: Activity,      tab: "performance" },
         ],
@@ -143,7 +143,7 @@ export default function Sidebar() {
   const router   = useRouter();
   const { role, currentProfile, roleLabel, logout } = useRole();
   const { theme, toggleTheme } = useTheme();
-  const { clients, tasks, trafficRoutineChecks, contentCards, onboarding } = useAppState();
+  const { clients, tasks, trafficRoutineChecks, contentCards, onboarding, designRequests } = useAppState();
   const { secondaryOpen, setSecondaryOpen, setPendingTab, currentTab, mobileOpen, setMobileOpen } = useNav();
 
   const visibleItems = useMemo(
@@ -198,6 +198,9 @@ export default function Sidebar() {
     (sum, items) => sum + items.filter((it) => !it.completed).length, 0
   );
 
+  // Design badges
+  const designQueued = designRequests.filter((r) => r.status === "queued").length;
+
   const badges: Record<string, number> = {
     trafficPending,
     trafficTasks,
@@ -206,6 +209,7 @@ export default function Sidebar() {
     socialPending,
     socialApproval,
     socialOnboarding,
+    designQueued,
   };
 
   // ── Interaction handlers ──────────────────────────────────────
@@ -296,6 +300,11 @@ export default function Sidebar() {
                 {/* Active page: blue pill on right edge */}
                 {isPage && (
                   <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-[#0a34f5] shadow-[0_0_8px_rgba(10,52,245,0.7)] -mr-px" />
+                )}
+
+                {/* Pulse dot for Design when there are queued requests */}
+                {item.href === "/design" && designQueued > 0 && !isPage && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#0a34f5] shadow-[0_0_8px_rgba(10,52,245,0.8)] animate-pulse" />
                 )}
               </button>
             );

@@ -578,12 +578,13 @@ export default function DesignPage() {
                     }}
                     onMove={(itemId, _from, to) => {
                       const card = contentCards.find((c) => c.id === itemId);
+                      if (!card) return;
                       const now = new Date().toISOString();
                       updateContentCard(itemId, {
                         status: to as ContentCard["status"],
                         statusChangedAt: now,
                         columnEnteredAt: {
-                          ...(card?.columnEnteredAt ?? {}),
+                          ...(card.columnEnteredAt ?? {}),
                           [to]: now,
                         },
                       });
