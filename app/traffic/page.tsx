@@ -278,7 +278,9 @@ export default function TrafficPage() {
                   updateClientStatus(clientId, toStatus as Client["status"], currentUser);
                 }}
                 renderCard={(client) => (
-                  <div className={`bg-card border rounded-lg p-3 transition-colors ${
+                  <div
+                    onClick={() => window.location.href = `/clients/${client.id}`}
+                    className={`bg-card border rounded-lg p-3 transition-colors cursor-pointer ${
                     client.status === "at_risk"
                       ? "border-red-500/30 hover:border-red-500/50"
                       : "border-border hover:border-primary/30"
@@ -1005,7 +1007,7 @@ function RoutineTab({
               <div key={client.id} className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 border ${
                 done ? "bg-primary/5 border-primary/10" : "bg-[#0c0c12] border-[#1e1e2a]"
               }`}>
-                {done ? <Check size={14} className="text-primary shrink-0" /> : <div className="w-3.5 h-3.5 rounded border border-zinc-600 shrink-0" />}
+                {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleReport(client)} className="w-5 h-5 rounded border border-zinc-600 shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
                 <span className={`text-sm flex-1 ${done ? "text-zinc-400" : "text-foreground"}`}>{client.name}</span>
                 {!done && (
                   <button onClick={() => handleReport(client)} className="text-xs text-primary hover:underline">Entregar</button>
@@ -1033,7 +1035,7 @@ function RoutineTab({
                 done ? "bg-primary/5 border-primary/10" : "bg-[#0c0c12] border-[#1e1e2a]"
               }`}>
                 <div className="flex items-center gap-2.5">
-                  {done ? <Check size={14} className="text-primary shrink-0" /> : <div className="w-3.5 h-3.5 rounded border border-zinc-600 shrink-0" />}
+                  {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleAnalysis(client)} className="w-5 h-5 rounded border border-zinc-600 shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
                   <span className={`text-sm flex-1 ${done ? "text-zinc-400" : "text-foreground"}`}>{client.name}</span>
                   {done && (
                     <span className="text-xs text-muted-foreground truncate max-w-[200px]">
@@ -1075,7 +1077,7 @@ function RoutineTab({
                 done ? "bg-primary/5 border-primary/10" : "bg-[#0c0c12] border-[#1e1e2a]"
               }`}>
                 <div className="flex items-center gap-2.5">
-                  {done ? <Check size={14} className="text-primary shrink-0" /> : <div className="w-3.5 h-3.5 rounded border border-zinc-600 shrink-0" />}
+                  {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleFeedback(client)} className="w-5 h-5 rounded border border-zinc-600 shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
                   <span className={`text-sm flex-1 ${done ? "text-zinc-400" : "text-foreground"}`}>{client.name}</span>
                   {done && (
                     <span className="text-xs text-muted-foreground truncate max-w-[250px]">
