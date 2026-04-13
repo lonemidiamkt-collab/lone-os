@@ -265,12 +265,12 @@ export default function Sidebar() {
         "ease-[cubic-bezier(0.16,1,0.3,1)]",
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
-        {/* Right-edge glow */}
-        <div className="absolute top-0 right-0 bottom-0 w-px bg-gradient-to-b from-transparent via-[#0a34f5]/20 to-transparent pointer-events-none" />
+        {/* Right-edge — ultra subtle gradient border */}
+        <div className="absolute top-0 right-0 bottom-0 w-px bg-gradient-to-b from-transparent via-white/[0.04] to-transparent pointer-events-none" />
 
         {/* Logo */}
         <Link href="/" className="group shrink-0">
-          <div className="w-10 h-10 rounded-2xl bg-black flex items-center justify-center shadow-[0_0_18px_rgba(10,52,245,0.35)] group-hover:shadow-[0_0_28px_rgba(10,52,245,0.55)] group-hover:scale-105 transition-all duration-200 overflow-hidden">
+          <div className="w-10 h-10 rounded-2xl bg-black flex items-center justify-center shadow-[0_0_12px_rgba(10,52,245,0.2)] group-hover:shadow-[0_0_20px_rgba(10,52,245,0.35)] group-hover:scale-[1.03] transition-all duration-300 overflow-hidden">
             <img src="/logo.png" alt="Lone" width={24} height={24} className="object-contain" />
           </div>
         </Link>
@@ -354,7 +354,7 @@ export default function Sidebar() {
       ═══════════════════════════════════════════════════════════ */}
       <aside
         className={cn(
-          "fixed left-[72px] top-0 bottom-0 z-40 w-[240px] bg-[#0c0c0c] border-r border-[#181818] flex flex-col",
+          "fixed left-[72px] top-0 bottom-0 z-40 w-[240px] bg-[#050508] border-r border-white/[0.03] flex flex-col",
           "transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform",
           secondaryOpen && secondaryConfig
             ? "translate-x-0 opacity-100"
@@ -363,7 +363,7 @@ export default function Sidebar() {
         )}
       >
         {/* Top micro-glow */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#0a34f5]/15 to-transparent pointer-events-none" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/[0.04] to-transparent pointer-events-none" />
 
         {secondaryConfig && (
           <>
@@ -382,7 +382,7 @@ export default function Sidebar() {
             </div>
 
             {/* Separator */}
-            <div className="h-px bg-[#181818] mx-3 mb-3" />
+            <div className="h-px bg-white/[0.04] mx-3 mb-3" />
 
             {/* Sections */}
             <nav className="flex-1 overflow-y-auto px-2 pb-4 space-y-0.5">
@@ -410,8 +410,8 @@ export default function Sidebar() {
                         className={cn(
                           "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all duration-150 ease-out group",
                           isActive
-                            ? "bg-[#1a1a1a] text-white"
-                            : "text-zinc-500 hover:text-zinc-200 hover:bg-[#151515]"
+                            ? "bg-white/[0.06] text-white"
+                            : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.03]"
                         )}
                       >
                         {/* Active left accent */}
@@ -452,8 +452,8 @@ export default function Sidebar() {
             </nav>
 
             {/* Footer — user info */}
-            <div className="px-3 py-3 border-t border-[#181818]">
-              <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-[#151515] transition-colors cursor-default">
+            <div className="px-3 py-3 border-t border-white/[0.04]">
+              <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/[0.03] transition-colors cursor-default">
                 <div className="w-7 h-7 rounded-lg bg-[#0a34f5]/15 flex items-center justify-center ring-1 ring-[#0a34f5]/20 shrink-0">
                   <span className="text-[10px] font-bold text-[#0a34f5]">{currentProfile.initials}</span>
                 </div>
