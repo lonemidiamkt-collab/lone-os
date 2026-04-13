@@ -15,7 +15,7 @@ import {
   Sparkles, Clock, Target, Zap, BarChart2,
   TrendingUp, Hash, Check, Plus, ChevronDown,
   Key, MessageCircle, Send, Eye, EyeOff, Save,
-  Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle,
+  Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle, Layers, Trash2, Copy,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
@@ -853,6 +853,192 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
   );
 }
 
+// ── Batch Create Modal ───────────────────────────────────────────────────────
+
+interface BatchRow {
+  id: string;
+  title: string;
+  format: string;
+  dueDate: string;
+  dueTime: string;
+}
+
+function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: () => void }) {
+  const { addContentCard } = useAppState();
+  const { currentUser, role } = useRole();
+
+  const [clientId, setClientId] = useState(clients[0]?.id ?? "");
+  const [priority, setPriority] = useState<ContentCard["priority"]>("medium");
+  const [rows, setRows] = useState<BatchRow[]>(() => {
+    // Pre-fill 5 rows with dates for next week (Mon-Fri)
+    const today = new Date();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + ((8 - today.getDay()) % 7 || 7));
+    return Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return {
+        id: `batch-${i}`,
+        title: "",
+        format: "Post",
+        dueDate: d.toISOString().slice(0, 10),
+        dueTime: "10:00",
+      };
+    });
+  });
+
+  const selectedClient = clients.find((c) => c.id === clientId);
+  const filledRows = rows.filter((r) => r.title.trim());
+
+  const addRow = () => {
+    const lastDate = rows[rows.length - 1]?.dueDate ?? new Date().toISOString().slice(0, 10);
+    const next = new Date(lastDate + "T00:00:00");
+    next.setDate(next.getDate() + 1);
+    setRows([...rows, { id: `batch-${Date.now()}`, title: "", format: "Post", dueDate: next.toISOString().slice(0, 10), dueTime: "10:00" }]);
+  };
+
+  const removeRow = (id: string) => {
+    if (rows.length <= 1) return;
+    setRows(rows.filter((r) => r.id !== id));
+  };
+
+  const updateRow = (id: string, field: keyof BatchRow, value: string) => {
+    setRows(rows.map((r) => r.id === id ? { ...r, [field]: value } : r));
+  };
+
+  const handleSubmit = () => {
+    if (!clientId || filledRows.length === 0) return;
+    filledRows.forEach((row) => {
+      addContentCard({
+        title: row.title.trim(),
+        clientId,
+        clientName: selectedClient?.name ?? "",
+        socialMedia: role === "social" ? currentUser : (selectedClient?.assignedSocial ?? currentUser),
+        status: "ideas",
+        priority,
+        format: row.format,
+        dueDate: row.dueDate,
+        dueTime: row.dueTime,
+      });
+    });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-2xl mx-4 bg-black border border-white/[0.06] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/20 to-transparent shrink-0" />
+
+        <div className="p-6 space-y-5 overflow-y-auto flex-1">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <Layers size={18} className="text-[#0d4af5]" />
+                Criacao em Batch
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Crie varios cards de conteudo de uma vez
+              </p>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5">
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Client + Priority */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Cliente</label>
+              <select value={clientId} onChange={(e) => setClientId(e.target.value)}
+                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none">
+                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Prioridade (todos)</label>
+              <select value={priority} onChange={(e) => setPriority(e.target.value as ContentCard["priority"])}
+                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none">
+                <option value="low">Baixa</option>
+                <option value="medium">Media</option>
+                <option value="high">Alta</option>
+                <option value="critical">Urgente</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Rows */}
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_100px_120px_70px_32px] gap-2 text-[10px] text-muted-foreground uppercase tracking-wider px-1">
+              <span>Titulo</span>
+              <span>Formato</span>
+              <span>Data</span>
+              <span>Hora</span>
+              <span />
+            </div>
+            {rows.map((row, i) => (
+              <div key={row.id} className="grid grid-cols-[1fr_100px_120px_70px_32px] gap-2 items-center">
+                <input
+                  value={row.title}
+                  onChange={(e) => updateRow(row.id, "title", e.target.value)}
+                  placeholder={`Card ${i + 1}...`}
+                  className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none"
+                />
+                <select
+                  value={row.format}
+                  onChange={(e) => updateRow(row.id, "format", e.target.value)}
+                  className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-2 py-2 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
+                >
+                  {["Post", "Reels", "Story", "Carrossel", "BTS"].map((f) => <option key={f}>{f}</option>)}
+                </select>
+                <input
+                  type="date" value={row.dueDate}
+                  onChange={(e) => updateRow(row.id, "dueDate", e.target.value)}
+                  className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-2 py-2 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
+                />
+                <input
+                  type="time" value={row.dueTime}
+                  onChange={(e) => updateRow(row.id, "dueTime", e.target.value)}
+                  className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-2 py-2 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
+                />
+                <button onClick={() => removeRow(row.id)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-all">
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+            <button onClick={addRow}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-zinc-500 hover:text-foreground hover:bg-white/[0.03] transition-all w-full justify-center border border-dashed border-white/[0.06]">
+              <Plus size={12} /> Adicionar linha
+            </button>
+          </div>
+
+          {/* Summary */}
+          <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+            <span className="text-xs text-muted-foreground">
+              {filledRows.length} card(s) preenchido(s) de {rows.length} total
+            </span>
+            {selectedClient && (
+              <span className="text-xs text-[#0d4af5]">→ {selectedClient.name}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-white/[0.04] shrink-0">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all">
+            Cancelar
+          </button>
+          <button onClick={handleSubmit} disabled={filledRows.length === 0}
+            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#0d4af5] text-white text-xs font-semibold hover:bg-[#0d4af5]/80 transition-all disabled:opacity-30">
+            <Layers size={12} /> Criar {filledRows.length} Card(s)
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Quick Task Bar ────────────────────────────────────────────────────────────
 
 interface QuickTaskBarProps {
@@ -1584,6 +1770,7 @@ export default function SocialPage() {
   const [newCardDate, setNewCardDate] = useState<string | null>(null);
   const [verifyingCard, setVerifyingCard] = useState<ContentCard | null>(null);
   const [verifyChecks, setVerifyChecks] = useState({ postLive: false, copyCorrect: false });
+  const [showBatchCreate, setShowBatchCreate] = useState(false);
 
   const { role, currentUser } = useRole();
   const {
@@ -1858,6 +2045,12 @@ export default function SocialPage() {
           onClose={() => setNewCardDate(null)}
         />
       )}
+      {showBatchCreate && (
+        <BatchCreateModal
+          clients={clients}
+          onClose={() => setShowBatchCreate(false)}
+        />
+      )}
 
       <div className="p-6 space-y-5 animate-fade-in">
 
@@ -2107,7 +2300,15 @@ export default function SocialPage() {
               );
             })()}
 
-            <QuickTaskBar clients={filteredClients.length > 0 ? filteredClients : clients} />
+            <div className="flex items-center gap-2">
+              <QuickTaskBar clients={filteredClients.length > 0 ? filteredClients : clients} />
+              <button
+                onClick={() => setShowBatchCreate(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-white/[0.06] text-zinc-400 hover:text-foreground hover:border-[#0d4af5]/30 transition-all shrink-0"
+              >
+                <Layers size={13} /> Batch ({">"}5 cards)
+              </button>
+            </div>
 
             <KanbanByClient
               clients={filteredClients.filter((c) => c.status !== "onboarding")}
