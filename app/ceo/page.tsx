@@ -276,7 +276,7 @@ export default function CEOPage() {
   }
 
   const LEVEL_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-    excellent: { color: "text-[#0a34f5]", bg: "bg-[#0a34f5]", label: "Excelente" },
+    excellent: { color: "text-[#0d4af5]", bg: "bg-[#0d4af5]", label: "Excelente" },
     good:      { color: "text-primary",     bg: "bg-primary",     label: "Bom" },
     warning:   { color: "text-[#3b6ff5]",  bg: "bg-[#3b6ff5]",  label: "Atenção" },
     critical:  { color: "text-red-500",     bg: "bg-red-500",     label: "Crítico" },
@@ -477,7 +477,7 @@ export default function CEOPage() {
                             <div className="flex-1 h-5 bg-muted rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all ${
-                                  stage.key === bottleneck?.key ? "bg-red-500" : stage.key === "published" ? "bg-[#0a34f5]" : "bg-primary"
+                                  stage.key === bottleneck?.key ? "bg-red-500" : stage.key === "published" ? "bg-[#0d4af5]" : "bg-primary"
                                 }`}
                                 style={{ width: `${(stage.count / maxCount) * 100}%` }}
                               />
@@ -503,7 +503,7 @@ export default function CEOPage() {
                             <p className="text-[10px] text-muted-foreground">Designs pendentes</p>
                           </div>
                           <div className="bg-muted rounded-lg p-3 text-center">
-                            <p className="text-2xl font-bold text-[#0a34f5]">{designDone}</p>
+                            <p className="text-2xl font-bold text-[#0d4af5]">{designDone}</p>
                             <p className="text-[10px] text-muted-foreground">Designs concluídos</p>
                           </div>
                           <div className="bg-muted rounded-lg p-3 text-center">
@@ -531,7 +531,7 @@ export default function CEOPage() {
                                 <div className="flex items-center justify-between">
                                   <span className="text-sm font-medium text-foreground">{w.person}</span>
                                   {isOverloaded && <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded">Sobrecarregado</span>}
-                                  {isIdle && <span className="text-[10px] text-[#3b6ff5] bg-[#0a34f5]/10 px-2 py-0.5 rounded">Ocioso</span>}
+                                  {isIdle && <span className="text-[10px] text-[#3b6ff5] bg-[#0d4af5]/10 px-2 py-0.5 rounded">Ocioso</span>}
                                 </div>
                                 <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                                   <span>{w.active} ativos</span>
@@ -604,7 +604,7 @@ export default function CEOPage() {
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 <div className="bg-muted rounded-lg p-3 text-center">
-                                  <p className="text-2xl font-bold text-[#0a34f5]">{verifiedCount}</p>
+                                  <p className="text-2xl font-bold text-[#0d4af5]">{verifiedCount}</p>
                                   <p className="text-[10px] text-muted-foreground">Verificados ✓</p>
                                 </div>
                                 <div className={`bg-muted rounded-lg p-3 text-center ${publishedWithoutVerify > 0 ? "border border-amber-500/30" : ""}`}>
@@ -637,9 +637,9 @@ export default function CEOPage() {
                                         <div key={name} className="flex items-center gap-3 bg-muted/50 rounded-lg p-2.5">
                                           <span className="text-xs font-medium text-foreground w-32 shrink-0">{name}</span>
                                           <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                            <div className={`h-full rounded-full ${rate >= 80 ? "bg-[#0a34f5]" : rate >= 50 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${rate}%` }} />
+                                            <div className={`h-full rounded-full ${rate >= 80 ? "bg-[#0d4af5]" : rate >= 50 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${rate}%` }} />
                                           </div>
-                                          <span className={`text-xs font-bold w-10 text-right ${rate >= 80 ? "text-[#0a34f5]" : rate >= 50 ? "text-amber-400" : "text-red-400"}`}>{rate}%</span>
+                                          <span className={`text-xs font-bold w-10 text-right ${rate >= 80 ? "text-[#0d4af5]" : rate >= 50 ? "text-amber-400" : "text-red-400"}`}>{rate}%</span>
                                           <span className="text-[10px] text-muted-foreground w-20 text-right">{pub} pub · {sched} pend</span>
                                         </div>
                                       );
@@ -666,7 +666,7 @@ export default function CEOPage() {
                                       <div className="flex items-center justify-between mb-1.5">
                                         <span className="text-xs font-medium text-foreground">{client.name}</span>
                                         <div className="flex items-center gap-2">
-                                          <span className="text-[10px] text-[#0a34f5] font-semibold">{daysWithPost}d com post</span>
+                                          <span className="text-[10px] text-[#0d4af5] font-semibold">{daysWithPost}d com post</span>
                                           <span className="text-[10px] text-red-400 font-semibold">{daysWithout}d sem post</span>
                                         </div>
                                       </div>
@@ -695,7 +695,7 @@ export default function CEOPage() {
                                                 isFuture
                                                   ? "bg-muted/30 text-muted-foreground/30"
                                                   : hasPost
-                                                    ? "bg-[#0a34f5]/20 text-[#0a34f5] border border-[#0a34f5]/30"
+                                                    ? "bg-[#0d4af5]/20 text-[#0d4af5] border border-[#0d4af5]/30"
                                                     : "bg-red-500/10 text-red-400 border border-red-500/20"
                                               } ${isToday ? "ring-1 ring-foreground/30" : ""}`}
                                             >
@@ -711,7 +711,7 @@ export default function CEOPage() {
                               {/* Legend */}
                               <div className="flex items-center gap-4 pt-2 border-t border-border">
                                 <div className="flex items-center gap-1.5">
-                                  <div className="w-3 h-3 rounded-sm bg-[#0a34f5]/20 border border-[#0a34f5]/30" />
+                                  <div className="w-3 h-3 rounded-sm bg-[#0d4af5]/20 border border-[#0d4af5]/30" />
                                   <span className="text-[10px] text-muted-foreground">Com post</span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
@@ -807,7 +807,7 @@ export default function CEOPage() {
                               <circle cx="50" cy="50" r="42" fill="none" stroke="var(--muted)" strokeWidth="6" />
                               <circle
                                 cx="50" cy="50" r="42" fill="none"
-                                stroke={levelConfig.bg === "bg-[#0a34f5]" ? "#0a34f5" : levelConfig.bg === "bg-primary" ? "var(--primary)" : levelConfig.bg === "bg-[#3b6ff5]" ? "#3b6ff5" : "#ef4444"}
+                                stroke={levelConfig.bg === "bg-[#0d4af5]" ? "#0d4af5" : levelConfig.bg === "bg-primary" ? "var(--primary)" : levelConfig.bg === "bg-[#3b6ff5]" ? "#3b6ff5" : "#ef4444"}
                                 strokeWidth="6"
                                 strokeLinecap="round"
                                 strokeDasharray={`${member.overallScore * 2.64} 264`}
@@ -848,7 +848,7 @@ export default function CEOPage() {
                               <div className="h-2 bg-muted rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all ${
-                                    member.taskRate >= 80 ? "bg-[#0a34f5]" : member.taskRate >= 50 ? "bg-[#3b6ff5]" : "bg-red-500"
+                                    member.taskRate >= 80 ? "bg-[#0d4af5]" : member.taskRate >= 50 ? "bg-[#3b6ff5]" : "bg-red-500"
                                   }`}
                                   style={{ width: `${member.taskRate}%` }}
                                 />
@@ -873,7 +873,7 @@ export default function CEOPage() {
                                 </div>
                                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                                   <div
-                                    className="h-full rounded-full bg-[#0a34f5] transition-all"
+                                    className="h-full rounded-full bg-[#0d4af5] transition-all"
                                     style={{ width: `${member.totalCards > 0 ? Math.round((member.published / member.totalCards) * 100) : 0}%` }}
                                   />
                                 </div>
@@ -894,7 +894,7 @@ export default function CEOPage() {
                                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                                   <div
                                     className={`h-full rounded-full transition-all ${
-                                      member.supportDone >= member.supportTotal ? "bg-[#0a34f5]" : "bg-[#3b6ff5]"
+                                      member.supportDone >= member.supportTotal ? "bg-[#0d4af5]" : "bg-[#3b6ff5]"
                                     }`}
                                     style={{ width: `${member.supportTotal > 0 ? Math.round((member.supportDone / member.supportTotal) * 100) : 0}%` }}
                                   />
@@ -1148,7 +1148,7 @@ export default function CEOPage() {
                           onClick={() => handleToggleActive(member.id)}
                           className={`p-2 rounded-lg transition-colors ${
                             member.active
-                              ? "text-muted-foreground hover:text-[#3b6ff5] hover:bg-[#0a34f5]/10"
+                              ? "text-muted-foreground hover:text-[#3b6ff5] hover:bg-[#0d4af5]/10"
                               : "text-primary hover:bg-primary/10"
                           }`}
                           title={member.active ? "Desativar acesso" : "Reativar acesso"}
@@ -1188,7 +1188,7 @@ export default function CEOPage() {
               </div>
 
               {/* Info note */}
-              <div className="flex items-start gap-3 bg-[#0a34f5]/5 border border-[#0a34f5]/15 rounded-xl px-4 py-3">
+              <div className="flex items-start gap-3 bg-[#0d4af5]/5 border border-[#0d4af5]/15 rounded-xl px-4 py-3">
                 <Shield size={16} className="text-primary mt-0.5 shrink-0" />
                 <div className="text-xs text-muted-foreground space-y-1">
                   <p><strong className="text-foreground">Nota sobre persistência:</strong> Alterações feitas aqui são salvas na sessão atual. Com Supabase ativo, os dados persistem no banco de dados.</p>
@@ -1305,7 +1305,7 @@ export default function CEOPage() {
                         <div key={name} className={`card border ${isOverloaded ? "border-red-500/30" : isHigh ? "border-amber-500/20" : "border-border"}`}>
                           <div className="flex items-center gap-4 mb-3">
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${
-                              isOverloaded ? "bg-red-500/15 text-red-400" : isHigh ? "bg-amber-500/15 text-amber-400" : "bg-[#0a34f5]/15 text-[#0a34f5]"
+                              isOverloaded ? "bg-red-500/15 text-red-400" : isHigh ? "bg-amber-500/15 text-amber-400" : "bg-[#0d4af5]/15 text-[#0d4af5]"
                             }`}>
                               {name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
                             </div>
@@ -1325,7 +1325,7 @@ export default function CEOPage() {
                           <div className="h-2.5 bg-muted rounded-full overflow-hidden mb-3">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${
-                                isOverloaded ? "bg-red-500" : isHigh ? "bg-amber-500" : "bg-[#0a34f5]"
+                                isOverloaded ? "bg-red-500" : isHigh ? "bg-amber-500" : "bg-[#0d4af5]"
                               }`}
                               style={{ width: `${Math.min(utilPct, 100)}%` }}
                             />
@@ -1393,7 +1393,7 @@ export default function CEOPage() {
                   const riskConfig = {
                     critical: { label: "Alto Risco", color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/30", bar: "bg-red-500" },
                     warning: { label: "Atenção", color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", bar: "bg-amber-500" },
-                    safe: { label: "Estável", color: "text-[#0a34f5]", bg: "bg-[#0a34f5]/10", border: "border-[#0a34f5]/20", bar: "bg-[#0a34f5]" },
+                    safe: { label: "Estável", color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/10", border: "border-[#0d4af5]/20", bar: "bg-[#0d4af5]" },
                   }[riskLevel];
 
                   const signals: string[] = [];
@@ -1615,7 +1615,7 @@ function TimesheetTab({
       {/* Hours by client */}
       <div className="card">
         <h3 className="font-semibold text-foreground text-sm mb-4 flex items-center gap-2">
-          <BarChart2 size={14} className="text-[#0a34f5]" />
+          <BarChart2 size={14} className="text-[#0d4af5]" />
           Alocação por Cliente (horas)
         </h3>
         {hoursByClient.length === 0 ? (
@@ -1628,11 +1628,11 @@ function TimesheetTab({
                 <div key={entry.name}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs text-foreground font-medium">{entry.name}</span>
-                    <span className="text-xs text-[#0a34f5] font-bold">{formatTimeSpent(entry.ms)}</span>
+                    <span className="text-xs text-[#0d4af5] font-bold">{formatTimeSpent(entry.ms)}</span>
                   </div>
                   <div className="h-3 bg-muted rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-[#0a34f5] rounded-full transition-all duration-500"
+                      className="h-full bg-[#0d4af5] rounded-full transition-all duration-500"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -1646,7 +1646,7 @@ function TimesheetTab({
       {/* Average by format */}
       <div className="card">
         <h3 className="font-semibold text-foreground text-sm mb-4 flex items-center gap-2">
-          <Clock size={14} className="text-[#0a34f5]" />
+          <Clock size={14} className="text-[#0d4af5]" />
           Tempo Médio por Formato de Conteúdo
         </h3>
         {avgByFormat.length === 0 ? (
@@ -1667,7 +1667,7 @@ function TimesheetTab({
       {/* Team ranking */}
       <div className="card">
         <h3 className="font-semibold text-foreground text-sm mb-4 flex items-center gap-2">
-          <Users size={14} className="text-[#0a34f5]" />
+          <Users size={14} className="text-[#0d4af5]" />
           Ranking de Dedicação
         </h3>
         {teamRanking.length === 0 ? (
@@ -1677,7 +1677,7 @@ function TimesheetTab({
             {teamRanking.map((member, i) => (
               <div key={member.name} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
                 <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                  i === 0 ? "bg-[#0a34f5]/20 text-[#0a34f5]" : "bg-muted text-muted-foreground"
+                  i === 0 ? "bg-[#0d4af5]/20 text-[#0d4af5]" : "bg-muted text-muted-foreground"
                 }`}>
                   {i + 1}
                 </span>

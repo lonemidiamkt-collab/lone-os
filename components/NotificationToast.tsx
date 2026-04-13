@@ -8,9 +8,9 @@ import { playNotificationSound } from "@/components/ScheduledNoticePopup";
 
 const TYPE_CONFIG: Record<string, { icon: typeof Bell; color: string; bg: string; border: string }> = {
   sla:     { icon: AlertTriangle, color: "text-red-500",    bg: "bg-red-500/10",    border: "border-red-500/30" },
-  status:  { icon: Activity,      color: "text-[#3b6ff5]", bg: "bg-[#0a34f5]/10", border: "border-yellow-500/30" },
+  status:  { icon: Activity,      color: "text-[#3b6ff5]", bg: "bg-[#0d4af5]/10", border: "border-yellow-500/30" },
   content: { icon: FileText,      color: "text-primary",    bg: "bg-primary/10",    border: "border-primary/30" },
-  checkin: { icon: Bell,           color: "text-[#0a34f5]",   bg: "bg-[#0a34f5]/10",   border: "border-[#0a34f5]/20" },
+  checkin: { icon: Bell,           color: "text-[#0d4af5]",   bg: "bg-[#0d4af5]/10",   border: "border-[#0d4af5]/20" },
   system:  { icon: Settings,      color: "text-zinc-400",   bg: "bg-[#111118]",      border: "border-[#1e1e2a]" },
 };
 

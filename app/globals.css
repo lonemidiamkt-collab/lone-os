@@ -17,7 +17,7 @@
     --popover: #0a0a0e;
     --popover-foreground: #ededef;
 
-    --primary: #0a34f5;
+    --primary: #0d4af5;
     --primary-foreground: #ffffff;
 
     --secondary: #060608;
@@ -35,11 +35,11 @@
     --border: rgba(255, 255, 255, 0.06);
     --border-glow: rgba(255, 255, 255, 0.1);
     --input: rgba(255, 255, 255, 0.06);
-    --ring: #0a34f5;
+    --ring: #0d4af5;
     --radius: 0.875rem;
 
     /* Charts */
-    --chart-1: #0a34f5;
+    --chart-1: #0d4af5;
     --chart-2: #3b82f6;
     --chart-3: #06b6d4;
     --chart-4: #8b5cf6;
@@ -48,15 +48,15 @@
     /* Sidebar */
     --sidebar: #000000;
     --sidebar-foreground: #a1a1aa;
-    --sidebar-primary: #0a34f5;
+    --sidebar-primary: #0d4af5;
     --sidebar-primary-foreground: #ffffff;
     --sidebar-accent: #0a0a0e;
     --sidebar-accent-foreground: #ededef;
     --sidebar-border: rgba(255, 255, 255, 0.04);
-    --sidebar-ring: #0a34f5;
+    --sidebar-ring: #0d4af5;
 
     /* LED system */
-    --led-healthy: #0a34f5;
+    --led-healthy: #0d4af5;
     --led-attention: #f59e0b;
     --led-critical: #ef4444;
 
@@ -76,7 +76,7 @@
     --popover: #ffffff;
     --popover-foreground: #18181b;
 
-    --primary: #0a34f5;
+    --primary: #0d4af5;
     --primary-foreground: #ffffff;
 
     --secondary: #f0f0f4;
@@ -94,18 +94,18 @@
     --border: rgba(0, 0, 0, 0.07);
     --border-glow: rgba(0, 0, 0, 0.1);
     --input: rgba(0, 0, 0, 0.05);
-    --ring: #0a34f5;
+    --ring: #0d4af5;
 
     --sidebar: #ffffff;
     --sidebar-foreground: #52525b;
-    --sidebar-primary: #0a34f5;
+    --sidebar-primary: #0d4af5;
     --sidebar-primary-foreground: #ffffff;
     --sidebar-accent: #f0f0f4;
     --sidebar-accent-foreground: #18181b;
     --sidebar-border: rgba(0, 0, 0, 0.06);
-    --sidebar-ring: #0a34f5;
+    --sidebar-ring: #0d4af5;
 
-    --led-healthy: #0a34f5;
+    --led-healthy: #0d4af5;
     --led-attention: #f59e0b;
     --led-critical: #ef4444;
 
@@ -264,7 +264,7 @@
   /* ─── BUTTONS — gradient interior, glow from below ──────── */
   .btn-primary {
     @apply px-5 py-2.5 rounded-xl text-sm font-semibold relative overflow-hidden;
-    background: linear-gradient(180deg, #1a4aff 0%, #0a34f5 100%);
+    background: linear-gradient(180deg, #1a4aff 0%, #0d4af5 100%);
     color: white;
     border: 0.5px solid rgba(59, 111, 245, 0.4);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(255,255,255,0.06) inset;
@@ -321,15 +321,15 @@
   }
 
   /* ─── TAGS ──────────────────────────────────────────────── */
-  .tag-premium { @apply text-[#3b82f6] bg-[#0a34f5]/8 border-[#0a34f5]/15; }
-  .tag-risk    { @apply text-red-400 bg-red-500/8 border-red-500/15; }
-  .tag-matcon  { @apply text-zinc-400 bg-zinc-500/8 border-zinc-500/15; }
+  .tag-premium { @apply text-[#3b82f6] bg-[#0d4af5]/[0.08] border-[#0d4af5]/[0.15]; }
+  .tag-risk    { @apply text-red-400 bg-red-500/[0.08] border-red-500/[0.15]; }
+  .tag-matcon  { @apply text-zinc-400 bg-zinc-500/[0.08] border-zinc-500/[0.15]; }
 
   /* ─── LED STATUS — neon indicators ──────────────────────── */
   .led { @apply w-2 h-2 rounded-full shrink-0; }
   .led-healthy {
-    background: #0a34f5;
-    box-shadow: 0 0 6px #0a34f5, 0 0 16px rgba(10,52,245,0.35);
+    background: #0d4af5;
+    box-shadow: 0 0 6px #0d4af5, 0 0 16px rgba(10,52,245,0.35);
   }
   .led-attention {
     background: #f59e0b;
@@ -342,10 +342,10 @@
   }
 
   /* ─── ATTENTION LEVELS ─────────────────────────────────── */
-  .level-low      { @apply text-zinc-400 bg-zinc-500/8 border-zinc-500/15; }
-  .level-medium   { @apply text-amber-400 bg-amber-500/8 border-amber-500/15; }
-  .level-high     { @apply text-[#3b6ff5] bg-[#0a34f5]/8 border-[#0a34f5]/15; }
-  .level-critical { @apply text-red-400 bg-red-500/8 border-red-500/15; }
+  .level-low      { @apply text-zinc-400 bg-zinc-500/[0.08] border-zinc-500/[0.15]; }
+  .level-medium   { @apply text-amber-400 bg-amber-500/[0.08] border-amber-500/[0.15]; }
+  .level-high     { @apply text-[#3b6ff5] bg-[#0d4af5]/[0.08] border-[#0d4af5]/[0.15]; }
+  .level-critical { @apply text-red-400 bg-red-500/[0.08] border-red-500/[0.15]; }
 
   /* ─── INPUT — glass morphism ────────────────────────────── */
   .input-glass {

@@ -23,9 +23,9 @@ const CONTENT_COLUMNS = [
   { id: "script",          title: "Roteiro",             color: "bg-zinc-600" },
   { id: "in_production",   title: "Em Produção",         color: "bg-primary" },
   { id: "approval",        title: "Aprovação",           color: "bg-[#3b6ff5]" },
-  { id: "client_approval", title: "Aprov. Cliente",      color: "bg-[#0a34f5]" },
+  { id: "client_approval", title: "Aprov. Cliente",      color: "bg-[#0d4af5]" },
   { id: "scheduled",       title: "Agendado",            color: "bg-blue-500" },
-  { id: "published",       title: "Publicado",           color: "bg-[#0a34f5]" },
+  { id: "published",       title: "Publicado",           color: "bg-[#0d4af5]" },
 ];
 
 // ── Design request columns ───────────────────────────────────────────────────
@@ -33,7 +33,7 @@ const CONTENT_COLUMNS = [
 const DESIGN_COLUMNS = [
   { id: "queued",      title: "Na Fila",       color: "bg-zinc-600" },
   { id: "in_progress", title: "Em Produção",   color: "bg-primary" },
-  { id: "done",        title: "Concluído",     color: "bg-[#0a34f5]" },
+  { id: "done",        title: "Concluído",     color: "bg-[#0d4af5]" },
 ];
 
 type TabView = "kanbans" | "requests" | "performance";
@@ -49,7 +49,7 @@ function getDeadlineUrgency(dueDate?: string): "overdue" | "today" | "soon" | "o
 
 const URGENCY_BADGE: Record<string, { label: string; cls: string }> = {
   overdue: { label: "Vencido", cls: "text-red-500 bg-red-500/10 border-red-500/20" },
-  today:   { label: "Hoje",   cls: "text-[#3b6ff5] bg-[#0a34f5]/10 border-[#0a34f5]/15" },
+  today:   { label: "Hoje",   cls: "text-[#3b6ff5] bg-[#0d4af5]/10 border-[#0d4af5]/15" },
   soon:    { label: "Em breve", cls: "text-primary bg-primary/10 border-primary/20" },
   ok:      { label: "",       cls: "text-muted-foreground" },
 };
@@ -96,11 +96,11 @@ function UploadArtModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-black border border-[#1a1a1a] rounded-2xl w-full max-w-md mx-4 shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in" onClick={(e) => e.stopPropagation()}>
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0a34f5]/40 to-transparent" />
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/40 to-transparent" />
         <div className="flex items-center justify-between p-5 border-b border-[#1a1a1a]">
           <div>
             <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
-              <Upload size={14} className="text-[#0a34f5]" /> Entregar Arte
+              <Upload size={14} className="text-[#0d4af5]" /> Entregar Arte
             </h3>
             <p className="text-xs text-primary mt-0.5">{card.title} — {card.clientName}</p>
           </div>
@@ -116,14 +116,14 @@ function UploadArtModal({
               href={clientDriveLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#0a34f5]/[0.04] border border-[#0a34f5]/20 hover:border-[#0a34f5]/40 hover:shadow-[0_0_15px_rgba(10,52,245,0.1)] transition-all"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#0d4af5]/[0.04] border border-[#0d4af5]/20 hover:border-[#0d4af5]/40 hover:shadow-[0_0_15px_rgba(10,52,245,0.1)] transition-all"
             >
-              <FolderOpen size={14} className="text-[#0a34f5] drop-shadow-[0_0_4px_rgba(10,52,245,0.6)]" />
+              <FolderOpen size={14} className="text-[#0d4af5] drop-shadow-[0_0_4px_rgba(10,52,245,0.6)]" />
               <div className="flex-1">
                 <p className="text-xs text-foreground font-medium">Pasta do cliente no Drive</p>
                 <p className="text-[9px] text-muted-foreground">Abrir para fazer upload da arte</p>
               </div>
-              <ExternalLink size={12} className="text-[#0a34f5]" />
+              <ExternalLink size={12} className="text-[#0d4af5]" />
             </a>
           )}
 
@@ -134,7 +134,7 @@ function UploadArtModal({
               value={artLink}
               onChange={(e) => { setArtLink(e.target.value); setError(""); }}
               placeholder="https://drive.google.com/file/d/..."
-              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0a34f5]/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
+              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
               autoFocus
             />
             {error && <p className="text-[10px] text-red-400">{error}</p>}
@@ -146,7 +146,7 @@ function UploadArtModal({
               href={artLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 text-xs text-[#0a34f5] hover:underline"
+              className="flex items-center gap-2 text-xs text-[#0d4af5] hover:underline"
             >
               <ExternalLink size={11} /> Verificar link antes de enviar
             </a>
@@ -177,7 +177,7 @@ function UploadArtModal({
           <button
             onClick={handleSave}
             disabled={!artLink.trim() || saved}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0a34f5] text-white text-xs font-medium hover:bg-[#0a34f5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] disabled:opacity-30 disabled:shadow-none"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] disabled:opacity-30 disabled:shadow-none"
           >
             {saved ? (
               <><CheckCircle size={14} /> Entregue!</>
@@ -317,8 +317,8 @@ export default function DesignPage() {
             </div>
           </div>
           <div className="card flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-[#0a34f5]/15 flex items-center justify-center">
-              <CheckCircle size={18} className="text-[#0a34f5]" />
+            <div className="w-10 h-10 rounded-xl bg-[#0d4af5]/15 flex items-center justify-center">
+              <CheckCircle size={18} className="text-[#0d4af5]" />
             </div>
             <div>
               <p className="text-2xl font-bold text-foreground">{totalDone}</p>
@@ -364,7 +364,7 @@ export default function DesignPage() {
                         <div
                           key={card.id}
                           className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors cursor-pointer hover:border-primary/30 ${
-                            isOverdue ? "bg-red-500/5 border-red-500/20" : isToday ? "bg-[#0a34f5]/5 border-[#0a34f5]/15" : "bg-muted/50 border-border"
+                            isOverdue ? "bg-red-500/5 border-red-500/20" : isToday ? "bg-[#0d4af5]/5 border-[#0d4af5]/15" : "bg-muted/50 border-border"
                           }`}
                           onClick={() => setUploadCard(card)}
                         >
@@ -455,7 +455,7 @@ export default function DesignPage() {
                           !hasArt && ["in_production", "approval", "client_approval"].includes(
                             contentCards.find((c) => c.id === item.id)?.status ?? ""
                           )
-                            ? "border-yellow-500/30 bg-[#0a34f5]/5"
+                            ? "border-yellow-500/30 bg-[#0d4af5]/5"
                             : "border-border hover:border-primary/30"
                         }`}>
                           {/* Art thumbnail */}
@@ -498,7 +498,7 @@ export default function DesignPage() {
                               {getPriorityLabel(item.priority)}
                             </span>
                             {hasArt ? (
-                              <span className="text-[10px] text-[#0a34f5] flex items-center gap-0.5">
+                              <span className="text-[10px] text-[#0d4af5] flex items-center gap-0.5">
                                 <CheckCircle size={9} /> Arte
                               </span>
                             ) : (
@@ -515,10 +515,10 @@ export default function DesignPage() {
                               <>
                                 {fullCard.designerDeliveredAt && (
                                   <div className="flex items-center gap-1 text-[10px]">
-                                    <CheckCircle size={9} className="text-[#0a34f5]" />
-                                    <span className="text-[#0a34f5]">Entregue</span>
+                                    <CheckCircle size={9} className="text-[#0d4af5]" />
+                                    <span className="text-[#0d4af5]">Entregue</span>
                                     {fullCard.socialConfirmedAt ? (
-                                      <span className="text-[#0a34f5] ml-1">· Confirmado</span>
+                                      <span className="text-[#0d4af5] ml-1">· Confirmado</span>
                                     ) : (
                                       <span className="text-[#3b6ff5] ml-1">· Aguardando social</span>
                                     )}
@@ -619,7 +619,7 @@ export default function DesignPage() {
             </div>
             <div className="card">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">No Prazo</p>
-              <p className="text-2xl font-bold text-[#0a34f5]">
+              <p className="text-2xl font-bold text-[#0d4af5]">
                 {myContentCards.filter((c) => c.designerDeliveredAt && c.dueDate && c.designerDeliveredAt.slice(0, 10) <= c.dueDate).length}
               </p>
               <p className="text-xs text-muted-foreground">entregas antes do deadline</p>
@@ -655,7 +655,7 @@ export default function DesignPage() {
                     </div>
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-[#0a34f5] rounded-full transition-all duration-500"
+                        className="h-full bg-[#0d4af5] rounded-full transition-all duration-500"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -680,12 +680,12 @@ export default function DesignPage() {
                     const onTime = c.dueDate && c.designerDeliveredAt && c.designerDeliveredAt.slice(0, 10) <= c.dueDate;
                     return (
                       <div key={c.id} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0">
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${onTime ? "bg-[#0a34f5]" : "bg-red-400"}`} />
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${onTime ? "bg-[#0d4af5]" : "bg-red-400"}`} />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-foreground truncate">{c.title}</p>
                           <p className="text-[10px] text-muted-foreground">{c.clientName} · {c.socialMedia}</p>
                         </div>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${onTime ? "bg-[#0a34f5]/10 text-[#0a34f5] border border-[#0a34f5]/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${onTime ? "bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
                           {onTime ? "No prazo" : "Atrasado"}
                         </span>
                       </div>
@@ -789,7 +789,7 @@ export default function DesignPage() {
               {/* Status badge */}
               <div className="flex items-center gap-2">
                 <span className={`badge border text-xs ${
-                  briefingReq.status === "done" ? "text-[#0a34f5] bg-[#0a34f5]/10 border-[#0a34f5]/20" :
+                  briefingReq.status === "done" ? "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" :
                   briefingReq.status === "in_progress" ? "text-primary bg-primary/10 border-primary/20" :
                   "text-zinc-400 bg-[#0e0e14] border-[#1e1e2a]"
                 }`}>
@@ -815,7 +815,7 @@ export default function DesignPage() {
                     updateDesignRequest(briefingReq.id, { status: "done" });
                     setBriefingReq(null);
                   }}
-                  className="bg-[#0a34f5] hover:bg-[#0a34f5]/80 text-white px-3 py-2 rounded-lg font-medium text-sm transition-colors flex-1 flex items-center justify-center gap-1.5"
+                  className="bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white px-3 py-2 rounded-lg font-medium text-sm transition-colors flex-1 flex items-center justify-center gap-1.5"
                 >
                   <CheckCircle size={13} /> Marcar Concluído
                 </button>
@@ -957,7 +957,7 @@ function RequestsView({
                   <div className="flex items-center gap-2 shrink-0">
                     <span className={`badge border text-xs ${getPriorityColor(req.priority)}`}>{getPriorityLabel(req.priority)}</span>
                     <span className={`badge border text-xs ${
-                      req.status === "done" ? "text-[#0a34f5] bg-[#0a34f5]/10 border-[#0a34f5]/20" :
+                      req.status === "done" ? "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" :
                       req.status === "in_progress" ? "text-primary bg-primary/10 border-primary/20" :
                       "text-zinc-400 bg-[#0e0e14] border-[#1e1e2a]"
                     }`}>
@@ -972,12 +972,12 @@ function RequestsView({
                     </button>
                   )}
                   {req.status === "in_progress" && (
-                    <button onClick={() => updateDesignRequest(req.id, { status: "done" })} className="bg-[#0a34f5] hover:bg-[#0a34f5]/80 text-white px-3 py-1.5 rounded-lg font-medium text-xs transition-colors">
+                    <button onClick={() => updateDesignRequest(req.id, { status: "done" })} className="bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white px-3 py-1.5 rounded-lg font-medium text-xs transition-colors">
                       Marcar Concluído
                     </button>
                   )}
                   {req.status === "done" && (
-                    <span className="text-xs text-[#0a34f5] flex items-center gap-1"><CheckCircle size={12} /> Concluído</span>
+                    <span className="text-xs text-[#0d4af5] flex items-center gap-1"><CheckCircle size={12} /> Concluído</span>
                   )}
                   <button onClick={() => onBriefing(req)} className="btn-ghost text-xs flex items-center gap-1">
                     <Paperclip size={12} /> Briefing

@@ -127,7 +127,7 @@ function Confetti() {
     Array.from({ length: 40 }, (_, i) => ({
       left: `${(i * 2.5) % 100}%`,
       top: `-${(i * 0.5) % 20}%`,
-      color: ["#0a34f5", "#1a4cff", "#3b6ff5", "#5588ff", "#0a34f5", "#1a4cff"][i % 6],
+      color: ["#0d4af5", "#1a4cff", "#3b6ff5", "#5588ff", "#0d4af5", "#1a4cff"][i % 6],
       delay: `${(i * 0.05) % 2}s`,
       duration: `${1 + (i * 0.05) % 2}s`,
       rotate: `${(i * 9) % 360}deg`,
@@ -792,7 +792,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as ContentCard["priority"])}
                 className={`flex h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
-                  priority === "critical" ? "border-red-500/50 bg-red-500/5" : priority === "high" ? "border-yellow-500/50 bg-[#0a34f5]/5" : "border-input bg-background"
+                  priority === "critical" ? "border-red-500/50 bg-red-500/5" : priority === "high" ? "border-yellow-500/50 bg-[#0d4af5]/5" : "border-input bg-background"
                 }`}
               >
                 <option value="low">Baixa</option>
@@ -1509,13 +1509,13 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                     {card.designerDeliveredAt && !card.socialConfirmedAt && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onConfirmArt(card); }}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-[#0a34f5]/15 text-[#0a34f5] hover:bg-[#0a34f5]/25 transition-colors flex items-center gap-0.5"
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-[#0d4af5]/15 text-[#0d4af5] hover:bg-[#0d4af5]/25 transition-colors flex items-center gap-0.5"
                       >
                         <CheckCircle size={9} /> Confirmar Arte
                       </button>
                     )}
                     {card.socialConfirmedAt && (
-                      <span className="text-[10px] text-[#0a34f5] flex items-center gap-0.5">
+                      <span className="text-[10px] text-[#0d4af5] flex items-center gap-0.5">
                         <CheckCircle size={9} /> Confirmado
                       </span>
                     )}
@@ -1927,7 +1927,7 @@ export default function SocialPage() {
                 {badge !== undefined && badge > 0 && (
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold tabular-nums ${
                     isApprovalTab
-                      ? "bg-[#0a34f5]/20 text-[#3b6ff5] shadow-[0_0_8px_rgba(10,52,245,0.3)]"
+                      ? "bg-[#0d4af5]/20 text-[#3b6ff5] shadow-[0_0_8px_rgba(10,52,245,0.3)]"
                       : "bg-muted text-muted-foreground"
                   }`}>
                     {badge}
@@ -2209,8 +2209,8 @@ export default function SocialPage() {
                           </span>
                           {item.completed && item.completedBy && (
                             <div className="flex items-center gap-2 mt-1.5">
-                              <div className="w-5 h-5 rounded-full bg-[#0a34f5]/15 flex items-center justify-center shrink-0">
-                                <span className="text-[8px] font-bold text-[#0a34f5]">
+                              <div className="w-5 h-5 rounded-full bg-[#0d4af5]/15 flex items-center justify-center shrink-0">
+                                <span className="text-[8px] font-bold text-[#0d4af5]">
                                   {item.completedBy.split(" ").map((w: string) => w[0]).join("").slice(0, 2)}
                                 </span>
                               </div>
@@ -2260,10 +2260,10 @@ export default function SocialPage() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {socialPerformanceScores.map((score) => {
-                    const meterColor = score.level === "excellent" ? "bg-[#0a34f5]" : score.level === "good" ? "bg-primary" : score.level === "warning" ? "bg-[#3b6ff5]" : "bg-red-500";
-                    const meterBg = score.level === "excellent" ? "bg-[#0a34f5]/10 border-[#0a34f5]/20" : score.level === "good" ? "bg-primary/10 border-primary/20" : score.level === "warning" ? "bg-[#0a34f5]/10 border-[#0a34f5]/15" : "bg-red-500/10 border-red-500/20";
+                    const meterColor = score.level === "excellent" ? "bg-[#0d4af5]" : score.level === "good" ? "bg-primary" : score.level === "warning" ? "bg-[#3b6ff5]" : "bg-red-500";
+                    const meterBg = score.level === "excellent" ? "bg-[#0d4af5]/10 border-[#0d4af5]/20" : score.level === "good" ? "bg-primary/10 border-primary/20" : score.level === "warning" ? "bg-[#0d4af5]/10 border-[#0d4af5]/15" : "bg-red-500/10 border-red-500/20";
                     const levelLabel = score.level === "excellent" ? "Excelente" : score.level === "good" ? "Bom" : score.level === "warning" ? "Atenção" : "Reunião Necessária";
-                    const levelColor = score.level === "excellent" ? "text-[#0a34f5]" : score.level === "good" ? "text-primary" : score.level === "warning" ? "text-[#3b6ff5]" : "text-red-500";
+                    const levelColor = score.level === "excellent" ? "text-[#0d4af5]" : score.level === "good" ? "text-primary" : score.level === "warning" ? "text-[#3b6ff5]" : "text-red-500";
                     return (
                       <div key={score.socialMedia} className={`border rounded-xl p-4 ${meterBg}`}>
                         <div className="flex items-center justify-between mb-3">
@@ -2283,7 +2283,7 @@ export default function SocialPage() {
                           {score.clientBreakdown.map((cb) => (
                             <div key={cb.clientId} className="flex items-center justify-between text-xs">
                               <span className="text-foreground">{cb.clientName}</span>
-                              <span className={cb.rate >= 80 ? "text-[#0a34f5]" : cb.rate >= 70 ? "text-[#3b6ff5]" : "text-red-500"}>
+                              <span className={cb.rate >= 80 ? "text-[#0d4af5]" : cb.rate >= 70 ? "text-[#3b6ff5]" : "text-red-500"}>
                                 {cb.delivered}/{cb.goal} ({cb.rate}%)
                               </span>
                             </div>
@@ -2297,7 +2297,7 @@ export default function SocialPage() {
                           </div>
                         )}
                         {score.level === "warning" && (
-                          <div className="mt-3 p-2 bg-[#0a34f5]/10 border border-[#0a34f5]/15 rounded-lg">
+                          <div className="mt-3 p-2 bg-[#0d4af5]/10 border border-[#0d4af5]/15 rounded-lg">
                             <p className="text-xs text-[#3b6ff5] font-medium flex items-center gap-1">
                               <AlertTriangle size={12} /> Performance em 70-80% — monitorar
                             </p>
@@ -2542,7 +2542,7 @@ function SocialChg({ value, invert }: { value: number; invert?: boolean }) {
   const isGood = invert ? !isPositive : isPositive;
   if (isNeutral) return <span className="text-xs text-zinc-500">0%</span>;
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isGood ? "text-[#0a34f5]" : "text-red-500"}`}>
+    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isGood ? "text-[#0d4af5]" : "text-red-500"}`}>
       {isPositive ? "+" : ""}{value.toFixed(1)}%
     </span>
   );
@@ -2645,7 +2645,7 @@ function SocialReportsTab({
                     <p className="text-xs text-muted-foreground">{card.clientName} · {card.format}</p>
                   </div>
                   {approval?.status === "approved" ? (
-                    <span className="text-xs text-[#0a34f5] font-medium">Aprovado</span>
+                    <span className="text-xs text-[#0d4af5] font-medium">Aprovado</span>
                   ) : approval?.status === "rejected" ? (
                     <span className="text-xs text-red-500 font-medium">Recusado: {approval.reason}</span>
                   ) : rejectCardId === card.id ? (
@@ -2671,7 +2671,7 @@ function SocialReportsTab({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => doApprove(card.id, currentUser)}
-                        className="text-xs bg-[#0a34f5]/15 text-[#0a34f5] px-3 py-1.5 rounded-lg hover:bg-[#0a34f5]/30 transition-colors font-medium"
+                        className="text-xs bg-[#0d4af5]/15 text-[#0d4af5] px-3 py-1.5 rounded-lg hover:bg-[#0d4af5]/30 transition-colors font-medium"
                       >
                         Aprovar
                       </button>
@@ -2993,8 +2993,8 @@ function MonthlyDeliveriesTab({
       {filteredScores.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredScores.map((score) => {
-            const meterColor = score.level === "excellent" ? "bg-[#0a34f5]" : score.level === "good" ? "bg-primary" : score.level === "warning" ? "bg-[#3b6ff5]" : "bg-red-500";
-            const levelColor = score.level === "excellent" ? "text-[#0a34f5]" : score.level === "good" ? "text-primary" : score.level === "warning" ? "text-[#3b6ff5]" : "text-red-500";
+            const meterColor = score.level === "excellent" ? "bg-[#0d4af5]" : score.level === "good" ? "bg-primary" : score.level === "warning" ? "bg-[#3b6ff5]" : "bg-red-500";
+            const levelColor = score.level === "excellent" ? "text-[#0d4af5]" : score.level === "good" ? "text-primary" : score.level === "warning" ? "text-[#3b6ff5]" : "text-red-500";
             const levelLabel = score.level === "excellent" ? "Excelente" : score.level === "good" ? "Bom" : score.level === "warning" ? "Atenção — Monitorar" : "Crítico — Agendar Reunião";
             return (
               <div key={score.socialMedia} className="bg-card border border-border rounded-xl p-5">
@@ -3025,7 +3025,7 @@ function MonthlyDeliveriesTab({
         </div>
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Taxa</p>
-          <p className={`text-2xl font-bold ${overallRate >= 80 ? "text-[#0a34f5]" : overallRate >= 70 ? "text-[#3b6ff5]" : "text-red-500"}`}>{overallRate}%</p>
+          <p className={`text-2xl font-bold ${overallRate >= 80 ? "text-[#0d4af5]" : overallRate >= 70 ? "text-[#3b6ff5]" : "text-red-500"}`}>{overallRate}%</p>
         </div>
       </div>
 
@@ -3036,8 +3036,8 @@ function MonthlyDeliveriesTab({
           <div className="bg-card border border-border rounded-xl p-10 text-center text-muted-foreground text-sm">Nenhum dado de entregas para este mês.</div>
         )}
         {filteredReports.map((report) => {
-          const rateColor = report.completionRate >= 80 ? "text-[#0a34f5]" : report.completionRate >= 70 ? "text-[#3b6ff5]" : "text-red-500";
-          const barColor = report.completionRate >= 80 ? "bg-[#0a34f5]" : report.completionRate >= 70 ? "bg-[#3b6ff5]" : "bg-red-500";
+          const rateColor = report.completionRate >= 80 ? "text-[#0d4af5]" : report.completionRate >= 70 ? "text-[#3b6ff5]" : "text-red-500";
+          const barColor = report.completionRate >= 80 ? "bg-[#0d4af5]" : report.completionRate >= 70 ? "bg-[#3b6ff5]" : "bg-red-500";
           return (
             <div key={report.id} className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">

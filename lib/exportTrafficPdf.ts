@@ -88,7 +88,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
               <circle cx="60" cy="60" r="54" fill="none" stroke="#1a1a24" stroke-width="12"/>
               <circle cx="60" cy="60" r="54" fill="none" stroke="#e84393" stroke-width="12"
                 stroke-dasharray="${womenArc} ${circumference}" stroke-linecap="round"/>
-              <circle cx="60" cy="60" r="54" fill="none" stroke="#0a34f5" stroke-width="12"
+              <circle cx="60" cy="60" r="54" fill="none" stroke="#0d4af5" stroke-width="12"
                 stroke-dasharray="${menArc} ${circumference}" stroke-dashoffset="-${womenArc}" stroke-linecap="round"/>
             </svg>
             <div class="center-text">
@@ -98,7 +98,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
           </div>
           <div class="gender-legend">
             <span><span class="dot" style="background:#e84393;"></span> ${wPct.toFixed(1)}% Mulheres</span>
-            <span><span class="dot" style="background:#0a34f5;"></span> ${mPct.toFixed(1)}% Homens</span>
+            <span><span class="dot" style="background:#0d4af5;"></span> ${mPct.toFixed(1)}% Homens</span>
           </div>
         </div>
       </div>
@@ -152,7 +152,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
     }
     .report-header .date-badge {
       display: inline-block;
-      background: #0a34f5;
+      background: #0d4af5;
       color: white;
       padding: 4px 12px;
       border-radius: 6px;
@@ -171,7 +171,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
     }
     .report-header .meta-badge {
       display: inline-block;
-      background: #0a34f5;
+      background: #0d4af5;
       color: white;
       padding: 4px 16px;
       border-radius: 6px;
@@ -199,7 +199,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
       flex: 1;
       text-align: center;
       padding: 10px 6px;
-      border: 2px solid #0a34f5;
+      border: 2px solid #0d4af5;
       background: #0f0f14;
     }
     .kpi-box:first-child { border-radius: 8px 0 0 8px; }
@@ -221,7 +221,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
 
     /* Cost Metrics */
     .cost-section {
-      border: 2px solid #0a34f5;
+      border: 2px solid #0d4af5;
       border-radius: 10px;
       padding: 14px;
       margin-bottom: 14px;
@@ -240,7 +240,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
     }
     .cost-value.highlight {
       font-size: 22px;
-      color: #0a34f5;
+      color: #0d4af5;
     }
     .cost-label {
       font-size: 10px;
@@ -308,7 +308,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
       font-size: 8px;
       font-weight: 700;
       color: white;
-      background: #0a34f5;
+      background: #0d4af5;
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
@@ -320,7 +320,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
     /* Observations */
     .observations {
       background: #0f0f14;
-      border-left: 3px solid #0a34f5;
+      border-left: 3px solid #0d4af5;
       padding: 8px 12px;
       border-radius: 0 6px 6px 0;
       margin-bottom: 10px;
@@ -406,7 +406,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
     }
     .age-bar-fill {
       height: 100%;
-      background: linear-gradient(90deg, #0a34f5, #3b6ff7);
+      background: linear-gradient(90deg, #0d4af5, #3b6ff7);
       border-radius: 4px;
       display: flex;
       align-items: center;
@@ -462,7 +462,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
       .page { padding: 12px 20px; background: #09090b !important; }
       .kpi-box { background: #0f0f14 !important; }
       .cost-section { background: #0f0f14 !important; }
-      .campaign-table th { background: #0a34f5 !important; }
+      .campaign-table th { background: #0d4af5 !important; }
       .campaign-table tr:nth-child(even) { background: #0f0f14 !important; }
       .campaign-table tr:nth-child(odd) { background: #09090b !important; }
       .observations { background: #0f0f14 !important; }
@@ -472,7 +472,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
   </style>
 </head>
 <body>
-  <div class="no-print" style="text-align:center;padding:16px;background:#0a34f5;">
+  <div class="no-print" style="text-align:center;padding:16px;background:#0d4af5;">
     <button onclick="window.print()" style="padding:10px 32px;background:#09090b;color:#ffffff;border:1px solid #3b6ff5;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.03em;">
       Salvar como PDF / Imprimir
     </button>
@@ -537,25 +537,25 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
       <div class="funnel">
         <div class="funnel-row">
           <div class="funnel-value">${formatNum(data.videoViews25!)}</div>
-          <div class="funnel-bar" style="background:linear-gradient(90deg,#0a34f5,#3b6ff7);width:100%;">
+          <div class="funnel-bar" style="background:linear-gradient(90deg,#0d4af5,#3b6ff7);width:100%;">
             <div class="funnel-pct">25%</div>
           </div>
         </div>
         <div class="funnel-row">
           <div class="funnel-value">${formatNum(data.videoViews50!)}</div>
-          <div class="funnel-bar" style="background:linear-gradient(90deg,#0a34f5,#3b6ff7);width:80%;">
+          <div class="funnel-bar" style="background:linear-gradient(90deg,#0d4af5,#3b6ff7);width:80%;">
             <div class="funnel-pct">50%</div>
           </div>
         </div>
         <div class="funnel-row">
           <div class="funnel-value">${formatNum(data.videoViews75!)}</div>
-          <div class="funnel-bar" style="background:linear-gradient(90deg,#0a34f5,#3b6ff7);width:60%;">
+          <div class="funnel-bar" style="background:linear-gradient(90deg,#0d4af5,#3b6ff7);width:60%;">
             <div class="funnel-pct">75%</div>
           </div>
         </div>
         <div class="funnel-row">
           <div class="funnel-value">${formatNum(data.videoViews95!)}</div>
-          <div class="funnel-bar" style="background:linear-gradient(90deg,#0a34f5,#3b6ff7);width:45%;">
+          <div class="funnel-bar" style="background:linear-gradient(90deg,#0d4af5,#3b6ff7);width:45%;">
             <div class="funnel-pct">95%</div>
           </div>
         </div>
@@ -610,7 +610,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
     </div>
 
     <!-- Disclaimer -->
-    <div style="margin-top:6px;padding:6px 10px;background:#0f0f14;border-left:2px solid #0a34f5;border-radius:4px;font-size:7px;color:#a1a1aa;line-height:1.5;">
+    <div style="margin-top:6px;padding:6px 10px;background:#0f0f14;border-left:2px solid #0d4af5;border-radius:4px;font-size:7px;color:#a1a1aa;line-height:1.5;">
       <strong style="color:#3b6ff5;">⚠ Nota:</strong>
       Valores extraídos da API do Meta Ads — variação de até 15% em relação ao Gerenciador de Anúncios devido a janelas de atribuição e delays de processamento.
     </div>

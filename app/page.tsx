@@ -116,7 +116,7 @@ function NoticeFormBlock() {
               <span className="text-xs text-red-500">Urgente</span>
             </label>
             <div className="flex items-center gap-2">
-              {formSuccess && <span className="text-xs text-[#0a34f5] font-medium flex items-center gap-1"><CheckCircle2 size={12} /> Publicado!</span>}
+              {formSuccess && <span className="text-xs text-[#0d4af5] font-medium flex items-center gap-1"><CheckCircle2 size={12} /> Publicado!</span>}
               <button onClick={() => setShowForm(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
               <button onClick={handleAdd} disabled={formSuccess} className="btn-primary text-xs flex items-center gap-1 disabled:opacity-50"><Send size={11} /> Publicar</button>
             </div>
@@ -132,7 +132,7 @@ function NoticeFormBlock() {
           return (
             <div key={notice.id} className={`p-3 rounded-lg border text-sm ${
               notice.urgent ? "bg-red-500/10 border-red-500/20"
-              : notice.category === "meeting" ? "bg-blue-500/5 border-[#0a34f5]/20"
+              : notice.category === "meeting" ? "bg-blue-500/5 border-[#0d4af5]/20"
               : "bg-muted border-transparent"
             }`}>
               <div className="flex items-start justify-between gap-2">
@@ -153,7 +153,7 @@ function NoticeFormBlock() {
               <div className="flex items-center gap-2 mt-1">
                 <p className="text-muted-foreground/50 text-xs">por {notice.createdBy} · {notice.createdAt}</p>
                 {notice.scheduledAt && (
-                  <span className="text-xs text-[#0a34f5] bg-[#0a34f5]/10 px-1.5 py-0.5 rounded">
+                  <span className="text-xs text-[#0d4af5] bg-[#0d4af5]/10 px-1.5 py-0.5 rounded">
                     {new Date(notice.scheduledAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 )}
@@ -244,7 +244,7 @@ function EmployeeDashboard() {
   return (
     <>
       {/* Greeting */}
-      <div className="bg-gradient-to-r from-[#0a34f5]/10 to-transparent border border-[#0a34f5]/20 rounded-2xl p-5">
+      <div className="bg-gradient-to-r from-[#0d4af5]/10 to-transparent border border-[#0d4af5]/20 rounded-2xl p-5">
         <h2 className="text-lg font-bold text-foreground">
           {greeting}, {currentUser.split(" ")[0]}!
         </h2>
@@ -271,13 +271,13 @@ function EmployeeDashboard() {
           label="Taxa de Conclusão"
           value={`${performance.rate}%`}
           sub={`${performance.done}/${performance.total} tarefas`}
-          iconColor={performance.rate >= 80 ? "text-[#0a34f5]" : performance.rate >= 50 ? "text-[#3b6ff5]" : "text-red-500"}
-          iconBg={performance.rate >= 80 ? "bg-[#0a34f5]/10" : performance.rate >= 50 ? "bg-[#0a34f5]/10" : "bg-red-500/10"}
+          iconColor={performance.rate >= 80 ? "text-[#0d4af5]" : performance.rate >= 50 ? "text-[#3b6ff5]" : "text-red-500"}
+          iconBg={performance.rate >= 80 ? "bg-[#0d4af5]/10" : performance.rate >= 50 ? "bg-[#0d4af5]/10" : "bg-red-500/10"}
           href="/calendar"
         />
         {role === "social" && (
           <>
-            <MetricCard icon={Instagram} label="Publicados" value={performance.published} sub="este mês" iconColor="text-[#0a34f5]" iconBg="bg-[#0a34f5]/10" href="/social" />
+            <MetricCard icon={Instagram} label="Publicados" value={performance.published} sub="este mês" iconColor="text-[#0d4af5]" iconBg="bg-[#0d4af5]/10" href="/social" />
             <MetricCard icon={FileText} label="No Pipeline" value={performance.inPipeline} sub="cards em andamento" iconColor="text-primary" iconBg="bg-primary/10" href="/social" />
           </>
         )}
@@ -289,15 +289,15 @@ function EmployeeDashboard() {
               label="Suporte Hoje"
               value={`${performance.supportDone}/${performance.supportTotal}`}
               sub="check-ins feitos"
-              iconColor={performance.supportDone >= performance.supportTotal ? "text-[#0a34f5]" : "text-[#3b6ff5]"}
-              iconBg={performance.supportDone >= performance.supportTotal ? "bg-[#0a34f5]/10" : "bg-[#0a34f5]/10"}
+              iconColor={performance.supportDone >= performance.supportTotal ? "text-[#0d4af5]" : "text-[#3b6ff5]"}
+              iconBg={performance.supportDone >= performance.supportTotal ? "bg-[#0d4af5]/10" : "bg-[#0d4af5]/10"}
               href="/traffic"
             />
           </>
         )}
         {role === "designer" && (
           <>
-            <MetricCard icon={Palette} label="Na Fila" value={myDesignRequests.filter((r) => r.status === "queued").length} sub="pedidos aguardando" iconColor="text-[#3b6ff5]" iconBg="bg-[#0a34f5]/10" href="/design" />
+            <MetricCard icon={Palette} label="Na Fila" value={myDesignRequests.filter((r) => r.status === "queued").length} sub="pedidos aguardando" iconColor="text-[#3b6ff5]" iconBg="bg-[#0d4af5]/10" href="/design" />
             <MetricCard icon={Activity} label="Em Produção" value={myDesignRequests.filter((r) => r.status === "in_progress").length} sub="fazendo agora" iconColor="text-primary" iconBg="bg-primary/10" href="/design" />
           </>
         )}
@@ -336,7 +336,7 @@ function EmployeeDashboard() {
                     <span className="text-[10px] text-muted-foreground">{task.clientName}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                       task.status === "in_progress" ? "bg-primary/10 text-primary" :
-                      task.status === "review" ? "bg-[#0a34f5]/10 text-[#3b6ff5]" :
+                      task.status === "review" ? "bg-[#0d4af5]/10 text-[#3b6ff5]" :
                       "bg-muted text-muted-foreground"
                     }`}>
                       {task.status === "pending" ? "Pendente" : task.status === "in_progress" ? "Em Progresso" : "Revisão"}
@@ -522,7 +522,7 @@ function AdminDashboard() {
       {/* Quick Actions */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs text-muted-foreground mr-1">Ações rápidas:</span>
-        <Link href="/calendar" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#0a34f5]/10 text-[#0a34f5] border border-[#0a34f5]/20 hover:bg-[#0a34f5]/20 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all">
+        <Link href="/calendar" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all">
           <Plus size={12} /> Nova Tarefa
         </Link>
         <Link href="/social" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-foreground border border-white/10 hover:bg-white/10 transition-all">
@@ -555,7 +555,7 @@ function AdminDashboard() {
                     <span className="text-foreground font-medium">{camp.name}</span>
                     <span className="text-muted-foreground">·</span>
                     <span className="text-muted-foreground">{camp.clientName}</span>
-                    <Link href="/traffic" className="text-[#0a34f5] hover:text-[#3b6ff5] font-medium ml-auto flex items-center gap-1">
+                    <Link href="/traffic" className="text-[#0d4af5] hover:text-[#3b6ff5] font-medium ml-auto flex items-center gap-1">
                       Ver detalhes <ChevronRight size={11} />
                     </Link>
                   </div>
@@ -568,10 +568,10 @@ function AdminDashboard() {
 
       {/* Urgências do Dia */}
       {(pendingApproval > 0 || urgentTasks.length > 0 || stuckCards.length > 0 || atRiskClients.length > 0) && (
-        <div className="rounded-xl border border-[#0a34f5]/20 bg-[#0a34f5]/[0.03] p-4 animate-fade-in">
+        <div className="rounded-xl border border-[#0d4af5]/20 bg-[#0d4af5]/[0.03] p-4 animate-fade-in">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-lg bg-[#0a34f5]/15 flex items-center justify-center">
-              <Zap size={14} className="text-[#0a34f5]" />
+            <div className="w-7 h-7 rounded-lg bg-[#0d4af5]/15 flex items-center justify-center">
+              <Zap size={14} className="text-[#0d4af5]" />
             </div>
             <h4 className="text-sm font-bold text-foreground">Urgências do Dia</h4>
           </div>
@@ -618,27 +618,27 @@ function AdminDashboard() {
 
       {/* Pipeline Quick Stats */}
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
-        <Link href="/social" className="bg-card border border-border rounded-xl p-4 hover:border-[#0a34f5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
+        <Link href="/social" className="bg-card border border-border rounded-xl p-4 hover:border-[#0d4af5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pipeline</p>
           <p className="text-xl font-bold text-foreground">{pipelineCards.length}</p>
           <p className="text-xs text-muted-foreground">cards em andamento</p>
         </Link>
-        <Link href="/social" className="bg-card border border-border rounded-xl p-4 hover:border-[#0a34f5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
+        <Link href="/social" className="bg-card border border-border rounded-xl p-4 hover:border-[#0d4af5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Publicados</p>
           <p className="text-xl font-bold text-primary">{publishedThisMonth}</p>
           <p className="text-xs text-muted-foreground">este mês</p>
         </Link>
-        <Link href="/social" className={`bg-card border rounded-xl p-4 hover:border-[#0a34f5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer ${stuckCards.length > 0 ? "border-red-500/20" : "border-border"}`}>
+        <Link href="/social" className={`bg-card border rounded-xl p-4 hover:border-[#0d4af5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer ${stuckCards.length > 0 ? "border-red-500/20" : "border-border"}`}>
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Parados 48h+</p>
           <p className={`text-xl font-bold ${stuckCards.length > 0 ? "text-red-500" : "text-foreground"}`}>{stuckCards.length}</p>
           <p className="text-xs text-muted-foreground">SLA violado</p>
         </Link>
-        <Link href="/social" className="bg-card border border-border rounded-xl p-4 hover:border-[#0a34f5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
+        <Link href="/social" className="bg-card border border-border rounded-xl p-4 hover:border-[#0d4af5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Aprovação</p>
           <p className="text-xl font-bold text-foreground">{pendingApproval}</p>
           <p className="text-xs text-muted-foreground">aguardando review</p>
         </Link>
-        <Link href="/design" className="bg-card border border-border rounded-xl p-4 hover:border-[#0a34f5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
+        <Link href="/design" className="bg-card border border-border rounded-xl p-4 hover:border-[#0d4af5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Design</p>
           <p className="text-xl font-bold text-foreground">{designQueued + designInProg}</p>
           <p className="text-xs text-muted-foreground">{designQueued} fila · {designInProg} produzindo</p>
@@ -860,7 +860,7 @@ function AdminDashboard() {
                       <button onClick={() => updateTask(task.id, { status: "in_progress" })} className="text-[10px] px-2 py-0.5 rounded bg-primary/15 text-primary hover:bg-primary/25">Iniciar</button>
                     )}
                     {task.status === "in_progress" && (
-                      <button onClick={() => updateTask(task.id, { status: "done" })} className="text-[10px] px-2 py-0.5 rounded bg-[#0a34f5]/15 text-[#0a34f5] hover:bg-[#0a34f5]/25">Concluir</button>
+                      <button onClick={() => updateTask(task.id, { status: "done" })} className="text-[10px] px-2 py-0.5 rounded bg-[#0d4af5]/15 text-[#0d4af5] hover:bg-[#0d4af5]/25">Concluir</button>
                     )}
                     <Link href={`/clients/${task.clientId}`} className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground">
                       <ChevronRight size={10} />

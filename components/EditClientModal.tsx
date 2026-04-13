@@ -338,7 +338,7 @@ export default function EditClientModal({ client, onClose }: Props) {
               <button
                 type="button"
                 onClick={meta.connect}
-                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-dashed border-[#2a2a2a] bg-[#0a0a0a] hover:border-[#0a34f5]/30 hover:bg-[#0a34f5]/[0.02] transition-all text-left group"
+                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-dashed border-[#2a2a2a] bg-[#0a0a0a] hover:border-[#0d4af5]/30 hover:bg-[#0d4af5]/[0.02] transition-all text-left group"
               >
                 <div className="w-9 h-9 rounded-lg bg-[#1877F2]/10 flex items-center justify-center shrink-0">
                   <Facebook size={16} className="text-[#1877F2]" />
@@ -351,12 +351,12 @@ export default function EditClientModal({ client, onClose }: Props) {
                     Vincule para acessar as campanhas do cliente
                   </p>
                 </div>
-                <ExternalLink size={14} className="text-zinc-700 group-hover:text-[#0a34f5] transition-colors" />
+                <ExternalLink size={14} className="text-zinc-700 group-hover:text-[#0d4af5] transition-colors" />
               </button>
             ) : selectedAdAccount ? (
-              <div className="flex items-center gap-3 p-3.5 rounded-xl border border-[#0a34f5]/30 bg-[#0a34f5]/[0.03] shadow-[0_0_12px_rgba(10,52,245,0.08)]">
-                <div className="w-9 h-9 rounded-lg bg-[#0a34f5]/10 border border-[#0a34f5]/20 flex items-center justify-center shrink-0">
-                  <Link2 size={16} className="text-[#0a34f5]" />
+              <div className="flex items-center gap-3 p-3.5 rounded-xl border border-[#0d4af5]/30 bg-[#0d4af5]/[0.03] shadow-[0_0_12px_rgba(10,52,245,0.08)]">
+                <div className="w-9 h-9 rounded-lg bg-[#0d4af5]/10 border border-[#0d4af5]/20 flex items-center justify-center shrink-0">
+                  <Link2 size={16} className="text-[#0d4af5]" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-white font-medium truncate">{selectedAdAccount.name}</p>
@@ -378,7 +378,7 @@ export default function EditClientModal({ client, onClose }: Props) {
                   onClick={() => setShowAccountPicker(!showAccountPicker)}
                   className={`w-full flex items-center gap-3 p-3.5 rounded-xl border bg-[#0a0a0a] text-left transition-all ${
                     showAccountPicker
-                      ? "border-[#0a34f5] shadow-[0_0_0_3px_rgba(10,52,245,0.1)]"
+                      ? "border-[#0d4af5] shadow-[0_0_0_3px_rgba(10,52,245,0.1)]"
                       : "border-[#1a1a1a] hover:border-[#2a2a2a]"
                   }`}
                 >
@@ -409,7 +409,7 @@ export default function EditClientModal({ client, onClose }: Props) {
                           value={accountSearch}
                           onChange={(e) => setAccountSearch(e.target.value)}
                           placeholder="Buscar conta..."
-                          className="w-full bg-[#121212] border border-[#1a1a1a] rounded-lg px-3 py-2 text-xs text-white outline-none placeholder:text-zinc-700 focus:border-[#0a34f5]/50"
+                          className="w-full bg-[#121212] border border-[#1a1a1a] rounded-lg px-3 py-2 text-xs text-white outline-none placeholder:text-zinc-700 focus:border-[#0d4af5]/50"
                         />
                       </div>
                     )}
@@ -423,7 +423,7 @@ export default function EditClientModal({ client, onClose }: Props) {
                             setShowAccountPicker(false);
                             setAccountSearch("");
                           }}
-                          className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-all hover:bg-[#0a34f5]/5"
+                          className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-all hover:bg-[#0d4af5]/5"
                         >
                           <div className="w-7 h-7 rounded-md bg-[#121212] border border-[#2a2a2a] flex items-center justify-center shrink-0">
                             <Facebook size={12} className="text-[#1877F2]" />
@@ -435,7 +435,7 @@ export default function EditClientModal({ client, onClose }: Props) {
                             </p>
                           </div>
                           {selectedAdAccount?.id === account.id && (
-                            <Check size={14} className="text-[#0a34f5] shrink-0" />
+                            <Check size={14} className="text-[#0d4af5] shrink-0" />
                           )}
                         </button>
                       ))}

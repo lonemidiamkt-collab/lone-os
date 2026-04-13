@@ -75,7 +75,7 @@ export default function MyWorkPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-3">
-          <Inbox size={24} className="text-[#0a34f5]" />
+          <Inbox size={24} className="text-[#0d4af5]" />
           Meu Trabalho
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -94,15 +94,15 @@ export default function MyWorkPage() {
               onClick={() => setFilter(f.key)}
               className={`p-3 rounded-xl border transition-all text-left ${
                 active
-                  ? "border-[#0a34f5]/30 bg-[#0a34f5]/[0.05] shadow-[0_0_15px_rgba(10,52,245,0.08)]"
-                  : "border-border bg-card hover:border-[#0a34f5]/20"
+                  ? "border-[#0d4af5]/30 bg-[#0d4af5]/[0.05] shadow-[0_0_15px_rgba(10,52,245,0.08)]"
+                  : "border-border bg-card hover:border-[#0d4af5]/20"
               }`}
             >
               <div className="flex items-center gap-2 mb-1">
-                <Icon size={14} className={active ? "text-[#0a34f5]" : "text-muted-foreground"} />
-                <span className={`text-xs font-medium ${active ? "text-[#0a34f5]" : "text-muted-foreground"}`}>{f.label}</span>
+                <Icon size={14} className={active ? "text-[#0d4af5]" : "text-muted-foreground"} />
+                <span className={`text-xs font-medium ${active ? "text-[#0d4af5]" : "text-muted-foreground"}`}>{f.label}</span>
               </div>
-              <p className={`text-xl font-bold ${active ? "text-[#0a34f5]" : "text-foreground"}`}>{f.count}</p>
+              <p className={`text-xl font-bold ${active ? "text-[#0d4af5]" : "text-foreground"}`}>{f.count}</p>
             </button>
           );
         })}
@@ -115,7 +115,7 @@ export default function MyWorkPage() {
           {(filter === "all" || filter === "tasks") && myTasks.length > 0 && (
             <div className="card">
               <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
-                <Check size={14} className="text-[#0a34f5]" />
+                <Check size={14} className="text-[#0d4af5]" />
                 Minhas Tarefas ({myTasks.length})
               </h3>
               <div className="space-y-2">
@@ -130,7 +130,7 @@ export default function MyWorkPage() {
           {(filter === "all" || filter === "content") && myCards.length > 0 && (
             <div className="card">
               <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
-                <FileText size={14} className="text-[#0a34f5]" />
+                <FileText size={14} className="text-[#0d4af5]" />
                 Meus Cards de Conteúdo ({myCards.length})
               </h3>
               <div className="space-y-2">
@@ -145,14 +145,14 @@ export default function MyWorkPage() {
           {(filter === "all" || filter === "design") && myDesignReqs.length > 0 && (
             <div className="card">
               <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
-                <Palette size={14} className="text-[#0a34f5]" />
+                <Palette size={14} className="text-[#0d4af5]" />
                 Solicitações de Design ({myDesignReqs.length})
               </h3>
               <div className="space-y-2">
                 {myDesignReqs.map((req) => (
-                  <div key={req.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-[#0a34f5]/20 transition-all">
+                  <div key={req.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-[#0d4af5]/20 transition-all">
                     <span className={`w-2 h-2 rounded-full shrink-0 ${
-                      req.status === "queued" ? "bg-zinc-500" : req.status === "in_progress" ? "bg-[#0a34f5]" : "bg-emerald-500"
+                      req.status === "queued" ? "bg-zinc-500" : req.status === "in_progress" ? "bg-[#0d4af5]" : "bg-emerald-500"
                     }`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{req.title}</p>
@@ -160,7 +160,7 @@ export default function MyWorkPage() {
                     </div>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
                       req.status === "queued" ? "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" :
-                      req.status === "in_progress" ? "text-[#0a34f5] bg-[#0a34f5]/10 border-[#0a34f5]/20" :
+                      req.status === "in_progress" ? "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" :
                       "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
                     }`}>
                       {req.status === "queued" ? "Na fila" : req.status === "in_progress" ? "Em progresso" : "Concluído"}
@@ -189,7 +189,7 @@ export default function MyWorkPage() {
           {/* Empty state */}
           {totalItems === 0 && (
             <div className="card text-center py-16">
-              <CheckCircle size={40} className="mx-auto text-[#0a34f5]/30 mb-3" />
+              <CheckCircle size={40} className="mx-auto text-[#0d4af5]/30 mb-3" />
               <p className="text-foreground font-medium">Tudo em dia!</p>
               <p className="text-sm text-muted-foreground mt-1">Nenhuma tarefa ou card pendente no momento.</p>
             </div>
@@ -200,7 +200,7 @@ export default function MyWorkPage() {
         <div className="space-y-4">
           <div className="card">
             <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
-              <Bell size={14} className="text-[#0a34f5]" />
+              <Bell size={14} className="text-[#0d4af5]" />
               Notificações Recentes
             </h3>
             {unreadNotifs.length === 0 ? (
@@ -211,7 +211,7 @@ export default function MyWorkPage() {
                   <button
                     key={n.id}
                     onClick={() => markNotificationRead(n.id)}
-                    className="w-full text-left p-2.5 rounded-lg bg-[#0a34f5]/[0.03] border border-[#0a34f5]/10 hover:border-[#0a34f5]/30 transition-all"
+                    className="w-full text-left p-2.5 rounded-lg bg-[#0d4af5]/[0.03] border border-[#0d4af5]/10 hover:border-[#0d4af5]/30 transition-all"
                   >
                     <p className="text-[11px] font-medium text-foreground leading-tight">{n.title}</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>
@@ -255,16 +255,16 @@ export default function MyWorkPage() {
 function TaskRow({ task }: { task: Task }) {
   const statusConfig: Record<string, { label: string; color: string }> = {
     pending: { label: "Pendente", color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
-    in_progress: { label: "Em andamento", color: "text-[#0a34f5] bg-[#0a34f5]/10 border-[#0a34f5]/20" },
+    in_progress: { label: "Em andamento", color: "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" },
     review: { label: "Em revisão", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
   };
   const s = statusConfig[task.status] ?? statusConfig.pending;
   const timeMs = getLiveTimeSpentMs(task.workStartedAt, task.totalTimeSpentMs);
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-[#0a34f5]/20 transition-all">
+    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-[#0d4af5]/20 transition-all">
       <span className={`w-2 h-2 rounded-full shrink-0 ${
-        task.status === "in_progress" ? "bg-[#0a34f5]" : task.status === "review" ? "bg-amber-400" : "bg-zinc-500"
+        task.status === "in_progress" ? "bg-[#0d4af5]" : task.status === "review" ? "bg-amber-400" : "bg-zinc-500"
       }`} />
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-foreground truncate">{task.title}</p>
@@ -301,7 +301,7 @@ function CardRow({ card, isApproval }: { card: ContentCard; isApproval?: boolean
     <div className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
       isApproval
         ? "bg-amber-500/[0.03] border-amber-500/20 hover:border-amber-500/40"
-        : "bg-muted/30 border-border/50 hover:border-[#0a34f5]/20"
+        : "bg-muted/30 border-border/50 hover:border-[#0d4af5]/20"
     }`}>
       {card.imageUrl && card.imageUrl.includes("http") ? (
         <div className="w-10 h-10 rounded-lg overflow-hidden bg-muted shrink-0">

@@ -131,7 +131,7 @@ export default function AutomationsPage() {
             <select
               value={triggerConfig.status || "at_risk"}
               onChange={(e) => setTriggerConfig({ status: e.target.value })}
-              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0a34f5]/50 outline-none"
+              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
             >
               {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
@@ -145,7 +145,7 @@ export default function AutomationsPage() {
             <div className="flex items-center gap-2">
               <input type="number" min="1" value={triggerConfig.hours || "48"}
                 onChange={(e) => setTriggerConfig({ hours: e.target.value })}
-                className="w-24 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0a34f5]/50 outline-none" />
+                className="w-24 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none" />
               <span className="text-xs text-muted-foreground">horas sem aprovacao</span>
             </div>
           </div>
@@ -158,7 +158,7 @@ export default function AutomationsPage() {
             <div className="flex items-center gap-2">
               <input type="number" min="50" max="100" value={triggerConfig.percent || "90"}
                 onChange={(e) => setTriggerConfig({ percent: e.target.value })}
-                className="w-24 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0a34f5]/50 outline-none" />
+                className="w-24 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none" />
               <span className="text-xs text-muted-foreground">% do orcamento mensal</span>
             </div>
           </div>
@@ -179,7 +179,7 @@ export default function AutomationsPage() {
                   <input type="number" min="1"
                     value={triggerConfig[phase.id] || phase.defaultHours}
                     onChange={(e) => setTriggerConfig((prev) => ({ ...prev, [phase.id]: e.target.value }))}
-                    className="w-16 bg-black border border-[#1a1a1a] rounded-lg px-2 py-1.5 text-xs text-foreground text-center focus:border-[#0a34f5]/50 outline-none" />
+                    className="w-16 bg-black border border-[#1a1a1a] rounded-lg px-2 py-1.5 text-xs text-foreground text-center focus:border-[#0d4af5]/50 outline-none" />
                   <span className="text-[10px] text-zinc-600">h</span>
                 </div>
               </div>
@@ -201,7 +201,7 @@ export default function AutomationsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-3">
-            <Zap size={22} className="text-[#0a34f5]" />
+            <Zap size={22} className="text-[#0d4af5]" />
             Automacoes & SLAs
           </h1>
           <p className="text-xs text-muted-foreground mt-1">
@@ -209,7 +209,7 @@ export default function AutomationsPage() {
           </p>
         </div>
         <button onClick={openCreate}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0a34f5] text-white text-sm font-medium hover:bg-[#0c3cff] transition-all">
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0d4af5] text-white text-sm font-medium hover:bg-[#0c3cff] transition-all">
           <Plus size={16} /> Nova Regra
         </button>
       </div>
@@ -217,7 +217,7 @@ export default function AutomationsPage() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { value: automationRules.length, label: "Total de regras", icon: Zap, color: "text-[#0a34f5]", bg: "bg-[#0a34f5]/10" },
+          { value: automationRules.length, label: "Total de regras", icon: Zap, color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/10" },
           { value: activeCount, label: "Regras ativas", icon: Power, color: "text-emerald-400", bg: "bg-emerald-500/10" },
           { value: totalTriggers, label: "Vezes disparadas", icon: Activity, color: "text-amber-400", bg: "bg-amber-500/10" },
         ].map((stat) => {
@@ -239,7 +239,7 @@ export default function AutomationsPage() {
       {/* Rules List */}
       <div className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <Activity size={14} className="text-[#0a34f5]" />
+          <Activity size={14} className="text-[#0d4af5]" />
           Regras Configuradas
         </h2>
 
@@ -250,7 +250,7 @@ export default function AutomationsPage() {
             </div>
             <p className="text-sm text-zinc-500">Nenhuma regra configurada</p>
             <p className="text-xs text-zinc-700 mt-1">O silencio antes da automacao.</p>
-            <button onClick={openCreate} className="mt-4 text-xs text-[#0a34f5] hover:underline">
+            <button onClick={openCreate} className="mt-4 text-xs text-[#0d4af5] hover:underline">
               Criar primeira regra
             </button>
           </div>
@@ -268,9 +268,9 @@ export default function AutomationsPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                      rule.enabled ? "bg-[#0a34f5]/10" : "bg-zinc-900"
+                      rule.enabled ? "bg-[#0d4af5]/10" : "bg-zinc-900"
                     }`}>
-                      <TriggerIcon size={18} className={rule.enabled ? "text-[#0a34f5]" : "text-zinc-600"} />
+                      <TriggerIcon size={18} className={rule.enabled ? "text-[#0d4af5]" : "text-zinc-600"} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -293,7 +293,7 @@ export default function AutomationsPage() {
                         {params && (
                           <>
                             <ChevronRight size={10} className="text-zinc-800" />
-                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#0a34f5]/5 text-[#3b6ff5] border border-[#0a34f5]/10 font-medium">
+                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#0d4af5]/5 text-[#3b6ff5] border border-[#0d4af5]/10 font-medium">
                               {params}
                             </span>
                           </>
@@ -318,7 +318,7 @@ export default function AutomationsPage() {
                   {/* Actions */}
                   <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => openEdit(rule)}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-600 hover:text-[#0a34f5] hover:bg-[#0a34f5]/10 transition-all"
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-600 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all"
                       title="Editar parametros">
                       <Settings2 size={14} />
                     </button>
@@ -360,13 +360,13 @@ export default function AutomationsPage() {
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setShowCreate(false); setEditingRule(null); }} />
           <div className="relative w-full max-w-lg mx-4 bg-black border border-[#1a1a1a] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0a34f5]/30 to-transparent shrink-0" />
+            <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/30 to-transparent shrink-0" />
 
             <div className="p-6 space-y-5 overflow-y-auto flex-1">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                    <Zap size={18} className="text-[#0a34f5]" />
+                    <Zap size={18} className="text-[#0d4af5]" />
                     {editingRule ? "Editar Regra" : "Nova Regra"}
                   </h2>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -385,14 +385,14 @@ export default function AutomationsPage() {
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Nome da Regra</label>
                   <input value={name} onChange={(e) => setName(e.target.value)}
                     placeholder="Ex: SLA de Onboarding (7 Dias)"
-                    className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0a34f5]/50 outline-none transition-all"
+                    className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none transition-all"
                     autoFocus />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Descricao</label>
                   <input value={description} onChange={(e) => setDescription(e.target.value)}
                     placeholder="O que essa regra monitora?"
-                    className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0a34f5]/50 outline-none transition-all" />
+                    className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none transition-all" />
                 </div>
               </div>
 
@@ -406,9 +406,9 @@ export default function AutomationsPage() {
                     return (
                       <button key={key} onClick={() => setTrigger(key)}
                         className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
-                          active ? "border-[#0a34f5]/40 bg-[#0a34f5]/[0.05]" : "border-[#1a1a1a] hover:border-[#2a2a2a]"
+                          active ? "border-[#0d4af5]/40 bg-[#0d4af5]/[0.05]" : "border-[#1a1a1a] hover:border-[#2a2a2a]"
                         }`}>
-                        <Icon size={14} className={active ? "text-[#0a34f5]" : "text-zinc-600"} />
+                        <Icon size={14} className={active ? "text-[#0d4af5]" : "text-zinc-600"} />
                         <div className="flex-1">
                           <p className={`text-xs font-medium ${active ? "text-foreground" : "text-zinc-500"}`}>{cfg.label}</p>
                           <p className="text-[9px] text-zinc-700">{cfg.description}</p>
@@ -432,9 +432,9 @@ export default function AutomationsPage() {
                     return (
                       <button key={key} onClick={() => setAction(key)}
                         className={`flex items-center gap-2 p-3 rounded-xl border text-left transition-all ${
-                          active ? "border-[#0a34f5]/40 bg-[#0a34f5]/[0.05]" : "border-[#1a1a1a] hover:border-[#2a2a2a]"
+                          active ? "border-[#0d4af5]/40 bg-[#0d4af5]/[0.05]" : "border-[#1a1a1a] hover:border-[#2a2a2a]"
                         }`}>
-                        <Icon size={14} className={active ? "text-[#0a34f5]" : "text-zinc-600"} />
+                        <Icon size={14} className={active ? "text-[#0d4af5]" : "text-zinc-600"} />
                         <p className={`text-xs font-medium ${active ? "text-foreground" : "text-zinc-500"}`}>{cfg.label}</p>
                       </button>
                     );
@@ -448,7 +448,7 @@ export default function AutomationsPage() {
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Notificar quem</label>
                   <select value={actionConfig.target || "manager"}
                     onChange={(e) => setActionConfig((prev) => ({ ...prev, target: e.target.value }))}
-                    className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0a34f5]/50 outline-none">
+                    className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none">
                     {TARGET_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
@@ -456,7 +456,7 @@ export default function AutomationsPage() {
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Mensagem</label>
                   <input value={actionConfig.message || ""} onChange={(e) => setActionConfig((prev) => ({ ...prev, message: e.target.value }))}
                     placeholder="Texto da notificacao"
-                    className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0a34f5]/50 outline-none" />
+                    className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none" />
                 </div>
               </div>
             </div>
@@ -468,7 +468,7 @@ export default function AutomationsPage() {
                 Cancelar
               </button>
               <button onClick={handleSave} disabled={!name.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0a34f5] text-white text-xs font-medium hover:bg-[#0c3cff] transition-all disabled:opacity-30">
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0c3cff] transition-all disabled:opacity-30">
                 <Save size={12} /> {editingRule ? "Salvar Alteracoes" : "Criar Regra"}
               </button>
             </div>

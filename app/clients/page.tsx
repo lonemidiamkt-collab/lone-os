@@ -190,7 +190,7 @@ export default function ClientsPage() {
                     className={`card cursor-pointer transition-all hover:border-primary/40 ${
                       selectedClient?.id === client.id ? "border-primary/60 bg-primary/5" : ""
                     } ${client.status === "at_risk" ? "border-red-500/20" : ""} ${
-                      hasMetaLinked ? "ring-1 ring-[#0a34f5]/30 shadow-[0_0_12px_rgba(10,52,245,0.12)]" : ""
+                      hasMetaLinked ? "ring-1 ring-[#0d4af5]/30 shadow-[0_0_12px_rgba(10,52,245,0.12)]" : ""
                     } ${hasAdError ? "ring-1 ring-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.15)]" : ""}`}
                     onClick={() => setSelectedClient(client === selectedClient ? null : client)}
                   >
@@ -203,7 +203,7 @@ export default function ClientsPage() {
                             <h4 className="font-semibold text-foreground tracking-tight">{client.name}</h4>
                             <span className="text-xs text-muted-foreground">{getStatusLabel(client.status)}</span>
                             {hasMetaLinked && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#0a34f5]/10 text-[#3b6ff5] border border-[#0a34f5]/20">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20">
                                 <Facebook size={9} />
                                 Meta
                               </span>

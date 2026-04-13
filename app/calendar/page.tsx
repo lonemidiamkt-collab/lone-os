@@ -66,7 +66,7 @@ const TYPE_COLORS: Record<EventType, string> = {
   content: "bg-primary",
   task: "bg-[#3b6ff5]",
   routine: "bg-zinc-500",
-  reminder: "bg-[#0a34f5]",
+  reminder: "bg-[#0d4af5]",
 };
 
 const TYPE_LABELS: Record<EventType, string> = {
@@ -92,7 +92,7 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
   pending: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20",
-  in_progress: "text-[#0a34f5] bg-[#0a34f5]/10 border-[#0a34f5]/20",
+  in_progress: "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20",
   review: "text-amber-400 bg-amber-500/10 border-amber-500/20",
   done: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
 };
@@ -215,7 +215,7 @@ export default function CalendarPage() {
         clientName: card.clientName,
         date: card.dueDate,
         dueDate: card.dueDate,
-        color: card.designerDeliveredAt ? "bg-[#0a34f5]" : card.designRequestId ? "bg-[#3b6ff5]" : TYPE_COLORS.content,
+        color: card.designerDeliveredAt ? "bg-[#0d4af5]" : card.designRequestId ? "bg-[#3b6ff5]" : TYPE_COLORS.content,
         detail: `${card.format} · ${card.status.replace(/_/g, " ")}${designTag ? ` · ${designTag}` : ""}`,
         raw: card,
       });
@@ -435,7 +435,7 @@ export default function CalendarPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-3">
-            <Calendar size={24} className="text-[#0a34f5]" />
+            <Calendar size={24} className="text-[#0d4af5]" />
             Calendário Unificado
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -449,7 +449,7 @@ export default function CalendarPage() {
               setCreateDate(todayStr);
               setShowCreate(true);
             }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#0a34f5] text-white text-xs font-medium hover:bg-[#0a34f5]/80 transition-all shadow-[0_0_20px_rgba(10,52,245,0.3)]"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all shadow-[0_0_20px_rgba(10,52,245,0.3)]"
           >
             <Plus size={14} /> Criar
           </button>
@@ -547,9 +547,9 @@ export default function CalendarPage() {
                   onDrop={day ? (e) => handleDrop(e, day) : undefined}
                   className={`group min-h-[90px] rounded-lg p-1.5 flex flex-col transition-all border relative ${
                     dragOverDay === day
-                      ? "bg-[#0a34f5]/15 border-[#0a34f5]/50 ring-1 ring-[#0a34f5]/30"
+                      ? "bg-[#0d4af5]/15 border-[#0d4af5]/50 ring-1 ring-[#0d4af5]/30"
                       : todayFlag
-                      ? "bg-[#0a34f5]/10 border-[#0a34f5]/30"
+                      ? "bg-[#0d4af5]/10 border-[#0d4af5]/30"
                       : selected
                       ? "bg-white/5 border-white/10"
                       : day
@@ -563,7 +563,7 @@ export default function CalendarPage() {
                         <span className={`text-xs font-medium flex items-center gap-1 ${
                           hasDeadline
                             ? "text-[#ff2d55] font-bold drop-shadow-[0_0_6px_rgba(255,45,85,0.6)]"
-                            : todayFlag ? "text-[#0a34f5] font-bold" : "text-foreground"
+                            : todayFlag ? "text-[#0d4af5] font-bold" : "text-foreground"
                         }`}>
                           {day}
                           {hasDeadline && (
@@ -573,7 +573,7 @@ export default function CalendarPage() {
                         {/* Quick create + icon */}
                         <button
                           onClick={(e) => { e.stopPropagation(); openQuickCreate(day); }}
-                          className="w-4 h-4 rounded flex items-center justify-center text-zinc-700 opacity-0 group-hover:opacity-100 hover:text-[#0a34f5] hover:bg-[#0a34f5]/10 transition-all"
+                          className="w-4 h-4 rounded flex items-center justify-center text-zinc-700 opacity-0 group-hover:opacity-100 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all"
                           title="Criar evento"
                         >
                           <Plus size={10} />
@@ -596,13 +596,13 @@ export default function CalendarPage() {
                               className={`w-[18px] h-[18px] rounded-md flex items-center justify-center transition-all cursor-grab active:cursor-grabbing ${
                                 rem.done
                                   ? "bg-emerald-500/15 border border-emerald-500/30"
-                                  : "bg-[#0a34f5]/10 border border-[#0a34f5]/25 shadow-[0_0_6px_rgba(10,52,245,0.3)] hover:shadow-[0_0_10px_rgba(10,52,245,0.5)]"
+                                  : "bg-[#0d4af5]/10 border border-[#0d4af5]/25 shadow-[0_0_6px_rgba(10,52,245,0.3)] hover:shadow-[0_0_10px_rgba(10,52,245,0.5)]"
                               }`}
                             >
                               {rem.done ? (
                                 <Check size={8} className="text-emerald-400" />
                               ) : (
-                                <Bell size={8} className="text-[#0a34f5] drop-shadow-[0_0_3px_rgba(10,52,245,0.8)]" />
+                                <Bell size={8} className="text-[#0d4af5] drop-shadow-[0_0_3px_rgba(10,52,245,0.8)]" />
                               )}
                             </button>
                             );
@@ -625,7 +625,7 @@ export default function CalendarPage() {
                                 key={bar.taskId}
                                 onClick={(e) => { e.stopPropagation(); handleBarClick(bar); }}
                                 className={`h-[14px] flex items-center text-[9px] font-medium text-white truncate transition-all hover:brightness-125 ${
-                                  isDone ? "bg-emerald-600/60" : "bg-[#0a34f5]"
+                                  isDone ? "bg-emerald-600/60" : "bg-[#0d4af5]"
                                 } ${isStart ? "rounded-l-sm pl-1" : "pl-0.5"} ${isEnd ? "rounded-r-sm pr-1" : "pr-0"}`}
                                 title={`${bar.title} — ${bar.clientName} (${bar.assignedTo})`}
                               >
@@ -691,7 +691,7 @@ export default function CalendarPage() {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => openQuickCreate(selectedDay)}
-                    className="w-6 h-6 rounded-md flex items-center justify-center text-[#0a34f5] hover:bg-[#0a34f5]/10 transition-all"
+                    className="w-6 h-6 rounded-md flex items-center justify-center text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all"
                     title="Criar evento neste dia"
                   >
                     <Plus size={14} />
@@ -706,7 +706,7 @@ export default function CalendarPage() {
                   <p className="text-xs text-muted-foreground mb-2">Nenhum evento neste dia.</p>
                   <button
                     onClick={() => openQuickCreate(selectedDay)}
-                    className="text-xs text-[#0a34f5] hover:underline flex items-center gap-1 mx-auto"
+                    className="text-xs text-[#0d4af5] hover:underline flex items-center gap-1 mx-auto"
                   >
                     <Plus size={12} /> Criar evento
                   </button>
@@ -726,7 +726,7 @@ export default function CalendarPage() {
                           isTaskDeadline
                             ? "bg-red-500/5 border-red-500/20 hover:border-red-500/40"
                             : isReminder
-                            ? (rem?.done ? "bg-emerald-500/5 border-emerald-500/20" : "bg-[#0a34f5]/5 border-[#0a34f5]/20 hover:border-[#0a34f5]/40")
+                            ? (rem?.done ? "bg-emerald-500/5 border-emerald-500/20" : "bg-[#0d4af5]/5 border-[#0d4af5]/20 hover:border-[#0d4af5]/40")
                             : "bg-muted/50 border-border/50 hover:border-border"
                         } ${e.type === "task" || isReminder ? "cursor-pointer hover:bg-muted/80" : ""}`}
                       >
@@ -736,7 +736,7 @@ export default function CalendarPage() {
                             isTaskDeadline ? "bg-[#ff2d55] shadow-[0_0_6px_rgba(255,45,85,0.8)]" : e.color
                           }`} />
                           <Icon size={12} className={
-                            isReminder ? (rem?.done ? "text-emerald-400" : "text-[#0a34f5]") :
+                            isReminder ? (rem?.done ? "text-emerald-400" : "text-[#0d4af5]") :
                             isTaskDeadline ? "text-[#ff2d55]" : "text-muted-foreground"
                           } />
                           <span className={`text-xs font-medium truncate ${
@@ -817,7 +817,7 @@ export default function CalendarPage() {
           {/* Upcoming 7 days */}
           <div className="card">
             <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
-              <Calendar size={14} className="text-[#0a34f5]" />
+              <Calendar size={14} className="text-[#0d4af5]" />
               Próximos 7 dias
             </h3>
             {upcomingEvents.length === 0 ? (
@@ -864,7 +864,7 @@ export default function CalendarPage() {
                 );
               })}
               <div className="flex items-center gap-2 pt-1 border-t border-border/50 mt-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#0a34f5]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#0d4af5]" />
                 <span className="text-[10px] text-muted-foreground">Barra = duração da tarefa</span>
               </div>
               <div className="flex items-center gap-2">
@@ -1037,14 +1037,14 @@ function QuickCreateModal({
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg mx-4 bg-black border border-[#1a1a1a] rounded-2xl shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in overflow-hidden">
         {/* Top glow bar */}
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0a34f5]/40 to-transparent" />
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/40 to-transparent" />
 
         <div className="p-6 space-y-5">
           {/* Header */}
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                <Plus size={18} className="text-[#0a34f5]" />
+                <Plus size={18} className="text-[#0d4af5]" />
                 Criação Rápida
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
@@ -1067,11 +1067,11 @@ function QuickCreateModal({
                   onClick={() => setCreateType(ct.key)}
                   className={`p-3 rounded-xl border text-left transition-all ${
                     active
-                      ? "border-[#0a34f5]/50 bg-[#0a34f5]/[0.06] shadow-[0_0_15px_rgba(10,52,245,0.1)]"
+                      ? "border-[#0d4af5]/50 bg-[#0d4af5]/[0.06] shadow-[0_0_15px_rgba(10,52,245,0.1)]"
                       : "border-[#1a1a1a] bg-[#0a0a0a] hover:border-[#2a2a2a]"
                   }`}
                 >
-                  <Icon size={16} className={active ? "text-[#0a34f5]" : "text-zinc-600"} />
+                  <Icon size={16} className={active ? "text-[#0d4af5]" : "text-zinc-600"} />
                   <p className={`text-xs font-medium mt-1.5 ${active ? "text-foreground" : "text-zinc-500"}`}>{ct.label}</p>
                   <p className="text-[9px] text-zinc-700 mt-0.5">{ct.desc}</p>
                 </button>
@@ -1090,7 +1090,7 @@ function QuickCreateModal({
                 createType === "social" ? "Ex: Reel: 5 dicas de investimento" :
                 "Ex: Revisar campanhas Google Ads"
               }
-              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0a34f5]/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
+              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
               autoFocus
             />
           </div>
@@ -1103,7 +1103,7 @@ function QuickCreateModal({
                 <select
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0a34f5]/50 outline-none"
+                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
                 >
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
@@ -1128,7 +1128,7 @@ function QuickCreateModal({
                           onClick={() => setSector(s.key)}
                           className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-lg border text-[9px] transition-all ${
                             active
-                              ? "border-[#0a34f5]/40 bg-[#0a34f5]/10 text-[#0a34f5]"
+                              ? "border-[#0d4af5]/40 bg-[#0d4af5]/10 text-[#0d4af5]"
                               : "border-[#1a1a1a] text-zinc-600 hover:border-[#2a2a2a]"
                           }`}
                         >
@@ -1147,7 +1147,7 @@ function QuickCreateModal({
                   <select
                     value={format}
                     onChange={(e) => setFormat(e.target.value)}
-                    className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0a34f5]/50 outline-none"
+                    className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
                   >
                     <option>Post Feed (1:1)</option>
                     <option>Reel (9:16)</option>
@@ -1168,7 +1168,7 @@ function QuickCreateModal({
                 <select
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0a34f5]/50 outline-none"
+                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
                 >
                   <option value="">Nenhum</option>
                   {clients.map((c) => (
@@ -1184,7 +1184,7 @@ function QuickCreateModal({
                   type="time"
                   value={time}
                   onChange={(e) => setTime(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0a34f5]/50 outline-none"
+                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
                 />
               </div>
             </div>
@@ -1198,7 +1198,7 @@ function QuickCreateModal({
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as Priority)}
-                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0a34f5]/50 outline-none"
+                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
                 >
                   {(Object.entries(PRIORITY_LABELS) as [Priority, string][]).map(([k, v]) => (
                     <option key={k} value={k}>{v}</option>
@@ -1211,7 +1211,7 @@ function QuickCreateModal({
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0a34f5]/50 outline-none"
+                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
                 />
               </div>
             </div>
@@ -1226,7 +1226,7 @@ function QuickCreateModal({
                 onChange={(e) => setBriefing(e.target.value)}
                 placeholder="Descreva o conteúdo, referências, tom de voz..."
                 rows={3}
-                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0a34f5]/50 outline-none resize-none"
+                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none resize-none"
               />
             </div>
           )}
@@ -1239,15 +1239,15 @@ function QuickCreateModal({
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Detalhes adicionais sobre a tarefa..."
                 rows={2}
-                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0a34f5]/50 outline-none resize-none"
+                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none resize-none"
               />
             </div>
           )}
 
           {/* Routing info */}
           {createType !== "reminder" && selectedClient && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0a34f5]/[0.03] border border-[#0a34f5]/10">
-              <User size={12} className="text-[#0a34f5] shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0d4af5]/[0.03] border border-[#0d4af5]/10">
+              <User size={12} className="text-[#0d4af5] shrink-0" />
               <span className="text-[10px] text-muted-foreground">
                 {createType === "social"
                   ? `Será enviado para o board de ${selectedClient.assignedSocial}`
@@ -1274,7 +1274,7 @@ function QuickCreateModal({
             <button
               onClick={() => handleSave(false)}
               disabled={!title.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0a34f5] text-white text-xs font-medium hover:bg-[#0a34f5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] disabled:opacity-30 disabled:shadow-none"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] disabled:opacity-30 disabled:shadow-none"
             >
               <Save size={12} /> Salvar
             </button>
@@ -1319,7 +1319,7 @@ function TaskDetailModal({
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg mx-4 bg-card border border-border rounded-2xl shadow-2xl animate-fade-in overflow-hidden">
-        <div className={`h-1 w-full ${task.status === "done" ? "bg-emerald-500" : isDeadlinePassed ? "bg-[#ff2d55]" : "bg-[#0a34f5]"}`} />
+        <div className={`h-1 w-full ${task.status === "done" ? "bg-emerald-500" : isDeadlinePassed ? "bg-[#ff2d55]" : "bg-[#0d4af5]"}`} />
 
         <div className="p-6 space-y-5">
           <div className="flex items-start justify-between gap-4">
@@ -1441,7 +1441,7 @@ function TaskDetailModal({
               {task.status === "pending" && (
                 <button
                   onClick={() => onUpdate(task.id, { status: "in_progress" })}
-                  className="text-[11px] px-3 py-1 rounded-lg bg-[#0a34f5]/10 text-[#0a34f5] border border-[#0a34f5]/20 hover:bg-[#0a34f5]/20 transition-all font-medium"
+                  className="text-[11px] px-3 py-1 rounded-lg bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 transition-all font-medium"
                 >
                   Iniciar
                 </button>
@@ -1469,7 +1469,7 @@ function TaskDetailModal({
             {editing ? (
               <>
                 <button onClick={() => setEditing(false)} className="btn-ghost text-xs">Cancelar</button>
-                <button onClick={handleSave} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0a34f5] text-white text-xs font-medium hover:bg-[#0a34f5]/80 transition-all">
+                <button onClick={handleSave} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all">
                   <Save size={12} /> Salvar
                 </button>
               </>

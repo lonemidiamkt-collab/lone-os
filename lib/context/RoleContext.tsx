@@ -16,10 +16,10 @@ export interface UserProfile {
 
 // Hardcoded profiles for the login dropdown (emails match seed.sql)
 export const USER_PROFILES: UserProfile[] = [
-  { id: "admin",   name: "Admin CEO",       role: "admin",    initials: "AC", color: "text-[#0a34f5]", email: "admin@loneos.com" },
-  { id: "manager", name: "Gerente Ops",     role: "manager",  initials: "GO", color: "text-[#0a34f5]", email: "gerente@loneos.com" },
-  { id: "ana",     name: "Ana Lima",        role: "traffic",  initials: "AL", color: "text-[#0a34f5]", email: "ana@loneos.com" },
-  { id: "pedro",   name: "Pedro Alves",     role: "traffic",  initials: "PA", color: "text-[#0a34f5]", email: "pedro@loneos.com" },
+  { id: "admin",   name: "Admin CEO",       role: "admin",    initials: "AC", color: "text-[#0d4af5]", email: "admin@loneos.com" },
+  { id: "manager", name: "Gerente Ops",     role: "manager",  initials: "GO", color: "text-[#0d4af5]", email: "gerente@loneos.com" },
+  { id: "ana",     name: "Ana Lima",        role: "traffic",  initials: "AL", color: "text-[#0d4af5]", email: "ana@loneos.com" },
+  { id: "pedro",   name: "Pedro Alves",     role: "traffic",  initials: "PA", color: "text-[#0d4af5]", email: "pedro@loneos.com" },
   { id: "carlos",  name: "Carlos Melo",     role: "social",   initials: "CM", color: "text-[#3b6ff5]", email: "carlos@loneos.com" },
   { id: "mariana", name: "Mariana Costa",   role: "social",   initials: "MC", color: "text-[#3b6ff5]", email: "mariana@loneos.com" },
   { id: "rafael",  name: "Rafael Designer", role: "designer", initials: "RD", color: "text-[#3b6ff5]", email: "rafael@loneos.com" },

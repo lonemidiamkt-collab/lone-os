@@ -47,7 +47,7 @@ export default function SettingsPage() {
     <div className="p-6 space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-3">
-          <Settings size={24} className="text-[#0a34f5]" />
+          <Settings size={24} className="text-[#0d4af5]" />
           Configurações
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -67,7 +67,7 @@ export default function SettingsPage() {
                 onClick={() => setActiveSection(s.key)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
                   active
-                    ? "bg-[#0a34f5]/10 text-[#0a34f5]"
+                    ? "bg-[#0d4af5]/10 text-[#0d4af5]"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
@@ -95,12 +95,12 @@ export default function SettingsPage() {
               <div className="card">
                 <h3 className="font-semibold text-foreground text-sm mb-5">Informações do Perfil</h3>
                 <div className="flex items-center gap-5 mb-6">
-                  <div className="w-16 h-16 rounded-2xl bg-[#0a34f5]/15 flex items-center justify-center shadow-[0_0_20px_rgba(10,52,245,0.2)]">
-                    <span className="text-xl font-bold text-[#0a34f5]">{currentProfile.initials}</span>
+                  <div className="w-16 h-16 rounded-2xl bg-[#0d4af5]/15 flex items-center justify-center shadow-[0_0_20px_rgba(10,52,245,0.2)]">
+                    <span className="text-xl font-bold text-[#0d4af5]">{currentProfile.initials}</span>
                   </div>
                   <div>
                     <p className="text-lg font-bold text-foreground">{currentProfile.name}</p>
-                    <p className="text-sm text-[#0a34f5]">{ROLE_LABELS[role] ?? role}</p>
+                    <p className="text-sm text-[#0d4af5]">{ROLE_LABELS[role] ?? role}</p>
                   </div>
                 </div>
 
@@ -158,7 +158,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-muted/30">
                     <div className="flex items-center gap-3">
-                      {theme === "dark" ? <Moon size={18} className="text-[#0a34f5]" /> : <Sun size={18} className="text-amber-400" />}
+                      {theme === "dark" ? <Moon size={18} className="text-[#0d4af5]" /> : <Sun size={18} className="text-amber-400" />}
                       <div>
                         <p className="text-sm font-medium text-foreground">Tema</p>
                         <p className="text-xs text-muted-foreground">{theme === "dark" ? "Modo escuro ativo" : "Modo claro ativo"}</p>
@@ -167,7 +167,7 @@ export default function SettingsPage() {
                     <button
                       onClick={toggleTheme}
                       className={`relative w-12 h-6 rounded-full transition-all ${
-                        theme === "dark" ? "bg-[#0a34f5]" : "bg-zinc-600"
+                        theme === "dark" ? "bg-[#0d4af5]" : "bg-zinc-600"
                       }`}
                     >
                       <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${
@@ -178,11 +178,11 @@ export default function SettingsPage() {
 
                   <div className="p-4 rounded-xl border border-border bg-muted/30">
                     <p className="text-sm font-medium text-foreground mb-1">Cor de Destaque</p>
-                    <p className="text-xs text-muted-foreground mb-3">Azul #0a34f5 — padrao do Lone OS</p>
+                    <p className="text-xs text-muted-foreground mb-3">Azul #0d4af5 — padrao do Lone OS</p>
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-[#0a34f5] shadow-[0_0_12px_rgba(10,52,245,0.4)]" />
+                      <div className="w-8 h-8 rounded-lg bg-[#0d4af5] shadow-[0_0_12px_rgba(10,52,245,0.4)]" />
                       <div className="w-8 h-8 rounded-lg bg-[#3b6ff5]" />
-                      <div className="w-8 h-8 rounded-lg bg-[#0a34f5]/50" />
+                      <div className="w-8 h-8 rounded-lg bg-[#0d4af5]/50" />
                       <span className="text-[10px] text-muted-foreground ml-2">Palette fixa</span>
                     </div>
                   </div>
@@ -193,7 +193,7 @@ export default function SettingsPage() {
                         <p className="text-sm font-medium text-foreground">Tour do Sistema</p>
                         <p className="text-xs text-muted-foreground">Refaca o tour interativo para conhecer o Lone OS</p>
                       </div>
-                      <RestartTourButton className="px-3 py-1.5 rounded-lg text-xs text-[#0a34f5] bg-[#0a34f5]/10 border border-[#0a34f5]/20 hover:bg-[#0a34f5]/20 transition-all" />
+                      <RestartTourButton className="px-3 py-1.5 rounded-lg text-xs text-[#0d4af5] bg-[#0d4af5]/10 border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 transition-all" />
                     </div>
                   </div>
                 </div>
@@ -223,7 +223,7 @@ export default function SettingsPage() {
                       <button
                         onClick={() => togglePref(key)}
                         className={`relative w-10 h-5 rounded-full transition-all ${
-                          notifPrefs[key] ? "bg-[#0a34f5]" : "bg-zinc-700"
+                          notifPrefs[key] ? "bg-[#0d4af5]" : "bg-zinc-700"
                         }`}
                       >
                         <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
@@ -245,7 +245,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <div className="p-4 rounded-xl border border-border bg-muted/30">
                     <div className="flex items-center gap-3 mb-2">
-                      <Key size={16} className="text-[#0a34f5]" />
+                      <Key size={16} className="text-[#0d4af5]" />
                       <p className="text-sm font-medium text-foreground">Sessão Ativa</p>
                     </div>
                     <p className="text-xs text-muted-foreground">

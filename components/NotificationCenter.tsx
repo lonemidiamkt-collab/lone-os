@@ -7,9 +7,9 @@ import type { AppNotification } from "@/lib/types";
 
 const TYPE_CONFIG: Record<string, { icon: typeof Bell; color: string; bg: string }> = {
   sla:     { icon: AlertTriangle, color: "text-red-400",    bg: "bg-red-500/10" },
-  status:  { icon: Activity,      color: "text-[#3b6ff5]",  bg: "bg-[#0a34f5]/10" },
-  content: { icon: FileText,      color: "text-[#0a34f5]",  bg: "bg-[#0a34f5]/10" },
-  checkin: { icon: Clock,         color: "text-[#0a34f5]",  bg: "bg-[#0a34f5]/10" },
+  status:  { icon: Activity,      color: "text-[#3b6ff5]",  bg: "bg-[#0d4af5]/10" },
+  content: { icon: FileText,      color: "text-[#0d4af5]",  bg: "bg-[#0d4af5]/10" },
+  checkin: { icon: Clock,         color: "text-[#0d4af5]",  bg: "bg-[#0d4af5]/10" },
   system:  { icon: Settings,      color: "text-zinc-400",   bg: "bg-zinc-500/10" },
 };
 
@@ -43,7 +43,7 @@ export default function NotificationCenter() {
       >
         <Bell size={17} />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 min-w-[18px] px-1 rounded-full bg-[#0a34f5] text-[9px] font-bold text-white flex items-center justify-center shadow-[0_0_8px_rgba(10,52,245,0.6)]">
+          <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 min-w-[18px] px-1 rounded-full bg-[#0d4af5] text-[9px] font-bold text-white flex items-center justify-center shadow-[0_0_8px_rgba(10,52,245,0.6)]">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
@@ -57,10 +57,10 @@ export default function NotificationCenter() {
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#1a1a1a]">
               <div className="flex items-center gap-2">
-                <Bell size={16} className="text-[#0a34f5]" />
+                <Bell size={16} className="text-[#0d4af5]" />
                 <h2 className="text-sm font-bold text-foreground">Notificações</h2>
                 {unreadCount > 0 && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#0a34f5]/15 text-[#0a34f5] border border-[#0a34f5]/20 font-bold">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#0d4af5]/15 text-[#0d4af5] border border-[#0d4af5]/20 font-bold">
                     {unreadCount}
                   </span>
                 )}
@@ -69,7 +69,7 @@ export default function NotificationCenter() {
                 {unreadCount > 0 && (
                   <button
                     onClick={markAllRead}
-                    className="text-[10px] px-2 py-1 rounded-lg text-[#0a34f5] hover:bg-[#0a34f5]/10 transition-all"
+                    className="text-[10px] px-2 py-1 rounded-lg text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all"
                     title="Marcar todas como lidas"
                   >
                     <CheckCheck size={14} />
@@ -120,7 +120,7 @@ export default function NotificationCenter() {
                         key={notif.id}
                         onClick={() => { if (!notif.read) markNotificationRead(notif.id); }}
                         className={`w-full text-left px-5 py-3.5 transition-all hover:bg-white/[0.02] ${
-                          !notif.read ? "bg-[#0a34f5]/[0.02]" : ""
+                          !notif.read ? "bg-[#0d4af5]/[0.02]" : ""
                         }`}
                       >
                         <div className="flex gap-3">
@@ -133,7 +133,7 @@ export default function NotificationCenter() {
                                 {notif.title}
                               </p>
                               {!notif.read && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#0a34f5] shrink-0 shadow-[0_0_4px_rgba(10,52,245,0.6)]" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#0d4af5] shrink-0 shadow-[0_0_4px_rgba(10,52,245,0.6)]" />
                               )}
                             </div>
                             <p className="text-[11px] text-zinc-600 leading-snug line-clamp-2">{notif.body}</p>

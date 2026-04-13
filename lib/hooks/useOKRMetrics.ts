@@ -267,7 +267,7 @@ export function useOKRMetrics(): OKRMetrics {
     // Console audit log
     // ═══════════════════════════════════════════════════════════
     if (typeof window !== "undefined") {
-      console.group("%c[LONE OS DATA AUDIT] OKR Metrics Validation", "color: #0a34f5; font-weight: bold; font-size: 12px");
+      console.group("%c[LONE OS DATA AUDIT] OKR Metrics Validation", "color: #0d4af5; font-weight: bold; font-size: 12px");
       console.table(audit.map((a) => ({
         Metric: a.metric,
         Source: a.source,

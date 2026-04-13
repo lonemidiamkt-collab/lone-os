@@ -23,9 +23,9 @@ interface ContentIdea {
 }
 
 const OBJECTIVE_STYLE = {
-  Engajamento: { color: "text-[#0a34f5]", bg: "bg-[#0a34f5]/15 border-[#0a34f5]/20", icon: TrendingUp },
-  Venda: { color: "text-[#0a34f5]", bg: "bg-[#0a34f5]/15 border-[#0a34f5]/30", icon: Target },
-  Autoridade: { color: "text-[#0a34f5]", bg: "bg-[#0a34f5]/15 border-[#0a34f5]/30", icon: Zap },
+  Engajamento: { color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/15 border-[#0d4af5]/20", icon: TrendingUp },
+  Venda: { color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/15 border-[#0d4af5]/30", icon: Target },
+  Autoridade: { color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/15 border-[#0d4af5]/30", icon: Zap },
 };
 
 const NICHE_IDEAS: Record<string, ContentIdea[]> = {
@@ -182,7 +182,7 @@ export default function ContentIdeasModal({ client, onClose }: Props) {
                       });
                       setAdded((prev) => new Set([...prev, i]));
                     }}
-                    className={isAdded ? "text-[#0a34f5]" : ""}
+                    className={isAdded ? "text-[#0d4af5]" : ""}
                   >
                     {isAdded ? "✓ Criado no Kanban" : "+ Usar"}
                   </Button>

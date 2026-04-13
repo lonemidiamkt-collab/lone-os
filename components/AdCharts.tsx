@@ -16,7 +16,7 @@ export interface DailyChartPoint {
 }
 
 const CHART_COLORS: Record<string, string> = {
-  spend: "#0a34f5",
+  spend: "#0d4af5",
   impressions: "#3b6ff5",
   clicks: "#5a8fff",
   conversions: "#7aacff",
@@ -62,8 +62,8 @@ export function SpendAreaChart({ data, visibleMetrics }: { data: DailyChartPoint
         <defs>
           {visibleMetrics.map((key) => (
             <linearGradient key={key} id={`grad-${key}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={CHART_COLORS[key] ?? "#0a34f5"} stopOpacity={0.35} />
-              <stop offset="100%" stopColor={CHART_COLORS[key] ?? "#0a34f5"} stopOpacity={0.02} />
+              <stop offset="0%" stopColor={CHART_COLORS[key] ?? "#0d4af5"} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={CHART_COLORS[key] ?? "#0d4af5"} stopOpacity={0.02} />
             </linearGradient>
           ))}
         </defs>
@@ -90,7 +90,7 @@ export function SpendAreaChart({ data, visibleMetrics }: { data: DailyChartPoint
             width={45}
           />
         )}
-        <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#0a34f5", strokeWidth: 1, strokeDasharray: "4 4" }} />
+        <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#0d4af5", strokeWidth: 1, strokeDasharray: "4 4" }} />
         <Legend
           wrapperStyle={{ fontSize: 11, paddingTop: 12 }}
           formatter={(value: string) => <span style={{ color: "#a1a1aa" }}>{CHART_LABELS[value] ?? value}</span>}
@@ -101,11 +101,11 @@ export function SpendAreaChart({ data, visibleMetrics }: { data: DailyChartPoint
             yAxisId={key === "spend" ? "spend" : "volume"}
             type="monotone"
             dataKey={key}
-            stroke={CHART_COLORS[key] ?? "#0a34f5"}
+            stroke={CHART_COLORS[key] ?? "#0d4af5"}
             fill={`url(#grad-${key})`}
             strokeWidth={2.5}
             dot={false}
-            activeDot={{ r: 5, fill: CHART_COLORS[key] ?? "#0a34f5", stroke: "#fff", strokeWidth: 2 }}
+            activeDot={{ r: 5, fill: CHART_COLORS[key] ?? "#0d4af5", stroke: "#fff", strokeWidth: 2 }}
           />
         ))}
       </AreaChart>
@@ -120,21 +120,21 @@ export function ClientSpendBar({ data }: { data: { name: string; spend: number; 
       <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#0a34f5" stopOpacity={1} />
+            <stop offset="0%" stopColor="#0d4af5" stopOpacity={1} />
             <stop offset="100%" stopColor="#0828b8" stopOpacity={0.8} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2a" vertical={false} />
         <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#52525b" }} axisLine={false} tickLine={false} dy={8} />
         <YAxis tick={{ fontSize: 10, fill: "#52525b" }} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`} width={55} />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: "#0a34f5", opacity: 0.05 }} />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: "#0d4af5", opacity: 0.05 }} />
         <Bar dataKey="spend" fill="url(#barGrad)" radius={[6, 6, 0, 0]} name="Gasto" maxBarSize={50} />
       </BarChart>
     </ResponsiveContainer>
   );
 }
 
-const HEALTH_COLORS = ["#EF4444", "#EF4444", "#EF4444", "#3b6ff5", "#3b6ff5", "#0a34f5", "#0a34f5", "#0a34f5", "#0a34f5", "#0a34f5"];
+const HEALTH_COLORS = ["#EF4444", "#EF4444", "#EF4444", "#3b6ff5", "#3b6ff5", "#0d4af5", "#0d4af5", "#0d4af5", "#0d4af5", "#0d4af5"];
 
 export function HealthScoreRing({ score, label, size = 120 }: { score: number; label: string; size?: number }) {
   const data = [{ value: score }, { value: 100 - score }];

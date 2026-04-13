@@ -60,7 +60,7 @@ const INDIVIDUAL_GOALS_CURRENT = [
 ];
 
 const TEAM_OKRS_CURRENT: TeamOKRs[] = [
-  { team: "Trafego Pago", icon: TrendingUp, color: "#0a34f5", okrs: [
+  { team: "Trafego Pago", icon: TrendingUp, color: "#0d4af5", okrs: [
     { id: "tr-1", title: "ROAS medio > 4.0", target: 4.0, current: 3.7, unit: "x", status: "at_risk" },
     { id: "tr-2", title: "Investimento executado > 95%", target: 95, current: 88, unit: "%", status: "at_risk" },
     { id: "tr-3", title: "Novos leads/mes > 500", target: 500, current: 420, unit: "leads", status: "at_risk" },
@@ -86,7 +86,7 @@ function generateSnapshot(month: number, variance: number): Omit<PeriodSnapshot,
   };
 
   const teamOkrs: TeamOKRs[] = [
-    { team: "Trafego Pago", icon: TrendingUp, color: "#0a34f5", okrs: [
+    { team: "Trafego Pago", icon: TrendingUp, color: "#0d4af5", okrs: [
       { id: "tr-1", title: "ROAS medio > 4.0", target: 4.0, current: +(3.2 + v * 0.5).toFixed(1), unit: "x", status: status(3.2 + v * 0.5, 4.0) },
       { id: "tr-2", title: "Investimento executado > 95%", target: 95, current: Math.round(78 + v * 10), unit: "%", status: status(78 + v * 10, 95) },
       { id: "tr-3", title: "Novos leads/mes > 500", target: 500, current: Math.round(320 + v * 100), unit: "leads", status: status(320 + v * 100, 500) },
@@ -217,7 +217,7 @@ export default function GoalsPage() {
 
   // Real team OKRs for "atual" view
   const realTeamOkrs = useMemo<TeamOKRs[]>(() => [
-    { team: "Trafego Pago", icon: TrendingUp, color: "#0a34f5", okrs: [
+    { team: "Trafego Pago", icon: TrendingUp, color: "#0d4af5", okrs: [
       kpiToOkr("tr-1", "ROAS medio > 4.0", metrics.traffic.roas),
       kpiToOkr("tr-2", "Investimento executado > 95%", metrics.traffic.investmentExecuted),
       kpiToOkr("tr-3", "Novos leads/mes > 500", metrics.traffic.leadsPerMonth),
@@ -362,8 +362,8 @@ export default function GoalsPage() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             {!presentationMode && (
-              <div className="w-10 h-10 rounded-xl bg-[#0a34f5]/10 flex items-center justify-center">
-                <Target size={20} className="text-[#0a34f5]" />
+              <div className="w-10 h-10 rounded-xl bg-[#0d4af5]/10 flex items-center justify-center">
+                <Target size={20} className="text-[#0d4af5]" />
               </div>
             )}
             <div>
@@ -388,7 +388,7 @@ export default function GoalsPage() {
                     onClick={() => switchPeriod(tv.key)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
                       active
-                        ? "bg-[#0a34f5] text-white shadow-[0_2px_8px_rgba(10,52,245,0.25)]"
+                        ? "bg-[#0d4af5] text-white shadow-[0_2px_8px_rgba(10,52,245,0.25)]"
                         : "text-zinc-500 hover:text-zinc-300"
                     }`}
                   >
@@ -417,7 +417,7 @@ export default function GoalsPage() {
                         onClick={() => switchPeriod("mensal", i)}
                         className={`px-3 py-1.5 rounded-lg text-xs transition-all ${
                           i === selectedMonth
-                            ? "bg-[#0a34f5] text-white"
+                            ? "bg-[#0d4af5] text-white"
                             : "text-zinc-400 hover:text-white hover:bg-zinc-800"
                         }`}
                       >
@@ -437,7 +437,7 @@ export default function GoalsPage() {
                     onClick={() => switchPeriod("trimestral", undefined, q)}
                     className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                       q === selectedQuarter
-                        ? "bg-[#0a34f5] text-white shadow-[0_2px_8px_rgba(10,52,245,0.25)]"
+                        ? "bg-[#0d4af5] text-white shadow-[0_2px_8px_rgba(10,52,245,0.25)]"
                         : "text-zinc-500 hover:text-zinc-300"
                     }`}
                   >
@@ -454,7 +454,7 @@ export default function GoalsPage() {
             <div className="relative">
               <button
                 onClick={() => setShowExportMenu(!showExportMenu)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-zinc-800 text-zinc-400 hover:text-foreground hover:border-[#0a34f5]/30 transition-all"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-zinc-800 text-zinc-400 hover:text-foreground hover:border-[#0d4af5]/30 transition-all"
               >
                 <Download size={13} />
                 Relatorio
@@ -466,14 +466,14 @@ export default function GoalsPage() {
                     disabled={exporting}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-40"
                   >
-                    <Download size={13} className="text-[#0a34f5]" />
+                    <Download size={13} className="text-[#0d4af5]" />
                     {exporting ? "Gerando..." : "Exportar PDF"}
                   </button>
                   <button
                     onClick={togglePresentation}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all"
                   >
-                    <Monitor size={13} className="text-[#0a34f5]" />
+                    <Monitor size={13} className="text-[#0d4af5]" />
                     Modo Apresentacao
                   </button>
                 </div>
@@ -501,11 +501,11 @@ export default function GoalsPage() {
               <h2 className="text-sm font-semibold text-foreground">
                 Progresso Geral — {periodLabel}
               </h2>
-              <span className="text-2xl font-bold text-[#0a34f5] tabular-nums">{overallProgress}%</span>
+              <span className="text-2xl font-bold text-[#0d4af5] tabular-nums">{overallProgress}%</span>
             </div>
             <div className="w-full h-3 rounded-full bg-zinc-900 overflow-hidden">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#0a34f5] to-[#3b6ff5] transition-all duration-700"
+                className="h-full rounded-full bg-gradient-to-r from-[#0d4af5] to-[#3b6ff5] transition-all duration-700"
                 style={{ width: `${overallProgress}%` }}
               />
             </div>
@@ -514,7 +514,7 @@ export default function GoalsPage() {
           {/* Company OKRs */}
           <div className="space-y-3">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <BarChart2 size={14} className="text-[#0a34f5]" />
+              <BarChart2 size={14} className="text-[#0d4af5]" />
               OKRs da Empresa
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -557,7 +557,7 @@ export default function GoalsPage() {
           {/* Team OKRs */}
           <div className="space-y-3">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Users size={14} className="text-[#0a34f5]" />
+              <Users size={14} className="text-[#0d4af5]" />
               OKRs por Equipe
             </h2>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -612,7 +612,7 @@ export default function GoalsPage() {
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-6">
             <div className="card p-4">
               <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-                <TrendingUp size={14} className="text-[#0a34f5]" />
+                <TrendingUp size={14} className="text-[#0d4af5]" />
                 Evolucao de OKRs (%) — {periodLabel}
               </h3>
               <div className={presentationMode ? "h-[350px]" : "h-[250px]"}>
@@ -625,7 +625,7 @@ export default function GoalsPage() {
                       contentStyle={{ backgroundColor: "#111118", border: "1px solid #1e1e1e", borderRadius: "12px", fontSize: "12px" }}
                       labelStyle={{ color: "#e8e8ec" }}
                     />
-                    <Line type="monotone" dataKey="trafego" stroke="#0a34f5" strokeWidth={2} dot={{ r: 3 }} name="Trafego" />
+                    <Line type="monotone" dataKey="trafego" stroke="#0d4af5" strokeWidth={2} dot={{ r: 3 }} name="Trafego" />
                     <Line type="monotone" dataKey="social" stroke="#3b6ff5" strokeWidth={2} dot={{ r: 3 }} name="Social" />
                     <Line type="monotone" dataKey="design" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} name="Design" />
                   </LineChart>
@@ -633,7 +633,7 @@ export default function GoalsPage() {
               </div>
               <div className="flex items-center justify-center gap-6 mt-2">
                 {[
-                  { key: "trafego", color: "#0a34f5", label: "Trafego" },
+                  { key: "trafego", color: "#0d4af5", label: "Trafego" },
                   { key: "social", color: "#3b6ff5", label: "Social" },
                   { key: "design", color: "#8b5cf6", label: "Design" },
                 ].map((l) => (
@@ -647,7 +647,7 @@ export default function GoalsPage() {
 
             <div className="card p-4">
               <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Users size={14} className="text-[#0a34f5]" />
+                <Users size={14} className="text-[#0d4af5]" />
                 Metas Individuais
               </h3>
               <div className="space-y-3">

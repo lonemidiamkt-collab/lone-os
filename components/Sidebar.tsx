@@ -291,7 +291,7 @@ export default function Sidebar() {
                   isPage
                     ? "text-white"
                     : isSection
-                    ? "text-[#3b6ff5] bg-[#0a34f5]/8"
+                    ? "text-[#3b6ff5] bg-[#0d4af5]/8"
                     : "text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.04]"
                 )}
               >
@@ -299,12 +299,12 @@ export default function Sidebar() {
 
                 {/* Active page: blue pill on right edge */}
                 {isPage && (
-                  <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-[#0a34f5] shadow-[0_0_8px_rgba(10,52,245,0.7)] -mr-px" />
+                  <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-[#0d4af5] shadow-[0_0_8px_rgba(10,52,245,0.7)] -mr-px" />
                 )}
 
                 {/* Pulse dot for Design when there are queued requests */}
                 {item.href === "/design" && designQueued > 0 && !isPage && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#0a34f5] shadow-[0_0_8px_rgba(10,52,245,0.8)] animate-pulse" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#0d4af5] shadow-[0_0_8px_rgba(10,52,245,0.8)] animate-pulse" />
                 )}
               </button>
             );
@@ -326,7 +326,7 @@ export default function Sidebar() {
             className={cn(
               "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
               pathname === "/settings"
-                ? "text-[#0a34f5] bg-[#0a34f5]/10"
+                ? "text-[#0d4af5] bg-[#0d4af5]/10"
                 : "text-zinc-700 hover:text-zinc-300 hover:bg-white/[0.04]"
             )}
             title="Configurações"
@@ -343,8 +343,8 @@ export default function Sidebar() {
           </button>
 
           {/* Avatar */}
-          <div className="w-9 h-9 rounded-xl bg-[#0a34f5]/12 flex items-center justify-center ring-1 ring-[#0a34f5]/20 mt-1">
-            <span className="text-[10px] font-bold text-[#0a34f5]">{currentProfile.initials}</span>
+          <div className="w-9 h-9 rounded-xl bg-[#0d4af5]/12 flex items-center justify-center ring-1 ring-[#0d4af5]/20 mt-1">
+            <span className="text-[10px] font-bold text-[#0d4af5]">{currentProfile.initials}</span>
           </div>
         </div>
       </aside>
@@ -416,7 +416,7 @@ export default function Sidebar() {
                       >
                         {/* Active left accent */}
                         {isActive && (
-                          <span className="absolute left-2 w-[2.5px] h-4 rounded-full bg-[#0a34f5] shadow-[0_0_6px_rgba(10,52,245,0.6)]" />
+                          <span className="absolute left-2 w-[2.5px] h-4 rounded-full bg-[#0d4af5] shadow-[0_0_6px_rgba(10,52,245,0.6)]" />
                         )}
 
                         <Icon
@@ -437,7 +437,7 @@ export default function Sidebar() {
                             className={cn(
                               "text-[10px] font-semibold rounded-md px-1.5 py-0.5 min-w-[20px] text-center tabular-nums shrink-0",
                               isActive
-                                ? "bg-[#0a34f5]/20 text-[#3b6ff5]"
+                                ? "bg-[#0d4af5]/20 text-[#3b6ff5]"
                                 : "bg-[#1a1a1a] text-zinc-600"
                             )}
                           >
@@ -454,8 +454,8 @@ export default function Sidebar() {
             {/* Footer — user info */}
             <div className="px-3 py-3 border-t border-white/[0.04]">
               <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/[0.03] transition-colors cursor-default">
-                <div className="w-7 h-7 rounded-lg bg-[#0a34f5]/15 flex items-center justify-center ring-1 ring-[#0a34f5]/20 shrink-0">
-                  <span className="text-[10px] font-bold text-[#0a34f5]">{currentProfile.initials}</span>
+                <div className="w-7 h-7 rounded-lg bg-[#0d4af5]/15 flex items-center justify-center ring-1 ring-[#0d4af5]/20 shrink-0">
+                  <span className="text-[10px] font-bold text-[#0d4af5]">{currentProfile.initials}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-semibold text-zinc-300 truncate leading-none">{currentProfile.name}</p>
@@ -467,7 +467,7 @@ export default function Sidebar() {
         )}
 
         {/* Right micro-glow */}
-        <div className="absolute top-0 right-0 bottom-0 w-px bg-gradient-to-b from-transparent via-[#0a34f5]/8 to-transparent pointer-events-none" />
+        <div className="absolute top-0 right-0 bottom-0 w-px bg-gradient-to-b from-transparent via-[#0d4af5]/8 to-transparent pointer-events-none" />
       </aside>
     </>
   );

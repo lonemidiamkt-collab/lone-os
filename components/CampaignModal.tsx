@@ -169,7 +169,7 @@ export default function CampaignModal({ client, onClose }: Props) {
                 variant={saved ? "secondary" : "ghost"}
                 onClick={handleSaveBriefing}
                 disabled={!briefing.trim()}
-                className={saved ? "text-[#0a34f5]" : ""}
+                className={saved ? "text-[#0d4af5]" : ""}
               >
                 {saved ? "✓ Salvo" : "Salvar Briefing"}
               </Button>
@@ -203,7 +203,7 @@ export default function CampaignModal({ client, onClose }: Props) {
                           onClick={() => handleCopy(art.description, `art-${i}`)}
                           className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
                         >
-                          {copied === `art-${i}` ? <Check size={13} className="text-[#0a34f5]" /> : <Copy size={13} />}
+                          {copied === `art-${i}` ? <Check size={13} className="text-[#0d4af5]" /> : <Copy size={13} />}
                         </button>
                       </div>
                       <p className="text-xs text-muted-foreground leading-relaxed">{art.description}</p>
@@ -223,7 +223,7 @@ export default function CampaignModal({ client, onClose }: Props) {
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <p className="text-xs font-semibold text-foreground">{step.label}</p>
                         <button onClick={() => handleCopy(step.content, `step-${i}`)} className="text-muted-foreground hover:text-foreground transition-colors">
-                          {copied === `step-${i}` ? <Check size={13} className="text-[#0a34f5]" /> : <Copy size={13} />}
+                          {copied === `step-${i}` ? <Check size={13} className="text-[#0d4af5]" /> : <Copy size={13} />}
                         </button>
                       </div>
                       <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line">{step.content}</p>
@@ -239,7 +239,7 @@ export default function CampaignModal({ client, onClose }: Props) {
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-xs font-semibold text-foreground">Legenda {i + 1}</p>
                         <button onClick={() => handleCopy(caption, `cap-${i}`)} className="text-muted-foreground hover:text-foreground transition-colors">
-                          {copied === `cap-${i}` ? <Check size={13} className="text-[#0a34f5]" /> : <Copy size={13} />}
+                          {copied === `cap-${i}` ? <Check size={13} className="text-[#0d4af5]" /> : <Copy size={13} />}
                         </button>
                       </div>
                       <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line">{caption}</p>
@@ -264,7 +264,7 @@ export default function CampaignModal({ client, onClose }: Props) {
                     onClick={() => handleCopy(generated.trafficSuggestion, "traffic")}
                     className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    {copied === "traffic" ? <Check size={12} className="text-[#0a34f5]" /> : <Copy size={12} />}
+                    {copied === "traffic" ? <Check size={12} className="text-[#0d4af5]" /> : <Copy size={12} />}
                     {copied === "traffic" ? "Copiado!" : "Copiar sugestão"}
                   </button>
                 </Card>

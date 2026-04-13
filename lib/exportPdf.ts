@@ -74,7 +74,7 @@ export function exportReportAsPdf(options: ExportOptions) {
       margin: 0 auto;
     }
     .header {
-      border-bottom: 3px solid #0a34f5;
+      border-bottom: 3px solid #0d4af5;
       padding-bottom: 20px;
       margin-bottom: 30px;
     }

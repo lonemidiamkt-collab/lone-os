@@ -149,13 +149,13 @@ export default function OnboardingTour() {
       <div className={`absolute ${getTooltipPosition()} w-full max-w-md mx-4`}>
         <div className="bg-[#111118] border border-[#1a1a1a] rounded-2xl shadow-[0_0_60px_rgba(10,52,245,0.15)] overflow-hidden animate-fade-in">
           {/* Top glow */}
-          <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0a34f5]/60 to-transparent" />
+          <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/60 to-transparent" />
 
           <div className="p-6">
             {/* Icon + Close */}
             <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl bg-[#0a34f5]/10 flex items-center justify-center">
-                <Icon size={24} className="text-[#0a34f5]" />
+              <div className="w-12 h-12 rounded-xl bg-[#0d4af5]/10 flex items-center justify-center">
+                <Icon size={24} className="text-[#0d4af5]" />
               </div>
               <button
                 onClick={skip}
@@ -176,9 +176,9 @@ export default function OnboardingTour() {
                   key={i}
                   className={`h-1.5 rounded-full transition-all ${
                     i === step
-                      ? "w-6 bg-[#0a34f5]"
+                      ? "w-6 bg-[#0d4af5]"
                       : i < step
-                      ? "w-1.5 bg-[#0a34f5]/40"
+                      ? "w-1.5 bg-[#0d4af5]/40"
                       : "w-1.5 bg-zinc-800"
                   }`}
                 />
@@ -208,7 +208,7 @@ export default function OnboardingTour() {
                 )}
                 <button
                   onClick={next}
-                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-[#0a34f5] text-white text-xs font-medium hover:bg-[#0a34f5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)]"
+                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)]"
                 >
                   {isLast ? "Comecar!" : "Proximo"} <ChevronRight size={14} />
                 </button>
@@ -226,7 +226,7 @@ export function RestartTourButton({ className }: { className?: string }) {
   return (
     <button
       onClick={() => window.dispatchEvent(new Event("restart-tour"))}
-      className={className || "text-xs text-[#0a34f5] hover:underline"}
+      className={className || "text-xs text-[#0d4af5] hover:underline"}
     >
       Refazer tour
     </button>

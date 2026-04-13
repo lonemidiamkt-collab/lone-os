@@ -27,7 +27,7 @@ const HEALTH_CONFIG: Record<string, { label: string; icon: string; variant: "suc
 };
 
 const MOOD_CONFIG = {
-  happy:   { emoji: "😄", label: "Satisfeito", color: "text-[#0a34f5]" },
+  happy:   { emoji: "😄", label: "Satisfeito", color: "text-[#0d4af5]" },
   neutral: { emoji: "😐", label: "Neutro",     color: "text-[#3b6ff5]" },
   angry:   { emoji: "😠", label: "Irritado",   color: "text-red-400" },
 };
@@ -56,7 +56,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
   const postsNow = client.postsThisMonth ?? 0;
   const postsGoal = client.postsGoal ?? 12;
   const postsPct = Math.min(100, Math.round((postsNow / postsGoal) * 100));
-  const postsColor = postsPct >= 80 ? "bg-[#0a34f5]" : postsPct >= 50 ? "bg-[#3b6ff5]" : "bg-red-400";
+  const postsColor = postsPct >= 80 ? "bg-[#0d4af5]" : postsPct >= 50 ? "bg-[#3b6ff5]" : "bg-red-400";
   const postsRemaining = postsGoal - postsNow;
 
   const obItems = onboarding[client.id] ?? [];
@@ -79,7 +79,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
               <span>{client.industry}</span>
-              {client.instagramUser && <span className="text-[#0a34f5]">{client.instagramUser}</span>}
+              {client.instagramUser && <span className="text-[#0d4af5]">{client.instagramUser}</span>}
               {client.toneOfVoice && <span>Tom: {TONE_LABELS[client.toneOfVoice]}</span>}
             </div>
           </div>
@@ -226,15 +226,15 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
 
               {/* Onboarding progress (only if onboarding) */}
               {client.status === "onboarding" && obItems.length > 0 && (
-                <Card className="p-4 bg-[#0a34f5]/10 border-[#0a34f5]/20">
+                <Card className="p-4 bg-[#0d4af5]/10 border-[#0d4af5]/20">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-medium text-[#0a34f5]">Onboarding</p>
-                    <span className="text-xs font-bold text-[#0a34f5]">{obPct}%</span>
+                    <p className="text-xs font-medium text-[#0d4af5]">Onboarding</p>
+                    <span className="text-xs font-bold text-[#0d4af5]">{obPct}%</span>
                   </div>
                   <div className="h-2 bg-blue-500/20 rounded-full overflow-hidden mb-1">
                     <div className="h-full bg-blue-400 rounded-full transition-all" style={{ width: `${obPct}%` }} />
                   </div>
-                  <p className="text-xs text-[#0a34f5]/70">{obDone}/{obItems.length} etapas</p>
+                  <p className="text-xs text-[#0d4af5]/70">{obDone}/{obItems.length} etapas</p>
                 </Card>
               )}
 
@@ -265,7 +265,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
               <Card className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-medium text-muted-foreground">Posts do Mês</p>
-                  <span className={`text-lg font-bold ${postsPct >= 80 ? "text-[#0a34f5]" : postsPct >= 50 ? "text-[#3b6ff5]" : "text-red-400"}`}>
+                  <span className={`text-lg font-bold ${postsPct >= 80 ? "text-[#0d4af5]" : postsPct >= 50 ? "text-[#3b6ff5]" : "text-red-400"}`}>
                     {postsNow}/{postsGoal}
                   </span>
                 </div>
@@ -277,7 +277,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
                     Faltam <span className="text-foreground font-medium">{postsRemaining} post{postsRemaining > 1 ? "s" : ""}</span> para completar o mês
                   </p>
                 ) : (
-                  <p className="text-xs text-[#0a34f5] font-medium">✓ Meta do mês atingida!</p>
+                  <p className="text-xs text-[#0d4af5] font-medium">✓ Meta do mês atingida!</p>
                 )}
               </Card>
 

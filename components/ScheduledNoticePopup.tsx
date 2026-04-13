@@ -6,10 +6,10 @@ import { X, Bell, Calendar, Clock, Megaphone, AlertTriangle } from "lucide-react
 import type { Notice } from "@/lib/types";
 
 const CATEGORY_CONFIG: Record<string, { icon: typeof Bell; color: string; bg: string; label: string }> = {
-  general:  { icon: Megaphone,      color: "text-[#0a34f5]", bg: "bg-[#0a34f5]/10", label: "Aviso" },
-  meeting:  { icon: Calendar,       color: "text-[#0a34f5]",  bg: "bg-[#0a34f5]/10",  label: "Reunião" },
+  general:  { icon: Megaphone,      color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/10", label: "Aviso" },
+  meeting:  { icon: Calendar,       color: "text-[#0d4af5]",  bg: "bg-[#0d4af5]/10",  label: "Reunião" },
   deadline: { icon: AlertTriangle,  color: "text-red-500",   bg: "bg-red-500/10",   label: "Prazo" },
-  reminder: { icon: Clock,          color: "text-[#3b6ff5]", bg: "bg-[#0a34f5]/10", label: "Lembrete" },
+  reminder: { icon: Clock,          color: "text-[#3b6ff5]", bg: "bg-[#0d4af5]/10", label: "Lembrete" },
 };
 
 // Plays a notification sound using Web Audio API (no external file needed)
@@ -182,7 +182,7 @@ export default function ScheduledNoticePopup() {
             {/* Pulsing icon */}
             <div className={`w-10 h-10 rounded-xl ${config.bg} flex items-center justify-center shrink-0 relative`}>
               <Icon size={18} className={config.color} />
-              <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#0a34f5] animate-pulse`} />
+              <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#0d4af5] animate-pulse`} />
             </div>
 
             <div className="flex-1 min-w-0">

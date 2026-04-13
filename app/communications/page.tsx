@@ -226,7 +226,7 @@ export default function CommunicationsPage() {
             <button
               onClick={() => { setShowMessageSearch(!showMessageSearch); setMessageSearch(""); }}
               className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                showMessageSearch ? "bg-[#0a34f5]/10 text-[#0a34f5]" : "text-zinc-600 hover:text-foreground hover:bg-white/5"
+                showMessageSearch ? "bg-[#0d4af5]/10 text-[#0d4af5]" : "text-zinc-600 hover:text-foreground hover:bg-white/5"
               }`}
               title="Buscar mensagens"
             >
@@ -256,10 +256,10 @@ export default function CommunicationsPage() {
 
           {/* Pinned messages */}
           {channelPinned.length > 0 && (
-            <div className="px-5 py-2 border-b border-[#0a34f5]/10 bg-[#0a34f5]/[0.02]">
+            <div className="px-5 py-2 border-b border-[#0d4af5]/10 bg-[#0d4af5]/[0.02]">
               <div className="flex items-center gap-1.5 mb-1">
-                <Pin size={10} className="text-[#0a34f5]" />
-                <span className="text-[10px] text-[#0a34f5] font-medium">{channelPinned.length} fixada(s)</span>
+                <Pin size={10} className="text-[#0d4af5]" />
+                <span className="text-[10px] text-[#0d4af5] font-medium">{channelPinned.length} fixada(s)</span>
               </div>
               {channelPinned.slice(0, 2).map((msg) => (
                 <div key={msg.id} className="flex items-center gap-2 text-[10px] text-muted-foreground truncate">
@@ -304,19 +304,19 @@ export default function CommunicationsPage() {
                           {ROLE_LABELS[msgRole]}
                         </span>
                         <span className="text-xs text-muted-foreground/50">{msg.timestamp}</span>
-                        {isPinned && <Pin size={9} className="text-[#0a34f5]" />}
+                        {isPinned && <Pin size={9} className="text-[#0d4af5]" />}
                         {/* Actions */}
                         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => togglePin(msg.id)} title={isPinned ? "Desafixar" : "Fixar"} className="w-5 h-5 rounded flex items-center justify-center text-zinc-700 hover:text-[#0a34f5] hover:bg-[#0a34f5]/10 transition-all">
+                          <button onClick={() => togglePin(msg.id)} title={isPinned ? "Desafixar" : "Fixar"} className="w-5 h-5 rounded flex items-center justify-center text-zinc-700 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all">
                             <Pin size={9} />
                           </button>
-                          <button onClick={() => setReplyTo({ id: msg.id, user: msg.user, text: msg.text })} title="Responder" className="w-5 h-5 rounded flex items-center justify-center text-zinc-700 hover:text-[#0a34f5] hover:bg-[#0a34f5]/10 transition-all">
+                          <button onClick={() => setReplyTo({ id: msg.id, user: msg.user, text: msg.text })} title="Responder" className="w-5 h-5 rounded flex items-center justify-center text-zinc-700 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all">
                             <Reply size={9} />
                           </button>
                         </div>
                       </div>
                       {replyPart && (
-                        <div className={`text-[10px] text-zinc-600 mb-0.5 px-3 py-1 rounded-lg bg-white/[0.02] border-l-2 border-[#0a34f5]/30 ${isMe ? "mr-1" : "ml-1"}`}>
+                        <div className={`text-[10px] text-zinc-600 mb-0.5 px-3 py-1 rounded-lg bg-white/[0.02] border-l-2 border-[#0d4af5]/30 ${isMe ? "mr-1" : "ml-1"}`}>
                           {replyPart.replace("↩️ ", "")}
                         </div>
                       )}
@@ -341,18 +341,18 @@ export default function CommunicationsPage() {
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs text-muted-foreground font-medium">{msg.user}</span>
                         <span className="text-xs text-muted-foreground/50">{msg.timestamp}</span>
-                        {isPinned && <Pin size={9} className="text-[#0a34f5]" />}
+                        {isPinned && <Pin size={9} className="text-[#0d4af5]" />}
                         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => togglePin(msg.id)} title={isPinned ? "Desafixar" : "Fixar"} className="w-5 h-5 rounded flex items-center justify-center text-zinc-700 hover:text-[#0a34f5] hover:bg-[#0a34f5]/10 transition-all">
+                          <button onClick={() => togglePin(msg.id)} title={isPinned ? "Desafixar" : "Fixar"} className="w-5 h-5 rounded flex items-center justify-center text-zinc-700 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all">
                             <Pin size={9} />
                           </button>
-                          <button onClick={() => setReplyTo({ id: msg.id, user: msg.user, text: msg.text })} title="Responder" className="w-5 h-5 rounded flex items-center justify-center text-zinc-700 hover:text-[#0a34f5] hover:bg-[#0a34f5]/10 transition-all">
+                          <button onClick={() => setReplyTo({ id: msg.id, user: msg.user, text: msg.text })} title="Responder" className="w-5 h-5 rounded flex items-center justify-center text-zinc-700 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all">
                             <Reply size={9} />
                           </button>
                         </div>
                       </div>
                       {replyPart && (
-                        <div className={`text-[10px] text-zinc-600 mb-0.5 px-3 py-1 rounded-lg bg-white/[0.02] border-l-2 border-[#0a34f5]/30 ${isMe ? "mr-1" : "ml-1"}`}>
+                        <div className={`text-[10px] text-zinc-600 mb-0.5 px-3 py-1 rounded-lg bg-white/[0.02] border-l-2 border-[#0d4af5]/30 ${isMe ? "mr-1" : "ml-1"}`}>
                           {replyPart.replace("↩️ ", "")}
                         </div>
                       )}
@@ -371,10 +371,10 @@ export default function CommunicationsPage() {
 
           {/* Reply-to indicator */}
           {replyTo && (
-            <div className="px-5 py-2 border-t border-[#0a34f5]/10 bg-[#0a34f5]/[0.02] flex items-center gap-2">
-              <Reply size={12} className="text-[#0a34f5] shrink-0" />
+            <div className="px-5 py-2 border-t border-[#0d4af5]/10 bg-[#0d4af5]/[0.02] flex items-center gap-2">
+              <Reply size={12} className="text-[#0d4af5] shrink-0" />
               <div className="flex-1 min-w-0">
-                <span className="text-[10px] text-[#0a34f5] font-medium">Respondendo a {replyTo.user}</span>
+                <span className="text-[10px] text-[#0d4af5] font-medium">Respondendo a {replyTo.user}</span>
                 <p className="text-[10px] text-muted-foreground truncate">{replyTo.text}</p>
               </div>
               <button onClick={() => setReplyTo(null)} className="text-zinc-600 hover:text-foreground shrink-0">
@@ -451,7 +451,7 @@ export default function CommunicationsPage() {
             <div className="p-4">
               <Link
                 href={`/clients/${selectedClient.id}`}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[#0a34f5]/10 text-[#0a34f5] text-xs font-medium border border-[#0a34f5]/20 hover:bg-[#0a34f5]/20 transition-all"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[#0d4af5]/10 text-[#0d4af5] text-xs font-medium border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 transition-all"
               >
                 Ver perfil completo <ChevronRight size={12} />
               </Link>

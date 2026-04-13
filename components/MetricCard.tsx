@@ -22,8 +22,8 @@ export default function MetricCard({
   sub,
   trend,
   trendValue,
-  iconColor = "text-[#0a34f5]",
-  iconBg = "bg-[#0a34f5]/10",
+  iconColor = "text-[#0d4af5]",
+  iconBg = "bg-[#0d4af5]/10",
   href,
   onClick,
 }: MetricCardProps) {
@@ -31,11 +31,11 @@ export default function MetricCard({
   const wrapperProps = href ? { href } : onClick ? { onClick, role: "button", tabIndex: 0 } : {};
   return (
     <Wrapper {...wrapperProps as any} className={cn(
-      "relative rounded-2xl border border-[#2a2a2a] p-5 overflow-hidden bg-[#121212] shadow-[0_8px_32px_-8px_rgba(0,0,0,0.6)] hover:border-[#0a34f5]/30 hover:shadow-[0_4px_14px_0_rgba(10,52,245,0.15),0_8px_32px_-8px_rgba(0,0,0,0.6)] transition-all duration-300",
+      "relative rounded-2xl border border-[#2a2a2a] p-5 overflow-hidden bg-[#121212] shadow-[0_8px_32px_-8px_rgba(0,0,0,0.6)] hover:border-[#0d4af5]/30 hover:shadow-[0_4px_14px_0_rgba(10,52,245,0.15),0_8px_32px_-8px_rgba(0,0,0,0.6)] transition-all duration-300",
       (href || onClick) && "cursor-pointer group"
     )}>
       {/* Top blue glow line */}
-      <div className="absolute top-0 left-[15%] right-[15%] h-px bg-gradient-to-r from-transparent via-[#0a34f5]/30 to-transparent" />
+      <div className="absolute top-0 left-[15%] right-[15%] h-px bg-gradient-to-r from-transparent via-[#0d4af5]/30 to-transparent" />
 
       <div className="flex items-start gap-4">
         <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", iconBg)}>
@@ -50,7 +50,7 @@ export default function MetricCard({
                 <span
                   className={cn(
                     "text-xs font-semibold px-1.5 py-0.5 rounded-md",
-                    trend === "up" && "text-[#0a34f5] bg-[#0a34f5]/10",
+                    trend === "up" && "text-[#0d4af5] bg-[#0d4af5]/10",
                     trend === "down" && "text-red-400 bg-red-500/10",
                     trend === "neutral" && "text-zinc-500"
                   )}

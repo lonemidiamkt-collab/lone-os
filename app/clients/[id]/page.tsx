@@ -387,7 +387,7 @@ export default function ClientDetailPage() {
                   <div className="flex items-center gap-2">
                     {client.metaAdAccountName ? (
                       <span className="text-sm text-foreground font-medium flex items-center gap-1.5">
-                        <Link2 size={12} className="text-[#0a34f5]" />
+                        <Link2 size={12} className="text-[#0d4af5]" />
                         {client.metaAdAccountName}
                       </span>
                     ) : (
@@ -521,7 +521,7 @@ export default function ClientDetailPage() {
               {/* Metas / OKRs */}
               <div className="card">
                 <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                  <Target size={14} className="text-[#0a34f5]" />
+                  <Target size={14} className="text-[#0d4af5]" />
                   Metas do Mês
                 </h3>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -536,10 +536,10 @@ export default function ClientDetailPage() {
                     const taskPct = totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0;
 
                     return [
-                      { label: "Posts Publicados", value: `${postsPublished}/${postsGoal}`, pct: postsPct, color: postsPct >= 80 ? "bg-[#0a34f5]" : postsPct >= 50 ? "bg-amber-500" : "bg-red-500" },
+                      { label: "Posts Publicados", value: `${postsPublished}/${postsGoal}`, pct: postsPct, color: postsPct >= 80 ? "bg-[#0d4af5]" : postsPct >= 50 ? "bg-amber-500" : "bg-red-500" },
                       { label: "Pipeline Ativo", value: `${cardsInPipeline}`, pct: Math.min(100, cardsInPipeline * 10), color: "bg-[#3b6ff5]" },
-                      { label: "Tarefas Concluídas", value: `${tasksCompleted}/${totalTasks}`, pct: taskPct, color: taskPct >= 80 ? "bg-[#0a34f5]" : "bg-amber-500" },
-                      { label: "Engajamento", value: client.postsThisMonth ? `${client.postsThisMonth} posts` : "—", pct: Math.min(100, (client.postsThisMonth ?? 0) * 8), color: "bg-[#0a34f5]" },
+                      { label: "Tarefas Concluídas", value: `${tasksCompleted}/${totalTasks}`, pct: taskPct, color: taskPct >= 80 ? "bg-[#0d4af5]" : "bg-amber-500" },
+                      { label: "Engajamento", value: client.postsThisMonth ? `${client.postsThisMonth} posts` : "—", pct: Math.min(100, (client.postsThisMonth ?? 0) * 8), color: "bg-[#0d4af5]" },
                     ].map(({ label, value, pct, color }) => (
                       <div key={label} className="p-3 rounded-xl bg-muted/30 border border-border/50">
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
@@ -961,8 +961,8 @@ export default function ClientDetailPage() {
                           </span>
                           {item.completed && item.completedBy && (
                             <div className="flex items-center gap-2 mt-1.5">
-                              <div className="w-5 h-5 rounded-full bg-[#0a34f5]/15 flex items-center justify-center shrink-0">
-                                <span className="text-[8px] font-bold text-[#0a34f5]">
+                              <div className="w-5 h-5 rounded-full bg-[#0d4af5]/15 flex items-center justify-center shrink-0">
+                                <span className="text-[8px] font-bold text-[#0d4af5]">
                                   {item.completedBy.split(" ").map((w) => w[0]).join("").slice(0, 2)}
                                 </span>
                               </div>
@@ -975,7 +975,7 @@ export default function ClientDetailPage() {
                             </div>
                           )}
                         </div>
-                        {item.completed && <CheckCircle size={15} className="text-[#0a34f5] shrink-0 mt-0.5 drop-shadow-[0_0_4px_rgba(10,52,245,0.5)]" />}
+                        {item.completed && <CheckCircle size={15} className="text-[#0d4af5] shrink-0 mt-0.5 drop-shadow-[0_0_4px_rgba(10,52,245,0.5)]" />}
                       </label>
                     ))}
                   </div>

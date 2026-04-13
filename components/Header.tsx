@@ -74,7 +74,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
 
       {/* Search */}
       <div className="relative">
-        <div className="flex items-center gap-2 bg-[#0e0e0e] rounded-xl px-3 py-2 w-52 border border-[#1a1a1a] focus-within:border-[#0a34f5]/50 focus-within:shadow-[0_0_20px_rgba(10,52,245,0.1)] transition-all">
+        <div className="flex items-center gap-2 bg-[#0e0e0e] rounded-xl px-3 py-2 w-52 border border-[#1a1a1a] focus-within:border-[#0d4af5]/50 focus-within:shadow-[0_0_20px_rgba(10,52,245,0.1)] transition-all">
           <Search size={13} className="text-zinc-700 shrink-0" />
           <input
             className="bg-transparent text-sm text-foreground placeholder:text-zinc-700 outline-none w-full"
@@ -94,8 +94,8 @@ export default function Header({ title, subtitle }: HeaderProps) {
               <>
                 <p className="text-[10px] text-zinc-600 uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium">Clientes</p>
                 {clientResults.map((c) => (
-                  <Link key={c.id} href={`/clients/${c.id}`} onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#0a34f5]/5 transition-colors">
-                    <div className="w-6 h-6 rounded-lg bg-[#0a34f5]/10 flex items-center justify-center text-[10px] font-bold text-[#0a34f5]">{c.name[0]}</div>
+                  <Link key={c.id} href={`/clients/${c.id}`} onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#0d4af5]/5 transition-colors">
+                    <div className="w-6 h-6 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center text-[10px] font-bold text-[#0d4af5]">{c.name[0]}</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{c.name}</p>
                       <p className="text-[10px] text-zinc-600">{c.industry}</p>
@@ -108,8 +108,8 @@ export default function Header({ title, subtitle }: HeaderProps) {
               <>
                 <p className="text-[10px] text-zinc-600 uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium border-t border-[#1a1a1a] mt-1">Conteudos</p>
                 {cardResults.map((c) => (
-                  <Link key={c.id} href="/social" onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#0a34f5]/5 transition-colors">
-                    <div className="w-6 h-6 rounded-lg bg-[#0a34f5]/10 flex items-center justify-center text-[10px] font-bold text-[#0a34f5]">C</div>
+                  <Link key={c.id} href="/social" onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#0d4af5]/5 transition-colors">
+                    <div className="w-6 h-6 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center text-[10px] font-bold text-[#0d4af5]">C</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{c.title}</p>
                       <p className="text-[10px] text-zinc-600">{c.clientName} · {c.status}</p>
@@ -122,8 +122,8 @@ export default function Header({ title, subtitle }: HeaderProps) {
               <>
                 <p className="text-[10px] text-zinc-600 uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium border-t border-[#1a1a1a] mt-1">Tarefas</p>
                 {taskResults.map((t) => (
-                  <Link key={t.id} href="/traffic" onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#0a34f5]/5 transition-colors">
-                    <div className="w-6 h-6 rounded-lg bg-[#0a34f5]/10 flex items-center justify-center text-[10px] font-bold text-[#0a34f5]">T</div>
+                  <Link key={t.id} href="/traffic" onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#0d4af5]/5 transition-colors">
+                    <div className="w-6 h-6 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center text-[10px] font-bold text-[#0d4af5]">T</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{t.title}</p>
                       <p className="text-[10px] text-zinc-600">{t.clientName} · {t.status}</p>
@@ -140,10 +140,10 @@ export default function Header({ title, subtitle }: HeaderProps) {
       <div className="relative" ref={quickRef}>
         <button
           onClick={() => { setShowQuick(!showQuick); setShowNotif(false); }}
-          className="w-8 h-8 rounded-xl bg-[#0e0e0e] border border-[#1a1a1a] flex items-center justify-center hover:border-[#0a34f5]/40 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all group"
+          className="w-8 h-8 rounded-xl bg-[#0e0e0e] border border-[#1a1a1a] flex items-center justify-center hover:border-[#0d4af5]/40 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all group"
           title="Ações rápidas"
         >
-          <Plus size={15} className="text-zinc-600 group-hover:text-[#0a34f5] transition-colors" />
+          <Plus size={15} className="text-zinc-600 group-hover:text-[#0d4af5] transition-colors" />
         </button>
 
         {showQuick && (
@@ -151,14 +151,14 @@ export default function Header({ title, subtitle }: HeaderProps) {
             <p className="text-[10px] text-zinc-600 uppercase tracking-[0.15em] px-3 pb-2 mb-1 border-b border-[#1a1a1a] font-medium">
               Ações Rápidas
             </p>
-            <Link href="/clients" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0a34f5]/5 transition-colors text-sm text-foreground">
-              <UserPlus size={14} className="text-[#0a34f5]" />Novo Cliente
+            <Link href="/clients" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0d4af5]/5 transition-colors text-sm text-foreground">
+              <UserPlus size={14} className="text-[#0d4af5]" />Novo Cliente
             </Link>
-            <Link href="/social" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0a34f5]/5 transition-colors text-sm text-foreground">
-              <FileText size={14} className="text-[#0a34f5]" />Novo Conteúdo
+            <Link href="/social" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0d4af5]/5 transition-colors text-sm text-foreground">
+              <FileText size={14} className="text-[#0d4af5]" />Novo Conteúdo
             </Link>
-            <Link href="/communications" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0a34f5]/5 transition-colors text-sm text-foreground">
-              <Smile size={14} className="text-[#0a34f5]" />Chat da Equipe
+            <Link href="/communications" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0d4af5]/5 transition-colors text-sm text-foreground">
+              <Smile size={14} className="text-[#0d4af5]" />Chat da Equipe
             </Link>
           </div>
         )}
@@ -168,11 +168,11 @@ export default function Header({ title, subtitle }: HeaderProps) {
       <div className="relative" ref={notifRef}>
         <button
           onClick={() => { setShowNotif(!showNotif); setShowQuick(false); }}
-          className="relative w-8 h-8 rounded-xl bg-[#0e0e0e] border border-[#1a1a1a] flex items-center justify-center hover:border-[#0a34f5]/40 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all" aria-label="Notificações"
+          className="relative w-8 h-8 rounded-xl bg-[#0e0e0e] border border-[#1a1a1a] flex items-center justify-center hover:border-[#0d4af5]/40 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all" aria-label="Notificações"
         >
           <Bell size={15} className="text-zinc-600" aria-hidden="true" />
           {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-[#0a34f5] rounded-full flex items-center justify-center shadow-[0_0_10px_rgba(10,52,245,0.5)]">
+            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-[#0d4af5] rounded-full flex items-center justify-center shadow-[0_0_10px_rgba(10,52,245,0.5)]">
               <span className="text-[9px] font-bold text-white">{unreadCount > 9 ? "9+" : unreadCount}</span>
             </span>
           )}
@@ -184,7 +184,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
               <h3 className="text-xs font-semibold text-foreground tracking-tight">Central de Notificações</h3>
               <div className="flex items-center gap-2">
                 {unreadCount > 0 && (
-                  <button onClick={markAllNotificationsRead} className="text-[10px] text-[#0a34f5] hover:text-[#0a34f5]/80 font-medium">
+                  <button onClick={markAllNotificationsRead} className="text-[10px] text-[#0d4af5] hover:text-[#0d4af5]/80 font-medium">
                     Marcar todas como lidas
                   </button>
                 )}
@@ -200,10 +200,10 @@ export default function Header({ title, subtitle }: HeaderProps) {
       <div className="relative">
         <button
           onClick={() => setShowMenu(!showMenu)}
-          className="flex items-center gap-2 bg-[#0e0e0e] border border-[#1a1a1a] rounded-xl px-2.5 py-1.5 hover:border-[#0a34f5]/40 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all"
+          className="flex items-center gap-2 bg-[#0e0e0e] border border-[#1a1a1a] rounded-xl px-2.5 py-1.5 hover:border-[#0d4af5]/40 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all"
         >
-          <div className="w-7 h-7 rounded-full bg-[#0a34f5]/15 flex items-center justify-center shrink-0">
-            <span className="text-[10px] font-bold text-[#0a34f5]">{currentProfile.initials}</span>
+          <div className="w-7 h-7 rounded-full bg-[#0d4af5]/15 flex items-center justify-center shrink-0">
+            <span className="text-[10px] font-bold text-[#0d4af5]">{currentProfile.initials}</span>
           </div>
           <ChevronDown size={12} className="text-zinc-700" />
         </button>
@@ -213,12 +213,12 @@ export default function Header({ title, subtitle }: HeaderProps) {
             <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
             <div className="absolute right-0 top-full mt-2 w-52 bg-[#0e0e0e] border border-[#2a2a2a] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.7)] z-50 py-2 animate-fade-in">
               <div className="flex items-center gap-2.5 px-3 py-2 border-b border-[#1a1a1a] mb-1">
-                <div className="w-8 h-8 rounded-full bg-[#0a34f5]/15 flex items-center justify-center shrink-0">
-                  <span className="text-[11px] font-bold text-[#0a34f5]">{currentProfile.initials}</span>
+                <div className="w-8 h-8 rounded-full bg-[#0d4af5]/15 flex items-center justify-center shrink-0">
+                  <span className="text-[11px] font-bold text-[#0d4af5]">{currentProfile.initials}</span>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-foreground leading-none">{currentProfile.name}</p>
-                  <p className="text-[10px] text-[#0a34f5] mt-0.5 uppercase tracking-wider font-medium">{roleLabel}</p>
+                  <p className="text-[10px] text-[#0d4af5] mt-0.5 uppercase tracking-wider font-medium">{roleLabel}</p>
                 </div>
               </div>
               <button
@@ -266,7 +266,7 @@ function NotifFilterTabs({ notifications }: { notifications: AppNotification[] }
               key={t}
               onClick={() => setFilter(t)}
               className={`text-[10px] px-2.5 py-1 rounded-md whitespace-nowrap transition-colors ${
-                filter === t ? "bg-[#0a34f5]/15 text-[#0a34f5]" : "text-zinc-600 hover:text-zinc-400"
+                filter === t ? "bg-[#0d4af5]/15 text-[#0d4af5]" : "text-zinc-600 hover:text-zinc-400"
               }`}
             >
               {t === "all" ? "Todas" : NOTIF_TYPE_CONFIG[t]?.label ?? t} ({count})
@@ -283,12 +283,12 @@ function NotifFilterTabs({ notifications }: { notifications: AppNotification[] }
             return (
               <div
                 key={notif.id}
-                className={`flex items-start gap-3 px-4 py-3 border-b border-[#1a1a1a]/50 transition-colors hover:bg-[#0a34f5]/5 ${
-                  !notif.read ? "bg-[#0a34f5]/[0.03]" : ""
+                className={`flex items-start gap-3 px-4 py-3 border-b border-[#1a1a1a]/50 transition-colors hover:bg-[#0d4af5]/5 ${
+                  !notif.read ? "bg-[#0d4af5]/[0.03]" : ""
                 }`}
               >
                 <div className="mt-1.5">
-                  <div className={`w-1.5 h-1.5 rounded-full ${!notif.read ? "bg-[#0a34f5] shadow-[0_0_6px_rgba(10,52,245,0.5)]" : "bg-zinc-800"}`} />
+                  <div className={`w-1.5 h-1.5 rounded-full ${!notif.read ? "bg-[#0d4af5] shadow-[0_0_6px_rgba(10,52,245,0.5)]" : "bg-zinc-800"}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -303,7 +303,7 @@ function NotifFilterTabs({ notifications }: { notifications: AppNotification[] }
                   {(notif.clientId || cfg.route) && (
                     <div className="flex items-center gap-2 mt-1.5">
                       {notif.clientId && (
-                        <Link href={`/clients/${notif.clientId}`} className="text-[10px] text-[#0a34f5] hover:underline flex items-center gap-0.5">
+                        <Link href={`/clients/${notif.clientId}`} className="text-[10px] text-[#0d4af5] hover:underline flex items-center gap-0.5">
                           <ChevronRight size={10} /> Ver cliente
                         </Link>
                       )}

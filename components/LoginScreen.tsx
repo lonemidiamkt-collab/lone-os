@@ -123,14 +123,14 @@ export default function LoginScreen() {
   if (welcomeState?.show) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#0a34f5]/10 rounded-full blur-[200px] pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#0d4af5]/10 rounded-full blur-[200px] pointer-events-none" />
         <div className="text-center animate-fade-in space-y-6 relative z-10">
           <div className="w-20 h-20 rounded-2xl bg-black flex items-center justify-center mx-auto shadow-[0_0_50px_rgba(10,52,245,0.5),0_0_100px_rgba(10,52,245,0.15)]">
             <img src="/logo.png" alt="Lone" width={48} height={48} className="object-contain" />
           </div>
           <div className="space-y-3">
             <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-              Seja bem-vindo, <span className="text-[#0a34f5] text-glow">{welcomeState.name}</span>
+              Seja bem-vindo, <span className="text-[#0d4af5] text-glow">{welcomeState.name}</span>
             </h1>
             <p className="text-sm text-zinc-500 max-w-xs mx-auto">
               {WELCOME_MESSAGES[welcomeState.role] ?? "Bem-vindo ao Lone OS."}
@@ -138,7 +138,7 @@ export default function LoginScreen() {
           </div>
           <div className="flex justify-center">
             <div className="h-0.5 w-32 bg-[#1a1a1a] rounded-full overflow-hidden">
-              <div className="h-full bg-[#0a34f5] rounded-full animate-[progress_2.5s_ease-in-out] shadow-[0_0_10px_rgba(10,52,245,0.5)]" />
+              <div className="h-full bg-[#0d4af5] rounded-full animate-[progress_2.5s_ease-in-out] shadow-[0_0_10px_rgba(10,52,245,0.5)]" />
             </div>
           </div>
         </div>
@@ -150,8 +150,8 @@ export default function LoginScreen() {
     <div className="min-h-screen bg-black flex items-center justify-center relative overflow-hidden">
       {/* Background effects */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-[-20%] right-[-10%] w-[700px] h-[700px] bg-[#0a34f5]/[0.03] rounded-full blur-[200px]" />
-        <div className="absolute bottom-[-30%] left-[-15%] w-[500px] h-[500px] bg-[#0a34f5]/[0.02] rounded-full blur-[150px]" />
+        <div className="absolute top-[-20%] right-[-10%] w-[700px] h-[700px] bg-[#0d4af5]/[0.03] rounded-full blur-[200px]" />
+        <div className="absolute bottom-[-30%] left-[-15%] w-[500px] h-[500px] bg-[#0d4af5]/[0.02] rounded-full blur-[150px]" />
         <div className="absolute inset-0 opacity-[0.015]" style={{
           backgroundImage: `linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px)`,
           backgroundSize: "80px 80px",
@@ -190,14 +190,14 @@ export default function LoginScreen() {
                     onKeyDown={handleKeyDown}
                     className={`w-full bg-[#0a0a0a] border rounded-xl px-4 py-3.5 text-sm text-left outline-none transition-all flex items-center justify-between ${
                       showDropdown
-                        ? "border-[#0a34f5] shadow-[0_0_0_3px_rgba(10,52,245,0.1)]"
+                        ? "border-[#0d4af5] shadow-[0_0_0_3px_rgba(10,52,245,0.1)]"
                         : "border-[#1a1a1a] hover:border-[#2a2a2a]"
                     }`}
                   >
                     {selectedProfile ? (
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-[#0a34f5]/10 border border-[#0a34f5]/20 flex items-center justify-center">
-                          <span className="text-[10px] font-bold text-[#0a34f5]">{selectedProfile.initials}</span>
+                        <div className="w-8 h-8 rounded-lg bg-[#0d4af5]/10 border border-[#0d4af5]/20 flex items-center justify-center">
+                          <span className="text-[10px] font-bold text-[#0d4af5]">{selectedProfile.initials}</span>
                         </div>
                         <div>
                           <p className="text-white font-medium text-sm">{selectedProfile.name}</p>
@@ -217,27 +217,27 @@ export default function LoginScreen() {
                         <button
                           key={profile.id}
                           onClick={() => handleSelectUser(profile.id)}
-                          className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-[#0a34f5]/5 ${
-                            selectedUser === profile.id ? "bg-[#0a34f5]/[0.03]" : ""
+                          className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-[#0d4af5]/5 ${
+                            selectedUser === profile.id ? "bg-[#0d4af5]/[0.03]" : ""
                           }`}
                         >
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
                             selectedUser === profile.id
-                              ? "bg-[#0a34f5]/15 border-[#0a34f5]/30"
+                              ? "bg-[#0d4af5]/15 border-[#0d4af5]/30"
                               : "bg-[#121212] border-[#2a2a2a]"
                           }`}>
                             <span className={`text-[10px] font-bold ${
-                              selectedUser === profile.id ? "text-[#0a34f5]" : "text-zinc-500"
+                              selectedUser === profile.id ? "text-[#0d4af5]" : "text-zinc-500"
                             }`}>{profile.initials}</span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium ${selectedUser === profile.id ? "text-[#0a34f5]" : "text-white"}`}>
+                            <p className={`text-sm font-medium ${selectedUser === profile.id ? "text-[#0d4af5]" : "text-white"}`}>
                               {profile.name}
                             </p>
                             <p className="text-[10px] text-zinc-600">{ROLE_LABELS[profile.role]}</p>
                           </div>
                           {selectedUser === profile.id && (
-                            <Check size={14} className="text-[#0a34f5] shrink-0" />
+                            <Check size={14} className="text-[#0d4af5] shrink-0" />
                           )}
                         </button>
                       ))}
@@ -252,7 +252,7 @@ export default function LoginScreen() {
               <button
                 onClick={handleContinue}
                 disabled={!selectedUser}
-                className="w-full bg-[#0a34f5] text-white rounded-xl py-3.5 text-sm font-semibold transition-all disabled:opacity-20 disabled:cursor-not-allowed hover:bg-[#0c3cff] active:scale-[0.99] shadow-[0_0_20px_rgba(10,52,245,0.25),0_4px_14px_rgba(10,52,245,0.2)] flex items-center justify-center gap-2"
+                className="w-full bg-[#0d4af5] text-white rounded-xl py-3.5 text-sm font-semibold transition-all disabled:opacity-20 disabled:cursor-not-allowed hover:bg-[#0c3cff] active:scale-[0.99] shadow-[0_0_20px_rgba(10,52,245,0.25),0_4px_14px_rgba(10,52,245,0.2)] flex items-center justify-center gap-2"
               >
                 Continuar
                 <ArrowRight size={15} />
@@ -266,14 +266,14 @@ export default function LoginScreen() {
               <div>
                 <button
                   onClick={handleBack}
-                  className="text-xs text-zinc-600 hover:text-[#0a34f5] transition-colors flex items-center gap-1 mb-4"
+                  className="text-xs text-zinc-600 hover:text-[#0d4af5] transition-colors flex items-center gap-1 mb-4"
                 >
                   <ArrowLeft size={12} />
                   Trocar conta
                 </button>
 
                 <h2 className="text-xl font-bold text-white">
-                  Olá, <span className="text-[#0a34f5]">{selectedProfile.name.split(" ")[0]}</span>
+                  Olá, <span className="text-[#0d4af5]">{selectedProfile.name.split(" ")[0]}</span>
                 </h2>
                 <p className="text-xs text-zinc-600 mt-1">{ROLE_LABELS[selectedProfile.role]}</p>
               </div>
@@ -292,7 +292,7 @@ export default function LoginScreen() {
                     className={`w-full bg-[#0a0a0a] border rounded-xl px-4 py-3.5 text-sm text-white outline-none transition-all placeholder:text-zinc-800 ${
                       error
                         ? "border-red-500/50 shadow-[0_0_0_3px_rgba(239,68,68,0.06)]"
-                        : "border-[#1a1a1a] focus:border-[#0a34f5] focus:shadow-[0_0_0_3px_rgba(10,52,245,0.1)]"
+                        : "border-[#1a1a1a] focus:border-[#0d4af5] focus:shadow-[0_0_0_3px_rgba(10,52,245,0.1)]"
                     }`}
                   />
                   <button
@@ -311,7 +311,7 @@ export default function LoginScreen() {
               <button
                 onClick={handleLogin}
                 disabled={!password || loading}
-                className="w-full bg-[#0a34f5] text-white rounded-xl py-3.5 text-sm font-semibold transition-all disabled:opacity-20 disabled:cursor-not-allowed hover:bg-[#0c3cff] active:scale-[0.99] shadow-[0_0_20px_rgba(10,52,245,0.25),0_4px_14px_rgba(10,52,245,0.2)] flex items-center justify-center gap-2"
+                className="w-full bg-[#0d4af5] text-white rounded-xl py-3.5 text-sm font-semibold transition-all disabled:opacity-20 disabled:cursor-not-allowed hover:bg-[#0c3cff] active:scale-[0.99] shadow-[0_0_20px_rgba(10,52,245,0.25),0_4px_14px_rgba(10,52,245,0.2)] flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>

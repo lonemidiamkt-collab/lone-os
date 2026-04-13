@@ -41,10 +41,10 @@ const STATUS_OPTIONS: { value: ContentCard["status"]; label: string; color: stri
 ];
 
 const ROLE_COLORS: Record<string, string> = {
-  admin: "text-[#0a34f5]",
-  manager: "text-[#0a34f5]",
-  traffic: "text-[#0a34f5]",
-  social: "text-[#0a34f5]",
+  admin: "text-[#0d4af5]",
+  manager: "text-[#0d4af5]",
+  traffic: "text-[#0d4af5]",
+  social: "text-[#0d4af5]",
   designer: "text-[#3b6ff5]",
 };
 
@@ -367,7 +367,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 href={card.imageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0a34f5]/[0.04] border border-[#0a34f5]/20 hover:border-[#0a34f5]/40 transition-all text-xs text-[#0a34f5]"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0d4af5]/[0.04] border border-[#0d4af5]/20 hover:border-[#0d4af5]/40 transition-all text-xs text-[#0d4af5]"
               >
                 <ExternalLink size={12} /> Abrir arte no Drive
               </a>
@@ -377,7 +377,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { approveContent(card.id, currentUser); onClose(); }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0a34f5] text-white text-xs font-medium hover:bg-[#0a34f5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] hover:shadow-[0_0_25px_rgba(10,52,245,0.5)]"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] hover:shadow-[0_0_25px_rgba(10,52,245,0.5)]"
                 >
                   <CheckCircle size={14} /> Aprovar Arte
                 </button>
@@ -470,7 +470,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
           </Button>
           <Button
             onClick={handleSave}
-            className={`flex items-center gap-2 ${saved ? "bg-[#0a34f5] hover:bg-[#0a34f5]" : ""}`}
+            className={`flex items-center gap-2 ${saved ? "bg-[#0d4af5] hover:bg-[#0d4af5]" : ""}`}
           >
             <Save size={14} />
             {saved ? "Salvo!" : "Salvar alteracoes"}
