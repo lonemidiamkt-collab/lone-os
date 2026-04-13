@@ -3,6 +3,7 @@
 import Header from "@/components/Header";
 import MetricCard from "@/components/MetricCard";
 import KanbanBoard from "@/components/KanbanBoard";
+import AdsInsightCard from "@/components/AdsInsightCard";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
@@ -3096,6 +3097,15 @@ function AdAnalyticsTab({
             })}
           </div>
         </div>
+      )}
+
+      {/* ═══ LONE ADS SPECIALIST (AI Analysis) ═══ */}
+      {selectedClient !== "all" && filteredCampaigns.length > 0 && (
+        <AdsInsightCard
+          clientName={clients.find((c) => c.id === selectedClient)?.name ?? selectedClient}
+          campaigns={filteredCampaigns}
+          period="ultimos 30 dias"
+        />
       )}
 
       {/* ═══ AI ACCOUNT REPORTS ═══ */}
