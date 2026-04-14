@@ -273,7 +273,7 @@ export default function Sidebar() {
 
         {/* Logo */}
         <Link href="/" className="group shrink-0">
-          <div className="w-10 h-10 rounded-2xl bg-black flex items-center justify-center shadow-[0_0_12px_rgba(10,52,245,0.2)] group-hover:shadow-[0_0_20px_rgba(10,52,245,0.35)] group-hover:scale-[1.03] transition-all duration-300 overflow-hidden">
+          <div className="w-10 h-10 rounded-2xl bg-black flex items-center justify-center group-hover:scale-[1.02] transition-all duration-300 overflow-hidden">
             <img src="/logo.png" alt="Lone" width={24} height={24} className="object-contain" />
           </div>
         </Link>
@@ -317,12 +317,12 @@ export default function Sidebar() {
 
                 {/* Active page: blue pill on right edge */}
                 {isPage && (
-                  <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-[#0d4af5] shadow-[0_0_8px_rgba(10,52,245,0.7)] -mr-px" />
+                  <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-[#0d4af5]  -mr-px" />
                 )}
 
                 {/* Pulse dot for Design when there are queued requests */}
                 {item.href === "/design" && designQueued > 0 && !isPage && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#0d4af5] shadow-[0_0_8px_rgba(10,52,245,0.8)] animate-pulse" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#0d4af5]  animate-pulse" />
                 )}
               </button>
             );
@@ -361,7 +361,7 @@ export default function Sidebar() {
           </button>
 
           {/* Avatar */}
-          <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={36} glow className="mt-1" />
+          <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={36} className="mt-1" />
         </div>
       </aside>
 
@@ -432,7 +432,7 @@ export default function Sidebar() {
                       >
                         {/* Active left accent */}
                         {isActive && (
-                          <span className="absolute left-2 w-[2.5px] h-4 rounded-full bg-[#0d4af5] shadow-[0_0_6px_rgba(10,52,245,0.6)]" />
+                          <span className="absolute left-2 w-[2.5px] h-4 rounded-full bg-[#0d4af5] " />
                         )}
 
                         <Icon
@@ -470,7 +470,7 @@ export default function Sidebar() {
             {/* Footer — user info */}
             <div className="px-3 py-3 border-t border-white/[0.04]">
               <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/[0.03] transition-colors cursor-default">
-                <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={28} glow />
+                <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={28} />
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-semibold text-zinc-300 truncate leading-none">{currentProfile.name}</p>
                   <p className="text-[10px] text-zinc-700 uppercase tracking-wide mt-0.5">{roleLabel}</p>

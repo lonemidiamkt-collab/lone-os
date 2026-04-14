@@ -75,13 +75,11 @@ function MainLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-black relative">
-      {/* Ambient glows — ultra subtle, hidden on mobile for performance */}
-      <div className="hidden lg:block fixed top-0 right-0 w-[500px] h-[500px] bg-[#0d4af5]/[0.01] rounded-full blur-[250px] pointer-events-none" />
-      <div className="hidden lg:block fixed bottom-0 left-72 w-[300px] h-[300px] bg-[#0d4af5]/[0.008] rounded-full blur-[200px] pointer-events-none" />
+      {/* Ambient glows removed — sober premium aesthetic */}
 
       {/* Mobile hamburger */}
       <button
-        className="lg:hidden fixed top-4 left-4 z-30 w-10 h-10 rounded-xl bg-[#0d4af5] flex items-center justify-center shadow-[0_2px_10px_rgba(10,52,245,0.25)]"
+        className="lg:hidden fixed top-4 left-4 z-30 w-10 h-10 rounded-xl bg-[#0d4af5] flex items-center justify-center"
         aria-label="Abrir menu"
         onClick={() => setMobileOpen(!mobileOpen)}
       >

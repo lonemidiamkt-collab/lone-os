@@ -47,9 +47,7 @@ export default function MedievalAvatar({ type, size = 40, className, glow = fals
 
   return (
     <div
-      className={`relative rounded-xl overflow-hidden flex items-center justify-center transition-all ${
-        glow ? "shadow-[0_0_16px_rgba(13,74,245,0.3)] hover:shadow-[0_0_24px_rgba(13,74,245,0.5)]" : ""
-      } ${className ?? ""}`}
+      className={`relative rounded-xl overflow-hidden flex items-center justify-center transition-all ${className ?? ""}`}
       style={{ width: size, height: size, background: "#0a0a0e" }}
     >
       {!imgError ? (
@@ -74,8 +72,8 @@ export default function MedievalAvatar({ type, size = 40, className, glow = fals
         </div>
       )}
 
-      {/* Neon border glow on hover */}
-      <div className="absolute inset-0 rounded-xl border border-white/[0.06] hover:border-[#0d4af5]/30 transition-all pointer-events-none" />
+      {/* Subtle border */}
+      <div className="absolute inset-0 rounded-xl border border-white/[0.06] pointer-events-none" />
     </div>
   );
 }
