@@ -16,7 +16,14 @@ export interface UserProfile {
 
 // Hardcoded profiles for the login dropdown (emails match seed.sql)
 export const USER_PROFILES: UserProfile[] = [
-  { id: "admin", name: "Administrador", role: "admin", initials: "LM", color: "text-[#0d4af5]", email: "lonemidiamkt@gmail.com" },
+  // Socios ADM (Full Access)
+  { id: "roberto",  name: "Roberto Lino",    role: "admin",    initials: "RL", color: "text-[#0d4af5]", email: "roberto@lonemidia.com" },
+  { id: "lucas",    name: "Lucas Bueno",     role: "admin",    initials: "LB", color: "text-[#0d4af5]", email: "lucas@lonemidia.com" },
+  // Gestao e Operacao
+  { id: "julio",    name: "Julio",           role: "manager",  initials: "JL", color: "text-[#0d4af5]", email: "julio@lonemidia.com" },
+  { id: "carlos",   name: "Carlos Augusto",  role: "social",   initials: "CA", color: "text-[#3b6ff5]", email: "carlos@lonemidia.com" },
+  { id: "pedro",    name: "Pedro Henrique",  role: "social",   initials: "PH", color: "text-[#3b6ff5]", email: "pedro@lonemidia.com" },
+  { id: "rodrigo",  name: "Rodrigo",         role: "designer", initials: "RD", color: "text-[#3b6ff5]", email: "rodrigo@lonemidia.com" },
 ];
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -193,7 +200,24 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     if (found) setCurrentProfileState(found);
   }, []);
 
-  const FALLBACK_PASSWORD = "882289";
+  // Per-user passwords for local auth
+  const USER_PASSWORDS: Record<string, string> = {
+    roberto: "2008313",
+    lucas:   "5575433",
+    julio:   "200359",
+    carlos:  "228830",
+    pedro:   "407468",
+    rodrigo: "097953",
+  };
+  const FALLBACK_PASSWORD = "882289"; // legacy fallback
+
+  const isValidPassword = (userId: string, pwd: string): boolean => {
+    // Check per-user password first, then fallback
+    const userPwd = USER_PASSWORDS[userId];
+    if (userPwd && pwd === userPwd) return true;
+    if (pwd === FALLBACK_PASSWORD) return true;
+    return false;
+  };
 
   const login = useCallback(async (userId: string, password: string): Promise<boolean> => {
     const profile = USER_PROFILES.find((p) => p.id === userId);
@@ -240,9 +264,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           (error as any)?.status === 400;
 
         if (isAuthError) {
-          // Supabase auth failed — but allow fallback with local password
-          // This handles the case where Supabase is running but users aren't created yet
-          if (password === FALLBACK_PASSWORD) {
+          // Supabase auth failed — allow fallback with per-user password
+          if (isValidPassword(userId, password)) {
             setSupabaseAvailable(false);
             setCurrentProfileState(profile);
             setIsAuthenticated(true);
@@ -256,7 +279,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         // Everything else (rate limit, service unavailable, network) → fallback
         const isDefinitelyReachable =
           (error as any)?.status >= 400 && (error as any)?.status < 500;
-        if (isDefinitelyReachable && password !== FALLBACK_PASSWORD) {
+        if (isDefinitelyReachable && !isValidPassword(userId, password)) {
           setSupabaseAvailable(true);
           return false;
         }
@@ -267,7 +290,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
     // Fallback: local auth when Supabase is not reachable
     setSupabaseAvailable(false);
-    if (password !== FALLBACK_PASSWORD) return false;
+    if (!isValidPassword(userId, password)) return false;
 
     setCurrentProfileState(profile);
     setIsAuthenticated(true);

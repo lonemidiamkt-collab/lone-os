@@ -20,9 +20,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const TEAM_MEMBERS = {
-  traffic: ["(Nenhum)"],
-  social: ["(Nenhum)"],
-  designer: ["(Nenhum)"],
+  traffic: ["Julio"],
+  social: ["Carlos Augusto", "Pedro Henrique"],
+  designer: ["Rodrigo"],
 };
 
 const INDUSTRIES = [

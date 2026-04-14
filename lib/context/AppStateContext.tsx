@@ -291,7 +291,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const cached = useRef(loadFromStorage());
 
   // ---------- State (initialized from localStorage → fallback to mock) ----------
-  const [clients, setClients] = useState<Client[]>(() => cached.current?.clients ?? mockClients);
+  const [clients, setClients] = useState<Client[]>(() => cached.current?.clients ?? []);
 
   const [investmentData, setInvestmentData] = useState<Record<string, ClientInvestmentData>>(() => {
     if (cached.current?.investmentData) return cached.current.investmentData;
@@ -305,26 +305,26 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return initInvestmentData();
   });
 
-  const [contentCards, setContentCards] = useState<ContentCard[]>(() => cached.current?.contentCards ?? mockContentCards);
-  const [timeline, setTimeline] = useState<Record<string, TimelineEntry[]>>(() => cached.current?.timeline ?? mockTimeline);
-  const [moodHistory, setMoodHistory] = useState<Record<string, MoodEntry[]>>(() => cached.current?.moodHistory ?? mockMoodHistory);
-  const [creativeAssets, setCreativeAssets] = useState<Record<string, CreativeAsset[]>>(() => cached.current?.creativeAssets ?? mockCreativeAssets);
-  const [clientChats, setClientChats] = useState<Record<string, ChatMessage[]>>(() => cached.current?.clientChats ?? initClientChats());
-  const [globalChat, setGlobalChat] = useState<GlobalChatMessage[]>(() => cached.current?.globalChat ?? mockGlobalChat);
-  const [onboarding, setOnboarding] = useState<Record<string, OnboardingItem[]>>(() => cached.current?.onboarding ?? initOnboarding());
-  const [notices, setNotices] = useState<Notice[]>(() => cached.current?.notices ?? mockNotices);
+  const [contentCards, setContentCards] = useState<ContentCard[]>(() => cached.current?.contentCards ?? []);
+  const [timeline, setTimeline] = useState<Record<string, TimelineEntry[]>>(() => cached.current?.timeline ?? {});
+  const [moodHistory, setMoodHistory] = useState<Record<string, MoodEntry[]>>(() => cached.current?.moodHistory ?? {});
+  const [creativeAssets, setCreativeAssets] = useState<Record<string, CreativeAsset[]>>(() => cached.current?.creativeAssets ?? {});
+  const [clientChats, setClientChats] = useState<Record<string, ChatMessage[]>>(() => cached.current?.clientChats ?? {});
+  const [globalChat, setGlobalChat] = useState<GlobalChatMessage[]>(() => cached.current?.globalChat ?? []);
+  const [onboarding, setOnboarding] = useState<Record<string, OnboardingItem[]>>(() => cached.current?.onboarding ?? {});
+  const [notices, setNotices] = useState<Notice[]>(() => cached.current?.notices ?? []);
   const [socialProofs, setSocialProofs] = useState<Record<string, SocialProofEntry[]>>(() => cached.current?.socialProofs ?? {});
   const [crisisNotes, setCrisisNotes] = useState<Record<string, CrisisNote[]>>(() => cached.current?.crisisNotes ?? {});
   const [socialTeam, setSocialTeam] = useState<SocialTeamMember[]>(() => cached.current?.socialTeam ?? initSocialTeam());
   const [socialAuthUser, setSocialAuthUser] = useState<string | null>(() => cached.current?.socialAuthUser ?? null);
   const [notifications, setNotifications] = useState<AppNotification[]>(() => cached.current?.notifications ?? initNotifications());
 
-  const [quinzReports, setQuinzReports] = useState<QuinzReport[]>(() => cached.current?.quinzReports ?? mockQuinzReports);
-  const [designRequests, setDesignRequests] = useState<DesignRequest[]>(() => cached.current?.designRequests ?? mockDesignRequests);
-  const [tasks, setTasks] = useState<Task[]>(() => cached.current?.tasks ?? mockTasks);
-  const [trafficReports, setTrafficReports] = useState<TrafficMonthlyReport[]>(() => cached.current?.trafficReports ?? mockTrafficReports);
-  const [trafficRoutineChecks, setTrafficRoutineChecks] = useState<TrafficRoutineCheck[]>(() => cached.current?.trafficRoutineChecks ?? mockTrafficRoutineChecks);
-  const [socialReports, setSocialReports] = useState<SocialMonthlyReport[]>(() => cached.current?.socialReports ?? mockSocialReports);
+  const [quinzReports, setQuinzReports] = useState<QuinzReport[]>(() => cached.current?.quinzReports ?? []);
+  const [designRequests, setDesignRequests] = useState<DesignRequest[]>(() => cached.current?.designRequests ?? []);
+  const [tasks, setTasks] = useState<Task[]>(() => cached.current?.tasks ?? []);
+  const [trafficReports, setTrafficReports] = useState<TrafficMonthlyReport[]>(() => cached.current?.trafficReports ?? []);
+  const [trafficRoutineChecks, setTrafficRoutineChecks] = useState<TrafficRoutineCheck[]>(() => cached.current?.trafficRoutineChecks ?? []);
+  const [socialReports, setSocialReports] = useState<SocialMonthlyReport[]>(() => cached.current?.socialReports ?? []);
   const [contentApprovals, setContentApprovals] = useState<ContentApproval[]>(() => cached.current?.contentApprovals ?? []);
 
   const [clientAccess, setClientAccess] = useState<Record<string, ClientAccess>>(() => cached.current?.clientAccess ?? initClientAccess());
