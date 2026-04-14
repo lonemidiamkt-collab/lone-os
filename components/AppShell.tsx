@@ -16,6 +16,7 @@ import ScheduledNoticePopup from "@/components/ScheduledNoticePopup";
 import GlobalSearch from "@/components/GlobalSearch";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
 import OnboardingTour from "@/components/OnboardingTour";
+import SessionTimeout from "@/components/SessionTimeout";
 
 // Routes that have a secondary sidebar (240px extra)
 const SECONDARY_ROUTES = ["/traffic", "/social", "/design", "/clients"];
@@ -124,6 +125,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <GlobalSearch />
               <KeyboardShortcuts />
               <OnboardingTour />
+              <SessionTimeout />
             </NavProvider>
           </AppStateProvider>
         </AuthGate>
