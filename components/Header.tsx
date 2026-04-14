@@ -3,6 +3,7 @@
 import { Bell, ChevronDown, Plus, X, UserPlus, FileText, Smile, Search, ChevronRight, LogIn } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
+import MedievalAvatar, { getUserAvatar } from "@/components/MedievalAvatars";
 import { useAppState } from "@/lib/context/AppStateContext";
 import Link from "next/link";
 import type { AppNotification } from "@/lib/types";
@@ -178,9 +179,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
           onClick={() => setShowMenu(!showMenu)}
           className="flex items-center gap-2 bg-[#0e0e0e] border border-[#1a1a1a] rounded-xl px-2.5 py-1.5 hover:border-[#0d4af5]/40 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all"
         >
-          <div className="w-7 h-7 rounded-full bg-[#0d4af5]/15 flex items-center justify-center shrink-0">
-            <span className="text-[10px] font-bold text-[#0d4af5]">{currentProfile.initials}</span>
-          </div>
+          <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={28} glow />
           <ChevronDown size={12} className="text-zinc-700" />
         </button>
 
@@ -189,9 +188,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
             <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
             <div className="absolute right-0 top-full mt-2 w-52 bg-[#0a0a0e] border border-white/[0.08] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.8)] z-[200] py-2 animate-fade-in">
               <div className="flex items-center gap-2.5 px-3 py-2 border-b border-[#1a1a1a] mb-1">
-                <div className="w-8 h-8 rounded-full bg-[#0d4af5]/15 flex items-center justify-center shrink-0">
-                  <span className="text-[11px] font-bold text-[#0d4af5]">{currentProfile.initials}</span>
-                </div>
+                <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={32} glow />
                 <div>
                   <p className="text-sm font-medium text-foreground leading-none">{currentProfile.name}</p>
                   <p className="text-[10px] text-[#0d4af5] mt-0.5 uppercase tracking-wider font-medium">{roleLabel}</p>

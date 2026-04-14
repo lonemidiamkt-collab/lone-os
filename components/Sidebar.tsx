@@ -12,6 +12,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/lib/context/RoleContext";
+import MedievalAvatar, { getUserAvatar } from "@/components/MedievalAvatars";
 import { useTheme } from "@/lib/context/ThemeContext";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useNav } from "@/lib/context/NavContext";
@@ -360,9 +361,7 @@ export default function Sidebar() {
           </button>
 
           {/* Avatar */}
-          <div className="w-9 h-9 rounded-xl bg-[#0d4af5]/12 flex items-center justify-center ring-1 ring-[#0d4af5]/20 mt-1">
-            <span className="text-[10px] font-bold text-[#0d4af5]">{currentProfile.initials}</span>
-          </div>
+          <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={36} glow className="mt-1" />
         </div>
       </aside>
 
@@ -471,9 +470,7 @@ export default function Sidebar() {
             {/* Footer — user info */}
             <div className="px-3 py-3 border-t border-white/[0.04]">
               <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/[0.03] transition-colors cursor-default">
-                <div className="w-7 h-7 rounded-lg bg-[#0d4af5]/15 flex items-center justify-center ring-1 ring-[#0d4af5]/20 shrink-0">
-                  <span className="text-[10px] font-bold text-[#0d4af5]">{currentProfile.initials}</span>
-                </div>
+                <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={28} glow />
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-semibold text-zinc-300 truncate leading-none">{currentProfile.name}</p>
                   <p className="text-[10px] text-zinc-700 uppercase tracking-wide mt-0.5">{roleLabel}</p>
