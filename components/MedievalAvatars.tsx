@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export type AvatarType = "knight" | "archer" | "mage" | "king" | "queen" | "shield";
+export type AvatarType = "knight" | "archer" | "mage" | "king" | "queen" | "shield" | "dragon" | "orc" | "rogue" | "smith" | "golem";
 
 interface AvatarProps {
   type: AvatarType;
@@ -20,15 +20,25 @@ const AVATAR_IMAGES: Record<AvatarType, string> = {
   king: "/avatars/king.png",
   queen: "/avatars/queen.png",
   shield: "/avatars/shield.png",
+  dragon: "/avatars/dragon.png",
+  orc: "/avatars/orc.png",
+  rogue: "/avatars/rogue.png",
+  smith: "/avatars/smith.png",
+  golem: "/avatars/golem.png",
 };
 
-const AVATAR_FALLBACK_COLORS: Record<AvatarType, string> = {
-  knight: "#0d4af5",
-  archer: "#3b6ff5",
-  mage: "#8b5cf6",
-  king: "#f59e0b",
-  queen: "#f59e0b",
-  shield: "#0d4af5",
+const AVATAR_FALLBACK: Record<AvatarType, { emoji: string; color: string }> = {
+  knight: { emoji: "⚔️", color: "#71717a" },
+  archer: { emoji: "🏹", color: "#71717a" },
+  mage: { emoji: "🧙", color: "#71717a" },
+  king: { emoji: "👑", color: "#a1a1aa" },
+  queen: { emoji: "👑", color: "#a1a1aa" },
+  shield: { emoji: "LM", color: "#0d4af5" },
+  dragon: { emoji: "🐉", color: "#71717a" },
+  orc: { emoji: "👹", color: "#71717a" },
+  rogue: { emoji: "🗡️", color: "#71717a" },
+  smith: { emoji: "⚒️", color: "#71717a" },
+  golem: { emoji: "🪨", color: "#71717a" },
 };
 
 export const AVATAR_OPTIONS: { type: AvatarType; label: string; adminOnly?: boolean }[] = [
@@ -37,13 +47,17 @@ export const AVATAR_OPTIONS: { type: AvatarType; label: string; adminOnly?: bool
   { type: "knight", label: "Cavaleiro" },
   { type: "archer", label: "Arqueiro" },
   { type: "mage", label: "Mago" },
+  { type: "dragon", label: "Dragao" },
+  { type: "orc", label: "Orc" },
+  { type: "rogue", label: "Ladino" },
+  { type: "smith", label: "Ferreiro" },
+  { type: "golem", label: "Golem" },
   { type: "shield", label: "Escudo LM" },
 ];
 
 export default function MedievalAvatar({ type, size = 40, className, glow = false }: AvatarProps) {
   const [imgError, setImgError] = useState(false);
   const src = AVATAR_IMAGES[type] ?? AVATAR_IMAGES.shield;
-  const fallbackColor = AVATAR_FALLBACK_COLORS[type] ?? "#0d4af5";
 
   return (
     <div
@@ -61,13 +75,10 @@ export default function MedievalAvatar({ type, size = 40, className, glow = fals
           draggable={false}
         />
       ) : (
-        // Fallback: colored circle with initials
-        <div
-          className="w-full h-full flex items-center justify-center"
-          style={{ backgroundColor: `${fallbackColor}15` }}
-        >
-          <span style={{ color: fallbackColor, fontSize: size * 0.35, fontWeight: 700 }}>
-            {type === "king" ? "👑" : type === "queen" ? "👑" : type === "knight" ? "⚔️" : type === "archer" ? "🏹" : type === "mage" ? "🧙" : "LM"}
+        // Fallback: sober emoji on dark bg
+        <div className="w-full h-full flex items-center justify-center bg-zinc-900">
+          <span style={{ fontSize: size * 0.4 }}>
+            {AVATAR_FALLBACK[type]?.emoji ?? "LM"}
           </span>
         </div>
       )}

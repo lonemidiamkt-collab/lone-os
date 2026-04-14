@@ -39,8 +39,8 @@ interface Props {
 }
 
 export default function NewClientModal({ onClose, onSuccess }: Props) {
-  const { addClient } = useAppState();
-  const { role } = useRole();
+  const { addClient, addTask, pushNotification } = useAppState();
+  const { role, currentUser } = useRole();
   const meta = useMetaConnection();
   const isAdmin = role === "admin" || role === "manager";
 
@@ -128,15 +128,78 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
       instagramPassword: form.instagramPassword || undefined,
     });
 
+    // Auto-generate setup tasks for the assigned team
+    const today = new Date().toISOString().slice(0, 10);
+    const weekFromNow = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+
+    if (form.assignedDesigner && form.assignedDesigner !== "(Nenhum)") {
+      addTask({
+        title: `[Setup] Estudo de Identidade Visual — ${form.name.trim()}`,
+        clientId: newClient.id,
+        clientName: newClient.name,
+        assignedTo: form.assignedDesigner,
+        role: "designer",
+        status: "pending",
+        priority: "high",
+        startDate: today,
+        dueDate: weekFromNow,
+        description: "Organizar assets, estudar paleta de cores, fontes e estilo visual do cliente. Preparar pasta Drive com materiais.",
+      });
+    }
+
+    if (form.assignedSocial && form.assignedSocial !== "(Nenhum)") {
+      addTask({
+        title: `[Setup] Planejamento de Grade Editorial — ${form.name.trim()}`,
+        clientId: newClient.id,
+        clientName: newClient.name,
+        assignedTo: form.assignedSocial,
+        role: "social",
+        status: "pending",
+        priority: "high",
+        startDate: today,
+        dueDate: weekFromNow,
+        description: "Definir linha de conteudo, tom de voz, frequencia de posts e primeiros temas do calendario editorial.",
+      });
+    }
+
+    if (form.assignedTraffic && form.assignedTraffic !== "(Nenhum)") {
+      addTask({
+        title: `[Setup] Auditoria de Contas e Pixel — ${form.name.trim()}`,
+        clientId: newClient.id,
+        clientName: newClient.name,
+        assignedTo: form.assignedTraffic,
+        role: "traffic",
+        status: "pending",
+        priority: "high",
+        startDate: today,
+        dueDate: weekFromNow,
+        description: "Auditar contas de anuncio (Meta/Google), verificar pixel, configurar conversoes e definir estrategia inicial.",
+      });
+    }
+
+    // Notify team
+    pushNotification("system", "Novo cliente na base", `${form.name.trim()} foi cadastrado. Tasks de setup criadas para a equipe.`);
+
     onSuccess(newClient.id);
   };
 
-  const SECTIONS: { key: Section; label: string; icon: typeof UserPlus }[] = [
-    { key: "dados", label: "Dados", icon: UserPlus },
-    { key: "equipe", label: "Equipe", icon: Users },
-    { key: "cofre", label: "Cofre", icon: Lock },
-    { key: "meta", label: "Meta Ads", icon: Facebook },
+  const SECTIONS: { key: Section; label: string; step: number; icon: typeof UserPlus }[] = [
+    { key: "dados", label: "Identificacao", step: 1, icon: UserPlus },
+    { key: "equipe", label: "Equipe", step: 2, icon: Users },
+    { key: "cofre", label: "Acessos", step: 3, icon: Lock },
+    { key: "meta", label: "Anuncios", step: 4, icon: Facebook },
   ];
+  const currentStep = SECTIONS.findIndex((s) => s.key === activeSection) + 1;
+  const canGoNext = activeSection !== "meta";
+  const canGoPrev = activeSection !== "dados";
+  const goNext = () => {
+    const idx = SECTIONS.findIndex((s) => s.key === activeSection);
+    if (idx < SECTIONS.length - 1) setActiveSection(SECTIONS[idx + 1].key);
+  };
+  const goPrev = () => {
+    const idx = SECTIONS.findIndex((s) => s.key === activeSection);
+    if (idx > 0) setActiveSection(SECTIONS[idx - 1].key);
+  };
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -153,21 +216,36 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           </div>
         </DialogHeader>
 
-        {/* Section tabs */}
-        <div className="flex items-center gap-1 p-0.5 bg-zinc-900/30 rounded-xl border border-white/[0.04]">
-          {SECTIONS.map((s) => {
-            const Icon = s.icon;
-            return (
-              <button key={s.key} onClick={() => setActiveSection(s.key)}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                  activeSection === s.key
-                    ? "bg-[#0d4af5] text-white"
-                    : "text-zinc-500 hover:text-zinc-300"
+        {/* Stepper progress */}
+        <div className="flex items-center gap-2">
+          {SECTIONS.map((s, i) => (
+            <div key={s.key} className="flex items-center gap-2 flex-1">
+              <button
+                onClick={() => setActiveSection(s.key)}
+                className={`flex items-center gap-1.5 text-[11px] font-medium transition-all ${
+                  currentStep > s.step
+                    ? "text-emerald-400"
+                    : currentStep === s.step
+                    ? "text-foreground"
+                    : "text-zinc-600"
+                }`}
+              >
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border ${
+                  currentStep > s.step
+                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                    : currentStep === s.step
+                    ? "bg-[#0d4af5]/15 border-[#0d4af5]/30 text-[#0d4af5]"
+                    : "border-zinc-800 text-zinc-600"
                 }`}>
-                <Icon size={12} /> {s.label}
+                  {currentStep > s.step ? "✓" : s.step}
+                </span>
+                <span className="hidden sm:inline">{s.label}</span>
               </button>
-            );
-          })}
+              {i < SECTIONS.length - 1 && (
+                <div className={`flex-1 h-px ${currentStep > s.step ? "bg-emerald-500/30" : "bg-zinc-800"}`} />
+              )}
+            </div>
+          ))}
         </div>
 
         <div className="space-y-4 py-1 min-h-[280px]">
@@ -417,11 +495,26 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           {!isAdmin && " Dados pessoais (CPF, telefone, email) sao visiveis apenas para ADM."}
         </div>
 
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleSubmit} className="flex items-center gap-2">
-            <UserPlus size={14} /> Cadastrar Cliente
-          </Button>
+        <DialogFooter className="flex items-center justify-between gap-2">
+          <div>
+            {canGoPrev && (
+              <Button variant="ghost" onClick={goPrev} className="text-xs">
+                Anterior
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+            {canGoNext ? (
+              <Button onClick={goNext} className="flex items-center gap-2">
+                Proximo
+              </Button>
+            ) : (
+              <Button onClick={handleSubmit} className="flex items-center gap-2">
+                <UserPlus size={14} /> Finalizar Onboarding
+              </Button>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

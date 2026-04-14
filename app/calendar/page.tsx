@@ -84,10 +84,10 @@ const TYPE_ICONS: Record<EventType, typeof FileText> = {
 };
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
-  pending: "Pendente",
-  in_progress: "Em andamento",
-  review: "Em revisão",
-  done: "Concluída",
+  pending: "Aguardando",
+  in_progress: "Em Execucao",
+  review: "Validacao",
+  done: "Entregue",
 };
 
 const STATUS_COLORS: Record<TaskStatus, string> = {

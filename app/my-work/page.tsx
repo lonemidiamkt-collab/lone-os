@@ -257,10 +257,10 @@ export default function MyWorkPage() {
 function TaskRow({ task }: { task: Task }) {
   const { updateTask } = useAppState();
   const statusConfig: Record<string, { label: string; color: string }> = {
-    pending: { label: "Pendente", color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
-    in_progress: { label: "Em andamento", color: "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" },
-    review: { label: "Em revisao", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
-    done: { label: "Concluida", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
+    pending: { label: "Aguardando", color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
+    in_progress: { label: "Em Execucao", color: "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" },
+    review: { label: "Validacao", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+    done: { label: "Entregue", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
   };
   const s = statusConfig[task.status] ?? statusConfig.pending;
   const timeMs = getLiveTimeSpentMs(task.workStartedAt, task.totalTimeSpentMs);
