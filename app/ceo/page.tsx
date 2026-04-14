@@ -17,7 +17,8 @@ import MedievalAvatar, { AVATAR_OPTIONS, getUserAvatar, setUserAvatar, type Avat
 import type { Role } from "@/lib/types";
 import { mockAdCampaigns } from "@/lib/mockData";
 
-const CORRECT_PIN = "1234";
+const CORRECT_PIN = "8822";
+const PIN_SESSION_KEY = "lone-os-ceo-unlocked";
 
 export default function CEOPage() {
   const {
@@ -25,7 +26,10 @@ export default function CEOPage() {
   } = useAppState();
 
   const [pin, setPin] = useState("");
-  const [unlocked, setUnlocked] = useState(false);
+  const [unlocked, setUnlocked] = useState(() => {
+    if (typeof window !== "undefined") return sessionStorage.getItem(PIN_SESSION_KEY) === "true";
+    return false;
+  });
   const [pinError, setPinError] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [activeSection, setActiveSection] = useState<"overview" | "team" | "reports" | "ltv" | "manage" | "timesheet" | "workload" | "churn">("overview");
@@ -34,6 +38,7 @@ export default function CEOPage() {
     if (pin === CORRECT_PIN) {
       setUnlocked(true);
       setPinError(false);
+      try { sessionStorage.setItem(PIN_SESSION_KEY, "true"); } catch {}
     } else {
       setPinError(true);
       setPin("");
@@ -225,53 +230,79 @@ export default function CEOPage() {
     setConfirmDeleteId(null);
   }, []);
 
+  // Auto-submit when 4 digits entered
+  const handlePinChange = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 4);
+    setPin(digits);
+    setPinError(false);
+    if (digits.length === 4) {
+      if (digits === CORRECT_PIN) {
+        setUnlocked(true);
+        try { sessionStorage.setItem(PIN_SESSION_KEY, "true"); } catch {}
+      } else {
+        setPinError(true);
+        setTimeout(() => setPin(""), 600);
+      }
+    }
+  };
+
   if (!unlocked) {
     return (
       <div className="flex flex-col flex-1 overflow-auto">
-        <Header title="Área da Diretoria" subtitle="Acesso restrito" />
+        <Header title="Diretoria" subtitle="Acesso restrito" />
         <div className="flex-1 flex items-center justify-center p-6">
-          <div className="card max-w-sm w-full text-center space-y-6">
-            <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto">
-              <Lock size={28} className="text-primary" />
-            </div>
+          <div className="max-w-xs w-full text-center space-y-8">
             <div>
-              <h2 className="text-xl font-bold text-foreground">Área Restrita</h2>
-              <p className="text-muted-foreground text-sm mt-1">
-                Esta área é exclusiva para a Diretoria/CEO.<br />
-                Insira o PIN de acesso para continuar.
-              </p>
+              <Lock size={24} className="text-zinc-500 mx-auto mb-4" />
+              <h2 className="text-lg font-semibold text-foreground">Cofre Executivo</h2>
+              <p className="text-sm text-zinc-500 mt-1">Insira o PIN de 4 digitos</p>
             </div>
-            <div className="space-y-3">
-              <div className="relative">
-                <input
-                  type={showPin ? "text" : "password"}
-                  value={pin}
-                  onChange={(e) => { setPin(e.target.value); setPinError(false); }}
-                  onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
-                  placeholder="••••"
-                  maxLength={8}
-                  className={`w-full bg-muted border ${
-                    pinError ? "border-red-500" : "border-border"
-                  } rounded-xl px-4 py-3 text-center text-xl font-bold text-foreground tracking-[0.5em] placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary`}
-                />
-                <button
-                  onClick={() => setShowPin(!showPin)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-[#c0c0cc]"
+
+            {/* 4-digit PIN boxes */}
+            <div className="flex items-center justify-center gap-3">
+              {[0, 1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className={`w-12 h-14 rounded-lg border flex items-center justify-center text-xl font-bold transition-all ${
+                    pinError
+                      ? "border-red-500/50 bg-red-500/[0.04]"
+                      : pin.length > i
+                      ? "border-[#0d4af5]/40 bg-[#0d4af5]/[0.04] text-foreground"
+                      : "border-zinc-800 bg-zinc-900/50 text-zinc-700"
+                  }`}
                 >
-                  {showPin ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {pinError && (
-                <p className="text-red-500 text-sm">PIN incorreto. Tente novamente.</p>
-              )}
-              <button onClick={handleUnlock} className="btn-primary w-full py-3 text-base">
-                Acessar
-              </button>
-              <p className="text-muted-foreground/50 text-xs">PIN padrão de demonstração: 1234</p>
+                  {pin.length > i ? "•" : ""}
+                </div>
+              ))}
             </div>
-            <div className="flex items-center justify-center gap-2 text-muted-foreground/50 text-xs">
-              <Shield size={12} />
-              <span>Acesso monitorado e registrado</span>
+
+            {/* Hidden input for actual typing */}
+            <input
+              type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={pin}
+              onChange={(e) => handlePinChange(e.target.value)}
+              maxLength={4}
+              autoFocus
+              className="sr-only"
+              aria-label="PIN"
+            />
+
+            {/* Click anywhere to focus the hidden input */}
+            <button
+              onClick={() => {
+                const input = document.querySelector('input[aria-label="PIN"]') as HTMLInputElement;
+                input?.focus();
+              }}
+              className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+            >
+              {pinError ? "PIN incorreto. Tente novamente." : "Clique aqui e digite o PIN"}
+            </button>
+
+            <div className="flex items-center justify-center gap-2 text-zinc-700 text-[10px]">
+              <Shield size={10} />
+              <span>Acesso monitorado</span>
             </div>
           </div>
         </div>
