@@ -38,7 +38,7 @@ import type {
 } from "@/lib/types";
 import {
   mockClients,
-  mockClientChats,
+  // mockClientChats — removed (no mock data)
   mockTimeline,
   mockGlobalChat,
   mockContentCards,
@@ -89,9 +89,26 @@ interface PersistedState {
   reminders: Reminder[];
 }
 
+const DATA_VERSION = "2026-04-14-clean"; // Increment to force purge cached mock data
+
 function loadFromStorage(): Partial<PersistedState> | null {
   if (typeof window === "undefined") return null;
   try {
+    // Force purge if data version changed (removes old mock data from cache)
+    const storedVersion = localStorage.getItem("lone-os-data-version");
+    if (storedVersion !== DATA_VERSION) {
+      console.log("[Lone OS] Data version changed — purging cached data");
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem("lone_reminders");
+      localStorage.removeItem("lone_investmentData");
+      localStorage.removeItem("lone_automations");
+      localStorage.removeItem("lone-os-snapshots");
+      localStorage.removeItem("lone-os-delivery-log");
+      localStorage.removeItem("lone-os-morning-briefing");
+      localStorage.setItem("lone-os-data-version", DATA_VERSION);
+      return null;
+    }
+
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     return JSON.parse(raw) as Partial<PersistedState>;
@@ -115,31 +132,8 @@ function clearStorage() {
 // Fallback init functions (used when DB is unavailable)
 // ============================================
 
-function initClientChats(): Record<string, ChatMessage[]> {
-  const result: Record<string, ChatMessage[]> = {};
-  for (const [clientId, messages] of Object.entries(mockClientChats)) {
-    result[clientId] = messages.map((m, i) => ({
-      id: `init-${clientId}-${i}`,
-      user: m.user,
-      text: m.text,
-      timestamp: m.time,
-    }));
-  }
-  return result;
-}
-
-function initOnboarding(): Record<string, OnboardingItem[]> {
-  const result: Record<string, OnboardingItem[]> = {};
-  mockClients
-    .filter((c) => c.status === "onboarding")
-    .forEach((c) => {
-      result[c.id] = DEFAULT_ONBOARDING_ITEMS.map((item, i) => ({
-        ...item,
-        id: `ob-${c.id}-${i}`,
-      }));
-    });
-  return result;
-}
+function initClientChats(): Record<string, ChatMessage[]> { return {}; }
+function initOnboarding(): Record<string, OnboardingItem[]> { return {}; }
 
 function initInvestmentData(): Record<string, ClientInvestmentData> {
   const result: Record<string, ClientInvestmentData> = {};
