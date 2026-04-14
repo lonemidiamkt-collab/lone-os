@@ -16,13 +16,7 @@ export interface UserProfile {
 
 // Hardcoded profiles for the login dropdown (emails match seed.sql)
 export const USER_PROFILES: UserProfile[] = [
-  { id: "admin",   name: "Admin CEO",       role: "admin",    initials: "AC", color: "text-[#0d4af5]", email: "admin@loneos.com" },
-  { id: "manager", name: "Gerente Ops",     role: "manager",  initials: "GO", color: "text-[#0d4af5]", email: "gerente@loneos.com" },
-  { id: "ana",     name: "Ana Lima",        role: "traffic",  initials: "AL", color: "text-[#0d4af5]", email: "ana@loneos.com" },
-  { id: "pedro",   name: "Pedro Alves",     role: "traffic",  initials: "PA", color: "text-[#0d4af5]", email: "pedro@loneos.com" },
-  { id: "carlos",  name: "Carlos Melo",     role: "social",   initials: "CM", color: "text-[#3b6ff5]", email: "carlos@loneos.com" },
-  { id: "mariana", name: "Mariana Costa",   role: "social",   initials: "MC", color: "text-[#3b6ff5]", email: "mariana@loneos.com" },
-  { id: "rafael",  name: "Rafael Designer", role: "designer", initials: "RD", color: "text-[#3b6ff5]", email: "rafael@loneos.com" },
+  { id: "admin", name: "Administrador", role: "admin", initials: "LM", color: "text-[#0d4af5]", email: "lonemidiamkt@gmail.com" },
 ];
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -199,7 +193,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     if (found) setCurrentProfileState(found);
   }, []);
 
-  const FALLBACK_PASSWORD = "1234";
+  const FALLBACK_PASSWORD = "882289";
 
   const login = useCallback(async (userId: string, password: string): Promise<boolean> => {
     const profile = USER_PROFILES.find((p) => p.id === userId);
