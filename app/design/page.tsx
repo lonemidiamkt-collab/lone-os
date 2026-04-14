@@ -51,7 +51,7 @@ const DESIGN_COLUMNS = [
   { id: "done",        title: "Concluído",     color: "bg-[#0d4af5]" },
 ];
 
-type TabView = "kanbans" | "requests" | "performance";
+type TabView = "kanbans" | "requests" | "performance" | "history";
 
 function getDeadlineUrgency(dueDate?: string): "overdue" | "today" | "soon" | "ok" | null {
   if (!dueDate) return null;
@@ -220,7 +220,7 @@ export default function DesignPage() {
 
   // NavContext wiring — sidebar tab switching
   useEffect(() => {
-    if (pendingTab && ["kanbans", "requests", "performance"].includes(pendingTab)) {
+    if (pendingTab && ["kanbans", "requests", "performance", "history"].includes(pendingTab)) {
       setTab(pendingTab as TabView);
       setPendingTab("");
     }
@@ -313,6 +313,14 @@ export default function DesignPage() {
               }`}
             >
               <BarChart2 size={13} /> Performance
+            </button>
+            <button
+              onClick={() => setTab("history")}
+              className={`text-xs px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
+                tab === "history" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Clock size={13} /> Historico
             </button>
           </div>
         </div>
@@ -483,13 +491,16 @@ export default function DesignPage() {
                       const isAtRisk = client?.status === "at_risk";
                       const budgetTier = (client?.monthlyBudget ?? 0) >= 8000 ? "high" : (client?.monthlyBudget ?? 0) >= 4000 ? "med" : "low";
 
+                      const fullCard = item._card as ContentCard;
                       return (
-                        <div className={`bg-card border rounded-lg p-3 space-y-2 transition-colors ${
+                        <div
+                          onClick={() => setDetailCard(fullCard)}
+                          className={`bg-card border rounded-lg p-3 space-y-2 transition-colors cursor-pointer ${
                           isAtRisk
                             ? "border-red-500/30 bg-red-500/[0.03]"
-                            : !hasArt && ["in_production", "approval", "client_approval"].includes(
-                                contentCards.find((c) => c.id === item.id)?.status ?? ""
-                              )
+                            : fullCard.status === "blocked"
+                            ? "border-red-500/40 bg-red-500/[0.05]"
+                            : !hasArt && ["in_production", "approval", "client_approval"].includes(fullCard.status)
                               ? "border-yellow-500/30 bg-[#0d4af5]/5"
                               : "border-border hover:border-primary/30"
                         }`}>
@@ -507,6 +518,13 @@ export default function DesignPage() {
                               </span>
                             )}
                           </div>
+
+                          {/* Blocked reason banner */}
+                          {fullCard.status === "blocked" && fullCard.blockedReason && (
+                            <div className="px-2 py-1.5 rounded-md bg-red-500/10 border border-red-500/20 text-[10px] text-red-400 font-medium">
+                              Bloqueado: {fullCard.blockedReason}
+                            </div>
+                          )}
 
                           {/* Art thumbnail */}
                           {hasArt && (
@@ -577,28 +595,23 @@ export default function DesignPage() {
                           })()}
 
                           {/* Actions */}
-                          <div className="flex items-center gap-1 pt-1.5 border-t border-border flex-wrap">
+                          <div className="flex items-center gap-1.5 pt-2 border-t border-border flex-wrap">
                             <button
-                              onClick={(e) => { e.stopPropagation(); setUploadCard(item._card as ContentCard); }}
-                              className="text-[10px] px-2 py-1 rounded-md bg-primary/15 text-primary hover:bg-primary/25 transition-colors flex items-center gap-1"
+                              onClick={(e) => { e.stopPropagation(); setUploadCard(fullCard); }}
+                              className="text-[11px] px-3 py-1.5 rounded-lg bg-[#0d4af5] text-white font-medium hover:bg-[#0d4af5]/80 transition-all flex items-center gap-1.5"
                             >
-                              <Upload size={10} />
-                              {hasArt ? "Trocar" : "Enviar Arte"}
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setDetailCard(item._card as ContentCard); }}
-                              className="text-[10px] px-2 py-1 rounded-md bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                            >
-                              <Eye size={10} /> Detalhes
+                              <Upload size={11} />
+                              {hasArt ? "Trocar Arte" : "Enviar Arte"}
                             </button>
                             {hasArt && (
                               <a
                                 href={item.imageUrl}
-                                download
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className="text-[10px] px-2 py-1 rounded-md bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                                className="text-[11px] px-3 py-1.5 rounded-lg bg-white/[0.06] text-zinc-300 font-medium hover:text-white hover:bg-white/[0.1] transition-all flex items-center gap-1.5 border border-white/[0.06]"
                               >
-                                <Download size={10} /> Baixar
+                                <Download size={11} /> Baixar
                               </a>
                             )}
                             {(() => {
@@ -745,6 +758,72 @@ export default function DesignPage() {
                       </div>
                     );
                   })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ HISTORY TAB ═══ */}
+      {tab === "history" && (
+        <div className="space-y-4 animate-fade-in">
+          <p className="text-xs text-zinc-400">Cards entregues e aprovados — historico completo de producao.</p>
+          <div className="space-y-2">
+            {myContentCards
+              .filter((c) => c.designerDeliveredAt || c.status === "published" || c.status === "scheduled")
+              .sort((a, b) => (b.designerDeliveredAt ?? b.statusChangedAt ?? "").localeCompare(a.designerDeliveredAt ?? a.statusChangedAt ?? ""))
+              .map((card) => {
+                const client = clients.find((cl) => cl.id === card.clientId);
+                const onTime = card.dueDate && card.designerDeliveredAt && card.designerDeliveredAt.slice(0, 10) <= card.dueDate;
+                return (
+                  <div key={card.id} onClick={() => setDetailCard(card)}
+                    className="card p-4 flex items-center gap-4 cursor-pointer hover:border-[#0d4af5]/20 transition-all">
+                    {card.imageUrl ? (
+                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted shrink-0">
+                        <img src={card.imageUrl} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                        <ImageIcon size={16} className="text-zinc-600" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{card.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-zinc-400">{card.clientName}</span>
+                        <span className="text-[10px] text-zinc-600">·</span>
+                        <span className="text-[10px] text-zinc-400">{card.format}</span>
+                        {card.designerDeliveredAt && (
+                          <>
+                            <span className="text-[10px] text-zinc-600">·</span>
+                            <span className="text-[10px] text-zinc-500">Entregue {card.designerDeliveredAt.slice(0, 10)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
+                        card.status === "published" ? "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" :
+                        card.status === "scheduled" ? "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" :
+                        "text-zinc-400 bg-zinc-500/10 border-zinc-500/20"
+                      }`}>
+                        {card.status === "published" ? "Publicado" : card.status === "scheduled" ? "Agendado" : "Entregue"}
+                      </span>
+                      {card.designerDeliveredAt && (
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                          onTime ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10"
+                        }`}>
+                          {onTime ? "No prazo" : "Atrasado"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            {myContentCards.filter((c) => c.designerDeliveredAt || c.status === "published").length === 0 && (
+              <div className="text-center py-12">
+                <Clock size={24} className="text-zinc-800 mx-auto mb-3" />
+                <p className="text-xs text-zinc-600">Nenhuma entrega no historico ainda.</p>
               </div>
             )}
           </div>

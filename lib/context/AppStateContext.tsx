@@ -1004,11 +1004,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   // Valid status transitions — enforces workflow pipeline
   const VALID_TRANSITIONS: Record<string, string[]> = {
-    ideas: ["script"],
-    script: ["ideas", "in_production"],
-    in_production: ["script", "approval"],
-    approval: ["in_production", "client_approval", "scheduled"],
-    client_approval: ["approval", "scheduled", "in_production"],
+    ideas: ["script", "in_production", "blocked"],
+    script: ["ideas", "in_production", "blocked"],
+    in_production: ["script", "approval", "blocked"],
+    blocked: ["ideas", "script", "in_production"],
+    approval: ["in_production", "client_approval", "scheduled", "blocked"],
+    client_approval: ["approval", "scheduled", "in_production", "blocked"],
     scheduled: ["published", "client_approval"],
     published: [],
   };
