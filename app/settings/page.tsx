@@ -93,7 +93,15 @@ export default function SettingsPage() {
           {activeSection === "profile" && (
             <div className="space-y-6 animate-fade-in">
               <div className="card">
-                <h3 className="font-semibold text-foreground text-sm mb-5">Informações do Perfil</h3>
+                <h3 className="font-semibold text-foreground text-sm mb-5">Informacoes do Perfil</h3>
+
+                {/* Staff lockdown warning */}
+                {role !== "admin" && (
+                  <div className="mb-4 px-4 py-3 rounded-xl bg-amber-500/[0.05] border border-amber-500/[0.12] text-[11px] text-amber-400">
+                    Alteracoes de perfil sao gerenciadas exclusivamente pela Diretoria (Admins).
+                  </div>
+                )}
+
                 <div className="flex items-center gap-5 mb-6">
                   <div className="w-16 h-16 rounded-2xl bg-[#0d4af5]/15 flex items-center justify-center shadow-[0_0_20px_rgba(10,52,245,0.2)]">
                     <span className="text-xl font-bold text-[#0d4af5]">{currentProfile.initials}</span>

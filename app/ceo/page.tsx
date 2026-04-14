@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo, useCallback } from "react";
 import { USER_PROFILES } from "@/lib/context/RoleContext";
+import MedievalAvatar, { AVATAR_OPTIONS, getUserAvatar, setUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
 import type { Role } from "@/lib/types";
 import { mockAdCampaigns } from "@/lib/mockData";
 
@@ -155,6 +156,7 @@ export default function CEOPage() {
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editRole, setEditRole] = useState<Role>("social");
+  const [editAvatar, setEditAvatar] = useState<AvatarType>("shield");
   const [editPassword, setEditPassword] = useState("");
 
   const generateInitials = (name: string) => {
@@ -207,8 +209,10 @@ export default function CEOPage() {
           : m
       )
     );
+    // Save avatar
+    setUserAvatar(editingId, editAvatar);
     setEditingId(null);
-  }, [editingId, editName, editEmail, editRole, editPassword]);
+  }, [editingId, editName, editEmail, editRole, editPassword, editAvatar]);
 
   const handleToggleActive = useCallback((id: string) => {
     setTeamMembers((prev) =>
@@ -1068,6 +1072,25 @@ export default function CEOPage() {
                               type="email"
                               className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
                             />
+                          </div>
+                          <div className="md:col-span-2">
+                            <label className="text-xs text-muted-foreground font-medium block mb-2">Avatar Medieval</label>
+                            <div className="flex items-center gap-3 flex-wrap">
+                              {AVATAR_OPTIONS.map((opt) => (
+                                <button
+                                  key={opt.type}
+                                  onClick={() => setEditAvatar(opt.type)}
+                                  className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${
+                                    editAvatar === opt.type
+                                      ? "border-[#0d4af5]/50 bg-[#0d4af5]/[0.06]"
+                                      : "border-transparent hover:bg-white/[0.03]"
+                                  }`}
+                                >
+                                  <MedievalAvatar type={opt.type} size={36} />
+                                  <span className="text-[9px] text-zinc-500">{opt.label}</span>
+                                </button>
+                              ))}
+                            </div>
                           </div>
                           <div>
                             <label className="text-xs text-muted-foreground font-medium block mb-1.5">Função</label>
