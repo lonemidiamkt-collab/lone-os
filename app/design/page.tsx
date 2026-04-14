@@ -610,9 +610,22 @@ export default function DesignPage() {
                             )}
                           </div>
 
+                          {/* Drive quick access */}
+                          {client?.driveLink && (
+                            <a
+                              href={client.driveLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.06] text-[10px] text-zinc-400 hover:text-[#0d4af5] hover:border-[#0d4af5]/30 transition-all w-full"
+                            >
+                              <FolderOpen size={10} className="shrink-0" />
+                              <span className="truncate">Abrir Drive — {item.clientName}</span>
+                            </a>
+                          )}
+
                           {/* Handoff status */}
                           {(() => {
-                            const fullCard = item._card as ContentCard;
                             return (
                               <>
                                 {fullCard.designerDeliveredAt && (

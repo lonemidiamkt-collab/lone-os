@@ -835,6 +835,26 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
             <p className="text-xs text-red-400">Data e horário são obrigatórios para enviar a demanda ao designer.</p>
           )}
 
+          {/* Drive link auto-recovered */}
+          {selectedClient && (
+            <div className={`rounded-lg p-3 ${selectedClient.driveLink ? "bg-[#0d4af5]/[0.04] border border-[#0d4af5]/[0.1]" : "bg-amber-500/[0.04] border border-amber-500/[0.1]"}`}>
+              {selectedClient.driveLink ? (
+                <div className="flex items-center gap-2">
+                  <CheckCircle size={12} className="text-[#0d4af5] shrink-0" />
+                  <p className="text-[10px] text-[#0d4af5] font-medium">Link do Drive recuperado do cadastro</p>
+                  <a href={selectedClient.driveLink} target="_blank" rel="noopener noreferrer"
+                    className="text-[10px] text-zinc-400 hover:text-[#0d4af5] ml-auto flex items-center gap-1">
+                    Abrir <ExternalLink size={9} />
+                  </a>
+                </div>
+              ) : (
+                <p className="text-[10px] text-amber-400 font-medium">
+                  Cliente sem pasta Drive cadastrada. Cadastre em Clientes → Editar.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Client fixed briefing preview */}
           {selectedClient?.fixedBriefing && (
             <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
@@ -968,6 +988,19 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
               </select>
             </div>
           </div>
+
+          {/* Drive link indicator */}
+          {selectedClient && (
+            <div className={`rounded-lg px-3 py-2 text-[10px] ${selectedClient.driveLink ? "bg-[#0d4af5]/[0.04] border border-[#0d4af5]/[0.1] text-[#0d4af5]" : "bg-amber-500/[0.04] border border-amber-500/[0.1] text-amber-400"}`}>
+              {selectedClient.driveLink ? (
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle size={10} /> Drive do cliente vinculado automaticamente
+                </span>
+              ) : (
+                <span>Cliente sem pasta Drive cadastrada</span>
+              )}
+            </div>
+          )}
 
           {/* Rows */}
           <div className="space-y-2">
