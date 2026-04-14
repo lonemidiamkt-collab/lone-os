@@ -423,17 +423,22 @@ export default function ContentCardModal({ card, onClose }: Props) {
           </div>
         )}
 
-        {/* Drive link + note */}
+        {/* Drive link — prominent button */}
         {(() => {
           const { clients } = useAppState();
           const cl = clients.find((c) => c.id === card.clientId);
           return cl?.driveLink ? (
-            <div className="px-6 py-2 border-t border-border flex items-center gap-2">
+            <div className="px-6 py-3 border-t border-border">
               <a href={cl.driveLink} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-[#0d4af5] transition-all">
-                <ExternalLink size={11} /> Abrir Drive — {cl.name}
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl bg-[#0d4af5]/[0.06] border border-[#0d4af5]/[0.15] hover:bg-[#0d4af5]/[0.12] hover:border-[#0d4af5]/[0.3] transition-all group">
+                <div className="w-9 h-9 rounded-lg bg-[#0d4af5]/15 flex items-center justify-center shrink-0 group-hover:bg-[#0d4af5]/25 transition-all">
+                  <ExternalLink size={16} className="text-[#0d4af5]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#0d4af5]">Abrir Drive — {cl.name}</p>
+                  <p className="text-[10px] text-zinc-500">Acesse logos, fotos e arquivos em alta resolucao</p>
+                </div>
               </a>
-              <span className="text-[9px] text-zinc-700 ml-auto">Acesse o Drive para arquivos em alta resolucao</span>
             </div>
           ) : null;
         })()}
