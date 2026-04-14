@@ -100,9 +100,10 @@ const TONE_LABELS: Record<string, string> = {
 const CONTENT_COLUMNS = [
   { id: "ideas",          title: "Ideias",             color: "bg-zinc-600" },
   { id: "script",         title: "Roteiro",            color: "bg-zinc-600" },
-  { id: "in_production",  title: "Em Produção",        color: "bg-primary" },
-  { id: "approval",       title: "Aprovação Interna",  color: "bg-zinc-500" },
-  { id: "client_approval",title: "Aprovação Cliente",  color: "bg-zinc-500" },
+  { id: "in_production",  title: "Em Producao",        color: "bg-primary" },
+  { id: "blocked",        title: "Bloqueado (Design)", color: "bg-red-500" },
+  { id: "approval",       title: "Aprovacao Interna",  color: "bg-zinc-500" },
+  { id: "client_approval",title: "Aprovacao Cliente",  color: "bg-zinc-500" },
   { id: "scheduled",      title: "Agendado",           color: "bg-zinc-500" },
   { id: "published",      title: "Publicado",          color: "bg-primary" },
 ];
@@ -111,6 +112,7 @@ const STATUS_DOT: Record<ContentCard["status"], string> = {
   ideas: "bg-zinc-600",
   script: "bg-zinc-600",
   in_production: "bg-primary",
+  blocked: "bg-red-500",
   approval: "bg-zinc-500",
   client_approval: "bg-zinc-500",
   scheduled: "bg-zinc-500",

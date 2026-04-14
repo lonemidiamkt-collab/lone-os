@@ -16,16 +16,31 @@ import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
 import type { ContentCard, DesignRequest } from "@/lib/types";
 
-// ── Content card columns (same pipeline as social page) ──────────────────────
+// ── Designer-focused columns (simplified from 7 → 4) ─────────────────────────
+// Maps: ideas/script → "queue", in_production → "doing", blocked → "blocked", rest → "delivered"
 
-const CONTENT_COLUMNS = [
-  { id: "ideas",           title: "Ideias",              color: "bg-zinc-600" },
-  { id: "script",          title: "Roteiro",             color: "bg-zinc-600" },
-  { id: "in_production",   title: "Em Produção",         color: "bg-primary" },
-  { id: "approval",        title: "Aprovação",           color: "bg-[#3b6ff5]" },
-  { id: "client_approval", title: "Aprov. Cliente",      color: "bg-[#0d4af5]" },
-  { id: "scheduled",       title: "Agendado",            color: "bg-blue-500" },
-  { id: "published",       title: "Publicado",           color: "bg-[#0d4af5]" },
+const DESIGNER_COLUMNS = [
+  { id: "queue",     title: "Fila / Pra Fazer",           color: "bg-zinc-600",   statuses: ["ideas", "script"] },
+  { id: "doing",     title: "Em Producao",                color: "bg-primary",    statuses: ["in_production"] },
+  { id: "blocked",   title: "Bloqueado / Devolvido",      color: "bg-red-500",    statuses: ["blocked"] },
+  { id: "delivered", title: "Entregue",                   color: "bg-[#0d4af5]",  statuses: ["approval", "client_approval", "scheduled", "published"] },
+];
+
+// Status mapping: designer column → actual content card status
+const DESIGNER_COL_TO_STATUS: Record<string, string> = {
+  queue: "ideas",
+  doing: "in_production",
+  blocked: "blocked",
+  delivered: "approval",
+};
+
+const BLOCK_REASONS = [
+  "Falta de dados / briefing incompleto",
+  "Texto/copy muito longo ou inadequado",
+  "Referencia visual ruim ou ausente",
+  "Aguardando aprovacao previa",
+  "Assets do cliente nao recebidos",
+  "Formato/dimensao indefinido",
 ];
 
 // ── Design request columns ───────────────────────────────────────────────────
@@ -198,7 +213,7 @@ function UploadArtModal({
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DesignPage() {
-  const { clients, contentCards, designRequests, updateDesignRequest, updateContentCard } = useAppState();
+  const { clients, contentCards, designRequests, updateDesignRequest, updateContentCard, pushNotification } = useAppState();
   const { role, currentUser } = useRole();
   const [tab, setTab] = useState<TabView>("kanbans");
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();
@@ -220,6 +235,8 @@ export default function DesignPage() {
   const [briefingReq, setBriefingReq] = useState<DesignRequest | null>(null);
   const [nonDeliveryCard, setNonDeliveryCard] = useState<ContentCard | null>(null);
   const [nonDeliveryReason, setNonDeliveryReason] = useState("");
+  const [blockingCard, setBlockingCard] = useState<ContentCard | null>(null);
+  const [blockReason, setBlockReason] = useState("");
 
   // Filter content cards to only show clients assigned to this designer
   const myClientIds = useMemo(() => {
@@ -421,19 +438,28 @@ export default function DesignPage() {
 
                   {/* Kanban for this person — sorted by deadline */}
                   <KanbanBoard
-                    columns={CONTENT_COLUMNS.map((col) => ({
-                      ...col,
+                    columns={DESIGNER_COLUMNS.map((col) => ({
+                      id: col.id,
+                      title: col.title,
+                      color: col.color,
                       items: cards
-                        .filter((c) => c.status === col.id)
+                        .filter((c) => col.statuses.includes(c.status))
                         .sort((a, b) => {
-                          // Sort by deadline urgency: overdue first, then today, then by date
+                          // at_risk clients first, then by deadline
+                          const aClient = clients.find((cl) => cl.id === a.clientId);
+                          const bClient = clients.find((cl) => cl.id === b.clientId);
+                          const aRisk = aClient?.status === "at_risk" ? 0 : 1;
+                          const bRisk = bClient?.status === "at_risk" ? 0 : 1;
+                          if (aRisk !== bRisk) return aRisk - bRisk;
+                          // Then by budget (high first)
+                          const aBudget = aClient?.monthlyBudget ?? 0;
+                          const bBudget = bClient?.monthlyBudget ?? 0;
+                          if (aBudget !== bBudget) return bBudget - aBudget;
+                          // Then by deadline
                           if (!a.dueDate && !b.dueDate) return 0;
                           if (!a.dueDate) return 1;
                           if (!b.dueDate) return -1;
-                          const dateCompare = a.dueDate.localeCompare(b.dueDate);
-                          if (dateCompare !== 0) return dateCompare;
-                          // Same date: sort by time
-                          return (a.dueTime ?? "23:59").localeCompare(b.dueTime ?? "23:59");
+                          return a.dueDate.localeCompare(b.dueDate);
                         })
                         .map((c) => ({
                           id: c.id,
@@ -596,14 +622,25 @@ export default function DesignPage() {
                     onMove={(itemId, _from, to) => {
                       const card = contentCards.find((c) => c.id === itemId);
                       if (!card) return;
+
+                      // If moving to "blocked" column, open block reason modal
+                      if (to === "blocked") {
+                        setBlockingCard(card);
+                        return;
+                      }
+
+                      // Map designer column to actual status
+                      const newStatus = DESIGNER_COL_TO_STATUS[to] ?? to;
                       const now = new Date().toISOString();
                       updateContentCard(itemId, {
-                        status: to as ContentCard["status"],
+                        status: newStatus as ContentCard["status"],
                         statusChangedAt: now,
                         columnEnteredAt: {
                           ...(card.columnEnteredAt ?? {}),
-                          [to]: now,
+                          [newStatus]: now,
                         },
+                        // Clear block fields if unblocking
+                        ...(card.status === "blocked" ? { blockedReason: undefined, blockedBy: undefined, blockedAt: undefined } : {}),
                       });
                     }}
                   />
@@ -725,6 +762,70 @@ export default function DesignPage() {
       )}
 
       {/* Non-delivery report modal */}
+      {/* Block Reason Modal — Designer's Panic Button */}
+      {blockingCard && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setBlockingCard(null); setBlockReason(""); }}>
+          <div className="bg-card border border-red-500/20 rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-border">
+              <h3 className="font-semibold text-red-400 text-sm flex items-center gap-2">
+                <AlertTriangle size={15} /> Devolver Card — Motivo do Bloqueio
+              </h3>
+              <p className="text-xs text-zinc-400 mt-1">{blockingCard.title} — {blockingCard.clientName}</p>
+            </div>
+            <div className="p-5 space-y-2">
+              {BLOCK_REASONS.map((reason) => (
+                <button
+                  key={reason}
+                  onClick={() => setBlockReason(reason)}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg text-xs transition-all ${
+                    blockReason === reason
+                      ? "bg-red-500/10 text-red-400 border border-red-500/30"
+                      : "bg-white/[0.02] text-zinc-400 border border-transparent hover:bg-white/[0.04]"
+                  }`}
+                >
+                  {reason}
+                </button>
+              ))}
+            </div>
+            <div className="p-5 border-t border-border flex gap-2">
+              <button onClick={() => { setBlockingCard(null); setBlockReason(""); }} className="btn-ghost flex-1 text-sm">Cancelar</button>
+              <button
+                onClick={() => {
+                  if (!blockReason) return;
+                  const now = new Date().toISOString();
+                  updateContentCard(blockingCard.id, {
+                    status: "blocked",
+                    blockedReason: blockReason,
+                    blockedBy: currentUser,
+                    blockedAt: now,
+                    statusChangedAt: now,
+                    columnEnteredAt: {
+                      ...(blockingCard.columnEnteredAt ?? {}),
+                      blocked: now,
+                    },
+                  });
+                  // Notify Social Media
+                  pushNotification(
+                    "sla",
+                    "Arte Devolvida pelo Designer",
+                    `"${blockingCard.title}" (${blockingCard.clientName}) — Motivo: ${blockReason}. Ajuste necessario.`,
+                    blockingCard.clientId
+                  );
+                  // Audio ping
+                  import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
+                  setBlockingCard(null);
+                  setBlockReason("");
+                }}
+                disabled={!blockReason}
+                className="flex-1 px-4 py-2 rounded-xl bg-red-500/15 text-red-400 text-sm font-medium border border-red-500/30 hover:bg-red-500/25 transition-all disabled:opacity-30"
+              >
+                Devolver Card
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {nonDeliveryCard && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); }}>
           <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>

@@ -121,7 +121,10 @@ export interface ContentCard {
   clientId: string;
   clientName: string;
   socialMedia: string;
-  status: "ideas" | "script" | "in_production" | "approval" | "client_approval" | "scheduled" | "published";
+  status: "ideas" | "script" | "in_production" | "blocked" | "approval" | "client_approval" | "scheduled" | "published";
+  blockedReason?: string;
+  blockedBy?: string;
+  blockedAt?: string;
   priority: Priority;
   dueDate?: string;
   dueTime?: string;       // "HH:mm" — posting time
