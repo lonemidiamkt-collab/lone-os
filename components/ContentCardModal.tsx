@@ -423,9 +423,24 @@ export default function ContentCardModal({ card, onClose }: Props) {
           </div>
         )}
 
+        {/* Drive link + note */}
+        {(() => {
+          const { clients } = useAppState();
+          const cl = clients.find((c) => c.id === card.clientId);
+          return cl?.driveLink ? (
+            <div className="px-6 py-2 border-t border-border flex items-center gap-2">
+              <a href={cl.driveLink} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-[#0d4af5] transition-all">
+                <ExternalLink size={11} /> Abrir Drive — {cl.name}
+              </a>
+              <span className="text-[9px] text-zinc-700 ml-auto">Acesse o Drive para arquivos em alta resolucao</span>
+            </div>
+          ) : null;
+        })()}
+
         <DialogFooter className="px-6 py-4 border-t border-border">
-          {/* Solicitar Design — only if card has no design request yet */}
-          {!card.designRequestId && !card.designerDeliveredAt && (
+          {/* Solicitar Design — only for social/traffic/admin, NOT for designer */}
+          {role !== "designer" && !card.designRequestId && !card.designerDeliveredAt && (
             <Button
               variant="outline"
               className="mr-auto flex items-center gap-2 text-[#8b5cf6] border-[#8b5cf6]/30 hover:bg-[#8b5cf6]/10"
@@ -448,12 +463,18 @@ export default function ContentCardModal({ card, onClose }: Props) {
               Solicitar Design
             </Button>
           )}
-          {card.designRequestId && !card.designerDeliveredAt && (
+          {/* Designer sees "Enviar Arte" instead */}
+          {role === "designer" && !card.designerDeliveredAt && (
+            <span className="mr-auto text-xs text-[#0d4af5] flex items-center gap-1.5">
+              <Upload size={12} /> Use o botao "Enviar Arte" no kanban
+            </span>
+          )}
+          {role !== "designer" && card.designRequestId && !card.designerDeliveredAt && (
             <span className="mr-auto text-xs text-amber-400 flex items-center gap-1.5">
               <Palette size={12} /> Aguardando design...
             </span>
           )}
-          {card.designerDeliveredAt && !card.socialConfirmedAt && (
+          {card.designerDeliveredAt && !card.socialConfirmedAt && role !== "designer" && (
             <Button
               variant="outline"
               className="mr-auto flex items-center gap-2 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
