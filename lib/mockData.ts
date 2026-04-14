@@ -216,15 +216,19 @@ export const mockClientChats: Record<string, { user: string; text: string; time:
 
 // Default onboarding checklist items
 export const DEFAULT_ONBOARDING_ITEMS: Omit<OnboardingItem, "id">[] = [
-  { label: "Acessos às redes sociais recebidos", completed: false },
-  { label: "Briefing de marca preenchido", completed: false },
-  { label: "Paleta de cores e fontes definidas", completed: false },
-  { label: "Tom de voz e persona definidos", completed: false },
-  { label: "Pixel de rastreamento instalado", completed: false },
-  { label: "Contas de anúncios configuradas", completed: false },
-  { label: "Calendário inicial de conteúdo criado", completed: false },
-  { label: "Primeira reunião de alinhamento realizada", completed: false },
-  { label: "Histórico de conteúdo analisado", completed: false },
+  // Setup de Trafego
+  { label: "Pixel de rastreamento instalado", completed: false, department: "traffic" },
+  { label: "Contas de anuncios configuradas", completed: false, department: "traffic" },
+  { label: "Estrategia inicial de campanhas definida", completed: false, department: "traffic" },
+  // Setup de Design
+  { label: "Paleta de cores e fontes definidas", completed: false, department: "design" },
+  { label: "Briefing de marca preenchido", completed: false, department: "design" },
+  { label: "Assets organizados no Drive", completed: false, department: "design" },
+  // Setup de Social Media
+  { label: "Acessos as redes sociais recebidos", completed: false, department: "social" },
+  { label: "Tom de voz e persona definidos", completed: false, department: "social" },
+  { label: "Calendario inicial criado", completed: false, department: "social" },
+  { label: "Primeira reuniao de alinhamento realizada", completed: false, department: "social" },
 ];
 
 // Timeline per client — audit log of all operations

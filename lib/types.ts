@@ -245,6 +245,7 @@ export interface OnboardingItem {
   completed: boolean;
   completedBy?: string;
   completedAt?: string;
+  department?: "traffic" | "design" | "social";
 }
 
 // --- Client Access / Credentials (non-financial) ---

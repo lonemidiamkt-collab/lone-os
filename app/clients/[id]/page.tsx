@@ -918,68 +918,87 @@ export default function ClientDetailPage() {
 
           {/* ── ONBOARDING ───────────────────────────────────────────────────── */}
           {activeTab === "onboarding" && (
-            <div className="animate-fade-in max-w-xl space-y-4">
-              {obItems.length === 0 && (
-                <div className="card text-center py-10 text-muted-foreground">
+            <div className="animate-fade-in space-y-6">
+              {obItems.length === 0 ? (
+                <div className="card text-center py-10 text-zinc-500">
                   {client.status === "onboarding"
-                    ? "Checklist de onboarding não iniciado."
-                    : "Este cliente já concluiu o onboarding."}
+                    ? "Checklist de onboarding nao iniciado."
+                    : "Este cliente ja concluiu o onboarding."}
                 </div>
-              )}
-
-              {obItems.length > 0 && (
-                <div className="card">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-foreground">Checklist de Onboarding</h3>
-                    <span className="text-sm font-bold text-primary">{obProgress}%</span>
+              ) : (
+                <>
+                  {/* Global progress bar */}
+                  <div className="card">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h3 className="font-semibold text-foreground text-sm">Setup do Cliente</h3>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">Quartel General — {client.name}</p>
+                      </div>
+                      <span className="text-lg font-bold text-foreground tabular-nums">{obProgress}%</span>
+                    </div>
+                    <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#0d4af5] rounded-full transition-all duration-500" style={{ width: `${obProgress}%` }} />
+                    </div>
                   </div>
 
-                  <div className="h-2 bg-muted rounded-full overflow-hidden mb-5">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all duration-500"
-                      style={{ width: `${obProgress}%` }}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    {obItems.map((item) => (
-                      <label
-                        key={item.id}
-                        className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                          item.completed ? "bg-primary/5 border border-primary/20" : "hover:bg-muted"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={item.completed}
-                          onChange={() => toggleOnboardingItem(clientId, item.id, currentUser)}
-                          className="mt-0.5 w-4 h-4 rounded accent-brand"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span className={`text-sm ${item.completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                            {item.label}
-                          </span>
-                          {item.completed && item.completedBy && (
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <div className="w-5 h-5 rounded-full bg-[#0d4af5]/15 flex items-center justify-center shrink-0">
-                                <span className="text-[8px] font-bold text-[#0d4af5]">
-                                  {item.completedBy.split(" ").map((w) => w[0]).join("").slice(0, 2)}
-                                </span>
+                  {/* 3 department blocks */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {([
+                      { dept: "traffic", title: "Setup de Trafego", icon: "🛡️", member: client.assignedTraffic },
+                      { dept: "design", title: "Setup de Design", icon: "🎨", member: client.assignedDesigner },
+                      { dept: "social", title: "Setup de Social", icon: "📱", member: client.assignedSocial },
+                    ] as const).map((block) => {
+                      const deptItems = obItems.filter((it) => (it as any).department === block.dept || (!((it as any).department) && block.dept === "social"));
+                      const deptDone = deptItems.filter((it) => it.completed).length;
+                      const deptTotal = deptItems.length;
+                      return (
+                        <div key={block.dept} className="card space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">{block.icon}</span>
+                              <div>
+                                <h4 className="text-xs font-semibold text-foreground">{block.title}</h4>
+                                <p className="text-[10px] text-zinc-500">{block.member || "Nao atribuido"}</p>
                               </div>
-                              <span className="text-[11px] text-muted-foreground">
-                                {item.completedBy}
-                              </span>
-                              <span className="text-[10px] text-zinc-600">
-                                · {item.completedAt}
-                              </span>
                             </div>
-                          )}
+                            <span className={`text-[10px] font-bold tabular-nums ${deptDone === deptTotal && deptTotal > 0 ? "text-emerald-400" : "text-zinc-400"}`}>
+                              {deptDone}/{deptTotal}
+                            </span>
+                          </div>
+
+                          {/* Mini progress */}
+                          <div className="h-1 bg-zinc-900 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all duration-500 ${deptDone === deptTotal && deptTotal > 0 ? "bg-emerald-500" : "bg-[#0d4af5]"}`}
+                              style={{ width: deptTotal > 0 ? `${(deptDone / deptTotal) * 100}%` : "0%" }} />
+                          </div>
+
+                          {/* Items */}
+                          <div className="space-y-1">
+                            {deptItems.map((item) => (
+                              <label key={item.id}
+                                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-all ${
+                                  item.completed ? "bg-zinc-900/50" : "hover:bg-zinc-900/30"
+                                }`}>
+                                <button
+                                  onClick={() => toggleOnboardingItem(clientId, item.id, currentUser)}
+                                  className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
+                                    item.completed
+                                      ? "bg-[#0d4af5] border-[#0d4af5] text-white"
+                                      : "border-zinc-700 hover:border-[#0d4af5]"
+                                  }`}>
+                                  {item.completed && <CheckCircle size={10} />}
+                                </button>
+                                <span className={`text-xs flex-1 ${item.completed ? "text-zinc-500 line-through" : "text-foreground"}`}>
+                                  {item.label}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
-                        {item.completed && <CheckCircle size={15} className="text-[#0d4af5] shrink-0 mt-0.5 drop-shadow-[0_0_4px_rgba(10,52,245,0.5)]" />}
-                      </label>
-                    ))}
+                      );
+                    })}
                   </div>
-                </div>
+                </>
               )}
             </div>
           )}
