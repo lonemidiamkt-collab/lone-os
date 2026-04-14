@@ -11,7 +11,7 @@ import {
   KeyRound, Mail, UserCog, AlertCircle, ChevronRight, ZapOff,
   Calendar as CalendarIcon, ShieldCheck,
 } from "lucide-react";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { USER_PROFILES } from "@/lib/context/RoleContext";
 import MedievalAvatar, { AVATAR_OPTIONS, getUserAvatar, setUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
 import type { Role } from "@/lib/types";
@@ -230,21 +230,49 @@ export default function CEOPage() {
     setConfirmDeleteId(null);
   }, []);
 
-  // Auto-submit when 4 digits entered
-  const handlePinChange = (value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 4);
-    setPin(digits);
+  // OTP-style PIN input refs
+  const pinRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
+  const [pinDigits, setPinDigits] = useState(["", "", "", ""]);
+  const [shake, setShake] = useState(false);
+
+  const handleDigitChange = useCallback((index: number, value: string) => {
+    const digit = value.replace(/\D/g, "").slice(-1); // only last digit
+    const newDigits = [...pinDigits];
+    newDigits[index] = digit;
+    setPinDigits(newDigits);
     setPinError(false);
-    if (digits.length === 4) {
-      if (digits === CORRECT_PIN) {
+
+    // Auto-focus next
+    if (digit && index < 3) {
+      pinRefs.current[index + 1]?.focus();
+    }
+
+    // Auto-submit when all 4 filled
+    const fullPin = newDigits.join("");
+    if (fullPin.length === 4 && newDigits.every((d) => d)) {
+      if (fullPin === CORRECT_PIN) {
         setUnlocked(true);
         try { sessionStorage.setItem(PIN_SESSION_KEY, "true"); } catch {}
       } else {
         setPinError(true);
-        setTimeout(() => setPin(""), 600);
+        setShake(true);
+        setTimeout(() => {
+          setPinDigits(["", "", "", ""]);
+          setShake(false);
+          pinRefs.current[0]?.focus();
+        }, 600);
       }
     }
-  };
+  }, [pinDigits]);
+
+  const handleKeyDown = useCallback((index: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !pinDigits[index] && index > 0) {
+      const newDigits = [...pinDigits];
+      newDigits[index - 1] = "";
+      setPinDigits(newDigits);
+      pinRefs.current[index - 1]?.focus();
+    }
+  }, [pinDigits]);
 
   if (!unlocked) {
     return (
@@ -253,52 +281,39 @@ export default function CEOPage() {
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="max-w-xs w-full text-center space-y-8">
             <div>
-              <Lock size={24} className="text-zinc-500 mx-auto mb-4" />
+              <Lock size={20} className="text-zinc-600 mx-auto mb-3" />
               <h2 className="text-lg font-semibold text-foreground">Cofre Executivo</h2>
-              <p className="text-sm text-zinc-500 mt-1">Insira o PIN de 4 digitos</p>
+              <p className="text-xs text-zinc-500 mt-1">PIN de 4 digitos</p>
             </div>
 
-            {/* 4-digit PIN boxes */}
-            <div className="flex items-center justify-center gap-3">
+            {/* 4 real OTP inputs */}
+            <div className={`flex items-center justify-center gap-3 ${shake ? "animate-shake" : ""}`}>
               {[0, 1, 2, 3].map((i) => (
-                <div
+                <input
                   key={i}
-                  className={`w-12 h-14 rounded-lg border flex items-center justify-center text-xl font-bold transition-all ${
+                  ref={(el) => { pinRefs.current[i] = el; }}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={pinDigits[i]}
+                  onChange={(e) => handleDigitChange(i, e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(i, e)}
+                  onFocus={(e) => e.target.select()}
+                  autoFocus={i === 0}
+                  className={`w-12 h-14 rounded-lg bg-transparent text-center text-xl font-bold text-white outline-none transition-all ${
                     pinError
-                      ? "border-red-500/50 bg-red-500/[0.04]"
-                      : pin.length > i
-                      ? "border-[#0d4af5]/40 bg-[#0d4af5]/[0.04] text-foreground"
-                      : "border-zinc-800 bg-zinc-900/50 text-zinc-700"
+                      ? "border border-red-500/60"
+                      : pinDigits[i]
+                      ? "border border-[#0d4af5]/50"
+                      : "border border-zinc-700 focus:border-[#0d4af5] focus:ring-1 focus:ring-[#0d4af5]/30"
                   }`}
-                >
-                  {pin.length > i ? "•" : ""}
-                </div>
+                />
               ))}
             </div>
 
-            {/* Hidden input for actual typing */}
-            <input
-              type="tel"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={pin}
-              onChange={(e) => handlePinChange(e.target.value)}
-              maxLength={4}
-              autoFocus
-              className="sr-only"
-              aria-label="PIN"
-            />
-
-            {/* Click anywhere to focus the hidden input */}
-            <button
-              onClick={() => {
-                const input = document.querySelector('input[aria-label="PIN"]') as HTMLInputElement;
-                input?.focus();
-              }}
-              className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
-            >
-              {pinError ? "PIN incorreto. Tente novamente." : "Clique aqui e digite o PIN"}
-            </button>
+            {pinError && (
+              <p className="text-xs text-red-400">PIN incorreto</p>
+            )}
 
             <div className="flex items-center justify-center gap-2 text-zinc-700 text-[10px]">
               <Shield size={10} />
