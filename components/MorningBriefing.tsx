@@ -153,9 +153,9 @@ export default function MorningBriefing({ clients }: Props) {
                     <span className="text-[11px] font-medium text-foreground">{alert.title}</span>
                   </div>
                   <p className="text-[10px] text-zinc-500 mt-0.5">{alert.detail}</p>
-                  <p className="text-[10px] text-[#0d4af5] mt-0.5 font-medium flex items-center gap-1">
-                    <Zap size={8} /> {alert.action}
-                  </p>
+                  <a href="/traffic" className="text-[10px] text-[#0d4af5] mt-0.5 font-medium flex items-center gap-1 hover:underline cursor-pointer">
+                    <Zap size={8} /> {alert.action} →
+                  </a>
                 </div>
               </div>
             ))}
@@ -226,9 +226,9 @@ export default function MorningBriefing({ clients }: Props) {
                         {item.title}
                       </p>
                       <p className="text-[10px] text-zinc-500 mt-0.5">{item.detail}</p>
-                      <p className="text-[10px] text-[#0d4af5] mt-1 font-medium flex items-center gap-1">
-                        <Zap size={8} /> {item.action}
-                      </p>
+                      <a href="/traffic" className="text-[10px] text-[#0d4af5] mt-1 font-medium flex items-center gap-1 hover:underline cursor-pointer">
+                        <Zap size={8} /> {item.action} →
+                      </a>
                     </div>
                   </div>
                 ))}

@@ -19,39 +19,41 @@ export default function MyWorkPage() {
   const { role, currentUser } = useRole();
   const [filter, setFilter] = useState<FilterType>("all");
 
-  // My tasks
+  const isAdmin = role === "admin" || role === "manager";
+  const pSort = (a: { priority: string }, b: { priority: string }) => {
+    const pOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+    return (pOrder[a.priority] ?? 3) - (pOrder[b.priority] ?? 3);
+  };
+
+  // Tasks: Admin/Manager = ALL open tasks, Staff = only assigned to me
   const myTasks = useMemo(() =>
-    tasks.filter((t) => t.assignedTo === currentUser && t.status !== "done")
-      .sort((a, b) => {
-        const pOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-        return (pOrder[a.priority] ?? 3) - (pOrder[b.priority] ?? 3);
-      }),
-    [tasks, currentUser]
+    tasks
+      .filter((t) => t.status !== "done" && (isAdmin || t.assignedTo === currentUser))
+      .sort(pSort),
+    [tasks, currentUser, isAdmin]
   );
 
-  // My content cards (assigned social media)
+  // Content cards: Admin/Manager = ALL unpublished, Social = my assigned
   const myCards = useMemo(() =>
-    contentCards.filter((c) => c.socialMedia === currentUser && c.status !== "published")
-      .sort((a, b) => {
-        const pOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-        return (pOrder[a.priority] ?? 3) - (pOrder[b.priority] ?? 3);
-      }),
-    [contentCards, currentUser]
+    contentCards
+      .filter((c) => c.status !== "published" && (isAdmin || c.socialMedia === currentUser))
+      .sort(pSort),
+    [contentCards, currentUser, isAdmin]
   );
 
-  // My design requests (requested by me or assigned designer)
+  // Design requests: Admin = all, Designer = all, Others = requested by me
   const myDesignReqs = useMemo(() =>
-    designRequests.filter((r) => r.status !== "done" && (r.requestedBy === currentUser || role === "designer")),
-    [designRequests, currentUser, role]
+    designRequests.filter((r) => r.status !== "done" && (isAdmin || role === "designer" || r.requestedBy === currentUser)),
+    [designRequests, currentUser, role, isAdmin]
   );
 
-  // Cards awaiting my approval
+  // Approvals: Admin/Manager = all, Staff = my cards only
   const pendingApprovals = useMemo(() =>
     contentCards.filter((c) =>
       (c.status === "approval" || c.status === "client_approval") &&
-      (role === "admin" || role === "manager" || c.socialMedia === currentUser)
+      (isAdmin || c.socialMedia === currentUser)
     ),
-    [contentCards, role, currentUser]
+    [contentCards, isAdmin, currentUser]
   );
 
   // Unread notifications
@@ -79,7 +81,7 @@ export default function MyWorkPage() {
           Meu Trabalho
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Tudo que precisa da sua atenção — {currentUser}
+          {isAdmin ? "Todas as tarefas da equipe" : `Tarefas de ${currentUser}`}
         </p>
       </div>
 

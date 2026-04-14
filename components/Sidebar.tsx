@@ -7,7 +7,7 @@ import {
   MessageCircle, Calendar, LogOut, Sun, Moon,
   ClipboardCheck, BarChart2, Wallet, Megaphone, Brain, FileText,
   ChevronLeft, Activity, Layers, AlertTriangle, Settings,
-  Users2, Globe, Target, Inbox, ShieldCheck, Package, Zap,
+  Users2, Globe, Target, Inbox, ShieldCheck, Package, Zap, PanelLeftClose, PanelLeft,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -162,6 +162,7 @@ export default function Sidebar() {
 
   // Track which section is "active" in the secondary sidebar
   const [activePrimary, setActivePrimary] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   // Auto-open/close secondary based on current route
   useEffect(() => {
@@ -261,8 +262,9 @@ export default function Sidebar() {
       )}
 
       <aside className={cn(
-        "fixed left-0 top-0 bottom-0 z-50 flex flex-col items-center justify-between py-5 w-[72px] bg-black transition-transform duration-[400ms]",
+        "fixed left-0 top-0 bottom-0 z-50 flex flex-col justify-between py-5 bg-black transition-all duration-[400ms]",
         "ease-[cubic-bezier(0.16,1,0.3,1)]",
+        expanded ? "w-[200px] items-start px-3" : "w-[72px] items-center",
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         {/* Right-edge — ultra subtle gradient border */}
@@ -275,8 +277,17 @@ export default function Sidebar() {
           </div>
         </Link>
 
+        {/* Expand/Collapse toggle */}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-700 hover:text-zinc-300 hover:bg-white/[0.04] transition-all mt-2 mb-1 shrink-0"
+          title={expanded ? "Recolher menu" : "Expandir menu"}
+        >
+          {expanded ? <PanelLeftClose size={14} /> : <PanelLeft size={14} />}
+        </button>
+
         {/* Nav icons */}
-        <nav className="flex flex-col items-center gap-0.5 flex-1 justify-center">
+        <nav className={cn("flex flex-col gap-0.5 flex-1 justify-center", expanded ? "w-full" : "items-center")}>
           {visibleItems.map((item) => {
             const isPage    = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             const isSection = activePrimary === item.href && secondaryOpen;
@@ -285,9 +296,10 @@ export default function Sidebar() {
               <button
                 key={item.href}
                 onClick={() => handlePrimaryClick(item)}
-                title={item.label}
+                title={expanded ? undefined : item.label}
                 className={cn(
-                  "relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ease-out group",
+                  "relative rounded-xl flex items-center transition-all duration-200 ease-out group",
+                  expanded ? "w-full gap-3 px-3 h-10" : "w-10 h-10 justify-center",
                   isPage
                     ? "text-white"
                     : isSection
@@ -295,7 +307,12 @@ export default function Sidebar() {
                     : "text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.04]"
                 )}
               >
-                <Icon size={17} strokeWidth={isPage ? 2.3 : 1.7} />
+                <Icon size={17} strokeWidth={isPage ? 2.3 : 1.7} className="shrink-0" />
+                {expanded && (
+                  <span className={`text-xs font-medium truncate ${isPage ? "text-white" : "text-zinc-400"}`}>
+                    {item.label}
+                  </span>
+                )}
 
                 {/* Active page: blue pill on right edge */}
                 {isPage && (
