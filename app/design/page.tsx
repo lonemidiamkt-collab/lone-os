@@ -453,26 +453,39 @@ export default function DesignPage() {
                       const urgency = getDeadlineUrgency(item.dueDate);
                       const badge = urgency && urgency !== "ok" ? URGENCY_BADGE[urgency] : null;
                       const hasArt = !!item.imageUrl;
+                      const client = clients.find((c) => c.id === (item._card as ContentCard).clientId);
+                      const isAtRisk = client?.status === "at_risk";
+                      const budgetTier = (client?.monthlyBudget ?? 0) >= 8000 ? "high" : (client?.monthlyBudget ?? 0) >= 4000 ? "med" : "low";
 
                       return (
                         <div className={`bg-card border rounded-lg p-3 space-y-2 transition-colors ${
-                          !hasArt && ["in_production", "approval", "client_approval"].includes(
-                            contentCards.find((c) => c.id === item.id)?.status ?? ""
-                          )
-                            ? "border-yellow-500/30 bg-[#0d4af5]/5"
-                            : "border-border hover:border-primary/30"
+                          isAtRisk
+                            ? "border-red-500/30 bg-red-500/[0.03]"
+                            : !hasArt && ["in_production", "approval", "client_approval"].includes(
+                                contentCards.find((c) => c.id === item.id)?.status ?? ""
+                              )
+                              ? "border-yellow-500/30 bg-[#0d4af5]/5"
+                              : "border-border hover:border-primary/30"
                         }`}>
+                          {/* Client risk + budget indicator */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {isAtRisk && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20 font-bold">RISCO</span>
+                            )}
+                            {budgetTier === "high" && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20 font-bold">$$$$</span>
+                            )}
+                            {item.requestedByTraffic && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#3b6ff5]/10 text-[#3b6ff5] border border-[#3b6ff5]/20 font-medium flex items-center gap-0.5">
+                                <Zap size={8} /> TRAFEGO
+                              </span>
+                            )}
+                          </div>
+
                           {/* Art thumbnail */}
                           {hasArt && (
                             <div className="w-full h-20 rounded-md overflow-hidden bg-muted">
                               <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
-                            </div>
-                          )}
-
-                          {item.requestedByTraffic && (
-                            <div className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md border text-[#3b6ff5] bg-[#3b6ff5]/10 border-[#3b6ff5]/20">
-                              <Zap size={10} />
-                              Solicitação Tráfego
                             </div>
                           )}
 
@@ -720,14 +733,37 @@ export default function DesignPage() {
               <p className="text-xs text-primary mt-0.5">{nonDeliveryCard.title} — {nonDeliveryCard.clientName}</p>
             </div>
             <div className="p-5 space-y-3">
-              <p className="text-xs text-muted-foreground">Informe o motivo pelo qual esta arte/conteúdo não foi entregue:</p>
-              <textarea
-                value={nonDeliveryReason}
-                onChange={(e) => setNonDeliveryReason(e.target.value)}
-                rows={3}
-                placeholder="Ex: Cliente não enviou materiais, briefing incompleto..."
-                className="w-full bg-muted rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary resize-none"
-              />
+              <p className="text-xs text-muted-foreground">Selecione o motivo:</p>
+              <div className="space-y-1.5">
+                {[
+                  "Briefing incompleto",
+                  "Aguardando assets do cliente",
+                  "Fila sobrecarregada",
+                  "Refacao pendente (aguardando feedback)",
+                  "Problema tecnico",
+                  "Outro",
+                ].map((reason) => (
+                  <button
+                    key={reason}
+                    onClick={() => setNonDeliveryReason(reason)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all ${
+                      nonDeliveryReason === reason
+                        ? "bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/30"
+                        : "bg-muted/50 text-zinc-400 border border-transparent hover:bg-muted"
+                    }`}
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
+              {nonDeliveryReason === "Outro" && (
+                <input
+                  value={nonDeliveryReason === "Outro" ? "" : nonDeliveryReason}
+                  onChange={(e) => setNonDeliveryReason(e.target.value || "Outro")}
+                  placeholder="Descreva o motivo..."
+                  className="w-full bg-muted rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary"
+                />
+              )}
             </div>
             <div className="p-5 border-t border-border flex gap-2">
               <button onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); }} className="btn-ghost flex-1 text-sm">Cancelar</button>
@@ -773,24 +809,62 @@ export default function DesignPage() {
                 <X size={18} />
               </button>
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Briefing Health Score */}
+              {(() => {
+                const client = clients.find((c) => c.id === briefingReq.clientId);
+                const checks = [
+                  { label: "Briefing preenchido", ok: !!(briefingReq.briefing && briefingReq.briefing.length > 10) },
+                  { label: "Formato definido", ok: !!briefingReq.format },
+                  { label: "Prazo definido", ok: !!briefingReq.deadline },
+                  { label: "Guidelines do cliente", ok: !!client?.fixedBriefing },
+                ];
+                const score = Math.round((checks.filter((c) => c.ok).length / checks.length) * 100);
+                return (
+                  <div className={`p-3 rounded-lg border ${score >= 75 ? "bg-emerald-500/[0.04] border-emerald-500/[0.1]" : score >= 50 ? "bg-amber-500/[0.04] border-amber-500/[0.1]" : "bg-red-500/[0.04] border-red-500/[0.1]"}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] uppercase tracking-wider font-semibold text-zinc-400">Saude do Briefing</p>
+                      <span className={`text-xs font-bold ${score >= 75 ? "text-emerald-400" : score >= 50 ? "text-amber-400" : "text-red-400"}`}>{score}%</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {checks.map((c) => (
+                        <span key={c.label} className={`text-[9px] px-2 py-0.5 rounded-full border ${c.ok ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-red-400 bg-red-500/10 border-red-500/20"}`}>
+                          {c.ok ? "✓" : "✗"} {c.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div>
                 <p className="text-xs text-muted-foreground font-medium mb-1.5">Briefing Completo</p>
-                <p className="text-sm text-foreground leading-relaxed bg-muted border border-border rounded-lg p-4">
-                  {briefingReq.briefing}
+                <p className="text-sm text-foreground leading-relaxed bg-muted border border-border rounded-lg p-4 whitespace-pre-wrap">
+                  {briefingReq.briefing || "Sem briefing detalhado."}
                 </p>
               </div>
+
               {/* Client brand guidelines */}
               {(() => {
                 const client = clients.find((c) => c.id === briefingReq.clientId);
-                return client?.fixedBriefing ? (
-                  <div>
-                    <p className="text-xs text-[#0d4af5]/70 font-medium mb-1.5 uppercase tracking-wider">Guidelines do Cliente</p>
-                    <p className="text-xs text-zinc-400 leading-relaxed bg-[#0d4af5]/[0.03] border border-[#0d4af5]/[0.08] rounded-lg p-3">
-                      {client.fixedBriefing}
-                    </p>
-                  </div>
-                ) : null;
+                return (
+                  <>
+                    {client?.fixedBriefing && (
+                      <div>
+                        <p className="text-xs text-[#0d4af5]/70 font-medium mb-1.5 uppercase tracking-wider">Guidelines do Cliente</p>
+                        <p className="text-xs text-zinc-400 leading-relaxed bg-[#0d4af5]/[0.03] border border-[#0d4af5]/[0.08] rounded-lg p-3 whitespace-pre-wrap">
+                          {client.fixedBriefing}
+                        </p>
+                      </div>
+                    )}
+                    {client?.driveLink && (
+                      <a href={client.driveLink} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:border-[#0d4af5]/30 transition-all text-xs text-zinc-400 hover:text-[#0d4af5]">
+                        <FolderOpen size={13} /> Abrir pasta Drive do cliente →
+                      </a>
+                    )}
+                  </>
+                );
               })()}
               {briefingReq.deadline && (
                 <div className="flex items-center gap-2">
