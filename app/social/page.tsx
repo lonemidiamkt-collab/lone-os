@@ -21,7 +21,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useNav } from "@/lib/context/NavContext";
-import SocialAuthModal from "@/components/SocialAuthModal";
+// SocialAuthModal removed — using global session auth only
 import Link from "next/link";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -1818,10 +1818,7 @@ export default function SocialPage() {
     updateClientStatus,
     toggleOnboardingItem,
     socialTeam,
-    socialAuthUser,
     addSocialTeamMember,
-    loginSocial,
-    logoutSocial,
     designRequests,
     clientAccess,
     updateClientAccess,
@@ -1855,18 +1852,11 @@ export default function SocialPage() {
     setCurrentTab(activeTab);
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auth gate: non-admin must authenticate
+  // Auth: use global session (no secondary login needed)
   const isAdmin = role === "admin" || role === "manager";
-  const isAuthenticated = isAdmin || socialAuthUser !== null;
-  const effectiveUser = isAdmin ? null : socialAuthUser;
-
-  if (!isAuthenticated) {
-    return <SocialAuthModal />;
-  }
 
   const socialMemberNames = socialTeam.map((m) => m.name);
-  const workspace = effectiveUser ?? "Todos";
-  const activeWorkspace = isAdmin ? adminWorkspace : effectiveUser!;
+  const activeWorkspace = isAdmin ? adminWorkspace : currentUser;
 
   const filteredClients = clients.filter((c) => {
     const matchWorkspace = activeWorkspace === "Todos" ? true : c.assignedSocial === activeWorkspace;
@@ -2068,12 +2058,7 @@ export default function SocialPage() {
           onClose={() => setMoodClientId(null)}
         />
       )}
-      {showAddMember && (
-        <AddMemberModal
-          onAdd={(name, password) => addSocialTeamMember(name, password)}
-          onClose={() => setShowAddMember(false)}
-        />
-      )}
+      {/* AddMemberModal removed — team managed via CEO area */}
       {newCardDate && (
         <NewContentCardModal
           defaultDate={newCardDate}
@@ -2118,7 +2103,7 @@ export default function SocialPage() {
           ) : (
             <div className="flex items-center gap-2">
               <span className="text-xs bg-primary/15 text-primary px-3 py-1.5 rounded border border-primary/20 font-medium">
-                Logado como: {effectiveUser}
+                Logado como: {currentUser}
               </span>
             </div>
           )}
@@ -2171,9 +2156,9 @@ export default function SocialPage() {
           <div className="space-y-6 animate-fade-in">
 
             {/* Personal Dashboard — shows for logged social user */}
-            {effectiveUser && (
+            {currentUser && (
               <PersonalDashboard
-                userName={effectiveUser}
+                userName={currentUser}
                 cards={contentCards}
                 clients={filteredClients}
                 moodHistory={moodHistory}
@@ -2733,7 +2718,7 @@ export default function SocialPage() {
           <MonthlyDeliveriesTab
             reports={monthlyDeliveryReports}
             performanceScores={socialPerformanceScores}
-            workspace={workspace}
+            workspace={activeWorkspace}
           />
         )}
 
