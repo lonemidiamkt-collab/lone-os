@@ -7,7 +7,7 @@ import {
   Users, TrendingUp, AlertTriangle, UserPlus,
   Activity, Megaphone, Clock, Bell, Send, X,
   AlertCircle, ZapOff, LayoutList,
-  CheckCircle, CheckCircle2, Palette, Instagram, BarChart2,
+  Check, CheckCircle, CheckCircle2, Palette, Instagram, BarChart2,
   Target, Zap, FileText, ChevronRight, Plus, Inbox,
 } from "lucide-react";
 import { getStatusLed, getStatusLabel } from "@/lib/utils";
@@ -771,124 +771,48 @@ function AdminDashboard() {
         </div>
       </div>
 
-      {/* Main grid */}
+      {/* Main grid — cleaned up per Lucas feedback */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-foreground flex items-center gap-2">
-              <Activity size={16} className="text-primary" />
-              Feed de Atividades
-            </h3>
-            <span className="text-xs text-muted-foreground">Tempo real</span>
-          </div>
-          <div className="space-y-3">
-            {recentActivities.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-4">Nenhuma atividade recente.</p>
-            )}
-            {recentActivities.map((entry, i) => (
-              <div key={`${entry.timestamp}-${i}`} className="flex items-start gap-3 py-3 border-b border-border last:border-0">
-                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                  <span className="text-xs font-bold text-primary">
-                    {entry.actor.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground">
-                    <span className="font-medium">{entry.actor}</span>{" "}
-                    <span className="text-muted-foreground">{entry.description}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{entry.timestamp}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+        {/* Avisos da Empresa — unico lugar */}
+        <div className="xl:col-span-2">
+          <NoticeFormBlock />
         </div>
 
-        <div className="space-y-4">
-          {/* Alert Feed */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <Bell size={15} className="text-zinc-400" />
-                Feed de Alertas
-              </h3>
-              {inactivityAlerts.length > 0 && (
-                <span className="text-xs bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full border border-red-500/20">
-                  {inactivityAlerts.length}
-                </span>
-              )}
-            </div>
-            <div className="space-y-2 max-h-52 overflow-auto">
-              {inactivityAlerts.length === 0 && zeroPostClients.length === 0 && (
-                <p className="text-xs text-muted-foreground/50 text-center py-4">Nenhum alerta no momento</p>
-              )}
-              {inactivityAlerts.map(({ client, hours }) => (
-                <Link key={client.id} href={`/clients/${client.id}`} className={`flex items-center gap-2 p-2 rounded-lg hover:border-primary/30 transition-colors group ${
-                  hours >= 48 ? "bg-red-500/10 border border-red-500/20" : "bg-[#0e0e14] border border-[#1e1e2a]"
-                }`}>
-                  {hours >= 48
-                    ? <AlertCircle size={12} className="text-red-500 shrink-0" />
-                    : <Clock size={12} className="text-zinc-400 shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-medium truncate ${hours >= 48 ? "text-red-500" : "text-zinc-300"}`}>
-                      {client.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {Math.floor(hours)}h sem movimentação
-                    </p>
-                  </div>
-                  <ChevronRight size={12} className="text-muted-foreground/30 group-hover:text-primary shrink-0 transition-colors" />
+        {/* Tarefas Urgentes — com acoes rapidas */}
+        <div className="card">
+          <h3 className="font-semibold text-foreground flex items-center gap-2 mb-3">
+            <AlertTriangle size={15} className="text-[#0d4af5]" />
+            Tarefas Urgentes
+          </h3>
+          <div className="space-y-2">
+            {tasks.filter((t) => ["critical", "high"].includes(t.priority) && t.status !== "done").slice(0, 6).map((task) => (
+              <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/[0.02] transition-colors group">
+                <button
+                  onClick={() => updateTask(task.id, { status: task.status === "done" ? "pending" : "done" })}
+                  className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
+                    task.status === "done" ? "bg-[#0d4af5] border-[#0d4af5] text-white" : "border-zinc-600 hover:border-[#0d4af5]"
+                  }`}>
+                  {task.status === "done" && <Check size={10} />}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-foreground leading-tight">{task.title}</p>
+                  <p className="text-[10px] text-muted-foreground">{task.clientName} · {task.assignedTo}</p>
+                </div>
+                <Link href={task.role === "social" ? "/social" : task.role === "designer" ? "/design" : "/traffic"} className="text-[10px] text-zinc-600 hover:text-[#0d4af5]">
+                  <ChevronRight size={10} />
                 </Link>
-              ))}
-              {zeroPostClients.map((client) => (
-                <div key={`zp-${client.id}`} className="flex items-center gap-2 p-2 rounded-lg bg-[#0e0e14] border border-[#1e1e2a]">
-                  <ZapOff size={12} className="text-zinc-400 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-zinc-300 truncate">{client.name}</p>
-                    <p className="text-xs text-zinc-400">0 posts este mês</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Notices */}
-          <NoticeFormBlock />
-
-          {/* Urgent Tasks */}
-          <div className="card">
-            <h3 className="font-semibold text-foreground flex items-center gap-2 mb-3">
-              <AlertTriangle size={15} className="text-zinc-400" />
-              Tarefas Urgentes
-            </h3>
-            <div className="space-y-2">
-              {tasks.filter((t) => ["critical", "high"].includes(t.priority) && t.status !== "done").slice(0, 5).map((task) => (
-                <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors group">
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${task.priority === "critical" ? "bg-red-500" : "bg-zinc-500"}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-foreground leading-tight">{task.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{task.clientName} · {task.assignedTo}</p>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {task.status === "pending" && (
-                      <button onClick={() => updateTask(task.id, { status: "in_progress" })} className="text-[10px] px-2 py-0.5 rounded bg-primary/15 text-primary hover:bg-primary/25">Iniciar</button>
-                    )}
-                    {task.status === "in_progress" && (
-                      <button onClick={() => updateTask(task.id, { status: "done" })} className="text-[10px] px-2 py-0.5 rounded bg-[#0d4af5]/15 text-[#0d4af5] hover:bg-[#0d4af5]/25">Concluir</button>
-                    )}
-                    <Link href={`/clients/${task.clientId}`} className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground">
-                      <ChevronRight size={10} />
-                    </Link>
-                  </div>
-                </div>
-              ))}
-              {tasks.filter((t) => ["critical", "high"].includes(t.priority) && t.status !== "done").length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-2">Nenhuma tarefa urgente</p>
-              )}
-            </div>
+              </div>
+            ))}
+            {tasks.filter((t) => ["critical", "high"].includes(t.priority) && t.status !== "done").length === 0 && (
+              <p className="text-xs text-zinc-600 text-center py-4">Nenhuma tarefa urgente</p>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Old Feed/Alerts/Tasks/Notices sections removed per Lucas feedback.
+         Content consolidated: Tarefas Urgentes above, Feed in NotificationCenter,
+         Avisos in NoticeFormBlock above. */}
 
       {/* 7-day report */}
       {inactiveSevenDays.length > 0 && (
