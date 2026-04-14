@@ -361,6 +361,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const [dbReady, setDbReady] = useState(false);
 
+  // ─── Delivery Log (BI tracking) ──────────────────────────
+  const logDelivery = useCallback((entry: Omit<import("@/lib/types").DeliveryLog, "id">) => {
+    const log: import("@/lib/types").DeliveryLog = { ...entry, id: `dl-${Date.now()}-${Math.random().toString(36).slice(2, 5)}` };
+    try {
+      const existing = JSON.parse(localStorage.getItem("lone-os-delivery-log") ?? "[]");
+      existing.unshift(log);
+      localStorage.setItem("lone-os-delivery-log", JSON.stringify(existing.slice(0, 500)));
+    } catch {}
+  }, []);
+
   // ---------- Debounced save to localStorage ----------
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMount = useRef(true);
@@ -1086,6 +1096,32 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           );
           if (updates.status === "published") {
             pushNotification("content", "Conteúdo publicado", `${card.title} — ${card.clientName}. Tráfego: avaliar impulsionamento.`, card.clientId);
+            // Log delivery for BI
+            logDelivery({
+              userId: card.socialMedia ?? "unknown",
+              clientId: card.clientId,
+              clientName: card.clientName,
+              cardId: card.id,
+              cardTitle: card.title,
+              taskType: "content",
+              action: "published",
+              leadTimeMs: card.statusChangedAt ? Date.now() - new Date(card.columnEnteredAt?.ideas ?? card.statusChangedAt).getTime() : 0,
+              timestamp: new Date().toISOString(),
+            });
+          }
+          // Log design delivery
+          if (updates.designerDeliveredAt && !card.designerDeliveredAt) {
+            logDelivery({
+              userId: updates.designerDeliveredBy ?? "unknown",
+              clientId: card.clientId,
+              clientName: card.clientName,
+              cardId: card.id,
+              cardTitle: card.title,
+              taskType: "design",
+              action: "delivered",
+              leadTimeMs: card.columnEnteredAt?.in_production ? Date.now() - new Date(card.columnEnteredAt.in_production).getTime() : 0,
+              timestamp: new Date().toISOString(),
+            });
           }
           if (updates.status === "approval") {
             pushNotification("content", "Card aguardando aprovação", `"${card.title}" de ${card.clientName} precisa de revisão do gestor.`, card.clientId);
@@ -1457,6 +1493,18 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           if (updates.status === "done") {
             pushNotification("system", "Tarefa concluída", `"${task.title}" de ${task.clientName} foi concluída por ${task.assignedTo}.`, task.clientId);
             pushTimeline({ clientId: task.clientId, type: "task", actor: task.assignedTo, description: `Tarefa concluída: "${task.title}"`, timestamp: now() });
+            // Log for BI
+            logDelivery({
+              userId: task.assignedTo,
+              clientId: task.clientId,
+              clientName: task.clientName,
+              cardId: task.id,
+              cardTitle: task.title,
+              taskType: "task",
+              action: "completed",
+              leadTimeMs: task.startDate ? Date.now() - new Date(task.startDate).getTime() : 0,
+              timestamp: new Date().toISOString(),
+            });
           } else if (updates.status === "in_progress") {
             pushNotification("system", "Tarefa iniciada", `"${task.title}" de ${task.clientName} — ${task.assignedTo} começou a trabalhar.`, task.clientId);
           } else if (updates.status === "review") {

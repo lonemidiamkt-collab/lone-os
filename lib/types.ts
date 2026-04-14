@@ -541,3 +541,17 @@ export interface OKR {
   quarter: string;
   status: OKRStatus;
 }
+
+// ─── Delivery Log (BI/Performance tracking) ────────────────
+export interface DeliveryLog {
+  id: string;
+  userId: string;
+  clientId: string;
+  clientName: string;
+  cardId: string;
+  cardTitle: string;
+  taskType: "design" | "content" | "traffic" | "task";
+  action: "delivered" | "published" | "approved" | "completed";
+  leadTimeMs: number;    // time from card creation to this action
+  timestamp: string;
+}
