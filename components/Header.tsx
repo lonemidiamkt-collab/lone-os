@@ -141,14 +141,16 @@ export default function Header({ title, subtitle }: HeaderProps) {
       <div className="relative" ref={quickRef}>
         <button
           onClick={() => { setShowQuick(!showQuick); setShowNotif(false); }}
-          className="w-8 h-8 rounded-xl bg-[#0e0e0e] border border-[#1a1a1a] flex items-center justify-center hover:border-[#0d4af5]/40 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all group"
+          className="w-8 h-8 rounded-xl bg-[#0e0e0e] border border-zinc-800 flex items-center justify-center hover:border-zinc-600 transition-all group"
           title="Ações rápidas"
         >
           <Plus size={15} className="text-zinc-600 group-hover:text-[#0d4af5] transition-colors" />
         </button>
 
         {showQuick && (
-          <div className="absolute right-0 top-full mt-2 w-52 bg-[#0a0a0e] border border-white/[0.08] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.8)] z-[200] py-2 animate-fade-in">
+          <>
+          <div className="fixed inset-0 z-[199]" onClick={() => setShowQuick(false)} />
+          <div className="absolute right-0 top-full mt-2 w-52 bg-[#111113] border border-white/[0.08] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.6)] z-[200] py-2 animate-fade-in">
             <p className="text-[10px] text-zinc-600 uppercase tracking-[0.15em] px-3 pb-2 mb-1 border-b border-[#1a1a1a] font-medium">
               Ações Rápidas
             </p>
@@ -162,6 +164,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
               <Smile size={14} className="text-[#0d4af5]" />Chat da Equipe
             </Link>
           </div>
+          </>
         )}
       </div>
 
@@ -177,9 +180,9 @@ export default function Header({ title, subtitle }: HeaderProps) {
       <div className="relative">
         <button
           onClick={() => setShowMenu(!showMenu)}
-          className="flex items-center gap-2 bg-[#0e0e0e] border border-[#1a1a1a] rounded-xl px-2.5 py-1.5 hover:border-[#0d4af5]/40 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all"
+          className="flex items-center gap-2 bg-[#0e0e0e] border border-[#1a1a1a] rounded-xl px-2.5 py-1.5 hover:border-zinc-600 transition-all"
         >
-          <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={28} glow />
+          <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={28} />
           <ChevronDown size={12} className="text-zinc-700" />
         </button>
 
