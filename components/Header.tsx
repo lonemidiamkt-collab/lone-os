@@ -56,7 +56,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
   const hasResults = clientResults.length > 0 || cardResults.length > 0 || taskResults.length > 0;
 
   return (
-    <header className="h-16 border-b border-[#1a1a1a] bg-black/80 backdrop-blur-xl flex items-center px-4 pl-16 lg:pl-6 lg:px-6 gap-3 lg:gap-4 shrink-0">
+    <header className="h-16 border-b border-zinc-900 bg-[#09090b] flex items-center px-4 pl-16 lg:pl-6 lg:px-6 gap-3 lg:gap-4 shrink-0 relative z-[100]">
       {/* Breadcrumb + Welcome */}
       <div className="flex-1 flex items-center gap-2">
         <div>

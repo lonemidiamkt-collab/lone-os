@@ -523,7 +523,7 @@ function AdminDashboard() {
       {/* Quick Actions */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs text-muted-foreground mr-1">Ações rápidas:</span>
-        <Link href="/calendar" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 hover:shadow-[0_0_12px_rgba(10,52,245,0.15)] transition-all">
+        <Link href="/calendar" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 transition-all">
           <Plus size={12} /> Nova Tarefa
         </Link>
         <Link href="/social" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-foreground border border-white/10 hover:bg-white/10 transition-all">
