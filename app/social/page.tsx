@@ -1854,9 +1854,16 @@ export default function SocialPage() {
 
   // Auth: use global session (no secondary login needed)
   const isAdmin = role === "admin" || role === "manager";
+  const isDesigner = role === "designer";
+  const canSelectWorkspace = isAdmin || isDesigner;
+  const isReadOnly = isDesigner; // Designer can view but not move cards
 
   const socialMemberNames = socialTeam.map((m) => m.name);
-  const activeWorkspace = isAdmin ? adminWorkspace : currentUser;
+  // Social members from USER_PROFILES (real team)
+  const realSocialMembers = ["Carlos Augusto", "Pedro Henrique"];
+  const workspaceOptions = isDesigner ? realSocialMembers : socialMemberNames.length > 0 ? socialMemberNames : realSocialMembers;
+
+  const activeWorkspace = canSelectWorkspace ? adminWorkspace : currentUser;
 
   const filteredClients = clients.filter((c) => {
     const matchWorkspace = activeWorkspace === "Todos" ? true : c.assignedSocial === activeWorkspace;
@@ -2076,33 +2083,33 @@ export default function SocialPage() {
 
         {/* Workspace header */}
         <div className="flex items-center justify-between gap-3">
-          {isAdmin ? (
+          {canSelectWorkspace ? (
             <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">Monitorando Workspace de:</span>
+              <span className="text-xs text-zinc-500 uppercase tracking-wider">
+                {isDesigner ? "Visualizando quadro de:" : "Monitorando Workspace de:"}
+              </span>
               <div className="relative">
                 <select
                   value={adminWorkspace}
                   onChange={(e) => setAdminWorkspace(e.target.value)}
-                  className="bg-muted border border-border rounded-lg px-4 py-2 text-sm text-foreground outline-none focus:border-primary appearance-none cursor-pointer pr-8"
+                  className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5] appearance-none cursor-pointer pr-8"
                 >
-                  <option value="Todos">Toda a Equipe</option>
-                  {socialMemberNames.map((name) => (
+                  <option value="Todos">Visao Geral</option>
+                  {workspaceOptions.map((name) => (
                     <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
-                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
               </div>
-              <button
-                onClick={() => setShowAddMember(true)}
-                className="btn-ghost text-xs flex items-center gap-1.5"
-              >
-                <UserPlus size={13} />
-                Novo Social Media
-              </button>
+              {isDesigner && activeWorkspace !== "Todos" && (
+                <span className="text-[10px] text-zinc-500 border border-zinc-800 px-2 py-1 rounded">
+                  Modo leitura
+                </span>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <span className="text-xs bg-primary/15 text-primary px-3 py-1.5 rounded border border-primary/20 font-medium">
+              <span className="text-xs bg-primary/[0.08] text-primary px-3 py-1.5 rounded border border-primary/[0.12] font-medium">
                 Logado como: {currentUser}
               </span>
             </div>
@@ -2110,6 +2117,15 @@ export default function SocialPage() {
         </div>
 
         {/* Tabs */}
+        {/* Designer context banner */}
+        {isDesigner && activeWorkspace !== "Todos" && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-900/50 border border-zinc-800 text-xs text-zinc-400 mb-2">
+            <Eye size={12} className="text-zinc-500 shrink-0" />
+            Visualizando fluxo de trabalho de <span className="text-foreground font-medium">{activeWorkspace}</span>
+            <span className="text-zinc-600 ml-auto">Somente leitura</span>
+          </div>
+        )}
+
         <div className="flex gap-1 border-b border-border overflow-x-auto">
           {(["carteira", "kanban", "calendar", "onboarding", "acessos", "chat", "metricas", "entregas", "relatorios"] as const).map((tab) => {
             const LABELS: Record<typeof tab, string> = {
@@ -2339,6 +2355,11 @@ export default function SocialPage() {
               onConfirmArt={(card) => updateContentCard(card.id, { socialConfirmedAt: new Date().toISOString(), socialConfirmedBy: currentUser })}
               onNonDelivery={setNonDeliveryCard}
               onMoveCard={(cardId, toStatus) => {
+                // Designer read-only: cannot move cards
+                if (isReadOnly) {
+                  pushNotification("system", "Modo leitura", "Voce esta visualizando o quadro como Designer. Apenas Social Media pode mover cards.");
+                  return;
+                }
                 const card = contentCards.find((c) => c.id === cardId);
                 if (!card) return;
                 // Block scheduling/publishing without art confirmation
