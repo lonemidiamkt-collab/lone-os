@@ -420,6 +420,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           reminders,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+
+        // Auto-sync to server (admin pushes state for team)
+        fetch("/api/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ state: stateToSave, syncedBy: "auto" }),
+        }).catch(() => {});
       } catch (err) {
         console.warn("[Lone OS] Failed to save to localStorage:", err);
       }
@@ -437,6 +444,45 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     quinzReports, designRequests, tasks, trafficReports, trafficRoutineChecks,
     socialReports, contentApprovals, clientAccess, reminders,
   ]);
+
+  // ---------- Server sync: pull shared state on load + periodically ----------
+  useEffect(() => {
+    let cancelled = false;
+    const pullFromServer = async () => {
+      try {
+        const res = await fetch("/api/sync");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.state || cancelled) return;
+
+        // Only apply server state if local is empty OR server is newer
+        const localHasData = clients.length > 0 || tasks.length > 0 || contentCards.length > 0;
+        if (!localHasData && data.state.clients?.length > 0) {
+          console.log("[Lone OS] Syncing state from server...");
+          if (data.state.clients) setClients(data.state.clients);
+          if (data.state.tasks) setTasks(data.state.tasks);
+          if (data.state.contentCards) setContentCards(data.state.contentCards);
+          if (data.state.designRequests) setDesignRequests(data.state.designRequests);
+          if (data.state.timeline) setTimeline(data.state.timeline);
+          if (data.state.clientChats) setClientChats(data.state.clientChats);
+          if (data.state.globalChat) setGlobalChat(data.state.globalChat);
+          if (data.state.onboarding) setOnboarding(data.state.onboarding);
+          if (data.state.notices) setNotices(data.state.notices);
+          if (data.state.notifications) setNotifications(data.state.notifications);
+          // Save to localStorage so next load is instant
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data.state));
+        }
+      } catch {}
+    };
+
+    // Pull on mount
+    pullFromServer();
+
+    // Pull every 30 seconds (lightweight — server returns cached JSON)
+    const interval = setInterval(pullFromServer, 30000);
+
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- Legacy persistence (keep for backwards compat, will be superseded by STORAGE_KEY) ----------
   useEffect(() => {
