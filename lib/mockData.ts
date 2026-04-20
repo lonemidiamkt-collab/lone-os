@@ -41,3 +41,15 @@ export const DEFAULT_ONBOARDING_ITEMS: Omit<OnboardingItem, "id">[] = [
   { label: "Calendario inicial criado", completed: false, department: "social" },
   { label: "Primeira reuniao de alinhamento realizada", completed: false, department: "social" },
 ];
+
+/** Filter onboarding items based on the service type contracted */
+export function getOnboardingItemsForService(serviceType?: string): Omit<OnboardingItem, "id">[] {
+  const depts = new Set<string>();
+  switch (serviceType) {
+    case "assessoria_trafego": depts.add("traffic"); break;
+    case "assessoria_social": depts.add("social"); break;
+    case "assessoria_design": depts.add("design"); break;
+    default: depts.add("traffic"); depts.add("social"); depts.add("design"); break;
+  }
+  return DEFAULT_ONBOARDING_ITEMS.filter((item) => !item.department || depts.has(item.department));
+}

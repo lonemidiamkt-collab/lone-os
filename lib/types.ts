@@ -21,6 +21,9 @@ export type MoodType = "happy" | "neutral" | "angry";
 
 export type LeadSource = "indicacao" | "trafego" | "organico" | "outros";
 
+export type ServiceType = "lone_growth" | "assessoria_trafego" | "assessoria_social" | "assessoria_design";
+export type DraftStatus = "pending_invite" | "awaiting_approval" | null;
+
 export interface Client {
   id: string;
   name: string;
@@ -30,6 +33,24 @@ export interface Client {
   status: ClientStatus;
   attentionLevel: AttentionLevel;
   tags: string[];
+  serviceType?: ServiceType;
+  draftStatus?: DraftStatus;
+  contactName?: string;
+  contactRole?: string;
+  idade?: string;
+  razaoSocial?: string;
+  nomeFantasia?: string;
+  cnpj?: string;
+  endereco?: string;
+  enderecoRua?: string;
+  enderecoBairro?: string;
+  enderecoCidade?: string;
+  enderecoEstado?: string;
+  enderecoCep?: string;
+  emailCorporativo?: string;
+  docContratoSocial?: string;
+  docIdentidade?: string;
+  docLogo?: string;
   assignedTraffic: string;
   assignedSocial: string;
   assignedDesigner: string;
@@ -63,6 +84,11 @@ export interface Client {
   googleAdsPassword?: string;
   instagramLogin?: string;
   instagramPassword?: string;
+  budgetAlertPct?: number;
+  npsScore?: number;
+  firstValueDeliveredAt?: string;
+  activatedAt?: string;
+  ttvDays?: number;
 }
 
 export interface MoodEntry {

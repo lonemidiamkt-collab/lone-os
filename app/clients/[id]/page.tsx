@@ -24,9 +24,17 @@ import {
   CheckSquare, GitCommitHorizontal, MessageCircle,
   BarChart2, PenLine, Star, Upload, Image as ImageIcon,
   Link as LinkIcon, Mic, Palette, Award, ShieldAlert, Plus, Download, Pencil,
-  Facebook, Settings, Link2, Unlink, ChevronDown, Check, Loader2, Target,
+  Facebook, Settings, Link2, Unlink, ChevronDown, Check, Loader2, Target, ExternalLink,
+  Eye, EyeOff, Shield, Building2, Trash2,
 } from "lucide-react";
 import EditClientModal from "@/components/EditClientModal";
+import dynamic from "next/dynamic";
+import DadosTab from "@/components/client-tabs/DadosTab";
+import ResultsTab from "@/components/client-tabs/ResultsTab";
+import ClientNPS from "@/components/sector/ClientNPS";
+import WhatsAppTemplates from "@/components/WhatsAppTemplates";
+import MeetingScheduler from "@/components/MeetingScheduler";
+const ContractGenerator = dynamic(() => import("@/components/ContractGenerator"), { ssr: false });
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { exportReportAsPdf } from "@/lib/exportPdf";
@@ -58,11 +66,14 @@ const ASSET_TYPE_CONFIG: Record<CreativeAsset["type"], { label: string; color: s
   logo:       { label: "Logo",       color: "text-primary",  icon: Star },
 };
 
-const TABS = ["overview", "chat", "historico", "tasks", "content", "onboarding", "wallet", "reports"] as const;
+const TABS = ["overview", "dados", "resultados", "contratos", "chat", "historico", "tasks", "content", "onboarding", "wallet", "reports"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
   overview: "Visão Geral",
+  dados: "Dados",
+  resultados: "Resultados",
+  contratos: "Contratos",
   chat: "Chat",
   historico: "Histórico Operacional",
   tasks: "Tarefas",
@@ -79,7 +90,16 @@ export default function ClientDetailPage() {
   const { clients, contentCards, tasks, timeline, clientChats, onboarding, creativeAssets, socialProofs, crisisNotes, quinzReports, designRequests, addCreativeAsset, sendClientMessage, addTimelineEntry, toggleOnboardingItem, updateClientStatus, updateClientData, addSocialProof, addCrisisNote, addQuinzReport, addDesignRequest } = useAppState();
 
   const client = clients.find((c) => c.id === clientId);
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+
+  // Deep-link: ?tab=onboarding navigates directly to onboarding tab
+  const initialTab = (() => {
+    if (typeof window !== "undefined") {
+      const urlTab = new URLSearchParams(window.location.search).get("tab");
+      if (urlTab === "onboarding") return "onboarding" as Tab;
+    }
+    return "overview" as Tab;
+  })();
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [chatInput, setChatInput] = useState("");
   const [manualNote, setManualNote] = useState("");
   const [showNoteInput, setShowNoteInput] = useState(false);
@@ -90,6 +110,145 @@ export default function ClientDetailPage() {
   const [showDesignReqForm, setShowDesignReqForm] = useState(false);
   const [designReqForm, setDesignReqForm] = useState({ title: "", format: "Post Feed", briefing: "", priority: "medium" as "low" | "medium" | "high" | "critical", deadline: "" });
   const [showEditModal, setShowEditModal] = useState(false);
+
+  // ─── Dados tab state ──────────────────────────────────────
+  const [dadosEditing, setDadosEditing] = useState(false);
+  const [dadosSaving, setDadosSaving] = useState(false);
+  const [dadosForm, setDadosForm] = useState<Record<string, string>>({});
+  const [showPw, setShowPw] = useState<Record<string, boolean>>({});
+  const [dadosUploading, setDadosUploading] = useState<string | null>(null);
+
+  const initDadosForm = () => ({
+    nomeFantasia: client?.nomeFantasia || "",
+    razaoSocial: client?.razaoSocial || "",
+    cnpj: client?.cnpj || "",
+    contactName: client?.contactName || "",
+    cpfCnpj: client?.cpfCnpj || "",
+    phone: client?.phone || "",
+    emailCorporativo: client?.emailCorporativo || "",
+    enderecoRua: client?.enderecoRua || "",
+    enderecoBairro: client?.enderecoBairro || "",
+    enderecoCidade: client?.enderecoCidade || "",
+    enderecoEstado: client?.enderecoEstado || "",
+    enderecoCep: client?.enderecoCep || "",
+    facebookLogin: client?.facebookLogin || "",
+    facebookPassword: client?.facebookPassword || "",
+    instagramLogin: client?.instagramLogin || "",
+    instagramPassword: client?.instagramPassword || "",
+    googleAdsLogin: client?.googleAdsLogin || "",
+    googleAdsPassword: client?.googleAdsPassword || "",
+  });
+
+  useEffect(() => {
+    if (client) setDadosForm(initDadosForm());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client?.id]);
+
+  const handleDadosSave = async () => {
+    if (!client) return;
+    setDadosSaving(true);
+    try {
+      updateClientData(client.id, {
+        nomeFantasia: dadosForm.nomeFantasia || undefined,
+        razaoSocial: dadosForm.razaoSocial || undefined,
+        cnpj: dadosForm.cnpj || undefined,
+        contactName: dadosForm.contactName || undefined,
+        cpfCnpj: dadosForm.cpfCnpj || undefined,
+        phone: dadosForm.phone || undefined,
+        emailCorporativo: dadosForm.emailCorporativo || undefined,
+        enderecoRua: dadosForm.enderecoRua || undefined,
+        enderecoBairro: dadosForm.enderecoBairro || undefined,
+        enderecoCidade: dadosForm.enderecoCidade || undefined,
+        enderecoEstado: dadosForm.enderecoEstado || undefined,
+        enderecoCep: dadosForm.enderecoCep || undefined,
+        facebookLogin: dadosForm.facebookLogin || undefined,
+        facebookPassword: dadosForm.facebookPassword || undefined,
+        instagramLogin: dadosForm.instagramLogin || undefined,
+        instagramPassword: dadosForm.instagramPassword || undefined,
+        googleAdsLogin: dadosForm.googleAdsLogin || undefined,
+        googleAdsPassword: dadosForm.googleAdsPassword || undefined,
+      });
+      setDadosEditing(false);
+    } finally {
+      setDadosSaving(false);
+    }
+  };
+
+  const handleDadosDocUpload = async (file: File, docType: string) => {
+    if (!client) return;
+    setDadosUploading(docType);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("clientId", client.id);
+      fd.append("docType", docType);
+      const res = await fetch("/api/onboarding/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        const field = docType === "contrato_social" ? "docContratoSocial" : docType === "identidade" ? "docIdentidade" : "docLogo";
+        updateClientData(client.id, { [field]: data.url });
+      }
+    } finally {
+      setDadosUploading(null);
+    }
+  };
+  // Delete client state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const handleDeleteClient = async () => {
+    if (deletePassword !== "8822") { setDeleteError("Senha incorreta"); return; }
+    if (!client || deleting) return;
+    setDeleting(true);
+    try {
+      const { supabase } = await import("@/lib/supabase/client");
+      const { error } = await supabase.from("clients").delete().eq("id", client.id);
+      if (error) { setDeleteError("Erro ao excluir: " + error.message); setDeleting(false); return; }
+      window.location.href = "/clients";
+    } catch (err) {
+      setDeleteError("Erro ao excluir");
+      setDeleting(false);
+    }
+  };
+
+  // Contract status for Dados tab
+  const [latestContract, setLatestContract] = useState<{ status: string; d4signStatus: string | null; endDate: string; version: number } | null>(null);
+  useEffect(() => {
+    if (!client) return;
+    let mounted = true;
+    import("@/lib/supabase/client").then(({ supabase: sb }) => {
+      sb.from("contracts").select("status, d4sign_status, end_date, version").eq("client_id", client.id).order("created_at", { ascending: false }).limit(1).maybeSingle().then(({ data, error }) => {
+        if (!mounted || error) return;
+        if (data) setLatestContract({ status: data.status as string, d4signStatus: data.d4sign_status as string | null, endDate: data.end_date as string, version: data.version as number });
+      });
+    });
+    return () => { mounted = false; };
+  }, [client?.id]);
+
+  const [onboardingLink, setOnboardingLink] = useState<string | null>(null);
+  const [generatingLink, setGeneratingLink] = useState(false);
+
+  const generateOnboardingLink = async () => {
+    setGeneratingLink(true);
+    try {
+      const res = await fetch("/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "generate_link", clientId }),
+      });
+      if (!res.ok) { setGeneratingLink(false); return; }
+      const data = await res.json();
+      if (data.url) {
+        const fullUrl = `${window.location.origin}${data.url}`;
+        setOnboardingLink(fullUrl);
+        navigator.clipboard.writeText(fullUrl).catch(() => {});
+      }
+    } catch (err) {
+      console.error("[OnboardingLink]", err);
+    }
+    setGeneratingLink(false);
+  };
 
   // Inline Meta Ads account picker
   const meta = useMetaConnection();
@@ -132,6 +291,43 @@ export default function ClientDetailPage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chats.length]);
 
+  // Skeleton loading state — handles race condition after new client creation
+  const [waitingForClient, setWaitingForClient] = useState(!client);
+  useEffect(() => {
+    if (client) { setWaitingForClient(false); return; }
+    // Wait up to 5s for the client to appear (DB insert in progress)
+    const timer = setTimeout(() => setWaitingForClient(false), 5000);
+    return () => clearTimeout(timer);
+  }, [client]);
+
+  if (!client && waitingForClient) {
+    return (
+      <div className="flex flex-col flex-1 overflow-auto">
+        <Header title="Carregando..." subtitle="Preparando dados do cliente" />
+        <div className="p-6 space-y-5 animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="h-4 w-24 bg-white/[0.06] rounded animate-pulse" />
+            <div className="h-5 w-20 bg-white/[0.06] rounded-full animate-pulse" />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {[1,2,3].map((i) => (
+              <div key={i} className="card border border-border p-4 space-y-3">
+                <div className="h-3 w-28 bg-white/[0.06] rounded animate-pulse" />
+                <div className="h-6 w-16 bg-white/[0.06] rounded animate-pulse" />
+                <div className="h-2 w-full bg-white/[0.06] rounded animate-pulse" />
+              </div>
+            ))}
+          </div>
+          <div className="card border border-border p-6 space-y-3">
+            {[1,2,3,4].map((i) => (
+              <div key={i} className="h-3 bg-white/[0.06] rounded animate-pulse" style={{ width: `${70 + i * 7}%` }} />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!client) {
     return (
       <div className="flex flex-col flex-1 overflow-auto">
@@ -155,8 +351,9 @@ export default function ClientDetailPage() {
   const obCompleted = obItems.filter((i) => i.completed).length;
   const obProgress = obItems.length > 0 ? Math.round((obCompleted / obItems.length) * 100) : 0;
 
+  const isAdmin = role === "admin" || role === "manager";
   const visibleTabs = TABS.filter((tab) => {
-    if (tab === "reports" || tab === "wallet") return role === "admin" || role === "manager";
+    if (tab === "reports" || tab === "wallet" || tab === "contratos") return isAdmin;
     return true;
   });
 
@@ -216,9 +413,29 @@ export default function ClientDetailPage() {
     { value: "at_risk", label: "Em Risco" },
   ];
 
+  const companyName = client.nomeFantasia || client.razaoSocial || client.name;
+  const companyInitial = companyName.charAt(0).toUpperCase();
+
   return (
     <div className="flex flex-col flex-1 overflow-auto">
-      <Header title={client.name} subtitle={`${client.industry} · Cliente desde ${client.joinDate}`} />
+      {/* Corporate Header */}
+      <div className="border-b border-border bg-surface px-6 py-5">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-[#0d4af5]/15 border border-[#0d4af5]/20 flex items-center justify-center shrink-0">
+            <span className="text-xl font-bold text-[#0d4af5]">{companyInitial}</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-bold text-foreground truncate">{companyName}</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {[
+                client.industry,
+                `Cliente desde ${client.joinDate}`,
+                client.contactName && `Contato: ${client.contactName}${client.contactRole ? ` (${client.contactRole})` : ""}`,
+              ].filter(Boolean).join(" \u00B7 ")}
+            </p>
+          </div>
+        </div>
+      </div>
 
       <div className="p-6 space-y-5 animate-fade-in">
         {/* Top bar */}
@@ -227,6 +444,13 @@ export default function ClientDetailPage() {
             <ArrowLeft size={15} /> Clientes
           </Link>
           <span className={`badge border ${getStatusColor(client.status)}`}>{getStatusLabel(client.status)}</span>
+          {client.serviceType && client.serviceType !== "lone_growth" && (
+            <span className="badge border text-xs text-zinc-400 bg-zinc-800/50 border-zinc-700">
+              {client.serviceType === "assessoria_trafego" ? "Assessoria Trafego" :
+               client.serviceType === "assessoria_social" ? "Assessoria Social" :
+               client.serviceType === "assessoria_design" ? "Assessoria Design" : "Lone Growth"}
+            </span>
+          )}
           <span className={`badge border ${getAttentionColor(client.attentionLevel)}`}>
             Atenção: {getAttentionLabel(client.attentionLevel)}
           </span>
@@ -235,15 +459,37 @@ export default function ClientDetailPage() {
               {tag}
             </span>
           ))}
+          <ClientNPS clientId={clientId} currentUser={currentUser} />
           <div className="ml-auto flex items-center gap-2">
             {(role === "admin" || role === "manager") && (
               <>
+                {onboardingLink ? (
+                  <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-1.5">
+                    <Check size={12} className="text-emerald-500" />
+                    <span className="text-xs text-emerald-400">Link copiado!</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={generateOnboardingLink}
+                    disabled={generatingLink}
+                    className="btn-ghost text-xs flex items-center gap-1.5 border border-[#0d4af5]/20 text-[#0d4af5] hover:bg-[#0d4af5]/10"
+                  >
+                    {generatingLink ? <Loader2 size={12} className="animate-spin" /> : <ExternalLink size={12} />}
+                    Link de Onboarding
+                  </button>
+                )}
                 <button
                   onClick={() => setShowEditModal(true)}
                   className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-primary/30 hover:text-primary"
                 >
                   <Pencil size={12} />
                   Editar
+                </button>
+                <button
+                  onClick={() => { setShowDeleteModal(true); setDeletePassword(""); setDeleteError(""); }}
+                  className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-red-500/30 hover:text-red-400"
+                >
+                  <Trash2 size={12} />
                 </button>
                 <select
                   value={client.status}
@@ -260,7 +506,7 @@ export default function ClientDetailPage() {
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
           <div className="card flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
               <Calendar size={18} className="text-primary" />
@@ -325,6 +571,24 @@ export default function ClientDetailPage() {
               </button>
             ))}
           </div>
+
+          {/* ── DADOS ──────────────────────────────────────────────────────── */}
+          {activeTab === "dados" && (
+            <DadosTab client={client} role={role} currentUser={currentUser}
+              updateClientData={updateClientData} onNavigateTab={(t) => setActiveTab(t as Tab)}
+              generateOnboardingLink={generateOnboardingLink} generatingLink={generatingLink} />
+          )}
+
+
+          {/* ── RESULTADOS ──────────────────────────────────────────────────── */}
+          {activeTab === "resultados" && (
+            <ResultsTab client={client} currentUser={currentUser} role={role} />
+          )}
+
+          {/* ── CONTRATOS ────────────────────────────────────────────────────── */}
+          {activeTab === "contratos" && (
+            <ContractGenerator client={client} currentUser={currentUser} />
+          )}
 
           {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
           {activeTab === "overview" && (
@@ -705,7 +969,12 @@ export default function ClientDetailPage() {
 
           {/* ── CHAT ─────────────────────────────────────────────────────────── */}
           {activeTab === "chat" && (
-            <div className="animate-fade-in max-w-2xl">
+            <div className="animate-fade-in max-w-2xl space-y-6">
+              {/* Meetings */}
+              <MeetingScheduler client={client} currentUser={currentUser} />
+
+              {/* WhatsApp Templates */}
+              <WhatsAppTemplates client={client} />
               <div className="card flex flex-col" style={{ height: "500px" }}>
                 <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border">
                   <MessageSquare size={16} className="text-primary" />
@@ -1291,6 +1560,44 @@ export default function ClientDetailPage() {
       {/* Edit Client Modal */}
       {showEditModal && (
         <EditClientModal client={client} onClose={() => setShowEditModal(false)} />
+      )}
+
+      {/* Delete Client Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setShowDeleteModal(false)}>
+          <div className="bg-card border border-border rounded-xl p-6 max-w-sm w-full space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center">
+                <Trash2 size={18} className="text-red-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground text-sm">Excluir Cliente</h3>
+                <p className="text-[10px] text-muted-foreground">Esta acao e irreversivel</p>
+              </div>
+            </div>
+            <p className="text-xs text-zinc-400">
+              Todos os dados de <span className="text-white font-medium">{companyName}</span> serao removidos permanentemente. Digite a senha para confirmar.
+            </p>
+            <input
+              type="password"
+              value={deletePassword}
+              onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(""); }}
+              placeholder="Senha de confirmacao"
+              className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-red-500/50"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter") handleDeleteClient(); }}
+            />
+            {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}
+            <div className="flex gap-2">
+              <button onClick={() => setShowDeleteModal(false)} className="btn-ghost flex-1 text-sm border border-border">Cancelar</button>
+              <button onClick={handleDeleteClient} disabled={deleting || !deletePassword}
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-red-500/15 text-red-400 text-sm font-medium hover:bg-red-500/25 transition-colors border border-red-500/20 disabled:opacity-50">
+                {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

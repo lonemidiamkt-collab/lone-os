@@ -52,7 +52,7 @@ const DEFAULT_PROFILE = USER_PROFILES[0];
 
 const RoleContext = createContext<RoleContextValue>({
   role: "admin",
-  currentUser: "Admin CEO",
+  currentUser: "Roberto Lino",
   currentProfile: DEFAULT_PROFILE,
   setProfile: () => {},
   setRole: () => {},
@@ -98,7 +98,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 1200);
-        const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://localhost:54321"}/rest/v1/`, {
+        const baseUrl = typeof window !== "undefined" ? `${window.location.origin}/supabase` : (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://localhost:54321");
+        const res = await fetch(`${baseUrl}/rest/v1/`, {
           method: "HEAD",
           signal: controller.signal,
           headers: {
@@ -127,7 +128,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
                   .from("team_members")
                   .select("id")
                   .eq("auth_id", session.user.id)
-                  .single();
+                  .maybeSingle();
                 teamMemberId = member?.id ?? undefined;
               } catch { /* DB query failed */ }
 
@@ -162,7 +163,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
                       .from("team_members")
                       .select("id")
                       .eq("auth_id", session.user.id)
-                      .single();
+                      .maybeSingle();
                     teamMemberId = member?.id ?? undefined;
                   } catch { /* DB query failed */ }
                   setCurrentProfileState({ ...profile, teamMemberId });
@@ -241,7 +242,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             .from("team_members")
             .select("id")
             .eq("auth_id", data.user.id)
-            .single();
+            .maybeSingle();
           teamMemberId = member?.id ?? undefined;
         } catch {
           // DB query failed, continue without teamMemberId

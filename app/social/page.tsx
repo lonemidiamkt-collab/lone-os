@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { exportReportAsPdf } from "@/lib/exportPdf";
+import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1858,10 +1859,9 @@ export default function SocialPage() {
   const canSelectWorkspace = isAdmin || isDesigner;
   const isReadOnly = isDesigner; // Designer can view but not move cards
 
-  const socialMemberNames = socialTeam.map((m) => m.name);
-  // Social members from USER_PROFILES (real team)
-  const realSocialMembers = ["Carlos Augusto", "Pedro Henrique"];
-  const workspaceOptions = isDesigner ? realSocialMembers : socialMemberNames.length > 0 ? socialMemberNames : realSocialMembers;
+  const team = useTeamMembers();
+  const socialMemberNames = team.social.map((m) => m.name);
+  const workspaceOptions = socialMemberNames.length > 0 ? socialMemberNames : socialTeam.map((m) => m.name);
 
   const activeWorkspace = canSelectWorkspace ? adminWorkspace : currentUser;
 

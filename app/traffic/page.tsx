@@ -22,6 +22,7 @@ import {
 import { getAttentionColor, getAttentionLabel, getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import type { Client, Task, TrafficMonthlyReport, AdCampaign, AdAccount, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
 import { mockAdAccounts, mockAdCampaigns } from "@/lib/mockData";
+import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useMetaConnection, fetchAdAccounts, fetchCampaignInsights, TokenExpiredError } from "@/lib/meta/useMetaAds";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { exportReportAsPdf } from "@/lib/exportPdf";
@@ -104,6 +105,7 @@ export default function TrafficPage() {
     client: import("@/lib/types").Client;
   } | null>(null);
   const { currentUser, role } = useRole();
+  const isAdmin = role === "admin" || role === "manager";
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();
   const [activeTab, setActiveTab] = useState<TabType>("rotina");
 
@@ -335,7 +337,9 @@ export default function TrafficPage() {
                   updateTask(taskId, { status: toStatus as Task["status"] });
                 }}
                 renderCard={(task) => (
-                  <div className={`bg-card border border-border rounded-lg p-3 hover:border-primary/30 transition-colors ${task.status === "done" ? "opacity-60" : ""}`}>
+                  <div
+                    onClick={() => window.location.href = `/clients/${task.clientId}`}
+                    className={`bg-card border border-border rounded-lg p-3 hover:border-primary/30 transition-colors cursor-pointer ${task.status === "done" ? "opacity-60" : ""}`}>
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <button
                         onClick={(e) => { e.stopPropagation(); updateTask(task.id, { status: task.status === "done" ? "pending" : "done" }); }}
@@ -1653,11 +1657,13 @@ function NewTaskModal({
     { value: "designer", label: "Designer" },
     { value: "manager", label: "Gerente" },
   ];
-  const ALL_MEMBERS: Record<string, string[]> = {
-    traffic: trafficManagers,
-    social: ["Carlos Melo", "Mariana Costa"],
-    designer: ["Rafael Designer"],
-    manager: ["Gerente Ops"],
+  const team = useTeamMembers();
+  const membersByRole = (role: string): string[] => {
+    if (role === "traffic") return [...team.traffic, ...team.manager].map((m) => m.name);
+    if (role === "social") return team.social.map((m) => m.name);
+    if (role === "designer") return team.designer.map((m) => m.name);
+    if (role === "manager") return team.manager.map((m) => m.name);
+    return team.members.map((m) => m.name);
   };
 
   const [title, setTitle] = useState("");
@@ -1668,7 +1674,7 @@ function NewTaskModal({
   const [dueDate, setDueDate] = useState("");
 
   const selectedClient = clients.find((c) => c.id === clientId);
-  const availableMembers = ALL_MEMBERS[taskRole] ?? trafficManagers;
+  const availableMembers = membersByRole(taskRole);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1706,7 +1712,7 @@ function NewTaskModal({
             </div>
             <div>
               <label className="text-xs text-muted-foreground font-medium">Setor</label>
-              <select value={taskRole} onChange={(e) => { setTaskRole(e.target.value as import("@/lib/types").Role); setAssignedTo(ALL_MEMBERS[e.target.value]?.[0] ?? currentUser); }} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary">
+              <select value={taskRole} onChange={(e) => { setTaskRole(e.target.value as import("@/lib/types").Role); setAssignedTo(membersByRole(e.target.value)[0] ?? currentUser); }} className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary">
                 {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
@@ -1795,6 +1801,8 @@ function AdAnalyticsTab({
   onRealDataChange?: (campaigns: AdCampaign[], isReal: boolean) => void;
   onRequestCreative?: (campaign: AdCampaign, client: Client) => void;
 }) {
+  const { role } = useRole();
+  const isAdmin = role === "admin" || role === "manager";
   const OBJECTIVE_LABELS: Record<string, string> = {
     messages: "Mensagens", traffic: "Tráfego", conversions: "Conversões",
     reach: "Alcance", engagement: "Engajamento", leads: "Leads",
@@ -2596,7 +2604,7 @@ function AdAnalyticsTab({
             </div>
           )}
         </div>
-      ) : (
+      ) : isAdmin ? (
         <div className={`rounded-xl p-4 flex items-center gap-4 ${
           meta.tokenExpired
             ? "bg-amber-500/5 border border-amber-500/20"
@@ -2609,12 +2617,12 @@ function AdAnalyticsTab({
           </div>
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-foreground">
-              {meta.tokenExpired ? "Meta Ads — Sessão Expirada" : "Meta Ads — Dados Simulados"}
+              {meta.tokenExpired ? "Meta Ads — Sessão Expirada" : "Meta Ads — Não Conectado"}
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               {meta.tokenExpired
                 ? "Seu token de acesso expirou. Reconecte para continuar vendo dados reais."
-                : "Conecte sua conta Meta para ver dados reais de campanhas, métricas e relatórios."
+                : "Conecte a conta Meta da agência para ver dados reais de campanhas."
               }
             </p>
           </div>
@@ -2626,7 +2634,7 @@ function AdAnalyticsTab({
             {meta.tokenExpired ? "Reconectar" : "Conectar Meta Ads"}
           </button>
         </div>
-      )}
+      ) : null}
 
       {/* Mock data warning banner */}
       {!isUsingRealData && (

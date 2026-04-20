@@ -14,9 +14,16 @@ import { getStatusLed, getStatusLabel } from "@/lib/utils";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
 import Link from "next/link";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { ClientStatus } from "@/lib/types";
 import { mockAdCampaigns } from "@/lib/mockData";
+import { supabase } from "@/lib/supabase/client";
+import TrafficChecklist from "@/components/sector/TrafficChecklist";
+import PostCounter from "@/components/sector/PostCounter";
+import DesignQueue from "@/components/sector/DesignQueue";
+import BudgetAlert from "@/components/sector/BudgetAlert";
+import SmartAlerts from "@/components/SmartAlerts";
+import ClientHealthRadar from "@/components/ClientHealthRadar";
 
 function hoursSince(isoString?: string): number {
   if (!isoString) return 9999;
@@ -126,7 +133,7 @@ function NoticeFormBlock() {
       )}
       <div className="space-y-2 max-h-64 overflow-auto">
         {notices.length === 0 && (
-          <p className="text-xs text-zinc-600 text-center py-5">Nenhum aviso. Tudo sob controle.</p>
+          <p className="text-xs text-muted-foreground/70 text-center py-5">Nenhum aviso. Tudo sob controle.</p>
         )}
         {notices.slice(0, 8).map((notice) => {
           const catIcon = notice.category === "meeting" ? "📅" : notice.category === "deadline" ? "⏰" : notice.category === "reminder" ? "🔔" : "";
@@ -257,7 +264,7 @@ function EmployeeDashboard() {
       </div>
 
       {/* Quick metrics */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard
           icon={Target}
           label="Tarefas Pendentes"
@@ -304,6 +311,17 @@ function EmployeeDashboard() {
         )}
       </div>
 
+      {/* Sector-specific widgets */}
+      {role === "traffic" && myClients.length > 0 && (
+        <TrafficChecklist clients={myClients.filter((c) => c.status !== "onboarding")} currentUser={currentUser} />
+      )}
+      {role === "social" && (
+        <PostCounter cards={contentCards} currentUser={currentUser} />
+      )}
+      {role === "designer" && myDesignRequests.length > 0 && (
+        <DesignQueue requests={myDesignRequests} currentUser={currentUser} />
+      )}
+
       {/* Two columns: Tasks + Notices/Activity */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* My Tasks */}
@@ -318,10 +336,10 @@ function EmployeeDashboard() {
           <div className="space-y-2">
             {myTasks.length === 0 && (
               <div className="flex flex-col items-center py-8">
-                <div className="w-10 h-10 rounded-xl bg-zinc-900/50 flex items-center justify-center mb-3">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-700"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center mb-3">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground/50"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                 </div>
-                <p className="text-xs text-zinc-600">Nenhuma tarefa pendente. Respire.</p>
+                <p className="text-xs text-muted-foreground/70">Nenhuma tarefa pendente. Respire.</p>
               </div>
             )}
             {myTasks.slice(0, 8).map((task) => (
@@ -413,11 +431,11 @@ function EmployeeDashboard() {
             </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-            {myClients.filter((c) => c.status !== "onboarding").map((client) => (
+            {myClients.map((client) => (
               <Link
                 key={client.id}
-                href={`/clients/${client.id}`}
-                className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                href={client.status === "onboarding" ? `/clients/${client.id}?tab=onboarding` : `/clients/${client.id}`}
+                className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg hover:bg-muted/50 hover:shadow-md select-none transition-all cursor-pointer"
               >
                 <div className={getStatusLed(client.status)} />
                 <div className="flex-1 min-w-0">
@@ -442,6 +460,22 @@ function AdminDashboard() {
   const { role } = useRole();
 
   const [statusFilter, setStatusFilter] = useState<ClientStatus | "all">("all");
+  const [contractStats, setContractStats] = useState({ active: 0, pending: 0, expiring: 0 });
+
+  useEffect(() => {
+    let mounted = true;
+    supabase.from("contracts").select("id, status, d4sign_status, end_date").then(({ data }) => {
+      if (!mounted || !data) return;
+      const now = Date.now();
+      const in30d = now + 30 * 86400000;
+      setContractStats({
+        active: data.filter((c) => c.status === "active" && c.d4sign_status === "2").length,
+        pending: data.filter((c) => c.d4sign_status === "1" || (!c.d4sign_status && c.status === "draft")).length,
+        expiring: data.filter((c) => c.status === "active" && c.end_date && new Date(c.end_date).getTime() <= in30d && new Date(c.end_date).getTime() > now).length,
+      });
+    });
+    return () => { mounted = false; };
+  }, []);
 
   const activeClients = clients.filter((c) => c.status !== "onboarding");
   const atRiskClients = clients.filter((c) => c.status === "at_risk");
@@ -513,7 +547,7 @@ function AdminDashboard() {
   return (
     <>
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard icon={Users} label="Clientes Ativos" value={activeClients.length} sub="clientes em operacao" iconColor="text-primary" iconBg="bg-primary/10" href="/clients" />
         <MetricCard icon={AlertTriangle} label="Em Risco" value={atRiskClients.length} sub="precisam de atencao" iconColor="text-red-500" iconBg="bg-red-500/10" href="/clients?filter=at_risk" />
         <MetricCard icon={UserPlus} label="Onboarding" value={onboardingClients.length} sub="novos clientes" iconColor="text-primary" iconBg="bg-primary/10" href="/clients?filter=onboarding" />
@@ -526,14 +560,67 @@ function AdminDashboard() {
         <Link href="/calendar" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 transition-all">
           <Plus size={12} /> Nova Tarefa
         </Link>
-        <Link href="/social" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-foreground border border-white/10 hover:bg-white/10 transition-all">
+        <Link href="/social" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-muted text-foreground border border-border hover:bg-muted/70 transition-all">
           <FileText size={12} /> Novo Card
         </Link>
-        <Link href="/my-work" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-foreground border border-white/10 hover:bg-white/10 transition-all">
+        <Link href="/my-work" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-muted text-foreground border border-border hover:bg-muted/70 transition-all">
           <Inbox size={12} /> Meu Trabalho
         </Link>
-        <span className="ml-auto text-[10px] text-zinc-700">⌘K para buscar</span>
+        <span className="ml-auto text-[10px] text-muted-foreground/50">⌘K para buscar</span>
       </div>
+
+      {/* Onboarding Pending Alert */}
+      {onboardingClients.length > 0 && (
+        <Link href="/clients/pending" className="block rounded-xl border border-[#0d4af5]/20 bg-[#0d4af5]/[0.03] p-4 hover:bg-[#0d4af5]/[0.06] transition-all group">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-[#0d4af5]/15 flex items-center justify-center">
+                <UserPlus size={18} className="text-[#0d4af5]" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">{onboardingClients.length} cadastro{onboardingClients.length > 1 ? "s" : ""} pendente{onboardingClients.length > 1 ? "s" : ""}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {onboardingClients.map((c) => c.nomeFantasia || c.name).slice(0, 3).join(", ")}
+                  {onboardingClients.length > 3 ? ` +${onboardingClients.length - 3}` : ""}
+                </p>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-muted-foreground/70 group-hover:text-[#0d4af5] transition-colors" />
+          </div>
+        </Link>
+      )}
+
+      {/* Budget alerts */}
+      <BudgetAlert clients={clients} />
+
+      {/* Health Radar + Smart Alerts */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <ClientHealthRadar />
+        <SmartAlerts />
+      </div>
+
+      {/* Contracts summary */}
+      {(contractStats.active > 0 || contractStats.pending > 0 || contractStats.expiring > 0) && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-xs text-muted-foreground mb-3 flex items-center gap-1.5"><FileText size={11} /> Contratos</p>
+          <div className="flex gap-4">
+            <div>
+              <p className="text-lg font-bold text-emerald-400">{contractStats.active}</p>
+              <p className="text-[10px] text-muted-foreground">Assinados</p>
+            </div>
+            <div>
+              <p className="text-lg font-bold text-amber-400">{contractStats.pending}</p>
+              <p className="text-[10px] text-muted-foreground">Pendentes</p>
+            </div>
+            {contractStats.expiring > 0 && (
+              <div>
+                <p className="text-lg font-bold text-red-400">{contractStats.expiring}</p>
+                <p className="text-[10px] text-muted-foreground">Vence em 30d</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Ad Rejection Alert */}
       {mockAdCampaigns.filter((c) => c.status === "error").length > 0 && (
@@ -676,11 +763,11 @@ function AdminDashboard() {
         const bottlenecks = Object.entries(statusCounts).filter(([, v]) => v.count >= 2).sort((a, b) => b[1].count - a[1].count);
         if (bottlenecks.length === 0) return null;
         return (
-          <div className="card border border-[#1e1e2a]">
+          <div className="card border border-border">
             <div className="flex items-center gap-2 mb-3">
-              <LayoutList size={16} className="text-zinc-400" />
+              <LayoutList size={16} className="text-muted-foreground" />
               <h3 className="font-semibold text-foreground text-sm">Gargalos da Semana</h3>
-              <span className="text-xs text-zinc-400 bg-[#111118]/50 px-2 py-0.5 rounded-full border border-[#1e1e2a]">
+              <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full border border-border">
                 {bottlenecks.length} gargalo{bottlenecks.length > 1 ? "s" : ""}
               </span>
             </div>
@@ -689,13 +776,13 @@ function AdminDashboard() {
                 <Link
                   key={status}
                   href={status === "in_production" || status === "ideas" || status === "script" ? "/social" : status === "approval" || status === "client_approval" ? "/social" : "/social"}
-                  className="flex items-start gap-3 bg-[#0c0c12] border border-[#1e1e2a] rounded-lg p-3 hover:border-primary/30 transition-colors group"
+                  className="flex items-start gap-3 bg-muted border border-border rounded-lg p-3 hover:border-primary/30 transition-colors group"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-[#111118] flex items-center justify-center shrink-0">
-                    <span className="text-sm font-bold text-zinc-400">{data.count}</span>
+                  <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+                    <span className="text-sm font-bold text-muted-foreground">{data.count}</span>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-zinc-300">{statusLabels[status] ?? status}</p>
+                    <p className="text-xs font-semibold text-foreground">{statusLabels[status] ?? status}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">{data.count} itens parados</p>
                     <p className="text-xs text-muted-foreground mt-1 truncate">
                       {data.clients.slice(0, 3).join(", ")}{data.clients.length > 3 ? ` +${data.clients.length - 3}` : ""}
@@ -758,7 +845,7 @@ function AdminDashboard() {
                   <p className="text-[10px] text-muted-foreground">suporte hoje</p>
                 </div>
                 <div className="w-16">
-                  <div className="h-1.5 bg-[#111118] rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all ${m.supportDone >= m.supportTotal ? "bg-primary" : "bg-zinc-500"}`}
                       style={{ width: `${m.supportTotal > 0 ? Math.round((m.supportDone / m.supportTotal) * 100) : 0}%` }}
@@ -786,11 +873,11 @@ function AdminDashboard() {
           </h3>
           <div className="space-y-2">
             {tasks.filter((t) => ["critical", "high"].includes(t.priority) && t.status !== "done").slice(0, 6).map((task) => (
-              <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/[0.02] transition-colors group">
+              <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors group">
                 <button
                   onClick={() => updateTask(task.id, { status: task.status === "done" ? "pending" : "done" })}
                   className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
-                    task.status === "done" ? "bg-[#0d4af5] border-[#0d4af5] text-white" : "border-zinc-600 hover:border-[#0d4af5]"
+                    task.status === "done" ? "bg-[#0d4af5] border-[#0d4af5] text-white" : "border-border hover:border-[#0d4af5]"
                   }`}>
                   {task.status === "done" && <Check size={10} />}
                 </button>
@@ -798,13 +885,13 @@ function AdminDashboard() {
                   <p className="text-xs text-foreground leading-tight">{task.title}</p>
                   <p className="text-[10px] text-muted-foreground">{task.clientName} · {task.assignedTo}</p>
                 </div>
-                <Link href={task.role === "social" ? "/social" : task.role === "designer" ? "/design" : "/traffic"} className="text-[10px] text-zinc-600 hover:text-[#0d4af5]">
+                <Link href={task.role === "social" ? "/social" : task.role === "designer" ? "/design" : "/traffic"} className="text-[10px] text-muted-foreground/70 hover:text-[#0d4af5]">
                   <ChevronRight size={10} />
                 </Link>
               </div>
             ))}
             {tasks.filter((t) => ["critical", "high"].includes(t.priority) && t.status !== "done").length === 0 && (
-              <p className="text-xs text-zinc-600 text-center py-4">Nenhuma tarefa urgente</p>
+              <p className="text-xs text-muted-foreground/70 text-center py-4">Nenhuma tarefa urgente</p>
             )}
           </div>
         </div>
@@ -816,9 +903,9 @@ function AdminDashboard() {
 
       {/* 7-day report */}
       {inactiveSevenDays.length > 0 && (
-        <div className="card border border-[#1e1e2a]">
+        <div className="card border border-border">
           <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle size={15} className="text-zinc-400" />
+            <AlertTriangle size={15} className="text-muted-foreground" />
             <h3 className="font-semibold text-foreground text-sm">
               Relatório 7 Dias — {inactiveSevenDays.length} cliente(s) sem qualquer interação
             </h3>
@@ -828,11 +915,11 @@ function AdminDashboard() {
               <Link
                 key={c.id}
                 href={`/clients/${c.id}`}
-                className="flex items-center gap-2 bg-[#0e0e14] border border-[#1e1e2a] rounded-lg px-3 py-2 hover:border-zinc-600 transition-colors"
+                className="flex items-center gap-2 bg-muted border border-border rounded-lg px-3 py-2 hover:border-muted-foreground/40 transition-colors"
               >
                 <span className="w-2 h-2 rounded-full bg-zinc-500" />
-                <span className="text-sm text-zinc-300">{c.name}</span>
-                <span className="text-xs text-zinc-400">{c.industry}</span>
+                <span className="text-sm text-foreground">{c.name}</span>
+                <span className="text-xs text-muted-foreground">{c.industry}</span>
               </Link>
             ))}
           </div>
@@ -896,7 +983,7 @@ function AdminDashboard() {
                     <td className="py-3 px-3">
                       {client.status !== "onboarding" && (
                         <div className="flex items-center gap-2">
-                          <div className="w-16 h-1 bg-[#0a0a10] rounded-full overflow-hidden">
+                          <div className="w-16 h-1 bg-muted rounded-full overflow-hidden">
                             <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
                           </div>
                           <span className="text-xs text-muted-foreground">{posts}/{goal}</span>

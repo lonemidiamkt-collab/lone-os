@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/lib/supabase/client";
 
 export class TokenExpiredError extends Error {
   constructor(message: string) {
@@ -9,32 +10,52 @@ export class TokenExpiredError extends Error {
   }
 }
 
-const STORAGE_KEY = "meta_access_token";
-const STORAGE_EXPIRY_KEY = "meta_token_expires_at";
-const STORAGE_TOKEN_TYPE_KEY = "meta_token_type"; // "short" | "long"
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID ?? "";
 const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}/traffic` : "";
 const SCOPES = "ads_read,business_management";
 
-function isTokenExpired(): boolean {
-  const expiresAt = localStorage.getItem(STORAGE_EXPIRY_KEY);
-  if (!expiresAt) return false;
-  return Date.now() > parseInt(expiresAt, 10);
-}
+// ─── Supabase-backed global token storage ─────────────────────────────────
 
-function storeToken(token: string, expiresIn?: number, tokenType: "short" | "long" = "short") {
-  localStorage.setItem(STORAGE_KEY, token);
-  localStorage.setItem(STORAGE_TOKEN_TYPE_KEY, tokenType);
-  if (expiresIn) {
-    // 5-min safety margin
-    localStorage.setItem(STORAGE_EXPIRY_KEY, String(Date.now() + (expiresIn - 300) * 1000));
+async function loadGlobalToken(): Promise<{ token: string; expiresAt: number | null; tokenType: "short" | "long" } | null> {
+  try {
+    const { data } = await supabase.from("agency_settings").select("key, value").in("key", ["meta_token", "meta_token_expires_at", "meta_token_type"]);
+    if (!data || data.length === 0) return null;
+    const map = new Map(data.map((r: { key: string; value: string }) => [r.key, r.value]));
+    const token = map.get("meta_token");
+    if (!token) return null;
+    const expiresAt = map.get("meta_token_expires_at") ? parseInt(map.get("meta_token_expires_at")!, 10) : null;
+    const tokenType = (map.get("meta_token_type") as "short" | "long") ?? "short";
+    return { token, expiresAt, tokenType };
+  } catch {
+    return null;
   }
 }
 
-function clearToken() {
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem(STORAGE_EXPIRY_KEY);
-  localStorage.removeItem(STORAGE_TOKEN_TYPE_KEY);
+async function saveGlobalToken(token: string, expiresIn?: number, tokenType: "short" | "long" = "short") {
+  const expiresAt = expiresIn ? String(Date.now() + (expiresIn - 300) * 1000) : null;
+  const rows = [
+    { key: "meta_token", value: token, updated_at: new Date().toISOString() },
+    { key: "meta_token_type", value: tokenType, updated_at: new Date().toISOString() },
+  ];
+  if (expiresAt) {
+    rows.push({ key: "meta_token_expires_at", value: expiresAt, updated_at: new Date().toISOString() });
+  }
+  await supabase.from("agency_settings").upsert(rows, { onConflict: "key" }).then(({ error }) => {
+    if (error) console.error("[Meta] Failed to save global token:", error);
+  });
+  // Also cache in localStorage for faster reads
+  localStorage.setItem("meta_access_token", token);
+  localStorage.setItem("meta_token_type", tokenType);
+  if (expiresAt) localStorage.setItem("meta_token_expires_at", expiresAt);
+}
+
+async function clearGlobalToken() {
+  await supabase.from("agency_settings").delete().in("key", ["meta_token", "meta_token_expires_at", "meta_token_type"]).then(({ error }) => {
+    if (error) console.error("[Meta] Failed to clear global token:", error);
+  });
+  localStorage.removeItem("meta_access_token");
+  localStorage.removeItem("meta_token_expires_at");
+  localStorage.removeItem("meta_token_type");
 }
 
 /** Exchange a short-lived token for a long-lived one (~60 days) via server-side API route */
@@ -45,15 +66,13 @@ async function exchangeForLongLivedToken(shortToken: string): Promise<void> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ short_lived_token: shortToken }),
     });
-    if (!res.ok) return; // silently skip — keep the short-lived token working
+    if (!res.ok) return;
 
     const data = await res.json();
     if (data.access_token) {
-      storeToken(data.access_token, data.expires_in, "long");
+      await saveGlobalToken(data.access_token, data.expires_in, "long");
     }
-  } catch {
-    // Network error or missing config — keep short-lived token
-  }
+  } catch {}
 }
 
 interface MetaConnectionState {
@@ -62,7 +81,7 @@ interface MetaConnectionState {
   token: string | null;
   tokenExpired: boolean;
   tokenType: "short" | "long" | null;
-  tokenExpiresAt: number | null; // ms timestamp
+  tokenExpiresAt: number | null;
 }
 
 export function useMetaConnection() {
@@ -76,58 +95,86 @@ export function useMetaConnection() {
   });
 
   useEffect(() => {
-    // Check if we're returning from OAuth (token in URL hash)
-    if (typeof window !== "undefined" && window.location.hash) {
-      const params = new URLSearchParams(window.location.hash.slice(1));
-      const token = params.get("access_token");
-      const expiresIn = params.get("expires_in");
-      if (token) {
-        const expiresInNum = expiresIn ? parseInt(expiresIn, 10) : undefined;
-        storeToken(token, expiresInNum, "short");
-        const expiresAt = expiresInNum ? Date.now() + (expiresInNum - 300) * 1000 : null;
-        setState({ connected: true, loading: false, token, tokenExpired: false, tokenType: "short", tokenExpiresAt: expiresAt });
-        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    let cancelled = false;
 
-        // Silently exchange for long-lived token (~60 days) in the background
-        exchangeForLongLivedToken(token).then(() => {
-          const upgraded = localStorage.getItem(STORAGE_KEY);
-          const upgradedExpiry = localStorage.getItem(STORAGE_EXPIRY_KEY);
-          const upgradedType = localStorage.getItem(STORAGE_TOKEN_TYPE_KEY) as "short" | "long" | null;
-          if (upgraded) {
-            setState((prev) => ({
-              ...prev,
-              token: upgraded,
-              tokenType: upgradedType ?? prev.tokenType,
-              tokenExpiresAt: upgradedExpiry ? parseInt(upgradedExpiry, 10) : prev.tokenExpiresAt,
-            }));
+    async function init() {
+      // 1. Check if we're returning from OAuth (token in URL hash)
+      if (typeof window !== "undefined" && window.location.hash) {
+        const params = new URLSearchParams(window.location.hash.slice(1));
+        const token = params.get("access_token");
+        const expiresIn = params.get("expires_in");
+        if (token) {
+          const expiresInNum = expiresIn ? parseInt(expiresIn, 10) : undefined;
+          await saveGlobalToken(token, expiresInNum, "short");
+          const expiresAt = expiresInNum ? Date.now() + (expiresInNum - 300) * 1000 : null;
+          if (!cancelled) {
+            setState({ connected: true, loading: false, token, tokenExpired: false, tokenType: "short", tokenExpiresAt: expiresAt });
           }
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+          // Exchange for long-lived token in background, update state when done
+          exchangeForLongLivedToken(token).then(async () => {
+            const upgraded = await loadGlobalToken();
+            if (upgraded && !cancelled) {
+              setState({
+                connected: true, loading: false, token: upgraded.token, tokenExpired: false,
+                tokenType: upgraded.tokenType, tokenExpiresAt: upgraded.expiresAt,
+              });
+            }
+          });
+          return;
+        }
+      }
+
+      // 2. Load from Supabase first (source of truth — shared across all users)
+      const global = await loadGlobalToken();
+      if (global) {
+        if (global.expiresAt && Date.now() > global.expiresAt) {
+          await clearGlobalToken();
+          if (!cancelled) setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null });
+          return;
+        }
+        if (!cancelled) setState({
+          connected: true, loading: false, token: global.token, tokenExpired: false,
+          tokenType: global.tokenType, tokenExpiresAt: global.expiresAt,
         });
         return;
       }
-    }
 
-    // Check localStorage for existing token
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      if (isTokenExpired()) {
-        clearToken();
-        setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null });
+      // 3. Auto-migrate: if localStorage has a token but Supabase doesn't, push it up
+      const legacyToken = localStorage.getItem("meta_access_token");
+      if (legacyToken) {
+        const legacyExpiry = localStorage.getItem("meta_token_expires_at");
+        const legacyType = (localStorage.getItem("meta_token_type") as "short" | "long") ?? "short";
+        // Check if expired
+        if (legacyExpiry && Date.now() > parseInt(legacyExpiry, 10)) {
+          localStorage.removeItem("meta_access_token");
+          localStorage.removeItem("meta_token_expires_at");
+          localStorage.removeItem("meta_token_type");
+          if (!cancelled) setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null });
+          return;
+        }
+        // Push to Supabase so all team members can use it
+        console.log("[Meta] Migrating token from localStorage → Supabase...");
+        const expiresIn = legacyExpiry ? Math.max(0, Math.round((parseInt(legacyExpiry, 10) - Date.now()) / 1000)) : undefined;
+        await saveGlobalToken(legacyToken, expiresIn, legacyType);
+        // Clean localStorage
+        localStorage.removeItem("meta_access_token");
+        localStorage.removeItem("meta_token_expires_at");
+        localStorage.removeItem("meta_token_type");
+        console.log("[Meta] Migration complete — token now in Supabase");
+        if (!cancelled) setState({
+          connected: true, loading: false, token: legacyToken, tokenExpired: false,
+          tokenType: legacyType, tokenExpiresAt: legacyExpiry ? parseInt(legacyExpiry, 10) : null,
+        });
         return;
       }
-      const storedExpiry = localStorage.getItem(STORAGE_EXPIRY_KEY);
-      const storedType = localStorage.getItem(STORAGE_TOKEN_TYPE_KEY) as "short" | "long" | null;
-      setState({
-        connected: true,
-        loading: false,
-        token: stored,
-        tokenExpired: false,
-        tokenType: storedType,
-        tokenExpiresAt: storedExpiry ? parseInt(storedExpiry, 10) : null,
-      });
-      return;
+
+      // 4. No token anywhere
+      if (!cancelled) setState({ connected: false, loading: false, token: null, tokenExpired: false, tokenType: null, tokenExpiresAt: null });
     }
 
-    setState({ connected: false, loading: false, token: null, tokenExpired: false, tokenType: null, tokenExpiresAt: null });
+    init();
+    return () => { cancelled = true; };
   }, []);
 
   const connect = useCallback(() => {
@@ -152,14 +199,13 @@ export function useMetaConnection() {
     window.location.href = `https://www.facebook.com/v21.0/dialog/oauth?${params}`;
   }, []);
 
-  const disconnect = useCallback(() => {
-    clearToken();
+  const disconnect = useCallback(async () => {
+    await clearGlobalToken();
     setState({ connected: false, loading: false, token: null, tokenExpired: false, tokenType: null, tokenExpiresAt: null });
   }, []);
 
-  // Call this when an API call returns 401/expired — auto-disconnects
-  const handleTokenError = useCallback(() => {
-    clearToken();
+  const handleTokenError = useCallback(async () => {
+    await clearGlobalToken();
     setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null });
   }, []);
 
@@ -220,7 +266,6 @@ export async function fetchAdAccounts(token: string) {
                 }
               }
             }
-            // Also fetch client ad accounts (accounts shared with the business)
             const clientParams = new URLSearchParams({
               access_token: token,
               fields: "id,name,account_id,currency,account_status",
@@ -249,29 +294,25 @@ export async function fetchAdAccounts(token: string) {
 // ACTION TYPE DEFINITIONS — authoritative source of truth
 // ═══════════════════════════════════════════════════════════
 
-// Mensagens: conversas iniciadas no WhatsApp/Messenger (NÃO cliques em link)
 const MESSAGE_ACTION_TYPES = [
-  "onsite_conversion.messaging_conversation_started_7d",  // principal — 7-day window
-  "onsite_conversion.messaging_first_conversation_started", // first-time conversations
-  "onsite_conversion.messaging_first_reply",               // fallback — first reply
+  "onsite_conversion.messaging_conversation_started_7d",
+  "onsite_conversion.messaging_first_conversation_started",
+  "onsite_conversion.messaging_first_reply",
 ] as const;
 
-// Leads: formulários nativos do Meta + pixel de lead
 const LEAD_ACTION_TYPES = [
-  "lead",                                    // formulário nativo (Lead Ads)
-  "onsite_conversion.lead_grouped",          // leads agrupados (formulário)
-  "offsite_conversion.fb_pixel_lead",        // pixel de lead no site
-  "offsite_conversion.fb_pixel_complete_registration", // registro completo via pixel
+  "lead",
+  "onsite_conversion.lead_grouped",
+  "offsite_conversion.fb_pixel_lead",
+  "offsite_conversion.fb_pixel_complete_registration",
 ] as const;
 
-// Compras/conversões de venda
 const PURCHASE_ACTION_TYPES = [
-  "offsite_conversion.fb_pixel_purchase",    // compra via pixel
-  "onsite_conversion.purchase",              // compra on-platform
-  "omni_purchase",                           // compra omnichannel
+  "offsite_conversion.fb_pixel_purchase",
+  "onsite_conversion.purchase",
+  "omni_purchase",
 ] as const;
 
-/** Parse string numérica da API Meta para number, com fallback seguro */
 function safeFloat(val: string | number | undefined | null): number {
   if (val === undefined || val === null || val === "") return 0;
   const n = typeof val === "number" ? val : parseFloat(val);
@@ -284,7 +325,6 @@ function safeInt(val: string | number | undefined | null): number {
   return isFinite(n) ? n : 0;
 }
 
-/** Count actions by type from a single insight row */
 function countActions(
   actions: { action_type: string; value: string }[] | undefined,
   types: readonly string[],
@@ -299,10 +339,8 @@ function countActions(
   return total;
 }
 
-/** Count messages with dedup: prefer conversation_started_7d > first_conversation > first_reply */
 function countMessages(actions: { action_type: string; value: string }[] | undefined): number {
   if (!actions) return 0;
-  // Priority order — use the first match found
   for (const type of MESSAGE_ACTION_TYPES) {
     const found = actions.find((a) => a.action_type === type);
     if (found) return safeInt(found.value);
@@ -310,7 +348,6 @@ function countMessages(actions: { action_type: string; value: string }[] | undef
   return 0;
 }
 
-// Fetch campaigns + insights for an ad account
 export async function fetchCampaignInsights(
   token: string,
   accountId: string,
@@ -320,11 +357,9 @@ export async function fetchCampaignInsights(
 ) {
   const syncTimestamp = new Date().toISOString();
 
-  // Fetch campaigns
   const campParams = new URLSearchParams({
     access_token: token,
     fields: "id,name,objective,status,daily_budget,lifetime_budget,start_time,stop_time",
-    // Only fetch ACTIVE + PAUSED (exclude DELETED/ARCHIVED to avoid garbage data)
     effective_status: '["ACTIVE","PAUSED"]',
     limit: "100",
   });
@@ -339,7 +374,6 @@ export async function fetchCampaignInsights(
   const campData = await campRes.json();
   const campaigns = campData.data ?? [];
 
-  // Calculate date range
   const todayDate = dateFrom && dateTo ? new Date(dateTo) : new Date();
   const sinceDate = dateFrom && dateTo ? new Date(dateFrom) : new Date(todayDate);
   if (!dateFrom || !dateTo) {
@@ -348,14 +382,11 @@ export async function fetchCampaignInsights(
   const sinceStr = sinceDate.toISOString().slice(0, 10);
   const untilStr = todayDate.toISOString().slice(0, 10);
 
-  // Fetch insights per campaign (parallel)
   return Promise.all(
     campaigns.map(async (campaign: any) => {
       try {
-        // Request daily breakdown + aggregated total in parallel
         const timeRange = JSON.stringify({ since: sinceStr, until: untilStr });
 
-        // Daily breakdown (for charts)
         const dailyParams = new URLSearchParams({
           access_token: token,
           fields: "date_start,date_stop,spend,impressions,reach,clicks,actions",
@@ -364,7 +395,6 @@ export async function fetchCampaignInsights(
           limit: "100",
         });
 
-        // Aggregated total (for accurate totals — avoids summing daily reach)
         const totalParams = new URLSearchParams({
           access_token: token,
           fields: "spend,impressions,reach,clicks,ctr,cpc,cpm,frequency,actions",
@@ -381,30 +411,26 @@ export async function fetchCampaignInsights(
         const totalData = totalRes.ok ? await totalRes.json() : { data: [] };
 
         const dailyInsights = dailyData.data ?? [];
-        const total = totalData.data?.[0]; // single aggregated row
+        const total = totalData.data?.[0];
 
         const hasData = !!total;
 
-        // ═══ AGGREGATED TOTALS (from the total query — accurate reach/frequency) ═══
         const totalSpend = safeFloat(total?.spend);
         const totalImpressions = safeInt(total?.impressions);
-        const totalReach = safeInt(total?.reach);           // accurate — not summed per day
+        const totalReach = safeInt(total?.reach);
         const totalClicks = safeInt(total?.clicks);
-        const frequency = safeFloat(total?.frequency);       // weighted average from API
+        const frequency = safeFloat(total?.frequency);
 
-        // Use API-provided weighted averages (NOT recalculated from daily sums)
         const ctr = safeFloat(total?.ctr);
         const cpc = safeFloat(total?.cpc);
         const cpm = safeFloat(total?.cpm);
 
-        // ═══ ACTION COUNTS (from aggregated total — no double-counting) ═══
         const totalActions = total?.actions as { action_type: string; value: string }[] | undefined;
         const totalMessages = countMessages(totalActions);
         const totalLeads = countActions(totalActions, LEAD_ACTION_TYPES);
         const totalPurchases = countActions(totalActions, PURCHASE_ACTION_TYPES);
-        const totalConversions = totalLeads + totalPurchases; // leads + purchases, NOT messages
+        const totalConversions = totalLeads + totalPurchases;
 
-        // ═══ COST PER RESULT — varies by objective ═══
         const objective = (campaign.objective ?? "").toUpperCase();
         let results = 0;
         let costPerResult = 0;
@@ -419,7 +445,6 @@ export async function fetchCampaignInsights(
         }
         costPerResult = results > 0 ? totalSpend / results : 0;
 
-        // ═══ DAILY METRICS (from daily query — for charts) ═══
         const dailyMetrics = dailyInsights.map((i: any) => {
           const dayActions = i.actions as { action_type: string; value: string }[] | undefined;
           return {

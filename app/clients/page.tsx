@@ -18,9 +18,11 @@ import {
 import {
   Search, UserPlus, ChevronRight, MessageSquare,
   ExternalLink, Activity, MoreHorizontal, Facebook, AlertTriangle, Zap,
+  Check, X, Loader2, Clock, Send,
 } from "lucide-react";
 import Link from "next/link";
 import { mockAdCampaigns } from "@/lib/mockData";
+import { fetchDraftClients } from "@/lib/supabase/queries";
 
 // Health score: uses shared calcHealthScore from lib/utils.ts
 
@@ -59,6 +61,38 @@ export default function ClientsPage() {
   const [chatInput, setChatInput] = useState("");
   const [showNewModal, setShowNewModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+
+  // ─── Draft clients (pending invite / awaiting approval) ───
+  const isAdmin = role === "admin" || role === "manager";
+  const [drafts, setDrafts] = useState<Client[]>([]);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetchDraftClients().then(setDrafts);
+  }, [isAdmin]);
+
+  const handleApprove = async (clientId: string) => {
+    setApprovingId(clientId);
+    await fetch("/api/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "approve", clientId }),
+    });
+    setDrafts((prev) => prev.filter((d) => d.id !== clientId));
+    // Refresh the page to show the newly approved client
+    window.location.reload();
+  };
+
+  const handleReject = async (clientId: string) => {
+    if (!confirm("Tem certeza que deseja rejeitar este cadastro? Os dados serao removidos.")) return;
+    await fetch("/api/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "reject", clientId }),
+    });
+    setDrafts((prev) => prev.filter((d) => d.id !== clientId));
+  };
 
   // Role-based: which field maps the current user to a client
   const isOperator = role === "traffic" || role === "social" || role === "designer";
@@ -128,6 +162,66 @@ export default function ClientsPage() {
               ))}
             </div>
 
+            {/* ═══ PENDING APPROVALS (Admin Only) ═══ */}
+            {isAdmin && drafts.length > 0 && (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock size={14} className="text-amber-500" />
+                    <h3 className="text-sm font-semibold text-amber-400">
+                      Cadastros Pendentes ({drafts.length})
+                    </h3>
+                  </div>
+                  <Link href="/clients/pending" className="text-xs text-[#0d4af5] hover:underline flex items-center gap-1">
+                    Revisar todos <ExternalLink size={10} />
+                  </Link>
+                </div>
+                <div className="space-y-2">
+                  {drafts.map((draft) => (
+                    <div key={draft.id} className="flex items-center gap-3 bg-[#111113] border border-[#1e1e2a] rounded-lg p-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">{draft.name}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] text-zinc-500">{draft.industry}</span>
+                          {draft.draftStatus === "pending_invite" && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                              <Send size={8} /> Link enviado
+                            </span>
+                          )}
+                          {draft.draftStatus === "awaiting_approval" && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20 flex items-center gap-1">
+                              <Check size={8} /> Formulario recebido
+                            </span>
+                          )}
+                          {draft.contactName && (
+                            <span className="text-[10px] text-zinc-500">Contato: {draft.contactName}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {draft.draftStatus === "awaiting_approval" && (
+                          <button
+                            onClick={() => handleApprove(draft.id)}
+                            disabled={approvingId === draft.id}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-colors border border-emerald-500/20"
+                          >
+                            {approvingId === draft.id ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                            Aprovar
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleReject(draft.id)}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-zinc-500 text-xs hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        >
+                          <X size={10} /> Rejeitar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Filters + Add Button */}
             <div className="flex gap-3">
               <div className="flex-1 flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
@@ -187,12 +281,18 @@ export default function ClientsPage() {
                 return (
                   <div
                     key={client.id}
-                    className={`card cursor-pointer transition-all hover:border-primary/40 ${
+                    className={`card cursor-pointer transition-all select-none hover:border-primary/40 hover:bg-zinc-800/50 hover:shadow-lg ${
                       selectedClient?.id === client.id ? "border-primary/60 bg-primary/5" : ""
                     } ${client.status === "at_risk" ? "border-red-500/20" : ""} ${
                       hasMetaLinked ? "ring-1 ring-[#0d4af5]/30 shadow-[0_0_12px_rgba(10,52,245,0.12)]" : ""
                     } ${hasAdError ? "ring-1 ring-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.15)]" : ""}`}
-                    onClick={() => setSelectedClient(client === selectedClient ? null : client)}
+                    onClick={() => {
+                      if (client.status === "onboarding") {
+                        window.location.href = `/clients/${client.id}?tab=onboarding`;
+                      } else {
+                        window.location.href = `/clients/${client.id}`;
+                      }
+                    }}
                   >
                     <div className="flex items-center gap-4">
                       <div className={`${getStatusLed(client.status)}`} />

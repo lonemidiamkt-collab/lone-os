@@ -111,12 +111,6 @@ const PRIORITY_COLORS: Record<Priority, string> = {
   critical: "text-red-400",
 };
 
-const TEAM_MEMBERS: Record<string, string[]> = {
-  social: ["Carlos Melo", "Mariana Costa"],
-  designer: ["Rafael Designer"],
-  traffic: ["Ana Lima", "Pedro Alves"],
-};
-
 type CreateType = "task" | "social" | "reminder";
 
 export default function CalendarPage() {
@@ -545,7 +539,7 @@ export default function CalendarPage() {
                   onDragOver={day ? (e) => handleDragOver(e, day) : undefined}
                   onDragLeave={day ? handleDragLeave : undefined}
                   onDrop={day ? (e) => handleDrop(e, day) : undefined}
-                  className={`group min-h-[90px] rounded-lg p-1.5 flex flex-col transition-all border relative ${
+                  className={`group min-h-[48px] sm:min-h-[70px] rounded-lg p-1 sm:p-1.5 flex flex-col transition-all border relative ${
                     dragOverDay === day
                       ? "bg-[#0d4af5]/15 border-[#0d4af5]/50 ring-1 ring-[#0d4af5]/30"
                       : todayFlag

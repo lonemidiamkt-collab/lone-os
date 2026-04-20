@@ -17,6 +17,7 @@ import GlobalSearch from "@/components/GlobalSearch";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
 import OnboardingTour from "@/components/OnboardingTour";
 import SessionTimeout from "@/components/SessionTimeout";
+import RealtimeToast from "@/components/RealtimeToast";
 
 // Routes that have a secondary sidebar (240px extra)
 const SECONDARY_ROUTES = ["/traffic", "/social", "/design", "/clients"];
@@ -43,26 +44,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   const { secondaryOpen, mobileOpen, setMobileOpen } = useNav();
   const { pushNotification } = useAppState();
 
-  // Check Meta token expiry on mount and warn user
-  useEffect(() => {
-    const expiresAt = localStorage.getItem("meta_token_expires_at");
-    const token = localStorage.getItem("meta_access_token");
-    if (token && expiresAt) {
-      const expiryMs = parseInt(expiresAt, 10);
-      const now = Date.now();
-      if (now > expiryMs) {
-        pushNotification("system", "Token Meta Ads expirado", "Seu token de acesso ao Meta Ads expirou. Reconecte na pagina de Trafego para continuar visualizando campanhas.");
-        localStorage.removeItem("meta_access_token");
-        localStorage.removeItem("meta_token_expires_at");
-        localStorage.removeItem("meta_token_type");
-      } else {
-        const daysLeft = Math.floor((expiryMs - now) / 86400000);
-        if (daysLeft <= 7) {
-          pushNotification("system", "Token Meta Ads expira em breve", `Seu token Meta Ads expira em ${daysLeft} dia(s). Reconecte na pagina de Trafego para renovar.`);
-        }
-      }
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Meta token expiry check is handled by useMetaConnection (Supabase-backed)
 
   // Secondary sidebar is 240px; primary is 72px
   const hasSecondaryRoute = SECONDARY_ROUTES.some(
@@ -74,7 +56,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   const contentOffset = showSecondary ? "lg:pl-[312px]" : "lg:pl-[72px]";
 
   return (
-    <div className="flex min-h-screen bg-black relative">
+    <div className="flex min-h-screen bg-background relative">
       {/* Ambient glows removed — sober premium aesthetic */}
 
       {/* Mobile hamburger */}
@@ -97,7 +79,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
       {/* Main content — shifts right when secondary is open */}
       <main
         className={[
-          "flex-1 flex flex-col overflow-hidden w-full",
+          "flex-1 flex flex-col overflow-auto w-full",
           "transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[padding]",
           contentOffset,
         ].join(" ")}
@@ -119,6 +101,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <NavProvider>
               <MainLayout>{children}</MainLayout>
               <NotificationToast />
+              <RealtimeToast />
               <ScheduledNoticePopup />
               <GlobalSearch />
               <KeyboardShortcuts />

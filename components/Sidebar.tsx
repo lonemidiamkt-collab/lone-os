@@ -263,7 +263,7 @@ export default function Sidebar() {
       )}
 
       <aside className={cn(
-        "fixed left-0 top-0 bottom-0 z-50 flex flex-col justify-between py-5 bg-black transition-all duration-[400ms]",
+        "fixed left-0 top-0 bottom-0 z-50 flex flex-col justify-between py-5 bg-sidebar transition-all duration-[400ms]",
         "ease-[cubic-bezier(0.16,1,0.3,1)]",
         expanded ? "w-[200px] items-start px-3" : "w-[72px] items-center",
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"

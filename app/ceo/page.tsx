@@ -720,18 +720,9 @@ export default function CEOPage() {
                                           <span className="text-[10px] text-red-400 font-semibold">{daysWithout}d sem post</span>
                                         </div>
                                       </div>
-                                      {/* Week header */}
-                                      <div className="grid grid-cols-7 gap-0.5 mb-0.5">
-                                        {weekDays.map((d, i) => (
-                                          <div key={i} className="text-[8px] text-muted-foreground text-center font-medium">{d}</div>
-                                        ))}
-                                      </div>
-                                      {/* Calendar grid */}
-                                      <div className="grid grid-cols-7 gap-0.5">
-                                        {/* Empty cells for offset */}
-                                        {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-                                          <div key={`empty-${i}`} className="w-full aspect-square" />
-                                        ))}
+                                      {/* Compact: no week header needed */}
+                                      {/* Calendar grid — compact */}
+                                      <div className="flex flex-wrap gap-[2px]">
                                         {Array.from({ length: daysInMonth }).map((_, i) => {
                                           const day = i + 1;
                                           const hasPost = days.has(day);
@@ -741,13 +732,13 @@ export default function CEOPage() {
                                             <div
                                               key={day}
                                               title={`Dia ${day}: ${isFuture ? "futuro" : hasPost ? "com post" : "sem post"}`}
-                                              className={`w-full aspect-square rounded-sm flex items-center justify-center text-[8px] font-bold transition-all ${
+                                              className={`w-[18px] h-[18px] rounded-[3px] flex items-center justify-center text-[7px] font-bold ${
                                                 isFuture
                                                   ? "bg-muted/30 text-muted-foreground/30"
                                                   : hasPost
-                                                    ? "bg-[#0d4af5]/20 text-[#0d4af5] border border-[#0d4af5]/30"
-                                                    : "bg-red-500/10 text-red-400 border border-red-500/20"
-                                              } ${isToday ? "ring-1 ring-foreground/30" : ""}`}
+                                                    ? "bg-[#0d4af5]/25 text-[#0d4af5]"
+                                                    : "bg-red-500/15 text-red-400"
+                                              } ${isToday ? "ring-1 ring-foreground/40" : ""}`}
                                             >
                                               {day}
                                             </div>

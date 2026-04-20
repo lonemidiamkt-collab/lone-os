@@ -22,8 +22,8 @@ export default function MetricCard({
   sub,
   trend,
   trendValue,
-  iconColor = "text-[#0d4af5]",
-  iconBg = "bg-[#0d4af5]/10",
+  iconColor = "text-primary",
+  iconBg = "bg-primary/10",
   href,
   onClick,
 }: MetricCardProps) {

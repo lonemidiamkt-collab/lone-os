@@ -1,50 +1,32 @@
-# Lone OS — Production Docker Compose
-# Usage on VPS:
-#   1. git clone your repo
-#   2. cp .env.production .env
-#   3. docker compose -f docker-compose.prod.yml up -d
-#   4. Apply migrations: docker compose exec db psql -U postgres -f /migrations/20260323000000_initial_schema.sql
-#   5. Apply seed: docker compose exec db psql -U postgres -f /seed/seed.sql
-
+# Lone OS — Production (app only, Supabase runs separately)
 services:
-  # PostgreSQL Database
-  db:
-    image: postgres:16-alpine
-    restart: always
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-loneos}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./supabase/migrations:/migrations:ro
-      - ./supabase:/seed:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # Next.js App
   app:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: https://painel.lonemidia.com/supabase
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_META_APP_ID: ${NEXT_PUBLIC_META_APP_ID}
     restart: always
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NODE_ENV: production
+      NEXT_PUBLIC_SUPABASE_URL: https://painel.lonemidia.com/supabase
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_INTERNAL_URL: http://supabase-kong-1:8000
       NEXT_PUBLIC_META_APP_ID: ${NEXT_PUBLIC_META_APP_ID}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-loneos}
-    depends_on:
-      db:
-        condition: service_healthy
+      META_APP_SECRET: ${META_APP_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+    networks:
+      - default
+      - supabase_default
 
-volumes:
-  pgdata:
-    driver: local
+networks:
+  default:
+  supabase_default:
+    external: true

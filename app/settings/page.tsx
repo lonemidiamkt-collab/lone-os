@@ -4,10 +4,13 @@ import { useState } from "react";
 import {
   Settings, User, Palette, Bell, Shield, LogOut,
   Sun, Moon, Check, ChevronRight, Mail, Key,
+  Building2, FileText, Loader2, Save,
 } from "lucide-react";
 import { useRole } from "@/lib/context/RoleContext";
 import { useTheme } from "@/lib/context/ThemeContext";
 import { RestartTourButton } from "@/components/OnboardingTour";
+import { supabase } from "@/lib/supabase/client";
+import { useEffect } from "react";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "CEO / Administrador",
@@ -20,7 +23,66 @@ const ROLE_LABELS: Record<string, string> = {
 export default function SettingsPage() {
   const { currentProfile, role, logout } = useRole();
   const { theme, toggleTheme } = useTheme();
-  const [activeSection, setActiveSection] = useState<"profile" | "appearance" | "notifications" | "security">("profile");
+  const [activeSection, setActiveSection] = useState<"profile" | "appearance" | "notifications" | "security" | "juridico">("profile");
+  const isAdmin = role === "admin" || role === "manager";
+
+  // Juridico state
+  const [agencyForm, setAgencyForm] = useState({
+    razaoSocial: "", nomeFantasia: "", cnpj: "", endereco: "", email: "", telefone: "",
+    signatarioNome: "", signatarioCpf: "", signatarioEmail: "",
+    d4signToken: "", d4signCryptKey: "",
+  });
+  const [templates, setTemplates] = useState<{ id: string; name: string; serviceType: string; d4signTemplateId: string; d4signSafeId: string; durationMonths: number; clauses: { id: string; title: string; body: string }[]; conditionalClauses: { id: string; title: string; body: string; enabled: boolean }[] }[]>([]);
+  const [editingClauses, setEditingClauses] = useState<string | null>(null);
+  const [agencySaving, setAgencySaving] = useState(false);
+  const [agencySaved, setAgencySaved] = useState(false);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    supabase.from("agency_settings").select("*").eq("key", "main").maybeSingle().then(({ data }) => {
+      if (data) setAgencyForm({
+        razaoSocial: data.razao_social || "", nomeFantasia: data.nome_fantasia || "",
+        cnpj: data.cnpj || "", endereco: data.endereco || "", email: data.email || "",
+        telefone: data.telefone || "", signatarioNome: data.signatario_nome || "",
+        signatarioCpf: data.signatario_cpf || "", signatarioEmail: data.signatario_email || "",
+        d4signToken: data.d4sign_token || "", d4signCryptKey: data.d4sign_crypt_key || "",
+      });
+    });
+    supabase.from("contract_templates").select("*").order("name").then(({ data }) => {
+      if (data) setTemplates(data.map((r) => ({
+        id: r.id, name: r.name, serviceType: r.service_type,
+        d4signTemplateId: r.d4sign_template_id || "", d4signSafeId: r.d4sign_safe_id || "",
+        durationMonths: r.duration_months,
+        clauses: (r.clauses as { id: string; title: string; body: string }[]) || [],
+        conditionalClauses: (r.conditional_clauses as { id: string; title: string; body: string; enabled: boolean }[]) || [],
+      })));
+    });
+  }, [isAdmin]);
+
+  const handleAgencySave = async () => {
+    setAgencySaving(true);
+    await supabase.from("agency_settings").update({
+      razao_social: agencyForm.razaoSocial, nome_fantasia: agencyForm.nomeFantasia,
+      cnpj: agencyForm.cnpj, endereco: agencyForm.endereco, email: agencyForm.email,
+      telefone: agencyForm.telefone, signatario_nome: agencyForm.signatarioNome,
+      signatario_cpf: agencyForm.signatarioCpf, signatario_email: agencyForm.signatarioEmail,
+      d4sign_token: agencyForm.d4signToken, d4sign_crypt_key: agencyForm.d4signCryptKey,
+      updated_at: new Date().toISOString(),
+    }).eq("key", "main");
+    for (const t of templates) {
+      await supabase.from("contract_templates").update({
+        d4sign_template_id: t.d4signTemplateId || null,
+        d4sign_safe_id: t.d4signSafeId || null,
+        duration_months: t.durationMonths,
+        clauses: t.clauses,
+        conditional_clauses: t.conditionalClauses,
+        updated_at: new Date().toISOString(),
+      }).eq("id", t.id);
+    }
+    setAgencySaving(false);
+    setAgencySaved(true);
+    setTimeout(() => setAgencySaved(false), 2000);
+  };
 
   // Notification preferences (local state — would persist to DB in production)
   const [notifPrefs, setNotifPrefs] = useState({
@@ -41,6 +103,7 @@ export default function SettingsPage() {
     { key: "appearance" as const, label: "Aparência", icon: Palette },
     { key: "notifications" as const, label: "Notificações", icon: Bell },
     { key: "security" as const, label: "Segurança", icon: Shield },
+    ...(isAdmin ? [{ key: "juridico" as const, label: "Jurídico & Contratos", icon: FileText }] : []),
   ];
 
   return (
@@ -280,6 +343,169 @@ export default function SettingsPage() {
                   >
                     <LogOut size={16} /> Encerrar sessão
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {/* Juridico & Contratos */}
+          {activeSection === "juridico" && isAdmin && (
+            <div className="space-y-6 animate-fade-in">
+              {/* Agency Data */}
+              <div className="card">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
+                    <Building2 size={14} className="text-[#0d4af5]" /> Dados da Agencia
+                  </h3>
+                  <button onClick={handleAgencySave} disabled={agencySaving}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white text-xs font-medium transition-colors disabled:opacity-50">
+                    {agencySaving ? <Loader2 size={12} className="animate-spin" /> : agencySaved ? <Check size={12} /> : <Save size={12} />}
+                    {agencySaved ? "Salvo!" : "Salvar Tudo"}
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {([
+                    { key: "razaoSocial", label: "Razao Social" },
+                    { key: "nomeFantasia", label: "Nome Fantasia" },
+                    { key: "cnpj", label: "CNPJ" },
+                    { key: "endereco", label: "Endereco" },
+                    { key: "email", label: "E-mail" },
+                    { key: "telefone", label: "Telefone" },
+                  ] as { key: keyof typeof agencyForm; label: string }[]).map(({ key, label }) => (
+                    <div key={key} className="space-y-1.5">
+                      <label className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</label>
+                      <input value={agencyForm[key]} onChange={(e) => setAgencyForm((p) => ({ ...p, [key]: e.target.value }))}
+                        className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Signatario */}
+              <div className="card">
+                <h3 className="font-semibold text-foreground text-sm mb-5 flex items-center gap-2">
+                  <User size={14} className="text-[#0d4af5]" /> Signatario (Contratada)
+                </h3>
+                <div className="grid grid-cols-3 gap-4">
+                  {([
+                    { key: "signatarioNome", label: "Nome Completo" },
+                    { key: "signatarioCpf", label: "CPF" },
+                    { key: "signatarioEmail", label: "E-mail para Assinatura" },
+                  ] as { key: keyof typeof agencyForm; label: string }[]).map(({ key, label }) => (
+                    <div key={key} className="space-y-1.5">
+                      <label className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</label>
+                      <input value={agencyForm[key]} onChange={(e) => setAgencyForm((p) => ({ ...p, [key]: e.target.value }))}
+                        className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* D4Sign Config */}
+              <div className="card">
+                <h3 className="font-semibold text-foreground text-sm mb-2 flex items-center gap-2">
+                  <Shield size={14} className="text-[#0d4af5]" /> Integracao D4Sign
+                </h3>
+                <p className="text-[10px] text-muted-foreground mb-5">Credenciais de API para assinatura digital de contratos</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">Token API</label>
+                    <input type="password" value={agencyForm.d4signToken}
+                      onChange={(e) => setAgencyForm((p) => ({ ...p, d4signToken: e.target.value }))}
+                      placeholder="live-xxxxxxxx..."
+                      className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50 font-mono" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">Crypt Key</label>
+                    <input type="password" value={agencyForm.d4signCryptKey}
+                      onChange={(e) => setAgencyForm((p) => ({ ...p, d4signCryptKey: e.target.value }))}
+                      placeholder="live-crypt-xxxxxxxx..."
+                      className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50 font-mono" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Templates & Clausulas */}
+              <div className="card">
+                <h3 className="font-semibold text-foreground text-sm mb-2 flex items-center gap-2">
+                  <FileText size={14} className="text-[#0d4af5]" /> Templates de Contrato
+                </h3>
+                <p className="text-[10px] text-muted-foreground mb-5">Configure IDs D4Sign e edite clausulas de cada servico</p>
+                <div className="space-y-4">
+                  {templates.map((t, idx) => (
+                    <div key={t.id} className="rounded-xl border border-border bg-surface p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-foreground">{t.name}</p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-zinc-500 font-mono">{t.serviceType}</span>
+                          <button onClick={() => setEditingClauses(editingClauses === t.id ? null : t.id)}
+                            className={`text-[10px] px-2 py-0.5 rounded border transition-all ${editingClauses === t.id ? "bg-[#0d4af5]/10 text-[#0d4af5] border-[#0d4af5]/20" : "border-border text-zinc-500 hover:text-white"}`}>
+                            {editingClauses === t.id ? "Fechar" : "Editar Clausulas"}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-zinc-500">Template ID (D4Sign)</label>
+                          <input value={t.d4signTemplateId} placeholder="UUID" onChange={(e) => {
+                            const u = [...templates]; u[idx] = { ...u[idx], d4signTemplateId: e.target.value }; setTemplates(u);
+                          }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50 font-mono" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-zinc-500">Safe ID (Pasta)</label>
+                          <input value={t.d4signSafeId} placeholder="UUID" onChange={(e) => {
+                            const u = [...templates]; u[idx] = { ...u[idx], d4signSafeId: e.target.value }; setTemplates(u);
+                          }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50 font-mono" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-zinc-500">Duracao (meses)</label>
+                          <input type="number" value={t.durationMonths} onChange={(e) => {
+                            const u = [...templates]; u[idx] = { ...u[idx], durationMonths: Number(e.target.value) || 3 }; setTemplates(u);
+                          }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50" />
+                        </div>
+                      </div>
+
+                      {/* Clause editor */}
+                      {editingClauses === t.id && (
+                        <div className="space-y-4 pt-3 border-t border-border">
+                          <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Clausulas do Contrato</p>
+                          {t.clauses.map((clause, ci) => (
+                            <div key={clause.id} className="space-y-1.5">
+                              <input value={clause.title} onChange={(e) => {
+                                const u = [...templates]; const c = [...u[idx].clauses]; c[ci] = { ...c[ci], title: e.target.value };
+                                u[idx] = { ...u[idx], clauses: c }; setTemplates(u);
+                              }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-medium outline-none focus:border-[#0d4af5]/50" />
+                              <textarea value={clause.body} rows={4} onChange={(e) => {
+                                const u = [...templates]; const c = [...u[idx].clauses]; c[ci] = { ...c[ci], body: e.target.value };
+                                u[idx] = { ...u[idx], clauses: c }; setTemplates(u);
+                              }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50 resize-none" />
+                            </div>
+                          ))}
+
+                          <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider pt-2">Clausulas Condicionais (Opcionais)</p>
+                          {t.conditionalClauses.map((cc, cci) => (
+                            <div key={cc.id} className={`rounded-lg border p-3 space-y-2 transition-all ${cc.enabled ? "border-[#0d4af5]/30 bg-[#0d4af5]/[0.03]" : "border-border"}`}>
+                              <div className="flex items-center justify-between">
+                                <input value={cc.title} onChange={(e) => {
+                                  const u = [...templates]; const c = [...u[idx].conditionalClauses]; c[cci] = { ...c[cci], title: e.target.value };
+                                  u[idx] = { ...u[idx], conditionalClauses: c }; setTemplates(u);
+                                }} className="bg-transparent text-xs text-foreground font-medium outline-none flex-1" />
+                                <button onClick={() => {
+                                  const u = [...templates]; const c = [...u[idx].conditionalClauses]; c[cci] = { ...c[cci], enabled: !c[cci].enabled };
+                                  u[idx] = { ...u[idx], conditionalClauses: c }; setTemplates(u);
+                                }} className={`relative w-9 h-5 rounded-full transition-all ${cc.enabled ? "bg-[#0d4af5]" : "bg-zinc-700"}`}>
+                                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${cc.enabled ? "left-[18px]" : "left-0.5"}`} />
+                                </button>
+                              </div>
+                              <textarea value={cc.body} rows={2} onChange={(e) => {
+                                const u = [...templates]; const c = [...u[idx].conditionalClauses]; c[cci] = { ...c[cci], body: e.target.value };
+                                u[idx] = { ...u[idx], conditionalClauses: c }; setTemplates(u);
+                              }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-[11px] text-foreground outline-none focus:border-[#0d4af5]/50 resize-none" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

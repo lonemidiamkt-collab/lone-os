@@ -44,7 +44,7 @@ import {
   mockContentCards,
   mockMoodHistory,
   mockCreativeAssets,
-  DEFAULT_ONBOARDING_ITEMS,
+  getOnboardingItemsForService,
   mockNotices,
   mockQuinzReports,
   mockDesignRequests,
@@ -174,8 +174,8 @@ function initNotifications(): AppNotification[] {
 
 function initSocialTeam(): SocialTeamMember[] {
   return [
-    { id: "sm-1", name: "Carlos Melo", password: "00" },
-    { id: "sm-2", name: "Mariana Costa", password: "00" },
+    { id: "sm-1", name: "Carlos", password: "00" },
+    { id: "sm-2", name: "Pedro", password: "00" },
   ];
 }
 
@@ -357,143 +357,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Delivery Log (BI tracking) ──────────────────────────
   const logDelivery = useCallback((entry: Omit<import("@/lib/types").DeliveryLog, "id">) => {
-    const log: import("@/lib/types").DeliveryLog = { ...entry, id: `dl-${Date.now()}-${Math.random().toString(36).slice(2, 5)}` };
-    try {
-      const existing = JSON.parse(localStorage.getItem("lone-os-delivery-log") ?? "[]");
-      existing.unshift(log);
-      localStorage.setItem("lone-os-delivery-log", JSON.stringify(existing.slice(0, 500)));
-    } catch {}
+    // Delivery log tracked via Supabase timeline entries (no localStorage)
+    void entry;
   }, []);
 
-  // ---------- Debounced save to localStorage ----------
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isInitialMount = useRef(true);
-
-  useEffect(() => {
-    // Skip saving on the very first render (initial load)
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-    }
-
-    saveTimerRef.current = setTimeout(() => {
-      try {
-        // Sanitize passwords before persisting to localStorage
-        const sanitizedAccess: typeof clientAccess = {};
-        for (const [k, v] of Object.entries(clientAccess)) {
-          const clean = { ...v };
-          for (const field of ["instagramPassword","facebookPassword","tiktokPassword","linkedinPassword","youtubePassword","mlabsPassword"] as const) {
-            if (clean[field]) clean[field] = "••••" + (clean[field]?.slice(-2) ?? "");
-          }
-          sanitizedAccess[k] = clean;
-        }
-        const sanitizedTeam = socialTeam.map((m) => ({ ...m, password: "••••" }));
-
-        const stateToSave: PersistedState = {
-          clients,
-          investmentData,
-          contentCards,
-          timeline,
-          moodHistory,
-          creativeAssets,
-          clientChats,
-          globalChat,
-          onboarding,
-          notices,
-          socialProofs,
-          crisisNotes,
-          socialTeam: sanitizedTeam,
-          socialAuthUser,
-          notifications,
-          quinzReports,
-          designRequests,
-          tasks,
-          trafficReports,
-          trafficRoutineChecks,
-          socialReports,
-          contentApprovals,
-          clientAccess: sanitizedAccess,
-          reminders,
-        };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
-
-        // Auto-sync to server (admin pushes state for team)
-        fetch("/api/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ state: stateToSave, syncedBy: "auto" }),
-        }).catch(() => {});
-      } catch (err) {
-        console.warn("[Lone OS] Failed to save to localStorage:", err);
-      }
-    }, 500);
-
-    return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-      }
-    };
-  }, [
-    clients, investmentData, contentCards, timeline, moodHistory,
-    creativeAssets, clientChats, globalChat, onboarding, notices,
-    socialProofs, crisisNotes, socialTeam, socialAuthUser, notifications,
-    quinzReports, designRequests, tasks, trafficReports, trafficRoutineChecks,
-    socialReports, contentApprovals, clientAccess, reminders,
-  ]);
-
-  // ---------- Server sync: pull shared state on load + periodically ----------
-  useEffect(() => {
-    let cancelled = false;
-    const pullFromServer = async () => {
-      try {
-        const res = await fetch("/api/sync");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data.state || cancelled) return;
-
-        // Only apply server state if local is empty OR server is newer
-        const localHasData = clients.length > 0 || tasks.length > 0 || contentCards.length > 0;
-        if (!localHasData && data.state.clients?.length > 0) {
-          console.log("[Lone OS] Syncing state from server...");
-          if (data.state.clients) setClients(data.state.clients);
-          if (data.state.tasks) setTasks(data.state.tasks);
-          if (data.state.contentCards) setContentCards(data.state.contentCards);
-          if (data.state.designRequests) setDesignRequests(data.state.designRequests);
-          if (data.state.timeline) setTimeline(data.state.timeline);
-          if (data.state.clientChats) setClientChats(data.state.clientChats);
-          if (data.state.globalChat) setGlobalChat(data.state.globalChat);
-          if (data.state.onboarding) setOnboarding(data.state.onboarding);
-          if (data.state.notices) setNotices(data.state.notices);
-          if (data.state.notifications) setNotifications(data.state.notifications);
-          // Save to localStorage so next load is instant
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(data.state));
-        }
-      } catch {}
-    };
-
-    // Pull on mount
-    pullFromServer();
-
-    // Pull every 30 seconds (lightweight — server returns cached JSON)
-    const interval = setInterval(pullFromServer, 30000);
-
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ---------- Legacy persistence (keep for backwards compat, will be superseded by STORAGE_KEY) ----------
-  useEffect(() => {
-    try { localStorage.setItem("lone_reminders", JSON.stringify(reminders)); } catch {}
-  }, [reminders]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("lone_investmentData", JSON.stringify(investmentData));
-    } catch {}
-  }, [investmentData]);
+  // ---------- Supabase is the source of truth — no more localStorage save loop ----------
+  // All mutations (addClient, updateTask, etc.) already call db.* functions directly.
+  // localStorage is only used for initial migration (one-time) and is cleared after.
 
   // ---------- Automation Rules Engine ----------
   // Refs to hold latest state so the interval callback never goes stale
@@ -653,7 +523,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
               ? { ...r, triggerCount: ruleUpdates[r.id].triggerCount, lastTriggeredAt: ruleUpdates[r.id].lastTriggeredAt }
               : r
           );
-          try { localStorage.setItem("lone_automations", JSON.stringify(next)); } catch {}
+          // Automation rules persisted via Supabase (no localStorage)
           return next;
         });
       }
@@ -758,6 +628,36 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
         if (cancelled) return;
 
+        // ── One-time migration: push localStorage data to Supabase ──
+        // If DB is empty but localStorage has data, push it to the DB
+        const dbIsEmpty = dbClients.length === 0 && dbTasks.length === 0 && dbCards.length === 0;
+        const localData = cached.current;
+        const localHasData = localData && ((localData.clients?.length ?? 0) > 0 || (localData.tasks?.length ?? 0) > 0 || (localData.contentCards?.length ?? 0) > 0);
+
+        if (dbIsEmpty && localHasData) {
+          console.log("[Lone OS] DB empty, migrating localStorage → Supabase...");
+          await migrateLocalToDb(localData);
+          // Re-fetch from DB after migration to get real UUIDs
+          const freshClients = await db.fetchClients();
+          const freshTasks = await db.fetchTasks();
+          const freshCards = await db.fetchContentCards();
+          const freshDesignReqs = await db.fetchDesignRequests();
+          const freshNotifications = await db.fetchNotifications();
+          const freshNotices = await db.fetchNotices();
+          if (!cancelled) {
+            if (freshClients.length > 0) setClients(freshClients);
+            if (freshTasks.length > 0) setTasks(freshTasks);
+            if (freshCards.length > 0) setContentCards(freshCards);
+            if (freshDesignReqs.length > 0) setDesignRequests(freshDesignReqs);
+            if (freshNotifications.length > 0) setNotifications(freshNotifications);
+            if (freshNotices.length > 0) setNotices(freshNotices);
+            // Mark migration done so it doesn't repeat
+            try { localStorage.setItem("lone-os-db-migrated", "true"); } catch {}
+          }
+          setDbReady(true);
+          return;
+        }
+
         // Supabase data takes priority over localStorage when available
         if (dbClients.length > 0) setClients(dbClients);
         if (dbTasks.length > 0) setTasks(dbTasks);
@@ -790,7 +690,161 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
     loadFromDb();
     return () => { cancelled = true; };
-  }, [isAuthenticated]);
+  }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── One-time migration: push localStorage → Supabase ──
+  async function migrateLocalToDb(local: Partial<PersistedState>) {
+    const alreadyMigrated = localStorage.getItem("lone-os-db-migrated");
+    if (alreadyMigrated === "true") return;
+
+    console.log("[Lone OS] Starting localStorage → Supabase migration...");
+
+    // Build old ID → new UUID map for clients (needed for foreign keys)
+    const clientIdMap = new Map<string, string>();
+
+    // 1. Migrate clients
+    if (local.clients?.length) {
+      for (const client of local.clients) {
+        try {
+          const { id: newId } = await db.insertClient(client);
+          clientIdMap.set(client.id, newId);
+          console.log(`[Migration] Client: ${client.name} → ${newId}`);
+        } catch (err) {
+          console.warn(`[Migration] Failed to insert client ${client.name}:`, err);
+        }
+      }
+    }
+
+    // Helper: resolve client ID (old → new UUID, or keep if already UUID)
+    const resolveClientId = (oldId: string): string | null => {
+      return clientIdMap.get(oldId) ?? (oldId.length === 36 ? oldId : null);
+    };
+
+    // 2. Migrate tasks
+    if (local.tasks?.length) {
+      for (const task of local.tasks) {
+        const newClientId = resolveClientId(task.clientId);
+        if (!newClientId) continue;
+        try {
+          await db.insertTask({ ...task, clientId: newClientId });
+        } catch {}
+      }
+      console.log(`[Migration] Tasks: ${local.tasks.length}`);
+    }
+
+    // 3. Migrate content cards
+    if (local.contentCards?.length) {
+      for (const card of local.contentCards) {
+        const newClientId = resolveClientId(card.clientId);
+        if (!newClientId) continue;
+        try {
+          await db.insertContentCard({ ...card, clientId: newClientId });
+        } catch {}
+      }
+      console.log(`[Migration] Content cards: ${local.contentCards.length}`);
+    }
+
+    // 4. Migrate design requests
+    if (local.designRequests?.length) {
+      for (const req of local.designRequests) {
+        const newClientId = resolveClientId(req.clientId);
+        if (!newClientId) continue;
+        try {
+          await db.insertDesignRequest({ ...req, clientId: newClientId });
+        } catch {}
+      }
+      console.log(`[Migration] Design requests: ${local.designRequests.length}`);
+    }
+
+    // 5. Migrate notifications
+    if (local.notifications?.length) {
+      for (const n of local.notifications) {
+        try {
+          await db.insertNotification({ type: n.type, title: n.title, body: n.body, clientId: n.clientId ? resolveClientId(n.clientId) ?? undefined : undefined });
+        } catch {}
+      }
+      console.log(`[Migration] Notifications: ${local.notifications.length}`);
+    }
+
+    // 6. Migrate timeline entries
+    if (local.timeline) {
+      let count = 0;
+      for (const [oldClientId, entries] of Object.entries(local.timeline)) {
+        const newClientId = resolveClientId(oldClientId);
+        if (!newClientId) continue;
+        for (const entry of entries) {
+          try {
+            await db.insertTimelineEntry({ ...entry, clientId: newClientId });
+            count++;
+          } catch {}
+        }
+      }
+      if (count > 0) console.log(`[Migration] Timeline entries: ${count}`);
+    }
+
+    // 7. Migrate client chats
+    if (local.clientChats) {
+      let count = 0;
+      for (const [oldClientId, messages] of Object.entries(local.clientChats)) {
+        const newClientId = resolveClientId(oldClientId);
+        if (!newClientId) continue;
+        for (const msg of messages) {
+          try {
+            await db.insertClientChatMessage(newClientId, msg.user, msg.text);
+            count++;
+          } catch {}
+        }
+      }
+      if (count > 0) console.log(`[Migration] Client chat messages: ${count}`);
+    }
+
+    // 8. Migrate global chat
+    if (local.globalChat?.length) {
+      for (const msg of local.globalChat) {
+        try {
+          await db.insertGlobalChatMessage(msg.user, msg.role, msg.text);
+        } catch {}
+      }
+      console.log(`[Migration] Global chat: ${local.globalChat.length}`);
+    }
+
+    // 9. Migrate onboarding items
+    if (local.onboarding) {
+      for (const [oldClientId, items] of Object.entries(local.onboarding)) {
+        const newClientId = resolveClientId(oldClientId);
+        if (!newClientId || items.length === 0) continue;
+        try {
+          await db.insertOnboardingItems(
+            newClientId,
+            items.map((item, i) => ({ label: item.label, sortOrder: i, department: item.department }))
+          );
+          // Mark completed items
+          const freshItems = await db.fetchOnboardingItems();
+          const clientItems = freshItems[newClientId] ?? [];
+          for (const item of items) {
+            if (item.completed) {
+              const dbItem = clientItems.find(di => di.label === item.label);
+              if (dbItem) {
+                await db.updateOnboardingItemDb(dbItem.id, true, item.completedBy ?? "Sistema");
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+
+    // 10. Migrate notices
+    if (local.notices?.length) {
+      for (const notice of local.notices) {
+        try {
+          await db.insertNotice({ title: notice.title, body: notice.body, urgent: notice.urgent, createdBy: notice.createdBy, scheduledAt: notice.scheduledAt, category: notice.category });
+        } catch {}
+      }
+      console.log(`[Migration] Notices: ${local.notices.length}`);
+    }
+
+    console.log("[Lone OS] Migration complete!");
+  }
 
   // ---------- Helpers ----------
 
@@ -890,7 +944,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setClients((prev) => [...prev, newClient]);
       setClientChats((prev) => ({ ...prev, [id]: [] }));
 
-      const items: OnboardingItem[] = DEFAULT_ONBOARDING_ITEMS.map((item, i) => ({
+      const onboardingSource = getOnboardingItemsForService(data.serviceType);
+      const items: OnboardingItem[] = onboardingSource.map((item, i) => ({
         ...item,
         id: `ob-${id}-${i}`,
       }));
@@ -918,7 +973,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         // Create onboarding items in DB
         db.insertOnboardingItems(
           dbClient.id,
-          DEFAULT_ONBOARDING_ITEMS.map((item, i) => ({ label: item.label, sortOrder: i }))
+          onboardingSource.map((item, i) => ({ label: item.label, sortOrder: i, department: item.department }))
         ).catch(() => {});
       }).catch(() => {});
 

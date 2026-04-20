@@ -6,12 +6,15 @@ import {
   Instagram, Palette, BarChart2, ArrowUp, ArrowDown, Minus,
   Download, Monitor, X, Calendar, Clock,
   Maximize2, Minimize2, Brain, AlertTriangle, Zap,
-  Activity, CheckCircle, TrendingDown, Shield,
+  Activity, CheckCircle, TrendingDown, Shield, Settings, Pencil, Save, Trash2,
 } from "lucide-react";
 import { useAppState } from "@/lib/context/AppStateContext";
+import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { calcHealthScore } from "@/lib/utils";
 import { useOKRMetrics, type KPIValue } from "@/lib/hooks/useOKRMetrics";
 import { useSnapshots, type Delta } from "@/lib/hooks/useSnapshots";
+import { useOKRData } from "@/lib/hooks/useOKRData";
+import { useRole } from "@/lib/context/RoleContext";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -37,7 +40,7 @@ interface TeamOKRs {
 interface PeriodSnapshot {
   companyOkrs: OKR[];
   teamOkrs: TeamOKRs[];
-  individualGoals: typeof INDIVIDUAL_GOALS_CURRENT;
+  individualGoals: Array<{ name: string; role: string; goal: string; progress: number; status: "on_track" | "at_risk" | "off_track" }>;
   trendData: { label: string; trafego: number; social: number; design: number }[];
   overallProgress: number;
 }
@@ -53,13 +56,15 @@ const STATUS_CONFIG = {
 const MONTHS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 
 // ─── Current Data ───────────────────────────────────────────────────────────
-const INDIVIDUAL_GOALS_CURRENT = [
-  { name: "Ana Lima", role: "Trafego", goal: "ROAS > 4.0 em 3 clientes", progress: 67, status: "at_risk" as const },
-  { name: "Pedro Alves", role: "Trafego", goal: "Reduzir CPA em 15%", progress: 82, status: "on_track" as const },
-  { name: "Carlos Melo", role: "Social", goal: "12 posts/semana entregues", progress: 75, status: "at_risk" as const },
-  { name: "Mariana Costa", role: "Social", goal: "Engajamento > 4% em 2 clientes", progress: 90, status: "on_track" as const },
-  { name: "Rafael Designer", role: "Design", goal: "Todas entregas em < 48h", progress: 93, status: "on_track" as const },
-];
+// Goals are dynamically generated from real team members
+const ROLE_LABELS: Record<string, string> = { traffic: "Trafego", social: "Social", designer: "Design", manager: "Gerente", admin: "Admin" };
+const ROLE_GOALS: Record<string, string> = {
+  traffic: "Otimizar ROAS e reduzir CPA",
+  social: "Meta de posts entregues no prazo",
+  designer: "Todas entregas em < 48h",
+  manager: "Gestao operacional eficiente",
+  admin: "Supervisao geral",
+};
 
 const TEAM_OKRS_CURRENT: TeamOKRs[] = [
   { team: "Trafego Pago", icon: TrendingUp, color: "#0d4af5", okrs: [
@@ -79,8 +84,8 @@ const TEAM_OKRS_CURRENT: TeamOKRs[] = [
   ]},
 ];
 
-// ─── Mock Historical Snapshots ──────────────────────────────────────────────
-function generateSnapshot(month: number, variance: number): Omit<PeriodSnapshot, "companyOkrs"> {
+// ─── Historical Snapshot Generator (called inside component with real team data) ──
+function generateSnapshot(month: number, variance: number, teamMembersList: Array<{ name: string; role: string }>): Omit<PeriodSnapshot, "companyOkrs"> {
   const v = variance;
   const status = (current: number, target: number, inverted = false): "on_track" | "at_risk" | "off_track" => {
     const pct = inverted ? (target / Math.max(current, 0.01)) * 100 : (current / target) * 100;
@@ -105,22 +110,27 @@ function generateSnapshot(month: number, variance: number): Omit<PeriodSnapshot,
     ]},
   ];
 
-  const individualGoals = INDIVIDUAL_GOALS_CURRENT.map((g) => ({
-    ...g,
-    progress: Math.min(100, Math.max(10, Math.round(g.progress - 25 + v * 25))),
-    status: (g.progress - 25 + v * 25) >= 80 ? "on_track" as const : "at_risk" as const,
-  }));
+  const individualGoals = teamMembersList.filter((m) => m.role !== "admin").map((m) => {
+    const baseProgress = 60 + v * 20 + Math.round(m.name.length * 2.3) % 20;
+    const progress = Math.min(100, Math.max(10, Math.round(baseProgress)));
+    return {
+      name: m.name,
+      role: ROLE_LABELS[m.role] ?? m.role,
+      goal: ROLE_GOALS[m.role] ?? "Meta operacional",
+      progress,
+      status: progress >= 80 ? "on_track" as const : "at_risk" as const,
+    };
+  });
 
-  // Generate weekly trend data for the period
   const weeks = 4;
   const trendData = Array.from({ length: weeks }, (_, i) => {
     const w = i + 1;
     const base = 50 + v * 25;
     return {
       label: `S${w}`,
-      trafego: Math.round(base + w * 3 + Math.random() * 5),
-      social: Math.round(base - 5 + w * 3 + Math.random() * 5),
-      design: Math.round(base + 8 + w * 2 + Math.random() * 5),
+      trafego: Math.round(base + w * 3 + (month + i) * 1.3 % 5),
+      social: Math.round(base - 5 + w * 3 + (month + i) * 1.7 % 5),
+      design: Math.round(base + 8 + w * 2 + (month + i) * 1.1 % 5),
     };
   });
 
@@ -133,38 +143,7 @@ function generateSnapshot(month: number, variance: number): Omit<PeriodSnapshot,
   return { teamOkrs, individualGoals, trendData, overallProgress };
 }
 
-// Monthly snapshots: Jan(0) to current month
-const MONTHLY_SNAPSHOTS: Record<number, Omit<PeriodSnapshot, "companyOkrs">> = {};
-for (let m = 0; m < 12; m++) {
-  MONTHLY_SNAPSHOTS[m] = generateSnapshot(m, m / 11);
-}
-
-// Quarterly: aggregate 3 months of trend data
-function getQuarterSnapshot(q: number): Omit<PeriodSnapshot, "companyOkrs"> {
-  const endMonth = Math.min(q * 3 + 2, 11);
-  const snap = MONTHLY_SNAPSHOTS[endMonth];
-  const trendData: { label: string; trafego: number; social: number; design: number }[] = [];
-  for (let m = q * 3; m <= endMonth; m++) {
-    const ms = MONTHLY_SNAPSHOTS[m];
-    ms.trendData.forEach((w, i) => {
-      trendData.push({ ...w, label: `${MONTHS[m]} S${i + 1}` });
-    });
-  }
-  return { ...snap, trendData };
-}
-
-// YTD: all months up to current
-function getYTDSnapshot(currentMonth: number): Omit<PeriodSnapshot, "companyOkrs"> {
-  const snap = MONTHLY_SNAPSHOTS[currentMonth];
-  const trendData: { label: string; trafego: number; social: number; design: number }[] = [];
-  for (let m = 0; m <= currentMonth; m++) {
-    const ms = MONTHLY_SNAPSHOTS[m];
-    // Just use last week of each month for YTD view
-    const lastWeek = ms.trendData[ms.trendData.length - 1];
-    trendData.push({ ...lastWeek, label: MONTHS[m] });
-  }
-  return { ...snap, trendData };
-}
+// Quarterly/YTD helpers moved inside component (need teamMembers)
 
 // ─── Component ──────────────────────────────────────────────────────────────
 // Helper to convert KPIValue to OKR
@@ -194,7 +173,23 @@ function SimTag({ isReal, source }: { isReal?: boolean; source?: string }) {
 
 export default function GoalsPage() {
   const { clients } = useAppState();
-  const metrics = useOKRMetrics();
+  const { role } = useRole();
+  const isAdmin = role === "admin" || role === "manager";
+  const { members: teamMembers } = useTeamMembers();
+  const okrData = useOKRData();
+  const [showOKRManager, setShowOKRManager] = useState(false);
+  const [editingTarget, setEditingTarget] = useState<{ id: string; value: string } | null>(null);
+
+  // Build targets map from database
+  const dbTargets = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const o of okrData.okrs) {
+      if (o.metricKey) map[o.metricKey] = o.target;
+    }
+    return map;
+  }, [okrData.okrs]);
+
+  const metrics = useOKRMetrics(Object.keys(dbTargets).length > 0 ? dbTargets : undefined);
   const { currentSnapshot, previousSnapshot, deltas, feedback, churnAlerts, saveCurrentSnapshot } = useSnapshots();
   const pageRef = useRef<HTMLDivElement>(null);
   const [activeLayer, setActiveLayer] = useState<"strategy" | "operations">("strategy");
@@ -218,6 +213,39 @@ export default function GoalsPage() {
     kpiToOkr("co-1", "Reduzir churn para < 5%", metrics.company.churnRate, true),
     kpiToOkr("co-2", "Atingir NPS > 8.5", metrics.company.nps),
   ], [metrics.company]);
+
+  // Generate monthly snapshots using real team data
+  const MONTHLY_SNAPSHOTS = useMemo(() => {
+    const snaps: Record<number, Omit<PeriodSnapshot, "companyOkrs">> = {};
+    for (let m = 0; m < 12; m++) {
+      snaps[m] = generateSnapshot(m, m / 11, teamMembers);
+    }
+    return snaps;
+  }, [teamMembers]);
+
+  const getQuarterSnapshot = useCallback((q: number): Omit<PeriodSnapshot, "companyOkrs"> => {
+    const endMonth = Math.min(q * 3 + 2, 11);
+    const snap = MONTHLY_SNAPSHOTS[endMonth];
+    const trendData: { label: string; trafego: number; social: number; design: number }[] = [];
+    for (let m = q * 3; m <= endMonth; m++) {
+      const ms = MONTHLY_SNAPSHOTS[m];
+      ms.trendData.forEach((w, i) => {
+        trendData.push({ ...w, label: `${MONTHS[m]} S${i + 1}` });
+      });
+    }
+    return { ...snap, trendData };
+  }, [MONTHLY_SNAPSHOTS]);
+
+  const getYTDSnapshot = useCallback((currentMonth: number): Omit<PeriodSnapshot, "companyOkrs"> => {
+    const snap = MONTHLY_SNAPSHOTS[currentMonth];
+    const trendData: { label: string; trafego: number; social: number; design: number }[] = [];
+    for (let m = 0; m <= currentMonth; m++) {
+      const ms = MONTHLY_SNAPSHOTS[m];
+      const lastWeek = ms.trendData[ms.trendData.length - 1];
+      trendData.push({ ...lastWeek, label: MONTHS[m] });
+    }
+    return { ...snap, trendData };
+  }, [MONTHLY_SNAPSHOTS]);
 
   // Real team OKRs for "atual" view
   const realTeamOkrs = useMemo<TeamOKRs[]>(() => [
@@ -251,10 +279,17 @@ export default function GoalsPage() {
       case "ytd":
         base = getYTDSnapshot(selectedMonth);
         break;
-      default: // atual
+      default: { // atual
+        const currentGoals = teamMembers.filter((m) => m.role !== "admin").map((m) => ({
+          name: m.name,
+          role: ROLE_LABELS[m.role] ?? m.role,
+          goal: ROLE_GOALS[m.role] ?? "Meta operacional",
+          progress: 0,
+          status: "on_track" as const,
+        }));
         base = {
           teamOkrs: realTeamOkrs,
-          individualGoals: INDIVIDUAL_GOALS_CURRENT,
+          individualGoals: currentGoals,
           trendData: [
             { label: "S1", trafego: 62, social: 55, design: 70 },
             { label: "S2", trafego: 68, social: 60, design: 72 },
@@ -267,9 +302,10 @@ export default function GoalsPage() {
           ],
           overallProgress: 0,
         };
+      }
     }
     return { ...base, companyOkrs };
-  }, [timeView, selectedMonth, selectedQuarter, companyOkrs, realTeamOkrs]);
+  }, [timeView, selectedMonth, selectedQuarter, companyOkrs, realTeamOkrs, teamMembers, MONTHLY_SNAPSHOTS, getQuarterSnapshot, getYTDSnapshot]);
 
   const getProgress = useCallback((okr: OKR) => {
     if (okr.title.includes("<")) return Math.min(100, Math.round((okr.target / Math.max(okr.current, 0.01)) * 100));
@@ -386,6 +422,15 @@ export default function GoalsPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* OKR Manager */}
+            {isAdmin && (
+              <button onClick={() => setShowOKRManager(!showOKRManager)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  showOKRManager ? "bg-[#0d4af5]/10 text-[#0d4af5] border-[#0d4af5]/20" : "border-border text-zinc-400 hover:text-white"
+                }`}>
+                <Settings size={12} /> Gerenciar Metas
+              </button>
+            )}
             {/* Time View Selector */}
             <div className="flex items-center bg-zinc-900/50 rounded-xl p-0.5 border border-zinc-800/50">
               {TIME_VIEWS.map((tv) => {
@@ -900,6 +945,85 @@ export default function GoalsPage() {
       )}
       {showExportMenu && (
         <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+      )}
+
+      {/* OKR Manager Panel */}
+      {showOKRManager && isAdmin && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex justify-end" onClick={() => setShowOKRManager(false)}>
+          <div className="bg-card border-l border-border w-full max-w-md h-full overflow-auto animate-slide-in-right" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-card border-b border-border p-5 flex items-center justify-between z-10">
+              <div>
+                <h2 className="font-semibold text-foreground text-sm">Gerenciar Metas</h2>
+                <p className="text-[10px] text-muted-foreground">{okrData.quarter} — {okrData.okrs.length} OKRs</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select value={okrData.quarter} onChange={(e) => okrData.setQuarter(e.target.value)}
+                  className="bg-surface border border-border rounded-lg px-2 py-1 text-xs text-foreground outline-none">
+                  <option value="2026-Q1">2026 Q1</option>
+                  <option value="2026-Q2">2026 Q2</option>
+                  <option value="2026-Q3">2026 Q3</option>
+                  <option value="2026-Q4">2026 Q4</option>
+                </select>
+                <button onClick={() => setShowOKRManager(false)} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-6">
+              {["company", "traffic", "social", "design"].map((team) => {
+                const teamOkrs = okrData.byTeam(team);
+                const teamLabel = team === "company" ? "Empresa" : team === "traffic" ? "Trafego Pago" : team === "social" ? "Social Media" : "Design";
+                return (
+                  <div key={team} className="space-y-3">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{teamLabel}</p>
+                    {teamOkrs.map((okr) => (
+                      <div key={okr.id} className="rounded-xl border border-border bg-surface p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-medium text-foreground flex-1">{okr.title}</p>
+                          <button onClick={async () => { await okrData.deleteOKR(okr.id); }}
+                            className="text-zinc-700 hover:text-red-400 transition-colors p-1"><Trash2 size={10} /></button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-zinc-500">Meta:</span>
+                          {editingTarget?.id === okr.id ? (
+                            <div className="flex items-center gap-1">
+                              <input type="number" value={editingTarget.value}
+                                onChange={(e) => setEditingTarget({ ...editingTarget, value: e.target.value })}
+                                className="w-20 bg-card border border-border rounded px-2 py-0.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50"
+                                autoFocus onKeyDown={(e) => {
+                                  if (e.key === "Enter") { okrData.updateTarget(okr.id, Number(editingTarget.value)); setEditingTarget(null); }
+                                  if (e.key === "Escape") setEditingTarget(null);
+                                }} />
+                              <span className="text-[10px] text-zinc-500">{okr.unit}</span>
+                              <button onClick={() => { okrData.updateTarget(okr.id, Number(editingTarget.value)); setEditingTarget(null); }}
+                                className="text-emerald-400 hover:text-emerald-300"><Save size={10} /></button>
+                            </div>
+                          ) : (
+                            <button onClick={() => setEditingTarget({ id: okr.id, value: String(okr.target) })}
+                              className="text-xs text-foreground hover:text-[#0d4af5] flex items-center gap-1 transition-colors">
+                              {okr.target} {okr.unit} <Pencil size={8} className="text-zinc-600" />
+                            </button>
+                          )}
+                          <span className="text-[10px] text-zinc-600 ml-auto">
+                            Atual: <span className={`font-medium ${okr.status === "on_track" ? "text-emerald-400" : okr.status === "at_risk" ? "text-amber-400" : "text-red-400"}`}>
+                              {okr.currentValue} {okr.unit}
+                            </span>
+                          </span>
+                        </div>
+                        {/* Progress bar */}
+                        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${
+                            okr.status === "on_track" ? "bg-emerald-500" : okr.status === "at_risk" ? "bg-amber-500" : "bg-red-500"
+                          }`} style={{ width: `${Math.min(100, okr.target > 0 ? (okr.currentValue / okr.target) * 100 : 0)}%` }} />
+                        </div>
+                        {okr.autoCalculated && <p className="text-[9px] text-zinc-600">Auto-calculado do sistema</p>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

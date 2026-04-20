@@ -80,7 +80,7 @@ function daysBetween(start: string, end: string): number {
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
 
-export function useOKRMetrics(): OKRMetrics {
+export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
   const {
     clients,
     contentCards,
@@ -104,6 +104,9 @@ export function useOKRMetrics(): OKRMetrics {
       ? clients.reduce((sum, c) => sum + calcHealthScore(c), 0) / clients.length / 10
       : 0;
     audit.push({ metric: "NPS (Health)", source: "calcHealthScore()", status: "ok", detail: `Avg: ${avgHealth.toFixed(2)} across ${clients.length} clients` });
+
+    // NPS average from client_nps table (if available)
+    const npsAvg = clients.reduce((sum, c) => sum + (c.npsScore || 0), 0) / Math.max(clients.filter((c) => c.npsScore).length, 1);
 
     // ═══════════════════════════════════════════════════════════
     // TRAFFIC OKRs
@@ -284,50 +287,53 @@ export function useOKRMetrics(): OKRMetrics {
     // ═══════════════════════════════════════════════════════════
     // Return structured KPIs
     // ═══════════════════════════════════════════════════════════
+    // Target override: if db targets are provided, use them instead of hardcoded
+    const t = (key: string, fallback: number) => dbTargets?.[key] ?? fallback;
+
     return {
       company: {
-        churnRate: { current: Math.round(churnRate * 10) / 10, target: 5, unit: "%", isReal: true, source: "Clients" },
-        nps: { current: Math.round(avgHealth * 100) / 100, target: 8.5, unit: "pts", isReal: true, source: "Health Score" },
+        churnRate: { current: Math.round(churnRate * 10) / 10, target: t("churn_rate", 5), unit: "%", isReal: true, source: "Clients" },
+        nps: { current: Math.round(avgHealth * 100) / 100, target: t("nps", 80), unit: "pts", isReal: true, source: "Health Score" },
       },
       traffic: {
         roas: {
           current: Math.round(roas * 10) / 10,
-          target: 4.0, unit: "x", isReal: roasIsReal,
+          target: t("roas", 4.0), unit: "x", isReal: roasIsReal,
           source: metaConnected ? "Meta API" : "Mock Data",
           error: !metaConnected ? "Aguardando conexao Meta Ads" : undefined,
         },
         investmentExecuted: {
-          current: Math.round(investPct), target: 95, unit: "%",
+          current: Math.round(investPct), target: t("investment_pct", 95), unit: "%",
           isReal: roasIsReal, source: metaConnected ? "Meta API" : "Mock Data",
         },
         leadsPerMonth: {
-          current: totalLeads, target: 500, unit: "leads",
+          current: totalLeads, target: t("leads_month", 500), unit: "leads",
           isReal: roasIsReal, source: metaConnected ? "Meta API" : "Mock Data",
         },
       },
       social: {
-        postsDelivered: { current: postsDelivered, target: 96, unit: "posts", isReal: true, source: "ContentCards" },
-        engagementRate: { current: 3.1, target: 3.5, unit: "%", isReal: false, source: "Instagram Graph API (nao conectado)" },
+        postsDelivered: { current: postsDelivered, target: t("posts_delivered", 96), unit: "posts", isReal: true, source: "ContentCards" },
+        engagementRate: { current: npsAvg > 0 ? npsAvg : 3.1, target: t("engagement_rate", 3.5), unit: "%", isReal: npsAvg > 0, source: npsAvg > 0 ? "Client NPS" : "Instagram Graph API (nao conectado)" },
         deliverySLA: {
           current: slaIsReal ? Math.round(avgSLAHours) : 42,
-          target: 48, unit: "horas",
+          target: t("delivery_sla", 48), unit: "horas",
           isReal: slaIsReal, source: slaIsReal ? "ContentCards" : "Simulado",
         },
       },
       design: {
         onTimeDelivery: {
           current: designIsReal ? Math.round(onTimePct) : 85,
-          target: 90, unit: "%",
+          target: t("on_time_pct", 90), unit: "%",
           isReal: designIsReal, source: designIsReal ? "DesignRequests" : "Simulado",
         },
         avgDeliveryTime: {
           current: designIsReal ? Math.round(avgDeliveryDays * 10) / 10 : 2.8,
-          target: 3, unit: "dias",
+          target: t("delivery_time", 48), unit: "h",
           isReal: designIsReal, source: designIsReal ? "ContentCards" : "Simulado",
         },
-        satisfaction: { current: 4.2, target: 4.5, unit: "/5", isReal: false, source: "Survey (nao integrado)" },
+        satisfaction: { current: npsAvg > 0 ? npsAvg : 4.2, target: t("satisfaction", 4.5), unit: "/5", isReal: npsAvg > 0, source: npsAvg > 0 ? "Client NPS" : "Survey (nao integrado)" },
       },
       audit,
     };
-  }, [clients, contentCards, designRequests, tasks]);
+  }, [clients, contentCards, designRequests, tasks, dbTargets]);
 }

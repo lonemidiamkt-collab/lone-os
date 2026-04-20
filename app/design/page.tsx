@@ -1242,7 +1242,9 @@ function RequestsView({
               })),
           }))}
           renderCard={(item) => (
-            <div className="bg-card border border-border rounded-lg p-3 space-y-2 hover:border-primary/30 transition-colors">
+            <div
+              onClick={() => onBriefing(item._req as DesignRequest)}
+              className="bg-card border border-border rounded-lg p-3 space-y-2 hover:border-primary/30 transition-colors cursor-pointer">
               <p className="text-sm font-medium text-foreground">{item.title}</p>
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-primary">{item.clientName}</span>
@@ -1277,7 +1279,7 @@ function RequestsView({
           {filtered.map((req) => {
             const linked = getLinkedCard(req);
             return (
-              <div key={req.id} className="card border border-border hover:border-primary/30 transition-colors">
+              <div key={req.id} onClick={() => onBriefing(req)} className="card border border-border hover:border-primary/30 transition-colors cursor-pointer">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h4 className="font-semibold text-foreground text-sm">{req.title}</h4>
@@ -1308,19 +1310,19 @@ function RequestsView({
                 </div>
                 <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border">
                   {req.status === "queued" && (
-                    <button onClick={() => updateDesignRequest(req.id, { status: "in_progress" })} className="btn-primary text-xs py-1.5">
+                    <button onClick={(e) => { e.stopPropagation(); updateDesignRequest(req.id, { status: "in_progress" }); }} className="btn-primary text-xs py-1.5">
                       Iniciar Produção
                     </button>
                   )}
                   {req.status === "in_progress" && (
-                    <button onClick={() => updateDesignRequest(req.id, { status: "done" })} className="bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white px-3 py-1.5 rounded-lg font-medium text-xs transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); updateDesignRequest(req.id, { status: "done" }); }} className="bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white px-3 py-1.5 rounded-lg font-medium text-xs transition-colors">
                       Marcar Concluído
                     </button>
                   )}
                   {req.status === "done" && (
                     <span className="text-xs text-[#0d4af5] flex items-center gap-1"><CheckCircle size={12} /> Concluído</span>
                   )}
-                  <button onClick={() => onBriefing(req)} className="btn-ghost text-xs flex items-center gap-1">
+                  <button onClick={(e) => { e.stopPropagation(); onBriefing(req); }} className="btn-ghost text-xs flex items-center gap-1">
                     <Paperclip size={12} /> Briefing
                   </button>
                 </div>

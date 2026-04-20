@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const SUPABASE_INTERNAL = process.env.SUPABASE_INTERNAL_URL ?? "http://127.0.0.1:8000";
+const SUPABASE_INTERNAL = process.env.SUPABASE_INTERNAL_URL ?? "http://supabase-kong-1:8000";
 
 const nextConfig: NextConfig = {
   output: "standalone",

@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Safe area for PWA standalone mode (iPhone notch/home indicator) */
+@supports (padding: max(0px)) {
+  html {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
 @layer base {
   :root {
     /* ═══════════════════════════════════════════════════════════
@@ -155,7 +165,7 @@
 
   /* ─── CARD — Solid, no blur, no glow ─────────────────────── */
   .card {
-    @apply rounded-xl p-5;
+    @apply rounded-xl p-3 sm:p-4 lg:p-5;
     background: var(--card);
     border: 0.5px solid rgba(255, 255, 255, 0.06);
     transition: border-color 0.2s ease;
