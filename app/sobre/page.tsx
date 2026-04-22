@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
+import { Logo } from "@/components/ui/Logo";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
 import { supabase } from "@/lib/supabase/client";
@@ -62,9 +63,7 @@ export default function SobrePage() {
         {/* Capa */}
         <section className="rounded-2xl border border-border bg-gradient-to-br from-[#0d4af5]/[0.08] via-card to-card p-10 print:p-6 print:page-break-after-always">
           <div className="flex items-center gap-4 mb-6">
-            <div className="w-14 h-14 rounded-2xl bg-[#0d4af5] flex items-center justify-center">
-              <span className="text-white font-black text-xl">LM</span>
-            </div>
+            <Logo className="w-14 h-14" priority />
             <div>
               <h1 className="text-3xl font-bold text-foreground">Lone OS</h1>
               <p className="text-sm text-muted-foreground">Sistema de Gestão Operacional · Lone Mídia</p>

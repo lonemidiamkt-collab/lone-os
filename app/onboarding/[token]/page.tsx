@@ -6,6 +6,7 @@ import {
   User, FileText, Shield, Upload, Camera, Check, Loader2,
   Eye, EyeOff, AlertTriangle, Building2, ChevronRight, MapPin, RefreshCw,
 } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
 
 // ─── Types ──────────────────────────────────────────────────
 interface SubmissionData {
@@ -590,11 +591,9 @@ export default function ExternalOnboardingPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               {docLogo ? (
-                <img src={docLogo} alt="Logo" className="w-7 h-7 rounded-lg object-contain border border-[#1e1e2a]" />
+                <img src={docLogo} alt="Logo do cliente" className="w-7 h-7 rounded-lg object-contain border border-[#1e1e2a]" />
               ) : (
-                <div className="w-7 h-7 rounded-lg bg-[#0d4af5] flex items-center justify-center">
-                  <span className="text-white font-bold text-xs">LM</span>
-                </div>
+                <Logo className="w-7 h-7" />
               )}
               <span className="font-semibold text-white text-sm">{nomeFantasia || "Lone Midia"}</span>
             </div>

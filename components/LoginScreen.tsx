@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRole, USER_PROFILES } from "@/lib/context/RoleContext";
+import { Logo } from "@/components/ui/Logo";
 /* eslint-disable @next/next/no-img-element */
 import { Eye, EyeOff, ArrowRight, ArrowLeft, ChevronDown, Check, Loader2 } from "lucide-react";
 
@@ -126,7 +127,7 @@ export default function LoginScreen() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#0d4af5]/10 rounded-full blur-[200px] pointer-events-none" />
         <div className="text-center animate-fade-in space-y-6 relative z-10">
           <div className="w-20 h-20 rounded-2xl bg-black flex items-center justify-center mx-auto shadow-[0_0_50px_rgba(10,52,245,0.5),0_0_100px_rgba(10,52,245,0.15)]">
-            <img src="/logo.png" alt="Lone" width={48} height={48} className="object-contain" />
+            <Logo className="w-12 h-12" priority />
           </div>
           <div className="space-y-3">
             <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
@@ -164,7 +165,7 @@ export default function LoginScreen() {
         {/* Logo + Brand */}
         <div className="text-center mb-10">
           <div className="w-14 h-14 rounded-xl bg-black flex items-center justify-center mx-auto mb-5 shadow-[0_0_40px_rgba(10,52,245,0.35),0_0_80px_rgba(10,52,245,0.1)]">
-            <img src="/logo.png" alt="Lone" width={32} height={32} className="object-contain" />
+            <Logo className="w-8 h-8" priority />
           </div>
           <h1 className="text-lg font-black text-white tracking-tight">LONE MÍDIA</h1>
           <p className="text-[10px] text-zinc-400 tracking-[0.25em] uppercase mt-1">Assessoria Digital</p>

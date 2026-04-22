@@ -9,6 +9,7 @@ import { NavProvider, useNav } from "@/lib/context/NavContext";
 import Sidebar from "@/components/Sidebar";
 import LoginScreen from "@/components/LoginScreen";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { Logo } from "@/components/ui/Logo";
 import { Menu } from "lucide-react";
 import NotificationToast from "@/components/NotificationToast";
 import NotificationCenter from "@/components/NotificationCenter";
@@ -29,7 +30,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="w-10 h-10 rounded-xl bg-black flex items-center justify-center animate-pulse shadow-[0_0_30px_rgba(10,52,245,0.4)] overflow-hidden">
-          <img src="/logo.png" alt="Lone" width={24} height={24} className="object-contain" />
+          <Logo className="w-6 h-6" priority />
         </div>
       </div>
     );

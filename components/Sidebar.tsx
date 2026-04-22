@@ -13,6 +13,7 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/lib/context/RoleContext";
 import MedievalAvatar, { getUserAvatar } from "@/components/MedievalAvatars";
+import { Logo } from "@/components/ui/Logo";
 import { useTheme } from "@/lib/context/ThemeContext";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useNav } from "@/lib/context/NavContext";
@@ -277,7 +278,7 @@ export default function Sidebar() {
         {/* Logo */}
         <Link href="/" className="group shrink-0">
           <div className="w-10 h-10 rounded-2xl bg-black flex items-center justify-center group-hover:scale-[1.02] transition-all duration-300 overflow-hidden">
-            <img src="/logo.png" alt="Lone" width={24} height={24} className="object-contain" />
+            <Logo className="w-6 h-6" priority />
           </div>
         </Link>
 
