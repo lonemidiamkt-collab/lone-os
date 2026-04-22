@@ -208,7 +208,7 @@ export default function TrafficPage() {
 
         {/* Metrics */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          <MetricCard icon={Users} label="Clientes" value={filteredClients.length} sub="na carteira" iconColor="text-primary" iconBg="bg-primary/15" />
+          <MetricCard icon={Users} label="Clientes" value={filteredClients.length} sub="na carteira" iconColor="text-primary" iconBg="bg-primary/15" onClick={() => setActiveTab("status")} />
           <MetricCard icon={CheckCircle} label="Bons Resultados" value={goodCount} sub="clientes" iconColor="text-primary" iconBg="bg-primary/15" />
           <MetricCard icon={AlertTriangle} label="Em Risco" value={atRiskCount} sub="clientes" iconColor="text-red-500" iconBg="bg-red-500/10" />
           <MetricCard icon={TrendingUp} label="Tarefas Abertas" value={trafficTasks.filter(t => t.status !== "done").length} sub="pendentes" iconColor="text-primary" iconBg="bg-primary/15" />
@@ -1866,7 +1866,14 @@ function AdAnalyticsTab({
     });
   };
 
-  const visibleAccounts = metaAccounts.filter((a) => !hiddenAccounts.has(a.id));
+  // Only show ad accounts linked to clients in our portfolio.
+  // "Hidden" accounts (user-dismissed) are still hidden on top of that.
+  const portfolioAccountIds = new Set(
+    clients.map((c) => c.metaAdAccountId).filter((v): v is string => !!v)
+  );
+  const visibleAccounts = metaAccounts.filter((a) =>
+    !hiddenAccounts.has(a.id) && portfolioAccountIds.has(a.id)
+  );
 
   // Fetch real ad accounts when connected
   useEffect(() => {
@@ -3125,8 +3132,10 @@ function AdAnalyticsTab({
       {selectedClient !== "all" && filteredCampaigns.length > 0 && (
         <AdsInsightCard
           clientName={clients.find((c) => c.id === selectedClient)?.name ?? selectedClient}
+          clientId={selectedClient}
           campaigns={filteredCampaigns}
           period="ultimos 30 dias"
+          triggeredBy={currentUser}
         />
       )}
 

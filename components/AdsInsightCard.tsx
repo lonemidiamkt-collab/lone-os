@@ -45,11 +45,13 @@ const INSIGHT_COLORS = {
 
 interface Props {
   clientName: string;
+  clientId?: string;
   campaigns: AdCampaign[];
   period?: string;
+  triggeredBy?: string;
 }
 
-export default function AdsInsightCard({ clientName, campaigns, period }: Props) {
+export default function AdsInsightCard({ clientName, clientId, campaigns, period, triggeredBy }: Props) {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +63,7 @@ export default function AdsInsightCard({ clientName, campaigns, period }: Props)
       const res = await fetch("/api/ai/analyze-ads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientName, campaigns, period: period ?? "ultimos 30 dias" }),
+        body: JSON.stringify({ clientName, clientId, campaigns, period: period ?? "ultimos 30 dias", triggeredBy }),
       });
 
       if (!res.ok) {
@@ -76,7 +78,7 @@ export default function AdsInsightCard({ clientName, campaigns, period }: Props)
     } finally {
       setLoading(false);
     }
-  }, [clientName, campaigns, period]);
+  }, [clientName, clientId, campaigns, period, triggeredBy]);
 
   // Not analyzed yet — show CTA
   if (!result && !loading && !error) {

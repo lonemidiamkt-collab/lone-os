@@ -28,7 +28,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   const [form, setForm] = useState<Record<string, string>>({});
   const [showPw, setShowPw] = useState<Record<string, boolean>>({});
   const [uploading, setUploading] = useState<string | null>(null);
-  const [latestContract, setLatestContract] = useState<{ status: string; d4signStatus: string | null; endDate: string; version: number } | null>(null);
+  const [latestContract, setLatestContract] = useState<{ status: string; endDate: string; version: number } | null>(null);
 
   const [emailSending, setEmailSending] = useState(false);
   const [emailStatus, setEmailStatus] = useState<"idle" | "sent" | "error">("idle");
@@ -56,7 +56,8 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
 
   const initForm = () => ({
     nomeFantasia: client.nomeFantasia || "", razaoSocial: client.razaoSocial || "",
-    cnpj: client.cnpj || "", contactName: client.contactName || "",
+    cnpj: client.cnpj || "", nicho: client.nicho || "",
+    contactName: client.contactName || "",
     cpfCnpj: client.cpfCnpj || "", phone: client.phone || "",
     emailCorporativo: client.emailCorporativo || "",
     enderecoRua: client.enderecoRua || "", enderecoBairro: client.enderecoBairro || "",
@@ -72,11 +73,11 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   useEffect(() => {
     let mounted = true;
     import("@/lib/supabase/client").then(({ supabase }) => {
-      supabase.from("contracts").select("status, d4sign_status, end_date, version")
+      supabase.from("contracts").select("status, end_date, version")
         .eq("client_id", client.id).order("created_at", { ascending: false }).limit(1).maybeSingle()
         .then(({ data, error }) => {
           if (!mounted || error) return;
-          if (data) setLatestContract({ status: data.status as string, d4signStatus: data.d4sign_status as string | null, endDate: data.end_date as string, version: data.version as number });
+          if (data) setLatestContract({ status: data.status as string, endDate: data.end_date as string, version: data.version as number });
         });
     });
     return () => { mounted = false; };
@@ -87,9 +88,12 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
     try {
       updateClientData(client.id, {
         nomeFantasia: form.nomeFantasia || undefined, razaoSocial: form.razaoSocial || undefined,
-        cnpj: form.cnpj || undefined, contactName: form.contactName || undefined,
+        cnpj: form.cnpj || undefined, nicho: form.nicho || undefined,
+        contactName: form.contactName || undefined,
         cpfCnpj: form.cpfCnpj || undefined, phone: form.phone || undefined,
         emailCorporativo: form.emailCorporativo || undefined,
+        // Keep both email fields in sync so automations (welcome email, contract generation) pick up the edit
+        email: form.emailCorporativo || undefined,
         enderecoRua: form.enderecoRua || undefined, enderecoBairro: form.enderecoBairro || undefined,
         enderecoCidade: form.enderecoCidade || undefined, enderecoEstado: form.enderecoEstado || undefined,
         enderecoCep: form.enderecoCep || undefined,
@@ -293,19 +297,19 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       <div className="rounded-xl border border-border bg-card p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-            !latestContract ? "bg-zinc-500/10" : latestContract.d4signStatus === "2" ? "bg-emerald-500/15" : latestContract.d4signStatus === "1" ? "bg-amber-500/10" : "bg-zinc-500/10"
+            !latestContract ? "bg-zinc-500/10" : latestContract.status === "active" ? "bg-emerald-500/15" : latestContract.status === "expired" ? "bg-red-500/10" : "bg-zinc-500/10"
           }`}>
             {!latestContract ? <FileText size={18} className="text-zinc-500" /> :
-             latestContract.d4signStatus === "2" ? <CheckCircle size={18} className="text-emerald-500" /> :
-             latestContract.d4signStatus === "1" ? <Clock size={18} className="text-amber-400" /> :
+             latestContract.status === "active" ? <CheckCircle size={18} className="text-emerald-500" /> :
+             latestContract.status === "expired" ? <Clock size={18} className="text-red-400" /> :
              <FileText size={18} className="text-zinc-400" />}
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Status Juridico</p>
             <p className="text-sm font-medium text-foreground">
               {!latestContract ? "Nenhum contrato" :
-               latestContract.d4signStatus === "2" ? "Contrato Ativo" :
-               latestContract.d4signStatus === "1" ? "Aguardando Assinatura" :
+               latestContract.status === "active" ? `Contrato Ativo (V${latestContract.version})` :
+               latestContract.status === "expired" ? `Contrato Vencido (V${latestContract.version})` :
                `Rascunho (V${latestContract.version})`}
             </p>
           </div>
@@ -341,11 +345,12 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         <div className="grid grid-cols-2 gap-x-6 gap-y-3">
           {([
             { key: "nomeFantasia", label: "Nome Fantasia" }, { key: "razaoSocial", label: "Razao Social" },
-            { key: "cnpj", label: "CNPJ" }, { key: "contactName", label: "Responsavel" },
-            { key: "cpfCnpj", label: "CPF" }, { key: "phone", label: "WhatsApp" },
-            { key: "emailCorporativo", label: "E-mail" }, { key: "enderecoCep", label: "CEP" },
-            { key: "enderecoRua", label: "Rua / Logradouro" }, { key: "enderecoBairro", label: "Bairro" },
-            { key: "enderecoCidade", label: "Cidade" }, { key: "enderecoEstado", label: "Estado (UF)" },
+            { key: "cnpj", label: "CNPJ" }, { key: "nicho", label: "Ramo / Nicho" },
+            { key: "contactName", label: "Responsavel" }, { key: "cpfCnpj", label: "CPF" },
+            { key: "phone", label: "WhatsApp" }, { key: "emailCorporativo", label: "E-mail" },
+            { key: "enderecoCep", label: "CEP" }, { key: "enderecoRua", label: "Rua / Logradouro" },
+            { key: "enderecoBairro", label: "Bairro" }, { key: "enderecoCidade", label: "Cidade" },
+            { key: "enderecoEstado", label: "Estado (UF)" },
           ]).map(({ key, label }) => (
             <div key={key} className="space-y-1">
               <p className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</p>

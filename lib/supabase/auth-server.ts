@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 // Emails that are allowed to access admin-only server endpoints.
 // Kept in sync with lib/context/RoleContext.tsx USER_PROFILES where role in {admin, manager}.
 const ADMIN_EMAILS = new Set([
-  "roberto@lonemidia.com",
+  "lonemidiamkt@gmail.com", // Roberto (admin)
   "lucas@lonemidia.com",
   "julio@lonemidia.com",
 ]);

@@ -43,3 +43,7 @@ next-env.d.ts
 
 # Supabase self-hosted secrets
 infrastructure/supabase/.env
+
+# Contract DOCX (derivados de *.md — gerados no prebuild via contract-templates/convert.js)
+contract-templates/*.docx
+contract-templates/node_modules

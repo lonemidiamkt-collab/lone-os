@@ -24,6 +24,7 @@ import DesignQueue from "@/components/sector/DesignQueue";
 import BudgetAlert from "@/components/sector/BudgetAlert";
 import SmartAlerts from "@/components/SmartAlerts";
 import ClientHealthRadar from "@/components/ClientHealthRadar";
+import PlatformUpdatesWidget from "@/components/PlatformUpdatesWidget";
 
 function hoursSince(isoString?: string): number {
   if (!isoString) return 9999;
@@ -464,13 +465,13 @@ function AdminDashboard() {
 
   useEffect(() => {
     let mounted = true;
-    supabase.from("contracts").select("id, status, d4sign_status, end_date").then(({ data }) => {
+    supabase.from("contracts").select("id, status, end_date").then(({ data }) => {
       if (!mounted || !data) return;
       const now = Date.now();
       const in30d = now + 30 * 86400000;
       setContractStats({
-        active: data.filter((c) => c.status === "active" && c.d4sign_status === "2").length,
-        pending: data.filter((c) => c.d4sign_status === "1" || (!c.d4sign_status && c.status === "draft")).length,
+        active: data.filter((c) => c.status === "active").length,
+        pending: data.filter((c) => c.status === "draft").length,
         expiring: data.filter((c) => c.status === "active" && c.end_date && new Date(c.end_date).getTime() <= in30d && new Date(c.end_date).getTime() > now).length,
       });
     });
@@ -1017,6 +1018,9 @@ export default function DashboardPage() {
       />
 
       <div className="p-6 space-y-6 animate-fade-in">
+        {/* Platform updates widget — aparece quando tem novidade nao lida */}
+        <PlatformUpdatesWidget />
+
         {/* Urgent broadcast banner — visible to all */}
         {notices.filter((n) => n.urgent).length > 0 && (
           <div className="space-y-2">

@@ -8,13 +8,13 @@ import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import {
   Palette, Filter, Clock, CheckCircle, Loader, Paperclip, X,
   AlertTriangle, Zap, LayoutList, Columns3, Upload, Download,
-  ImageIcon, Eye, ChevronDown, User, FileText, FileWarning, FolderOpen,
-  ExternalLink, BarChart2,
+  ImageIcon, Eye, ChevronDown, User, Users, FileText, FileWarning, FolderOpen,
+  ExternalLink, BarChart2, Plus, Calendar, ArrowRight,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
-import type { ContentCard, DesignRequest } from "@/lib/types";
+import type { Client, ContentCard, DesignRequest } from "@/lib/types";
 
 // ── Designer-focused columns (simplified from 7 → 4) ─────────────────────────
 // Maps: ideas/script → "queue", in_production → "doing", blocked → "blocked", rest → "delivered"
@@ -51,7 +51,7 @@ const DESIGN_COLUMNS = [
   { id: "done",        title: "Concluído",     color: "bg-[#0d4af5]" },
 ];
 
-type TabView = "kanbans" | "requests" | "performance" | "history";
+type TabView = "kanbans" | "requests" | "performance" | "history" | "clientes";
 
 function getDeadlineUrgency(dueDate?: string): "overdue" | "today" | "soon" | "ok" | null {
   if (!dueDate) return null;
@@ -254,14 +254,14 @@ function DownloadButton({ url, title }: { url: string; title: string }) {
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DesignPage() {
-  const { clients, contentCards, designRequests, updateDesignRequest, updateContentCard, pushNotification } = useAppState();
+  const { clients, contentCards, designRequests, updateDesignRequest, updateContentCard, pushNotification, addDesignRequest, updateClientData } = useAppState();
   const { role, currentUser } = useRole();
   const [tab, setTab] = useState<TabView>("kanbans");
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();
 
   // NavContext wiring — sidebar tab switching
   useEffect(() => {
-    if (pendingTab && ["kanbans", "requests", "performance", "history"].includes(pendingTab)) {
+    if (pendingTab && ["kanbans", "requests", "performance", "history", "clientes"].includes(pendingTab)) {
       setTab(pendingTab as TabView);
       setPendingTab("");
     }
@@ -278,6 +278,10 @@ export default function DesignPage() {
   const [nonDeliveryReason, setNonDeliveryReason] = useState("");
   const [blockingCard, setBlockingCard] = useState<ContentCard | null>(null);
   const [blockReason, setBlockReason] = useState("");
+
+  // Self-initiated task + client drawer
+  const [newTaskClient, setNewTaskClient] = useState<Client | null>(null);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
 
   // Filter content cards to only show clients assigned to this designer
   const myClientIds = useMemo(() => {
@@ -345,7 +349,15 @@ export default function DesignPage() {
                 tab === "requests" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <LayoutList size={13} /> Solicitações de Design
+              <LayoutList size={13} /> Quadro de Tarefas
+            </button>
+            <button
+              onClick={() => setTab("clientes")}
+              className={`text-xs px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
+                tab === "clientes" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Users size={13} /> Meus Clientes
             </button>
             <button
               onClick={() => setTab("performance")}
@@ -409,6 +421,17 @@ export default function DesignPage() {
         {/* ═══ KANBANS TAB ═══ */}
         {tab === "kanbans" && (
           <div className="space-y-8">
+            {/* Action bar: designer pode criar tarefa propria */}
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Gerencie as artes em produção e crie tarefas próprias.</p>
+              <button
+                onClick={() => setNewTaskOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-xs font-medium transition-colors"
+              >
+                <Plus size={12} /> Nova Tarefa
+              </button>
+            </div>
+
             {/* Pending deadlines strip */}
             {(() => {
               const upcoming = contentCards
@@ -716,6 +739,17 @@ export default function DesignPage() {
             contentCards={myContentCards}
             updateDesignRequest={updateDesignRequest}
             onBriefing={setBriefingReq}
+            currentUser={currentUser}
+          />
+        )}
+
+        {/* ═══ MEUS CLIENTES TAB ═══ */}
+        {tab === "clientes" && (
+          <ClientesView
+            clients={clients.filter((c) => !myClientIds || myClientIds.has(c.id))}
+            myContentCards={myContentCards}
+            myDesignRequests={myDesignRequests}
+            onCreateTask={(c) => setNewTaskClient(c)}
           />
         )}
       </div>
@@ -1141,6 +1175,30 @@ export default function DesignPage() {
           </div>
         </div>
       )}
+
+      {/* ═══ DRAWER CLIENTE (Meus Clientes) ═══ */}
+      {newTaskClient && !newTaskOpen && (
+        <ClientDrawer
+          client={newTaskClient}
+          contentCards={myContentCards.filter((c) => c.clientId === newTaskClient.id)}
+          designRequests={myDesignRequests.filter((r) => r.clientId === newTaskClient.id)}
+          onClose={() => setNewTaskClient(null)}
+          onCreateTask={() => setNewTaskOpen(true)}
+          updateClientData={updateClientData}
+        />
+      )}
+
+      {/* ═══ MODAL NOVA TAREFA ═══ */}
+      {newTaskOpen && (
+        <NewTaskModal
+          clients={clients.filter((c) => !myClientIds || myClientIds.has(c.id))}
+          preselectedClient={newTaskClient}
+          requestedBy={currentUser}
+          addDesignRequest={addDesignRequest}
+          pushNotification={pushNotification}
+          onClose={() => { setNewTaskOpen(false); setNewTaskClient(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -1152,11 +1210,13 @@ function RequestsView({
   contentCards,
   updateDesignRequest,
   onBriefing,
+  currentUser,
 }: {
   designRequests: DesignRequest[];
   contentCards: ContentCard[];
   updateDesignRequest: (id: string, updates: Partial<DesignRequest>) => void;
   onBriefing: (req: DesignRequest) => void;
+  currentUser?: string;
 }) {
   const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
   const [statusFilter, setStatusFilter] = useState<"all" | "queued" | "in_progress" | "done">("all");
@@ -1255,7 +1315,13 @@ function RequestsView({
                 {item.deadline && <span className="text-[10px] text-muted-foreground">{item.deadline}</span>}
               </div>
               <div className="flex items-center gap-1.5 pt-1.5 border-t border-border">
-                <p className="text-[10px] text-muted-foreground flex-1">por {item.requestedBy}</p>
+                {currentUser && item.requestedBy === currentUser ? (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20 font-medium flex-1 text-center">
+                    ⚡ Auto-iniciada
+                  </span>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground flex-1">por {item.requestedBy}</p>
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); onBriefing(item._req as DesignRequest); }}
                   className="text-[10px] px-2 py-1 rounded-md bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
@@ -1288,7 +1354,11 @@ function RequestsView({
                       <span className="text-muted-foreground/50">·</span>
                       <span className="text-xs text-muted-foreground">{req.format}</span>
                       <span className="text-muted-foreground/50">·</span>
-                      <span className="text-xs text-muted-foreground">por {req.requestedBy}</span>
+                      {currentUser && req.requestedBy === currentUser ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20 font-medium">⚡ Auto-iniciada</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">por {req.requestedBy}</span>
+                      )}
                     </div>
                     {req.briefing && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{req.briefing}</p>}
                     {linked && (
@@ -1331,6 +1401,541 @@ function RequestsView({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Meus Clientes — grid da carteira do designer ──────────────────────
+
+function ClientesView({
+  clients,
+  myContentCards,
+  myDesignRequests,
+  onCreateTask,
+}: {
+  clients: Client[];
+  myContentCards: ContentCard[];
+  myDesignRequests: DesignRequest[];
+  onCreateTask: (client: Client) => void;
+}) {
+  if (clients.length === 0) {
+    return (
+      <div className="card text-center py-16 animate-fade-in">
+        <Users size={32} className="mx-auto text-muted-foreground/50 mb-3" />
+        <p className="text-sm font-medium text-foreground">Nenhum cliente na sua carteira ainda</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Quando clientes forem atribuídos a você como designer, eles aparecem aqui.
+        </p>
+      </div>
+    );
+  }
+
+  const statusColor = (s: string) => {
+    if (s === "good")       return { dot: "bg-emerald-500", label: "On Fire" };
+    if (s === "average")    return { dot: "bg-amber-400",   label: "Atenção" };
+    if (s === "at_risk")    return { dot: "bg-red-500",     label: "Crítico" };
+    if (s === "onboarding") return { dot: "bg-[#0d4af5]",   label: "Onboarding" };
+    return { dot: "bg-zinc-500", label: s };
+  };
+
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <div>
+        <h2 className="text-sm font-semibold text-foreground">Minha Carteira ({clients.length} clientes)</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">Clique em um cliente para ver briefing e criar tarefa</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {clients.map((c) => {
+          const cards = myContentCards.filter((cc) => cc.clientId === c.id);
+          const openRequests = myDesignRequests.filter((r) => r.clientId === c.id && r.status !== "done").length;
+          const lastDelivery = cards
+            .filter((cc) => cc.designerDeliveredAt)
+            .map((cc) => cc.designerDeliveredAt!)
+            .sort((a, b) => b.localeCompare(a))[0];
+          const daysSinceDelivery = lastDelivery
+            ? Math.floor((Date.now() - new Date(lastDelivery).getTime()) / 86400000)
+            : null;
+          const st = statusColor(c.status);
+
+          return (
+            <button
+              key={c.id}
+              onClick={() => onCreateTask(c)}
+              className="card text-left hover:border-primary/30 transition-colors group"
+            >
+              <div className="flex items-start gap-3">
+                {c.docLogo ? (
+                  <img src={c.docLogo} alt="" className="w-11 h-11 rounded-lg border border-border object-contain bg-muted shrink-0" />
+                ) : (
+                  <div className="w-11 h-11 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                    <span className="text-sm font-bold text-primary">
+                      {(c.nomeFantasia || c.name).charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{c.nomeFantasia || c.name}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{c.industry || "—"}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="flex items-center gap-1 text-[10px]">
+                      <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+                      <span className="text-muted-foreground">{st.label}</span>
+                    </span>
+                    {openRequests > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        {openRequests} pedido{openRequests > 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <ArrowRight size={14} className="text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0 mt-1" />
+              </div>
+              <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>{cards.length} cards · {cards.filter((cc) => cc.designerDeliveredAt).length} entregues</span>
+                <span>
+                  {daysSinceDelivery === null ? "sem entrega" :
+                   daysSinceDelivery === 0 ? "entregou hoje" :
+                   daysSinceDelivery === 1 ? "há 1 dia" :
+                   `há ${daysSinceDelivery} dias`}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Client Drawer — perfil + briefing + CTA nova tarefa ──────────────
+
+function ClientDrawer({
+  client,
+  contentCards,
+  designRequests,
+  onClose,
+  onCreateTask,
+  updateClientData,
+}: {
+  client: Client;
+  contentCards: ContentCard[];
+  designRequests: DesignRequest[];
+  onClose: () => void;
+  onCreateTask: () => void;
+  updateClientData: (id: string, data: Partial<Client>) => void;
+}) {
+  const openRequests = designRequests.filter((r) => r.status !== "done");
+  const delivered = contentCards.filter((c) => c.designerDeliveredAt).length;
+
+  const [editingBriefing, setEditingBriefing] = useState(false);
+  const [briefingForm, setBriefingForm] = useState({
+    toneOfVoice: client.toneOfVoice || "",
+    fixedBriefing: client.fixedBriefing || "",
+    campaignBriefing: client.campaignBriefing || "",
+  });
+  const [savingBriefing, setSavingBriefing] = useState(false);
+  const [briefingSaved, setBriefingSaved] = useState(false);
+
+  const handleSaveBriefing = async () => {
+    setSavingBriefing(true);
+    const toneValue = briefingForm.toneOfVoice.trim();
+    const validTones = ["formal", "funny", "authoritative", "casual"] as const;
+    updateClientData(client.id, {
+      toneOfVoice: (validTones as readonly string[]).includes(toneValue) ? (toneValue as typeof validTones[number]) : undefined,
+      fixedBriefing: briefingForm.fixedBriefing.trim() || undefined,
+      campaignBriefing: briefingForm.campaignBriefing.trim() || undefined,
+    });
+    setTimeout(() => {
+      setSavingBriefing(false);
+      setBriefingSaved(true);
+      setEditingBriefing(false);
+      setTimeout(() => setBriefingSaved(false), 2000);
+    }, 400);
+  };
+
+  const hasBriefing = client.toneOfVoice || client.fixedBriefing || client.campaignBriefing;
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end animate-fade-in" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div
+        className="relative bg-card border-l border-border w-full max-w-md h-full overflow-y-auto animate-slide-in-right"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between z-10">
+          <div className="flex items-center gap-3 min-w-0">
+            {client.docLogo ? (
+              <img src={client.docLogo} alt="" className="w-9 h-9 rounded-lg border border-border object-contain bg-muted shrink-0" />
+            ) : (
+              <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold text-primary">{(client.nomeFantasia || client.name).charAt(0).toUpperCase()}</span>
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">{client.nomeFantasia || client.name}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{client.industry || "—"}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {/* Stats rápidas */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-lg bg-muted/40 border border-border p-3 text-center">
+              <p className="text-xl font-bold text-foreground">{delivered}</p>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Entregues</p>
+            </div>
+            <div className="rounded-lg bg-muted/40 border border-border p-3 text-center">
+              <p className="text-xl font-bold text-amber-400">{openRequests.length}</p>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Pendentes</p>
+            </div>
+            <div className="rounded-lg bg-muted/40 border border-border p-3 text-center">
+              <p className="text-xl font-bold text-foreground">{contentCards.length}</p>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Total</p>
+            </div>
+          </div>
+
+          {/* Briefing (editavel por qualquer role) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <FileText size={11} /> Briefing de Marca
+              </p>
+              {!editingBriefing ? (
+                <button
+                  onClick={() => setEditingBriefing(true)}
+                  className="text-[10px] px-2 py-0.5 rounded-md bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 transition-colors"
+                >
+                  {hasBriefing ? "Editar" : "+ Adicionar"}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1">
+                  {briefingSaved && <span className="text-[10px] text-emerald-400">✓ Salvo</span>}
+                  <button
+                    onClick={() => {
+                      setEditingBriefing(false);
+                      setBriefingForm({
+                        toneOfVoice: client.toneOfVoice || "",
+                        fixedBriefing: client.fixedBriefing || "",
+                        campaignBriefing: client.campaignBriefing || "",
+                      });
+                    }}
+                    className="text-[10px] px-2 py-0.5 rounded-md text-muted-foreground hover:text-foreground"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSaveBriefing}
+                    disabled={savingBriefing}
+                    className="text-[10px] px-2 py-0.5 rounded-md bg-[#0d4af5] text-white hover:bg-[#1a56ff] disabled:opacity-50"
+                  >
+                    {savingBriefing ? "Salvando..." : "Salvar"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg bg-muted/40 border border-border p-4 space-y-3">
+              {editingBriefing ? (
+                <>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Tom de voz</label>
+                    <select
+                      value={briefingForm.toneOfVoice}
+                      onChange={(e) => setBriefingForm((p) => ({ ...p, toneOfVoice: e.target.value }))}
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50"
+                    >
+                      <option value="">— Não definido —</option>
+                      <option value="casual">Casual (descontraído)</option>
+                      <option value="formal">Formal (corporativo)</option>
+                      <option value="funny">Divertido (humor)</option>
+                      <option value="authoritative">Autoritário (especialista)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Briefing fixo (info permanente da marca)</label>
+                    <textarea
+                      value={briefingForm.fixedBriefing}
+                      onChange={(e) => setBriefingForm((p) => ({ ...p, fixedBriefing: e.target.value }))}
+                      rows={4}
+                      placeholder="Missao, valores, publico-alvo, cores, o que NAO fazer..."
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50 resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Briefing da campanha (temporario)</label>
+                    <textarea
+                      value={briefingForm.campaignBriefing}
+                      onChange={(e) => setBriefingForm((p) => ({ ...p, campaignBriefing: e.target.value }))}
+                      rows={3}
+                      placeholder="Campanha atual, promocao, foco do mes..."
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50 resize-none"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {client.toneOfVoice && (
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Tom de voz</p>
+                      <p className="text-xs text-foreground">{client.toneOfVoice}</p>
+                    </div>
+                  )}
+                  {client.fixedBriefing && (
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Briefing fixo</p>
+                      <p className="text-xs text-foreground whitespace-pre-wrap">{client.fixedBriefing}</p>
+                    </div>
+                  )}
+                  {client.campaignBriefing && (
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Briefing da campanha</p>
+                      <p className="text-xs text-foreground whitespace-pre-wrap">{client.campaignBriefing}</p>
+                    </div>
+                  )}
+                  {!hasBriefing && (
+                    <div className="text-center py-3">
+                      <p className="text-xs text-muted-foreground italic mb-2">Nenhum briefing preenchido ainda.</p>
+                      <button
+                        onClick={() => setEditingBriefing(true)}
+                        className="text-[11px] text-primary hover:underline"
+                      >
+                        + Adicionar briefing agora
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Links úteis */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <ExternalLink size={11} /> Assets & Links
+            </p>
+            <div className="space-y-1.5">
+              {client.driveLink && (
+                <a href={client.driveLink} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/40 border border-border text-xs text-foreground hover:border-primary/30 transition-colors">
+                  <FolderOpen size={12} className="text-primary" />
+                  <span className="flex-1 truncate">Pasta do Drive</span>
+                  <ExternalLink size={10} className="text-muted-foreground" />
+                </a>
+              )}
+              {client.instagramUser && (
+                <a href={`https://instagram.com/${client.instagramUser.replace(/^@/, "")}`} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/40 border border-border text-xs text-foreground hover:border-primary/30 transition-colors">
+                  <span className="text-primary">📷</span>
+                  <span className="flex-1 truncate">@{client.instagramUser.replace(/^@/, "")}</span>
+                  <ExternalLink size={10} className="text-muted-foreground" />
+                </a>
+              )}
+              {!client.driveLink && !client.instagramUser && (
+                <p className="text-xs text-muted-foreground italic">Sem links cadastrados.</p>
+              )}
+            </div>
+          </div>
+
+          {/* CTAs */}
+          <div className="space-y-2 pt-2">
+            <button
+              onClick={onCreateTask}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-colors"
+            >
+              <Plus size={14} /> Criar Tarefa para este Cliente
+            </button>
+            <a
+              href={`/clients/${client.id}`}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-muted text-foreground border border-border hover:border-primary/30 text-sm font-medium transition-colors"
+            >
+              <ExternalLink size={13} /> Abrir Perfil Completo
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal Nova Tarefa (designer cria pra si mesmo) ──────────────────
+
+function NewTaskModal({
+  clients,
+  preselectedClient,
+  requestedBy,
+  addDesignRequest,
+  pushNotification,
+  onClose,
+}: {
+  clients: Client[];
+  preselectedClient: Client | null;
+  requestedBy: string;
+  addDesignRequest: (req: Omit<DesignRequest, "id">) => DesignRequest;
+  pushNotification: (type: "sla" | "status" | "content" | "checkin" | "system", title: string, body: string, clientId?: string) => void;
+  onClose: () => void;
+}) {
+  const [clientId, setClientId] = useState(preselectedClient?.id ?? "");
+  const [title, setTitle] = useState("");
+  const [briefing, setBriefing] = useState("");
+  const [format, setFormat] = useState("Post");
+  const [priority, setPriority] = useState<"low" | "medium" | "high" | "critical">("medium");
+  const [deadline, setDeadline] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const client = clients.find((c) => c.id === clientId);
+  const canSubmit = !!clientId && title.trim().length > 0;
+
+  const handleSubmit = () => {
+    if (!canSubmit || !client) return;
+    setSaving(true);
+    addDesignRequest({
+      title: title.trim(),
+      clientId: client.id,
+      clientName: client.nomeFantasia || client.name,
+      requestedBy,
+      priority,
+      status: "queued",
+      format,
+      briefing: briefing.trim(),
+      deadline: deadline || undefined,
+    });
+    // Toast de confirmacao visivel na aba de notificacoes (sino)
+    pushNotification(
+      "content",
+      "Tarefa auto-iniciada criada",
+      `"${title.trim()}" — ${client.nomeFantasia || client.name}. Veja no Quadro de Tarefas.`,
+      client.id,
+    );
+    setTimeout(() => {
+      setSaving(false);
+      onClose();
+    }, 400);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
+      <div
+        className="w-full max-w-lg bg-card border border-border rounded-2xl overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-[#0d4af5]/15 flex items-center justify-center">
+              <Plus size={14} className="text-[#0d4af5]" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Nova Tarefa</h2>
+              <p className="text-[10px] text-muted-foreground">Tarefa auto-iniciada pelo designer</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {/* Cliente */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Cliente *</label>
+            <select
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+            >
+              <option value="">Selecione um cliente...</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.nomeFantasia || c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Título */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Título *</label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Ex: Rebranding de capa Instagram"
+              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+            />
+          </div>
+
+          {/* Formato + Prioridade */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Formato</label>
+              <select
+                value={format}
+                onChange={(e) => setFormat(e.target.value)}
+                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+              >
+                <option>Post</option>
+                <option>Story</option>
+                <option>Reels</option>
+                <option>Carrossel</option>
+                <option>Banner</option>
+                <option>Outro</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Prioridade</label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as typeof priority)}
+                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+              >
+                <option value="low">Baixa</option>
+                <option value="medium">Média</option>
+                <option value="high">Alta</option>
+                <option value="critical">Crítica</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Prazo */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <Calendar size={10} /> Prazo (opcional)
+            </label>
+            <input
+              type="date"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+            />
+          </div>
+
+          {/* Briefing */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Descrição / Briefing</label>
+            <textarea
+              value={briefing}
+              onChange={(e) => setBriefing(e.target.value)}
+              rows={3}
+              placeholder="O que precisa ser feito, detalhes, referências..."
+              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-2">
+          <button onClick={onClose} className="btn-ghost text-sm">Cancelar</button>
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit || saving}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {saving ? <Loader size={13} className="animate-spin" /> : <Plus size={13} />}
+            {saving ? "Criando..." : "Criar Tarefa"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

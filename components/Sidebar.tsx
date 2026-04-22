@@ -36,6 +36,8 @@ const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/clients",       icon: Users,           label: "Clientes",   roles: ["admin","manager"],                              hasSecondary: true },
   { href: "/calendar",      icon: Calendar,        label: "Calendário", roles: ["admin","manager","traffic","social","designer"] },
   { href: "/communications",icon: MessageCircle,   label: "Comunicação",roles: ["admin","manager","traffic","social","designer"] },
+  { href: "/broadcasts",    icon: Megaphone,       label: "Comunicados", roles: ["admin","manager"] },
+  { href: "/sobre",         icon: FileText,        label: "Sobre o Sistema", roles: ["admin","manager","traffic","social","designer"] },
   { href: "/automations",   icon: Zap,             label: "Automações", roles: ["admin","manager"] },
   { href: "/goals",         icon: Target,          label: "Metas & OKRs", roles: ["admin","manager"] },
   { href: "/ceo",           icon: Lock,            label: "Área CEO",   roles: ["admin"] },
@@ -87,7 +89,7 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
     sections: [
       {
         items: [
-          { label: "Carteira",           icon: Users2,        tab: "carteira",   badgeKey: "socialClients" },
+          { label: "Clientes",           icon: Users2,        tab: "carteira",   badgeKey: "socialClients" },
           { label: "Board de Produção",  icon: Layers,        tab: "kanban",     badgeKey: "socialPending" },
           { label: "Calendário Editorial",icon: Calendar,     tab: "calendar" },
           { label: "Inbox de Aprovação", icon: Inbox,         tab: "relatorios", badgeKey: "socialApproval" },
@@ -116,9 +118,10 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
     sections: [
       {
         items: [
-          { label: "Fila de Pedidos",  icon: Layers,        tab: "requests", badgeKey: "designQueued" },
+          { label: "Quadro de Tarefas", icon: Layers,        tab: "requests", badgeKey: "designQueued" },
+          { label: "Meus Clientes",    icon: Users,          tab: "clientes" },
           { label: "Minhas Tarefas",   icon: ClipboardCheck, tab: "kanbans" },
-          { label: "Performance",      icon: Activity,      tab: "performance" },
+          { label: "Performance",      icon: Activity,       tab: "performance" },
         ],
       },
     ],

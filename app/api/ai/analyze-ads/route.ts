@@ -1,4 +1,7 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase/server";
 
 // Server-side only — API key never exposed to frontend
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -45,7 +48,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { clientName, campaigns, period } = await req.json();
+    const { clientName, clientId, campaigns, period, triggeredBy } = await req.json();
 
     if (!campaigns || !Array.isArray(campaigns)) {
       return NextResponse.json({ error: "Dados de campanha invalidos" }, { status: 400 });
@@ -114,24 +117,40 @@ Campanhas com erro: ${compactData.filter((c: Record<string, unknown>) => c.statu
     }
 
     // Parse JSON response from AI
+    let parsed: { score?: number; status?: string; insights?: unknown; summary?: string };
     try {
-      const parsed = JSON.parse(content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
-      return NextResponse.json({
-        ...parsed,
-        model: data.model,
-        tokens: data.usage?.total_tokens,
-      });
+      parsed = JSON.parse(content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
     } catch {
-      // If AI didn't return valid JSON, wrap the text
-      return NextResponse.json({
+      parsed = {
         score: 50,
         status: "atencao",
         insights: [{ type: "sugestao", title: "Analise disponivel", body: content.slice(0, 200) }],
         summary: content.slice(0, 200),
-        model: data.model,
-        tokens: data.usage?.total_tokens,
+      };
+    }
+
+    // Persist audit (non-blocking — failure here shouldn't break the response)
+    if (clientId) {
+      supabaseAdmin.from("ai_audits").insert({
+        client_id: clientId,
+        type: "campaign_analysis",
+        score: parsed.score ?? null,
+        status: parsed.status ?? null,
+        summary: parsed.summary ?? null,
+        insights: parsed.insights ?? null,
+        raw_response: { model: data.model, tokens: data.usage?.total_tokens, ...parsed },
+        triggered_by: triggeredBy ?? null,
+        visible_to_client: true,
+      }).then(({ error }) => {
+        if (error) console.error("[AI Audit] Failed to persist:", error.message);
       });
     }
+
+    return NextResponse.json({
+      ...parsed,
+      model: data.model,
+      tokens: data.usage?.total_tokens,
+    });
   } catch (err) {
     console.error("[Lone AI] Error:", err);
     return NextResponse.json(

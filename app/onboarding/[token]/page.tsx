@@ -276,6 +276,7 @@ export default function ExternalOnboardingPage() {
   const [nomeFantasia, setNomeFantasia] = useState("");
   const [razaoSocial, setRazaoSocial] = useState("");
   const [cnpj, setCnpj] = useState("");
+  const [nicho, setNicho] = useState("");
   const [enderecoRua, setEnderecoRua] = useState("");
   const [enderecoBairro, setEnderecoBairro] = useState("");
   const [enderecoCidade, setEnderecoCidade] = useState("");
@@ -342,7 +343,7 @@ export default function ExternalOnboardingPage() {
             action: "auto_save",
             token,
             contactName, contactCpf, contactWhatsapp, contactEmail,
-            nomeFantasia, razaoSocial, cnpj,
+            nomeFantasia, razaoSocial, cnpj, nicho,
             enderecoRua, enderecoBairro, enderecoCidade, enderecoEstado, enderecoCep,
             metaLogin, metaPassword, metaStatus,
             instagramLogin: instaLogin, instagramPassword: instaPassword, instagramStatus: instaStatus,
@@ -353,7 +354,7 @@ export default function ExternalOnboardingPage() {
       } catch {}
       setAutoSaving(false);
     }, 3000);
-  }, [submission, token, contactName, contactCpf, contactWhatsapp, contactEmail, nomeFantasia, razaoSocial, cnpj,
+  }, [submission, token, contactName, contactCpf, contactWhatsapp, contactEmail, nomeFantasia, razaoSocial, cnpj, nicho,
     enderecoRua, enderecoBairro, enderecoCidade, enderecoEstado, enderecoCep,
     metaLogin, metaPassword, metaStatus, instaLogin, instaPassword, instaStatus,
     googleLogin, googlePassword, googleStatus, docContrato, docIdentidade, docLogo, notes]);
@@ -393,6 +394,7 @@ export default function ExternalOnboardingPage() {
           if (data.nome_fantasia) setNomeFantasia(data.nome_fantasia);
           if (data.razao_social) setRazaoSocial(data.razao_social);
           if (data.cnpj) setCnpj(data.cnpj);
+          if (data.nicho) setNicho(data.nicho);
           if (data.endereco_rua) setEnderecoRua(data.endereco_rua);
           if (data.endereco_bairro) setEnderecoBairro(data.endereco_bairro);
           if (data.endereco_cidade) setEnderecoCidade(data.endereco_cidade);
@@ -468,6 +470,7 @@ export default function ExternalOnboardingPage() {
   const buildPayload = () => ({
     action: "submit", token, clientId: submission?.client_id,
     nomeFantasia: nomeFantasia.trim(), razaoSocial: razaoSocial.trim(), cnpj: cnpj.trim(),
+    nicho: nicho.trim(),
     contactName: contactName.trim(), contactCpf: contactCpf.trim(), contactWhatsapp: contactWhatsapp.trim(),
     contactEmail: contactEmail.trim().toLowerCase(),
     enderecoRua: enderecoRua.trim(), enderecoBairro: enderecoBairro.trim(),
@@ -638,6 +641,43 @@ export default function ExternalOnboardingPage() {
               <InputField label="Razao Social" value={razaoSocial} onChange={setRazaoSocial} placeholder="Ex: Joao da Silva LTDA" />
               <InputField label="CNPJ" value={cnpj} onChange={handleCnpjChange} placeholder="00.000.000/0000-00" required
                 error={cnpjError || (showValidation && missingRequired.cnpj ? REQUIRED_ERROR : undefined)} />
+              <div className="space-y-2">
+                <InputField label="Ramo de Atividade / Nicho" value={nicho} onChange={setNicho}
+                  placeholder="Ex: varejo de moda, odontologia, restaurante..." />
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "Odontologia",
+                    "Estética e Beleza",
+                    "Restaurante / Food",
+                    "Varejo de Moda",
+                    "Fitness / Academia",
+                    "Saúde / Clínicas",
+                    "Advocacia",
+                    "Imobiliária",
+                    "Educação / Cursos",
+                    "E-commerce",
+                    "Automotivo",
+                    "Tecnologia / SaaS",
+                    "Turismo / Hotelaria",
+                  ].map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setNicho(opt)}
+                      className={`text-[10px] px-2.5 py-1 rounded-full border transition-all ${
+                        nicho === opt
+                          ? "bg-[#0d4af5]/15 text-[#0d4af5] border-[#0d4af5]/30"
+                          : "bg-[#0a0a0c] text-zinc-500 border-[#1e1e2a] hover:border-[#0d4af5]/20 hover:text-zinc-300"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-zinc-600">
+                  Clique numa sugestão ou digite o seu. Usado pra personalizar o objeto do contrato.
+                </p>
+              </div>
             </div>
 
             <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
@@ -709,6 +749,7 @@ export default function ExternalOnboardingPage() {
                 {nomeFantasia && <div className="flex justify-between"><span className="text-zinc-500">Nome Fantasia</span><span className="text-white">{nomeFantasia}</span></div>}
                 {razaoSocial && <div className="flex justify-between"><span className="text-zinc-500">Razao Social</span><span className="text-white">{razaoSocial}</span></div>}
                 {cnpj && <div className="flex justify-between"><span className="text-zinc-500">CNPJ</span><span className={`${cnpjError ? "text-red-400" : "text-white"}`}>{cnpj} {cnpjError && "(invalido)"}</span></div>}
+                {nicho && <div className="flex justify-between"><span className="text-zinc-500">Ramo / Nicho</span><span className="text-white">{nicho}</span></div>}
                 <div className="flex justify-between"><span className="text-zinc-500">Responsavel</span><span className="text-white">{contactName || "—"}</span></div>
                 <div className="flex justify-between"><span className="text-zinc-500">WhatsApp</span><span className="text-white">{contactWhatsapp || "—"}</span></div>
                 {(enderecoRua || enderecoCidade) && (

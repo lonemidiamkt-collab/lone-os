@@ -25,15 +25,21 @@ function baseLayout(content: string): string {
     <tr>
       <td align="center">
         <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
-          <!-- Logo -->
+          <!-- Main card with integrated header + content -->
           <tr>
-            <td align="center" style="padding-bottom:32px;">
-              <img src="${LOGO_URL}" alt="Lone Midia" width="56" height="56" style="display:block;width:56px;height:56px;object-fit:contain;" />
-            </td>
-          </tr>
-          <!-- Content -->
-          <tr>
-            <td style="background-color:${CARD_COLOR};border:1px solid ${BORDER_COLOR};border-radius:16px;padding:40px 32px;">
+            <td style="background-color:${CARD_COLOR};border:1px solid ${BORDER_COLOR};border-radius:16px;padding:32px;">
+              <!-- Integrated header: logo + brand text -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                <tr>
+                  <td width="56" valign="middle" style="padding-right:14px;">
+                    <img src="${LOGO_URL}" alt="Lone Midia" width="48" height="48" style="display:block;width:48px;height:48px;object-fit:contain;border-radius:10px;" />
+                  </td>
+                  <td valign="middle">
+                    <p style="color:${TEXT_PRIMARY};font-size:15px;font-weight:700;margin:0;letter-spacing:-0.01em;line-height:1.2;">Lone Midia</p>
+                    <p style="color:${TEXT_SECONDARY};font-size:12px;font-weight:400;margin:2px 0 0;line-height:1.3;">Assessoria de Marketing e Vendas</p>
+                  </td>
+                </tr>
+              </table>
               ${content}
             </td>
           </tr>
@@ -121,6 +127,39 @@ export function contractSignedEmail(clientName: string, companyName: string): { 
       </div>
     `),
   };
+}
+
+// ─── Broadcast Email ────────────────────────────────────────
+// Mass-communication template. Uses the same Sober Premium layout.
+// contentHtml is the rich-text body from the admin editor (already sanitized).
+// {{nome_cliente}} in contentHtml is replaced per recipient before send.
+export function broadcastEmail(subject: string, contentHtml: string, clientName: string, companyName?: string): { subject: string; html: string } {
+  // Accept multiple tag spellings so the user can write naturally:
+  //   {{nome_cliente}} | {{nome_responsavel}} | {{nome}} | {{responsavel}}   → contact name
+  //   {{empresa}} | {{nome_empresa}} | {{empresa_nome}}                     → company name
+  const personalized = contentHtml
+    .replace(/\{\{\s*(?:nome_cliente|nome_responsavel|responsavel|nome)\s*\}\}/gi, escapeHtml(clientName))
+    .replace(/\{\{\s*(?:empresa|nome_empresa|empresa_nome|nome_fantasia)\s*\}\}/gi, escapeHtml(companyName || clientName));
+
+  return {
+    subject,
+    html: baseLayout(`
+      <p style="color:${TEXT_PRIMARY};font-size:14px;line-height:1.8;margin:0 0 16px;">
+        Ola, ${escapeHtml(clientName)}!
+      </p>
+      <div style="color:${TEXT_SECONDARY};font-size:13px;line-height:1.75;">
+        ${personalized}
+      </div>
+      <div style="border-top:1px solid ${BORDER_COLOR};margin:28px 0 16px;"></div>
+      <p style="color:${TEXT_PRIMARY};font-size:13px;margin:0 0 2px;">Abracos,</p>
+      <p style="color:${TEXT_PRIMARY};font-size:14px;font-weight:600;margin:0;">Equipe Lone Midia</p>
+      <p style="color:${BRAND_COLOR};font-size:12px;margin:2px 0 0;">Assessoria de Marketing e Vendas</p>
+    `),
+  };
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 // ─── Monthly Report Email ───────────────────────────────────

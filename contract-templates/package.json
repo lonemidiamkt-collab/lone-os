@@ -1,0 +1,11 @@
+{
+  "name": "contract-templates-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node convert.js"
+  },
+  "dependencies": {
+    "docx": "^9.0.2"
+  }
+}

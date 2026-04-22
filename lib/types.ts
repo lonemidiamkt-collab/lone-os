@@ -38,6 +38,7 @@ export interface Client {
   contactName?: string;
   contactRole?: string;
   idade?: string;
+  nicho?: string;
   razaoSocial?: string;
   nomeFantasia?: string;
   cnpj?: string;

@@ -9,18 +9,18 @@ import type { Client } from "@/lib/types";
 import { supabase } from "@/lib/supabase/client";
 import {
   FileText, Plus, Download, Eye, Loader2, Check, X,
-  Calendar, DollarSign, Clock, Send, AlertTriangle,
-  CheckCircle, ExternalLink, Mail, RefreshCw, History,
+  Calendar, DollarSign, Clock, AlertTriangle,
+  CheckCircle, Mail, RefreshCw, History,
   ArrowRight, PenLine,
 } from "lucide-react";
 
 interface Props { client: Client; currentUser: string; }
 
 interface ContractFull extends ContractRecord {
-  d4signDocumentId?: string;
-  d4signStatus?: string;
   paymentDay?: number;
   previousContractId?: string;
+  hasRenewal?: boolean;
+  renewalValue?: number | null;
 }
 
 interface AuditEntry { id: string; action: string; actor: string; details: string; createdAt: string; }
@@ -36,20 +36,15 @@ function daysUntil(date: string): number {
   return Math.ceil((new Date(date).getTime() - Date.now()) / 86400000);
 }
 
-const D4S: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  "1": { label: "Aguardando Assinatura", color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
-  "2": { label: "Contrato Assinado", color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
-  "3": { label: "Cancelado", color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20" },
-  "4": { label: "Assinatura Parcial", color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/10", border: "border-[#0d4af5]/20" },
-};
-
 export default function ContractGenerator({ client, currentUser }: Props) {
   const [contracts, setContracts] = useState<ContractFull[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [sendingD4Sign, setSendingD4Sign] = useState<string | null>(null);
-  const [d4signError, setD4signError] = useState("");
+  const [downloadingDocx, setDownloadingDocx] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState("");
+  // Nicho preenchido via prompt() quando falta no cadastro — evita perguntar de novo no mesmo ciclo.
+  const [nichoOverride, setNichoOverride] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showAudit, setShowAudit] = useState<string | null>(null);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
@@ -61,6 +56,8 @@ export default function ContractGenerator({ client, currentUser }: Props) {
 
   const [serviceType, setServiceType] = useState(client.serviceType || "lone_growth");
   const [valor, setValor] = useState("");
+  const [hasRenewal, setHasRenewal] = useState(false);
+  const [renewalValue, setRenewalValue] = useState("");
   const [dataInicio, setDataInicio] = useState(new Date().toISOString().slice(0, 10));
   const [duracao, setDuracao] = useState(3);
   const [templateClauses, setTemplateClauses] = useState<Record<string, { clauses: { id: string; title: string; body: string }[]; conditionalClauses: { id: string; title: string; body: string; enabled: boolean }[] }>>({});
@@ -100,8 +97,8 @@ export default function ContractGenerator({ client, currentUser }: Props) {
       startDate: r.start_date as string, endDate: r.end_date as string,
       durationMonths: r.duration_months as number, status: r.status as ContractRecord["status"],
       pdfUrl: r.pdf_url as string | null, generatedBy: r.generated_by as string, generatedAt: r.generated_at as string,
-      d4signDocumentId: (r.d4sign_document_id as string) || undefined, d4signStatus: (r.d4sign_status as string) || undefined,
       paymentDay: (r.payment_day as number) || 10, previousContractId: (r.previous_contract_id as string) || undefined,
+      hasRenewal: Boolean(r.has_renewal), renewalValue: r.renewal_value != null ? Number(r.renewal_value) : null,
     })));
     setLoading(false);
   };
@@ -182,6 +179,8 @@ export default function ContractGenerator({ client, currentUser }: Props) {
         status: "draft", pdf_url: pdfUrl, generated_by: currentUser,
         payment_day: paymentDay,
         previous_contract_id: renewFrom?.id || null,
+        has_renewal: hasRenewal,
+        renewal_value: hasRenewal && renewalValue ? Number(renewalValue) : null,
       }).select("id").single();
 
       if (inserted) {
@@ -202,20 +201,59 @@ export default function ContractGenerator({ client, currentUser }: Props) {
     } catch (err) { console.error(err); } finally { setGenerating(false); }
   };
 
-  const handleSendD4Sign = async (contractId: string) => {
+  const handleDownloadDocx = async (c: ContractFull) => {
     const errs = validateClientData();
-    if (errs.length > 0) { setD4signError(`Dados incompletos: ${errs.join(", ")}`); return; }
-    setSendingD4Sign(contractId); setD4signError("");
+    if (errs.length > 0) { setDownloadError(`Dados incompletos: ${errs.join(", ")}`); return; }
+    // Pra Tráfego/Lone Growth, nicho é obrigatório. Se o cliente não preencheu, pede inline.
+    const needsNicho = c.serviceType === "assessoria_trafego" || c.serviceType === "lone_growth";
+    const currentNicho = (nichoOverride ?? client.nicho ?? "").trim();
+    if (needsNicho && !currentNicho) {
+      const entered = window.prompt("Qual o nicho/ramo da empresa? (aparece na cláusula 1.1 do contrato)\nEx: varejo de moda, odontologia, restaurante");
+      if (!entered?.trim()) { setDownloadError("Nicho é obrigatório para contratos de Tráfego e Lone Growth."); return; }
+      const nichoValue = entered.trim();
+      await supabase.from("clients").update({ nicho: nichoValue }).eq("id", client.id);
+      setNichoOverride(nichoValue); // evita re-prompt no mesmo ciclo; parent vai sincronizar no próximo fetch
+    }
+    setDownloadingDocx(c.id); setDownloadError("");
     try {
-      const res = await fetch("/api/contracts", {
+      const res = await fetch("/api/contracts/download-docx", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send_to_d4sign", contractId, clientId: client.id, signerEmail, actor: currentUser }),
+        body: JSON.stringify({
+          clientId: client.id,
+          serviceType: c.serviceType,
+          valorMensal: c.monthlyValue,
+          duracaoMeses: c.durationMonths,
+          diaPagamento: c.paymentDay || 10,
+          version: c.version,
+          hasRenewal: c.hasRenewal ?? false,
+          renewalValue: c.renewalValue ?? null,
+          signerEmail: signerEmail || undefined,
+        }),
       });
-      const data = await res.json();
-      if (!res.ok) { setD4signError(data.error || "Erro D4Sign"); return; }
-      await logAudit(contractId, "sent_d4sign", `Enviado para assinatura — ${signerEmail}`);
-      await loadContracts();
-    } catch { setD4signError("Falha de conexao"); } finally { setSendingD4Sign(null); }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Erro desconhecido" }));
+        setDownloadError(data.error || "Erro ao gerar DOCX");
+        return;
+      }
+      const blob = await res.blob();
+      // Prefer RFC 5987 `filename*=UTF-8''...` (tem acentos); cai pra `filename="..."` se nao tiver.
+      const cd = res.headers.get("Content-Disposition") || "";
+      const utf8Match = cd.match(/filename\*=UTF-8''([^;]+)/);
+      const asciiMatch = cd.match(/filename="([^"]+)"/);
+      const filename = utf8Match
+        ? decodeURIComponent(utf8Match[1])
+        : asciiMatch?.[1] || `Contrato-${client.nomeFantasia || client.name}.docx`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Small delay pra garantir que o Chrome iniciou o download antes de liberar a URL.
+      setTimeout(() => URL.revokeObjectURL(url), 200);
+      await logAudit(c.id, "downloaded_docx", `DOCX oficial baixado para upload manual no D4Sign`);
+    } catch { setDownloadError("Falha ao gerar DOCX"); } finally { setDownloadingDocx(null); }
   };
 
   const handleAddendum = async (contractId: string) => {
@@ -275,11 +313,11 @@ export default function ContractGenerator({ client, currentUser }: Props) {
         </div>
       )}
 
-      {d4signError && (
+      {downloadError && (
         <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-start gap-2">
           <AlertTriangle size={14} className="text-red-400 mt-0.5 shrink-0" />
-          <p className="text-xs text-red-400">{d4signError}</p>
-          <button onClick={() => setD4signError("")} className="ml-auto text-red-400/50 hover:text-red-400"><X size={12} /></button>
+          <p className="text-xs text-red-400">{downloadError}</p>
+          <button onClick={() => setDownloadError("")} className="ml-auto text-red-400/50 hover:text-red-400"><X size={12} /></button>
         </div>
       )}
 
@@ -292,17 +330,21 @@ export default function ContractGenerator({ client, currentUser }: Props) {
       ) : (
         <div className="space-y-3">
           {contracts.map((c) => {
-            const d4s = c.d4signStatus ? D4S[c.d4signStatus] : null;
-            const isSending = sendingD4Sign === c.id;
+            const isSending = downloadingDocx === c.id;
             const days = daysUntil(c.endDate);
             const prevContract = c.previousContractId ? contracts.find((x) => x.id === c.previousContractId) : null;
+            const statusBadge = c.status === "active"
+              ? { label: "Ativo", cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" }
+              : c.status === "expired"
+                ? { label: "Vencido", cls: "bg-red-500/10 text-red-400 border-red-500/20" }
+                : { label: "Rascunho", cls: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20" };
 
             return (
-              <div key={c.id} className={`rounded-xl border bg-card p-4 space-y-3 transition-all ${d4s ? d4s.border : "border-border"}`}>
+              <div key={c.id} className="rounded-xl border border-border bg-card p-4 space-y-3 transition-all">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${c.d4signStatus === "2" ? "bg-emerald-500/15" : "bg-[#0d4af5]/10"}`}>
-                      {c.d4signStatus === "2" ? <CheckCircle size={18} className="text-emerald-500" /> : <FileText size={18} className="text-[#0d4af5]" />}
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${c.status === "active" ? "bg-emerald-500/15" : "bg-[#0d4af5]/10"}`}>
+                      {c.status === "active" ? <CheckCircle size={18} className="text-emerald-500" /> : <FileText size={18} className="text-[#0d4af5]" />}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
@@ -315,11 +357,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {d4s ? (
-                      <span className={`text-[10px] px-2.5 py-1 rounded-lg ${d4s.bg} ${d4s.color} ${d4s.border} border font-medium`}>{d4s.label}</span>
-                    ) : (
-                      <span className="text-[10px] px-2.5 py-1 rounded-lg bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">Rascunho</span>
-                    )}
+                    <span className={`text-[10px] px-2.5 py-1 rounded-lg ${statusBadge.cls} border font-medium`}>{statusBadge.label}</span>
                     {days > 0 && days <= 30 && c.status === "active" && (
                       <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Vence em {days}d</span>
                     )}
@@ -339,17 +377,13 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                   <button onClick={() => { setShowAddendum(showAddendum === c.id ? null : c.id); if (showAddendum !== c.id) loadAddendums(c.id); }}
                     className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-zinc-600"><PenLine size={11} /> Adendo</button>
 
-                  {!c.d4signDocumentId && (
-                    <button onClick={() => handleSendD4Sign(c.id)} disabled={isSending}
-                      className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 border border-emerald-500/20 disabled:opacity-50">
-                      {isSending ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />} {isSending ? "Enviando..." : "Enviar p/ Assinatura"}
-                    </button>
-                  )}
-                  {c.d4signDocumentId && c.d4signStatus !== "2" && (
-                    <a href={`https://sandbox.d4sign.com.br/desk/viewblob/${c.d4signDocumentId}`} target="_blank" rel="noopener noreferrer"
-                      className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs text-[#0d4af5] border border-[#0d4af5]/20 hover:bg-[#0d4af5]/10"><ExternalLink size={11} /> D4Sign</a>
-                  )}
-                  {c.d4signStatus === "2" && <span className="ml-auto flex items-center gap-1 text-xs text-emerald-400"><CheckCircle size={12} /> Assinado</span>}
+                  <button onClick={() => handleDownloadDocx(c)} disabled={isSending}
+                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 border border-emerald-500/20 disabled:opacity-50"
+                    title="Baixa o contrato oficial preenchido (.docx) para você subir manualmente no D4Sign e enviar pra assinatura">
+                    {isSending ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                    {isSending ? "Gerando..." : "Baixar DOCX Oficial"}
+                  </button>
+                  {c.status === "active" && <span className="flex items-center gap-1 text-xs text-emerald-400"><CheckCircle size={12} /> Ativo</span>}
                 </div>
 
                 {/* Audit log */}
@@ -448,6 +482,11 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                       className={`p-2.5 rounded-lg border text-xs text-center transition-all ${serviceType === o.v ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-border text-zinc-500"}`}>{o.i} {o.l}</button>
                   ))}
                 </div>
+                {(serviceType === "assessoria_trafego" || serviceType === "lone_growth") && !(nichoOverride ?? client.nicho)?.trim() && (
+                  <p className="text-[10px] text-amber-400 flex items-center gap-1 mt-1">
+                    <AlertTriangle size={10} /> Nicho do cliente vazio — sera pedido na hora de baixar o DOCX oficial.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -474,7 +513,65 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                   {[3, 6, 12].map((m) => (
                     <button key={m} onClick={() => setDuracao(m)} className={`flex-1 py-2 rounded-lg border text-xs transition-all ${duracao === m ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-border text-zinc-500"}`}>{m}m</button>
                   ))}
+                  <button
+                    onClick={() => { if ([3, 6, 12].includes(duracao)) setDuracao(5); }}
+                    className={`flex-1 py-2 rounded-lg border text-xs transition-all ${![3, 6, 12].includes(duracao) ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-border text-zinc-500"}`}
+                  >
+                    Personalizado
+                  </button>
                 </div>
+                {![3, 6, 12].includes(duracao) && (
+                  <div className="pt-2">
+                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">Meses (1 a 36)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={36}
+                      value={duracao}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!isNaN(n) && n >= 1 && n <= 36) setDuracao(n);
+                      }}
+                      placeholder="Ex: 5"
+                      className="mt-1 w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Ex: cliente com primeiro mes cortesia → coloque 5 (a cobranca comeca no mes 2 ate o mes 6).
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Reajuste apos periodo inicial */}
+              <div className="rounded-xl border border-border bg-surface p-3 space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={hasRenewal}
+                    onChange={(e) => setHasRenewal(e.target.checked)}
+                    className="w-4 h-4 accent-[#0d4af5]"
+                  />
+                  <span className="text-xs font-medium text-foreground">Tera reajuste apos os {duracao} meses iniciais?</span>
+                </label>
+                {hasRenewal ? (
+                  <div className="space-y-1.5 pl-6">
+                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">Novo valor mensal (pos-reajuste)</label>
+                    <input
+                      type="number"
+                      value={renewalValue}
+                      onChange={(e) => setRenewalValue(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+                    />
+                    {renewalValue && Number(renewalValue) > 0 && Number(valor) > 0 && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Reajuste: {formatCurrency(Number(valor))} → {formatCurrency(Number(renewalValue))} ({Number(renewalValue) > Number(valor) ? "+" : ""}{(((Number(renewalValue) - Number(valor)) / Number(valor)) * 100).toFixed(1)}%)
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground pl-6">Sem reajuste — contrato inclui clausula de valor mantido durante todo o periodo.</p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -490,6 +587,13 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                   <p className="text-[10px] text-zinc-500">{dataInicio} a {addMonths(dataInicio, duracao)} | Pagamento dia {paymentDay}</p>
                 </div>
               )}
+
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.03] p-3 flex items-start gap-2">
+                <AlertTriangle size={12} className="text-amber-400 mt-0.5 shrink-0" />
+                <p className="text-[10px] text-amber-400/90 leading-relaxed">
+                  <span className="font-medium">PDF abaixo é apenas preview/rascunho.</span> O documento oficial com template Lone Midia (e cláusula de reajuste se habilitada) é gerado no botão <span className="font-medium">&quot;Baixar DOCX Oficial&quot;</span> na lista de contratos.
+                </p>
+              </div>
             </div>
 
             {previewUrl && <div className="px-5 pb-3"><iframe src={previewUrl} className="w-full h-[400px] rounded-lg border border-border bg-white" /></div>}

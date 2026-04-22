@@ -17,7 +17,7 @@ export interface UserProfile {
 // Hardcoded profiles for the login dropdown (emails match seed.sql)
 export const USER_PROFILES: UserProfile[] = [
   // Socios ADM (Full Access)
-  { id: "roberto",  name: "Roberto Lino",    role: "admin",    initials: "RL", color: "text-[#0d4af5]", email: "roberto@lonemidia.com" },
+  { id: "roberto",  name: "Roberto Lino",    role: "admin",    initials: "RL", color: "text-[#0d4af5]", email: "lonemidiamkt@gmail.com" },
   { id: "lucas",    name: "Lucas Bueno",     role: "admin",    initials: "LB", color: "text-[#0d4af5]", email: "lucas@lonemidia.com" },
   // Gestao e Operacao
   { id: "julio",    name: "Julio",           role: "manager",  initials: "JL", color: "text-[#0d4af5]", email: "julio@lonemidia.com" },

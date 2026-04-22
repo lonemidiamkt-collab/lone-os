@@ -40,7 +40,9 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Resolve recipient email
-    const recipientEmail = client.email || client.email_corporativo;
+    // Prefer email_corporativo: it's the field edited through the UI (aba Dados).
+    // email is legacy/backup; email_corporativo reflects the most recent user intent.
+    const recipientEmail = client.email_corporativo || client.email;
     const clientName = client.contact_name || client.name || "Cliente";
     const companyName = client.nome_fantasia || client.name || "Empresa";
 
@@ -104,7 +106,9 @@ export async function POST(req: NextRequest) {
 
     if (cErr || !client) return NextResponse.json({ error: "Cliente nao encontrado" }, { status: 404 });
 
-    const recipientEmail = client.email || client.email_corporativo;
+    // Prefer email_corporativo: it's the field edited through the UI (aba Dados).
+    // email is legacy/backup; email_corporativo reflects the most recent user intent.
+    const recipientEmail = client.email_corporativo || client.email;
     if (!recipientEmail) return NextResponse.json({ error: "E-mail nao cadastrado" }, { status: 400 });
 
     const template = contractSignedEmail(client.contact_name || client.name, client.nome_fantasia || client.name);
@@ -129,7 +133,9 @@ export async function POST(req: NextRequest) {
 
     if (mErr || !client) return NextResponse.json({ error: "Cliente nao encontrado" }, { status: 404 });
 
-    const recipientEmail = client.email || client.email_corporativo;
+    // Prefer email_corporativo: it's the field edited through the UI (aba Dados).
+    // email is legacy/backup; email_corporativo reflects the most recent user intent.
+    const recipientEmail = client.email_corporativo || client.email;
     if (!recipientEmail) return NextResponse.json({ error: "E-mail nao cadastrado" }, { status: 400 });
 
     const template = monthlyReportEmail(client.contact_name || client.name, client.nome_fantasia || client.name, month || new Date().toISOString().slice(0, 7));

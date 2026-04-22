@@ -40,6 +40,7 @@ function snakeToClient(row: Record<string, unknown>): Client {
     contactName: (row.contact_name as string) ?? undefined,
     contactRole: (row.contact_role as string) ?? undefined,
     idade: (row.idade as string) ?? undefined,
+    nicho: (row.nicho as string) ?? undefined,
     razaoSocial: (row.razao_social as string) ?? undefined,
     nomeFantasia: (row.nome_fantasia as string) ?? undefined,
     cnpj: (row.cnpj as string) ?? undefined,
@@ -104,6 +105,7 @@ function clientToSnake(c: Partial<Client>): Record<string, unknown> {
   if (c.contactName !== undefined) row.contact_name = c.contactName;
   if (c.contactRole !== undefined) row.contact_role = c.contactRole;
   if (c.idade !== undefined) row.idade = c.idade;
+  if (c.nicho !== undefined) row.nicho = c.nicho;
   if (c.razaoSocial !== undefined) row.razao_social = c.razaoSocial;
   if (c.nomeFantasia !== undefined) row.nome_fantasia = c.nomeFantasia;
   if (c.cnpj !== undefined) row.cnpj = c.cnpj;

@@ -30,9 +30,8 @@ export default function SettingsPage() {
   const [agencyForm, setAgencyForm] = useState({
     razaoSocial: "", nomeFantasia: "", cnpj: "", endereco: "", email: "", telefone: "",
     signatarioNome: "", signatarioCpf: "", signatarioEmail: "",
-    d4signToken: "", d4signCryptKey: "",
   });
-  const [templates, setTemplates] = useState<{ id: string; name: string; serviceType: string; d4signTemplateId: string; d4signSafeId: string; durationMonths: number; clauses: { id: string; title: string; body: string }[]; conditionalClauses: { id: string; title: string; body: string; enabled: boolean }[] }[]>([]);
+  const [templates, setTemplates] = useState<{ id: string; name: string; serviceType: string; durationMonths: number; clauses: { id: string; title: string; body: string }[]; conditionalClauses: { id: string; title: string; body: string; enabled: boolean }[] }[]>([]);
   const [editingClauses, setEditingClauses] = useState<string | null>(null);
   const [agencySaving, setAgencySaving] = useState(false);
   const [agencySaved, setAgencySaved] = useState(false);
@@ -45,13 +44,11 @@ export default function SettingsPage() {
         cnpj: data.cnpj || "", endereco: data.endereco || "", email: data.email || "",
         telefone: data.telefone || "", signatarioNome: data.signatario_nome || "",
         signatarioCpf: data.signatario_cpf || "", signatarioEmail: data.signatario_email || "",
-        d4signToken: data.d4sign_token || "", d4signCryptKey: data.d4sign_crypt_key || "",
       });
     });
     supabase.from("contract_templates").select("*").order("name").then(({ data }) => {
       if (data) setTemplates(data.map((r) => ({
         id: r.id, name: r.name, serviceType: r.service_type,
-        d4signTemplateId: r.d4sign_template_id || "", d4signSafeId: r.d4sign_safe_id || "",
         durationMonths: r.duration_months,
         clauses: (r.clauses as { id: string; title: string; body: string }[]) || [],
         conditionalClauses: (r.conditional_clauses as { id: string; title: string; body: string; enabled: boolean }[]) || [],
@@ -66,13 +63,10 @@ export default function SettingsPage() {
       cnpj: agencyForm.cnpj, endereco: agencyForm.endereco, email: agencyForm.email,
       telefone: agencyForm.telefone, signatario_nome: agencyForm.signatarioNome,
       signatario_cpf: agencyForm.signatarioCpf, signatario_email: agencyForm.signatarioEmail,
-      d4sign_token: agencyForm.d4signToken, d4sign_crypt_key: agencyForm.d4signCryptKey,
       updated_at: new Date().toISOString(),
     }).eq("key", "main");
     for (const t of templates) {
       await supabase.from("contract_templates").update({
-        d4sign_template_id: t.d4signTemplateId || null,
-        d4sign_safe_id: t.d4signSafeId || null,
         duration_months: t.durationMonths,
         clauses: t.clauses,
         conditional_clauses: t.conditionalClauses,
@@ -400,36 +394,14 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* D4Sign Config */}
-              <div className="card">
-                <h3 className="font-semibold text-foreground text-sm mb-2 flex items-center gap-2">
-                  <Shield size={14} className="text-[#0d4af5]" /> Integracao D4Sign
-                </h3>
-                <p className="text-[10px] text-muted-foreground mb-5">Credenciais de API para assinatura digital de contratos</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">Token API</label>
-                    <input type="password" value={agencyForm.d4signToken}
-                      onChange={(e) => setAgencyForm((p) => ({ ...p, d4signToken: e.target.value }))}
-                      placeholder="live-xxxxxxxx..."
-                      className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50 font-mono" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">Crypt Key</label>
-                    <input type="password" value={agencyForm.d4signCryptKey}
-                      onChange={(e) => setAgencyForm((p) => ({ ...p, d4signCryptKey: e.target.value }))}
-                      placeholder="live-crypt-xxxxxxxx..."
-                      className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50 font-mono" />
-                  </div>
-                </div>
-              </div>
-
               {/* Templates & Clausulas */}
               <div className="card">
                 <h3 className="font-semibold text-foreground text-sm mb-2 flex items-center gap-2">
                   <FileText size={14} className="text-[#0d4af5]" /> Templates de Contrato
                 </h3>
-                <p className="text-[10px] text-muted-foreground mb-5">Configure IDs D4Sign e edite clausulas de cada servico</p>
+                <p className="text-[10px] text-muted-foreground mb-5">
+                  Duracao padrao e clausulas por tipo de servico. O DOCX oficial preenchido esta em <code className="text-[#0d4af5]">contract-templates/*.docx</code>.
+                </p>
                 <div className="space-y-4">
                   {templates.map((t, idx) => (
                     <div key={t.id} className="rounded-xl border border-border bg-surface p-4 space-y-3">
@@ -443,25 +415,11 @@ export default function SettingsPage() {
                           </button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[10px] text-zinc-500">Template ID (D4Sign)</label>
-                          <input value={t.d4signTemplateId} placeholder="UUID" onChange={(e) => {
-                            const u = [...templates]; u[idx] = { ...u[idx], d4signTemplateId: e.target.value }; setTemplates(u);
-                          }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50 font-mono" />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] text-zinc-500">Safe ID (Pasta)</label>
-                          <input value={t.d4signSafeId} placeholder="UUID" onChange={(e) => {
-                            const u = [...templates]; u[idx] = { ...u[idx], d4signSafeId: e.target.value }; setTemplates(u);
-                          }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50 font-mono" />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] text-zinc-500">Duracao (meses)</label>
-                          <input type="number" value={t.durationMonths} onChange={(e) => {
-                            const u = [...templates]; u[idx] = { ...u[idx], durationMonths: Number(e.target.value) || 3 }; setTemplates(u);
-                          }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50" />
-                        </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-zinc-500">Duracao padrao (meses)</label>
+                        <input type="number" value={t.durationMonths} onChange={(e) => {
+                          const u = [...templates]; u[idx] = { ...u[idx], durationMonths: Number(e.target.value) || 3 }; setTemplates(u);
+                        }} className="w-40 bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50" />
                       </div>
 
                       {/* Clause editor */}

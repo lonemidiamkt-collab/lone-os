@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
       nome_fantasia: fields.nomeFantasia || null,
       razao_social: fields.razaoSocial || null,
       cnpj: fields.cnpj || null,
+      nicho: fields.nicho || null,
       endereco_rua: fields.enderecoRua || null,
       endereco_bairro: fields.enderecoBairro || null,
       endereco_cidade: fields.enderecoCidade || null,
@@ -142,6 +143,7 @@ export async function POST(req: NextRequest) {
         nome_fantasia: formData.nomeFantasia || null,
         razao_social: formData.razaoSocial || null,
         cnpj: formData.cnpj || null,
+        nicho: formData.nicho || null,
         endereco_rua: formData.enderecoRua || null,
         endereco_bairro: formData.enderecoBairro || null,
         endereco_cidade: formData.enderecoCidade || null,
@@ -177,6 +179,7 @@ export async function POST(req: NextRequest) {
         nome_fantasia: formData.nomeFantasia || null,
         razao_social: formData.razaoSocial || null,
         cnpj: formData.cnpj || null,
+        nicho: formData.nicho || null,
         contact_name: formData.contactName,
         cpf_cnpj: formData.contactCpf,
         phone: formData.contactWhatsapp,
@@ -258,6 +261,7 @@ export async function POST(req: NextRequest) {
       if (subRow.nome_fantasia) updatePayload.nome_fantasia = subRow.nome_fantasia;
       if (subRow.razao_social) updatePayload.razao_social = subRow.razao_social;
       if (subRow.cnpj) updatePayload.cnpj = subRow.cnpj;
+      if (subRow.nicho) updatePayload.nicho = subRow.nicho;
       if (subRow.contact_name) updatePayload.contact_name = subRow.contact_name;
       if (subRow.contact_cpf) updatePayload.cpf_cnpj = subRow.contact_cpf;
       if (subRow.contact_whatsapp) updatePayload.phone = subRow.contact_whatsapp;

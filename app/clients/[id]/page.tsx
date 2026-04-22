@@ -31,6 +31,7 @@ import EditClientModal from "@/components/EditClientModal";
 import dynamic from "next/dynamic";
 import DadosTab from "@/components/client-tabs/DadosTab";
 import ResultsTab from "@/components/client-tabs/ResultsTab";
+import AIAuditsTab from "@/components/client-tabs/AIAuditsTab";
 import ClientNPS from "@/components/sector/ClientNPS";
 import WhatsAppTemplates from "@/components/WhatsAppTemplates";
 import MeetingScheduler from "@/components/MeetingScheduler";
@@ -66,13 +67,14 @@ const ASSET_TYPE_CONFIG: Record<CreativeAsset["type"], { label: string; color: s
   logo:       { label: "Logo",       color: "text-primary",  icon: Star },
 };
 
-const TABS = ["overview", "dados", "resultados", "contratos", "chat", "historico", "tasks", "content", "onboarding", "wallet", "reports"] as const;
+const TABS = ["overview", "dados", "resultados", "analise-ia", "contratos", "chat", "historico", "tasks", "content", "onboarding", "wallet", "reports"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
   overview: "Visão Geral",
   dados: "Dados",
   resultados: "Resultados",
+  "analise-ia": "Análise IA",
   contratos: "Contratos",
   chat: "Chat",
   historico: "Histórico Operacional",
@@ -213,14 +215,14 @@ export default function ClientDetailPage() {
   };
 
   // Contract status for Dados tab
-  const [latestContract, setLatestContract] = useState<{ status: string; d4signStatus: string | null; endDate: string; version: number } | null>(null);
+  const [latestContract, setLatestContract] = useState<{ status: string; endDate: string; version: number } | null>(null);
   useEffect(() => {
     if (!client) return;
     let mounted = true;
     import("@/lib/supabase/client").then(({ supabase: sb }) => {
-      sb.from("contracts").select("status, d4sign_status, end_date, version").eq("client_id", client.id).order("created_at", { ascending: false }).limit(1).maybeSingle().then(({ data, error }) => {
+      sb.from("contracts").select("status, end_date, version").eq("client_id", client.id).order("created_at", { ascending: false }).limit(1).maybeSingle().then(({ data, error }) => {
         if (!mounted || error) return;
-        if (data) setLatestContract({ status: data.status as string, d4signStatus: data.d4sign_status as string | null, endDate: data.end_date as string, version: data.version as number });
+        if (data) setLatestContract({ status: data.status as string, endDate: data.end_date as string, version: data.version as number });
       });
     });
     return () => { mounted = false; };
@@ -583,6 +585,11 @@ export default function ClientDetailPage() {
           {/* ── RESULTADOS ──────────────────────────────────────────────────── */}
           {activeTab === "resultados" && (
             <ResultsTab client={client} currentUser={currentUser} role={role} />
+          )}
+
+          {/* ── ANALISE IA ──────────────────────────────────────────────────── */}
+          {activeTab === "analise-ia" && (
+            <AIAuditsTab clientId={clientId} isAdmin={isAdmin} />
           )}
 
           {/* ── CONTRATOS ────────────────────────────────────────────────────── */}
