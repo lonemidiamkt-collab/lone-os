@@ -55,8 +55,8 @@ export const SERVICE_LABELS: Record<string, string> = {
 };
 
 export const LONE_MIDIA = {
-  nome: "Lone Midia Marketing Digital LTDA",
-  cnpj: "00.000.000/0001-00",
-  endereco: "Rio de Janeiro, RJ",
-  responsavel: "Roberto Lino",
+  nome: "LM Assessoria e Marketing LTDA",
+  cnpj: "62.074.361/0001-30",
+  endereco: "AV. Getúlio Vargas, 221, sala 403, Centro, Araruama/RJ, CEP 28.979-129",
+  responsavel: "Lucas Bueno Dos Santos e Roberto Lino Machado Neto",
 };

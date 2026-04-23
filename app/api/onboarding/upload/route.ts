@@ -14,7 +14,46 @@ const BUCKET_BY_DOC_TYPE: Record<string, "brand-assets" | "legal-docs"> = {
   identidade: "legal-docs",
 };
 
+// ─── Rate limit (in-memory, single-instance) ─────────────────
+// Evita spam de uploads que pode entupir o bucket com arquivos grandes.
+// Limite: 1 upload por IP a cada 5 segundos. Suficiente pra onboarding
+// legítimo (usuário leva >5s entre uploads manuais) e bloqueia automação hostil.
+const uploadWindow = new Map<string, number>();
+const RATE_LIMIT_WINDOW_MS = 5_000;
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const last = uploadWindow.get(ip);
+  if (last && now - last < RATE_LIMIT_WINDOW_MS) return true;
+  uploadWindow.set(ip, now);
+  // GC: em vez de janela deslizante perfeita, limpamos entradas velhas a cada 100 uploads
+  // pra evitar vazamento de memória com muitos IPs distintos.
+  if (uploadWindow.size > 100) {
+    for (const [k, t] of uploadWindow) {
+      if (now - t > RATE_LIMIT_WINDOW_MS) uploadWindow.delete(k);
+    }
+  }
+  return false;
+}
+
+function getClientIp(req: NextRequest): string {
+  // Cloudflare → Nginx → Next: o IP real vem em x-forwarded-for (primeiro IP da lista).
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0].trim();
+  const real = req.headers.get("x-real-ip");
+  if (real) return real.trim();
+  return "unknown";
+}
+
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  if (isRateLimited(ip)) {
+    return NextResponse.json(
+      { error: "Muitos uploads em pouco tempo. Aguarde 5 segundos e tente novamente." },
+      { status: 429 }
+    );
+  }
+
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
   const clientId = formData.get("clientId") as string;

@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "contracts:regen": "node scripts/build-contracts.mjs",
+    "test:merge": "npx tsx scripts/test-merge-docx.ts",
     "db:seed": "npx tsx scripts/seed-auth-users.ts",
     "db:reset": "supabase db reset",
     "db:migrate": "supabase db push"

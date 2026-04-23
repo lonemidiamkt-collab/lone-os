@@ -41,5 +41,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error?.message ?? "Falha ao gerar URL" }, { status: 500 });
   }
 
+  // Audit log (LGPD). Fire-and-forget — não bloquear resposta se log falhar.
+  // `path` formato: "{clientId}/{docType}-{timestamp}.{ext}" → extrai clientId/docType.
+  const [clientIdFromPath, fileName] = path.split("/", 2);
+  const docTypeMatch = fileName?.match(/^([a-z_]+)-/);
+  const resourceType = docTypeMatch?.[1] ?? "unknown";
+  supabaseAdmin.from("vault_access_log").insert({
+    user_id: user.id,
+    user_email: user.email,
+    client_id: clientIdFromPath || null,
+    resource_type: resourceType,
+    resource_path: path,
+    action: download ? "download" : "signed_url_issued",
+    ip: req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? req.headers.get("x-real-ip") ?? null,
+    user_agent: req.headers.get("user-agent") ?? null,
+  }).then(({ error: logErr }) => {
+    if (logErr) console.error("[signed-url] vault_access_log insert failed:", logErr);
+  });
+
   return NextResponse.json({ url: data.signedUrl, expiresIn: SIGNED_URL_TTL_SECONDS });
 }

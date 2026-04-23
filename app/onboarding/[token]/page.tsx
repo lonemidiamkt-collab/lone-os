@@ -645,6 +645,9 @@ export default function ExternalOnboardingPage() {
                   placeholder="Ex: varejo de moda, odontologia, restaurante..." />
                 <div className="flex flex-wrap gap-1.5">
                   {[
+                    "Construção Civil",
+                    "Arquitetura e Engenharia",
+                    "Imobiliária",
                     "Odontologia",
                     "Estética e Beleza",
                     "Restaurante / Food",
@@ -652,7 +655,6 @@ export default function ExternalOnboardingPage() {
                     "Fitness / Academia",
                     "Saúde / Clínicas",
                     "Advocacia",
-                    "Imobiliária",
                     "Educação / Cursos",
                     "E-commerce",
                     "Automotivo",
