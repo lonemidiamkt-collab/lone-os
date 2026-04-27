@@ -403,8 +403,6 @@ export function HolidaysMonthPdf({ year, month, observances, region = "BRASIL", 
   const cells = buildMonthCells(year, month);
   const weeks = chunkBy7(cells);
 
-  const totalPages = 2;
-
   return (
     <Document title={`Feriados ${monthLabel} ${year}`} author="Lone Mídia">
       {/* ─── PÁGINA 1: GRID DO MÊS ──────────────────────────────── */}
@@ -484,7 +482,7 @@ export function HolidaysMonthPdf({ year, month, observances, region = "BRASIL", 
             <Text style={s.footerBrandText}>LONE MÍDIA</Text>
           </View>
           <Text style={s.footerCenter}>Feriados — {monthLabel} {year} · {region}</Text>
-          <Text style={s.footerRight}>1 / {totalPages}</Text>
+          <Text style={s.footerRight} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
         </View>
       </Page>
 
@@ -543,7 +541,7 @@ export function HolidaysMonthPdf({ year, month, observances, region = "BRASIL", 
             <Text style={s.footerBrandText}>LONE MÍDIA</Text>
           </View>
           <Text style={s.footerCenter}>Feriados — {monthLabel} {year} · {region}</Text>
-          <Text style={s.footerRight}>2 / {totalPages}</Text>
+          <Text style={s.footerRight} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
         </View>
       </Page>
     </Document>

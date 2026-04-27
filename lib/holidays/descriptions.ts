@@ -6,11 +6,28 @@
  * gerado pela categoria.
  */
 
+/**
+ * Normaliza nome pra lookup tolerante a:
+ *   - case (Brasil API às vezes usa lowercase: "Dia do trabalho")
+ *   - parênteses (variações: "Carnaval" vs "Carnaval (segunda)")
+ *   - acentos (caso edge)
+ */
+function normalize(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")  // remove acentos
+    .replace(/\(.*?\)/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 const DESCRIPTIONS: Record<string, string> = {
   // ─── Feriados nacionais ──────────────────────────────────────
   "Confraternização Universal": "Início do ano novo. Feriado nacional em todo o Brasil — ponto facultativo em órgãos públicos e fechamento generalizado do comércio.",
+  "Confraternização Mundial": "Início do ano novo. Feriado nacional em todo o Brasil — ponto facultativo em órgãos públicos e fechamento generalizado do comércio.",
   "Tiradentes": "Homenagem a Joaquim José da Silva Xavier, mártir da Inconfidência Mineira. Feriado nacional.",
   "Dia do Trabalho": "Celebração mundial da luta dos trabalhadores por melhores condições de trabalho. Feriado nacional em todo o território brasileiro.",
+  "Páscoa": "Domingo da ressurreição de Cristo. Não é feriado oficial no Brasil, mas é amplamente celebrada com forte tradição familiar e religiosa.",
   "Independência do Brasil": "Aniversário da proclamação da independência em 1822. Feriado nacional com desfiles cívicos em todo o país.",
   "Nossa Senhora Aparecida": "Padroeira do Brasil. Feriado nacional religioso celebrado em 12 de outubro.",
   "Finados": "Dia de homenagem aos mortos. Feriado nacional — cemitérios recebem grande movimento.",
@@ -18,6 +35,7 @@ const DESCRIPTIONS: Record<string, string> = {
   "Consciência Negra": "Dia em memória de Zumbi dos Palmares. Feriado nacional desde 2024 — momento de reflexão sobre a história e cultura afro-brasileira.",
   "Natal": "Celebração cristã do nascimento de Jesus. Feriado nacional, com forte tradição familiar e cultural no Brasil.",
   "Sexta-feira Santa": "Sexta-feira que antecede a Páscoa. Feriado nacional religioso.",
+  "Carnaval": "Auge do calendário cultural brasileiro. Segunda e terça são pontos facultativos nacionais, mas tratados como feriado em quase todo o país.",
   "Carnaval (segunda)": "Segunda-feira de Carnaval. Ponto facultativo nacional, mas tratado como feriado em quase todo o país.",
   "Carnaval (terça)": "Terça-feira de Carnaval. Ponto facultativo nacional, mas tratado como feriado em quase todo o país.",
   "Corpus Christi": "Quinta-feira após o Domingo da Trindade. Ponto facultativo nacional com forte tradição religiosa.",
@@ -65,11 +83,18 @@ const DESCRIPTIONS: Record<string, string> = {
   "Dia do Professor": "15 de outubro. Homenagem aos educadores. Boa data pra escolas e cursos engajarem alunos e ex-alunos.",
 };
 
+// Pré-computa índice normalizado pra lookup tolerante (executa 1x na carga do módulo)
+const NORMALIZED_INDEX: Record<string, string> = {};
+for (const [key, value] of Object.entries(DESCRIPTIONS)) {
+  NORMALIZED_INDEX[normalize(key)] = value;
+}
+
 /**
  * Retorna a descrição da data, ou um fallback baseado em categoria/nicho.
+ * Lookup é tolerante a case/acentos/parênteses.
  */
 export function getDescriptionFor(name: string, category: string, nichos?: string[]): string {
-  const exact = DESCRIPTIONS[name];
+  const exact = DESCRIPTIONS[name] ?? NORMALIZED_INDEX[normalize(name)];
   if (exact) return exact;
 
   // Fallback genérico baseado em categoria
