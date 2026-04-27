@@ -748,8 +748,8 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <ImageIcon size={16} className="text-primary" />
             Novo Conteúdo
@@ -759,7 +759,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
           )}
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 space-y-4 py-2">
           {/* Title */}
           <div>
             <Label className="mb-1.5 block">Título do Conteúdo *</Label>
@@ -891,7 +891,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="px-6 py-4 shrink-0 border-t border-border">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button onClick={handleSubmit} disabled={!canSubmit}>
             Criar Conteúdo
