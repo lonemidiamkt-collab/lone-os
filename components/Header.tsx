@@ -157,7 +157,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
             <Link href="/clients" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0d4af5]/5 transition-colors text-sm text-foreground">
               <UserPlus size={14} className="text-[#0d4af5]" />Novo Cliente
             </Link>
-            <Link href="/social" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0d4af5]/5 transition-colors text-sm text-foreground">
+            <Link href="/social?action=new-content" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0d4af5]/5 transition-colors text-sm text-foreground">
               <FileText size={14} className="text-[#0d4af5]" />Novo Conteúdo
             </Link>
             <Link href="/communications" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0d4af5]/5 transition-colors text-sm text-foreground">

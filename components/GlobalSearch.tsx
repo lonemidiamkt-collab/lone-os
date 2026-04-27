@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { useAppState } from "@/lib/context/AppStateContext";
 import {
   Search, Users, FileText, TrendingUp, Instagram,
-  Palette, MessageCircle, X, Calendar, Lock,
-  LayoutDashboard,
+  Palette, MessageCircle, Calendar, Lock, Inbox,
+  LayoutDashboard, Thermometer, ShieldAlert, Megaphone,
+  Zap, Target, UserPlus, Plus,
 } from "lucide-react";
 
 interface SearchResult {
   id: string;
-  type: "client" | "task" | "content" | "page";
+  type: "client" | "task" | "content" | "page" | "action";
   title: string;
   subtitle: string;
   href: string;
@@ -20,14 +21,34 @@ interface SearchResult {
 
 const PAGES: SearchResult[] = [
   { id: "p-dash", type: "page", title: "Dashboard", subtitle: "Visão geral", href: "/", icon: LayoutDashboard },
+  { id: "p-mywork", type: "page", title: "Meu Trabalho", subtitle: "Tarefas atribuídas a você", href: "/my-work", icon: Inbox },
   { id: "p-traffic", type: "page", title: "Tráfego Pago", subtitle: "Campanhas e anúncios", href: "/traffic", icon: TrendingUp },
   { id: "p-social", type: "page", title: "Social Media", subtitle: "Kanban de conteúdo", href: "/social", icon: Instagram },
   { id: "p-design", type: "page", title: "Designer", subtitle: "Fila de design", href: "/design", icon: Palette },
   { id: "p-clients", type: "page", title: "Clientes", subtitle: "Lista de clientes", href: "/clients", icon: Users },
+  { id: "p-contratos", type: "page", title: "Contratos", subtitle: "Lista global de contratos", href: "/contratos", icon: FileText },
+  { id: "p-churn", type: "page", title: "Termômetro de Churn", subtitle: "Score preditivo de risco", href: "/churn", icon: Thermometer },
+  { id: "p-defesa", type: "page", title: "Defesa Ativa", subtitle: "Anomalias em Meta Ads", href: "/defesa", icon: ShieldAlert },
   { id: "p-calendar", type: "page", title: "Calendário", subtitle: "Agenda de publicações", href: "/calendar", icon: Calendar },
   { id: "p-comms", type: "page", title: "Comunicação", subtitle: "Chat global e por cliente", href: "/communications", icon: MessageCircle },
+  { id: "p-broadcasts", type: "page", title: "Comunicados", subtitle: "Mensagens em massa", href: "/broadcasts", icon: Megaphone },
+  { id: "p-automations", type: "page", title: "Automações", subtitle: "Regras e gatilhos do sistema", href: "/automations", icon: Zap },
+  { id: "p-goals", type: "page", title: "Metas & OKRs", subtitle: "Objetivos do time", href: "/goals", icon: Target },
+  { id: "p-sobre", type: "page", title: "Sobre o Sistema", subtitle: "Documentação interna", href: "/sobre", icon: FileText },
   { id: "p-ceo", type: "page", title: "Área CEO", subtitle: "Visão da diretoria", href: "/ceo", icon: Lock },
 ];
+
+// Ações rápidas — abrem a página de destino onde a ação acontece (mesmo padrão do Header)
+const ACTIONS: SearchResult[] = [
+  { id: "a-novo-cliente", type: "action", title: "Novo Cliente", subtitle: "Cadastrar cliente novo", href: "/clients?action=new", icon: UserPlus },
+  { id: "a-novo-conteudo", type: "action", title: "Novo Conteúdo", subtitle: "Criar card de social media", href: "/social?action=new-content", icon: Plus },
+  { id: "a-novo-contrato", type: "action", title: "Novo Contrato", subtitle: "Gerar contrato pra cliente", href: "/contratos", icon: FileText },
+  { id: "a-novo-comunicado", type: "action", title: "Novo Comunicado", subtitle: "Enviar mensagem em massa", href: "/broadcasts", icon: Megaphone },
+];
+
+function digitsOnly(s: string): string {
+  return s.replace(/\D/g, "");
+}
 
 export default function GlobalSearch() {
   const [open, setOpen] = useState(false);
@@ -64,9 +85,18 @@ export default function GlobalSearch() {
   // Build search results
   const results = useMemo<SearchResult[]>(() => {
     const q = query.toLowerCase().trim();
-    if (!q) return PAGES;
+    // Sem query: mostra ações + páginas (ações primeiro pra ficarem em destaque)
+    if (!q) return [...ACTIONS, ...PAGES];
 
+    const qDigits = digitsOnly(q);
     const items: SearchResult[] = [];
+
+    // Ações rápidas
+    ACTIONS.forEach((a) => {
+      if (a.title.toLowerCase().includes(q) || a.subtitle.toLowerCase().includes(q)) {
+        items.push(a);
+      }
+    });
 
     // Pages
     PAGES.forEach((p) => {
@@ -75,14 +105,22 @@ export default function GlobalSearch() {
       }
     });
 
-    // Clients
+    // Clients (busca por nome, nicho/industry, e CNPJ se digitou número)
     clients.forEach((c) => {
-      if (c.name.toLowerCase().includes(q) || c.industry.toLowerCase().includes(q)) {
+      const nicho = (c as { nicho?: string }).nicho;
+      const cnpj = (c as { cnpj?: string }).cnpj;
+      const subtitle = nicho || c.industry || "";
+      const matchesText =
+        c.name.toLowerCase().includes(q) ||
+        (nicho && nicho.toLowerCase().includes(q)) ||
+        c.industry.toLowerCase().includes(q);
+      const matchesCnpj = qDigits.length >= 4 && cnpj && digitsOnly(cnpj).includes(qDigits);
+      if (matchesText || matchesCnpj) {
         items.push({
           id: `c-${c.id}`,
           type: "client",
           title: c.name,
-          subtitle: c.industry,
+          subtitle: matchesCnpj && cnpj ? `CNPJ ${cnpj}` : subtitle,
           href: `/clients/${c.id}`,
           icon: Users,
         });
@@ -117,7 +155,7 @@ export default function GlobalSearch() {
       }
     });
 
-    return items.slice(0, 12);
+    return items.slice(0, 16);
   }, [query, clients, tasks, contentCards]);
 
   // Reset selected on results change
@@ -149,6 +187,7 @@ export default function GlobalSearch() {
     client: "Cliente",
     task: "Tarefa",
     content: "Conteúdo",
+    action: "Ação",
   };
 
   return (

@@ -24,6 +24,7 @@ import { useAppState } from "@/lib/context/AppStateContext";
 import { useNav } from "@/lib/context/NavContext";
 // SocialAuthModal removed — using global session auth only
 import Link from "next/link";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -1853,6 +1854,19 @@ export default function SocialPage() {
   useEffect(() => {
     setCurrentTab(activeTab);
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Atalho de URL: ?action=new-content abre direto o modal "Novo Conteúdo"
+  // Disparado pelo dropdown do header global e pelo command palette (GlobalSearch).
+  // Após abrir, limpa o param da URL pra não reabrir em refresh.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  useEffect(() => {
+    if (searchParams.get("action") === "new-content") {
+      setNewCardDate(new Date().toISOString().slice(0, 10));
+      router.replace(pathname, { scroll: false });
+    }
+  }, [searchParams, router, pathname]);
 
   // Auth: use global session (no secondary login needed)
   const isAdmin = role === "admin" || role === "manager";
