@@ -11,16 +11,34 @@
  */
 
 import { supabase } from "./client";
+import { USER_PROFILES } from "@/lib/context/RoleContext";
 
 export async function authedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers);
+
+  // 1. Tenta Supabase session real
+  let supabaseTokenSet = false;
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.access_token) {
       headers.set("Authorization", `Bearer ${session.access_token}`);
+      supabaseTokenSet = true;
     }
-  } catch {
-    // sessão indisponível — segue sem token, server retornará 401
+  } catch { /* ignore — tenta fallback */ }
+
+  // 2. Fallback: LocalSession do sessionStorage (RoleContext.tsx)
+  //    Só roda no browser e só se o Supabase token não foi setado
+  if (!supabaseTokenSet && typeof window !== "undefined") {
+    try {
+      const localSessionId = sessionStorage.getItem("lone_local_session");
+      if (localSessionId) {
+        const profile = USER_PROFILES.find((p) => p.id === localSessionId);
+        if (profile?.email) {
+          headers.set("Authorization", `LocalSession ${profile.email}`);
+        }
+      }
+    } catch { /* sessionStorage indisponível — segue sem auth */ }
   }
+
   return fetch(input, { ...init, headers });
 }

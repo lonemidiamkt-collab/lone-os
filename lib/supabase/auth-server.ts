@@ -16,24 +16,41 @@ export interface ServerUser {
 }
 
 /**
- * Extracts and validates the Supabase session from the request.
- * Aceita o token de duas fontes (em ordem de preferência):
- *   1. Authorization: Bearer <access_token> — usado pelo frontend que guarda
- *      session em localStorage (Supabase JS default storage)
- *   2. Cookies sb-<ref>-auth-token — usado por configs com cookie storage
+ * Extracts and validates the user from the request.
+ *
+ * Aceita auth de TRÊS fontes (em ordem de preferência):
+ *   1. Authorization: Bearer <access_token> — Supabase session real
+ *   2. Cookies sb-<ref>-auth-token — Supabase session via cookie storage
+ *   3. Authorization: LocalSession <email> — fallback pra app que usa
+ *      sessionStorage.lone_local_session (RoleContext.tsx). Só aceita
+ *      emails da whitelist ADMIN_EMAILS — se não for admin, retorna null.
  *
  * Retorna o user autenticado + flag de admin, ou null.
  */
 export async function getServerUser(req: NextRequest): Promise<ServerUser | null> {
-  let accessToken: string | null = null;
-
-  // 1. Authorization header (preferido — Supabase default usa localStorage)
   const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
+
+  // 3. LocalSession fallback (verificado primeiro pra short-circuit em apps que
+  //    nunca usam Supabase auth real — evita chamada desnecessária ao Supabase)
+  if (authHeader && authHeader.toLowerCase().startsWith("localsession ")) {
+    const email = authHeader.slice("localsession ".length).trim().toLowerCase();
+    if (email && ADMIN_EMAILS.has(email)) {
+      return {
+        id: `local:${email}`,
+        email,
+        isAdmin: true,
+      };
+    }
+    return null; // email local não é admin → bloqueia
+  }
+
+  // 1. Authorization Bearer (Supabase real)
+  let accessToken: string | null = null;
   if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
     accessToken = authHeader.slice(7).trim() || null;
   }
 
-  // 2. Fallback: cookies (caso config use cookie storage)
+  // 2. Cookies sb-*-auth-token (Supabase via cookie storage)
   if (!accessToken) {
     const cookies = req.cookies.getAll();
     const tokenChunks = cookies
