@@ -31,6 +31,7 @@ import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
 import DriveButton from "@/components/DriveButton";
 import type { ContentCard, Task, TrafficRoutineCheck, TaskStatus, Priority, Reminder, Role } from "@/lib/types";
+import HolidaysPdfButton from "@/components/HolidaysPdfButton";
 
 const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const MONTHS_SHORT = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -579,16 +580,19 @@ export default function CalendarPage() {
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
         {/* Calendar Grid */}
         <div className="card">
-          <div className="flex items-center justify-between mb-6">
-            <button onClick={goToPrev} className="p-2 rounded-lg hover:bg-muted transition-colors">
-              <ChevronLeft size={18} className="text-muted-foreground" />
-            </button>
-            <h2 className="text-lg font-bold text-foreground">
-              {MONTHS[viewMonth]} {viewYear}
-            </h2>
-            <button onClick={goToNext} className="p-2 rounded-lg hover:bg-muted transition-colors">
-              <ChevronRight size={18} className="text-muted-foreground" />
-            </button>
+          <div className="flex items-center justify-between mb-6 gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <button onClick={goToPrev} className="p-2 rounded-lg hover:bg-muted transition-colors">
+                <ChevronLeft size={18} className="text-muted-foreground" />
+              </button>
+              <h2 className="text-lg font-bold text-foreground min-w-[140px] text-center">
+                {MONTHS[viewMonth]} {viewYear}
+              </h2>
+              <button onClick={goToNext} className="p-2 rounded-lg hover:bg-muted transition-colors">
+                <ChevronRight size={18} className="text-muted-foreground" />
+              </button>
+            </div>
+            <HolidaysPdfButton month={viewMonth + 1} year={viewYear} label="Baixar PDF" />
           </div>
 
           {/* Awareness months ativos (Outubro Rosa, Novembro Azul, etc.) — banner topo */}

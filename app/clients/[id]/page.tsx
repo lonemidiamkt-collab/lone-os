@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import Header from "@/components/Header";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
+import HolidaysPdfButton from "@/components/HolidaysPdfButton";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
 import { mockTasks, mockAdAccounts } from "@/lib/mockData";
@@ -547,13 +548,20 @@ export default function ClientDetailPage() {
           </div>
         </div>
 
-        {/* Banner de datas comemorativas relevantes pro nicho do cliente */}
+        {/* Banner de datas comemorativas relevantes pro nicho do cliente + botão de PDF */}
         {client.nicho && (
-          <MonthObservancesAlert
-            title={`Datas relevantes — ${client.nicho}`}
-            nichos={[client.nicho]}
-            compact
-          />
+          <div className="space-y-2">
+            <MonthObservancesAlert
+              title={`Datas relevantes — ${client.nicho}`}
+              nichos={[client.nicho]}
+              compact
+            />
+            <HolidaysPdfButton
+              nichos={[client.nicho]}
+              clientName={client.name}
+              label={`Baixar PDF do mês — ${client.name}`}
+            />
+          </div>
         )}
 
         {/* Tabs */}
