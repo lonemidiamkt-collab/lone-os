@@ -179,3 +179,59 @@ export function monthlyReportEmail(clientName: string, companyName: string, mont
     `),
   };
 }
+
+// ─── Holiday Alert Email ────────────────────────────────────
+export function holidayAlertEmail(
+  recipientName: string,
+  monthLabel: string,
+  holidays: Array<{ date: string; name: string; weekday: string }>,
+): { subject: string; html: string } {
+  const rows = holidays.length === 0
+    ? `<tr><td style="color:${TEXT_SECONDARY};font-size:13px;padding:12px 0;text-align:center;">Nenhum feriado nacional em ${monthLabel}.</td></tr>`
+    : holidays.map((h) => `
+        <tr>
+          <td style="padding:14px 0;border-bottom:1px solid ${BORDER_COLOR};">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td width="80" valign="top">
+                  <p style="color:${BRAND_COLOR};font-size:18px;font-weight:700;margin:0;line-height:1;">${formatDateBrPart(h.date, "day")}</p>
+                  <p style="color:${TEXT_SECONDARY};font-size:11px;margin:2px 0 0;text-transform:uppercase;letter-spacing:0.05em;">${formatDateBrPart(h.date, "month")}</p>
+                </td>
+                <td valign="top">
+                  <p style="color:${TEXT_PRIMARY};font-size:14px;font-weight:600;margin:0;line-height:1.4;">${h.name}</p>
+                  <p style="color:${TEXT_SECONDARY};font-size:12px;margin:3px 0 0;">${h.weekday}</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      `).join("");
+
+  return {
+    subject: `📌 [Lone OS] Planejamento: Feriados de ${monthLabel}`,
+    html: baseLayout(`
+      <p style="color:${TEXT_PRIMARY};font-size:18px;font-weight:600;margin:0 0 8px;">Olá, ${recipientName}.</p>
+      <p style="color:${TEXT_SECONDARY};font-size:13px;line-height:1.7;margin:0 0 24px;">
+        Aqui estão os <strong style="color:${TEXT_PRIMARY};">feriados nacionais de ${monthLabel}</strong> pra você considerar no planejamento de conteúdo dos clientes. Programe ganchos, ajuste calendário e antecipe pautas.
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_COLOR};border:1px solid ${BORDER_COLOR};border-radius:12px;padding:8px 20px;margin-bottom:24px;">
+        ${rows}
+      </table>
+
+      <div style="background-color:${BRAND_COLOR}10;border:1px solid ${BRAND_COLOR}20;border-radius:12px;padding:16px;">
+        <p style="color:${BRAND_COLOR};font-size:12px;font-weight:600;margin:0 0 6px;text-transform:uppercase;letter-spacing:0.05em;">Lembrete</p>
+        <p style="color:${TEXT_PRIMARY};font-size:13px;line-height:1.6;margin:0;">
+          Cliente de Construção Civil reage diferente de cliente de Solar — adapte o tom por nicho. Calendário completo em <strong>painel.lonemidia.com/calendar</strong>.
+        </p>
+      </div>
+    `),
+  };
+}
+
+// helper local, não exporta
+function formatDateBrPart(iso: string, part: "day" | "month"): string {
+  const d = new Date(iso + "T12:00:00Z");
+  if (part === "day") return String(d.getUTCDate()).padStart(2, "0");
+  return d.toLocaleDateString("pt-BR", { month: "short", timeZone: "America/Sao_Paulo" }).replace(".", "").toUpperCase();
+}
