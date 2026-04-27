@@ -132,7 +132,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden p-0">
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col overflow-hidden p-0">
         <DialogHeader className="flex-row items-start px-6 py-5 border-b border-border shrink-0 space-y-0">
           <div className="flex-1 min-w-0 pr-4">
             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -386,40 +386,22 @@ export default function ContentCardModal({ card, onClose }: Props) {
               />
             </div>
 
-            {/* Comments Thread */}
-            <div className="pt-4 border-t border-border">
-              <Label className="flex items-center gap-1.5 mb-3">
-                <MessageSquare size={12} />
-                Discussão ({comments.length})
-              </Label>
+          </div>
 
-              {comments.length === 0 && (
-                <p className="text-xs text-zinc-600 mb-3">Nenhum comentário ainda. Inicie a discussão sobre este conteúdo.</p>
-              )}
+          {/* Right: Comments / Activity sidebar (Trello-style) */}
+          <div className="w-80 border-l border-border flex flex-col shrink-0 bg-background/40">
+            <div className="px-5 py-4 border-b border-border shrink-0">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <MessageSquare size={14} className="text-primary" />
+                Comentários e atividade
+              </h3>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {comments.length === 0 ? "Nenhum comentário ainda" : `${comments.length} ${comments.length === 1 ? "comentário" : "comentários"}`}
+              </p>
+            </div>
 
-              {comments.length > 0 && (
-                <div className="space-y-2.5 mb-3 max-h-48 overflow-auto">
-                  {comments.map((cmt) => (
-                    <div key={cmt.id} className="flex gap-2.5">
-                      <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                        <span className={`text-[9px] font-bold ${ROLE_COLORS[cmt.role] ?? "text-primary"}`}>
-                          {cmt.author.split(" ").map((w) => w[0]).join("").slice(0, 2)}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-foreground">{cmt.author}</span>
-                          <span className="text-[10px] text-zinc-600">{timeAgo(cmt.createdAt)}</span>
-                        </div>
-                        <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">{cmt.text}</p>
-                      </div>
-                    </div>
-                  ))}
-                  <div ref={commentsEndRef} />
-                </div>
-              )}
-
-              {/* Comment input */}
+            {/* Comment input no topo (Trello-style) */}
+            <div className="px-5 py-3 border-b border-border shrink-0">
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -439,6 +421,33 @@ export default function ContentCardModal({ card, onClose }: Props) {
                   <Send size={14} />
                 </Button>
               </div>
+            </div>
+
+            {/* Activity feed scrollável */}
+            <div className="flex-1 overflow-auto px-5 py-4 space-y-3">
+              {comments.length === 0 ? (
+                <p className="text-xs text-zinc-600 leading-relaxed">
+                  Inicie a discussão sobre este conteúdo. Comentários ficam vinculados ao card e aparecem na timeline do cliente.
+                </p>
+              ) : (
+                comments.map((cmt) => (
+                  <div key={cmt.id} className="flex gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className={`text-[10px] font-bold ${ROLE_COLORS[cmt.role] ?? "text-primary"}`}>
+                        {cmt.author.split(" ").map((w) => w[0]).join("").slice(0, 2)}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-medium text-foreground">{cmt.author}</span>
+                        <span className="text-[10px] text-zinc-600">{timeAgo(cmt.createdAt)}</span>
+                      </div>
+                      <p className="text-xs text-zinc-300 mt-1 leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-wrap">{cmt.text}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={commentsEndRef} />
             </div>
           </div>
         </div>
