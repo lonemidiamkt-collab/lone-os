@@ -1143,6 +1143,22 @@ function QuickCreateModal({
   const [time, setTime] = useState("");
   const [endDate, setEndDate] = useState(date);
 
+  // Autoresize: textareas crescem conforme o conteúdo (estilo Trello)
+  const briefingRef = useRef<HTMLTextAreaElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = briefingRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [briefing]);
+  useEffect(() => {
+    const el = descriptionRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [description]);
+
   const selectedClient = clients.find((c) => c.id === clientId);
 
   const getAssignedTo = () => {
@@ -1218,13 +1234,13 @@ function QuickCreateModal({
   const dateLabel = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg mx-4 bg-black border border-[#1a1a1a] rounded-2xl shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in overflow-hidden">
+      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-black border border-[#1a1a1a] rounded-2xl shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in overflow-hidden">
         {/* Top glow bar */}
         <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/40 to-transparent" />
 
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-y-5 overflow-y-auto">
           {/* Header */}
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -1402,17 +1418,21 @@ function QuickCreateModal({
             </div>
           )}
 
-          {/* Briefing (social) or Description (task) */}
+          {/* Briefing (social) or Description (task) — autoresize estilo Trello */}
           {createType === "social" && (
             <div className="space-y-1.5">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Briefing</label>
               <textarea
+                ref={briefingRef}
                 value={briefing}
                 onChange={(e) => setBriefing(e.target.value)}
-                placeholder="Descreva o conteúdo, referências, tom de voz..."
-                rows={3}
-                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none resize-none"
+                placeholder="Descreva o conteúdo, referências, tom de voz, CTAs, hashtags..."
+                rows={4}
+                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none resize-none leading-relaxed min-h-[100px] overflow-hidden"
               />
+              <p className="text-[9px] text-zinc-700">
+                O campo expande conforme você escreve. A modal scrolla quando precisa.
+              </p>
             </div>
           )}
 
@@ -1420,11 +1440,12 @@ function QuickCreateModal({
             <div className="space-y-1.5">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Descrição (opcional)</label>
               <textarea
+                ref={descriptionRef}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Detalhes adicionais sobre a tarefa..."
-                rows={2}
-                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none resize-none"
+                rows={3}
+                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none resize-none leading-relaxed min-h-[80px] overflow-hidden"
               />
             </div>
           )}
