@@ -120,26 +120,40 @@ export async function POST(req: NextRequest) {
 
   // ── Action: TEST — send single email to admin (or custom test_to) ──
   if (action === "test") {
-    const testRecipient = (test_to && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(test_to)) ? test_to.trim() : adminEmail;
-    const template = broadcastEmail(subject, content_html, testRecipient.split("@")[0], "Teste");
-    let attachments: Array<{ filename: string; content: Buffer; contentType?: string }> | undefined;
-    if (attach_calendar_pdf) {
-      const buf = await renderMonthHolidaysPdfBuffer({ year: calYear, month: calMonth, region: "BRASIL", logoUrl });
-      if (buf) attachments = [{ filename: holidaysPdfFilename(calYear, calMonth), content: buf, contentType: "application/pdf" }];
+    try {
+      const testRecipient = (test_to && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(test_to)) ? test_to.trim() : adminEmail;
+      const template = broadcastEmail(subject, content_html, testRecipient.split("@")[0], "Teste");
+
+      let attachments: Array<{ filename: string; content: Buffer; contentType?: string }> | undefined;
+      if (attach_calendar_pdf) {
+        try {
+          const buf = await renderMonthHolidaysPdfBuffer({ year: calYear, month: calMonth, region: "BRASIL", logoUrl });
+          if (buf) attachments = [{ filename: holidaysPdfFilename(calYear, calMonth), content: buf, contentType: "application/pdf" }];
+        } catch (pdfErr) {
+          console.error("[broadcasts/test] PDF render failed, sending without attachment:", pdfErr);
+          // continua sem PDF — não bloqueia o teste do email
+        }
+      }
+
+      const result = await sendEmail({
+        to: testRecipient,
+        subject: `[TESTE] ${template.subject}`,
+        html: template.html,
+        templateName: "broadcast_test",
+        attachments,
+      });
+
+      return NextResponse.json({
+        success: result.success,
+        error: result.error,
+        sentTo: testRecipient,
+        attachedPdf: !!attachments,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro desconhecido";
+      console.error("[broadcasts/test] Unhandled error:", err);
+      return NextResponse.json({ error: `Falha no teste: ${msg}` }, { status: 500 });
     }
-    const result = await sendEmail({
-      to: testRecipient,
-      subject: `[TESTE] ${template.subject}`,
-      html: template.html,
-      templateName: "broadcast_test",
-      attachments,
-    });
-    return NextResponse.json({
-      success: result.success,
-      error: result.error,
-      sentTo: testRecipient,
-      attachedPdf: !!attachments,
-    });
   }
 
   // ── Action: SEND — full broadcast ──

@@ -84,20 +84,27 @@ export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
   const recipient = resolveRecipient(payload.to);
 
   try {
-    const { data, error } = await resend.emails.send({
+    // Monta payload sem incluir attachments quando vazio (alguns SDKs validam strictly)
+    const sendPayload: Parameters<typeof resend.emails.send>[0] = {
       from: FROM_EMAIL,
       to: recipient,
       subject: payload.subject,
       html: payload.html,
-      attachments: payload.attachments?.map((a) => ({
+    };
+    if (payload.attachments && payload.attachments.length > 0) {
+      // Converte Buffer pra base64 string — formato universal aceito pelo Resend.
+      // Pra strings, deixa como está (já é base64 ou plain).
+      sendPayload.attachments = payload.attachments.map((a) => ({
         filename: a.filename,
-        content: a.content,
-        ...(a.contentType ? { contentType: a.contentType } : {}),
-      })),
-    });
+        content: Buffer.isBuffer(a.content) ? a.content.toString("base64") : a.content,
+        ...(a.contentType ? { content_type: a.contentType } : {}),
+      }));
+    }
+
+    const { data, error } = await resend.emails.send(sendPayload);
 
     if (error) {
-      console.error("[Email] Resend error:", error);
+      console.error("[Email] Resend error:", JSON.stringify(error));
       return { success: false, error: error.message };
     }
 
