@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { X, Loader2, Check } from "lucide-react";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 interface PlatformUpdate {
   id: string;
@@ -44,7 +45,7 @@ export default function NewPlatformUpdateModal({ onClose, onCreated }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch("/api/platform-updates", {
+      const res = await authedFetch("/api/platform-updates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

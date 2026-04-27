@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
 import { useAppState } from "@/lib/context/AppStateContext";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
   Send, Loader2, Check, AlertCircle, Bold, Italic, List, Link as LinkIcon,
   Mail, Users, Megaphone, Plus, X, CheckCircle, XCircle,
@@ -36,7 +37,7 @@ export default function BroadcastsPage() {
   const loadBroadcasts = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/broadcasts");
+      const res = await authedFetch("/api/broadcasts");
       const data = await res.json();
       if (res.ok) setBroadcasts(data.broadcasts || []);
     } finally {
@@ -232,7 +233,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
         calendar_month: pdfMonth,
       };
       console.log("[broadcasts] payload:", { ...payload, content_html: `<${payload.content_html.length} chars>` });
-      const res = await fetch("/api/broadcasts", {
+      const res = await authedFetch("/api/broadcasts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -266,7 +267,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
 
     setSending(true);
     try {
-      const res = await fetch("/api/broadcasts", {
+      const res = await authedFetch("/api/broadcasts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

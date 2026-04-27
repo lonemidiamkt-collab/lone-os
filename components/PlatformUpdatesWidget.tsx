@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Sparkles, X, ArrowRight, GitBranch } from "lucide-react";
 import { useRole } from "@/lib/context/RoleContext";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 interface Update {
   id: string;
@@ -28,8 +29,8 @@ export default function PlatformUpdatesWidget() {
 
   useEffect(() => {
     if (!userEmail) return;
-    // GET usa session do cookie pra derivar user_email — não precisa passar query param
-    fetch("/api/platform-updates")
+    // GET usa session do Authorization header pra derivar user_email
+    authedFetch("/api/platform-updates")
       .then((r) => r.json())
       .then((data) => { setUpdates(data.updates ?? []); })
       .finally(() => setLoading(false));
@@ -39,7 +40,7 @@ export default function PlatformUpdatesWidget() {
 
   const markAllRead = async () => {
     if (unread.length === 0) return;
-    await fetch("/api/platform-updates", {
+    await authedFetch("/api/platform-updates", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

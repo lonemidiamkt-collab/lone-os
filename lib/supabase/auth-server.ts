@@ -16,32 +16,39 @@ export interface ServerUser {
 }
 
 /**
- * Extracts and validates the Supabase session from request cookies.
- * Returns the authenticated user + admin flag, or null if unauthenticated/invalid.
+ * Extracts and validates the Supabase session from the request.
+ * Aceita o token de duas fontes (em ordem de preferência):
+ *   1. Authorization: Bearer <access_token> — usado pelo frontend que guarda
+ *      session em localStorage (Supabase JS default storage)
+ *   2. Cookies sb-<ref>-auth-token — usado por configs com cookie storage
  *
- * The Supabase browser client stores sessions in cookies named sb-<ref>-auth-token
- * (sometimes split across -auth-token.0, -auth-token.1 for large tokens).
+ * Retorna o user autenticado + flag de admin, ou null.
  */
 export async function getServerUser(req: NextRequest): Promise<ServerUser | null> {
-  // Collect all Supabase auth-token cookie chunks and reassemble
-  const cookies = req.cookies.getAll();
-  const tokenChunks = cookies
-    .filter((c) => c.name.startsWith("sb-") && c.name.includes("-auth-token"))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((c) => c.value);
-
-  if (tokenChunks.length === 0) return null;
-
-  const raw = tokenChunks.join("");
   let accessToken: string | null = null;
 
-  try {
-    // Cookie may be base64-prefixed JSON or raw JSON
-    const cleaned = raw.startsWith("base64-") ? Buffer.from(raw.slice(7), "base64").toString("utf8") : raw;
-    const parsed = JSON.parse(cleaned);
-    accessToken = parsed?.access_token ?? null;
-  } catch {
-    return null;
+  // 1. Authorization header (preferido — Supabase default usa localStorage)
+  const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
+  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+    accessToken = authHeader.slice(7).trim() || null;
+  }
+
+  // 2. Fallback: cookies (caso config use cookie storage)
+  if (!accessToken) {
+    const cookies = req.cookies.getAll();
+    const tokenChunks = cookies
+      .filter((c) => c.name.startsWith("sb-") && c.name.includes("-auth-token"))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((c) => c.value);
+
+    if (tokenChunks.length > 0) {
+      const raw = tokenChunks.join("");
+      try {
+        const cleaned = raw.startsWith("base64-") ? Buffer.from(raw.slice(7), "base64").toString("utf8") : raw;
+        const parsed = JSON.parse(cleaned);
+        accessToken = parsed?.access_token ?? null;
+      } catch { /* ignore — falls through to null check */ }
+    }
   }
 
   if (!accessToken) return null;
