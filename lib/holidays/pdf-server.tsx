@@ -9,13 +9,33 @@
  */
 
 import { renderToStream } from "@react-pdf/renderer";
+import { readFile } from "fs/promises";
+import { join } from "path";
 import { HolidaysMonthPdf } from "./pdf";
 import { getAllObservances, observancesForLocation, type Holiday } from "./brasil-api";
+
+// Cache do logo em memória — lido 1x do FS na primeira chamada
+let _logoDataUrl: string | null = null;
+async function getLogoDataUrl(): Promise<string | undefined> {
+  if (_logoDataUrl) return _logoDataUrl;
+  try {
+    const buf = await readFile(join(process.cwd(), "public", "logo.png"));
+    _logoDataUrl = `data:image/png;base64,${buf.toString("base64")}`;
+    return _logoDataUrl;
+  } catch (err) {
+    console.warn("[pdf-server] Logo não encontrado em public/logo.png — PDF vai sem logo:", err);
+    return undefined;
+  }
+}
+
+// Timeout pro renderToStream (PDF complexo não deveria demorar > 10s)
+const PDF_RENDER_TIMEOUT_MS = 10000;
 
 interface BuildOptions {
   year: number;
   month: number;          // 1-12
   region?: string;        // texto exibido no subtítulo (ex.: "BRASIL", "SAQUAREMA · RJ")
+  /** @deprecated Não usado mais — logo é lido do filesystem (public/logo.png). */
   logoUrl?: string;
   /** Filtra profissões pra esses nichos. Se vazio, mostra tudo. */
   nichos?: string[];
@@ -51,16 +71,30 @@ export async function renderMonthHolidaysPdfBuffer(opts: BuildOptions): Promise<
     }
     if (inMonth.length === 0) return null;
 
-    const stream = await renderToStream(
-      <HolidaysMonthPdf
-        year={opts.year}
-        month={opts.month}
-        observances={inMonth}
-        region={opts.region ?? "BRASIL"}
-        logoUrl={opts.logoUrl}
-      />,
-    );
-    return await streamToBuffer(stream);
+    const logoDataUrl = await getLogoDataUrl();
+
+    // Timeout protection — PDF complexo não pode bloquear o request indefinidamente
+    const renderPromise = (async () => {
+      const stream = await renderToStream(
+        <HolidaysMonthPdf
+          year={opts.year}
+          month={opts.month}
+          observances={inMonth}
+          region={opts.region ?? "BRASIL"}
+          logoUrl={logoDataUrl}
+        />,
+      );
+      return streamToBuffer(stream);
+    })();
+
+    const timeoutPromise = new Promise<null>((resolve) => {
+      setTimeout(() => {
+        console.warn(`[pdf-server] PDF render timed out after ${PDF_RENDER_TIMEOUT_MS}ms`);
+        resolve(null);
+      }, PDF_RENDER_TIMEOUT_MS);
+    });
+
+    return await Promise.race([renderPromise, timeoutPromise]);
   } catch (err) {
     console.error("[pdf-server] Failed to render holidays PDF:", err);
     return null;
