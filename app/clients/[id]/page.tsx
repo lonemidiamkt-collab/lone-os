@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import Header from "@/components/Header";
+import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
 import { mockTasks, mockAdAccounts } from "@/lib/mockData";
@@ -545,6 +546,15 @@ export default function ClientDetailPage() {
             </p>
           </div>
         </div>
+
+        {/* Banner de datas comemorativas relevantes pro nicho do cliente */}
+        {client.nicho && (
+          <MonthObservancesAlert
+            title={`Datas relevantes — ${client.nicho}`}
+            nichos={[client.nicho]}
+            compact
+          />
+        )}
 
         {/* Tabs */}
         <div>

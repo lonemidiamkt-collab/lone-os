@@ -7,6 +7,7 @@ import ContentIdeasModal from "@/components/ContentIdeasModal";
 import Client360Modal from "@/components/Client360Modal";
 import CampaignModal from "@/components/CampaignModal";
 import DriveButton from "@/components/DriveButton";
+import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import type { ContentCard, Client, MoodType, Priority, SocialMonthlyReport, MonthlyDeliveryReport, SocialPerformanceScore } from "@/lib/types";
 import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import {
@@ -2080,6 +2081,9 @@ export default function SocialPage() {
       )}
 
       <div className="p-6 space-y-5 animate-fade-in">
+
+        {/* Banner de feriados/datas comemorativas do mês — pra planejamento de conteúdo */}
+        <MonthObservancesAlert title="Datas e feriados deste mês" />
 
         {/* Workspace header */}
         <div className="flex items-center justify-between gap-3">

@@ -7,13 +7,19 @@
  */
 
 import { getStaticHolidays, type StaticHoliday } from "./static-fallback";
+import { getCommemorativeDates, filterByNichos, type CommemorativeDate, type CommemorativeCategory } from "./commemorative-dates";
 import { supabaseAdmin } from "@/lib/supabase/server";
+
+export type HolidayCategory = "national" | CommemorativeCategory;
 
 export interface Holiday {
   date: string;       // YYYY-MM-DD
   name: string;
-  type: string;       // "national" | "estadual" | "municipal" — Brasil API retorna "national" sempre
-  source: "api" | "fallback";
+  type: string;       // legado: "national" | "estadual" | "municipal" — mantido pra retrocompatibilidade
+  category: HolidayCategory;
+  source: "api" | "fallback" | "static";
+  nichos?: string[];
+  monthLong?: boolean;
 }
 
 interface BrasilApiHoliday {
@@ -34,7 +40,17 @@ async function readCache(year: number): Promise<{ holidays: Holiday[]; ageMs: nu
     .maybeSingle();
   if (!data?.value) return null;
   try {
-    const holidays = JSON.parse(data.value as string) as Holiday[];
+    const raw = JSON.parse(data.value as string) as Array<Holiday | (Omit<Holiday, "category"> & { category?: HolidayCategory })>;
+    // Retrocompat: cache antigo não tinha `category`, usa "national" como default
+    const holidays: Holiday[] = raw.map((h) => ({
+      date: h.date,
+      name: h.name,
+      type: h.type ?? "national",
+      category: h.category ?? "national",
+      source: h.source,
+      nichos: h.nichos,
+      monthLong: h.monthLong,
+    }));
     const ageMs = data.updated_at ? Date.now() - new Date(data.updated_at as string).getTime() : Infinity;
     return { holidays, ageMs };
   } catch {
@@ -64,6 +80,7 @@ async function fetchFromApi(year: number): Promise<Holiday[] | null> {
       date: h.date,
       name: h.name,
       type: h.type ?? "national",
+      category: "national" as const,
       source: "api" as const,
     }));
   } catch (err) {
@@ -77,8 +94,21 @@ function fromStatic(year: number): Holiday[] {
     date: h.date,
     name: h.name,
     type: h.type,
+    category: "national" as const,
     source: "fallback" as const,
   }));
+}
+
+function commemorativeToHoliday(c: CommemorativeDate): Holiday {
+  return {
+    date: c.date,
+    name: c.name,
+    type: c.category,        // legado: type repete category pras comemorativas (callers antigos não filtram por type)
+    category: c.category,
+    source: "static",
+    nichos: c.nichos,
+    monthLong: c.monthLong,
+  };
 }
 
 /**
@@ -109,12 +139,41 @@ export async function getHolidays(year: number): Promise<Holiday[]> {
 }
 
 /**
+ * Retorna feriados oficiais + datas comemorativas, ordenados por data.
+ * É a função canônica que o calendário e os banners de mês devem consumir.
+ */
+export async function getAllObservances(year: number): Promise<Holiday[]> {
+  const [feriados, comemorativas] = await Promise.all([
+    getHolidays(year),
+    Promise.resolve(getCommemorativeDates(year).map(commemorativeToHoliday)),
+  ]);
+  return [...feriados, ...comemorativas].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
  * Filtra os feriados do mês especificado (1-12).
  */
 export function holidaysInMonth(holidays: Holiday[], year: number, month: number): Holiday[] {
   const prefix = `${year}-${String(month).padStart(2, "0")}-`;
   return holidays.filter((h) => h.date.startsWith(prefix));
 }
+
+/**
+ * Filtra observances pra um conjunto de nichos (deixa todos exceto profissões
+ * que não casam com o cliente). Reusa a lógica de commemorative-dates.
+ */
+export function observancesForNichos(observances: Holiday[], nichos: string[]): Holiday[] {
+  if (nichos.length === 0) return observances;
+  return observances.filter((h) => {
+    if (h.category !== "profissao") return true;
+    if (!h.nichos || h.nichos.length === 0) return true;
+    return h.nichos.some((n) => nichos.includes(n));
+  });
+}
+
+// Re-export para componentes
+export { filterByNichos };
+export type { CommemorativeDate, CommemorativeCategory };
 
 /**
  * Helper pra exibir dia da semana em PT-BR.

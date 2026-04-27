@@ -15,6 +15,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
 import type { Client, ContentCard, DesignRequest } from "@/lib/types";
+import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 
 // ── Designer-focused columns (simplified from 7 → 4) ─────────────────────────
 // Maps: ideas/script → "queue", in_production → "doing", blocked → "blocked", rest → "delivered"
@@ -332,6 +333,9 @@ export default function DesignPage() {
       <Header title="Área do Designer" subtitle="Produção de artes — kanbans por social media" />
 
       <div className="p-6 space-y-6 animate-fade-in">
+        {/* Banner de feriados/datas comemorativas do mês — pra planejamento criativo */}
+        <MonthObservancesAlert title="Datas e feriados deste mês" />
+
         {/* Tab selector */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">

@@ -13,6 +13,8 @@ import {
   AlertTriangle,
   User,
   Flag,
+  Heart,
+  Sparkles,
   Edit3,
   Save,
   Plus,
@@ -133,8 +135,10 @@ export default function CalendarPage() {
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
   const draggedEventRef = useRef<CalendarEvent | null>(null);
 
-  // Feriados nacionais — fetch por ano (cache 30d server-side)
-  const [holidays, setHolidays] = useState<Array<{ date: string; name: string }>>([]);
+  // Feriados oficiais + datas comemorativas — fetch por ano
+  type ObservanceCategory = "national" | "comercial" | "cultural" | "awareness_month" | "profissao";
+  type Observance = { date: string; name: string; category: ObservanceCategory; nichos?: string[]; monthLong?: boolean };
+  const [observances, setObservances] = useState<Observance[]>([]);
   useEffect(() => {
     let cancelled = false;
     async function loadHolidays() {
@@ -142,42 +146,68 @@ export default function CalendarPage() {
         const res = await fetch(`/api/holidays/${viewYear}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled) setHolidays(data.holidays ?? []);
+        if (!cancelled) setObservances(data.holidays ?? []);
       } catch { /* silent — calendar funciona sem */ }
     }
     loadHolidays();
     return () => { cancelled = true; };
   }, [viewYear]);
 
-  // Map dia-do-mês → nome do feriado (pra render rápido por célula)
-  const holidayByDay = useMemo(() => {
-    const map: Record<number, string> = {};
+  // Prioridade visual quando múltiplas categorias caem no mesmo dia
+  const CATEGORY_PRIORITY: Record<ObservanceCategory, number> = useMemo(() => ({
+    national: 4, awareness_month: 0, comercial: 3, cultural: 2, profissao: 1,
+  }), []);
+
+  // Map dia-do-mês → observância dominante da célula (categoria com maior prioridade)
+  const observanceByDay = useMemo(() => {
+    const map: Record<number, Observance & { allInDay: Observance[] }> = {};
     const prefix = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-`;
-    for (const h of holidays) {
-      if (h.date.startsWith(prefix)) {
-        const day = parseInt(h.date.slice(8, 10), 10);
-        if (Number.isFinite(day)) map[day] = h.name;
+    for (const o of observances) {
+      if (!o.date.startsWith(prefix) || o.monthLong) continue;
+      const day = parseInt(o.date.slice(8, 10), 10);
+      if (!Number.isFinite(day)) continue;
+      const existing = map[day];
+      if (!existing || CATEGORY_PRIORITY[o.category] > CATEGORY_PRIORITY[existing.category]) {
+        map[day] = { ...o, allInDay: existing ? [...existing.allInDay, o] : [o] };
+      } else {
+        existing.allInDay.push(o);
       }
     }
     return map;
-  }, [holidays, viewYear, viewMonth]);
+  }, [observances, viewYear, viewMonth, CATEGORY_PRIORITY]);
 
+  // Awareness months ativos no mês visualizado (banner topo do mês)
+  const monthAwareness = useMemo(() => {
+    const prefix = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-`;
+    return observances.filter((o) => o.date.startsWith(prefix) && o.monthLong);
+  }, [observances, viewYear, viewMonth]);
+
+  // Datas do mês corrente — feriados oficiais (compatibilidade com banner antigo)
   const monthHolidays = useMemo(() => {
-    return Object.entries(holidayByDay)
-      .map(([day, name]) => ({ day: parseInt(day, 10), name }))
+    return Object.entries(observanceByDay)
+      .filter(([, o]) => o.category === "national")
+      .map(([day, o]) => ({ day: parseInt(day, 10), name: o.name }))
       .sort((a, b) => a.day - b.day);
-  }, [holidayByDay]);
+  }, [observanceByDay]);
 
-  // Feriados upcoming — próximos 60 dias a partir de hoje (atravessa virada de mês)
-  const upcomingHolidays = useMemo(() => {
+  // Datas comemorativas do mês (banner separado)
+  const monthCommemoratives = useMemo(() => {
+    return Object.entries(observanceByDay)
+      .filter(([, o]) => o.category !== "national")
+      .map(([day, o]) => ({ day: parseInt(day, 10), name: o.name, category: o.category }))
+      .sort((a, b) => a.day - b.day);
+  }, [observanceByDay]);
+
+  // Próximos 60 dias (ordenado, separa feriados de comemorativas)
+  const upcomingObservances = useMemo(() => {
     const todayIso = new Date().toISOString().slice(0, 10);
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() + 60);
     const cutoffIso = cutoff.toISOString().slice(0, 10);
-    return holidays
-      .filter((h) => h.date >= todayIso && h.date <= cutoffIso)
+    return observances
+      .filter((o) => !o.monthLong && o.date >= todayIso && o.date <= cutoffIso)
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [holidays]);
+  }, [observances]);
 
   const handleDragStart = useCallback((e: React.DragEvent, event: CalendarEvent) => {
     if (event.type === "routine") return; // routine checks are not draggable
@@ -561,7 +591,26 @@ export default function CalendarPage() {
             </button>
           </div>
 
-          {/* Banner de feriados nacionais do mês — sempre visível pra reduzir margem de erro */}
+          {/* Awareness months ativos (Outubro Rosa, Novembro Azul, etc.) — banner topo */}
+          {monthAwareness.length > 0 && (
+            <div className="mb-3 rounded-xl border border-rose-500/20 bg-rose-500/[0.05] p-3">
+              <div className="flex items-start gap-2 flex-wrap">
+                <Heart size={12} className="text-rose-300 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-rose-300 font-semibold uppercase tracking-wider">
+                  Mês de conscientização
+                </p>
+                <div className="flex flex-wrap gap-1.5 ml-1">
+                  {monthAwareness.map((a) => (
+                    <span key={a.name} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-200 border border-rose-500/20">
+                      <span>{a.name}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Banner de feriados nacionais do mês */}
           {monthHolidays.length > 0 && (
             <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] p-3">
               <div className="flex items-start gap-2 flex-wrap">
@@ -574,6 +623,26 @@ export default function CalendarPage() {
                     <span key={h.day} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
                       <strong className="font-bold">{String(h.day).padStart(2, "0")}</strong>
                       <span>{h.name}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Banner de datas comemorativas do mês */}
+          {monthCommemoratives.length > 0 && (
+            <div className="mb-3 rounded-xl border border-pink-500/20 bg-pink-500/[0.05] p-3">
+              <div className="flex items-start gap-2 flex-wrap">
+                <Sparkles size={12} className="text-pink-300 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-pink-300 font-semibold uppercase tracking-wider">
+                  {monthCommemoratives.length} data{monthCommemoratives.length > 1 ? "s" : ""} comemorativa{monthCommemoratives.length > 1 ? "s" : ""}
+                </p>
+                <div className="flex flex-wrap gap-1.5 ml-1">
+                  {monthCommemoratives.map((c) => (
+                    <span key={`${c.day}-${c.name}`} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-pink-500/10 text-pink-200 border border-pink-500/20">
+                      <strong className="font-bold">{String(c.day).padStart(2, "0")}</strong>
+                      <span>{c.name}</span>
                     </span>
                   ))}
                 </div>
@@ -620,19 +689,35 @@ export default function CalendarPage() {
                   {day && (
                     <>
                       <div className="flex items-center justify-between mb-0.5">
-                        <span className={`text-xs font-medium flex items-center gap-1 ${
-                          hasDeadline
+                        {(() => {
+                          const obs = observanceByDay[day];
+                          const isOfficial = obs?.category === "national";
+                          const isCommemorative = obs && !isOfficial;
+                          const titleAttr = obs ? obs.allInDay.map((x) => x.name).join(" • ") : undefined;
+                          const dayColor = hasDeadline
                             ? "text-[#ff2d55] font-bold drop-shadow-[0_0_6px_rgba(255,45,85,0.6)]"
-                            : todayFlag ? "text-[#0d4af5] font-bold" : holidayByDay[day] ? "text-amber-400 font-bold" : "text-foreground"
-                        }`}>
-                          {day}
-                          {hasDeadline && (
-                            <AlertTriangle size={10} className="text-[#ff2d55] drop-shadow-[0_0_4px_rgba(255,45,85,0.8)]" />
-                          )}
-                          {!hasDeadline && holidayByDay[day] && (
-                            <Flag size={9} className="text-amber-400" aria-label={holidayByDay[day]} />
-                          )}
-                        </span>
+                            : todayFlag
+                            ? "text-[#0d4af5] font-bold"
+                            : isOfficial
+                            ? "text-amber-400 font-bold"
+                            : isCommemorative
+                            ? "text-pink-300 font-medium"
+                            : "text-foreground";
+                          return (
+                            <span className={`text-xs font-medium flex items-center gap-1 ${dayColor}`} title={titleAttr}>
+                              {day}
+                              {hasDeadline && (
+                                <AlertTriangle size={10} className="text-[#ff2d55] drop-shadow-[0_0_4px_rgba(255,45,85,0.8)]" />
+                              )}
+                              {!hasDeadline && isOfficial && (
+                                <Flag size={9} className="text-amber-400" aria-label={obs!.name} />
+                              )}
+                              {!hasDeadline && isCommemorative && (
+                                <Sparkles size={9} className="text-pink-300" aria-label={obs!.name} />
+                              )}
+                            </span>
+                          );
+                        })()}
                         {/* Quick create + icon */}
                         <button
                           onClick={(e) => { e.stopPropagation(); openQuickCreate(day); }}
@@ -912,28 +997,30 @@ export default function CalendarPage() {
             )}
           </div>
 
-          {/* Próximos feriados (60 dias) — sempre visível pra reduzir margem de erro */}
+          {/* Próximas datas (60 dias) — feriados oficiais + comemorativas */}
           <div className="card">
             <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
-              <Flag size={14} className="text-amber-400" />
-              Próximos feriados
+              <Calendar size={14} className="text-[#0d4af5]" />
+              Próximas datas
             </h3>
-            {upcomingHolidays.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Nenhum feriado nos próximos 60 dias.</p>
+            {upcomingObservances.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhuma data nos próximos 60 dias.</p>
             ) : (
               <div className="space-y-2">
-                {upcomingHolidays.map((h) => {
-                  const [, m, d] = h.date.split("-").map(Number);
-                  const weekday = new Date(h.date + "T12:00:00Z").toLocaleDateString("pt-BR", { weekday: "long", timeZone: "America/Sao_Paulo" });
+                {upcomingObservances.map((o, idx) => {
+                  const [, m, d] = o.date.split("-").map(Number);
+                  const weekday = new Date(o.date + "T12:00:00Z").toLocaleDateString("pt-BR", { weekday: "long", timeZone: "America/Sao_Paulo" });
+                  const isOfficial = o.category === "national";
+                  const Icon = isOfficial ? Flag : Sparkles;
                   return (
-                    <div key={h.date} className="flex items-center gap-2 py-1.5 px-1">
-                      <span className="text-[10px] text-amber-400 w-10 shrink-0 text-right font-medium">
+                    <div key={`${o.date}-${idx}`} className="flex items-center gap-2 py-1.5 px-1">
+                      <span className={`text-[10px] w-10 shrink-0 text-right font-medium ${isOfficial ? "text-amber-400" : "text-pink-300"}`}>
                         {d} {MONTHS_SHORT[m - 1]}
                       </span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
-                      <Flag size={11} className="text-amber-400/70 shrink-0" />
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOfficial ? "bg-amber-400" : "bg-pink-300"}`} />
+                      <Icon size={11} className={`shrink-0 ${isOfficial ? "text-amber-400/70" : "text-pink-300/70"}`} />
                       <div className="flex-1 min-w-0">
-                        <span className="text-xs text-foreground truncate block">{h.name}</span>
+                        <span className="text-xs text-foreground truncate block">{o.name}</span>
                         <span className="text-[10px] text-muted-foreground">{weekday}</span>
                       </div>
                     </div>
