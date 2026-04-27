@@ -138,7 +138,7 @@ function BroadcastRow({ broadcast: b }: { broadcast: Broadcast }) {
   );
 }
 
-interface Client { id: string; name: string; nomeFantasia?: string; industry?: string; status?: string }
+interface Client { id: string; name: string; nomeFantasia?: string; industry?: string; nicho?: string; status?: string }
 
 function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () => void; onSent: () => void; clients: Client[]; adminEmail: string }) {
   const [subject, setSubject] = useState("");
@@ -149,9 +149,14 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
   const [testing, setTesting] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
-  const industries = useMemo(() => {
+  // Setores únicos: une `industry` (legado) e `nicho` (novo) num único set
+  // — usa prefixo "sector:" no audience pra match em qualquer um dos dois campos
+  const sectors = useMemo(() => {
     const s = new Set<string>();
-    clients.forEach((c) => { if (c.industry && c.industry !== "Outro") s.add(c.industry); });
+    clients.forEach((c) => {
+      if (c.industry && c.industry !== "Outro") s.add(c.industry);
+      if (c.nicho && c.nicho.trim()) s.add(c.nicho.trim());
+    });
     return Array.from(s).sort();
   }, [clients]);
 
@@ -159,9 +164,17 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
     if (audience === "all_active") {
       return clients.filter((c) => c.status && ["good", "average", "onboarding"].includes(c.status)).length;
     }
+    if (audience.startsWith("sector:")) {
+      const sec = audience.slice("sector:".length);
+      return clients.filter((c) => c.industry === sec || c.nicho === sec).length;
+    }
     if (audience.startsWith("industry:")) {
       const ind = audience.slice("industry:".length);
       return clients.filter((c) => c.industry === ind).length;
+    }
+    if (audience.startsWith("nicho:")) {
+      const nic = audience.slice("nicho:".length);
+      return clients.filter((c) => c.nicho === nic).length;
     }
     return 0;
   }, [audience, clients]);
@@ -313,20 +326,23 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
                   <p className="text-[10px] text-muted-foreground">Clientes em operacao (exclui rascunhos e at risk)</p>
                 </div>
               </label>
-              {industries.map((ind) => (
-                <label key={ind} className="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted cursor-pointer hover:border-primary/30 transition-colors">
-                  <input
-                    type="radio"
-                    checked={audience === `industry:${ind}`}
-                    onChange={() => setAudience(`industry:${ind}`)}
-                    className="accent-primary"
-                  />
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-foreground">{ind}</p>
-                    <p className="text-[10px] text-muted-foreground">Filtro por nicho</p>
-                  </div>
-                </label>
-              ))}
+              {sectors.map((sec) => {
+                const matchCount = clients.filter((c) => c.industry === sec || c.nicho === sec).length;
+                return (
+                  <label key={sec} className="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted cursor-pointer hover:border-primary/30 transition-colors">
+                    <input
+                      type="radio"
+                      checked={audience === `sector:${sec}`}
+                      onChange={() => setAudience(`sector:${sec}`)}
+                      className="accent-primary"
+                    />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-foreground">{sec}</p>
+                      <p className="text-[10px] text-muted-foreground">Filtro por nicho · {matchCount} cliente{matchCount === 1 ? "" : "s"}</p>
+                    </div>
+                  </label>
+                );
+              })}
             </div>
             <p className="text-[10px] text-muted-foreground mt-1">
               Publico atual: <span className="text-primary font-semibold">{audienceCount} destinatario(s)</span>

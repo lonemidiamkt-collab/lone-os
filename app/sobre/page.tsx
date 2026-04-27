@@ -6,10 +6,11 @@ import { Logo } from "@/components/ui/Logo";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
 import { supabase } from "@/lib/supabase/client";
+import NewPlatformUpdateModal from "@/components/NewPlatformUpdateModal";
 import {
   Brain, Users, TrendingUp, Instagram, Palette, FileText, Megaphone, Zap, Lock,
   Settings, Printer, Sparkles, ChevronDown, ChevronUp, Rocket, Package,
-  GitBranch, Lightbulb, HelpCircle, PlayCircle,
+  GitBranch, Lightbulb, HelpCircle, PlayCircle, Plus,
 } from "lucide-react";
 
 interface PlatformUpdate {
@@ -29,6 +30,7 @@ export default function SobrePage() {
   const [updates, setUpdates] = useState<PlatformUpdate[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>("dashboard");
+  const [creatorOpen, setCreatorOpen] = useState(false);
 
   useEffect(() => {
     supabase.from("platform_updates").select("*").eq("published", true).order("created_at", { ascending: false })
@@ -122,9 +124,19 @@ export default function SobrePage() {
 
         {/* Changelog */}
         <Section title="Histórico de Atualizações" icon={GitBranch} id="changelog">
-          <p className="text-sm text-muted-foreground mb-4">
-            Todas as features lançadas e melhorias do sistema.
-          </p>
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <p className="text-sm text-muted-foreground">
+              Todas as features lançadas e melhorias do sistema.
+            </p>
+            {isAdmin && (
+              <button
+                onClick={() => setCreatorOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-xs font-medium transition-all shrink-0 print:hidden"
+              >
+                <Plus size={12} /> Nova atualização
+              </button>
+            )}
+          </div>
           {loading ? (
             <div className="text-center py-8 text-xs text-muted-foreground">Carregando...</div>
           ) : updates.length === 0 ? (
@@ -194,6 +206,18 @@ export default function SobrePage() {
           </p>
         </div>
       </div>
+
+      {/* Modal de criar nova atualização (admin only) */}
+      {creatorOpen && isAdmin && currentProfile?.email && (
+        <NewPlatformUpdateModal
+          adminEmail={currentProfile.email}
+          onClose={() => setCreatorOpen(false)}
+          onCreated={(u) => {
+            setUpdates((prev) => [u, ...prev]);
+            setCreatorOpen(false);
+          }}
+        />
+      )}
 
       {/* Print CSS */}
       <style jsx global>{`

@@ -29,16 +29,27 @@ interface Recipient {
 }
 
 async function resolveAudience(audience: string): Promise<Recipient[]> {
-  // audience values: "all_active" | "industry:<name>" | "custom:<comma-separated emails>"
+  // audience values:
+  //   "all_active"           — todos com status good/average/onboarding (exclui drafts e at_risk)
+  //   "industry:<name>"      — legado: filtro pela coluna `industry` (preenchido em todos os clientes)
+  //   "nicho:<name>"         — novo: filtro pela coluna `nicho` (014_nicho_field)
+  //   "sector:<name>"        — alias inteligente: bate em industry OU nicho (recomendado)
+  //   "custom:<emails>"      — lista direta de emails
   if (audience.startsWith("custom:")) {
     const emails = audience.slice("custom:".length).split(",").map((e) => e.trim()).filter(Boolean);
     return emails.map((email) => ({ clientId: null, email, contactName: email.split("@")[0], companyName: "" }));
   }
 
-  let q = supabaseAdmin.from("clients").select("id, name, nome_fantasia, contact_name, email, email_corporativo, industry");
+  let q = supabaseAdmin.from("clients").select("id, name, nome_fantasia, contact_name, email, email_corporativo, industry, nicho");
 
   if (audience.startsWith("industry:")) {
     q = q.eq("industry", audience.slice("industry:".length));
+  } else if (audience.startsWith("nicho:")) {
+    q = q.eq("nicho", audience.slice("nicho:".length));
+  } else if (audience.startsWith("sector:")) {
+    // Bate em industry OU nicho — pega clientes legados E novos
+    const sector = audience.slice("sector:".length);
+    q = q.or(`industry.eq.${sector},nicho.eq.${sector}`);
   } else {
     // all_active: status in ('good', 'average', 'onboarding'), exclude at_risk and drafts
     q = q.in("status", ["good", "average", "onboarding"]).is("draft_status", null);
