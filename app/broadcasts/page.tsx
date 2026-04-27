@@ -211,7 +211,9 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
     return true;
   };
 
-  const handleTest = async () => {
+  const handleTest = async (e?: React.MouseEvent | React.FormEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     if (!validate()) return;
     setTesting(true);
     try {
@@ -228,14 +230,27 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
           calendar_month: pdfMonth,
         }),
       });
-      const data = await res.json();
-      if (res.ok && data.success) showToast("success", `Teste enviado para ${data.sentTo}`);
-      else showToast("error", data.error || "Falha ao enviar teste");
-    } catch { showToast("error", "Erro de conexao"); }
-    setTesting(false);
+      // Captura status HTTP corretamente — 401/403/500 caem aqui também
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      if (res.ok && data.success) {
+        showToast("success", `Teste enviado para ${data.sentTo}`);
+      } else {
+        const errMsg = data.error || `HTTP ${res.status}`;
+        console.error("[broadcasts] test failed:", { status: res.status, data });
+        showToast("error", `Erro ao enviar teste: ${errMsg}`);
+      }
+    } catch (err) {
+      console.error("[broadcasts] handleTest exception:", err);
+      const msg = err instanceof Error ? err.message : "Erro de conexão";
+      showToast("error", `Erro: ${msg}`);
+    } finally {
+      setTesting(false);
+    }
   };
 
-  const handleSend = async () => {
+  const handleSend = async (e?: React.MouseEvent | React.FormEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     if (!validate()) return;
     const total = audienceCount;
     if (!window.confirm(`Enviar este comunicado para ${total} cliente(s)? Essa acao nao pode ser desfeita.`)) return;
@@ -255,15 +270,22 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
           calendar_month: pdfMonth,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (res.ok && data.success) {
         showToast("success", `Enviado: ${data.sent}/${data.total}${data.failed > 0 ? ` (${data.failed} falha(s))` : ""}`);
         setTimeout(onSent, 1200);
       } else {
-        showToast("error", data.error || "Falha no envio");
+        const errMsg = data.error || `HTTP ${res.status}`;
+        console.error("[broadcasts] send failed:", { status: res.status, data });
+        showToast("error", `Erro no envio: ${errMsg}`);
       }
-    } catch { showToast("error", "Erro de conexao"); }
-    setSending(false);
+    } catch (err) {
+      console.error("[broadcasts] handleSend exception:", err);
+      const msg = err instanceof Error ? err.message : "Erro de conexão";
+      showToast("error", `Erro: ${msg}`);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -275,7 +297,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
             <h2 className="text-base font-semibold text-foreground">Novo Comunicado</h2>
             <p className="text-xs text-muted-foreground mt-0.5">Email em massa para sua base</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+          <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -423,6 +445,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
         {/* Footer actions */}
         <div className="sticky bottom-0 bg-card border-t border-border px-6 py-4 flex items-center justify-between">
           <button
+            type="button"
             onClick={handleTest}
             disabled={testing || sending}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-muted text-foreground border border-border hover:border-primary/30 transition-all disabled:opacity-50"
@@ -431,6 +454,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
             {testing ? "Enviando..." : "Enviar Teste"}
           </button>
           <button
+            type="button"
             onClick={handleSend}
             disabled={testing || sending || audienceCount === 0}
             className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all disabled:opacity-50"

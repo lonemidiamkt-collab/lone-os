@@ -143,9 +143,18 @@ export async function POST(req: NextRequest) {
         attachments,
       });
 
+      // Status correto: 200 só quando o envio foi bem-sucedido. Resend error → 502.
+      if (!result.success) {
+        console.error("[broadcasts/test] sendEmail failed:", result.error);
+        return NextResponse.json({
+          success: false,
+          error: result.error || "Falha no envio do email",
+          sentTo: testRecipient,
+        }, { status: 502 });
+      }
+
       return NextResponse.json({
-        success: result.success,
-        error: result.error,
+        success: true,
         sentTo: testRecipient,
         attachedPdf: !!attachments,
       });
