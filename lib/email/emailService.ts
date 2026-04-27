@@ -13,6 +13,12 @@ const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const TEST_EMAIL = "pedrohma1000@gmail.com";
 
 // ─── Types ──────────────────────────────────────────────────
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer | string; // Buffer ou base64 string
+  contentType?: string;
+}
+
 export interface EmailPayload {
   to: string;
   toName?: string;
@@ -20,6 +26,7 @@ export interface EmailPayload {
   html: string;
   clientId?: string;
   templateName: string;
+  attachments?: EmailAttachment[];
 }
 
 export interface EmailResult {
@@ -82,6 +89,11 @@ export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
       to: recipient,
       subject: payload.subject,
       html: payload.html,
+      attachments: payload.attachments?.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+        ...(a.contentType ? { contentType: a.contentType } : {}),
+      })),
     });
 
     if (error) {

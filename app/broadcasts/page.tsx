@@ -148,6 +148,11 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
   const [sending, setSending] = useState(false);
   const [testing, setTesting] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  // Anexo do PDF de feriados/datas comemorativas do mês
+  const today = new Date();
+  const [attachPdf, setAttachPdf] = useState(false);
+  const [pdfYear, setPdfYear] = useState(today.getFullYear());
+  const [pdfMonth, setPdfMonth] = useState(today.getMonth() + 1); // 1-12
 
   // Setores únicos: une `industry` (legado) e `nicho` (novo) num único set
   // — usa prefixo "sector:" no audience pra match em qualquer um dos dois campos
@@ -218,6 +223,9 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
           subject,
           content_html: getContentHtml(),
           test_to: testTo || adminEmail,
+          attach_calendar_pdf: attachPdf,
+          calendar_year: pdfYear,
+          calendar_month: pdfMonth,
         }),
       });
       const data = await res.json();
@@ -242,6 +250,9 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
           subject,
           content_html: getContentHtml(),
           target_audience: audience,
+          attach_calendar_pdf: attachPdf,
+          calendar_year: pdfYear,
+          calendar_month: pdfMonth,
         }),
       });
       const data = await res.json();
@@ -345,6 +356,54 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
             <p className="text-[10px] text-muted-foreground mt-1">
               Publico atual: <span className="text-primary font-semibold">{audienceCount} destinatario(s)</span>
             </p>
+          </div>
+
+          {/* Anexar PDF de feriados/datas comemorativas */}
+          <div className="space-y-2 pt-2 border-t border-border">
+            <label className="flex items-start gap-2 p-3 rounded-lg border border-border bg-muted cursor-pointer hover:border-primary/30 transition-colors">
+              <input
+                type="checkbox"
+                checked={attachPdf}
+                onChange={(e) => setAttachPdf(e.target.checked)}
+                className="accent-primary mt-0.5"
+              />
+              <div className="flex-1">
+                <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                  📅 Anexar PDF de feriados e datas comemorativas
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  PDF personalizado por nicho de cada cliente. Pra clientes sem nicho, vai a versão geral.
+                </p>
+              </div>
+            </label>
+
+            {attachPdf && (
+              <div className="grid grid-cols-2 gap-2 pl-6">
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Mês</label>
+                  <select
+                    value={pdfMonth}
+                    onChange={(e) => setPdfMonth(parseInt(e.target.value, 10))}
+                    className="w-full mt-1 bg-muted border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50 transition-colors"
+                  >
+                    {["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"].map((m, i) => (
+                      <option key={i} value={i + 1}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Ano</label>
+                  <input
+                    type="number"
+                    min={2025}
+                    max={2030}
+                    value={pdfYear}
+                    onChange={(e) => setPdfYear(parseInt(e.target.value, 10) || today.getFullYear())}
+                    className="w-full mt-1 bg-muted border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50 transition-colors"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

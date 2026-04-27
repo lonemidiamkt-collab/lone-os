@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/emailService";
 import { broadcastEmail } from "@/lib/email/templates";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { renderMonthHolidaysPdfBuffer, holidaysPdfFilename } from "@/lib/holidays/pdf-server";
 
 // Lotes de 10 emails com 300ms de delay entre lotes.
 // Resend free tier aceita ~100/s; deixamos margem de segurança.
@@ -18,6 +19,7 @@ interface Recipient {
   email: string;
   contactName: string;
   companyName: string;
+  nicho?: string | null;
 }
 
 async function resolveAudience(audience: string): Promise<Recipient[]> {
@@ -59,6 +61,7 @@ async function resolveAudience(audience: string): Promise<Recipient[]> {
         email,
         contactName: (c.contact_name as string) || (c.name as string) || "Cliente",
         companyName: (c.nome_fantasia as string) || (c.name as string) || "",
+        nicho: (c.nicho as string) || null,
       } as Recipient;
     })
     .filter((r): r is Recipient => r !== null);
@@ -88,28 +91,50 @@ export async function POST(req: NextRequest) {
   const adminEmail = user.email;
 
   const body = await req.json().catch(() => ({}));
-  const { action, subject, content_html, target_audience, test_to } = body as {
-    action?: string; subject?: string; content_html?: string; target_audience?: string; test_to?: string;
+  const { action, subject, content_html, target_audience, test_to, attach_calendar_pdf, calendar_year, calendar_month } = body as {
+    action?: string;
+    subject?: string;
+    content_html?: string;
+    target_audience?: string;
+    test_to?: string;
+    attach_calendar_pdf?: boolean;
+    calendar_year?: number;
+    calendar_month?: number;  // 1-12
   };
 
   if (!subject?.trim() || !content_html?.trim()) {
     return NextResponse.json({ error: "subject e content_html sao obrigatorios" }, { status: 400 });
   }
 
+  // Mês/ano do calendário a anexar — default: mês atual (timezone do servidor)
+  const now = new Date();
+  const calYear = calendar_year ?? now.getFullYear();
+  const calMonth = calendar_month ?? (now.getMonth() + 1);
+
+  // Logo URL absoluta (server precisa pra carregar a imagem no PDF)
+  const logoUrl = `${req.nextUrl.origin}/logo.png`;
+
   // ── Action: TEST — send single email to admin (or custom test_to) ──
   if (action === "test") {
     const testRecipient = (test_to && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(test_to)) ? test_to.trim() : adminEmail;
     const template = broadcastEmail(subject, content_html, testRecipient.split("@")[0], "Teste");
+    let attachments: Array<{ filename: string; content: Buffer; contentType?: string }> | undefined;
+    if (attach_calendar_pdf) {
+      const buf = await renderMonthHolidaysPdfBuffer({ year: calYear, month: calMonth, region: "BRASIL", logoUrl });
+      if (buf) attachments = [{ filename: holidaysPdfFilename(calYear, calMonth), content: buf, contentType: "application/pdf" }];
+    }
     const result = await sendEmail({
       to: testRecipient,
       subject: `[TESTE] ${template.subject}`,
       html: template.html,
       templateName: "broadcast_test",
+      attachments,
     });
     return NextResponse.json({
       success: result.success,
       error: result.error,
       sentTo: testRecipient,
+      attachedPdf: !!attachments,
     });
   }
 
@@ -153,6 +178,26 @@ export async function POST(req: NextRequest) {
       }))
     );
 
+    // 2.5. Pré-gera PDFs por nicho único (cache) — quando flag de anexo está ligada
+    // Strategy: 1 PDF "geral" (sem filtro) + 1 PDF por nicho que aparece nos recipients.
+    // Reuso garante que pra 100 clientes com 5 nichos diferentes → só 6 PDFs gerados.
+    const pdfCache = new Map<string, Buffer | null>(); // chave "__none__" pra sem-nicho, senão valor do nicho
+    async function getPdfForRecipient(r: Recipient): Promise<Buffer | null> {
+      if (!attach_calendar_pdf) return null;
+      const key = r.nicho ?? "__none__";
+      if (pdfCache.has(key)) return pdfCache.get(key)!;
+      const buf = await renderMonthHolidaysPdfBuffer({
+        year: calYear,
+        month: calMonth,
+        region: "BRASIL",
+        logoUrl,
+        nichos: r.nicho ? [r.nicho] : undefined,
+      });
+      pdfCache.set(key, buf);
+      return buf;
+    }
+    const pdfFilename = holidaysPdfFilename(calYear, calMonth);
+
     // 3. Send in batches
     let successCount = 0;
     let failCount = 0;
@@ -163,12 +208,14 @@ export async function POST(req: NextRequest) {
         batch.map(async (r) => {
           try {
             const template = broadcastEmail(subject, content_html, r.contactName, r.companyName);
+            const pdfBuf = await getPdfForRecipient(r);
             const result = await sendEmail({
               to: r.email,
               toName: r.contactName,
               subject: template.subject,
               html: template.html,
               templateName: "broadcast",
+              attachments: pdfBuf ? [{ filename: pdfFilename, content: pdfBuf, contentType: "application/pdf" }] : undefined,
             });
             return { r, result };
           } catch (e) {
