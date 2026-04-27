@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import {
   Calendar,
   ChevronLeft,
@@ -132,6 +132,52 @@ export default function CalendarPage() {
   // Drag & Drop state
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
   const draggedEventRef = useRef<CalendarEvent | null>(null);
+
+  // Feriados nacionais — fetch por ano (cache 30d server-side)
+  const [holidays, setHolidays] = useState<Array<{ date: string; name: string }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadHolidays() {
+      try {
+        const res = await fetch(`/api/holidays/${viewYear}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setHolidays(data.holidays ?? []);
+      } catch { /* silent — calendar funciona sem */ }
+    }
+    loadHolidays();
+    return () => { cancelled = true; };
+  }, [viewYear]);
+
+  // Map dia-do-mês → nome do feriado (pra render rápido por célula)
+  const holidayByDay = useMemo(() => {
+    const map: Record<number, string> = {};
+    const prefix = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-`;
+    for (const h of holidays) {
+      if (h.date.startsWith(prefix)) {
+        const day = parseInt(h.date.slice(8, 10), 10);
+        if (Number.isFinite(day)) map[day] = h.name;
+      }
+    }
+    return map;
+  }, [holidays, viewYear, viewMonth]);
+
+  const monthHolidays = useMemo(() => {
+    return Object.entries(holidayByDay)
+      .map(([day, name]) => ({ day: parseInt(day, 10), name }))
+      .sort((a, b) => a.day - b.day);
+  }, [holidayByDay]);
+
+  // Feriados upcoming — próximos 60 dias a partir de hoje (atravessa virada de mês)
+  const upcomingHolidays = useMemo(() => {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + 60);
+    const cutoffIso = cutoff.toISOString().slice(0, 10);
+    return holidays
+      .filter((h) => h.date >= todayIso && h.date <= cutoffIso)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [holidays]);
 
   const handleDragStart = useCallback((e: React.DragEvent, event: CalendarEvent) => {
     if (event.type === "routine") return; // routine checks are not draggable
@@ -515,6 +561,26 @@ export default function CalendarPage() {
             </button>
           </div>
 
+          {/* Banner de feriados nacionais do mês — sempre visível pra reduzir margem de erro */}
+          {monthHolidays.length > 0 && (
+            <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] p-3">
+              <div className="flex items-start gap-2 flex-wrap">
+                <Flag size={12} className="text-amber-400 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-amber-400 font-semibold uppercase tracking-wider">
+                  {monthHolidays.length} feriado{monthHolidays.length > 1 ? "s" : ""} em {MONTHS[viewMonth]}
+                </p>
+                <div className="flex flex-wrap gap-1.5 ml-1">
+                  {monthHolidays.map((h) => (
+                    <span key={h.day} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                      <strong className="font-bold">{String(h.day).padStart(2, "0")}</strong>
+                      <span>{h.name}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-7 gap-1 mb-1">
             {WEEKDAYS.map((d) => (
               <div key={d} className="text-center text-xs text-muted-foreground font-medium py-2">{d}</div>
@@ -557,11 +623,14 @@ export default function CalendarPage() {
                         <span className={`text-xs font-medium flex items-center gap-1 ${
                           hasDeadline
                             ? "text-[#ff2d55] font-bold drop-shadow-[0_0_6px_rgba(255,45,85,0.6)]"
-                            : todayFlag ? "text-[#0d4af5] font-bold" : "text-foreground"
+                            : todayFlag ? "text-[#0d4af5] font-bold" : holidayByDay[day] ? "text-amber-400 font-bold" : "text-foreground"
                         }`}>
                           {day}
                           {hasDeadline && (
                             <AlertTriangle size={10} className="text-[#ff2d55] drop-shadow-[0_0_4px_rgba(255,45,85,0.8)]" />
+                          )}
+                          {!hasDeadline && holidayByDay[day] && (
+                            <Flag size={9} className="text-amber-400" aria-label={holidayByDay[day]} />
                           )}
                         </span>
                         {/* Quick create + icon */}
@@ -837,6 +906,37 @@ export default function CalendarPage() {
                         <span className="text-[10px] text-muted-foreground">{e.clientName}</span>
                       </div>
                     </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Próximos feriados (60 dias) — sempre visível pra reduzir margem de erro */}
+          <div className="card">
+            <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
+              <Flag size={14} className="text-amber-400" />
+              Próximos feriados
+            </h3>
+            {upcomingHolidays.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhum feriado nos próximos 60 dias.</p>
+            ) : (
+              <div className="space-y-2">
+                {upcomingHolidays.map((h) => {
+                  const [, m, d] = h.date.split("-").map(Number);
+                  const weekday = new Date(h.date + "T12:00:00Z").toLocaleDateString("pt-BR", { weekday: "long", timeZone: "America/Sao_Paulo" });
+                  return (
+                    <div key={h.date} className="flex items-center gap-2 py-1.5 px-1">
+                      <span className="text-[10px] text-amber-400 w-10 shrink-0 text-right font-medium">
+                        {d} {MONTHS_SHORT[m - 1]}
+                      </span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                      <Flag size={11} className="text-amber-400/70 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs text-foreground truncate block">{h.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{weekday}</span>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
