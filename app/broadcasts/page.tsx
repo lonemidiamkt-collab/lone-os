@@ -212,26 +212,34 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
   };
 
   const handleTest = async (e?: React.MouseEvent | React.FormEvent) => {
+    console.log("[broadcasts] handleTest fired", { event: e?.type, target: (e?.target as HTMLElement)?.tagName });
     e?.preventDefault();
     e?.stopPropagation();
-    if (!validate()) return;
-    setTesting(true);
     try {
+      if (!validate()) {
+        console.log("[broadcasts] validation failed");
+        return;
+      }
+      console.log("[broadcasts] starting test fetch...");
+      setTesting(true);
+      const payload = {
+        action: "test",
+        subject,
+        content_html: getContentHtml(),
+        test_to: testTo || adminEmail,
+        attach_calendar_pdf: attachPdf,
+        calendar_year: pdfYear,
+        calendar_month: pdfMonth,
+      };
+      console.log("[broadcasts] payload:", { ...payload, content_html: `<${payload.content_html.length} chars>` });
       const res = await fetch("/api/broadcasts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "test",
-          subject,
-          content_html: getContentHtml(),
-          test_to: testTo || adminEmail,
-          attach_calendar_pdf: attachPdf,
-          calendar_year: pdfYear,
-          calendar_month: pdfMonth,
-        }),
+        body: JSON.stringify(payload),
       });
-      // Captura status HTTP corretamente — 401/403/500 caem aqui também
+      console.log("[broadcasts] fetch returned, status:", res.status);
       const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      console.log("[broadcasts] response data:", data);
       if (res.ok && data.success) {
         showToast("success", `Teste enviado para ${data.sentTo}`);
       } else {
@@ -244,6 +252,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
       const msg = err instanceof Error ? err.message : "Erro de conexão";
       showToast("error", `Erro: ${msg}`);
     } finally {
+      console.log("[broadcasts] handleTest done");
       setTesting(false);
     }
   };
