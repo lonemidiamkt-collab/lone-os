@@ -6,9 +6,11 @@ import { Download, Loader2 } from "lucide-react";
 interface ObservanceLite {
   date: string;
   name: string;
-  category: "national" | "comercial" | "cultural" | "awareness_month" | "profissao";
+  category: "national" | "estadual" | "municipal" | "comercial" | "cultural" | "awareness_month" | "profissao";
   nichos?: string[];
   monthLong?: boolean;
+  uf?: string;
+  cities?: string[];
 }
 
 interface Props {
@@ -18,7 +20,11 @@ interface Props {
   year?: number;
   /** Filtra observances pra esses nichos (opcional). Se omitido, mostra tudo. */
   nichos?: string[];
-  /** Texto do subtítulo (ex.: "RIO DE JANEIRO" ou "BRASIL"). Default: "BRASIL". */
+  /** UF do cliente. Quando passado, inclui feriados estaduais desse estado. */
+  uf?: string;
+  /** Cidade do cliente. Quando passado, inclui feriados municipais dessa cidade. */
+  city?: string;
+  /** Texto do subtítulo (ex.: "RIO DE JANEIRO" ou "BRASIL"). Default deriva de uf/city. */
   region?: string;
   /** Nome do cliente — usado no nome do arquivo. */
   clientName?: string;
@@ -30,7 +36,12 @@ interface Props {
 
 const MONTH_NAMES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
-export default function HolidaysPdfButton({ month, year, nichos, region = "BRASIL", clientName, variant = "ghost", label = "Baixar PDF do mês" }: Props) {
+function normalizeKey(s: string | undefined): string {
+  if (!s) return "";
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim().replace(/\s+/g, " ");
+}
+
+export default function HolidaysPdfButton({ month, year, nichos, uf, city, region, clientName, variant = "ghost", label = "Baixar PDF do mês" }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +53,7 @@ export default function HolidaysPdfButton({ month, year, nichos, region = "BRASI
     setLoading(true);
     setError(null);
     try {
-      // 1. Buscar observances do ano
+      // 1. Buscar observances do ano (inclui tudo — filtros aplicados client-side)
       const res = await fetch(`/api/holidays/${targetYear}`);
       if (!res.ok) throw new Error(`API ${res.status}`);
       const data = await res.json();
@@ -52,7 +63,22 @@ export default function HolidaysPdfButton({ month, year, nichos, region = "BRASI
       const prefix = `${targetYear}-${String(targetMonth).padStart(2, "0")}-`;
       observances = observances.filter((o) => o.date.startsWith(prefix));
 
-      // 3. Filtrar por nichos (se aplicável)
+      // 3. Filtro de localização (estaduais/municipais)
+      const ufUp = uf?.toUpperCase();
+      const cityKey = normalizeKey(city);
+      const hasLocationFilter = !!(ufUp || cityKey);
+      if (hasLocationFilter) {
+        observances = observances.filter((o) => {
+          if (o.category === "estadual") return ufUp ? o.uf?.toUpperCase() === ufUp : false;
+          if (o.category === "municipal") return cityKey ? (o.cities ?? []).some((c) => normalizeKey(c) === cityKey) : false;
+          return true;
+        });
+      } else {
+        // Sem cliente específico → exclui regionais (PDF mais limpo)
+        observances = observances.filter((o) => o.category !== "estadual" && o.category !== "municipal");
+      }
+
+      // 4. Filtrar por nichos (se aplicável)
       if (nichos && nichos.length > 0) {
         observances = observances.filter((o) => {
           if (o.category !== "profissao") return true;
@@ -66,11 +92,13 @@ export default function HolidaysPdfButton({ month, year, nichos, region = "BRASI
         return;
       }
 
-      // 4. Gerar PDF (import dinâmico — react-pdf é pesado, só carrega ao clicar)
+      // 5. Gerar PDF (import dinâmico — react-pdf é pesado, só carrega ao clicar)
       const { pdf } = await import("@react-pdf/renderer");
       const { HolidaysMonthPdf } = await import("@/lib/holidays/pdf");
       const logoUrl = `${window.location.origin}/logo.png`;
-      const blob = await pdf(<HolidaysMonthPdf year={targetYear} month={targetMonth} observances={observances} region={region} logoUrl={logoUrl} />).toBlob();
+      // Se region não foi passada, deriva de city/uf
+      const computedRegion = region ?? (city ? `${city.toUpperCase()}${uf ? ` · ${uf.toUpperCase()}` : ""}` : (uf ? uf.toUpperCase() : "BRASIL"));
+      const blob = await pdf(<HolidaysMonthPdf year={targetYear} month={targetMonth} observances={observances} region={computedRegion} logoUrl={logoUrl} />).toBlob();
 
       // 5. Trigger download
       const url = URL.createObjectURL(blob);

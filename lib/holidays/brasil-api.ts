@@ -8,9 +8,10 @@
 
 import { getStaticHolidays, type StaticHoliday } from "./static-fallback";
 import { getCommemorativeDates, filterByNichos, type CommemorativeDate, type CommemorativeCategory } from "./commemorative-dates";
+import { getStateHolidaysForYear, getMunicipalHolidaysForYear, normalizeRegionKey } from "./regional-dates";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
-export type HolidayCategory = "national" | CommemorativeCategory;
+export type HolidayCategory = "national" | "estadual" | "municipal" | CommemorativeCategory;
 
 export interface Holiday {
   date: string;       // YYYY-MM-DD
@@ -20,6 +21,8 @@ export interface Holiday {
   source: "api" | "fallback" | "static";
   nichos?: string[];
   monthLong?: boolean;
+  uf?: string;        // pra estaduais e municipais
+  cities?: string[];  // pra municipais
 }
 
 interface BrasilApiHoliday {
@@ -139,7 +142,9 @@ export async function getHolidays(year: number): Promise<Holiday[]> {
 }
 
 /**
- * Retorna feriados oficiais + datas comemorativas, ordenados por data.
+ * Retorna feriados oficiais (nacionais + estaduais + municipais) + datas
+ * comemorativas, ordenados por data.
+ *
  * É a função canônica que o calendário e os banners de mês devem consumir.
  */
 export async function getAllObservances(year: number): Promise<Holiday[]> {
@@ -147,7 +152,48 @@ export async function getAllObservances(year: number): Promise<Holiday[]> {
     getHolidays(year),
     Promise.resolve(getCommemorativeDates(year).map(commemorativeToHoliday)),
   ]);
-  return [...feriados, ...comemorativas].sort((a, b) => a.date.localeCompare(b.date));
+
+  const estaduais: Holiday[] = getStateHolidaysForYear(year).map((s) => ({
+    date: s.date, name: s.name, type: "estadual",
+    category: "estadual" as const, source: "static" as const, uf: s.uf,
+  }));
+  const municipais: Holiday[] = getMunicipalHolidaysForYear(year).map((m) => ({
+    date: m.date, name: m.name, type: "municipal",
+    category: "municipal" as const, source: "static" as const, uf: m.uf, cities: m.cities,
+  }));
+
+  return [...feriados, ...estaduais, ...municipais, ...comemorativas]
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Filtra observances pra uma localização específica (estado/cidade).
+ *
+ * Comportamento:
+ *   - national, comercial, cultural, awareness_month, profissao: sempre incluídos
+ *   - estadual: incluído se o `uf` da observance bate com o `uf` passado
+ *   - municipal: incluído se a cidade do cliente está em `cities` da observance
+ *
+ * Quando opts é vazio/sem campos, retorna tudo (ex.: calendário geral).
+ */
+export function observancesForLocation(
+  observances: Holiday[],
+  opts: { uf?: string; city?: string } = {},
+): Holiday[] {
+  const targetUf = opts.uf?.toUpperCase();
+  const targetCityKey = normalizeRegionKey(opts.city);
+
+  return observances.filter((o) => {
+    if (o.category === "estadual") {
+      if (!targetUf) return false; // sem filtro estadual → não mostra estaduais (estamos filtrando p/ cliente)
+      return o.uf?.toUpperCase() === targetUf;
+    }
+    if (o.category === "municipal") {
+      if (!targetCityKey) return false;
+      return (o.cities ?? []).some((c) => normalizeRegionKey(c) === targetCityKey);
+    }
+    return true;
+  });
 }
 
 /**

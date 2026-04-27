@@ -548,16 +548,20 @@ export default function ClientDetailPage() {
           </div>
         </div>
 
-        {/* Banner de datas comemorativas relevantes pro nicho do cliente + botão de PDF */}
-        {client.nicho && (
+        {/* Banner de datas comemorativas + feriados regionais relevantes pro cliente + botão de PDF */}
+        {(client.nicho || client.enderecoCidade || client.enderecoEstado) && (
           <div className="space-y-2">
             <MonthObservancesAlert
-              title={`Datas relevantes — ${client.nicho}`}
-              nichos={[client.nicho]}
+              title={`Datas e feriados${client.enderecoCidade ? ` — ${client.enderecoCidade}` : ""}`}
+              nichos={client.nicho ? [client.nicho] : []}
+              uf={client.enderecoEstado}
+              city={client.enderecoCidade}
               compact
             />
             <HolidaysPdfButton
-              nichos={[client.nicho]}
+              nichos={client.nicho ? [client.nicho] : undefined}
+              uf={client.enderecoEstado}
+              city={client.enderecoCidade}
               clientName={client.name}
               label={`Baixar PDF do mês — ${client.name}`}
             />

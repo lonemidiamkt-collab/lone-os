@@ -13,9 +13,11 @@ import { getDescriptionFor } from "./descriptions";
 interface ObservanceLite {
   date: string;          // YYYY-MM-DD
   name: string;
-  category: "national" | "comercial" | "cultural" | "awareness_month" | "profissao";
+  category: "national" | "estadual" | "municipal" | "comercial" | "cultural" | "awareness_month" | "profissao";
   nichos?: string[];
   monthLong?: boolean;
+  uf?: string;
+  cities?: string[];
 }
 
 interface Props {
@@ -44,11 +46,41 @@ const C = {
   textMuted: "#64748b",
   brand: "#0d4af5",
   brandLight: "#3b6ff5",
-  feriado: "#dc2626",
+  feriado: "#dc2626",        // nacional — vermelho
   feriadoBg: "#7f1d1d",
-  comemorativa: "#0d4af5",
+  estadual: "#ea580c",       // estadual — laranja
+  estadualBg: "#7c2d12",
+  municipal: "#65a30d",      // municipal — lima
+  municipalBg: "#365314",
+  comemorativa: "#0d4af5",   // datas comemorativas — azul
   comemorativaBg: "#1e3a8a",
 };
+
+type FeriadoStyleKey = "national" | "estadual" | "municipal" | "comemorativa";
+function styleKeyFor(category: ObservanceLite["category"]): FeriadoStyleKey {
+  if (category === "national") return "national";
+  if (category === "estadual") return "estadual";
+  if (category === "municipal") return "municipal";
+  return "comemorativa";
+}
+function colorForStyleKey(key: FeriadoStyleKey): { fg: string; bg: string } {
+  if (key === "national") return { fg: C.feriado, bg: C.feriadoBg };
+  if (key === "estadual") return { fg: C.estadual, bg: C.estadualBg };
+  if (key === "municipal") return { fg: C.municipal, bg: C.municipalBg };
+  return { fg: C.comemorativa, bg: C.comemorativaBg };
+}
+function pillLabelFor(category: ObservanceLite["category"]): string {
+  switch (category) {
+    case "national": return "FERIADO NACIONAL";
+    case "estadual": return "FERIADO ESTADUAL";
+    case "municipal": return "FERIADO MUNICIPAL";
+    case "awareness_month": return "MÊS DE CONSCIENTIZAÇÃO";
+    case "comercial": return "DATA COMERCIAL";
+    case "cultural": return "DATA CULTURAL";
+    case "profissao": return "DIA PROFISSIONAL";
+    default: return "DATA COMEMORATIVA";
+  }
+}
 
 const s = StyleSheet.create({
   page: {
@@ -137,10 +169,20 @@ const s = StyleSheet.create({
   dayCellEmpty: {
     backgroundColor: "transparent",
   },
-  dayCellHoliday: {
+  dayCellNational: {
     backgroundColor: C.feriadoBg,
     borderWidth: 1,
     borderColor: C.feriado,
+  },
+  dayCellEstadual: {
+    backgroundColor: C.estadualBg,
+    borderWidth: 1,
+    borderColor: C.estadual,
+  },
+  dayCellMunicipal: {
+    backgroundColor: C.municipalBg,
+    borderWidth: 1,
+    borderColor: C.municipal,
   },
   dayCellComemorativa: {
     backgroundColor: C.comemorativaBg,
@@ -151,10 +193,20 @@ const s = StyleSheet.create({
     fontSize: 11,
     color: C.textSecondary,
   },
-  dayNumberHoliday: {
+  dayNumberNational: {
     fontSize: 14,
     fontFamily: "Helvetica-Bold",
     color: C.feriado,
+  },
+  dayNumberEstadual: {
+    fontSize: 14,
+    fontFamily: "Helvetica-Bold",
+    color: C.estadual,
+  },
+  dayNumberMunicipal: {
+    fontSize: 14,
+    fontFamily: "Helvetica-Bold",
+    color: C.municipal,
   },
   dayNumberComemorativa: {
     fontSize: 14,
@@ -181,6 +233,12 @@ const s = StyleSheet.create({
   },
   legendDotFeriado: {
     backgroundColor: C.feriado,
+  },
+  legendDotEstadual: {
+    backgroundColor: C.estadual,
+  },
+  legendDotMunicipal: {
+    backgroundColor: C.municipal,
   },
   legendDotComemorativa: {
     backgroundColor: C.comemorativa,
@@ -259,6 +317,12 @@ const s = StyleSheet.create({
   cardFeriado: {
     borderLeftColor: C.feriado,
   },
+  cardEstadual: {
+    borderLeftColor: C.estadual,
+  },
+  cardMunicipal: {
+    borderLeftColor: C.municipal,
+  },
   cardComemorativa: {
     borderLeftColor: C.comemorativa,
   },
@@ -272,6 +336,12 @@ const s = StyleSheet.create({
   },
   dateBadgeFeriado: {
     backgroundColor: C.feriado,
+  },
+  dateBadgeEstadual: {
+    backgroundColor: C.estadual,
+  },
+  dateBadgeMunicipal: {
+    backgroundColor: C.municipal,
   },
   dateBadgeComemorativa: {
     backgroundColor: C.comemorativa,
@@ -304,6 +374,12 @@ const s = StyleSheet.create({
   },
   categoryPillFeriado: {
     backgroundColor: C.feriado,
+  },
+  categoryPillEstadual: {
+    backgroundColor: C.estadual,
+  },
+  categoryPillMunicipal: {
+    backgroundColor: C.municipal,
   },
   categoryPillComemorativa: {
     backgroundColor: C.comemorativa,
@@ -388,15 +464,15 @@ export function HolidaysMonthPdf({ year, month, observances, region = "BRASIL", 
   const awareness = inMonth.filter((o) => o.monthLong);
   const dailyDates = inMonth.filter((o) => !o.monthLong).sort((a, b) => a.date.localeCompare(b.date));
 
-  // Map dia → categoria predominante (national tem prioridade visual)
-  const dayCategory: Record<number, "national" | "comemorativa"> = {};
+  // Map dia → categoria predominante (prioridade nacional > estadual > municipal > comemorativa)
+  const PRIO: Record<FeriadoStyleKey, number> = { national: 4, estadual: 3, municipal: 2, comemorativa: 1 };
+  const dayCategory: Record<number, FeriadoStyleKey> = {};
   for (const o of dailyDates) {
     const day = parseInt(o.date.slice(8, 10), 10);
     if (!Number.isFinite(day)) continue;
-    if (o.category === "national") {
-      dayCategory[day] = "national";
-    } else if (!dayCategory[day]) {
-      dayCategory[day] = "comemorativa";
+    const key = styleKeyFor(o.category);
+    if (!dayCategory[day] || PRIO[key] > PRIO[dayCategory[day]]) {
+      dayCategory[day] = key;
     }
   }
 
@@ -434,14 +510,18 @@ export function HolidaysMonthPdf({ year, month, observances, region = "BRASIL", 
                 return <View key={colIdx} style={[s.dayCell, s.dayCellEmpty]} />;
               }
               const cat = dayCategory[day];
-              const isHoliday = cat === "national";
-              const isCommemorative = cat === "comemorativa";
               const cellStyle = [
                 s.dayCell,
-                isHoliday ? s.dayCellHoliday : null,
-                isCommemorative ? s.dayCellComemorativa : null,
+                cat === "national" ? s.dayCellNational : null,
+                cat === "estadual" ? s.dayCellEstadual : null,
+                cat === "municipal" ? s.dayCellMunicipal : null,
+                cat === "comemorativa" ? s.dayCellComemorativa : null,
               ].filter(Boolean);
-              const numberStyle = isHoliday ? s.dayNumberHoliday : isCommemorative ? s.dayNumberComemorativa : s.dayNumber;
+              const numberStyle =
+                cat === "national" ? s.dayNumberNational :
+                cat === "estadual" ? s.dayNumberEstadual :
+                cat === "municipal" ? s.dayNumberMunicipal :
+                cat === "comemorativa" ? s.dayNumberComemorativa : s.dayNumber;
               return (
                 <View key={colIdx} style={cellStyle as never}>
                   <Text style={numberStyle}>{day}</Text>
@@ -451,16 +531,32 @@ export function HolidaysMonthPdf({ year, month, observances, region = "BRASIL", 
           </View>
         ))}
 
-        {/* Legend */}
+        {/* Legend (mostra só categorias presentes no mês pra reduzir ruído) */}
         <View style={s.legend}>
-          <View style={s.legendItem}>
-            <View style={[s.legendDot, s.legendDotFeriado]} />
-            <Text style={s.legendText}>Feriado nacional</Text>
-          </View>
-          <View style={s.legendItem}>
-            <View style={[s.legendDot, s.legendDotComemorativa]} />
-            <Text style={s.legendText}>Data comemorativa</Text>
-          </View>
+          {Object.values(dayCategory).includes("national") && (
+            <View style={s.legendItem}>
+              <View style={[s.legendDot, s.legendDotFeriado]} />
+              <Text style={s.legendText}>Feriado nacional</Text>
+            </View>
+          )}
+          {Object.values(dayCategory).includes("estadual") && (
+            <View style={s.legendItem}>
+              <View style={[s.legendDot, s.legendDotEstadual]} />
+              <Text style={s.legendText}>Feriado estadual</Text>
+            </View>
+          )}
+          {Object.values(dayCategory).includes("municipal") && (
+            <View style={s.legendItem}>
+              <View style={[s.legendDot, s.legendDotMunicipal]} />
+              <Text style={s.legendText}>Feriado municipal</Text>
+            </View>
+          )}
+          {Object.values(dayCategory).includes("comemorativa") && (
+            <View style={s.legendItem}>
+              <View style={[s.legendDot, s.legendDotComemorativa]} />
+              <Text style={s.legendText}>Data comemorativa</Text>
+            </View>
+          )}
         </View>
 
         {/* Awareness month banners (se houver) */}
@@ -503,17 +599,35 @@ export function HolidaysMonthPdf({ year, month, observances, region = "BRASIL", 
 
         {/* Cards */}
         {[...awareness, ...dailyDates].map((o, idx) => {
-          const isHoliday = o.category === "national";
+          const styleKey = styleKeyFor(o.category);
           const day = o.monthLong ? null : parseInt(o.date.slice(8, 10), 10);
           const monthAbbr = MONTHS_SHORT_UPPER[month - 1];
           const weekdayIdx = o.monthLong ? null : new Date(o.date + "T12:00:00Z").getUTCDay();
           const weekday = weekdayIdx !== null ? WEEKDAYS_FULL[weekdayIdx] : "Mês inteiro";
           const description = getDescriptionFor(o.name, o.category, o.nichos);
-          const pillLabel = isHoliday ? "FERIADO NACIONAL" : o.category === "awareness_month" ? "MÊS DE CONSCIENTIZAÇÃO" : o.category === "comercial" ? "DATA COMERCIAL" : o.category === "cultural" ? "DATA CULTURAL" : o.category === "profissao" ? "DIA PROFISSIONAL" : "DATA COMEMORATIVA";
+          const pillLabel = pillLabelFor(o.category);
+          const cardStyle =
+            styleKey === "national" ? s.cardFeriado :
+            styleKey === "estadual" ? s.cardEstadual :
+            styleKey === "municipal" ? s.cardMunicipal : s.cardComemorativa;
+          const badgeStyle =
+            styleKey === "national" ? s.dateBadgeFeriado :
+            styleKey === "estadual" ? s.dateBadgeEstadual :
+            styleKey === "municipal" ? s.dateBadgeMunicipal : s.dateBadgeComemorativa;
+          const pillStyle =
+            styleKey === "national" ? s.categoryPillFeriado :
+            styleKey === "estadual" ? s.categoryPillEstadual :
+            styleKey === "municipal" ? s.categoryPillMunicipal : s.categoryPillComemorativa;
+          // Sufixo da localização pro municipal (mostra cidades) e estadual (mostra UF)
+          const locationSuffix = o.category === "municipal" && o.cities && o.cities.length > 0
+            ? ` · ${o.cities.join(", ")}`
+            : o.category === "estadual" && o.uf
+            ? ` · ${o.uf}`
+            : "";
 
           return (
-            <View key={`${o.date}-${idx}`} style={[s.card, isHoliday ? s.cardFeriado : s.cardComemorativa]} wrap={false}>
-              <View style={[s.dateBadge, isHoliday ? s.dateBadgeFeriado : s.dateBadgeComemorativa]}>
+            <View key={`${o.date}-${idx}`} style={[s.card, cardStyle]} wrap={false}>
+              <View style={[s.dateBadge, badgeStyle]}>
                 {day !== null && (
                   <>
                     <Text style={s.dateBadgeDay}>{String(day).padStart(2, "0")}</Text>
@@ -525,8 +639,8 @@ export function HolidaysMonthPdf({ year, month, observances, region = "BRASIL", 
                 )}
               </View>
               <View style={s.cardBody}>
-                <Text style={[s.categoryPill, isHoliday ? s.categoryPillFeriado : s.categoryPillComemorativa]}>{pillLabel}</Text>
-                <Text style={s.cardTitle}>{o.name}</Text>
+                <Text style={[s.categoryPill, pillStyle]}>{pillLabel}</Text>
+                <Text style={s.cardTitle}>{o.name}{locationSuffix}</Text>
                 <Text style={s.cardWeekday}>{weekday}</Text>
                 <Text style={s.cardDescription}>{description}</Text>
               </View>

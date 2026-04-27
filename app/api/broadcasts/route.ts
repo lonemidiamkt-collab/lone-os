@@ -20,6 +20,8 @@ interface Recipient {
   contactName: string;
   companyName: string;
   nicho?: string | null;
+  city?: string | null;
+  uf?: string | null;
 }
 
 async function resolveAudience(audience: string): Promise<Recipient[]> {
@@ -34,7 +36,7 @@ async function resolveAudience(audience: string): Promise<Recipient[]> {
     return emails.map((email) => ({ clientId: null, email, contactName: email.split("@")[0], companyName: "" }));
   }
 
-  let q = supabaseAdmin.from("clients").select("id, name, nome_fantasia, contact_name, email, email_corporativo, industry, nicho");
+  let q = supabaseAdmin.from("clients").select("id, name, nome_fantasia, contact_name, email, email_corporativo, industry, nicho, endereco_cidade, endereco_estado");
 
   if (audience.startsWith("industry:")) {
     q = q.eq("industry", audience.slice("industry:".length));
@@ -62,6 +64,8 @@ async function resolveAudience(audience: string): Promise<Recipient[]> {
         contactName: (c.contact_name as string) || (c.name as string) || "Cliente",
         companyName: (c.nome_fantasia as string) || (c.name as string) || "",
         nicho: (c.nicho as string) || null,
+        city: (c.endereco_cidade as string) || null,
+        uf: (c.endereco_estado as string) || null,
       } as Recipient;
     })
     .filter((r): r is Recipient => r !== null);
@@ -178,20 +182,25 @@ export async function POST(req: NextRequest) {
       }))
     );
 
-    // 2.5. Pré-gera PDFs por nicho único (cache) — quando flag de anexo está ligada
-    // Strategy: 1 PDF "geral" (sem filtro) + 1 PDF por nicho que aparece nos recipients.
-    // Reuso garante que pra 100 clientes com 5 nichos diferentes → só 6 PDFs gerados.
-    const pdfCache = new Map<string, Buffer | null>(); // chave "__none__" pra sem-nicho, senão valor do nicho
+    // 2.5. Pré-gera PDFs por (nicho + cidade + UF) único — quando flag de anexo está ligada
+    // Strategy: cache por chave composta. Pra 100 clientes em poucas combinações
+    // distintas, geramos só algumas dezenas de PDFs no máximo.
+    const pdfCache = new Map<string, Buffer | null>();
     async function getPdfForRecipient(r: Recipient): Promise<Buffer | null> {
       if (!attach_calendar_pdf) return null;
-      const key = r.nicho ?? "__none__";
+      const key = `${r.nicho ?? ""}|${r.city ?? ""}|${r.uf ?? ""}`;
       if (pdfCache.has(key)) return pdfCache.get(key)!;
+      const region = r.city
+        ? `${r.city.toUpperCase()}${r.uf ? ` · ${r.uf.toUpperCase()}` : ""}`
+        : (r.uf ? r.uf.toUpperCase() : "BRASIL");
       const buf = await renderMonthHolidaysPdfBuffer({
         year: calYear,
         month: calMonth,
-        region: "BRASIL",
+        region,
         logoUrl,
         nichos: r.nicho ? [r.nicho] : undefined,
+        uf: r.uf || undefined,
+        city: r.city || undefined,
       });
       pdfCache.set(key, buf);
       return buf;

@@ -10,15 +10,19 @@
 
 import { renderToStream } from "@react-pdf/renderer";
 import { HolidaysMonthPdf } from "./pdf";
-import { getAllObservances, type Holiday } from "./brasil-api";
+import { getAllObservances, observancesForLocation, type Holiday } from "./brasil-api";
 
 interface BuildOptions {
   year: number;
   month: number;          // 1-12
-  region?: string;        // "BRASIL" default
+  region?: string;        // texto exibido no subtítulo (ex.: "BRASIL", "SAQUAREMA · RJ")
   logoUrl?: string;
   /** Filtra profissões pra esses nichos. Se vazio, mostra tudo. */
   nichos?: string[];
+  /** Filtra estaduais pra esse UF (ex.: "RJ"). Sem isso, estaduais não aparecem. */
+  uf?: string;
+  /** Filtra municipais pra essa cidade. Sem isso, municipais não aparecem. */
+  city?: string;
 }
 
 /**
@@ -32,6 +36,16 @@ export async function renderMonthHolidaysPdfBuffer(opts: BuildOptions): Promise<
     const all = await getAllObservances(opts.year);
     const prefix = `${opts.year}-${String(opts.month).padStart(2, "0")}-`;
     let inMonth = all.filter((o) => o.date.startsWith(prefix));
+
+    // Filtro de localização (estaduais/municipais)
+    if (opts.uf || opts.city) {
+      inMonth = observancesForLocation(inMonth, { uf: opts.uf, city: opts.city });
+    } else {
+      // Sem filtro de localização → omite estaduais e municipais (PDF mais limpo
+      // pra clientes sem cidade cadastrada)
+      inMonth = inMonth.filter((o) => o.category !== "estadual" && o.category !== "municipal");
+    }
+
     if (opts.nichos && opts.nichos.length > 0) {
       inMonth = filterByNichosLocal(inMonth, opts.nichos);
     }
