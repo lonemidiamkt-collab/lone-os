@@ -716,6 +716,15 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
   const [priority, setPriority] = useState<ContentCard["priority"]>("medium");
   const [dueDate, setDueDate] = useState(defaultDate ?? "");
   const [dueTime, setDueTime] = useState("");
+  const [briefing, setBriefing] = useState("");
+
+  const briefingRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = briefingRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [briefing]);
 
   const selectedClient = clients.find((c) => c.id === clientId);
   const canSubmit = title.trim() && clientId && dueDate && dueTime && priority;
@@ -732,7 +741,8 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
       format,
       dueDate,
       dueTime,
-    });
+      briefing: briefing.trim() || undefined,
+    } as Omit<ContentCard, "id">);
     onClose();
   };
 
@@ -837,6 +847,20 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
           {(!dueDate || !dueTime) && (
             <p className="text-xs text-red-400">Data e horário são obrigatórios para enviar a demanda ao designer.</p>
           )}
+
+          {/* Briefing — autoresize estilo Trello */}
+          <div>
+            <Label className="mb-1.5 block">Briefing / Descrição</Label>
+            <textarea
+              ref={briefingRef}
+              value={briefing}
+              onChange={(e) => setBriefing(e.target.value)}
+              placeholder={"Detalhes do conteúdo:\n• Nome do produto\n• Tópicos de benefício\n• CTA / próximo passo\n• Tom de voz, referências"}
+              rows={4}
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none overflow-hidden leading-relaxed min-h-[100px]"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">O campo cresce conforme você escreve. Pode editar depois no modal de detalhes.</p>
+          </div>
 
           {/* Drive link auto-recovered */}
           {selectedClient && (

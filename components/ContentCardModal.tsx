@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Upload, Calendar, FileText, User, Tag,
   Save, ImageIcon, Hash, AlignLeft, Globe,
@@ -67,6 +67,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [observations, setObservations] = useState(card.observations ?? "");
+  const [briefing, setBriefing] = useState(card.briefing ?? "");
   const [caption, setCaption] = useState(card.caption ?? "");
   const [hashtags, setHashtags] = useState(card.hashtags ?? "");
   const [platform, setPlatform] = useState<SocialPlatform | "">(card.platform ?? "");
@@ -75,8 +76,18 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [imageUrl, setImageUrl] = useState(card.imageUrl ?? "");
   const [saved, setSaved] = useState(false);
   const [commentText, setCommentText] = useState("");
+  const [editingBriefing, setEditingBriefing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
+  const briefingTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Autoresize do briefing (estilo Trello/Notion)
+  useEffect(() => {
+    const el = briefingTextareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [briefing, editingBriefing]);
 
   const comments = card.comments ?? [];
 
@@ -91,6 +102,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const handleSave = () => {
     updateContentCard(card.id, {
       observations,
+      briefing: briefing || undefined,
       caption: caption || undefined,
       hashtags: hashtags || undefined,
       platform: (platform as SocialPlatform) || undefined,
@@ -98,6 +110,13 @@ export default function ContentCardModal({ card, onClose }: Props) {
       status,
       imageUrl: imageUrl || undefined,
     });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+
+  const handleSaveBriefing = () => {
+    updateContentCard(card.id, { briefing: briefing || undefined });
+    setEditingBriefing(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   };
@@ -263,18 +282,70 @@ export default function ContentCardModal({ card, onClose }: Props) {
               />
             </div>
 
-            {/* Briefing */}
-            {card.briefing && (
-              <div>
-                <Label className="flex items-center gap-1.5 mb-2">
+            {/* Briefing — editável estilo Trello (clique pra editar) */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="flex items-center gap-1.5">
                   <FileText size={12} />
-                  Briefing
+                  Briefing / Descrição
                 </Label>
-                <div className="bg-muted border border-border rounded-lg px-4 py-3 text-sm text-foreground leading-relaxed">
-                  {card.briefing}
-                </div>
+                {!editingBriefing && briefing && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingBriefing(true)}
+                    className="text-[11px] px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors"
+                  >
+                    Editar
+                  </button>
+                )}
               </div>
-            )}
+
+              {editingBriefing ? (
+                <div className="space-y-2">
+                  <textarea
+                    ref={briefingTextareaRef}
+                    value={briefing}
+                    onChange={(e) => setBriefing(e.target.value)}
+                    placeholder="Detalhes do conteúdo: produto, benefícios, CTA, referências, tom de voz..."
+                    rows={5}
+                    className="w-full bg-muted border border-primary/30 rounded-lg px-4 py-3 text-sm text-foreground leading-relaxed outline-none focus:border-primary/60 resize-none overflow-hidden min-h-[120px]"
+                    autoFocus
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveBriefing}
+                      className="text-xs px-3 py-1.5 rounded-md bg-[#0d4af5] hover:bg-[#1a56ff] text-white font-medium transition-colors"
+                    >
+                      Salvar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setBriefing(card.briefing ?? ""); setEditingBriefing(false); }}
+                      className="text-xs px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : briefing ? (
+                <div
+                  onClick={() => setEditingBriefing(true)}
+                  className="bg-muted border border-border rounded-lg px-4 py-3 text-sm text-foreground leading-relaxed whitespace-pre-wrap cursor-text hover:border-primary/30 transition-colors"
+                  title="Clique pra editar"
+                >
+                  {briefing}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setEditingBriefing(true)}
+                  className="w-full text-left bg-muted border border-dashed border-border rounded-lg px-4 py-3 text-sm text-muted-foreground hover:border-primary/30 hover:text-foreground transition-colors"
+                >
+                  + Adicionar briefing / descrição
+                </button>
+              )}
+            </div>
 
             {/* Caption */}
             <div>
