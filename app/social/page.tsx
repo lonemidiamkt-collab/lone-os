@@ -2067,7 +2067,7 @@ export default function SocialPage() {
         />
       )}
       {/* AddMemberModal removed — team managed via CEO area */}
-      {newCardDate && (
+      {newCardDate !== null && (
         <NewContentCardModal
           defaultDate={newCardDate}
           onClose={() => setNewCardDate(null)}
@@ -2117,6 +2117,16 @@ export default function SocialPage() {
                 Logado como: {currentUser}
               </span>
             </div>
+          )}
+
+          {/* CTA: criar novo conteúdo (escondido pra designer em modo leitura) */}
+          {!isReadOnly && (
+            <button
+              onClick={() => setNewCardDate(new Date().toISOString().slice(0, 10))}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all shrink-0 shadow-[0_0_20px_rgba(13,74,245,0.15)]"
+            >
+              <Plus size={14} /> Novo Conteúdo
+            </button>
           )}
         </div>
 
