@@ -14,7 +14,8 @@ interface PlatformUpdate {
 }
 
 interface Props {
-  adminEmail: string;
+  /** Mantido pra compatibilidade do call-site, mas não enviado no body — server usa session. */
+  adminEmail?: string;
   onClose: () => void;
   onCreated: (update: PlatformUpdate) => void;
 }
@@ -28,7 +29,7 @@ const CATEGORIES = [
 
 const SUGGESTED_ICONS = ["📦", "🚀", "✨", "🐛", "⚠️", "🤖", "📧", "💰", "🎨", "📝", "📊", "🔒", "⚡", "🎯", "📅"];
 
-export default function NewPlatformUpdateModal({ adminEmail, onClose, onCreated }: Props) {
+export default function NewPlatformUpdateModal({ onClose, onCreated }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("feature");
@@ -48,7 +49,6 @@ export default function NewPlatformUpdateModal({ adminEmail, onClose, onCreated 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "create",
-          admin_email: adminEmail,
           title: title.trim(),
           description: description.trim(),
           category,

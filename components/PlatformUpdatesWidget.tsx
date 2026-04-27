@@ -28,7 +28,8 @@ export default function PlatformUpdatesWidget() {
 
   useEffect(() => {
     if (!userEmail) return;
-    fetch(`/api/platform-updates?user_email=${encodeURIComponent(userEmail)}`)
+    // GET usa session do cookie pra derivar user_email — não precisa passar query param
+    fetch("/api/platform-updates")
       .then((r) => r.json())
       .then((data) => { setUpdates(data.updates ?? []); })
       .finally(() => setLoading(false));
@@ -43,7 +44,6 @@ export default function PlatformUpdatesWidget() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "mark_read",
-        user_email: userEmail,
         update_ids: unread.map((u) => u.id),
       }),
     });

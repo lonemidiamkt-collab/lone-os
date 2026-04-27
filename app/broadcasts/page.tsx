@@ -36,7 +36,7 @@ export default function BroadcastsPage() {
   const loadBroadcasts = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/broadcasts?admin_email=${encodeURIComponent(adminEmail)}`);
+      const res = await fetch("/api/broadcasts");
       const data = await res.json();
       if (res.ok) setBroadcasts(data.broadcasts || []);
     } finally {
@@ -217,7 +217,6 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
           action: "test",
           subject,
           content_html: getContentHtml(),
-          admin_email: adminEmail,
           test_to: testTo || adminEmail,
         }),
       });
@@ -243,7 +242,6 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
           subject,
           content_html: getContentHtml(),
           target_audience: audience,
-          admin_email: adminEmail,
         }),
       });
       const data = await res.json();

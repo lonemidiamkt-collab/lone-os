@@ -4,15 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/emailService";
 import { broadcastEmail } from "@/lib/email/templates";
-
-// Admin emails allowed to trigger broadcasts.
-// The client sends admin_email in the body; we validate it against this list.
-// Keep in sync with lib/context/RoleContext.tsx USER_PROFILES (admin + manager roles).
-const ADMIN_EMAILS = new Set([
-  "lonemidiamkt@gmail.com", // Roberto (admin)
-  "lucas@lonemidia.com",
-  "julio@lonemidia.com",
-]);
+import { getServerUser } from "@/lib/supabase/auth-server";
 
 // Lotes de 10 emails com 300ms de delay entre lotes.
 // Resend free tier aceita ~100/s; deixamos margem de segurança.
@@ -72,21 +64,11 @@ async function resolveAudience(audience: string): Promise<Recipient[]> {
     .filter((r): r is Recipient => r !== null);
 }
 
-// Validate admin from request body. Returns { ok, email } or an error response.
-function validateAdmin(body: Record<string, unknown>): { ok: true; email: string } | { ok: false; response: NextResponse } {
-  const adminEmail = ((body.admin_email as string) || "").trim().toLowerCase();
-  if (!adminEmail || !ADMIN_EMAILS.has(adminEmail)) {
-    return { ok: false, response: NextResponse.json({ error: "Acesso restrito a administradores" }, { status: 403 }) };
-  }
-  return { ok: true, email: adminEmail };
-}
-
 // ─── GET: list broadcasts ──────────────────────────────────
 export async function GET(req: NextRequest) {
-  const adminEmail = (req.nextUrl.searchParams.get("admin_email") || "").trim().toLowerCase();
-  if (!adminEmail || !ADMIN_EMAILS.has(adminEmail)) {
-    return NextResponse.json({ error: "Acesso restrito a administradores" }, { status: 403 });
-  }
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Sessão inválida ou ausente" }, { status: 401 });
+  if (!user.isAdmin) return NextResponse.json({ error: "Acesso restrito a administradores" }, { status: 403 });
 
   const { data, error } = await supabaseAdmin
     .from("broadcasts")
@@ -100,11 +82,12 @@ export async function GET(req: NextRequest) {
 
 // ─── POST: test send OR real send ──────────────────────────
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({}));
-  const auth = validateAdmin(body);
-  if (!auth.ok) return auth.response;
-  const adminEmail = auth.email;
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Sessão inválida ou ausente" }, { status: 401 });
+  if (!user.isAdmin) return NextResponse.json({ error: "Acesso restrito a administradores" }, { status: 403 });
+  const adminEmail = user.email;
 
+  const body = await req.json().catch(() => ({}));
   const { action, subject, content_html, target_audience, test_to } = body as {
     action?: string; subject?: string; content_html?: string; target_audience?: string; test_to?: string;
   };

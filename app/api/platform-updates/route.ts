@@ -2,21 +2,17 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-
-// Admin whitelist — mantido em sync com outras rotas
-const ADMIN_EMAILS = new Set([
-  "lonemidiamkt@gmail.com",
-  "lucas@lonemidia.com",
-  "julio@lonemidia.com",
-]);
+import { getServerUser } from "@/lib/supabase/auth-server";
 
 /**
- * GET /api/platform-updates?user_email=<email>
+ * GET /api/platform-updates
  *
  * Retorna lista de updates publicados + flag 'read' por usuario.
+ * Usa email da session (cookie). Se não houver session, retorna sem flag de read.
  */
 export async function GET(req: NextRequest) {
-  const userEmail = (req.nextUrl.searchParams.get("user_email") || "").trim().toLowerCase();
+  const user = await getServerUser(req);
+  const userEmail = user?.email ?? "";
 
   const { data: updates, error } = await supabaseAdmin
     .from("platform_updates")
@@ -54,15 +50,20 @@ export async function GET(req: NextRequest) {
  * POST /api/platform-updates
  *
  * Actions:
- * - create: admin cria novo update
- * - mark_read: usuario marca update(s) como lido
+ * - create: admin cria novo update (precisa session admin)
+ * - mark_read: usuario marca update(s) como lido (precisa session)
+ *
+ * Auth via session cookie (não aceita admin_email/user_email no body).
  */
 export async function POST(req: NextRequest) {
+  const user = await getServerUser(req);
+  if (!user) {
+    return NextResponse.json({ error: "Sessão inválida ou ausente" }, { status: 401 });
+  }
+
   const body = await req.json().catch(() => ({}));
-  const { action, admin_email, user_email, update_ids, title, description, category, icon } = body as {
+  const { action, update_ids, title, description, category, icon } = body as {
     action?: string;
-    admin_email?: string;
-    user_email?: string;
     update_ids?: string[];
     title?: string;
     description?: string;
@@ -71,18 +72,17 @@ export async function POST(req: NextRequest) {
   };
 
   if (action === "mark_read") {
-    if (!user_email || !update_ids || !Array.isArray(update_ids) || update_ids.length === 0) {
-      return NextResponse.json({ error: "user_email e update_ids sao obrigatorios" }, { status: 400 });
+    if (!update_ids || !Array.isArray(update_ids) || update_ids.length === 0) {
+      return NextResponse.json({ error: "update_ids é obrigatório" }, { status: 400 });
     }
-    const rows = update_ids.map((id) => ({ user_email: user_email.toLowerCase(), update_id: id }));
+    const rows = update_ids.map((id) => ({ user_email: user.email, update_id: id }));
     const { error } = await supabaseAdmin.from("user_read_updates").upsert(rows, { onConflict: "user_email,update_id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true, marked: update_ids.length });
   }
 
   if (action === "create") {
-    const adminEmail = (admin_email || "").trim().toLowerCase();
-    if (!adminEmail || !ADMIN_EMAILS.has(adminEmail)) {
+    if (!user.isAdmin) {
       return NextResponse.json({ error: "Acesso restrito a administradores" }, { status: 403 });
     }
     if (!title?.trim() || !description?.trim()) {
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
       description: description.trim(),
       category: category || "feature",
       icon: icon || null,
-      created_by: adminEmail,
+      created_by: user.email,
     }).select("*").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true, update: data });
