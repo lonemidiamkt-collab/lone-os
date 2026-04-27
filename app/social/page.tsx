@@ -748,7 +748,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ImageIcon size={16} className="text-primary" />
