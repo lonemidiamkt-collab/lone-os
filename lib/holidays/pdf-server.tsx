@@ -8,11 +8,39 @@
  * a página /broadcasts ao bundle do react-pdf no client.
  */
 
-import { pdf } from "@react-pdf/renderer";
+import { pdf, Document, Page, Text, StyleSheet } from "@react-pdf/renderer";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { HolidaysMonthPdf } from "./pdf";
 import { getAllObservances, observancesForLocation, type Holiday } from "./brasil-api";
+
+// ─── Diagnostic test: minimal PDF ──────────────────────────
+// Roda 1 vez na primeira chamada pra confirmar se o renderer funciona
+// minimamente em produção. Se falhar, sabemos que é issue fundamental
+// (Next.js 15 + @react-pdf/renderer 4.x compat).
+let _diagnosticRan = false;
+const minStyles = StyleSheet.create({ p: { padding: 40 }, t: { fontSize: 12 } });
+async function runDiagnostic() {
+  if (_diagnosticRan) return;
+  _diagnosticRan = true;
+  try {
+    const stream = await pdf(
+      <Document>
+        <Page size="A4" style={minStyles.p}>
+          <Text style={minStyles.t}>diagnostic</Text>
+        </Page>
+      </Document>,
+    ).toBuffer();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream as unknown as NodeJS.ReadableStream) {
+      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    }
+    const buf = Buffer.concat(chunks);
+    console.log(`[pdf-server] DIAGNOSTIC OK — minimal PDF rendered, ${buf.length} bytes`);
+  } catch (err) {
+    console.error("[pdf-server] DIAGNOSTIC FAILED — fundamental issue:", err);
+  }
+}
 
 // Cache do logo em memória — lido 1x do FS na primeira chamada
 let _logoDataUrl: string | null = null;
@@ -72,6 +100,9 @@ export async function renderMonthHolidaysPdfBuffer(opts: BuildOptions): Promise<
     if (inMonth.length === 0) return null;
 
     const logoDataUrl = await getLogoDataUrl();
+
+    // Diagnóstico: roda 1x um render mínimo pra confirmar se o renderer funciona
+    await runDiagnostic();
 
     // Diagnóstico: verifica o tipo do componente importado pra garantir que
     // não é um Server Component reference do Next.js (que tem $$typeof embrulhado)
