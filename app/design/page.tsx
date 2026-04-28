@@ -16,7 +16,8 @@ import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
 import type { Client, ContentCard, DesignRequest } from "@/lib/types";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
-import { briefingPlainText } from "@/components/RichTextEditor";
+import { briefingPlainText, renderBriefingHtml } from "@/components/RichTextEditor";
+import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
 
 // ── Designer-focused columns (simplified from 7 → 4) ─────────────────────────
 // Maps: ideas/script → "queue", in_production → "doing", blocked → "blocked", rest → "delivered"
@@ -86,32 +87,52 @@ function UploadArtModal({
     card.imageUrl && card.imageUrl.includes("drive.google.com") ? card.imageUrl : ""
   );
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const clientDriveLink = clients.find((c) => c.id === card.clientId)?.driveLink;
 
-  const handleSave = () => {
-    if (!artLink.trim()) { setError("Insira o link da arte."); return; }
-    if (!artLink.includes("drive.google.com") && !artLink.includes("docs.google.com") && !artLink.includes("http")) {
-      setError("Insira um link válido (Google Drive ou URL)."); return;
+  const handleSave = async () => {
+    setError("");
+    const link = artLink.trim();
+    // Validações com mensagens específicas
+    if (!link) { setError("Insira o link da arte."); return; }
+    try {
+      const url = new URL(link);
+      if (!url.protocol.startsWith("http")) {
+        setError("URL inválida — deve começar com https://"); return;
+      }
+    } catch {
+      setError("URL inválida — verifique o formato (deve ser https://...)."); return;
     }
-    updateContentCard(card.id, {
-      imageUrl: artLink.trim(),
-      designerDeliveredAt: new Date().toISOString(),
-      designerDeliveredBy: currentUser,
-    });
-    if (card.designRequestId) {
-      updateDesignRequest(card.designRequestId, { status: "done" });
+
+    setSaving(true);
+    try {
+      // Bypass workflow: designer entregando arte pode estar em qualquer status
+      updateContentCard(card.id, {
+        imageUrl: link,
+        designerDeliveredAt: new Date().toISOString(),
+        designerDeliveredBy: currentUser,
+      }, { bypassWorkflow: true });
+
+      if (card.designRequestId) {
+        updateDesignRequest(card.designRequestId, { status: "done" });
+      }
+      // Notify Social Media that art is ready
+      pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmacao. Clique no card para confirmar.`, card.clientId);
+      // Audio ping
+      import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
+      setSaved(true);
+      setTimeout(() => {
+        setSaved(false);
+        onClose();
+      }, 800);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro desconhecido";
+      console.error("[UploadArt] Falha ao salvar:", err);
+      setError(`Não foi possível salvar a arte: ${msg}`);
+      setSaving(false);
     }
-    // Notify Social Media that art is ready
-    pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmacao. Clique no card para confirmar.`, card.clientId);
-    // Audio ping
-    import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
-    setSaved(true);
-    setTimeout(() => {
-      setSaved(false);
-      onClose();
-    }, 800);
   };
 
   return (
@@ -196,12 +217,15 @@ function UploadArtModal({
         <div className="p-5 border-t border-[#1a1a1a] flex gap-2">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all">Cancelar</button>
           <button
+            type="button"
             onClick={handleSave}
-            disabled={!artLink.trim() || saved}
+            disabled={!artLink.trim() || saved || saving}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] disabled:opacity-30 disabled:shadow-none"
           >
             {saved ? (
               <><CheckCircle size={14} /> Entregue!</>
+            ) : saving ? (
+              <><Upload size={14} className="animate-pulse" /> Salvando...</>
             ) : (
               <><Upload size={14} /> Entregar Arte</>
             )}
@@ -514,6 +538,7 @@ export default function DesignPage() {
                   </div>
 
                   {/* Kanban for this person — sorted by deadline */}
+                  <KanbanErrorBoundary context={`Kanban Designer · ${person}`}>
                   <KanbanBoard
                     columns={DESIGNER_COLUMNS.map((col) => ({
                       id: col.id,
@@ -719,6 +744,8 @@ export default function DesignPage() {
                       // Map designer column to actual status
                       const newStatus = DESIGNER_COL_TO_STATUS[to] ?? to;
                       const now = new Date().toISOString();
+                      // Designer/admin podem mover livremente — bypassWorkflow ignora
+                      // o state-machine VALID_TRANSITIONS pra evitar bloqueios desnecessários
                       updateContentCard(itemId, {
                         status: newStatus as ContentCard["status"],
                         statusChangedAt: now,
@@ -728,9 +755,10 @@ export default function DesignPage() {
                         },
                         // Clear block fields if unblocking
                         ...(card.status === "blocked" ? { blockedReason: undefined, blockedBy: undefined, blockedAt: undefined } : {}),
-                      });
+                      }, { bypassWorkflow: true });
                     }}
                   />
+                  </KanbanErrorBoundary>
                 </div>
               );
             })}
@@ -1104,9 +1132,14 @@ export default function DesignPage() {
 
               <div>
                 <p className="text-xs text-muted-foreground font-medium mb-1.5">Briefing Completo</p>
-                <p className="text-sm text-foreground leading-relaxed bg-muted border border-border rounded-lg p-4 whitespace-pre-wrap">
-                  {briefingReq.briefing || "Sem briefing detalhado."}
-                </p>
+                {briefingReq.briefing ? (
+                  <div
+                    className="text-sm text-foreground leading-relaxed bg-muted border border-border rounded-lg p-4 prose prose-sm prose-invert max-w-none"
+                    dangerouslySetInnerHTML={renderBriefingHtml(briefingReq.briefing)}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground leading-relaxed bg-muted border border-border rounded-lg p-4">Sem briefing detalhado.</p>
+                )}
               </div>
 
               {/* Client brand guidelines */}
@@ -1117,9 +1150,10 @@ export default function DesignPage() {
                     {client?.fixedBriefing && (
                       <div>
                         <p className="text-xs text-[#0d4af5]/70 font-medium mb-1.5 uppercase tracking-wider">Guidelines do Cliente</p>
-                        <p className="text-xs text-zinc-400 leading-relaxed bg-[#0d4af5]/[0.03] border border-[#0d4af5]/[0.08] rounded-lg p-3 whitespace-pre-wrap">
-                          {client.fixedBriefing}
-                        </p>
+                        <div
+                          className="text-xs text-zinc-400 leading-relaxed bg-[#0d4af5]/[0.03] border border-[#0d4af5]/[0.08] rounded-lg p-3 prose prose-sm prose-invert max-w-none"
+                          dangerouslySetInnerHTML={renderBriefingHtml(client.fixedBriefing)}
+                        />
                       </div>
                     )}
                     {client?.driveLink && (
@@ -1289,6 +1323,7 @@ function RequestsView({
       </div>
 
       {viewMode === "kanban" && (
+        <KanbanErrorBoundary context="Kanban Design Requests">
         <KanbanBoard
           columns={DESIGN_COLUMNS.map((col) => ({
             ...col,
@@ -1340,6 +1375,7 @@ function RequestsView({
             updateDesignRequest(itemId, { status: to as DesignRequest["status"] });
           }}
         />
+        </KanbanErrorBoundary>
       )}
 
       {viewMode === "list" && (

@@ -235,7 +235,7 @@ interface AppStateContextValue {
   deleteContentCard: (id: string) => void;
   deleteDesignRequest: (id: string) => void;
 
-  updateContentCard: (id: string, updates: Partial<ContentCard>) => void;
+  updateContentCard: (id: string, updates: Partial<ContentCard>, options?: { bypassWorkflow?: boolean }) => void;
   addContentCard: (card: Omit<ContentCard, "id">) => ContentCard;
   updateClientData: (clientId: string, updates: Partial<Client>) => void;
   addMoodEntry: (clientId: string, mood: MoodType, note: string, actor: string) => void;
@@ -1120,12 +1120,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateContentCard = useCallback(
-    (id: string, updates: Partial<ContentCard>) => {
+    (id: string, updates: Partial<ContentCard>, options?: { bypassWorkflow?: boolean }) => {
       setContentCards((prev) => {
         const card = prev.find((c) => c.id === id);
         if (!card) return prev;
-        // Enforce workflow transitions
-        if (card && updates.status && updates.status !== card.status) {
+        // Enforce workflow transitions — exceto quando bypassWorkflow está ligado
+        // (designer/admin podem mover livremente entre colunas no kanban)
+        if (card && updates.status && updates.status !== card.status && !options?.bypassWorkflow) {
           const allowed = VALID_TRANSITIONS[card.status] ?? [];
           if (allowed.length > 0 && !allowed.includes(updates.status)) {
             pushNotification(
