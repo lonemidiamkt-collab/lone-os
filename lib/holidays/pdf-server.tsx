@@ -8,7 +8,7 @@
  * a página /broadcasts ao bundle do react-pdf no client.
  */
 
-import { renderToStream } from "@react-pdf/renderer";
+import { pdf } from "@react-pdf/renderer";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { HolidaysMonthPdf } from "./pdf";
@@ -73,18 +73,34 @@ export async function renderMonthHolidaysPdfBuffer(opts: BuildOptions): Promise<
 
     const logoDataUrl = await getLogoDataUrl();
 
+    // Diagnóstico: verifica o tipo do componente importado pra garantir que
+    // não é um Server Component reference do Next.js (que tem $$typeof embrulhado)
+    console.log("[pdf-server] HolidaysMonthPdf type:", typeof HolidaysMonthPdf, "name:", (HolidaysMonthPdf as { name?: string }).name);
+
     // Timeout protection — PDF complexo não pode bloquear o request indefinidamente
     const renderPromise = (async () => {
-      const stream = await renderToStream(
-        <HolidaysMonthPdf
-          year={opts.year}
-          month={opts.month}
-          observances={inMonth}
-          region={opts.region ?? "BRASIL"}
-          logoUrl={logoDataUrl}
-        />,
-      );
-      return streamToBuffer(stream);
+      try {
+        const element = (
+          <HolidaysMonthPdf
+            year={opts.year}
+            month={opts.month}
+            observances={inMonth}
+            region={opts.region ?? "BRASIL"}
+            logoUrl={logoDataUrl}
+          />
+        );
+        // toBuffer() retorna stream em Node.js (não confundir com toBlob client-side)
+        const stream = await pdf(element).toBuffer();
+        return await streamToBuffer(stream as unknown as NodeJS.ReadableStream);
+      } catch (innerErr) {
+        // Log detalhado pra diagnóstico
+        console.error("[pdf-server] renderPromise error full:", innerErr);
+        if (innerErr instanceof Error) {
+          console.error("[pdf-server] message:", innerErr.message);
+          console.error("[pdf-server] stack:", innerErr.stack);
+        }
+        throw innerErr;
+      }
     })();
 
     const timeoutPromise = new Promise<null>((resolve) => {
