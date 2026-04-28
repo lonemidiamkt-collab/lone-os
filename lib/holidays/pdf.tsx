@@ -510,20 +510,18 @@ export function HolidaysMonthPdf({ year, month, observances, region = "BRASIL", 
                 return <View key={colIdx} style={[s.dayCell, s.dayCellEmpty]} />;
               }
               const cat = dayCategory[day];
-              const cellStyle = [
-                s.dayCell,
-                cat === "national" ? s.dayCellNational : null,
-                cat === "estadual" ? s.dayCellEstadual : null,
-                cat === "municipal" ? s.dayCellMunicipal : null,
-                cat === "comemorativa" ? s.dayCellComemorativa : null,
-              ].filter(Boolean);
+              const dayCellExtraStyle =
+                cat === "national" ? s.dayCellNational :
+                cat === "estadual" ? s.dayCellEstadual :
+                cat === "municipal" ? s.dayCellMunicipal :
+                cat === "comemorativa" ? s.dayCellComemorativa : undefined;
               const numberStyle =
                 cat === "national" ? s.dayNumberNational :
                 cat === "estadual" ? s.dayNumberEstadual :
                 cat === "municipal" ? s.dayNumberMunicipal :
                 cat === "comemorativa" ? s.dayNumberComemorativa : s.dayNumber;
               return (
-                <View key={colIdx} style={cellStyle as never}>
+                <View key={colIdx} style={dayCellExtraStyle ? [s.dayCell, dayCellExtraStyle] : s.dayCell}>
                   <Text style={numberStyle}>{day}</Text>
                 </View>
               );
@@ -628,13 +626,12 @@ export function HolidaysMonthPdf({ year, month, observances, region = "BRASIL", 
           return (
             <View key={`${o.date}-${idx}`} style={[s.card, cardStyle]} wrap={false}>
               <View style={[s.dateBadge, badgeStyle]}>
-                {day !== null && (
-                  <>
+                {day !== null ? (
+                  <View>
                     <Text style={s.dateBadgeDay}>{String(day).padStart(2, "0")}</Text>
                     <Text style={s.dateBadgeMonth}>{monthAbbr}</Text>
-                  </>
-                )}
-                {day === null && (
+                  </View>
+                ) : (
                   <Text style={[s.dateBadgeMonth, { fontSize: 10 }]}>{monthAbbr}</Text>
                 )}
               </View>
