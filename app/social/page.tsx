@@ -10,6 +10,7 @@ import DriveButton from "@/components/DriveButton";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import { MarkdownEditor } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
+import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import type { ContentCard, Client, MoodType, Priority, SocialMonthlyReport, MonthlyDeliveryReport, SocialPerformanceScore } from "@/lib/types";
 import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import {
@@ -1594,11 +1595,12 @@ interface KanbanByClientProps {
   onConfirmArt: (card: ContentCard) => void;
   onNonDelivery: (card: ContentCard) => void;
   onMoveCard: (cardId: string, toStatus: string) => void;
+  onDeleteCard?: (card: ContentCard) => void;
   currentUser: string;
   role: string;
 }
 
-function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, currentUser, role }: KanbanByClientProps) {
+function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, onDeleteCard, currentUser, role }: KanbanByClientProps) {
   const [activeClientId, setActiveClientId] = useState(clients[0]?.id ?? "");
 
   const activeClient = allClients.find((c) => c.id === activeClientId);
@@ -1681,6 +1683,11 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
         <KanbanBoard<ContentCard>
           columns={kanbanCols}
           onMove={(cardId, _from, toStatus) => onMoveCard(cardId, toStatus)}
+          onEdit={(card) => onCardClick(card)}
+          onDelete={onDeleteCard ? (cardId) => {
+            const card = contentCards.find((c) => c.id === cardId);
+            if (card) onDeleteCard(card);
+          } : undefined}
           renderCard={(card) => {
             const sla = getSlaBadge(card.status, card.columnEnteredAt, card.statusChangedAt);
             return (
@@ -1824,6 +1831,7 @@ export default function SocialPage() {
   const [adminWorkspace, setAdminWorkspace] = useState("Todos");
   const [selectedCard, setSelectedCard] = useState<ContentCard | null>(null);
   const [nonDeliveryCard, setNonDeliveryCard] = useState<ContentCard | null>(null);
+  const [cardToDelete, setCardToDelete] = useState<ContentCard | null>(null);
   const [nonDeliveryReason, setNonDeliveryReason] = useState("");
   const [ideasClient, setIdeasClient] = useState<Client | null>(null);
   const [moodClientId, setMoodClientId] = useState<string | null>(null);
@@ -1845,6 +1853,7 @@ export default function SocialPage() {
     onboarding,
     moodHistory,
     updateContentCard,
+    deleteContentCard,
     addMoodEntry,
     updateClientStatus,
     toggleOnboardingItem,
@@ -1980,6 +1989,18 @@ export default function SocialPage() {
 
       {/* Modals */}
       {selectedCard && <ContentCardModal card={selectedCard} onClose={() => setSelectedCard(null)} />}
+
+      {/* Delete card confirmation */}
+      {cardToDelete && (
+        <DeleteConfirmModal
+          title="Apagar este card?"
+          message="Toda informação do card (briefing, comentários, anexo de arte) será removida permanentemente. Esta ação não pode ser desfeita."
+          itemLabel={`${cardToDelete.title} — ${cardToDelete.clientName}`}
+          confirmLabel="Apagar card"
+          onConfirm={() => deleteContentCard(cardToDelete.id)}
+          onClose={() => setCardToDelete(null)}
+        />
+      )}
       {/* Non-delivery report modal */}
       {nonDeliveryCard && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); }}>
@@ -2435,6 +2456,7 @@ export default function SocialPage() {
                   },
                 }, { bypassWorkflow: true });
               }}
+              onDeleteCard={(card) => setCardToDelete(card)}
               currentUser={currentUser}
               role={role}
             />

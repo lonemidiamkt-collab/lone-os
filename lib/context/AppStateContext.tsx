@@ -54,6 +54,7 @@ import {
   mockSocialReports,
 } from "@/lib/mockData";
 import * as db from "@/lib/supabase/queries";
+import { supabase } from "@/lib/supabase/client";
 import { useRole } from "@/lib/context/RoleContext";
 
 // ============================================
@@ -232,8 +233,8 @@ interface AppStateContextValue {
   addTask: (task: Omit<Task, "id">) => Task;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
-  deleteContentCard: (id: string) => void;
-  deleteDesignRequest: (id: string) => void;
+  deleteContentCard: (id: string) => Promise<void>;
+  deleteDesignRequest: (id: string) => Promise<void>;
 
   updateContentCard: (id: string, updates: Partial<ContentCard>, options?: { bypassWorkflow?: boolean }) => void;
   addContentCard: (card: Omit<ContentCard, "id">) => ContentCard;
@@ -691,6 +692,45 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     loadFromDb();
     return () => { cancelled = true; };
   }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Realtime: content_cards ────────────────────────────────
+  // Mantém o state sincronizado quando OUTRO user faz INSERT/UPDATE/DELETE.
+  // Mudanças locais já são aplicadas optimistically — o realtime apenas
+  // garante consistência (o setContentCards é idempotente: se id já existe
+  // com mesmos campos, é no-op visual).
+  useEffect(() => {
+    if (!isAuthenticated || !dbReady) return;
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    (async () => {
+      const { snakeToContentCard } = await import("@/lib/supabase/queries");
+      if (cancelled) return;
+      channel = supabase
+        .channel("public:content_cards")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "content_cards" }, (payload) => {
+          if (!payload.new) return;
+          try {
+            const card = snakeToContentCard(payload.new as Record<string, unknown>);
+            setContentCards((prev) => prev.some((c) => c.id === card.id) ? prev : [...prev, card]);
+          } catch (err) { console.error("[realtime] insert mapping:", err); }
+        })
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "content_cards" }, (payload) => {
+          if (!payload.new) return;
+          try {
+            const card = snakeToContentCard(payload.new as Record<string, unknown>);
+            setContentCards((prev) => prev.map((c) => c.id === card.id ? { ...c, ...card } : c));
+          } catch (err) { console.error("[realtime] update mapping:", err); }
+        })
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "content_cards" }, (payload) => {
+          const id = (payload.old as { id?: string } | undefined)?.id;
+          if (id) setContentCards((prev) => prev.filter((c) => c.id !== id));
+        })
+        .subscribe();
+    })();
+
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [isAuthenticated, dbReady]);
 
   // ── One-time migration: push localStorage → Supabase ──
   async function migrateLocalToDb(local: Partial<PersistedState>) {
@@ -1619,12 +1659,44 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setTasks((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const deleteContentCard = useCallback((id: string) => {
+  const deleteContentCard = useCallback(async (id: string) => {
+    // Optimistic update — remove do state imediatamente
     setContentCards((prev) => prev.filter((c) => c.id !== id));
+    try {
+      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+      const res = await authedFetch("/api/content-cards/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        console.error("[deleteContentCard] API failed, will be re-synced via realtime:", data);
+        throw new Error(data.error || "Falha ao apagar");
+      }
+    } catch (err) {
+      console.error("[deleteContentCard]", err);
+      throw err;
+    }
   }, []);
 
-  const deleteDesignRequest = useCallback((id: string) => {
+  const deleteDesignRequest = useCallback(async (id: string) => {
     setDesignRequests((prev) => prev.filter((r) => r.id !== id));
+    try {
+      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+      const res = await authedFetch("/api/design-requests/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(data.error || "Falha ao apagar");
+      }
+    } catch (err) {
+      console.error("[deleteDesignRequest]", err);
+      throw err;
+    }
   }, []);
 
   const addReminder = useCallback(

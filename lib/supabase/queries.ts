@@ -8,6 +8,14 @@ import type {
   Role,
 } from "@/lib/types";
 
+// SENHAS DE PLATAFORMA (facebookPassword, instagramPassword, googleAdsPassword)
+// NÃO viajam mais pelo estado do Client. São lidas server-side via /api/client-vault/reveal
+// quando admin clica em "mostrar senha". Isso previne:
+//   - Senha ficar em memória do browser sem necessidade
+//   - Supabase RLS leak hipotético (se RLS relaxar algum dia)
+//   - Chance de vazamento via React DevTools / state inspection
+// snakeToClient continua recebendo a coluna do banco mas DESCARTA o valor da senha.
+
 // ═══════════════════════════════════════════════════════════
 // CLIENTS
 // ═══════════════════════════════════════════════════════════
@@ -65,11 +73,12 @@ function snakeToClient(row: Record<string, unknown>): Client {
     email: (row.email as string) ?? undefined,
     leadSource: (row.lead_source as Client["leadSource"]) ?? undefined,
     facebookLogin: (row.facebook_login as string) ?? undefined,
-    facebookPassword: (row.facebook_password as string) ?? undefined,
+    // Senhas NÃO saem do banco pelo caminho do estado. Admin chama /api/client-vault/reveal quando precisar.
+    facebookPassword: undefined,
     googleAdsLogin: (row.google_ads_login as string) ?? undefined,
-    googleAdsPassword: (row.google_ads_password as string) ?? undefined,
+    googleAdsPassword: undefined,
     instagramLogin: (row.instagram_login as string) ?? undefined,
-    instagramPassword: (row.instagram_password as string) ?? undefined,
+    instagramPassword: undefined,
     budgetAlertPct: (row.budget_alert_pct as number) ?? undefined,
     npsScore: (row.nps_score as number) ?? undefined,
     firstValueDeliveredAt: (row.first_value_delivered_at as string) ?? undefined,
@@ -130,11 +139,13 @@ function clientToSnake(c: Partial<Client>): Record<string, unknown> {
   if (c.email !== undefined) row.email = c.email;
   if (c.leadSource !== undefined) row.lead_source = c.leadSource;
   if (c.facebookLogin !== undefined) row.facebook_login = c.facebookLogin;
-  if (c.facebookPassword !== undefined) row.facebook_password = c.facebookPassword;
+  // Senhas NÃO são escritas via updateClientDb (que roda no browser sem o VAULT_KEY).
+  // Admin edita via /api/client-vault/update que faz encrypt server-side antes de persistir.
+  // Se alguém tentar burlar passando facebookPassword, é ignorado (defense in depth).
   if (c.googleAdsLogin !== undefined) row.google_ads_login = c.googleAdsLogin;
-  if (c.googleAdsPassword !== undefined) row.google_ads_password = c.googleAdsPassword;
+  // google_ads_password: via /api/client-vault/update
   if (c.instagramLogin !== undefined) row.instagram_login = c.instagramLogin;
-  if (c.instagramPassword !== undefined) row.instagram_password = c.instagramPassword;
+  // instagram_password: via /api/client-vault/update
   return row;
 }
 
@@ -228,7 +239,7 @@ export async function updateTaskDb(id: string, updates: Partial<Task>): Promise<
 // CONTENT CARDS
 // ═══════════════════════════════════════════════════════════
 
-function snakeToContentCard(row: Record<string, unknown>): ContentCard {
+export function snakeToContentCard(row: Record<string, unknown>): ContentCard {
   return {
     id: row.id as string,
     title: row.title as string,

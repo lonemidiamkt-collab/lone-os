@@ -34,7 +34,6 @@ export default function KanbanBoard<T extends { id: string }>({
   const [dragging, setDragging] = useState<{ itemId: string; fromCol: string } | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   useEffect(() => {
     if (!dragging) setColumns(propColumns);
@@ -132,29 +131,12 @@ export default function KanbanBoard<T extends { id: string }>({
                             </button>
                           )}
                           {onDelete && (
-                            confirmDelete === item.id ? (
-                              <div className="px-3 py-1.5 flex items-center gap-1">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); onDelete(item.id); setConfirmDelete(null); setMenuOpen(null); }}
-                                  className="text-[10px] px-2 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25"
-                                >
-                                  Confirmar
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(null); }}
-                                  className="text-[10px] px-2 py-0.5 text-zinc-500 hover:text-white"
-                                >
-                                  Nao
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setConfirmDelete(item.id); }}
-                                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/[0.06] transition-all"
-                              >
-                                <Trash2 size={11} /> Excluir
-                              </button>
-                            )
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onDelete(item.id); setMenuOpen(null); }}
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/[0.06] transition-all"
+                            >
+                              <Trash2 size={11} /> Excluir
+                            </button>
                           )}
                         </div>
                       </>

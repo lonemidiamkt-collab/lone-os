@@ -9,9 +9,10 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.{ts,tsx}"],
-    // pool=threads + 1 thread evita o bug de path com espaços que dá timeout
-    // no vitest-pool-runner (default "forks" trava em path "Projetos Vibe Coding/").
+    // path "Projetos Vibe Coding/" com espaços trava o worker pool em paralelo.
+    // fileParallelism:false força execução sequencial, evita o timeout.
     pool: "threads",
+    fileParallelism: false,
   },
   resolve: {
     alias: {

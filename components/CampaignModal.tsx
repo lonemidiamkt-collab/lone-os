@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { MarkdownEditor } from "@/components/Markdown";
 import { Card } from "@/components/ui/card";
 
 interface ArtDescription {
@@ -148,11 +149,12 @@ export default function CampaignModal({ client, onClose }: Props) {
               Briefing da Campanha
               <span className="text-muted-foreground/60 ml-2 font-normal">Descreva o objetivo, oferta e público da campanha deste mês</span>
             </label>
-            <Textarea
+            <MarkdownEditor
               value={briefing}
-              onChange={(e) => setBriefing(e.target.value)}
-              rows={4}
-              placeholder="Ex: Lançamento do novo programa de emagrecimento em 12 semanas. Público: mulheres 25-45 anos que já tentaram de tudo. Oferta: matrícula com 30% de desconto + acompanhamento nutricional. Objetivo: 50 matrículas no mês."
+              onChange={setBriefing}
+              minHeight={120}
+              placeholder="Ex: **Lançamento** do novo programa de emagrecimento.&#10;- Público: mulheres 25-45 anos&#10;- Oferta: 30% off + acompanhamento&#10;- Objetivo: 50 matrículas no mês"
+              className="bg-muted"
             />
             <div className="flex items-center gap-2 mt-2">
               <Button

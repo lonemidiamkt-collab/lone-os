@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import Header from "@/components/Header";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import HolidaysPdfButton from "@/components/HolidaysPdfButton";
+import { MarkdownEditor } from "@/components/Markdown";
 import { useAppState } from "@/lib/context/AppStateContext";
 import { useRole } from "@/lib/context/RoleContext";
 import { mockTasks, mockAdAccounts } from "@/lib/mockData";
@@ -1549,12 +1550,12 @@ export default function ClientDetailPage() {
                 onChange={(e) => setDesignReqForm((f) => ({ ...f, deadline: e.target.value }))}
                 className="w-full bg-muted rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary"
               />
-              <textarea
+              <MarkdownEditor
                 value={designReqForm.briefing}
-                onChange={(e) => setDesignReqForm((f) => ({ ...f, briefing: e.target.value }))}
-                rows={3}
-                placeholder="Briefing detalhado para o designer..."
-                className="w-full bg-muted rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary resize-none"
+                onChange={(v) => setDesignReqForm((f) => ({ ...f, briefing: v }))}
+                placeholder="Briefing detalhado para o designer (markdown — **negrito**, listas, links)..."
+                minHeight={120}
+                className="bg-muted"
               />
             </div>
             <div className="p-5 border-t border-border flex gap-2">

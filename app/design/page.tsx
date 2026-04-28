@@ -16,8 +16,9 @@ import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
 import type { Client, ContentCard, DesignRequest } from "@/lib/types";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
-import { MarkdownView, markdownPlainText } from "@/components/Markdown";
+import { MarkdownView, MarkdownEditor, markdownPlainText } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
+import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 
 // ── Designer-focused columns (simplified from 7 → 4) ─────────────────────────
 // Maps: ideas/script → "queue", in_production → "doing", blocked → "blocked", rest → "delivered"
@@ -348,7 +349,7 @@ function DownloadButton({ url, title }: { url: string; title: string }) {
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DesignPage() {
-  const { clients, contentCards, designRequests, updateDesignRequest, updateContentCard, pushNotification, addDesignRequest, updateClientData } = useAppState();
+  const { clients, contentCards, designRequests, updateDesignRequest, updateContentCard, deleteContentCard, deleteDesignRequest, pushNotification, addDesignRequest, updateClientData } = useAppState();
   const { role, currentUser } = useRole();
   const [tab, setTab] = useState<TabView>("kanbans");
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();
@@ -367,6 +368,8 @@ export default function DesignPage() {
 
   const [uploadCard, setUploadCard] = useState<ContentCard | null>(null);
   const [detailCard, setDetailCard] = useState<ContentCard | null>(null);
+  const [cardToDelete, setCardToDelete] = useState<ContentCard | null>(null);
+  const [reqToDelete, setReqToDelete] = useState<DesignRequest | null>(null);
   const [briefingReq, setBriefingReq] = useState<DesignRequest | null>(null);
   const [nonDeliveryCard, setNonDeliveryCard] = useState<ContentCard | null>(null);
   const [nonDeliveryReason, setNonDeliveryReason] = useState("");
@@ -825,6 +828,14 @@ export default function DesignPage() {
                         ...(card.status === "blocked" ? { blockedReason: undefined, blockedBy: undefined, blockedAt: undefined } : {}),
                       }, { bypassWorkflow: true });
                     }}
+                    onEdit={(item) => {
+                      const fullCard = (item as { _card?: ContentCard })._card ?? contentCards.find((c) => c.id === item.id);
+                      if (fullCard) setDetailCard(fullCard);
+                    }}
+                    onDelete={(itemId) => {
+                      const fullCard = contentCards.find((c) => c.id === itemId);
+                      if (fullCard) setCardToDelete(fullCard);
+                    }}
                   />
                   </KanbanErrorBoundary>
                 </div>
@@ -840,6 +851,7 @@ export default function DesignPage() {
             contentCards={myContentCards}
             updateDesignRequest={updateDesignRequest}
             onBriefing={setBriefingReq}
+            onDeleteRequest={setReqToDelete}
             currentUser={currentUser}
           />
         )}
@@ -1019,6 +1031,30 @@ export default function DesignPage() {
       {/* Card Detail Modal (reuse ContentCardModal from social) */}
       {detailCard && (
         <ContentCardModal card={detailCard} onClose={() => setDetailCard(null)} />
+      )}
+
+      {/* Delete confirmation — content card */}
+      {cardToDelete && (
+        <DeleteConfirmModal
+          title="Apagar este card de conteúdo?"
+          message="Toda informação do card (briefing, comentários, anexo) será removida permanentemente. Esta ação não pode ser desfeita."
+          itemLabel={`${cardToDelete.title} — ${cardToDelete.clientName}`}
+          confirmLabel="Apagar card"
+          onConfirm={() => deleteContentCard(cardToDelete.id)}
+          onClose={() => setCardToDelete(null)}
+        />
+      )}
+
+      {/* Delete confirmation — design request */}
+      {reqToDelete && (
+        <DeleteConfirmModal
+          title="Apagar esta demanda?"
+          message="A solicitação de design será removida da fila. Cards de conteúdo já vinculados não serão afetados."
+          itemLabel={`${reqToDelete.title} — ${reqToDelete.clientName}`}
+          confirmLabel="Apagar demanda"
+          onConfirm={() => deleteDesignRequest(reqToDelete.id)}
+          onClose={() => setReqToDelete(null)}
+        />
       )}
 
       {/* Non-delivery report modal */}
@@ -1315,12 +1351,14 @@ function RequestsView({
   contentCards,
   updateDesignRequest,
   onBriefing,
+  onDeleteRequest,
   currentUser,
 }: {
   designRequests: DesignRequest[];
   contentCards: ContentCard[];
   updateDesignRequest: (id: string, updates: Partial<DesignRequest>) => void;
   onBriefing: (req: DesignRequest) => void;
+  onDeleteRequest?: (req: DesignRequest) => void;
   currentUser?: string;
 }) {
   const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
@@ -1440,6 +1478,14 @@ function RequestsView({
           onMove={(itemId, _from, to) => {
             updateDesignRequest(itemId, { status: to as DesignRequest["status"] });
           }}
+          onEdit={(item) => {
+            const fullReq = (item as { _req?: DesignRequest })._req ?? designRequests.find((r) => r.id === item.id);
+            if (fullReq) onBriefing(fullReq);
+          }}
+          onDelete={onDeleteRequest ? (itemId) => {
+            const req = designRequests.find((r) => r.id === itemId);
+            if (req) onDeleteRequest(req);
+          } : undefined}
         />
         </KanbanErrorBoundary>
       )}
@@ -1766,22 +1812,22 @@ function ClientDrawer({
                   </div>
                   <div>
                     <label className="text-[10px] text-muted-foreground mb-1 block">Briefing fixo (info permanente da marca)</label>
-                    <textarea
+                    <MarkdownEditor
                       value={briefingForm.fixedBriefing}
-                      onChange={(e) => setBriefingForm((p) => ({ ...p, fixedBriefing: e.target.value }))}
-                      rows={4}
-                      placeholder="Missao, valores, publico-alvo, cores, o que NAO fazer..."
-                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50 resize-none"
+                      onChange={(v) => setBriefingForm((p) => ({ ...p, fixedBriefing: v }))}
+                      minHeight={120}
+                      placeholder="Missão, valores, público-alvo, cores, o que NÃO fazer..."
+                      className="bg-background"
                     />
                   </div>
                   <div>
                     <label className="text-[10px] text-muted-foreground mb-1 block">Briefing da campanha (temporario)</label>
-                    <textarea
+                    <MarkdownEditor
                       value={briefingForm.campaignBriefing}
-                      onChange={(e) => setBriefingForm((p) => ({ ...p, campaignBriefing: e.target.value }))}
-                      rows={3}
-                      placeholder="Campanha atual, promocao, foco do mes..."
-                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50 resize-none"
+                      onChange={(v) => setBriefingForm((p) => ({ ...p, campaignBriefing: v }))}
+                      minHeight={100}
+                      placeholder="Campanha atual, promoção, foco do mês..."
+                      className="bg-background"
                     />
                   </div>
                 </>
@@ -2018,15 +2064,15 @@ function NewTaskModal({
             />
           </div>
 
-          {/* Briefing */}
+          {/* Briefing — Markdown */}
           <div className="space-y-1.5">
             <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Descrição / Briefing</label>
-            <textarea
+            <MarkdownEditor
               value={briefing}
-              onChange={(e) => setBriefing(e.target.value)}
-              rows={3}
-              placeholder="O que precisa ser feito, detalhes, referências..."
-              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 resize-none"
+              onChange={setBriefing}
+              placeholder="O que precisa ser feito (markdown — **negrito**, listas, links, referências)..."
+              minHeight={120}
+              className="bg-muted"
             />
           </div>
         </div>
