@@ -16,7 +16,7 @@ import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
 import type { Client, ContentCard, DesignRequest } from "@/lib/types";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
-import { briefingPlainText, renderBriefingHtml } from "@/components/RichTextEditor";
+import { MarkdownView, markdownPlainText } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
 
 // ── Designer-focused columns (simplified from 7 → 4) ─────────────────────────
@@ -88,27 +88,70 @@ function UploadArtModal({
   );
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string>("");
   const [error, setError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const clientDriveLink = clients.find((c) => c.id === card.clientId)?.driveLink;
+
+  // ─── Upload de arquivo direto (PNG/JPG/PDF/MP4) ───
+  const handleFileUpload = async (file: File) => {
+    setError("");
+    if (file.size === 0) { setError("Arquivo vazio."); return; }
+    if (file.size > 25 * 1024 * 1024) {
+      setError(`Arquivo muito grande (${(file.size / 1024 / 1024).toFixed(1)}MB). Máximo: 25MB`);
+      return;
+    }
+    const allowed = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "application/pdf", "video/mp4", "video/webm"];
+    if (!allowed.includes(file.type)) {
+      setError(`Tipo não suportado (${file.type}). Use PNG, JPEG, WebP, GIF, PDF ou MP4.`);
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress("Enviando arquivo...");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("cardId", card.id);
+
+      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+      const res = await authedFetch("/api/upload-art", { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+
+      if (!res.ok) {
+        setError(data.error || `Falha no upload: HTTP ${res.status}`);
+        console.error("[UploadArt] upload failed:", { status: res.status, data });
+        return;
+      }
+
+      setArtLink(data.url);
+      setUploadProgress("Upload concluído. Clique em \"Entregar Arte\" para finalizar.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro de conexão";
+      console.error("[UploadArt] upload exception:", err);
+      setError(`Erro no upload: ${msg}`);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     setError("");
     const link = artLink.trim();
-    // Validações com mensagens específicas
-    if (!link) { setError("Insira o link da arte."); return; }
+    if (!link) { setError("Faça upload do arquivo OU cole um link da arte."); return; }
     try {
       const url = new URL(link);
       if (!url.protocol.startsWith("http")) {
         setError("URL inválida — deve começar com https://"); return;
       }
     } catch {
-      setError("URL inválida — verifique o formato (deve ser https://...)."); return;
+      setError("URL inválida — verifique o formato."); return;
     }
 
     setSaving(true);
     try {
-      // Bypass workflow: designer entregando arte pode estar em qualquer status
       updateContentCard(card.id, {
         imageUrl: link,
         designerDeliveredAt: new Date().toISOString(),
@@ -118,19 +161,14 @@ function UploadArtModal({
       if (card.designRequestId) {
         updateDesignRequest(card.designRequestId, { status: "done" });
       }
-      // Notify Social Media that art is ready
       pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmacao. Clique no card para confirmar.`, card.clientId);
-      // Audio ping
       import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
       setSaved(true);
-      setTimeout(() => {
-        setSaved(false);
-        onClose();
-      }, 800);
+      setTimeout(() => { setSaved(false); onClose(); }, 800);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      console.error("[UploadArt] Falha ao salvar:", err);
-      setError(`Não foi possível salvar a arte: ${msg}`);
+      console.error("[UploadArt] save failed:", err);
+      setError(`Não foi possível salvar: ${msg}`);
       setSaving(false);
     }
   };
@@ -169,7 +207,37 @@ function UploadArtModal({
             </a>
           )}
 
-          {/* Art link input */}
+          {/* File upload — direto do computador */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Upload do arquivo</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,video/mp4,video/webm"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || saving}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-[#0d4af5]/40 bg-[#0d4af5]/[0.04] hover:bg-[#0d4af5]/[0.08] hover:border-[#0d4af5]/60 transition-all text-sm text-foreground disabled:opacity-50 disabled:cursor-wait"
+            >
+              <Upload size={14} className="text-[#0d4af5]" />
+              {uploading ? "Enviando..." : "Selecionar arquivo (PNG, JPG, PDF, MP4 — até 25MB)"}
+            </button>
+            {uploadProgress && (
+              <p className="text-[10px] text-emerald-400 mt-1">{uploadProgress}</p>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-px bg-[#1a1a1a]" />
+            <span className="text-[9px] text-zinc-700 uppercase tracking-wider">ou</span>
+            <div className="flex-1 h-px bg-[#1a1a1a]" />
+          </div>
+
+          {/* Art link input — fallback */}
           <div className="space-y-1.5">
             <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Link da Arte (Google Drive)</label>
             <input
@@ -208,7 +276,7 @@ function UploadArtModal({
             </div>
             {card.briefing && (
               <div className="pt-1.5 border-t border-[#1a1a1a] mt-1.5">
-                <p className="text-muted-foreground leading-relaxed line-clamp-3 whitespace-pre-line">{briefingPlainText(card.briefing)}</p>
+                <p className="text-muted-foreground leading-relaxed line-clamp-3">{markdownPlainText(card.briefing)}</p>
               </div>
             )}
           </div>
@@ -1133,10 +1201,9 @@ export default function DesignPage() {
               <div>
                 <p className="text-xs text-muted-foreground font-medium mb-1.5">Briefing Completo</p>
                 {briefingReq.briefing ? (
-                  <div
-                    className="text-sm text-foreground leading-relaxed bg-muted border border-border rounded-lg p-4 prose prose-sm prose-invert max-w-none"
-                    dangerouslySetInnerHTML={renderBriefingHtml(briefingReq.briefing)}
-                  />
+                  <div className="bg-muted border border-border rounded-lg p-4">
+                    <MarkdownView source={briefingReq.briefing} />
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground leading-relaxed bg-muted border border-border rounded-lg p-4">Sem briefing detalhado.</p>
                 )}
@@ -1150,10 +1217,9 @@ export default function DesignPage() {
                     {client?.fixedBriefing && (
                       <div>
                         <p className="text-xs text-[#0d4af5]/70 font-medium mb-1.5 uppercase tracking-wider">Guidelines do Cliente</p>
-                        <div
-                          className="text-xs text-zinc-400 leading-relaxed bg-[#0d4af5]/[0.03] border border-[#0d4af5]/[0.08] rounded-lg p-3 prose prose-sm prose-invert max-w-none"
-                          dangerouslySetInnerHTML={renderBriefingHtml(client.fixedBriefing)}
-                        />
+                        <div className="bg-[#0d4af5]/[0.03] border border-[#0d4af5]/[0.08] rounded-lg p-3">
+                          <MarkdownView source={client.fixedBriefing} />
+                        </div>
                       </div>
                     )}
                     {client?.driveLink && (
@@ -1401,7 +1467,7 @@ function RequestsView({
                         <span className="text-xs text-muted-foreground">por {req.requestedBy}</span>
                       )}
                     </div>
-                    {req.briefing && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 whitespace-pre-line">{briefingPlainText(req.briefing)}</p>}
+                    {req.briefing && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{markdownPlainText(req.briefing)}</p>}
                     {linked && (
                       <span className="text-[10px] text-zinc-400 bg-[#111118] border border-[#1e1e2a] px-2 py-0.5 rounded-full mt-1.5 inline-block">
                         Card: {linked.title}

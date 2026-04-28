@@ -8,7 +8,8 @@ import Client360Modal from "@/components/Client360Modal";
 import CampaignModal from "@/components/CampaignModal";
 import DriveButton from "@/components/DriveButton";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
-import RichTextEditor, { renderBriefingHtml } from "@/components/RichTextEditor";
+import { MarkdownEditor } from "@/components/Markdown";
+import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
 import type { ContentCard, Client, MoodType, Priority, SocialMonthlyReport, MonthlyDeliveryReport, SocialPerformanceScore } from "@/lib/types";
 import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import {
@@ -853,16 +854,16 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
             <p className="text-xs text-red-400">Data e horário são obrigatórios para enviar a demanda ao designer.</p>
           )}
 
-          {/* Briefing — editor WYSIWYG */}
+          {/* Briefing — Markdown editor (Trello-like) */}
           <div>
             <Label className="mb-1.5 block">Briefing / Descrição</Label>
-            <RichTextEditor
+            <MarkdownEditor
               value={briefing}
               onChange={setBriefing}
-              placeholder="Detalhes do conteúdo: produto, benefícios, CTA, tom de voz, referências..."
+              placeholder={"Use markdown — **negrito**, *itálico*, listas, links\n\nDetalhes do conteúdo: produto, benefícios, CTA, tom de voz..."}
               minHeight={120}
             />
-            <p className="text-[10px] text-muted-foreground mt-1">Use negrito, itálico e listas pra estruturar o briefing. O designer vê formatado.</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Markdown puro. Designer vê formatado.</p>
           </div>
 
           {/* Drive link auto-recovered */}
@@ -2401,6 +2402,7 @@ export default function SocialPage() {
               </button>
             </div>
 
+            <KanbanErrorBoundary context="Kanban Social Media">
             <KanbanByClient
               clients={filteredClients.filter((c) => c.status !== "onboarding")}
               allClients={clients}
@@ -2423,6 +2425,7 @@ export default function SocialPage() {
                   return;
                 }
                 const now = new Date().toISOString();
+                // Movimento livre: ignora state-machine pra fluidez do time
                 updateContentCard(cardId, {
                   status: toStatus as ContentCard["status"],
                   statusChangedAt: now,
@@ -2430,11 +2433,12 @@ export default function SocialPage() {
                     ...(card.columnEnteredAt ?? {}),
                     [toStatus]: now,
                   },
-                });
+                }, { bypassWorkflow: true });
               }}
               currentUser={currentUser}
               role={role}
             />
+            </KanbanErrorBoundary>
           </div>
         )}
 

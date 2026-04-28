@@ -9,6 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "contracts:regen": "node scripts/build-contracts.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:merge": "npx tsx scripts/test-merge-docx.ts",
     "db:seed": "npx tsx scripts/seed-auth-users.ts",
     "db:reset": "supabase db reset",
@@ -42,19 +44,27 @@
     "pizzip": "^3.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
     "recharts": "^3.8.0",
+    "remark-gfm": "^4.0.1",
     "resend": "^6.12.0",
     "tailwind-merge": "^2.3.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/ui": "^4.1.5",
     "autoprefixer": "^10.4.27",
     "eslint": "^8",
     "eslint-config-next": "^14.2.35",
+    "jsdom": "^29.1.0",
     "postcss": "^8",
     "tailwindcss": "^3.4.19",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.5"
   }
 }

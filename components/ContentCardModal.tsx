@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import RichTextEditor, { renderBriefingHtml } from "@/components/RichTextEditor";
+import { MarkdownEditor, MarkdownView, htmlToMarkdown } from "@/components/Markdown";
 
 const PLATFORM_OPTIONS: { value: SocialPlatform; label: string; emoji: string }[] = [
   { value: "instagram", label: "Instagram", emoji: "📸" },
@@ -68,7 +68,9 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [observations, setObservations] = useState(card.observations ?? "");
-  const [briefing, setBriefing] = useState(card.briefing ?? "");
+  // Briefing é salvo/editado como Markdown. Dados legacy (HTML do contentEditable
+  // anterior) são convertidos no carregamento via htmlToMarkdown.
+  const [briefing, setBriefing] = useState(htmlToMarkdown(card.briefing ?? ""));
   const [caption, setCaption] = useState(card.caption ?? "");
   const [hashtags, setHashtags] = useState(card.hashtags ?? "");
   const [platform, setPlatform] = useState<SocialPlatform | "">(card.platform ?? "");
@@ -78,17 +80,64 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [saved, setSaved] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [editingBriefing, setEditingBriefing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadOk, setUploadOk] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
   const comments = card.comments ?? [];
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload real pra bucket "arts" via /api/upload-art (service role bypassa RLS)
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (imageUrl && imageUrl.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
-    const url = URL.createObjectURL(file);
-    setImageUrl(url);
+
+    setUploadError(null);
+    setUploadOk(false);
+
+    // Validações antes de subir
+    if (file.size === 0) { setUploadError("Arquivo vazio."); return; }
+    if (file.size > 25 * 1024 * 1024) {
+      setUploadError(`Arquivo muito grande (${(file.size / 1024 / 1024).toFixed(1)}MB). Máximo: 25MB`);
+      return;
+    }
+    const allowed = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "application/pdf", "video/mp4", "video/webm"];
+    if (!allowed.includes(file.type)) {
+      setUploadError(`Tipo não suportado (${file.type}). Use PNG, JPEG, WebP, PDF ou MP4.`);
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("cardId", card.id);
+
+      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+      const res = await authedFetch("/api/upload-art", { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+
+      if (!res.ok) {
+        const msg = data.error || `Falha no upload (HTTP ${res.status})`;
+        setUploadError(msg);
+        console.error("[ContentCardModal upload]", { status: res.status, data });
+        return;
+      }
+
+      setImageUrl(data.url);
+      setUploadOk(true);
+      // Limpa o feedback de sucesso após 3s
+      setTimeout(() => setUploadOk(false), 3000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro de conexão";
+      console.error("[ContentCardModal upload exception]", err);
+      setUploadError(`Erro: ${msg}`);
+    } finally {
+      setUploading(false);
+      // Limpa o input pra permitir re-upload do mesmo arquivo
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const handleSave = () => {
@@ -181,23 +230,44 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 </div>
               )}
             </div>
-            <div className="p-3 border-t border-border">
+            <div className="p-3 border-t border-border space-y-2">
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*,video/*,.pdf"
+                accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,video/mp4,video/webm"
                 className="hidden"
                 onChange={handleFileChange}
+                disabled={uploading}
               />
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
                 className="w-full flex items-center justify-center gap-2"
               >
-                <Upload size={13} />
-                {imageUrl ? "Trocar arquivo" : "Anexar arte / arquivo"}
+                {uploading ? (
+                  <><Upload size={13} className="animate-pulse" /> Carregando arte...</>
+                ) : (
+                  <><Upload size={13} /> {imageUrl ? "Trocar arquivo" : "Anexar arte / arquivo"}</>
+                )}
               </Button>
+              {/* Toast inline — sucesso ou erro */}
+              {uploadOk && (
+                <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2 py-1.5">
+                  <CheckCircle size={11} /> Arte enviada — clique em &quot;Salvar&quot; pra confirmar
+                </div>
+              )}
+              {uploadError && (
+                <div className="flex items-start gap-1.5 text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-2 py-1.5">
+                  <XCircle size={11} className="shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{uploadError}</span>
+                </div>
+              )}
+              <p className="text-[9px] text-muted-foreground text-center">
+                PNG, JPEG, WebP, GIF, PDF, MP4 — até 25MB
+              </p>
             </div>
           </div>
 
@@ -294,10 +364,10 @@ export default function ContentCardModal({ card, onClose }: Props) {
 
               {editingBriefing ? (
                 <div className="space-y-2">
-                  <RichTextEditor
+                  <MarkdownEditor
                     value={briefing}
                     onChange={setBriefing}
-                    placeholder="Detalhes do conteúdo: produto, benefícios, CTA, referências, tom de voz..."
+                    placeholder={"Use markdown:\n**negrito**, *itálico*, # título\n- item de lista\n[link](https://...)\n\nDigite o briefing — produto, benefícios, CTA, tom de voz..."}
                     minHeight={140}
                     autoFocus
                     className="bg-muted"
@@ -312,7 +382,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setBriefing(card.briefing ?? ""); setEditingBriefing(false); }}
+                      onClick={() => { setBriefing(htmlToMarkdown(card.briefing ?? "")); setEditingBriefing(false); }}
                       className="text-xs px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground transition-colors"
                     >
                       Cancelar
@@ -322,10 +392,11 @@ export default function ContentCardModal({ card, onClose }: Props) {
               ) : briefing ? (
                 <div
                   onClick={() => setEditingBriefing(true)}
-                  className="bg-muted border border-border rounded-lg px-4 py-3 text-sm text-foreground leading-relaxed cursor-text hover:border-primary/30 transition-colors prose prose-sm prose-invert max-w-none"
+                  className="bg-muted border border-border rounded-lg px-4 py-3 cursor-text hover:border-primary/30 transition-colors"
                   title="Clique pra editar"
-                  dangerouslySetInnerHTML={renderBriefingHtml(briefing)}
-                />
+                >
+                  <MarkdownView source={briefing} />
+                </div>
               ) : (
                 <button
                   type="button"
