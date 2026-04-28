@@ -1198,8 +1198,16 @@ function QuickCreateModal({
   onSaveAndOpen: (task: Omit<Task, "id">) => void;
 }) {
   const [createType, setCreateType] = useState<CreateType>("task");
+  // Social/designer/traffic só veem seus próprios clientes na carteira
+  const visibleClients = useMemo(() => {
+    if (role === "social") return clients.filter((c) => c.assignedSocial === currentUser);
+    if (role === "designer") return clients.filter((c) => c.assignedDesigner === currentUser);
+    if (role === "traffic") return clients.filter((c) => c.assignedTraffic === currentUser);
+    return clients;
+  }, [clients, role, currentUser]);
+
   const [title, setTitle] = useState("");
-  const [clientId, setClientId] = useState(clients[0]?.id || "");
+  const [clientId, setClientId] = useState(visibleClients[0]?.id || "");
   const [sector, setSector] = useState<"social" | "designer" | "traffic">("social");
   const [priority, setPriority] = useState<Priority>("medium");
   const [description, setDescription] = useState("");
@@ -1224,7 +1232,7 @@ function QuickCreateModal({
     el.style.height = `${el.scrollHeight}px`;
   }, [description]);
 
-  const selectedClient = clients.find((c) => c.id === clientId);
+  const selectedClient = visibleClients.find((c) => c.id === clientId);
 
   const getAssignedTo = () => {
     if (!selectedClient) return currentUser;
@@ -1371,7 +1379,7 @@ function QuickCreateModal({
                   onChange={(e) => setClientId(e.target.value)}
                   className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
                 >
-                  {clients.map((c) => (
+                  {visibleClients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
@@ -1437,7 +1445,7 @@ function QuickCreateModal({
                   className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
                 >
                   <option value="">Nenhum</option>
-                  {clients.map((c) => (
+                  {visibleClients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>

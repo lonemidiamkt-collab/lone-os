@@ -710,6 +710,15 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
   const { clients, addContentCard } = useAppState();
   const { currentUser, role } = useRole();
 
+  // Social media só vê seus clientes (carteira). Admin/manager/designer veem todos.
+  // Mesma lógica do workspace selector da página /social.
+  const visibleClients = useMemo(() => {
+    if (role === "social") {
+      return clients.filter((c) => c.assignedSocial === currentUser);
+    }
+    return clients;
+  }, [clients, role, currentUser]);
+
   const [title, setTitle] = useState("");
   const [clientId, setClientId] = useState(defaultClient?.id ?? "");
   const [format, setFormat] = useState("Post");
@@ -726,7 +735,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
     el.style.height = `${el.scrollHeight}px`;
   }, [briefing]);
 
-  const selectedClient = clients.find((c) => c.id === clientId);
+  const selectedClient = visibleClients.find((c) => c.id === clientId);
   const canSubmit = title.trim() && clientId && dueDate && dueTime && priority;
 
   const handleSubmit = () => {
@@ -781,10 +790,13 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
               className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <option value="">Selecione um cliente...</option>
-              {clients.map((c) => (
+              {visibleClients.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
+            {role === "social" && visibleClients.length === 0 && (
+              <p className="text-[10px] text-amber-400 mt-1">Você ainda não tem clientes na sua carteira. Fale com a gerência.</p>
+            )}
           </div>
 
           {/* Format + Priority row */}
@@ -2113,7 +2125,7 @@ export default function SocialPage() {
       )}
       {showBatchCreate && (
         <BatchCreateModal
-          clients={clients}
+          clients={filteredClients}
           onClose={() => setShowBatchCreate(false)}
         />
       )}
@@ -2389,7 +2401,7 @@ export default function SocialPage() {
             })()}
 
             <div className="flex items-center gap-2">
-              <QuickTaskBar clients={filteredClients.length > 0 ? filteredClients : clients} />
+              <QuickTaskBar clients={filteredClients} />
               <button
                 onClick={() => setShowBatchCreate(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-white/[0.06] text-zinc-400 hover:text-foreground hover:border-[#0d4af5]/30 transition-all shrink-0"
