@@ -16,6 +16,7 @@ import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
 import type { Client, ContentCard, DesignRequest } from "@/lib/types";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
+import { briefingPlainText } from "@/components/RichTextEditor";
 
 // ── Designer-focused columns (simplified from 7 → 4) ─────────────────────────
 // Maps: ideas/script → "queue", in_production → "doing", blocked → "blocked", rest → "delivered"
@@ -24,7 +25,7 @@ const DESIGNER_COLUMNS = [
   { id: "queue",     title: "Fila / Pra Fazer",           color: "bg-zinc-600",   statuses: ["ideas", "script"] },
   { id: "doing",     title: "Em Producao",                color: "bg-primary",    statuses: ["in_production"] },
   { id: "blocked",   title: "Bloqueado / Devolvido",      color: "bg-red-500",    statuses: ["blocked"] },
-  { id: "delivered", title: "Entregue",                   color: "bg-[#0d4af5]",  statuses: ["approval", "client_approval", "scheduled", "published"] },
+  { id: "delivered", title: "Aprovação",                  color: "bg-[#0d4af5]",  statuses: ["approval", "client_approval", "scheduled", "published"] },
 ];
 
 // Status mapping: designer column → actual content card status
@@ -186,7 +187,7 @@ function UploadArtModal({
             </div>
             {card.briefing && (
               <div className="pt-1.5 border-t border-[#1a1a1a] mt-1.5">
-                <p className="text-muted-foreground leading-relaxed line-clamp-3">{card.briefing}</p>
+                <p className="text-muted-foreground leading-relaxed line-clamp-3 whitespace-pre-line">{briefingPlainText(card.briefing)}</p>
               </div>
             )}
           </div>
@@ -1364,7 +1365,7 @@ function RequestsView({
                         <span className="text-xs text-muted-foreground">por {req.requestedBy}</span>
                       )}
                     </div>
-                    {req.briefing && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{req.briefing}</p>}
+                    {req.briefing && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 whitespace-pre-line">{briefingPlainText(req.briefing)}</p>}
                     {linked && (
                       <span className="text-[10px] text-zinc-400 bg-[#111118] border border-[#1e1e2a] px-2 py-0.5 rounded-full mt-1.5 inline-block">
                         Card: {linked.title}

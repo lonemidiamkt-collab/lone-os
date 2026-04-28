@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import RichTextEditor, { renderBriefingHtml } from "@/components/RichTextEditor";
 
 const PLATFORM_OPTIONS: { value: SocialPlatform; label: string; emoji: string }[] = [
   { value: "instagram", label: "Instagram", emoji: "📸" },
@@ -79,15 +80,6 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [editingBriefing, setEditingBriefing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
-  const briefingTextareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Autoresize do briefing (estilo Trello/Notion)
-  useEffect(() => {
-    const el = briefingTextareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [briefing, editingBriefing]);
 
   const comments = card.comments ?? [];
 
@@ -302,14 +294,13 @@ export default function ContentCardModal({ card, onClose }: Props) {
 
               {editingBriefing ? (
                 <div className="space-y-2">
-                  <textarea
-                    ref={briefingTextareaRef}
+                  <RichTextEditor
                     value={briefing}
-                    onChange={(e) => setBriefing(e.target.value)}
+                    onChange={setBriefing}
                     placeholder="Detalhes do conteúdo: produto, benefícios, CTA, referências, tom de voz..."
-                    rows={5}
-                    className="w-full bg-muted border border-primary/30 rounded-lg px-4 py-3 text-sm text-foreground leading-relaxed outline-none focus:border-primary/60 resize-none overflow-hidden min-h-[120px]"
+                    minHeight={140}
                     autoFocus
+                    className="bg-muted"
                   />
                   <div className="flex items-center gap-2">
                     <button
@@ -331,11 +322,10 @@ export default function ContentCardModal({ card, onClose }: Props) {
               ) : briefing ? (
                 <div
                   onClick={() => setEditingBriefing(true)}
-                  className="bg-muted border border-border rounded-lg px-4 py-3 text-sm text-foreground leading-relaxed whitespace-pre-wrap cursor-text hover:border-primary/30 transition-colors"
+                  className="bg-muted border border-border rounded-lg px-4 py-3 text-sm text-foreground leading-relaxed cursor-text hover:border-primary/30 transition-colors prose prose-sm prose-invert max-w-none"
                   title="Clique pra editar"
-                >
-                  {briefing}
-                </div>
+                  dangerouslySetInnerHTML={renderBriefingHtml(briefing)}
+                />
               ) : (
                 <button
                   type="button"

@@ -8,6 +8,7 @@ import Client360Modal from "@/components/Client360Modal";
 import CampaignModal from "@/components/CampaignModal";
 import DriveButton from "@/components/DriveButton";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
+import RichTextEditor, { renderBriefingHtml } from "@/components/RichTextEditor";
 import type { ContentCard, Client, MoodType, Priority, SocialMonthlyReport, MonthlyDeliveryReport, SocialPerformanceScore } from "@/lib/types";
 import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import {
@@ -727,14 +728,6 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
   const [dueTime, setDueTime] = useState("");
   const [briefing, setBriefing] = useState("");
 
-  const briefingRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    const el = briefingRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [briefing]);
-
   const selectedClient = visibleClients.find((c) => c.id === clientId);
   const canSubmit = title.trim() && clientId && dueDate && dueTime && priority;
 
@@ -860,18 +853,16 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
             <p className="text-xs text-red-400">Data e horário são obrigatórios para enviar a demanda ao designer.</p>
           )}
 
-          {/* Briefing — autoresize estilo Trello */}
+          {/* Briefing — editor WYSIWYG */}
           <div>
             <Label className="mb-1.5 block">Briefing / Descrição</Label>
-            <textarea
-              ref={briefingRef}
+            <RichTextEditor
               value={briefing}
-              onChange={(e) => setBriefing(e.target.value)}
-              placeholder={"Detalhes do conteúdo:\n• Nome do produto\n• Tópicos de benefício\n• CTA / próximo passo\n• Tom de voz, referências"}
-              rows={4}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none overflow-hidden leading-relaxed min-h-[100px]"
+              onChange={setBriefing}
+              placeholder="Detalhes do conteúdo: produto, benefícios, CTA, tom de voz, referências..."
+              minHeight={120}
             />
-            <p className="text-[10px] text-muted-foreground mt-1">O campo cresce conforme você escreve. Pode editar depois no modal de detalhes.</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Use negrito, itálico e listas pra estruturar o briefing. O designer vê formatado.</p>
           </div>
 
           {/* Drive link auto-recovered */}

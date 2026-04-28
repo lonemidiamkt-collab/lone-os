@@ -32,6 +32,7 @@ import { useRole } from "@/lib/context/RoleContext";
 import DriveButton from "@/components/DriveButton";
 import type { ContentCard, Task, TrafficRoutineCheck, TaskStatus, Priority, Reminder, Role } from "@/lib/types";
 import HolidaysPdfButton from "@/components/HolidaysPdfButton";
+import RichTextEditor from "@/components/RichTextEditor";
 
 const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const MONTHS_SHORT = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1216,15 +1217,8 @@ function QuickCreateModal({
   const [time, setTime] = useState("");
   const [endDate, setEndDate] = useState(date);
 
-  // Autoresize: textareas crescem conforme o conteúdo (estilo Trello)
-  const briefingRef = useRef<HTMLTextAreaElement>(null);
+  // Autoresize do textarea de descrição (briefing usa RichTextEditor que cuida sozinho)
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    const el = briefingRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [briefing]);
   useEffect(() => {
     const el = descriptionRef.current;
     if (!el) return;
@@ -1491,20 +1485,18 @@ function QuickCreateModal({
             </div>
           )}
 
-          {/* Briefing (social) or Description (task) — autoresize estilo Trello */}
+          {/* Briefing (social) — editor WYSIWYG */}
           {createType === "social" && (
             <div className="space-y-1.5">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Briefing</label>
-              <textarea
-                ref={briefingRef}
+              <RichTextEditor
                 value={briefing}
-                onChange={(e) => setBriefing(e.target.value)}
+                onChange={setBriefing}
                 placeholder="Descreva o conteúdo, referências, tom de voz, CTAs, hashtags..."
-                rows={4}
-                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none resize-none leading-relaxed min-h-[100px] overflow-hidden"
+                minHeight={140}
               />
               <p className="text-[9px] text-zinc-700">
-                O campo expande conforme você escreve. A modal scrolla quando precisa.
+                Use negrito, itálico e listas pra estruturar. O designer vê formatado.
               </p>
             </div>
           )}
