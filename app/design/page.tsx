@@ -9,7 +9,7 @@ import {
   Palette, Filter, Clock, CheckCircle, Loader, Paperclip, X,
   AlertTriangle, Zap, LayoutList, Columns3, Upload, Download,
   ImageIcon, Eye, ChevronDown, User, Users, FileText, FileWarning, FolderOpen,
-  ExternalLink, BarChart2, Plus, Calendar, ArrowRight,
+  ExternalLink, BarChart2, Plus, Calendar, ArrowRight, XCircle,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
@@ -371,6 +371,57 @@ export default function DesignPage() {
   const [cardToDelete, setCardToDelete] = useState<ContentCard | null>(null);
   const [reqToDelete, setReqToDelete] = useState<DesignRequest | null>(null);
   const [briefingReq, setBriefingReq] = useState<DesignRequest | null>(null);
+  // Upload de arte direto do modal de briefing
+  const briefingUploadInputRef = useRef<HTMLInputElement>(null);
+  const [briefingUploading, setBriefingUploading] = useState(false);
+  const [briefingUploadError, setBriefingUploadError] = useState<string | null>(null);
+  const [briefingUploadOk, setBriefingUploadOk] = useState(false);
+
+  async function handleBriefingArtUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !briefingReq) return;
+    setBriefingUploadError(null);
+    setBriefingUploadOk(false);
+
+    if (file.size === 0) { setBriefingUploadError("Arquivo vazio."); return; }
+    if (file.size > 25 * 1024 * 1024) {
+      setBriefingUploadError(`Arquivo muito grande (${(file.size / 1024 / 1024).toFixed(1)}MB). Máximo: 25MB`);
+      return;
+    }
+    const allowed = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "application/pdf", "video/mp4", "video/webm"];
+    if (!allowed.includes(file.type)) {
+      setBriefingUploadError(`Tipo não suportado (${file.type}).`);
+      return;
+    }
+
+    setBriefingUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("cardId", briefingReq.id);
+      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+      const res = await authedFetch("/api/upload-art", { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      if (!res.ok) {
+        setBriefingUploadError(data.error || `Falha (HTTP ${res.status})`);
+        console.error("[briefingReq upload]", { status: res.status, data });
+        return;
+      }
+      // Anexa URL à request + marca como concluída
+      const nextAttachments = [...(briefingReq.attachments ?? []), data.url as string];
+      updateDesignRequest(briefingReq.id, { attachments: nextAttachments, status: "done" });
+      setBriefingReq({ ...briefingReq, attachments: nextAttachments, status: "done" });
+      setBriefingUploadOk(true);
+      setTimeout(() => setBriefingUploadOk(false), 4000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro de conexão";
+      console.error("[briefingReq upload exception]", err);
+      setBriefingUploadError(`Erro: ${msg}`);
+    } finally {
+      setBriefingUploading(false);
+      if (briefingUploadInputRef.current) briefingUploadInputRef.current.value = "";
+    }
+  }
   const [nonDeliveryCard, setNonDeliveryCard] = useState<ContentCard | null>(null);
   const [nonDeliveryReason, setNonDeliveryReason] = useState("");
   const [blockingCard, setBlockingCard] = useState<ContentCard | null>(null);
@@ -1286,6 +1337,63 @@ export default function DesignPage() {
                 }`}>
                   {briefingReq.status === "queued" ? "Na Fila" : briefingReq.status === "in_progress" ? "Em Produção" : "Concluído"}
                 </span>
+              </div>
+
+              {/* Anexos já enviados */}
+              {briefingReq.attachments && briefingReq.attachments.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Artes anexadas ({briefingReq.attachments.length})</p>
+                  <div className="space-y-1">
+                    {briefingReq.attachments.map((url, i) => (
+                      <a
+                        key={i}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0d4af5]/[0.05] border border-[#0d4af5]/20 hover:border-[#0d4af5]/40 transition-all text-xs text-[#3b6ff5]"
+                      >
+                        <ExternalLink size={11} className="shrink-0" />
+                        <span className="truncate">Anexo #{i + 1}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Upload de arte direto do modal */}
+              <div className="space-y-2 pt-2 border-t border-border">
+                <input
+                  ref={briefingUploadInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,video/mp4,video/webm"
+                  className="hidden"
+                  onChange={handleBriefingArtUpload}
+                  disabled={briefingUploading}
+                />
+                <button
+                  type="button"
+                  onClick={() => briefingUploadInputRef.current?.click()}
+                  disabled={briefingUploading}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all shadow-[0_0_20px_rgba(13,74,245,0.2)] disabled:opacity-50"
+                >
+                  {briefingUploading ? (
+                    <><Upload size={14} className="animate-pulse" /> Carregando arte...</>
+                  ) : (
+                    <><Upload size={14} /> Enviar Arte para Aprovação</>
+                  )}
+                </button>
+                {briefingUploadOk && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-3 py-2">
+                    <CheckCircle size={12} /> Arte enviada — demanda marcada como concluída.
+                  </div>
+                )}
+                {briefingUploadError && (
+                  <div className="flex items-start gap-1.5 text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-3 py-2">
+                    <XCircle size={12} className="shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{briefingUploadError}</span>
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground text-center">PNG, JPEG, WebP, GIF, PDF, MP4 — até 25MB</p>
               </div>
             </div>
             <div className="p-5 border-t border-border flex gap-2">
