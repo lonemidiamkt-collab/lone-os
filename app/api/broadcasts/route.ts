@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/emailService";
 import { broadcastEmail } from "@/lib/email/templates";
 import { getServerUser } from "@/lib/supabase/auth-server";
-import { renderMonthHolidaysPdfBuffer, holidaysPdfFilename } from "@/lib/holidays/pdf-server";
+import { renderMonthCalendarHtml } from "@/lib/holidays/email-html";
 
 // Lotes de 10 emails com 300ms de delay entre lotes.
 // Resend free tier aceita ~100/s; deixamos margem de segurança.
@@ -122,28 +122,29 @@ export async function POST(req: NextRequest) {
   if (action === "test") {
     try {
       const testRecipient = (test_to && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(test_to)) ? test_to.trim() : adminEmail;
-      const template = broadcastEmail(subject, content_html, testRecipient.split("@")[0], "Teste");
 
-      let attachments: Array<{ filename: string; content: Buffer; contentType?: string }> | undefined;
+      // Calendário HTML inline (substituiu o anexo PDF — @react-pdf não funciona em Next.js 15 SSR)
+      let calendarHtml = "";
+      let calendarIncluded = false;
       if (attach_calendar_pdf) {
         try {
-          const buf = await renderMonthHolidaysPdfBuffer({ year: calYear, month: calMonth, region: "BRASIL", logoUrl });
-          if (buf) attachments = [{ filename: holidaysPdfFilename(calYear, calMonth), content: buf, contentType: "application/pdf" }];
-        } catch (pdfErr) {
-          console.error("[broadcasts/test] PDF render failed, sending without attachment:", pdfErr);
-          // continua sem PDF — não bloqueia o teste do email
+          calendarHtml = await renderMonthCalendarHtml({ year: calYear, month: calMonth, region: "BRASIL" });
+          calendarIncluded = calendarHtml.length > 0;
+        } catch (calErr) {
+          console.error("[broadcasts/test] calendar HTML render failed, sending without it:", calErr);
         }
       }
+
+      const finalHtml = content_html + calendarHtml;
+      const template = broadcastEmail(subject, finalHtml, testRecipient.split("@")[0], "Teste");
 
       const result = await sendEmail({
         to: testRecipient,
         subject: `[TESTE] ${template.subject}`,
         html: template.html,
         templateName: "broadcast_test",
-        attachments,
       });
 
-      // Status correto: 200 só quando o envio foi bem-sucedido. Resend error → 502.
       if (!result.success) {
         console.error("[broadcasts/test] sendEmail failed:", result.error);
         return NextResponse.json({
@@ -156,7 +157,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         sentTo: testRecipient,
-        attachedPdf: !!attachments,
+        calendarIncluded,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
@@ -205,30 +206,33 @@ export async function POST(req: NextRequest) {
       }))
     );
 
-    // 2.5. Pré-gera PDFs por (nicho + cidade + UF) único — quando flag de anexo está ligada
-    // Strategy: cache por chave composta. Pra 100 clientes em poucas combinações
-    // distintas, geramos só algumas dezenas de PDFs no máximo.
-    const pdfCache = new Map<string, Buffer | null>();
-    async function getPdfForRecipient(r: Recipient): Promise<Buffer | null> {
-      if (!attach_calendar_pdf) return null;
+    // 2.5. Pré-gera HTML do calendário por (nicho + cidade + UF) único — quando
+    //      flag de anexo está ligada. Cada combo única é gerada 1x e reusada.
+    const calendarHtmlCache = new Map<string, string>();
+    async function getCalendarHtmlFor(r: Recipient): Promise<string> {
+      if (!attach_calendar_pdf) return "";
       const key = `${r.nicho ?? ""}|${r.city ?? ""}|${r.uf ?? ""}`;
-      if (pdfCache.has(key)) return pdfCache.get(key)!;
+      if (calendarHtmlCache.has(key)) return calendarHtmlCache.get(key)!;
       const region = r.city
         ? `${r.city.toUpperCase()}${r.uf ? ` · ${r.uf.toUpperCase()}` : ""}`
         : (r.uf ? r.uf.toUpperCase() : "BRASIL");
-      const buf = await renderMonthHolidaysPdfBuffer({
-        year: calYear,
-        month: calMonth,
-        region,
-        logoUrl,
-        nichos: r.nicho ? [r.nicho] : undefined,
-        uf: r.uf || undefined,
-        city: r.city || undefined,
-      });
-      pdfCache.set(key, buf);
-      return buf;
+      let html = "";
+      try {
+        html = await renderMonthCalendarHtml({
+          year: calYear,
+          month: calMonth,
+          region,
+          nichos: r.nicho ? [r.nicho] : undefined,
+          uf: r.uf || undefined,
+          city: r.city || undefined,
+        });
+      } catch (err) {
+        console.error("[broadcasts/send] calendar HTML render failed:", err);
+        html = "";
+      }
+      calendarHtmlCache.set(key, html);
+      return html;
     }
-    const pdfFilename = holidaysPdfFilename(calYear, calMonth);
 
     // 3. Send in batches
     let successCount = 0;
@@ -239,15 +243,15 @@ export async function POST(req: NextRequest) {
       const results = await Promise.all(
         batch.map(async (r) => {
           try {
-            const template = broadcastEmail(subject, content_html, r.contactName, r.companyName);
-            const pdfBuf = await getPdfForRecipient(r);
+            const calendarHtml = await getCalendarHtmlFor(r);
+            const finalHtml = content_html + calendarHtml;
+            const template = broadcastEmail(subject, finalHtml, r.contactName, r.companyName);
             const result = await sendEmail({
               to: r.email,
               toName: r.contactName,
               subject: template.subject,
               html: template.html,
               templateName: "broadcast",
-              attachments: pdfBuf ? [{ filename: pdfFilename, content: pdfBuf, contentType: "application/pdf" }] : undefined,
             });
             return { r, result };
           } catch (e) {

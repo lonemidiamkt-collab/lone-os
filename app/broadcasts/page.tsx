@@ -390,7 +390,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
             </p>
           </div>
 
-          {/* Anexar PDF de feriados/datas comemorativas */}
+          {/* Incluir calendário de feriados/datas comemorativas inline no email */}
           <div className="space-y-2 pt-2 border-t border-border">
             <label className="flex items-start gap-2 p-3 rounded-lg border border-border bg-muted cursor-pointer hover:border-primary/30 transition-colors">
               <input
@@ -401,10 +401,10 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
               />
               <div className="flex-1">
                 <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                  📅 Anexar PDF de feriados e datas comemorativas
+                  📅 Incluir calendário de feriados e datas comemorativas
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  PDF personalizado por nicho de cada cliente. Pra clientes sem nicho, vai a versão geral.
+                  Calendário do mês embutido no fim do email. Personalizado por nicho/cidade do cliente.
                 </p>
               </div>
             </label>
