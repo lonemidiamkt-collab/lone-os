@@ -37,12 +37,16 @@ export interface ServerUser {
  */
 export async function getServerUser(req: NextRequest): Promise<ServerUser | null> {
   const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
+  const debug = (msg: string) => console.warn(`[getServerUser] ${msg}`);
 
   // 3. LocalSession fallback (verificado primeiro pra short-circuit em apps que
   //    nunca usam Supabase auth real — evita chamada desnecessária ao Supabase)
   if (authHeader && authHeader.toLowerCase().startsWith("localsession ")) {
     const email = authHeader.slice("localsession ".length).trim().toLowerCase();
-    if (!email) return null;
+    if (!email) {
+      debug("LocalSession sem email");
+      return null;
+    }
 
     if (ADMIN_EMAILS.has(email)) {
       return { id: `local:${email}`, email, isAdmin: true };
@@ -50,7 +54,8 @@ export async function getServerUser(req: NextRequest): Promise<ServerUser | null
     if (STAFF_EMAILS.has(email)) {
       return { id: `local:${email}`, email, isAdmin: false };
     }
-    return null; // email não está em nenhum whitelist → bloqueia
+    debug(`LocalSession email não-whitelisted: ${email}`);
+    return null;
   }
 
   // 1. Authorization Bearer (Supabase real)
@@ -77,10 +82,16 @@ export async function getServerUser(req: NextRequest): Promise<ServerUser | null
     }
   }
 
-  if (!accessToken) return null;
+  if (!accessToken) {
+    debug(`sem token. authHeader=${authHeader ? authHeader.slice(0, 20) + "..." : "ausente"}`);
+    return null;
+  }
 
   const { data, error } = await supabaseAdmin.auth.getUser(accessToken);
-  if (error || !data.user?.email) return null;
+  if (error || !data.user?.email) {
+    debug(`Bearer rejeitado. error=${error?.message ?? "no-email"}`);
+    return null;
+  }
 
   const email = data.user.email.toLowerCase();
   return {
