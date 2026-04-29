@@ -1,9 +1,24 @@
+export const runtime = "nodejs"; // vault usa crypto nativo de Node
+
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { encryptVault } from "@/lib/crypto/vault";
 
 const supabaseUrl = process.env.SUPABASE_INTERNAL_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://supabase-kong-1:8000";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Encrypta senha antes de persistir. Se VAULT_KEY não estiver configurada (ambiente sem env),
+// loga warning e deixa passar plaintext — não queremos bloquear onboarding por config errada.
+function safeEncrypt(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    return encryptVault(value);
+  } catch (err) {
+    console.error("[onboarding] encryptVault failed, persisting plaintext:", err);
+    return value;
+  }
+}
 
 // GET — Fetch submission by token (public, used by onboarding page)
 export async function GET(req: NextRequest) {
@@ -74,7 +89,7 @@ export async function POST(req: NextRequest) {
   if (body.action === "auto_save") {
     const { token: t, ...fields } = body;
     if (!t) return NextResponse.json({ error: "Token required" }, { status: 400 });
-    await supabase.from("client_onboarding_submissions").update({
+    const { error: autoSaveErr } = await supabase.from("client_onboarding_submissions").update({
       contact_name: fields.contactName || null,
       contact_cpf: fields.contactCpf || null,
       contact_whatsapp: fields.contactWhatsapp || null,
@@ -88,20 +103,24 @@ export async function POST(req: NextRequest) {
       endereco_cidade: fields.enderecoCidade || null,
       endereco_estado: fields.enderecoEstado || null,
       endereco_cep: fields.enderecoCep || null,
-      meta_login: fields.metaLogin || null,
-      meta_password: fields.metaPassword || null,
+      meta_login: fields.metaLogin || null,  // login em plaintext é ok (não é sensível)
+      meta_password: safeEncrypt(fields.metaPassword),
       meta_status: fields.metaStatus || null,
       instagram_login: fields.instagramLogin || null,
-      instagram_password: fields.instagramPassword || null,
+      instagram_password: safeEncrypt(fields.instagramPassword),
       instagram_status: fields.instagramStatus || null,
       google_login: fields.googleLogin || null,
-      google_password: fields.googlePassword || null,
+      google_password: safeEncrypt(fields.googlePassword),
       google_status: fields.googleStatus || null,
       doc_contrato_social: fields.docContratoSocial || null,
       doc_identidade: fields.docIdentidade || null,
       doc_logo: fields.docLogo || null,
       notes: fields.notes || null,
     }).eq("token", t);
+    if (autoSaveErr) {
+      console.error("[onboarding/auto_save] update failed:", autoSaveErr);
+      return NextResponse.json({ error: autoSaveErr.message }, { status: 500 });
+    }
     return NextResponse.json({ ok: true });
   }
 
@@ -150,13 +169,13 @@ export async function POST(req: NextRequest) {
         endereco_estado: formData.enderecoEstado || null,
         endereco_cep: formData.enderecoCep || null,
         meta_login: formData.metaLogin || null,
-        meta_password: formData.metaPassword || null,
+        meta_password: safeEncrypt(formData.metaPassword),
         meta_status: formData.metaStatus || "pending",
         instagram_login: formData.instagramLogin || null,
-        instagram_password: formData.instagramPassword || null,
+        instagram_password: safeEncrypt(formData.instagramPassword),
         instagram_status: formData.instagramStatus || "pending",
         google_login: formData.googleLogin || null,
-        google_password: formData.googlePassword || null,
+        google_password: safeEncrypt(formData.googlePassword),
         google_status: formData.googleStatus || "pending",
         doc_contrato_social: formData.docContratoSocial || null,
         doc_identidade: formData.docIdentidade || null,
@@ -191,11 +210,11 @@ export async function POST(req: NextRequest) {
         endereco_estado: formData.enderecoEstado || null,
         endereco_cep: formData.enderecoCep || null,
         facebook_login: formData.metaLogin || null,
-        facebook_password: formData.metaPassword || null,
+        facebook_password: safeEncrypt(formData.metaPassword),
         instagram_login: formData.instagramLogin || null,
-        instagram_password: formData.instagramPassword || null,
+        instagram_password: safeEncrypt(formData.instagramPassword),
         google_ads_login: formData.googleLogin || null,
-        google_ads_password: formData.googlePassword || null,
+        google_ads_password: safeEncrypt(formData.googlePassword),
         doc_contrato_social: formData.docContratoSocial || null,
         doc_identidade: formData.docIdentidade || null,
         doc_logo: formData.docLogo || null,

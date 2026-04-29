@@ -1660,8 +1660,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteContentCard = useCallback(async (id: string) => {
-    // Optimistic update — remove do state imediatamente
-    setContentCards((prev) => prev.filter((c) => c.id !== id));
+    // Captura backup ANTES de remover (pra rollback se API falhar)
+    let backup: ContentCard | undefined;
+    setContentCards((prev) => {
+      backup = prev.find((c) => c.id === id);
+      return prev.filter((c) => c.id !== id);
+    });
     try {
       const { authedFetch } = await import("@/lib/supabase/authed-fetch");
       const res = await authedFetch("/api/content-cards/delete", {
@@ -1671,17 +1675,25 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        console.error("[deleteContentCard] API failed, will be re-synced via realtime:", data);
+        // Rollback — restaura card no state
+        if (backup) setContentCards((prev) => prev.some((c) => c.id === id) ? prev : [...prev, backup!]);
+        console.error("[deleteContentCard] API failed, restoring:", data);
         throw new Error(data.error || "Falha ao apagar");
       }
     } catch (err) {
+      // Rollback em qualquer erro (rede, parse, etc)
+      if (backup) setContentCards((prev) => prev.some((c) => c.id === id) ? prev : [...prev, backup!]);
       console.error("[deleteContentCard]", err);
       throw err;
     }
   }, []);
 
   const deleteDesignRequest = useCallback(async (id: string) => {
-    setDesignRequests((prev) => prev.filter((r) => r.id !== id));
+    let backup: DesignRequest | undefined;
+    setDesignRequests((prev) => {
+      backup = prev.find((r) => r.id === id);
+      return prev.filter((r) => r.id !== id);
+    });
     try {
       const { authedFetch } = await import("@/lib/supabase/authed-fetch");
       const res = await authedFetch("/api/design-requests/delete", {
@@ -1691,9 +1703,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        if (backup) setDesignRequests((prev) => prev.some((r) => r.id === id) ? prev : [...prev, backup!]);
         throw new Error(data.error || "Falha ao apagar");
       }
     } catch (err) {
+      if (backup) setDesignRequests((prev) => prev.some((r) => r.id === id) ? prev : [...prev, backup!]);
       console.error("[deleteDesignRequest]", err);
       throw err;
     }

@@ -1,12 +1,20 @@
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
-// Emails that are allowed to access admin-only server endpoints.
-// Kept in sync with lib/context/RoleContext.tsx USER_PROFILES where role in {admin, manager}.
+// Emails que tem acesso admin (pode tudo, incluindo rotas restritas).
+// Kept in sync com RoleContext.tsx USER_PROFILES, role in {admin, manager}.
 const ADMIN_EMAILS = new Set([
   "lonemidiamkt@gmail.com", // Roberto (admin)
-  "lucas@lonemidia.com",
-  "julio@lonemidia.com",
+  "lucas@lonemidia.com",    // Lucas  (admin)
+  "julio@lonemidia.com",    // Julio  (manager)
+]);
+
+// Emails de staff (operadores) — autenticados, mas sem privilégios admin.
+// Podem deletar/editar conteúdo do dia-a-dia (cards, demandas).
+const STAFF_EMAILS = new Set([
+  "carlos@lonemidia.com",  // Social
+  "pedro@lonemidia.com",   // Social
+  "rodrigo@lonemidia.com", // Designer
 ]);
 
 export interface ServerUser {
@@ -34,14 +42,15 @@ export async function getServerUser(req: NextRequest): Promise<ServerUser | null
   //    nunca usam Supabase auth real — evita chamada desnecessária ao Supabase)
   if (authHeader && authHeader.toLowerCase().startsWith("localsession ")) {
     const email = authHeader.slice("localsession ".length).trim().toLowerCase();
-    if (email && ADMIN_EMAILS.has(email)) {
-      return {
-        id: `local:${email}`,
-        email,
-        isAdmin: true,
-      };
+    if (!email) return null;
+
+    if (ADMIN_EMAILS.has(email)) {
+      return { id: `local:${email}`, email, isAdmin: true };
     }
-    return null; // email local não é admin → bloqueia
+    if (STAFF_EMAILS.has(email)) {
+      return { id: `local:${email}`, email, isAdmin: false };
+    }
+    return null; // email não está em nenhum whitelist → bloqueia
   }
 
   // 1. Authorization Bearer (Supabase real)
