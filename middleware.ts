@@ -12,16 +12,20 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for Supabase auth session cookie
-  // Supabase JS client stores the session in cookies with the project ref prefix
-  const hasSession = request.cookies.getAll().some(
-    (cookie) => cookie.name.startsWith("sb-") && cookie.name.endsWith("-auth-token")
-  );
+  // Auth gate pra /api/*: aceita 3 fontes (sincronizado com lib/supabase/auth-server.ts).
+  // Validação fina (whitelist de email, decodificação de token) é feita no
+  // route handler via getServerUser — middleware só bloqueia request claramente
+  // sem credencial alguma.
+  if (pathname.startsWith("/api/")) {
+    const hasCookieSession = request.cookies.getAll().some(
+      (c) => c.name.startsWith("sb-") && c.name.endsWith("-auth-token")
+    );
+    const authHeader = request.headers.get("authorization") || request.headers.get("Authorization") || "";
+    const hasAuthHeader = /^(bearer|localsession)\s+\S/i.test(authHeader);
 
-  // If no session cookie, the client-side auth guard (LoginScreen) handles redirect
-  // Middleware just ensures API routes are protected
-  if (pathname.startsWith("/api/") && !hasSession) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!hasCookieSession && !hasAuthHeader) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   return NextResponse.next();
