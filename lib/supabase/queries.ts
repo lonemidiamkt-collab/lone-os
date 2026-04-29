@@ -328,7 +328,7 @@ export async function insertContentCard(card: Omit<ContentCard, "id">): Promise<
   return { id: data.id as string };
 }
 
-export async function updateContentCardDb(id: string, updates: Record<string, unknown>): Promise<void> {
+export async function updateContentCardDb(id: string, updates: Record<string, unknown>): Promise<{ error: Error | null }> {
   const row: Record<string, unknown> = {};
   const keyMap: Record<string, string> = {
     status: "status", priority: "priority", imageUrl: "image_url",
@@ -349,9 +349,10 @@ export async function updateContentCardDb(id: string, updates: Record<string, un
     const dbKey = keyMap[key] ?? key;
     row[dbKey] = val;
   }
-  if (Object.keys(row).length === 0) return;
+  if (Object.keys(row).length === 0) return { error: null };
   const { error } = await supabase.from("content_cards").update(row).eq("id", id);
   if (error) console.error("[DB] updateContentCard:", error);
+  return { error: error ? new Error(error.message) : null };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -391,13 +392,14 @@ export async function insertDesignRequest(req: Omit<DesignRequest, "id">): Promi
   return { id: data.id as string };
 }
 
-export async function updateDesignRequestDb(id: string, updates: Partial<DesignRequest>): Promise<void> {
+export async function updateDesignRequestDb(id: string, updates: Partial<DesignRequest>): Promise<{ error: Error | null }> {
   const row: Record<string, unknown> = {};
   if (updates.status !== undefined) row.status = updates.status;
   if (updates.priority !== undefined) row.priority = updates.priority;
-  if (Object.keys(row).length === 0) return;
+  if (Object.keys(row).length === 0) return { error: null };
   const { error } = await supabase.from("design_requests").update(row).eq("id", id);
   if (error) console.error("[DB] updateDesignRequest:", error);
+  return { error: error ? new Error(error.message) : null };
 }
 
 // ═══════════════════════════════════════════════════════════

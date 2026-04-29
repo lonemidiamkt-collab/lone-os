@@ -1319,8 +1319,21 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           );
         }
 
-        // Persist to DB
-        db.updateContentCardDb(id, updates).catch(() => {});
+        // Persist to DB — se falhar (RLS, rede), restaura estado e notifica.
+        // prev é capturado pelo closure, então o snapshot pré-update fica
+        // disponível pro rollback caso o servidor rejeite a alteração.
+        const prevSnapshot = prev;
+        db.updateContentCardDb(id, updates).then(({ error }) => {
+          if (error) {
+            setContentCards(prevSnapshot);
+            pushNotification(
+              "system",
+              "Falha ao salvar",
+              `Não foi possível atualizar "${card?.title ?? "card"}". Detalhe: ${error.message}`,
+              card?.clientId
+            );
+          }
+        }).catch(() => { /* network error, optimismo já reverte via realtime */ });
 
         return prev.map((c) => {
           if (c.id !== id) return c;
@@ -1486,8 +1499,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const updateDesignRequest = useCallback(
     (id: string, updates: Partial<DesignRequest>) => {
+      let prevSnapshot: DesignRequest[] | null = null;
+      let reqRef: DesignRequest | undefined;
       setDesignRequests((prev) => {
+        prevSnapshot = prev;
         const req = prev.find((r) => r.id === id);
+        reqRef = req;
         if (req && updates.status === "done" && req.status !== "done") {
           pushNotification(
             "content",
@@ -1518,7 +1535,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         }
         return prev.map((r) => (r.id === id ? { ...r, ...updates } : r));
       });
-      db.updateDesignRequestDb(id, updates).catch(() => {});
+      db.updateDesignRequestDb(id, updates).then(({ error }) => {
+        if (error && prevSnapshot) {
+          setDesignRequests(prevSnapshot);
+          pushNotification(
+            "system",
+            "Falha ao salvar demanda",
+            `Não foi possível atualizar "${reqRef?.title ?? "demanda"}". Detalhe: ${error.message}`,
+            reqRef?.clientId
+          );
+        }
+      }).catch(() => { /* network error — realtime reconcilia */ });
     },
     [pushNotification, pushTimeline, now]
   );

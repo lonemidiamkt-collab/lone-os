@@ -65,7 +65,20 @@ export function MarkdownView({ source, className }: { source: string | undefined
   const md = htmlToMarkdown(source);
   if (!md) return null;
   return (
-    <div className={`prose prose-sm prose-invert max-w-none break-words ${className ?? ""}`}>
+    <div className={`prose prose-sm prose-invert max-w-none break-words
+        prose-headings:text-foreground
+        prose-h1:text-2xl prose-h1:font-bold prose-h1:mt-6 prose-h1:mb-3
+        prose-h2:text-xl prose-h2:font-bold prose-h2:mt-5 prose-h2:mb-2.5
+        prose-h3:text-lg prose-h3:font-semibold prose-h3:mt-4 prose-h3:mb-2
+        prose-h4:text-base prose-h4:font-semibold prose-h4:mt-3 prose-h4:mb-1.5
+        prose-strong:text-foreground prose-strong:font-semibold
+        prose-em:text-foreground/90
+        prose-p:text-foreground/85 prose-li:text-foreground/85
+        prose-a:text-[#3b6ff5] prose-a:no-underline hover:prose-a:underline
+        prose-code:text-[#3b6ff5] prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:before:content-none prose-code:after:content-none
+        prose-blockquote:border-l-[#0d4af5] prose-blockquote:text-foreground/70
+        prose-hr:border-border
+        ${className ?? ""}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
