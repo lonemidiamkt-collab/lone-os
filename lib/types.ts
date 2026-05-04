@@ -44,6 +44,7 @@ export interface Client {
   cnpj?: string;
   endereco?: string;
   enderecoRua?: string;
+  enderecoNumero?: string;
   enderecoBairro?: string;
   enderecoCidade?: string;
   enderecoEstado?: string;

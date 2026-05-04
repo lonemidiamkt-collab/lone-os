@@ -54,6 +54,7 @@ function snakeToClient(row: Record<string, unknown>): Client {
     cnpj: (row.cnpj as string) ?? undefined,
     endereco: (row.endereco as string) ?? undefined,
     enderecoRua: (row.endereco_rua as string) ?? undefined,
+    enderecoNumero: (row.endereco_numero as string) ?? undefined,
     enderecoBairro: (row.endereco_bairro as string) ?? undefined,
     enderecoCidade: (row.endereco_cidade as string) ?? undefined,
     enderecoEstado: (row.endereco_estado as string) ?? undefined,
@@ -120,6 +121,7 @@ function clientToSnake(c: Partial<Client>): Record<string, unknown> {
   if (c.cnpj !== undefined) row.cnpj = c.cnpj;
   if (c.endereco !== undefined) row.endereco = c.endereco;
   if (c.enderecoRua !== undefined) row.endereco_rua = c.enderecoRua;
+  if (c.enderecoNumero !== undefined) row.endereco_numero = c.enderecoNumero;
   if (c.enderecoBairro !== undefined) row.endereco_bairro = c.enderecoBairro;
   if (c.enderecoCidade !== undefined) row.endereco_cidade = c.enderecoCidade;
   if (c.enderecoEstado !== undefined) row.endereco_estado = c.enderecoEstado;
