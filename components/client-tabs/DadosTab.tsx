@@ -195,27 +195,16 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   if (!client.docIdentidade) missing.push("Documento RG/CNH");
   if (!client.docLogo) missing.push("Logo da Empresa");
 
-  const downloadFile = (url: string, filename: string) => {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
   // Private docs (legal-docs bucket) are stored as "legal://<path>" and need a signed URL.
   // Legacy entries stored as "/storage/..." or full URLs open directly.
   const isPrivateRef = (ref: string) => ref.startsWith("legal://");
 
-  const resolvePrivateUrl = async (ref: string, download = false): Promise<string | null> => {
+  const resolvePrivateUrl = async (ref: string, forDownload = false): Promise<string | null> => {
     try {
       const res = await authedFetch("/api/storage/signed-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: ref, download }),
+        body: JSON.stringify({ path: ref, download: forDownload }),
       });
       const data = await res.json();
       if (!res.ok || !data.url) {
@@ -231,20 +220,27 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
 
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
 
-  const handleSecureOpen = async (ref: string, docType: string, download: boolean) => {
+  const handleSecureOpen = async (ref: string, docType: string, forDownload: boolean) => {
+    setOpenError(null);
     if (!isPrivateRef(ref)) {
-      // Legacy public URL — open/download directly
-      if (download) downloadFile(ref, `${docType}-${companyName.replace(/\s+/g, "-").toLowerCase()}`);
-      else window.open(ref, "_blank", "noopener,noreferrer");
+      window.open(ref, "_blank", "noopener,noreferrer");
       return;
     }
-    setOpening(`${docType}-${download ? "dl" : "view"}`);
-    const signed = await resolvePrivateUrl(ref, download);
+    setOpening(`${docType}-${forDownload ? "dl" : "view"}`);
+    // Para download, pede URL com Content-Disposition: attachment
+    // Para visualizar, pede URL normal (browser abre inline)
+    const signed = await resolvePrivateUrl(ref, forDownload);
     setOpening(null);
-    if (!signed) return;
-    if (download) downloadFile(signed, `${docType}-${companyName.replace(/\s+/g, "-").toLowerCase()}`);
-    else window.open(signed, "_blank", "noopener,noreferrer");
+    if (!signed) {
+      setOpenError("Não foi possível gerar o link. Verifique sua sessão.");
+      setTimeout(() => setOpenError(null), 5000);
+      return;
+    }
+    // Abre em nova aba — browser faz download se Content-Disposition for attachment,
+    // ou exibe inline (PDF/imagem) se for visualizar
+    window.open(signed, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -552,10 +548,10 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
               </p>
             </div>
           </div>
-          {uploadError && (
+          {(uploadError || openError) && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
               <AlertTriangle size={13} className="text-red-400 shrink-0" />
-              <span className="text-xs text-red-400">{uploadError}</span>
+              <span className="text-xs text-red-400">{uploadError ?? openError}</span>
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
