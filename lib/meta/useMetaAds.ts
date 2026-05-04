@@ -483,7 +483,7 @@ export async function fetchCampaignInsights(
 
         const dailyMetrics = dailyInsights.map((i: any) => {
           const dayActions = i.actions as { action_type: string; value: string }[] | undefined;
-          const dayInlineLinkClicks = safeInt((i as Record<string, unknown>).inline_link_clicks);
+          const dayInlineLinkClicks = safeInt(i.inline_link_clicks);
           return {
             date: i.date_start,
             spend: safeFloat(i.spend),
