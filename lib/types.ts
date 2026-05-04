@@ -506,6 +506,7 @@ export interface AdCampaign {
   costPerConversion: number;
   messages?: number;
   costPerMessage?: number;
+  cheapestAdSetName?: string;
   leads?: number;
   costPerLead?: number;
   // "result" = the primary KPI for this campaign's objective
