@@ -41,6 +41,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error?.message ?? "Falha ao gerar URL" }, { status: 500 });
   }
 
+  // Rewrite internal Docker hostname to public-facing URL so the browser can resolve it.
+  // supabaseAdmin uses SUPABASE_INTERNAL_URL (http://supabase-kong-1:8000) server-side,
+  // so signed URLs contain that hostname. Next.js proxies /supabase/storage/* → internal Kong.
+  const internalBase = process.env.SUPABASE_INTERNAL_URL ?? "";
+  const publicBase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  let signedUrl = data.signedUrl;
+  if (internalBase && publicBase && signedUrl.startsWith(internalBase)) {
+    signedUrl = publicBase + signedUrl.slice(internalBase.length);
+  }
+
   // Audit log (LGPD). Fire-and-forget — não bloquear resposta se log falhar.
   // `path` formato: "{clientId}/{docType}-{timestamp}.{ext}" → extrai clientId/docType.
   const [clientIdFromPath, fileName] = path.split("/", 2);
@@ -59,5 +69,5 @@ export async function POST(req: NextRequest) {
     if (logErr) console.error("[signed-url] vault_access_log insert failed:", logErr);
   });
 
-  return NextResponse.json({ url: data.signedUrl, expiresIn: SIGNED_URL_TTL_SECONDS });
+  return NextResponse.json({ url: signedUrl, expiresIn: SIGNED_URL_TTL_SECONDS });
 }

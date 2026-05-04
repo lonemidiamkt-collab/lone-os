@@ -154,14 +154,22 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
 
   const handleDocUpload = async (file: File, docType: string) => {
     setUploading(docType);
+    setUploadError(null);
     try {
       const fd = new FormData();
       fd.append("file", file); fd.append("clientId", client.id); fd.append("docType", docType);
       const res = await fetch("/api/onboarding/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (res.ok && data.url) {
-        updateClientData(client.id, { [docType === "contrato_social" ? "docContratoSocial" : docType === "identidade" ? "docIdentidade" : "docLogo"]: data.url });
+        const field = docType === "contrato_social" ? "docContratoSocial" : docType === "identidade" ? "docIdentidade" : "docLogo";
+        updateClientData(client.id, { [field]: data.url });
+      } else {
+        setUploadError(data.error ?? "Falha no upload");
+        setTimeout(() => setUploadError(null), 5000);
       }
+    } catch {
+      setUploadError("Erro de conexão no upload");
+      setTimeout(() => setUploadError(null), 5000);
     } finally { setUploading(null); }
   };
 
@@ -220,6 +228,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
     }
   };
 
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
 
   const handleSecureOpen = async (ref: string, docType: string, download: boolean) => {
@@ -542,6 +551,12 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
               </p>
             </div>
           </div>
+          {uploadError && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+              <AlertTriangle size={13} className="text-red-400 shrink-0" />
+              <span className="text-xs text-red-400">{uploadError}</span>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {([
               { label: "Contrato Social", url: client.docContratoSocial, docType: "contrato_social" },
