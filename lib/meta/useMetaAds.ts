@@ -442,7 +442,7 @@ export async function fetchCampaignInsights(
         const totalClicks = safeInt(total?.clicks);
         // inline_link_clicks = somente cliques em links (exclui reações, comentários, etc.)
         // Usado para CTR e CPC mais precisos.
-        const inlineLinkClicks = safeInt((total as Record<string, unknown>)?.inline_link_clicks);
+        const inlineLinkClicks = safeInt(total?.inline_link_clicks);
         const frequency = safeFloat(total?.frequency);
 
         // Preferimos ctr/cpc da Meta quando disponíveis (calculados sobre inline_link_clicks).
