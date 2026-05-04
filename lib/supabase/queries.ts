@@ -375,6 +375,7 @@ export async function fetchDesignRequests(): Promise<DesignRequest[]> {
     format: (row.format as string) ?? "",
     briefing: (row.briefing as string) ?? "",
     deadline: (row.deadline as string) ?? undefined,
+    createdAt: (row.created_at as string) ?? undefined,
   }));
 }
 

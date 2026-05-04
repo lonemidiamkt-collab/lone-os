@@ -214,6 +214,7 @@ export interface DesignRequest {
   briefing: string;
   attachments?: string[];
   deadline?: string;
+  createdAt?: string;
 }
 
 export interface Notice {

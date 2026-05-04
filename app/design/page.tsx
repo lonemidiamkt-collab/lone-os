@@ -1328,6 +1328,12 @@ export default function DesignPage() {
                 <Palette size={13} className="text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">Pedido por: <span className="text-foreground font-medium">{briefingReq.requestedBy}</span></span>
               </div>
+              {briefingReq.createdAt && (
+                <div className="flex items-center gap-2">
+                  <Clock size={13} className="text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Data da demanda: <span className="text-foreground font-medium">{new Date(briefingReq.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span></span>
+                </div>
+              )}
               {/* Status badge */}
               <div className="flex items-center gap-2">
                 <span className={`badge border text-xs ${
