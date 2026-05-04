@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     if (!user.isAdmin) return NextResponse.json({ error: "Acesso restrito a administradores" }, { status: 403 });
 
     const body = await req.json();
-    const { clientId, serviceType, valorMensal, duracaoMeses, diaPagamento, version, hasRenewal, renewalValue, signerEmail } = body;
+    const { clientId, serviceType, valorMensal, duracaoMeses, diaPagamento, version, hasRenewal, renewalValue, signerEmail, startDate } = body;
 
     if (!clientId || !serviceType) {
       return NextResponse.json({ error: "clientId e serviceType são obrigatórios" }, { status: 400 });
@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
       has_renewal: Boolean(hasRenewal),
       renewal_value: hasRenewal && renewalValue ? Number(renewalValue) : null,
 
+      startDate: (startDate as string) || undefined,
       service_type: serviceType,
       version: version ? Number(version) : undefined,
       data_assinatura: new Date(),

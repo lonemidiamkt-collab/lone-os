@@ -239,6 +239,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
           hasRenewal: c.hasRenewal ?? false,
           renewalValue: c.renewalValue ?? null,
           signerEmail: signerEmail || undefined,
+          startDate: c.startDate || undefined,
         }),
       });
       if (!res.ok) {

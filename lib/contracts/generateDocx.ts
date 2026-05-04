@@ -37,6 +37,7 @@ export interface ContractMergeData {
   valor_mensal_numero: number; // em reais (ex: 2500.00)
   duracao_meses_numero: number; // em meses (ex: 6)
   dia_pagamento_numero: number; // dia do mês (ex: 10)
+  startDate?: string; // YYYY-MM-DD — data de início do contrato (padrão: hoje)
 
   // Reajuste opcional (cláusula 2.7 condicional)
   has_renewal?: boolean;
@@ -63,12 +64,21 @@ function numberToWords(value: number): string {
   return extenso(String(value));
 }
 
+function formatDatePtBR(d: Date): string {
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
 function buildTemplateData(input: ContractMergeData): Record<string, string> {
   const today = input.data_assinatura ?? new Date();
   const valorFormatado = input.valor_mensal_numero.toLocaleString("pt-BR", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+
+  // Datas de vigência: usa startDate se fornecido, senão usa hoje.
+  const start = input.startDate ? new Date(input.startDate + "T12:00:00") : today;
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + input.duracao_meses_numero);
 
   // Cláusula de reajuste: só aparece se admin habilitou na geração do contrato.
   // Sem reajuste → placeholder fica vazio (parágrafo some no .docx).
@@ -101,6 +111,8 @@ function buildTemplateData(input: ContractMergeData): Record<string, string> {
     dia_pagamento_numero: String(input.dia_pagamento_numero),
     dia_pagamento_extenso: numberToWords(input.dia_pagamento_numero),
 
+    data_inicio: formatDatePtBR(start),
+    data_fim: formatDatePtBR(end),
     data_dia: String(today.getDate()).padStart(2, "0"),
     data_mes_extenso: MESES_EXTENSO[today.getMonth()],
     data_ano: String(today.getFullYear()),

@@ -17,7 +17,7 @@
 
 ## CLÁUSULA SEGUNDA – DO PRAZO, RENOVAÇÃO AUTOMÁTICA E CONTINUIDADE ESTRATÉGICA
 
-2.1. O presente contrato possui prazo mínimo inicial de **{{duracao_meses_numero}} ({{duracao_meses_extenso}}) meses**, com início a partir da data de assinatura, abrangendo todos os serviços e obrigações aqui descritos.
+2.1. O presente contrato possui prazo mínimo inicial de **{{duracao_meses_numero}} ({{duracao_meses_extenso}}) meses**, com início em **{{data_inicio}}** e término previsto em **{{data_fim}}**, abrangendo todos os serviços e obrigações aqui descritos.
 
 2.2. Após o término do período inicial, o contrato será automaticamente renovado por períodos iguais e sucessivos, mantendo-se todas as condições contratuais vigentes, salvo manifestação expressa em contrário por qualquer das partes.
 
