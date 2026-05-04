@@ -7,6 +7,7 @@ import { SERVICE_LABELS, LONE_MIDIA } from "@/lib/contracts/types";
 import type { ContractData, ContractRecord } from "@/lib/contracts/types";
 import type { Client } from "@/lib/types";
 import { supabase } from "@/lib/supabase/client";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
   FileText, Plus, Download, Eye, Loader2, Check, X,
   Calendar, DollarSign, Clock, AlertTriangle,
@@ -226,7 +227,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
     }
     setDownloadingDocx(c.id); setDownloadError("");
     try {
-      const res = await fetch("/api/contracts/download-docx", {
+      const res = await authedFetch("/api/contracts/download-docx", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientId: client.id,
@@ -291,7 +292,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
         fd.append("file", file);
         fd.append("contractId", contractId);
         fd.append("method", "d4sign_manual");
-        const res = await fetch("/api/contracts/upload-signed", { method: "POST", body: fd });
+        const res = await authedFetch("/api/contracts/upload-signed", { method: "POST", body: fd });
         if (!res.ok) {
           const data = await res.json().catch(() => ({ error: "Falha no upload" }));
           setDownloadError(data.error || "Falha no upload");
@@ -312,7 +313,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
   // Abre o PDF assinado via signed URL (5 min TTL). Cada acesso gera linha em vault_access_log.
   const handleViewSigned = async (signedPath: string) => {
     try {
-      const res = await fetch("/api/storage/signed-url", {
+      const res = await authedFetch("/api/storage/signed-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: signedPath, download: false }),
