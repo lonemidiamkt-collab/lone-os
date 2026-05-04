@@ -294,23 +294,44 @@ export async function fetchAdAccounts(token: string) {
 // ACTION TYPE DEFINITIONS — authoritative source of truth
 // ═══════════════════════════════════════════════════════════
 
+// ─── Mensagens / WhatsApp / Messenger ────────────────────────────────────────
+// A Meta usa tipos diferentes dependendo do canal e da versão da API.
+// Usamos o PRIMEIRO tipo encontrado (prioridade: mais específico primeiro).
 const MESSAGE_ACTION_TYPES = [
+  // WhatsApp Business (Click-to-WhatsApp)
   "onsite_conversion.messaging_conversation_started_7d",
+  // Messenger e Instagram DM
   "onsite_conversion.messaging_first_conversation_started",
   "onsite_conversion.messaging_first_reply",
+  // Formato legado (sem prefixo onsite_conversion)
+  "messaging_conversation_started_7d",
+  // WhatsApp — formato alternativo mais novo
+  "onsite_conversion.whatsapp_business_messaging_conversation_started_7d",
+  // Click-to-WhatsApp via objetivo Engajamento
+  "onsite_conversion.engagement",
 ] as const;
 
+// ─── Leads ───────────────────────────────────────────────────────────────────
 const LEAD_ACTION_TYPES = [
   "lead",
   "onsite_conversion.lead_grouped",
   "offsite_conversion.fb_pixel_lead",
   "offsite_conversion.fb_pixel_complete_registration",
+  "onsite_conversion.lead",
 ] as const;
 
+// ─── Compras / Conversões ────────────────────────────────────────────────────
 const PURCHASE_ACTION_TYPES = [
   "offsite_conversion.fb_pixel_purchase",
   "onsite_conversion.purchase",
   "omni_purchase",
+] as const;
+
+// ─── Tráfego (link clicks) ───────────────────────────────────────────────────
+const TRAFFIC_ACTION_TYPES = [
+  "link_click",
+  "inline_link_click",
+  "landing_page_view",
 ] as const;
 
 function safeFloat(val: string | number | undefined | null): number {
@@ -389,7 +410,7 @@ export async function fetchCampaignInsights(
 
         const dailyParams = new URLSearchParams({
           access_token: token,
-          fields: "date_start,date_stop,spend,impressions,reach,clicks,actions",
+          fields: "date_start,date_stop,spend,impressions,reach,clicks,inline_link_clicks,actions",
           time_range: timeRange,
           time_increment: "1",
           limit: "100",
@@ -397,7 +418,7 @@ export async function fetchCampaignInsights(
 
         const totalParams = new URLSearchParams({
           access_token: token,
-          fields: "spend,impressions,reach,clicks,ctr,cpc,cpm,frequency,actions",
+          fields: "spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions",
           time_range: timeRange,
           limit: "1",
         });
@@ -419,39 +440,56 @@ export async function fetchCampaignInsights(
         const totalImpressions = safeInt(total?.impressions);
         const totalReach = safeInt(total?.reach);
         const totalClicks = safeInt(total?.clicks);
+        // inline_link_clicks = somente cliques em links (exclui reações, comentários, etc.)
+        // Usado para CTR e CPC mais precisos.
+        const inlineLinkClicks = safeInt((total as Record<string, unknown>)?.inline_link_clicks);
         const frequency = safeFloat(total?.frequency);
 
-        const ctr = safeFloat(total?.ctr);
-        const cpc = safeFloat(total?.cpc);
-        const cpm = safeFloat(total?.cpm);
+        // Preferimos ctr/cpc da Meta quando disponíveis (calculados sobre inline_link_clicks).
+        // Se a Meta não retornar, calculamos manualmente com inline_link_clicks.
+        const linkClicks = inlineLinkClicks > 0 ? inlineLinkClicks : totalClicks;
+        const ctr = safeFloat(total?.ctr) || (totalImpressions > 0 ? (linkClicks / totalImpressions) * 100 : 0);
+        const cpc = safeFloat(total?.cpc) || (linkClicks > 0 ? totalSpend / linkClicks : 0);
+        const cpm = safeFloat(total?.cpm) || (totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0);
 
         const totalActions = total?.actions as { action_type: string; value: string }[] | undefined;
         const totalMessages = countMessages(totalActions);
         const totalLeads = countActions(totalActions, LEAD_ACTION_TYPES);
         const totalPurchases = countActions(totalActions, PURCHASE_ACTION_TYPES);
         const totalConversions = totalLeads + totalPurchases;
+        const totalLinkClicks = countActions(totalActions, TRAFFIC_ACTION_TYPES) || linkClicks;
 
         const objective = (campaign.objective ?? "").toUpperCase();
         let results = 0;
         let costPerResult = 0;
         if (objective.includes("MESSAGE") || objective.includes("OUTCOME_ENGAGEMENT")) {
-          results = totalMessages;
+          results = totalMessages > 0 ? totalMessages : totalLinkClicks;
         } else if (objective.includes("LEAD") || objective.includes("OUTCOME_LEADS")) {
-          results = totalLeads;
+          results = totalLeads > 0 ? totalLeads : totalMessages;
         } else if (objective.includes("CONVERSION") || objective.includes("SALES") || objective.includes("OUTCOME_SALES")) {
           results = totalPurchases > 0 ? totalPurchases : totalConversions;
+        } else if (objective.includes("TRAFFIC") || objective.includes("OUTCOME_TRAFFIC") || objective.includes("LINK_CLICKS")) {
+          results = totalLinkClicks;
+        } else if (objective.includes("AWARENESS") || objective.includes("OUTCOME_AWARENESS") || objective.includes("REACH")) {
+          results = totalReach;
         } else {
-          results = totalConversions > 0 ? totalConversions : totalMessages;
+          // Fallback: usa o resultado mais relevante disponível
+          results = totalMessages > 0 ? totalMessages
+            : totalLeads > 0 ? totalLeads
+            : totalConversions > 0 ? totalConversions
+            : totalLinkClicks;
         }
         costPerResult = results > 0 ? totalSpend / results : 0;
 
         const dailyMetrics = dailyInsights.map((i: any) => {
           const dayActions = i.actions as { action_type: string; value: string }[] | undefined;
+          const dayInlineLinkClicks = safeInt((i as Record<string, unknown>).inline_link_clicks);
           return {
             date: i.date_start,
             spend: safeFloat(i.spend),
             impressions: safeInt(i.impressions),
             clicks: safeInt(i.clicks),
+            linkClicks: dayInlineLinkClicks,
             conversions: countActions(dayActions, [...LEAD_ACTION_TYPES, ...PURCHASE_ACTION_TYPES]),
             messages: countMessages(dayActions),
             leads: countActions(dayActions, LEAD_ACTION_TYPES),

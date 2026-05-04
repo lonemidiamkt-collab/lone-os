@@ -2146,8 +2146,14 @@ function AdAnalyticsTab({
   const totalMessages = agg.messages;
   const totalLeads = agg.leads;
   const totalResults = agg.results;
-  const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
-  const avgCpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
+  // Usa média ponderada dos ctr/cpc da Meta por campanha (mais preciso que recalcular de totalClicks,
+  // que inclui reações, comentários e outros eventos — não só cliques em links).
+  const avgCtr = totalImpressions > 0
+    ? filteredCampaigns.reduce((s, c) => s + c.ctr * c.impressions, 0) / totalImpressions
+    : 0;
+  const avgCpc = totalClicks > 0
+    ? filteredCampaigns.reduce((s, c) => s + c.cpc * c.clicks, 0) / totalClicks
+    : 0;
   const avgCpm = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0;
   const avgCostPerConv = totalConversions > 0 ? totalSpend / totalConversions : 0;
   const avgCostPerMessage = totalMessages > 0 ? totalSpend / totalMessages : 0;
