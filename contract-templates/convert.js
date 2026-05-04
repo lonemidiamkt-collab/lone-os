@@ -24,6 +24,8 @@ const FILES = [
 
 // Parse **bold** into array of TextRun with bold flag where needed.
 function parseInline(text) {
+  // Strip Markdown escape backslashes (\_  \* etc.) before processing
+  text = text.replace(/\\([_*[\]()~`>#+=|{}.!\-])/g, "$1");
   const runs = [];
   const regex = /\*\*(.+?)\*\*/g;
   let lastIndex = 0;
