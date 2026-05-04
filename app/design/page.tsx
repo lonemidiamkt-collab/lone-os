@@ -82,7 +82,7 @@ function UploadArtModal({
   card: ContentCard;
   onClose: () => void;
 }) {
-  const { updateContentCard, updateDesignRequest, clients, pushNotification } = useAppState();
+  const { updateContentCard, updateDesignRequest, designRequests, clients, pushNotification } = useAppState();
   const { currentUser } = useRole();
   const [artLink, setArtLink] = useState(
     card.imageUrl && card.imageUrl.includes("drive.google.com") ? card.imageUrl : ""
@@ -95,8 +95,36 @@ function UploadArtModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const clientDriveLink = clients.find((c) => c.id === card.clientId)?.driveLink;
+  const isImageUrl = (url: string) => /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
 
-  // ─── Upload de arquivo direto (PNG/JPG/PDF/MP4) ───
+  // Shared save logic — called both from file upload (atomic) and Drive link button
+  const saveArt = async (url: string) => {
+    setSaving(true);
+    try {
+      updateContentCard(card.id, {
+        imageUrl: url,
+        designerDeliveredAt: new Date().toISOString(),
+        designerDeliveredBy: currentUser,
+      }, { bypassWorkflow: true });
+
+      if (card.designRequestId) {
+        const dr = designRequests.find((r) => r.id === card.designRequestId);
+        const nextAttachments = [...(dr?.attachments ?? []), url];
+        updateDesignRequest(card.designRequestId, { attachments: nextAttachments, status: "done" });
+      }
+      pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmação.`, card.clientId);
+      import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
+      setSaved(true);
+      setTimeout(() => { setSaved(false); onClose(); }, 800);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro desconhecido";
+      console.error("[UploadArt] save failed:", err);
+      setError(`Não foi possível salvar: ${msg}`);
+      setSaving(false);
+    }
+  };
+
+  // ─── Upload de arquivo direto (PNG/JPG/PDF/MP4) — atômico ───
   const handleFileUpload = async (file: File) => {
     setError("");
     if (file.size === 0) { setError("Arquivo vazio."); return; }
@@ -127,8 +155,10 @@ function UploadArtModal({
         return;
       }
 
-      setArtLink(data.url);
-      setUploadProgress("Upload concluído. Clique em \"Entregar Arte\" para finalizar.");
+      const url = data.url as string;
+      setArtLink(url);
+      setUploadProgress("Upload concluído. Salvando...");
+      await saveArt(url);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro de conexão";
       console.error("[UploadArt] upload exception:", err);
@@ -150,28 +180,7 @@ function UploadArtModal({
     } catch {
       setError("URL inválida — verifique o formato."); return;
     }
-
-    setSaving(true);
-    try {
-      updateContentCard(card.id, {
-        imageUrl: link,
-        designerDeliveredAt: new Date().toISOString(),
-        designerDeliveredBy: currentUser,
-      }, { bypassWorkflow: true });
-
-      if (card.designRequestId) {
-        updateDesignRequest(card.designRequestId, { status: "done" });
-      }
-      pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmacao. Clique no card para confirmar.`, card.clientId);
-      import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
-      setSaved(true);
-      setTimeout(() => { setSaved(false); onClose(); }, 800);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      console.error("[UploadArt] save failed:", err);
-      setError(`Não foi possível salvar: ${msg}`);
-      setSaving(false);
-    }
+    await saveArt(link);
   };
 
   return (
@@ -251,16 +260,23 @@ function UploadArtModal({
             {error && <p className="text-[10px] text-red-400">{error}</p>}
           </div>
 
-          {/* Preview link */}
+          {/* Preview */}
           {artLink && artLink.includes("http") && (
-            <a
-              href={artLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-xs text-[#0d4af5] hover:underline"
-            >
-              <ExternalLink size={11} /> Verificar link antes de enviar
-            </a>
+            isImageUrl(artLink) ? (
+              <div className="rounded-xl overflow-hidden border border-[#1a1a1a] bg-[#0a0a0a]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={artLink} alt="Preview da arte" className="w-full max-h-48 object-contain" />
+              </div>
+            ) : (
+              <a
+                href={artLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-xs text-[#0d4af5] hover:underline"
+              >
+                <ExternalLink size={11} /> Verificar arquivo antes de enviar
+              </a>
+            )
           )}
 
           {/* Card info */}

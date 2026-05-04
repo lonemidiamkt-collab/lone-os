@@ -732,6 +732,41 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
   }, [isAuthenticated, dbReady]);
 
+  // ─── Realtime: design_requests ─────────────────────────────
+  useEffect(() => {
+    if (!isAuthenticated || !dbReady) return;
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    (async () => {
+      const { snakeToDesignRequest } = await import("@/lib/supabase/queries");
+      if (cancelled) return;
+      channel = supabase
+        .channel("public:design_requests")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "design_requests" }, (payload) => {
+          if (!payload.new) return;
+          try {
+            const req = snakeToDesignRequest(payload.new as Record<string, unknown>);
+            setDesignRequests((prev) => prev.some((r) => r.id === req.id) ? prev : [req, ...prev]);
+          } catch (err) { console.error("[realtime] design_requests insert:", err); }
+        })
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "design_requests" }, (payload) => {
+          if (!payload.new) return;
+          try {
+            const req = snakeToDesignRequest(payload.new as Record<string, unknown>);
+            setDesignRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, ...req } : r));
+          } catch (err) { console.error("[realtime] design_requests update:", err); }
+        })
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "design_requests" }, (payload) => {
+          const id = (payload.old as { id?: string } | undefined)?.id;
+          if (id) setDesignRequests((prev) => prev.filter((r) => r.id !== id));
+        })
+        .subscribe();
+    })();
+
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [isAuthenticated, dbReady]);
+
   // ── One-time migration: push localStorage → Supabase ──
   async function migrateLocalToDb(local: Partial<PersistedState>) {
     const alreadyMigrated = localStorage.getItem("lone-os-db-migrated");
@@ -1577,13 +1612,31 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
       const tempId = newReq.id;
       db.insertDesignRequest(req).then((dbReq) => {
+        // Swap temp ID for real DB ID in both designRequests and linked ContentCard
         setDesignRequests((prev) =>
           prev.map((r) => (r.id === tempId ? { ...r, id: dbReq.id } : r))
         );
         if (req.contentCardId) {
+          setContentCards((prev) =>
+            prev.map((c) => c.id === req.contentCardId ? { ...c, designRequestId: dbReq.id } : c)
+          );
           db.updateContentCardDb(req.contentCardId, { designRequestId: dbReq.id }).catch(() => {});
         }
-      }).catch(() => {});
+      }).catch((err) => {
+        // Rollback optimistic state on DB failure
+        setDesignRequests((prev) => prev.filter((r) => r.id !== tempId));
+        if (req.contentCardId) {
+          setContentCards((prev) =>
+            prev.map((c) => c.id === req.contentCardId ? { ...c, designRequestId: undefined } : c)
+          );
+        }
+        pushNotification(
+          "system",
+          "Falha ao criar demanda",
+          `"${req.title}" não foi salva. ${err instanceof Error ? err.message : "Erro desconhecido"}`,
+          req.clientId
+        );
+      });
 
       return newReq;
     },

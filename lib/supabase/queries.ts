@@ -361,10 +361,8 @@ export async function updateContentCardDb(id: string, updates: Record<string, un
 // DESIGN REQUESTS
 // ═══════════════════════════════════════════════════════════
 
-export async function fetchDesignRequests(): Promise<DesignRequest[]> {
-  const { data, error } = await supabase.from("design_requests").select("*").order("created_at", { ascending: false });
-  if (error) { console.error("[DB] fetchDesignRequests:", error); return []; }
-  return (data ?? []).map((row: Record<string, unknown>) => ({
+export function snakeToDesignRequest(row: Record<string, unknown>): DesignRequest {
+  return {
     id: row.id as string,
     title: row.title as string,
     clientId: row.client_id as string,
@@ -374,9 +372,16 @@ export async function fetchDesignRequests(): Promise<DesignRequest[]> {
     status: (row.status as DesignRequest["status"]) ?? "queued",
     format: (row.format as string) ?? "",
     briefing: (row.briefing as string) ?? "",
+    attachments: (row.attachments as string[]) ?? [],
     deadline: (row.deadline as string) ?? undefined,
     createdAt: (row.created_at as string) ?? undefined,
-  }));
+  };
+}
+
+export async function fetchDesignRequests(): Promise<DesignRequest[]> {
+  const { data, error } = await supabase.from("design_requests").select("*").order("created_at", { ascending: false });
+  if (error) { console.error("[DB] fetchDesignRequests:", error); return []; }
+  return (data ?? []).map(snakeToDesignRequest);
 }
 
 export async function insertDesignRequest(req: Omit<DesignRequest, "id">): Promise<{ id: string }> {
@@ -389,6 +394,7 @@ export async function insertDesignRequest(req: Omit<DesignRequest, "id">): Promi
     status: req.status ?? "queued",
     format: req.format,
     briefing: req.briefing,
+    attachments: req.attachments ?? [],
     deadline: req.deadline,
   }).select("id").single();
   if (error) { console.error("[DB] insertDesignRequest:", error); throw error; }
@@ -399,6 +405,10 @@ export async function updateDesignRequestDb(id: string, updates: Partial<DesignR
   const row: Record<string, unknown> = {};
   if (updates.status !== undefined) row.status = updates.status;
   if (updates.priority !== undefined) row.priority = updates.priority;
+  if (updates.briefing !== undefined) row.briefing = updates.briefing;
+  if (updates.format !== undefined) row.format = updates.format;
+  if (updates.deadline !== undefined) row.deadline = updates.deadline;
+  if (updates.attachments !== undefined) row.attachments = updates.attachments;
   if (Object.keys(row).length === 0) return { error: null };
   const { error } = await supabase.from("design_requests").update(row).eq("id", id);
   if (error) console.error("[DB] updateDesignRequest:", error);
