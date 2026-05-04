@@ -95,15 +95,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Falha no upload: " + error.message }, { status: 500 });
   }
 
+  // Map docType → clients table column
+  const DOC_COLUMN: Record<string, string> = {
+    contrato_social: "doc_contrato_social",
+    identidade: "doc_identidade",
+    logo: "doc_logo",
+  };
+
+  const dbColumn = DOC_COLUMN[docType];
+
   // Public bucket: return usable public URL.
   // Private bucket: return the storage path (prefixed) — frontend must request a signed URL to access.
   if (bucket === "brand-assets") {
     const publicUrl = `/storage/v1/object/public/${bucket}/${path}`;
+    // Persist URL to clients table server-side (service role bypasses RLS, no client-side auth needed)
+    if (dbColumn) {
+      await supabase.from("clients").update({ [dbColumn]: publicUrl }).eq("id", clientId);
+    }
     return NextResponse.json({ url: publicUrl, path, bucket });
   }
 
-  // Private: we save a prefixed path in the DB so downstream code can distinguish
-  // legacy public URLs from private-paths that need signing.
+  // Private: save prefixed path so frontend can distinguish it from legacy public URLs
   const privateRef = `legal://${path}`;
+  // Persist URL to clients table server-side (service role bypasses RLS)
+  if (dbColumn) {
+    const { error: dbErr } = await supabase.from("clients").update({ [dbColumn]: privateRef }).eq("id", clientId);
+    if (dbErr) console.error("[Upload] DB update failed:", dbErr);
+  }
   return NextResponse.json({ url: privateRef, path, bucket });
 }
