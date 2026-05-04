@@ -29,7 +29,7 @@
 
 2.6. Após cada ciclo de renovação, as partes poderão revisar valores, escopo ou condições operacionais mediante acordo formal, considerando evolução estratégica das campanhas, aumento de demanda ou ampliação dos serviços prestados.
 
-{{clausula_reajuste}}
+2.7. O valor mensal de R$ 1.500,00 (mil e quinhentos reais) corresponde a uma condição comercial promocional válida exclusivamente durante o período mínimo inicial de 3 (três) meses. Havendo renovação automática ou continuidade da prestação dos serviços após o período inicial, o valor mensal passará a ser de R$ 2.000,00 (dois mil reais), salvo novo acordo formal entre as partes.
 
 ---
 
@@ -92,47 +92,41 @@ A CONTRATADA se compromete a:
 
 4.12. Prestar suporte contínuo via WhatsApp durante o horário comercial;
 
-4.13. A CONTRATADA poderá incluir, dentro do planejamento estratégico, conteúdos relacionados a **datas comemorativas, campanhas sazonais ou datas simbólicas**, com o objetivo de fortalecer o posicionamento da marca da CONTRATANTE;
+4.13. Toda solicitação de criação, alteração ou inclusão de conteúdos deverá ser realizada com **antecedência mínima de 48 (quarenta e oito) horas úteis**, a fim de garantir a qualidade e viabilidade da execução;
 
-4.14. Os conteúdos de datas comemorativas possuem caráter **estratégico complementar**, não sendo considerados como conteúdo extra contratado, tampouco como obrigação fixa em todas as datas do calendário;
+4.14. Solicitações realizadas fora desse prazo poderão não ser atendidas integralmente ou dentro do prazo desejado, não sendo caracterizada falha na prestação dos serviços por parte da CONTRATADA;
 
-4.15. Quando produzidos, os conteúdos de datas comemorativas **não serão contabilizados dentro do volume semanal contratado de postagens**, sendo tratados como entregas adicionais de valor estratégico;
+4.15. Para conteúdos relacionados a datas comemorativas, campanhas sazonais ou ações específicas, a CONTRATANTE deverá fornecer materiais, informações e aprovações com antecedência mínima de **48 (quarenta e oito) horas úteis**;
 
-4.16. A definição das datas a serem trabalhadas será realizada com base na relevância estratégica para o negócio da CONTRATANTE, conforme planejamento mensal;
+4.16. Demandas urgentes ou fora do prazo estabelecido estarão sujeitas à análise de viabilidade pela CONTRATADA, podendo ser recusadas ou reprogramadas conforme a disponibilidade operacional;
 
-4.17. A produção desses conteúdos dependerá do envio de informações, materiais e aprovações por parte da CONTRATANTE dentro dos prazos operacionais definidos;
+4.17. A CONTRATADA é responsável exclusivamente pela **edição dos conteúdos em vídeo**, desde que o material bruto seja fornecido pela CONTRATANTE;
 
-4.18. Toda solicitação de criação, alteração ou inclusão de conteúdos deverá ser realizada com **antecedência mínima de 48 (quarenta e oito) horas úteis**, a fim de garantir a qualidade e viabilidade da execução;
+4.18. A CONTRATADA não realiza serviços de **gravação, captação ou produção presencial de conteúdo**;
 
-4.19. Solicitações realizadas fora desse prazo poderão não ser atendidas integralmente ou dentro do prazo desejado, não sendo caracterizada falha na prestação dos serviços por parte da CONTRATADA;
+4.19. A CONTRATADA não garante resultados financeiros, uma vez que os resultados dependem de fatores externos à sua atuação, como atendimento, operação, produto e posicionamento da CONTRATANTE;
 
-4.20. Para conteúdos relacionados a datas comemorativas, campanhas sazonais ou ações específicas, a CONTRATANTE deverá fornecer materiais, informações e aprovações com antecedência mínima de **48 (quarenta e oito) horas úteis**;
+4.20. A prestação dos serviços possui natureza estratégica e consultiva, não se limitando à execução operacional de postagens;
 
-4.21. Demandas urgentes ou fora do prazo estabelecido estarão sujeitas à análise de viabilidade pela CONTRATADA, podendo ser recusadas ou reprogramadas conforme a disponibilidade operacional;
+4.21. Cada conteúdo poderá passar por até **02 (duas) rodadas de ajustes**, desde que solicitadas dentro do prazo operacional estabelecido.
 
-4.22. A CONTRATADA é responsável exclusivamente pela **edição dos conteúdos em vídeo**, desde que o material bruto seja fornecido pela CONTRATANTE;
+4.22. Solicitações adicionais de alteração poderão ser avaliadas e executadas mediante disponibilidade operacional ou negociação entre as partes.
 
-4.23. A CONTRATADA não realiza serviços de **gravação, captação ou produção presencial de conteúdo**;
+4.23. Os conteúdos serão produzidos e disponibilizados conforme o planejamento mensal, respeitando os prazos operacionais da CONTRATADA, que poderão variar de acordo com a demanda e complexidade das entregas.
 
-4.24. A CONTRATADA não garante resultados financeiros, uma vez que os resultados dependem de fatores externos à sua atuação, como atendimento, operação, produto e posicionamento da CONTRATANTE;
+4.24. A CONTRATADA poderá incluir, dentro do planejamento estratégico, conteúdos relacionados a datas comemorativas, campanhas sazonais ou datas simbólicas, desde que tais conteúdos sejam considerados relevantes para o negócio da CONTRATANTE e estejam dentro da viabilidade operacional e do volume mensal de produção previsto neste contrato.
 
-4.25. A prestação dos serviços possui natureza estratégica e consultiva, não se limitando à execução operacional de postagens;
-
-4.26. Cada conteúdo poderá passar por até **02 (duas) rodadas de ajustes**, desde que solicitadas dentro do prazo operacional estabelecido.
-
-4.27. Solicitações adicionais de alteração poderão ser avaliadas e executadas mediante disponibilidade operacional ou negociação entre as partes.
-
-4.28. Os conteúdos serão produzidos e disponibilizados conforme o planejamento mensal, respeitando os prazos operacionais da CONTRATADA, que poderão variar de acordo com a demanda e complexidade das entregas.
+4.25. Conteúdos de datas comemorativas poderão ser tratados como ações estratégicas complementares, não caracterizando obrigação automática da CONTRATADA em produzir materiais para todas as datas do calendário. A execução dependerá do planejamento mensal, envio prévio de informações, materiais e aprovação da CONTRATANTE dentro dos prazos operacionais definidos.
 
 ---
 
 ## CLÁUSULA QUINTA - DAS PERMISSÕES
 
-5.1. O CONTRATADO deverá acessar, buscando a plena satisfação da prestação de serviço, objeto deste contrato, a conta do Business Manager, a página do Facebook e Instagram da CONTRATANTE e demais ferramentas e contas indispensáveis para a realização do serviço.
+5.1. A CONTRATADA deverá acessar, buscando a plena satisfação da prestação de serviço, objeto deste contrato, a conta do Business Manager, a página do Facebook e Instagram da CONTRATANTE e demais ferramentas e contas indispensáveis para a realização do serviço.
 
-5.2. Fica reservado ao CONTRATADO o acesso como administrador das plataformas: Business Manager, página do Facebook e Instagram da CONTRATANTE, entre outros, sem o qual a prestação dos serviços fica impossibilitada.
+5.2. Fica reservado à CONTRATADA o acesso como administrador das plataformas: Business Manager, página do Facebook e Instagram da CONTRATANTE, entre outros, sem o qual a prestação dos serviços fica impossibilitada.
 
-5.3. O CONTRATADO não tem exclusividade com a CONTRATANTE, podendo assim, fechar outras parcerias com empresas do mesmo nicho ou nichos diferentes.
+5.3. A CONTRATADA não tem exclusividade com a CONTRATANTE, podendo assim, fechar outras parcerias com empresas do mesmo nicho ou nichos diferentes.
 
 5.4. A CONTRATADA não será responsável por bloqueios, restrições, penalizações, perdas de contas ou limitações decorrentes de políticas das plataformas digitais, ações anteriores da CONTRATANTE, violações de diretrizes das mídias ou decisões automatizadas realizadas por terceiros.
 
@@ -160,9 +154,9 @@ Esta restrição permanecerá válida durante toda a vigência contratual e pelo
 
 A parte CONTRATANTE deve:
 
-7.1. Fornecer todas as informações que o CONTRATADO requisitar para o bom funcionamento e realização da prestação de serviços;
+7.1. Fornecer todas as informações que a CONTRATADA requisitar para o bom funcionamento e realização da prestação de serviços;
 
-7.2. Nomear um representante legal que possa estar acompanhando e estar frequentemente em contato com o CONTRATADO sempre que for necessário para o melhor funcionamento das estratégias e conteúdos desenvolvidos;
+7.2. Nomear um representante legal que possa estar acompanhando e estar frequentemente em contato com a CONTRATADA sempre que for necessário para o melhor funcionamento das estratégias e conteúdos desenvolvidos;
 
 7.3. Não divulgar, compartilhar ou repassar qualquer informação que obteve decorrente da prestação de serviço e da relação jurídica que aconteceu entre as partes, mesmo após a extinção do contrato;
 
@@ -188,7 +182,7 @@ Solicitações de alterações realizadas fora do horário comercial ou com praz
 
 O pagamento pelo serviço prestado será feito de forma mensal, na seguinte forma:
 
-8.1. O valor mensal do contrato será de **R$ {{valor_mensal_numero}} ({{valor_mensal_extenso}})**, a ser pago durante o período mínimo inicial de **{{duracao_meses_numero}} ({{duracao_meses_extenso}}) meses**, conforme as condições estabelecidas neste instrumento.
+8.1. O valor mensal do contrato será de R$ 1.500,00 (mil e quinhentos reais), a ser pago durante o período mínimo inicial de 3 (três) meses, totalizando R$ 4.500,00 (quatro mil e quinhentos reais) durante a vigência contratual inicial. Após o período inicial, em caso de renovação ou continuidade da prestação dos serviços, aplicar-se-á o reajuste previsto na Cláusula 2.7 deste instrumento.
 
 8.2. O pagamento deverá ser efetuado até o dia **{{dia_pagamento_numero}} ({{dia_pagamento_extenso}})** de cada mês, durante toda a vigência do contrato.
 
@@ -256,25 +250,21 @@ O pagamento pelo serviço prestado será feito de forma mensal, na seguinte form
 
 ## CLÁUSULA DÉCIMA PRIMEIRA – DOS BÔNUS
 
-A CONTRATANTE poderá receber, a critério da CONTRATADA, serviços adicionais de caráter estratégico, sem custo extra, com o objetivo de potencializar os resultados da presença digital, sem que tais serviços integrem a obrigação principal deste contrato.
+O CONTRATANTE terá direito aos seguintes serviços adicionais, que serão prestados durante a vigência deste contrato como bônus estratégico, sem acréscimo ao valor mensal contratado, desde que respeitada a disponibilidade operacional da CONTRATADA e os limites previstos neste instrumento.
 
-11.1. **Consultoria de Posicionamento Digital:** Análise estratégica do perfil da CONTRATANTE nas redes sociais, com recomendações práticas para melhoria de comunicação, autoridade e percepção de valor da marca.
+11.1. Treinamento Comercial: A CONTRATANTE terá acesso a orientações estratégicas sobre atendimento e conversão de leads, incluindo análise de pontos de melhoria no atendimento e sugestões práticas para aumento da conversão comercial.
 
-11.2. **Sugestões Estratégicas de Conteúdo:** Indicação de ideias de conteúdos, tendências e formatos que possam aumentar o engajamento, retenção e conexão com o público.
+11.2. Treinamento de Posicionamento: A CONTRATANTE poderá receber orientações estratégicas sobre posicionamento digital no Instagram, incluindo boas práticas de organização do perfil, comunicação visual, conteúdo e apresentação da marca.
 
-11.3. **Apoio na Estruturação do Perfil:** Orientações sobre bio, destaques, organização visual do feed e estrutura geral do perfil, visando maior profissionalismo e conversão.
-
-11.4. **Direcionamento de Comunicação e Linguagem:** Ajustes e recomendações sobre a forma de comunicação da marca, visando maior clareza, persuasão e alinhamento com o público-alvo.
-
-11.5. Os serviços descritos nesta cláusula possuem caráter complementar e poderão ser realizados conforme disponibilidade operacional da CONTRATADA, não sendo obrigatórios nem passíveis de cobrança futura caso não sejam executados.
+11.3. Os bônus previstos nesta cláusula possuem caráter acessório e estratégico, não constituindo obrigação operacional ilimitada, tampouco alterando o escopo principal contratado nas Cláusulas Primeira e Quarta deste instrumento.
 
 ---
 
-## CLÁUSULA DÉCIMA SEGUNDA - DA ELEIÇÃO DO FORO
+## CLÁUSULA DÉCIMA SEGUNDA – DA ELEIÇÃO DO FORO
 
-12.1. Fica eleito o foro da cidade de **Araruama/RJ**, para dirimir quaisquer controvérsias, dúvidas, desentendimentos, litígios resultantes do presente instrumento, estando ambas as partes renunciando a qualquer outro local, por mais privilegiado que o outro seja ou possa ser.
+12.1. Para dirimir quaisquer controvérsias oriundas do presente instrumento, as partes elegem o Foro da Comarca de Araruama, Estado do Rio de Janeiro, com renúncia expressa a qualquer outro, por mais privilegiado que seja.
 
-O presente acordo é firmado entre as partes (CONTRATANTE E CONTRATADO).
+O presente acordo é firmado entre as partes (CONTRATANTE E CONTRATADA).
 
 Araruama/RJ, {{data_dia}} de {{data_mes_extenso}} de {{data_ano}}.
 
@@ -283,7 +273,7 @@ Araruama/RJ, {{data_dia}} de {{data_mes_extenso}} de {{data_ano}}.
 \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
 
 **LM ASSESSORIA E MARKETING LTDA**
-Representado por {{lm_representante_nome}}
+Representada por Roberto Lino Machado Neto
 CNPJ n° 62.074.361/0001-30
 
 \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
