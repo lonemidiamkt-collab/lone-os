@@ -3126,7 +3126,7 @@ function AdAnalyticsTab({
                 </p>
               )}
               {m.key === "costPerMessage" && (
-                <p className="text-[9px] text-muted-foreground/50 mt-1" title="Valores da API Meta podem variar até 15% em relação ao Gerenciador de Anúncios devido a janelas de atribuição e delays de processamento.">⚠ variação de até 15%</p>
+                <p className="text-[9px] text-muted-foreground/50 mt-1">melhor conjunto ativo</p>
               )}
             </div>
           );
@@ -3370,7 +3370,7 @@ function AdAnalyticsTab({
                         { label: "Leads", value: camp.leads ? String(camp.leads) : "N/A" },
                         { label: "CPL", value: camp.costPerLead ? fmtMetric(camp.costPerLead, "R$") : "N/A" },
                         { label: "Msgs", value: camp.messages ? String(camp.messages) : "N/A" },
-                        { label: "Custo/Msg", value: camp.costPerMessage ? fmtMetric(camp.costPerMessage, "R$") : "N/A" },
+                        { label: camp.cheapestAdSetName ? `Custo/Msg (${camp.cheapestAdSetName.slice(0, 18)})` : "Custo/Msg (melhor conj.)", value: camp.costPerMessage ? fmtMetric(camp.costPerMessage, "R$") : "N/A" },
                         { label: "Resultado", value: camp.results ? String(camp.results) : "N/A" },
                         { label: "Custo/Resultado", value: camp.costPerResult ? fmtMetric(camp.costPerResult, "R$") : "N/A" },
                         { label: "Frequência", value: camp.frequency ? camp.frequency.toFixed(2) : "N/A" },

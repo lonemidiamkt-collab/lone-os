@@ -423,13 +423,24 @@ export async function fetchCampaignInsights(
           limit: "1",
         });
 
-        const [dailyRes, totalRes] = await Promise.all([
+        // Insights por conjunto de anúncios — usado para encontrar o conjunto mais barato de mensagens
+        const adsetParams = new URLSearchParams({
+          access_token: token,
+          fields: "adset_id,adset_name,spend,actions",
+          time_range: timeRange,
+          level: "adset",
+          limit: "50",
+        });
+
+        const [dailyRes, totalRes, adsetRes] = await Promise.all([
           fetch(`https://graph.facebook.com/v21.0/${campaign.id}/insights?${dailyParams}`),
           fetch(`https://graph.facebook.com/v21.0/${campaign.id}/insights?${totalParams}`),
+          fetch(`https://graph.facebook.com/v21.0/${campaign.id}/insights?${adsetParams}`),
         ]);
 
         const dailyData = dailyRes.ok ? await dailyRes.json() : { data: [] };
         const totalData = totalRes.ok ? await totalRes.json() : { data: [] };
+        const adsetData = adsetRes.ok ? await adsetRes.json() : { data: [] };
 
         const dailyInsights = dailyData.data ?? [];
         const total = totalData.data?.[0];
@@ -481,6 +492,29 @@ export async function fetchCampaignInsights(
         }
         costPerResult = results > 0 ? totalSpend / results : 0;
 
+        // Conjunto mais barato de mensagens ativo no período.
+        // level=adset retorna um row por conjunto que teve atividade no período.
+        // Filtramos os que tiveram mensagens e achamos o menor custo/mensagem.
+        const adsetRows: { name: string; spend: number; messages: number; cpm: number }[] =
+          (adsetData.data ?? [])
+            .map((a: any) => ({
+              name: (a.adset_name as string) ?? "",
+              spend: safeFloat(a.spend),
+              messages: countMessages(a.actions as { action_type: string; value: string }[] | undefined),
+              cpm: safeFloat(a.cpm),
+            }))
+            .filter((a: { spend: number; messages: number }) => a.messages > 0 && a.spend > 0);
+
+        let cheapestAdSetCostPerMessage = totalMessages > 0 ? totalSpend / totalMessages : 0;
+        let cheapestAdSetName = "";
+        if (adsetRows.length > 0) {
+          const best = adsetRows.reduce((min, a) =>
+            a.spend / a.messages < min.spend / min.messages ? a : min
+          );
+          cheapestAdSetCostPerMessage = best.spend / best.messages;
+          cheapestAdSetName = best.name;
+        }
+
         const dailyMetrics = dailyInsights.map((i: any) => {
           const dayActions = i.actions as { action_type: string; value: string }[] | undefined;
           const dayInlineLinkClicks = safeInt(i.inline_link_clicks);
@@ -516,7 +550,8 @@ export async function fetchCampaignInsights(
           conversions: totalConversions,
           costPerConversion: totalConversions > 0 ? totalSpend / totalConversions : 0,
           messages: totalMessages,
-          costPerMessage: totalMessages > 0 ? totalSpend / totalMessages : 0,
+          costPerMessage: cheapestAdSetCostPerMessage,
+          cheapestAdSetName,
           leads: totalLeads,
           costPerLead: totalLeads > 0 ? totalSpend / totalLeads : 0,
           results,
