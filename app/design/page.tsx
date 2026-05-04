@@ -408,9 +408,24 @@ export default function DesignPage() {
         return;
       }
       // Anexa URL à request + marca como concluída
-      const nextAttachments = [...(briefingReq.attachments ?? []), data.url as string];
+      const artUrl = data.url as string;
+      const nextAttachments = [...(briefingReq.attachments ?? []), artUrl];
       updateDesignRequest(briefingReq.id, { attachments: nextAttachments, status: "done" });
       setBriefingReq({ ...briefingReq, attachments: nextAttachments, status: "done" });
+
+      // Propaga arte para o ContentCard vinculado → social media vê "Baixar Arte"
+      const linkedCard = contentCards.find((c) => c.designRequestId === briefingReq.id);
+      if (linkedCard) {
+        updateContentCard(linkedCard.id, {
+          imageUrl: artUrl,
+          designerDeliveredAt: new Date().toISOString(),
+          designerDeliveredBy: currentUser,
+        }, { bypassWorkflow: true });
+      }
+      // Notifica social media
+      pushNotification("content", "Arte entregue pelo Designer", `"${briefingReq.title}" (${briefingReq.clientName}) — arte pronta para confirmação.`, briefingReq.clientId);
+      import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
+
       setBriefingUploadOk(true);
       setTimeout(() => setBriefingUploadOk(false), 4000);
     } catch (err) {
@@ -1351,16 +1366,39 @@ export default function DesignPage() {
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Artes anexadas ({briefingReq.attachments.length})</p>
                   <div className="space-y-1">
                     {briefingReq.attachments.map((url, i) => (
-                      <a
-                        key={i}
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0d4af5]/[0.05] border border-[#0d4af5]/20 hover:border-[#0d4af5]/40 transition-all text-xs text-[#3b6ff5]"
-                      >
-                        <ExternalLink size={11} className="shrink-0" />
-                        <span className="truncate">Anexo #{i + 1}</span>
-                      </a>
+                      <div key={i} className="flex items-center gap-1.5">
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0d4af5]/[0.05] border border-[#0d4af5]/20 hover:border-[#0d4af5]/40 transition-all text-xs text-[#3b6ff5] min-w-0"
+                        >
+                          <ExternalLink size={11} className="shrink-0" />
+                          <span className="truncate">Anexo #{i + 1}</span>
+                        </a>
+                        <a
+                          href={url}
+                          download
+                          className="p-2 rounded-lg border border-border hover:border-emerald-500/30 hover:text-emerald-400 text-muted-foreground transition-colors"
+                          title="Baixar arquivo"
+                        >
+                          <Download size={11} />
+                        </a>
+                        {(role === "designer" || role === "admin" || role === "manager") && (
+                          <button
+                            onClick={() => {
+                              const next = briefingReq.attachments!.filter((_, idx) => idx !== i);
+                              const nextStatus = next.length === 0 ? "in_progress" : briefingReq.status;
+                              updateDesignRequest(briefingReq.id, { attachments: next, status: nextStatus });
+                              setBriefingReq({ ...briefingReq, attachments: next, status: nextStatus });
+                            }}
+                            className="p-2 rounded-lg border border-border hover:border-red-500/30 hover:text-red-400 text-muted-foreground transition-colors"
+                            title="Remover anexo"
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
