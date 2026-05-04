@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { Client, Role } from "@/lib/types";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
   Building2, Shield, FileText, Eye, EyeOff, Download, Upload,
   Pencil, Check, Loader2, AlertTriangle, Send, ExternalLink,
@@ -38,7 +39,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
     setEmailSending(true);
     setEmailStatus("idle");
     try {
-      const res = await fetch("/api/emails", {
+      const res = await authedFetch("/api/emails", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "send_welcome", clientId: client.id, force: true }),
@@ -112,7 +113,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       if (form.googleAdsPassword && form.googleAdsPassword !== "••••••••") pwUpdates.push({ field: "google_ads_password", value: form.googleAdsPassword });
 
       for (const u of pwUpdates) {
-        await fetch("/api/client-vault", {
+        await authedFetch("/api/client-vault", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ clientId: client.id, table: "clients", field: u.field, value: u.value }),
@@ -138,7 +139,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
     if (!field) return;
     setRevealingPw(pwKey);
     try {
-      const res = await fetch(`/api/client-vault?clientId=${client.id}&table=clients&field=${field}`);
+      const res = await authedFetch(`/api/client-vault?clientId=${client.id}&table=clients&field=${field}`);
       if (!res.ok) {
         setForm((p) => ({ ...p, [pwKey]: "" }));
         return;
@@ -158,7 +159,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
     try {
       const fd = new FormData();
       fd.append("file", file); fd.append("clientId", client.id); fd.append("docType", docType);
-      const res = await fetch("/api/onboarding/upload", { method: "POST", body: fd });
+      const res = await authedFetch("/api/onboarding/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (res.ok && data.url) {
         const field = docType === "contrato_social" ? "docContratoSocial" : docType === "identidade" ? "docIdentidade" : "docLogo";
@@ -211,7 +212,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
 
   const resolvePrivateUrl = async (ref: string, download = false): Promise<string | null> => {
     try {
-      const res = await fetch("/api/storage/signed-url", {
+      const res = await authedFetch("/api/storage/signed-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: ref, download }),
