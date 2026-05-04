@@ -352,7 +352,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             <div className="flex items-center gap-2 mt-3 flex-wrap">
               {client.docLogo && (
                 <>
-                  <button onClick={() => downloadFile(client.docLogo!, `logo-${companyName.replace(/\s+/g, "-").toLowerCase()}`)}
+                  <button onClick={() => window.open(client.docLogo!, "_blank", "noopener,noreferrer")}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-colors">
                     <Download size={11} /> Baixar Logo
                   </button>
