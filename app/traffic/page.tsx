@@ -1,6 +1,7 @@
 "use client";
 
 import Header from "@/components/Header";
+import DefesaAlertBanner from "@/components/DefesaAlertBanner";
 import MetricCard from "@/components/MetricCard";
 import KanbanBoard from "@/components/KanbanBoard";
 import AdsInsightCard from "@/components/AdsInsightCard";
@@ -170,6 +171,7 @@ export default function TrafficPage() {
       <Header title="Trafego Pago" subtitle="Gestao de performance e campanhas" />
 
       <div className="p-6 space-y-6 animate-fade-in">
+        <DefesaAlertBanner />
         {/* Workspace Filter */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -2233,8 +2235,10 @@ function AdAnalyticsTab({
   const successInsights = activeInsights.filter((i) => i.severity === "success");
 
   const [exportingAll, setExportingAll] = useState(false);
+  const [exportAllError, setExportAllError] = useState<string | null>(null);
 
   const handleExportAllPdf = async () => {
+    setExportAllError(null);
     setExportingAll(true);
     try {
       const now = new Date();
@@ -2254,18 +2258,66 @@ function AdAnalyticsTab({
         genderSplit: { women: 62.3, men: 37.7 },
       };
 
+      // Fonte de dados:
+      //   1º Meta Ads real (portfolioCampaigns) se tem clientes com conta Meta vinculada
+      //   2º Fallback pra campaigns (mock / pre-sync) se não tem Meta conectada
+      // Antes (bug): usava só `campaigns` que é mockAdCampaigns = [] → sempre caía no alert.
+      let dataByClient = new Map<string, AdCampaign[]>();
+
+      if (meta.token && linkedClients.length > 0) {
+        // Se ainda não fez refresh, busca agora (pode ter varios clientes, paralelo)
+        if (portfolioCampaigns.size === 0) {
+          await Promise.all(linkedClients.map(async (client) => {
+            if (!client.metaAdAccountId || !meta.token) return;
+            try {
+              const camps = await fetchCampaignInsights(meta.token, client.metaAdAccountId, dateRange);
+              const mapped: AdCampaign[] = camps.filter((c: { error?: unknown }) => !c.error).map((c: Record<string, unknown>) => ({
+                id: c.id as string, accountId: client.metaAdAccountId!, clientId: client.id,
+                clientName: client.name, name: c.name as string, objective: mapMetaObjective(c.objective as string),
+                status: (c.status === "active" || c.status === "paused" || c.status === "completed") ? c.status as AdCampaign["status"] : "active",
+                dailyBudget: (c.dailyBudget as number) ?? 0, totalBudget: (c.totalBudget as number) ?? 0,
+                startDate: (c.startDate as string) ?? "", endDate: c.endDate as string | undefined,
+                spend: (c.spend as number) ?? 0, impressions: (c.impressions as number) ?? 0, reach: (c.reach as number) ?? 0,
+                clicks: (c.clicks as number) ?? 0, ctr: (c.ctr as number) ?? 0, cpc: (c.cpc as number) ?? 0, cpm: (c.cpm as number) ?? 0,
+                conversions: (c.conversions as number) ?? 0, costPerConversion: (c.costPerConversion as number) ?? 0,
+                messages: (c.messages as number) ?? 0, costPerMessage: (c.costPerMessage as number) ?? 0,
+                leads: (c.leads as number) ?? 0, costPerLead: (c.costPerLead as number) ?? 0,
+                results: (c.results as number) ?? 0, costPerResult: (c.costPerResult as number) ?? 0,
+                frequency: (c.frequency as number) ?? 0, dailyMetrics: (c.dailyMetrics as AdCampaign["dailyMetrics"]) ?? [],
+                hasData: (c.hasData as boolean) ?? false, lastSyncAt: c.lastSyncAt as string | undefined,
+              }));
+              dataByClient.set(client.id, mapped);
+            } catch (err) {
+              if (err instanceof TokenExpiredError) meta.handleTokenError();
+            }
+          }));
+          // atualiza cache pra próximos exports no mesmo ciclo
+          setPortfolioCampaigns(dataByClient);
+        } else {
+          dataByClient = portfolioCampaigns;
+        }
+      } else {
+        // Sem Meta conectada: cai no mock (vai estar vazio por padrão, mas mantém compatibilidade)
+        for (const client of clients) {
+          const clientAccountIds = new Set(accounts.filter((a) => a.clientId === client.id).map((a) => a.id));
+          const clientCampaigns = campaigns.filter((c) => clientAccountIds.has(c.accountId));
+          if (clientCampaigns.length > 0) dataByClient.set(client.id, clientCampaigns);
+        }
+      }
+
       const reports: { clientName: string; data: import("@/lib/exportTrafficPdf").TrafficReportData }[] = [];
 
-      for (const client of clients) {
-        // Find accounts for this client
-        const clientAccountIds = new Set(accounts.filter((a) => a.clientId === client.id).map((a) => a.id));
-        const clientCampaigns = campaigns.filter((c) => clientAccountIds.has(c.accountId) && (statusFilter === "all" || c.status === statusFilter));
+      for (const [clientId, clientCampaigns] of dataByClient) {
+        const client = clients.find((c) => c.id === clientId);
+        if (!client) continue;
 
-        if (clientCampaigns.length === 0) continue;
+        // ZIP export ignores the table's statusFilter — "all clients" report includes every campaign
+        const filtered = clientCampaigns;
+        if (filtered.length === 0) continue;
 
         const reportData = buildTrafficReportData(
           client.name,
-          clientCampaigns,
+          filtered,
           periodLabel,
           undefined,
           mockDemographics,
@@ -2276,7 +2328,11 @@ function AdAnalyticsTab({
       }
 
       if (reports.length === 0) {
-        alert("Nenhum cliente com campanhas encontradas no período.");
+        if (!meta.token || linkedClients.length === 0) {
+          setExportAllError("Nenhuma conta Meta conectada. Vá em Integrações e vincule a conta da agência para gerar relatórios.");
+        } else {
+          setExportAllError(`Nenhum cliente com campanhas nos últimos ${dateRange} dias. Tente um período maior — use 30d ou 90d no seletor de período.`);
+        }
         return;
       }
 
@@ -2800,6 +2856,15 @@ function AdAnalyticsTab({
           </button>
         </div>
       </div>
+
+      {/* Export error banner */}
+      {exportAllError && (
+        <div className="flex items-start gap-2.5 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-400 animate-fade-in">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span className="flex-1">{exportAllError}</span>
+          <button onClick={() => setExportAllError(null)} className="text-amber-400/50 hover:text-amber-400 transition-colors">✕</button>
+        </div>
+      )}
 
       {/* Metric Configuration Panel */}
       {showMetricConfig && (

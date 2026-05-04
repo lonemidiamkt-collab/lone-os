@@ -16,11 +16,12 @@ interface Props {
   onNavigateTab: (tab: string) => void;
   generateOnboardingLink: () => void;
   generatingLink: boolean;
+  onboardingLink?: string | null;
 }
 
 type Tab = "overview" | "dados" | "contratos" | "chat" | "historico" | "tasks" | "content" | "onboarding" | "wallet" | "reports";
 
-export default function DadosTab({ client, role, currentUser, updateClientData, onNavigateTab, generateOnboardingLink, generatingLink }: Props) {
+export default function DadosTab({ client, role, currentUser, updateClientData, onNavigateTab, generateOnboardingLink, generatingLink, onboardingLink }: Props) {
   const isAdmin = role === "admin" || role === "manager";
 
   const [editing, setEditing] = useState(false);
@@ -86,23 +87,69 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Separamos campos não-sensíveis (via updateClientData, caminho normal)
+      // de senhas (via /api/client-vault que criptografa server-side).
       updateClientData(client.id, {
         nomeFantasia: form.nomeFantasia || undefined, razaoSocial: form.razaoSocial || undefined,
         cnpj: form.cnpj || undefined, nicho: form.nicho || undefined,
         contactName: form.contactName || undefined,
         cpfCnpj: form.cpfCnpj || undefined, phone: form.phone || undefined,
         emailCorporativo: form.emailCorporativo || undefined,
-        // Keep both email fields in sync so automations (welcome email, contract generation) pick up the edit
         email: form.emailCorporativo || undefined,
         enderecoRua: form.enderecoRua || undefined, enderecoBairro: form.enderecoBairro || undefined,
         enderecoCidade: form.enderecoCidade || undefined, enderecoEstado: form.enderecoEstado || undefined,
         enderecoCep: form.enderecoCep || undefined,
-        facebookLogin: form.facebookLogin || undefined, facebookPassword: form.facebookPassword || undefined,
-        instagramLogin: form.instagramLogin || undefined, instagramPassword: form.instagramPassword || undefined,
-        googleAdsLogin: form.googleAdsLogin || undefined, googleAdsPassword: form.googleAdsPassword || undefined,
+        // Logins (não-sensível) ainda via path normal
+        facebookLogin: form.facebookLogin || undefined,
+        instagramLogin: form.instagramLogin || undefined,
+        googleAdsLogin: form.googleAdsLogin || undefined,
       });
+
+      // Senhas: só envia se foi editada (evita regravar blob criptografado com string vazia).
+      const pwUpdates: { field: string; value: string }[] = [];
+      if (form.facebookPassword && form.facebookPassword !== "••••••••") pwUpdates.push({ field: "facebook_password", value: form.facebookPassword });
+      if (form.instagramPassword && form.instagramPassword !== "••••••••") pwUpdates.push({ field: "instagram_password", value: form.instagramPassword });
+      if (form.googleAdsPassword && form.googleAdsPassword !== "••••••••") pwUpdates.push({ field: "google_ads_password", value: form.googleAdsPassword });
+
+      for (const u of pwUpdates) {
+        await fetch("/api/client-vault", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientId: client.id, table: "clients", field: u.field, value: u.value }),
+        }).catch((err) => console.error("[vault] save failed:", u.field, err));
+      }
+
       setEditing(false);
     } finally { setSaving(false); }
+  };
+
+  // Fetch plaintext de uma senha (lazy, on-demand). Ao revelar, preenche form[pwKey]
+  // pra admin copiar/ver. Cada call gera entrada em vault_access_log (audit LGPD).
+  // Mapeamento: loginKey → coluna no DB
+  const pwFieldMap: Record<string, string> = {
+    facebookPassword: "facebook_password",
+    instagramPassword: "instagram_password",
+    googleAdsPassword: "google_ads_password",
+  };
+
+  const [revealingPw, setRevealingPw] = useState<string | null>(null);
+  const revealPassword = async (pwKey: string): Promise<void> => {
+    const field = pwFieldMap[pwKey];
+    if (!field) return;
+    setRevealingPw(pwKey);
+    try {
+      const res = await fetch(`/api/client-vault?clientId=${client.id}&table=clients&field=${field}`);
+      if (!res.ok) {
+        setForm((p) => ({ ...p, [pwKey]: "" }));
+        return;
+      }
+      const data = await res.json();
+      setForm((p) => ({ ...p, [pwKey]: data.value ?? "" }));
+    } catch {
+      setForm((p) => ({ ...p, [pwKey]: "" }));
+    } finally {
+      setRevealingPw(null);
+    }
   };
 
   const handleDocUpload = async (file: File, docType: string) => {
@@ -230,6 +277,36 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           ) : null}
         </div>
       </div>
+
+      {/* Link de Correção gerado */}
+      {onboardingLink && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4 space-y-2">
+          <p className="text-xs font-medium text-amber-400 flex items-center gap-1.5">
+            <LinkIcon size={12} /> Link de Preenchimento Gerado
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={onboardingLink}
+              className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none select-all"
+              onFocus={(e) => e.target.select()}
+            />
+            <button
+              onClick={() => copyToClip(onboardingLink)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/15 text-amber-400 text-xs font-medium hover:bg-amber-500/25 transition-colors border border-amber-500/20 whitespace-nowrap"
+            >
+              <LinkIcon size={11} /> Copiar
+            </button>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent("Olá! Segue o link para preencher/corrigir seus dados: " + onboardingLink)}`}
+              target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-colors border border-emerald-500/20 whitespace-nowrap"
+            >
+              Enviar WA
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* Pendencies */}
       {missing.length > 0 && (
@@ -404,12 +481,15 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                       )}
                     </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] text-zinc-500 uppercase">Senha</p>
+                      <p className="text-[10px] text-zinc-500 uppercase flex items-center gap-1">
+                        Senha <Shield size={9} className="text-[#0d4af5]" />
+                      </p>
                       {editing ? (
                         <div className="relative">
                           <input type={showPw[pwKey] ? "text" : "password"} value={form[pwKey] || ""}
                             onChange={(e) => setForm((p) => ({ ...p, [pwKey]: e.target.value }))}
-                            className="w-full bg-card border border-border rounded-lg px-3 py-2 pr-9 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" placeholder="Senha" />
+                            className="w-full bg-card border border-border rounded-lg px-3 py-2 pr-9 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+                            placeholder="Deixe em branco pra manter a senha atual" />
                           <button type="button" onClick={() => setShowPw((p) => ({ ...p, [pwKey]: !p[pwKey] }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
                             {showPw[pwKey] ? <EyeOff size={13} /> : <Eye size={13} />}
                           </button>
@@ -417,15 +497,26 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                       ) : (
                         <div className="flex items-center gap-2">
                           <p className="text-sm text-foreground font-mono flex-1">
-                            {hasPw ? (showPw[pwKey] ? form[pwKey] : "••••••••") : <span className="text-zinc-600 italic font-sans">Nao informado</span>}
+                            {form[pwKey] ? (
+                              showPw[pwKey] ? form[pwKey] : "••••••••"
+                            ) : (
+                              <span className="text-zinc-600 italic font-sans text-[11px]">
+                                {revealingPw === pwKey ? "Descriptografando..." : "🔒 Armazenada (clique pra revelar)"}
+                              </span>
+                            )}
                           </p>
-                          {hasPw && (
+                          {form[pwKey] ? (
                             <>
                               <button type="button" onClick={() => setShowPw((p) => ({ ...p, [pwKey]: !p[pwKey] }))} className="text-zinc-500 hover:text-zinc-300 transition-colors">
                                 {showPw[pwKey] ? <EyeOff size={12} /> : <Eye size={12} />}
                               </button>
                               <button type="button" onClick={() => copyToClip(form[pwKey])} className="text-zinc-600 hover:text-[#0d4af5] transition-colors" title="Copiar"><LinkIcon size={11} /></button>
                             </>
+                          ) : (
+                            <button type="button" onClick={() => revealPassword(pwKey)} disabled={revealingPw === pwKey}
+                              className="text-zinc-500 hover:text-[#0d4af5] transition-colors disabled:opacity-50" title="Revelar senha">
+                              <Eye size={12} />
+                            </button>
                           )}
                         </div>
                       )}
@@ -488,6 +579,14 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                         {opening === `${docType}-dl` ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />} Baixar
                       </button>
                     </div>
+                    {/* Substituir — admin pode enviar versão recebida via WhatsApp */}
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-zinc-700/50 text-[10px] text-zinc-600 hover:text-zinc-300 hover:border-zinc-500/50 transition-all cursor-pointer">
+                      {uploading === docType ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
+                      {uploading === docType ? "Substituindo..." : "Substituir arquivo"}
+                      <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => {
+                        const f = e.target.files?.[0]; if (f) handleDocUpload(f, docType); e.target.value = "";
+                      }} />
+                    </label>
                   </>
                 ) : (
                   <div className="space-y-2">
@@ -496,7 +595,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                     </div>
                     <label className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-border text-xs text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all cursor-pointer">
                       {uploading === docType ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-                      {uploading === docType ? "Enviando..." : "Enviar Arquivo"}
+                      {uploading === docType ? "Enviando..." : "Enviar arquivo do WhatsApp"}
                       <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => {
                         const f = e.target.files?.[0]; if (f) handleDocUpload(f, docType); e.target.value = "";
                       }} />

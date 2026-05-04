@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { pdf } from "@react-pdf/renderer";
 import { ContractPDF } from "@/lib/contracts/templates";
 import { SERVICE_LABELS, LONE_MIDIA } from "@/lib/contracts/types";
@@ -11,8 +11,9 @@ import {
   FileText, Plus, Download, Eye, Loader2, Check, X,
   Calendar, DollarSign, Clock, AlertTriangle,
   CheckCircle, Mail, RefreshCw, History,
-  ArrowRight, PenLine,
+  ArrowRight, PenLine, Upload, FileCheck2,
 } from "lucide-react";
+import LegacyContractModal from "@/components/LegacyContractModal";
 
 interface Props { client: Client; currentUser: string; }
 
@@ -21,6 +22,10 @@ interface ContractFull extends ContractRecord {
   previousContractId?: string;
   hasRenewal?: boolean;
   renewalValue?: number | null;
+  signedPdfPath?: string | null;
+  signedAt?: string | null;
+  signedUploadedBy?: string | null;
+  signatureMethod?: string | null;
 }
 
 interface AuditEntry { id: string; action: string; actor: string; details: string; createdAt: string; }
@@ -53,6 +58,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
   const [addendumForm, setAddendumForm] = useState({ changeType: "valor", description: "", oldValue: "", newValue: "", effectiveDate: new Date().toISOString().slice(0, 10) });
   const [renewFrom, setRenewFrom] = useState<ContractFull | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [showLegacyModal, setShowLegacyModal] = useState(false);
 
   const [serviceType, setServiceType] = useState(client.serviceType || "lone_growth");
   const [valor, setValor] = useState("");
@@ -99,6 +105,10 @@ export default function ContractGenerator({ client, currentUser }: Props) {
       pdfUrl: r.pdf_url as string | null, generatedBy: r.generated_by as string, generatedAt: r.generated_at as string,
       paymentDay: (r.payment_day as number) || 10, previousContractId: (r.previous_contract_id as string) || undefined,
       hasRenewal: Boolean(r.has_renewal), renewalValue: r.renewal_value != null ? Number(r.renewal_value) : null,
+      signedPdfPath: (r.signed_pdf_path as string) || null,
+      signedAt: (r.signed_at as string) || null,
+      signedUploadedBy: (r.signed_uploaded_by as string) || null,
+      signatureMethod: (r.signature_method as string) || null,
     })));
     setLoading(false);
   };
@@ -256,6 +266,68 @@ export default function ContractGenerator({ client, currentUser }: Props) {
     } catch { setDownloadError("Falha ao gerar DOCX"); } finally { setDownloadingDocx(null); }
   };
 
+  // Upload do PDF assinado (de volta do D4Sign, após cliente assinar).
+  // Fecha o ciclo: admin clica → file picker → envia pra /api/contracts/upload-signed →
+  // status vira 'active' + timestamp de assinatura + PDF armazenado no cofre do cliente.
+  const uploadingSignedRef = useRef<string | null>(null);
+  const [uploadingSignedId, setUploadingSignedId] = useState<string | null>(null);
+  const handleUploadSigned = (contractId: string) => {
+    if (uploadingSignedRef.current) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/pdf,.pdf";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      if (file.size > 20 * 1024 * 1024) {
+        setDownloadError("PDF muito grande. Máximo 20MB.");
+        return;
+      }
+      uploadingSignedRef.current = contractId;
+      setUploadingSignedId(contractId);
+      setDownloadError("");
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("contractId", contractId);
+        fd.append("method", "d4sign_manual");
+        const res = await fetch("/api/contracts/upload-signed", { method: "POST", body: fd });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({ error: "Falha no upload" }));
+          setDownloadError(data.error || "Falha no upload");
+          return;
+        }
+        await logAudit(contractId, "signed_uploaded", "PDF assinado recebido e armazenado no cofre");
+        await loadContracts();
+      } catch {
+        setDownloadError("Falha de conexão no upload");
+      } finally {
+        uploadingSignedRef.current = null;
+        setUploadingSignedId(null);
+      }
+    };
+    input.click();
+  };
+
+  // Abre o PDF assinado via signed URL (5 min TTL). Cada acesso gera linha em vault_access_log.
+  const handleViewSigned = async (signedPath: string) => {
+    try {
+      const res = await fetch("/api/storage/signed-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: signedPath, download: false }),
+      });
+      if (!res.ok) {
+        setDownloadError("Não foi possível abrir o PDF assinado");
+        return;
+      }
+      const data = await res.json();
+      if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
+    } catch {
+      setDownloadError("Falha ao abrir PDF assinado");
+    }
+  };
+
   const handleAddendum = async (contractId: string) => {
     if (!addendumForm.description) return;
     await supabase.from("contract_addendums").insert({
@@ -277,12 +349,30 @@ export default function ContractGenerator({ client, currentUser }: Props) {
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm text-muted-foreground">Gestao de contratos</p>
-        <button onClick={() => openForm()} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white text-xs font-medium transition-colors">
-          <Plus size={12} /> Novo Contrato
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowLegacyModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted text-xs text-foreground transition-colors"
+            title="Anexar contrato já assinado fora do sistema"
+          >
+            <FileCheck2 size={12} /> Anexar existente
+          </button>
+          <button onClick={() => openForm()} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white text-xs font-medium transition-colors">
+            <Plus size={12} /> Novo Contrato
+          </button>
+        </div>
       </div>
+
+      <LegacyContractModal
+        clientId={client.id}
+        clientName={client.nomeFantasia || client.name}
+        open={showLegacyModal}
+        onClose={() => setShowLegacyModal(false)}
+        onSuccess={() => loadContracts()}
+      />
+
 
       {/* Expiration alerts */}
       {expiringContracts.length > 0 && (
@@ -352,7 +442,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                         {prevContract && <span className="text-[10px] text-zinc-500 flex items-center gap-0.5"><ArrowRight size={8} /> Renovacao V{prevContract.version}</span>}
                       </p>
                       <p className="text-[10px] text-muted-foreground">
-                        {formatCurrency(c.monthlyValue)}/mes x {c.durationMonths}m | {c.startDate} a {c.endDate} | Pgto dia {c.paymentDay || 10}
+                        {c.monthlyValue > 0 ? `${formatCurrency(c.monthlyValue)}/mes` : "Valor no PDF"} x {c.durationMonths}m | {c.startDate} a {c.endDate} | Pgto dia {c.paymentDay || 10}
                       </p>
                     </div>
                   </div>
@@ -383,7 +473,28 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                     {isSending ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
                     {isSending ? "Gerando..." : "Baixar DOCX Oficial"}
                   </button>
-                  {c.status === "active" && <span className="flex items-center gap-1 text-xs text-emerald-400"><CheckCircle size={12} /> Ativo</span>}
+
+                  {/* Upload do PDF assinado (pós D4Sign) OU ver o assinado se já subiu */}
+                  {c.signedPdfPath ? (
+                    <button onClick={() => handleViewSigned(c.signedPdfPath!)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d4af5]/10 text-[#0d4af5] text-xs font-medium hover:bg-[#0d4af5]/20 border border-[#0d4af5]/20"
+                      title={`Assinado em ${c.signedAt ? new Date(c.signedAt).toLocaleDateString("pt-BR") : ""}${c.signedUploadedBy ? ` por ${c.signedUploadedBy}` : ""}`}>
+                      <FileCheck2 size={11} /> Ver Assinado
+                    </button>
+                  ) : (
+                    <button onClick={() => handleUploadSigned(c.id)} disabled={uploadingSignedId === c.id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d4af5]/10 text-[#0d4af5] text-xs font-medium hover:bg-[#0d4af5]/20 border border-[#0d4af5]/20 disabled:opacity-50"
+                      title="Upload do PDF assinado pelo cliente (D4Sign) para fechar o contrato.">
+                      {uploadingSignedId === c.id ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                      {uploadingSignedId === c.id ? "Enviando..." : "Upload Assinado"}
+                    </button>
+                  )}
+
+                  {c.signedAt && (
+                    <span className="flex items-center gap-1 text-[10px] text-emerald-400" title={`Assinado em ${new Date(c.signedAt).toLocaleDateString("pt-BR")}`}>
+                      <CheckCircle size={11} /> Assinado
+                    </span>
+                  )}
                 </div>
 
                 {/* Audit log */}

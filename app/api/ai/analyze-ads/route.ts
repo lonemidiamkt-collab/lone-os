@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { aiCache } from "@/lib/ai/cache";
 
 // Server-side only — API key never exposed to frontend
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -83,54 +84,79 @@ Spend total: R$ ${compactData.reduce((s: number, c: Record<string, unknown>) => 
 Campanhas ativas: ${compactData.filter((c: Record<string, unknown>) => c.status === "active").length}
 Campanhas com erro: ${compactData.filter((c: Record<string, unknown>) => c.status === "error").length}`;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+    // Cache: key by (clientId + compactData + period + day). Análise muda raramente no mesmo dia.
+    // Miss → chama OpenAI. Hit → devolve direto (zero tokens).
+    const cacheResult = await aiCache.getOrFetch<{
+      parsed: { score?: number; status?: string; insights?: unknown; summary?: string };
+      model: string;
+      tokens: number;
+    }>({
+      category: "analyze-ads",
+      model: "gpt-4o-mini",
+      payload: { clientId, compactData, period },
+      ttlMinutes: 60 * 24, // 24h
+      bucketGranularity: "day",
+      fetcher: async () => {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: userMessage },
+            ],
+            temperature: 0.3,
+            max_tokens: 600,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorBody = await response.text();
+          console.error("[Lone AI] OpenAI error:", response.status, errorBody);
+          throw new Error(`OpenAI API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+
+        if (!content) throw new Error("Resposta vazia da IA");
+
+        let parsed: { score?: number; status?: string; insights?: unknown; summary?: string };
+        try {
+          parsed = JSON.parse(content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+        } catch {
+          parsed = {
+            score: 50,
+            status: "atencao",
+            insights: [{ type: "sugestao", title: "Analise disponivel", body: content.slice(0, 200) }],
+            summary: content.slice(0, 200),
+          };
+        }
+
+        return {
+          response: { parsed, model: data.model, tokens: data.usage?.total_tokens ?? 0 },
+          tokensPrompt: data.usage?.prompt_tokens,
+          tokensCompletion: data.usage?.completion_tokens,
+        };
       },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userMessage },
-        ],
-        temperature: 0.3,
-        max_tokens: 600,
-      }),
+    }).catch((err) => {
+      console.error("[Lone AI] fetcher error:", err);
+      return null;
     });
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error("[Lone AI] OpenAI error:", response.status, errorBody);
-      return NextResponse.json(
-        { error: `OpenAI API error: ${response.status}` },
-        { status: 502 }
-      );
+    if (!cacheResult) {
+      return NextResponse.json({ error: "Erro ao gerar análise" }, { status: 502 });
     }
 
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    const { parsed, model, tokens } = cacheResult.response;
 
-    if (!content) {
-      return NextResponse.json({ error: "Resposta vazia da IA" }, { status: 502 });
-    }
-
-    // Parse JSON response from AI
-    let parsed: { score?: number; status?: string; insights?: unknown; summary?: string };
-    try {
-      parsed = JSON.parse(content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
-    } catch {
-      parsed = {
-        score: 50,
-        status: "atencao",
-        insights: [{ type: "sugestao", title: "Analise disponivel", body: content.slice(0, 200) }],
-        summary: content.slice(0, 200),
-      };
-    }
-
-    // Persist audit (non-blocking — failure here shouldn't break the response)
-    if (clientId) {
+    // Persist audit apenas em cache miss (quando realmente houve análise nova).
+    // Cache hit não gera novo audit — o audit original já registrou a análise.
+    if (clientId && !cacheResult.hit) {
       supabaseAdmin.from("ai_audits").insert({
         client_id: clientId,
         type: "campaign_analysis",
@@ -138,7 +164,7 @@ Campanhas com erro: ${compactData.filter((c: Record<string, unknown>) => c.statu
         status: parsed.status ?? null,
         summary: parsed.summary ?? null,
         insights: parsed.insights ?? null,
-        raw_response: { model: data.model, tokens: data.usage?.total_tokens, ...parsed },
+        raw_response: { model, tokens, ...parsed },
         triggered_by: triggeredBy ?? null,
         visible_to_client: true,
       }).then(({ error }) => {
@@ -148,8 +174,9 @@ Campanhas com erro: ${compactData.filter((c: Record<string, unknown>) => c.statu
 
     return NextResponse.json({
       ...parsed,
-      model: data.model,
-      tokens: data.usage?.total_tokens,
+      model,
+      tokens,
+      cached: cacheResult.hit,
     });
   } catch (err) {
     console.error("[Lone AI] Error:", err);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { aiCache } from "@/lib/ai/cache";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
@@ -81,45 +82,77 @@ export async function POST(req: NextRequest) {
 ${compactClients.length} clientes ativos:
 ${JSON.stringify(compactClients, null, 0)}`;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+    // Cache: bucket por HORA (briefings matinais podem ser reabertos; 1h dá margem sem estourar tokens).
+    // Se métricas mudarem drasticamente na mesma hora, usuário aguarda próximo bucket — trade-off aceitável.
+    const cacheResult = await aiCache.getOrFetch<{
+      parsed: Record<string, unknown>;
+      tokens: number;
+    }>({
+      category: "morning-briefing",
+      model: "gpt-4o-mini",
+      payload: { compactClients },
+      ttlMinutes: 60, // 1h
+      bucketGranularity: "hour",
+      fetcher: async () => {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: userMessage },
+            ],
+            temperature: 0.3,
+            max_tokens: 800,
+          }),
+        });
+
+        if (!response.ok) {
+          const err = await response.text();
+          console.error("[Lone AI] Morning briefing error:", response.status, err);
+          throw new Error(`OpenAI error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+
+        let parsed: Record<string, unknown>;
+        try {
+          parsed = JSON.parse(content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+        } catch {
+          parsed = {
+            greeting: "Briefing disponivel",
+            urgent: [],
+            opportunities: [],
+            stable: [],
+            summary: content?.slice(0, 200) ?? "Erro ao processar",
+          };
+        }
+
+        return {
+          response: { parsed, tokens: data.usage?.total_tokens ?? 0 },
+          tokensPrompt: data.usage?.prompt_tokens,
+          tokensCompletion: data.usage?.completion_tokens,
+        };
       },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userMessage },
-        ],
-        temperature: 0.3,
-        max_tokens: 800,
-      }),
+    }).catch((err) => {
+      console.error("[Lone AI] Morning briefing fetcher error:", err);
+      return null;
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      console.error("[Lone AI] Morning briefing error:", response.status, err);
-      return NextResponse.json({ error: `OpenAI error: ${response.status}` }, { status: 502 });
+    if (!cacheResult) {
+      return NextResponse.json({ error: "Erro ao gerar briefing" }, { status: 502 });
     }
 
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    try {
-      const parsed = JSON.parse(content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
-      return NextResponse.json({ ...parsed, tokens: data.usage?.total_tokens });
-    } catch {
-      return NextResponse.json({
-        greeting: "Briefing disponivel",
-        urgent: [],
-        opportunities: [],
-        stable: [],
-        summary: content?.slice(0, 200) ?? "Erro ao processar",
-        tokens: data.usage?.total_tokens,
-      });
-    }
+    return NextResponse.json({
+      ...cacheResult.response.parsed,
+      tokens: cacheResult.response.tokens,
+      cached: cacheResult.hit,
+    });
   } catch (err) {
     console.error("[Lone AI] Morning briefing error:", err);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });

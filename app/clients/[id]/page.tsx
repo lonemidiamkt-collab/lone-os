@@ -601,7 +601,8 @@ export default function ClientDetailPage() {
           {activeTab === "dados" && (
             <DadosTab client={client} role={role} currentUser={currentUser}
               updateClientData={updateClientData} onNavigateTab={(t) => setActiveTab(t as Tab)}
-              generateOnboardingLink={generateOnboardingLink} generatingLink={generatingLink} />
+              generateOnboardingLink={generateOnboardingLink} generatingLink={generatingLink}
+              onboardingLink={onboardingLink} />
           )}
 
 

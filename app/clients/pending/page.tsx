@@ -10,6 +10,7 @@ import type { Client } from "@/lib/types";
 import {
   Check, X, Loader2, Clock, Send, ArrowLeft, FileText, Download,
   Eye, User, Building2, Shield, ExternalLink, Users as UsersIcon,
+  Upload, AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
@@ -55,13 +56,6 @@ function getContactDisplay(draft: Client, sub?: Submission | null): string {
   return sub?.contact_name || draft.contactName || "";
 }
 
-function resolveDocUrl(url: string | null): string | null {
-  if (!url) return null;
-  // If relative path, make absolute
-  if (url.startsWith("/")) return url;
-  return url;
-}
-
 // ─── Main Page ────────────────────────────────────────────
 export default function PendingClientsPage() {
   const { role } = useRole();
@@ -76,6 +70,10 @@ export default function PendingClientsPage() {
   const [approving, setApproving] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [reviewChecks, setReviewChecks] = useState({ docs: false, access: false, data: false });
+  const [resolvedContrato, setResolvedContrato] = useState<string | null>(null);
+  const [resolvedIdentidade, setResolvedIdentidade] = useState<string | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Editable form
   const [editForm, setEditForm] = useState({
@@ -113,6 +111,36 @@ export default function PendingClientsPage() {
     if (isAdmin) loadData();
   }, [isAdmin, loadData]);
 
+  // Resolve legal:// (private bucket) paths to signed URLs when a client is selected
+  useEffect(() => {
+    setResolvedContrato(null);
+    setResolvedIdentidade(null);
+    if (!selected) return;
+    const sub = submissions[selected.id];
+    const rawContrato = sub?.doc_contrato_social || selected.docContratoSocial || null;
+    const rawIdentidade = sub?.doc_identidade || selected.docIdentidade || null;
+
+    async function resolve(url: string | null): Promise<string | null> {
+      if (!url) return null;
+      if (!url.startsWith("legal://")) return url;
+      try {
+        const res = await fetch("/api/storage/signed-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: url }),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return (data.url as string) ?? null;
+      } catch { return null; }
+    }
+
+    Promise.all([resolve(rawContrato), resolve(rawIdentidade)]).then(([c, i]) => {
+      setResolvedContrato(c);
+      setResolvedIdentidade(i);
+    });
+  }, [selected?.id, submissions]);
+
   // ─── Select draft ─────────────────────────────
   const selectDraft = (draft: Client) => {
     setSelected(draft);
@@ -137,6 +165,47 @@ export default function PendingClientsPage() {
   const needsTraffic = editForm.serviceType === "lone_growth" || editForm.serviceType === "assessoria_trafego";
   const needsSocial = editForm.serviceType === "lone_growth" || editForm.serviceType === "assessoria_social";
   const needsDesigner = editForm.serviceType === "lone_growth" || editForm.serviceType === "assessoria_design";
+
+  // ─── Upload doc on behalf of client (received via WhatsApp) ──────────────
+  const handleAdminDocUpload = async (file: File, docType: "contrato_social" | "identidade") => {
+    if (!selected) return;
+    setUploadError(null);
+    setUploadingDoc(docType);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("clientId", selected.id);
+      fd.append("docType", docType);
+      const res = await fetch("/api/onboarding/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) { setUploadError(data.error || "Erro no upload."); return; }
+      const newUrl: string = data.url;
+      const field = docType === "contrato_social" ? "doc_contrato_social" : "doc_identidade";
+      await supabase.from("client_onboarding_submissions").update({ [field]: newUrl }).eq("client_id", selected.id);
+      setSubmissions((prev) => {
+        const existing = prev[selected.id] ?? {} as Submission;
+        return { ...prev, [selected.id]: { ...existing, [field]: newUrl } };
+      });
+      if (newUrl.startsWith("legal://")) {
+        const res2 = await fetch("/api/storage/signed-url", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: newUrl }),
+        });
+        if (res2.ok) {
+          const d = await res2.json();
+          if (docType === "contrato_social") setResolvedContrato(d.url ?? null);
+          else setResolvedIdentidade(d.url ?? null);
+        }
+      } else {
+        if (docType === "contrato_social") setResolvedContrato(newUrl);
+        else setResolvedIdentidade(newUrl);
+      }
+    } catch {
+      setUploadError("Falha na conexão. Tente novamente.");
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
 
   // ─── Approve ──────────────────────────────────
   const handleApprove = async () => {
@@ -186,8 +255,8 @@ export default function PendingClientsPage() {
   if (!isAdmin) return <div className="p-6 text-muted-foreground">Acesso restrito a administradores.</div>;
 
   const sub = selected ? submissions[selected.id] : null;
-  const docContrato = resolveDocUrl(sub?.doc_contrato_social || selected?.docContratoSocial || null);
-  const docIdentidade = resolveDocUrl(sub?.doc_identidade || selected?.docIdentidade || null);
+  const docContrato = resolvedContrato;
+  const docIdentidade = resolvedIdentidade;
 
   return (
     <div className="flex flex-col flex-1 overflow-auto">
@@ -293,55 +362,64 @@ export default function PendingClientsPage() {
               </div>
 
               {/* ═══ DOCUMENTOS ═══ */}
-              {(docContrato || docIdentidade) && (
-                <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-3">
+              <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-3">
+                <div className="flex items-center justify-between">
                   <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
-                    <FileText size={10} className="text-[#0d4af5]" /> Documentos Recebidos
+                    <FileText size={10} className="text-[#0d4af5]" /> Documentos
                   </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {docContrato && (
-                      <div className="p-3 rounded-lg border border-[#1e1e2a] bg-[#111113] space-y-2">
-                        <p className="text-xs text-zinc-400 font-medium">Contrato Social</p>
-                        {docContrato.match(/\.(jpg|jpeg|png|webp|heic)$/i) && (
-                          <div className="relative w-full h-24 rounded-lg overflow-hidden bg-[#0a0a0c] border border-[#1e1e2a]">
-                            <img src={docContrato} alt="Contrato Social" className="w-full h-full object-cover" />
-                          </div>
-                        )}
-                        <div className="flex gap-1.5">
-                          <button onClick={() => setLightbox(docContrato)}
-                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-[#1e1e2a] text-[11px] text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all">
-                            <Eye size={10} /> Visualizar
-                          </button>
-                          <a href={docContrato} download target="_blank" rel="noopener noreferrer"
-                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-[#1e1e2a] text-[11px] text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all">
-                            <Download size={10} /> Baixar
-                          </a>
-                        </div>
-                      </div>
-                    )}
-                    {docIdentidade && (
-                      <div className="p-3 rounded-lg border border-[#1e1e2a] bg-[#111113] space-y-2">
-                        <p className="text-xs text-zinc-400 font-medium">Documento c/ Foto (RG/CNH)</p>
-                        {docIdentidade.match(/\.(jpg|jpeg|png|webp|heic)$/i) && (
-                          <div className="relative w-full h-24 rounded-lg overflow-hidden bg-[#0a0a0c] border border-[#1e1e2a]">
-                            <img src={docIdentidade} alt="Documento" className="w-full h-full object-cover" />
-                          </div>
-                        )}
-                        <div className="flex gap-1.5">
-                          <button onClick={() => setLightbox(docIdentidade)}
-                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-[#1e1e2a] text-[11px] text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all">
-                            <Eye size={10} /> Visualizar
-                          </button>
-                          <a href={docIdentidade} download target="_blank" rel="noopener noreferrer"
-                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-[#1e1e2a] text-[11px] text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all">
-                            <Download size={10} /> Baixar
-                          </a>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <span className="text-[10px] text-zinc-600">Envie arquivos recebidos via WhatsApp</span>
                 </div>
-              )}
+                {uploadError && (
+                  <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                    <AlertTriangle size={11} /> {uploadError}
+                    <button onClick={() => setUploadError(null)} className="ml-auto text-red-400/50 hover:text-red-400">✕</button>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    { label: "Contrato Social", docType: "contrato_social" as const, resolved: docContrato },
+                    { label: "Documento c/ Foto (RG/CNH)", docType: "identidade" as const, resolved: docIdentidade },
+                  ]).map(({ label, docType, resolved }) => (
+                    <div key={docType} className={`p-3 rounded-lg border bg-[#111113] space-y-2 ${resolved ? "border-[#1e1e2a]" : "border-amber-500/20"}`}>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-zinc-400 font-medium">{label}</p>
+                        {resolved
+                          ? <Check size={12} className="text-emerald-500" />
+                          : <span className="text-[10px] text-amber-400 flex items-center gap-1"><AlertTriangle size={9} /> Pendente</span>
+                        }
+                      </div>
+                      {resolved && resolved.match(/\.(jpg|jpeg|png|webp|heic)$/i) && (
+                        <div className="relative w-full h-24 rounded-lg overflow-hidden bg-[#0a0a0c] border border-[#1e1e2a]">
+                          <img src={resolved} alt={label} className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      {resolved ? (
+                        <div className="flex gap-1.5">
+                          <button onClick={() => setLightbox(resolved)}
+                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-[#1e1e2a] text-[11px] text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all">
+                            <Eye size={10} /> Visualizar
+                          </button>
+                          <a href={resolved} download target="_blank" rel="noopener noreferrer"
+                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-[#1e1e2a] text-[11px] text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all">
+                            <Download size={10} /> Baixar
+                          </a>
+                        </div>
+                      ) : null}
+                      {/* Upload recebido via WhatsApp */}
+                      <label className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed text-[11px] transition-all cursor-pointer ${
+                        resolved
+                          ? "border-zinc-700/40 text-zinc-600 hover:border-zinc-500/50 hover:text-zinc-400"
+                          : "border-amber-500/30 text-amber-500/70 hover:border-[#0d4af5]/40 hover:text-white bg-amber-500/[0.03]"
+                      }`}>
+                        {uploadingDoc === docType ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                        {uploadingDoc === docType ? "Enviando..." : resolved ? "Substituir" : "Enviar do WhatsApp"}
+                        <input type="file" accept="image/*,.pdf,.heic,.heif" className="hidden"
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAdminDocUpload(f, docType); e.target.value = ""; }} />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {/* ═══ DADOS PESSOAIS (editavel) ═══ */}
               <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
@@ -428,22 +506,26 @@ export default function PendingClientsPage() {
               </div>
 
               {/* ═══ ACESSOS (read-only from submission) ═══ */}
-              {sub && (sub.meta_login || sub.instagram_login || sub.google_login) && (
+              {sub && (
                 <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-3">
-                  <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Acessos Informados pelo Cliente</p>
+                  <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
+                    <Shield size={10} className="text-[#0d4af5]" /> Acessos Informados pelo Cliente
+                  </p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {[
                       { label: "Meta Ads", login: sub.meta_login, status: sub.meta_status, icon: "📘" },
                       { label: "Instagram", login: sub.instagram_login, status: sub.instagram_status, icon: "📷" },
                       { label: "Google", login: sub.google_login, status: sub.google_status, icon: "🔍" },
-                    ].filter((a) => a.login || (a.status && a.status !== "pending")).map((acc) => (
+                    ].map((acc) => (
                       <div key={acc.label} className="p-3 rounded-lg bg-[#111113] border border-[#1e1e2a] space-y-1">
                         <p className="text-xs text-zinc-400 font-medium flex items-center gap-1">{acc.icon} {acc.label}</p>
                         {acc.login ? (
                           <p className="text-xs text-zinc-300 truncate">{acc.login}</p>
                         ) : (
                           <p className="text-[10px] text-amber-400">
-                            {acc.status === "waiting_client" ? "Cliente nao tem" : acc.status === "partner_invite" ? "Convite Partner" : "Pendente"}
+                            {acc.status === "waiting_client" ? "Cliente nao tem acesso" :
+                             acc.status === "partner_invite" ? "Via convite Partner" :
+                             "Nao informado"}
                           </p>
                         )}
                       </div>

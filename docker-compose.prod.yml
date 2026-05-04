@@ -22,6 +22,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM}
+      # AES-256 key pra vault de senhas de cliente (base64 32 bytes).
+      # Gere uma e guarde BACKUP — perder essa chave = perder acesso às senhas armazenadas.
+      VAULT_KEY: ${VAULT_KEY}
     networks:
       - default
       - supabase_default
