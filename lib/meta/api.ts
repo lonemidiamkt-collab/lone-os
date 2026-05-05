@@ -113,18 +113,21 @@ export async function getCampaignInsights(
   days: number = 7,
 ): Promise<MetaInsight[]> {
   const url = getGraphUrl(`/${campaignId}/insights`);
-  const today = new Date();
-  const since = new Date(today);
-  since.setDate(since.getDate() - days);
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const since = new Date(yesterday);
+  since.setDate(since.getDate() - (days - 1));
+
+  const sinceStr = since.toISOString().slice(0, 10);
+  const untilStr = yesterday.toISOString().slice(0, 10);
+  console.log(`[Meta API] getCampaignInsights ${campaignId}: ${sinceStr} → ${untilStr} (UTC)`);
 
   const params = new URLSearchParams({
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
-    time_range: JSON.stringify({
-      since: since.toISOString().slice(0, 10),
-      until: today.toISOString().slice(0, 10),
-    }),
-    time_increment: "1", // daily breakdown
+    time_range: JSON.stringify({ since: sinceStr, until: untilStr }),
+    time_increment: "1",
+    use_account_attribution_setting: "true",
     limit: "100",
   });
 
@@ -141,18 +144,21 @@ export async function getAccountInsights(
   days: number = 30,
 ): Promise<MetaInsight[]> {
   const url = getGraphUrl(`/${accountId}/insights`);
-  const today = new Date();
-  const since = new Date(today);
-  since.setDate(since.getDate() - days);
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const since = new Date(yesterday);
+  since.setDate(since.getDate() - (days - 1));
+
+  const sinceStr = since.toISOString().slice(0, 10);
+  const untilStr = yesterday.toISOString().slice(0, 10);
+  console.log(`[Meta API] getAccountInsights ${accountId}: ${sinceStr} → ${untilStr} (UTC)`);
 
   const params = new URLSearchParams({
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
-    time_range: JSON.stringify({
-      since: since.toISOString().slice(0, 10),
-      until: today.toISOString().slice(0, 10),
-    }),
+    time_range: JSON.stringify({ since: sinceStr, until: untilStr }),
     time_increment: "1",
+    use_account_attribution_setting: "true",
     limit: "100",
   });
 

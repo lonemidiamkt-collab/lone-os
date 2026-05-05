@@ -395,13 +395,21 @@ export async function fetchCampaignInsights(
   const campData = await campRes.json();
   const campaigns = campData.data ?? [];
 
-  const todayDate = dateFrom && dateTo ? new Date(dateTo) : new Date();
-  const sinceDate = dateFrom && dateTo ? new Date(dateFrom) : new Date(todayDate);
+  // "until" is always yesterday when no custom range is provided.
+  // Including today would pull partial-day spend (e.g. morning only) that inflates CPA
+  // compared to the Meta Ads Manager which reports on completed days.
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const untilDate = dateFrom && dateTo ? new Date(dateTo) : yesterday;
+  const sinceDate = dateFrom && dateTo ? new Date(dateFrom) : new Date(untilDate);
   if (!dateFrom || !dateTo) {
-    sinceDate.setDate(sinceDate.getDate() - days);
+    sinceDate.setDate(sinceDate.getDate() - (days - 1)); // e.g. days=7 → 7 full days ending yesterday
   }
   const sinceStr = sinceDate.toISOString().slice(0, 10);
-  const untilStr = todayDate.toISOString().slice(0, 10);
+  const untilStr = untilDate.toISOString().slice(0, 10);
+
+  console.log(`[Meta API] fetchCampaignInsights date range: ${sinceStr} → ${untilStr} (days=${days}, UTC)`);
 
   return Promise.all(
     campaigns.map(async (campaign: any) => {
@@ -413,6 +421,7 @@ export async function fetchCampaignInsights(
           fields: "date_start,date_stop,spend,impressions,reach,clicks,inline_link_clicks,actions",
           time_range: timeRange,
           time_increment: "1",
+          use_account_attribution_setting: "true",
           limit: "100",
         });
 
@@ -420,6 +429,7 @@ export async function fetchCampaignInsights(
           access_token: token,
           fields: "spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions",
           time_range: timeRange,
+          use_account_attribution_setting: "true",
           limit: "1",
         });
 
@@ -429,6 +439,7 @@ export async function fetchCampaignInsights(
           fields: "adset_id,adset_name,spend,actions",
           time_range: timeRange,
           level: "adset",
+          use_account_attribution_setting: "true",
           limit: "50",
         });
 
@@ -550,7 +561,9 @@ export async function fetchCampaignInsights(
           conversions: totalConversions,
           costPerConversion: totalConversions > 0 ? totalSpend / totalConversions : 0,
           messages: totalMessages,
-          costPerMessage: cheapestAdSetCostPerMessage,
+          // Always recompute from raw spend/messages of this same request — never use
+          // pre-rounded API values or adset-level figures that drift from the Meta dashboard.
+          costPerMessage: totalMessages > 0 ? totalSpend / totalMessages : 0,
           cheapestAdSetName,
           leads: totalLeads,
           costPerLead: totalLeads > 0 ? totalSpend / totalLeads : 0,
