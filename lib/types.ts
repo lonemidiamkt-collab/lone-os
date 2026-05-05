@@ -213,6 +213,7 @@ export interface DesignRequest {
   format: string;
   briefing: string;
   attachments?: string[];
+  contentCardId?: string;
   deadline?: string;
   createdAt?: string;
 }

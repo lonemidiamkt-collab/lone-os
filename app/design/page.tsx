@@ -430,13 +430,22 @@ export default function DesignPage() {
       setBriefingReq({ ...briefingReq, attachments: nextAttachments, status: "done" });
 
       // Propaga arte para o ContentCard vinculado → social media vê "Baixar Arte"
-      const linkedCard = contentCards.find((c) => c.designRequestId === briefingReq.id);
+      // Primary: via contentCardId stored on the design request (reliable direct link)
+      // Fallback: via design_request_id stored on the content card
+      const linkedCard =
+        (briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null) ??
+        contentCards.find((c) => c.designRequestId === briefingReq.id);
       if (linkedCard) {
         updateContentCard(linkedCard.id, {
           imageUrl: artUrl,
           designerDeliveredAt: new Date().toISOString(),
           designerDeliveredBy: currentUser,
         }, { bypassWorkflow: true });
+      } else {
+        console.warn("[briefingReq upload] No linked ContentCard found — art saved to DesignRequest only.", {
+          designRequestId: briefingReq.id,
+          contentCardId: briefingReq.contentCardId,
+        });
       }
       // Notifica social media
       pushNotification("content", "Arte entregue pelo Designer", `"${briefingReq.title}" (${briefingReq.clientName}) — arte pronta para confirmação.`, briefingReq.clientId);

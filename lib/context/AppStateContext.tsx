@@ -1304,7 +1304,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             pushNotification("content", "Card em produção", `"${card.title}" de ${card.clientName} entrou em produção. Designer: verificar fila.`, card.clientId);
             // Auto-create design request if card doesn't have one yet
             if (!card.designRequestId) {
-              const autoReq = addDesignRequest({
+              addDesignRequest({
                 title: card.title,
                 clientId: card.clientId,
                 clientName: card.clientName,
@@ -1315,8 +1315,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
                 briefing: card.briefing || card.caption || `Arte para "${card.title}"`,
                 contentCardId: card.id,
               });
-              // Link the design request back to the card
-              updates.designRequestId = autoReq.id;
+              // designRequestId is set on the card by addDesignRequest's DB callback
+              // (after insertDesignRequest resolves the real UUID). Do NOT set it here
+              // with the temp ID — design_request_id is UUID type and rejects non-UUID strings.
             }
           }
         }
@@ -1620,7 +1621,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           setContentCards((prev) =>
             prev.map((c) => c.id === req.contentCardId ? { ...c, designRequestId: dbReq.id } : c)
           );
-          db.updateContentCardDb(req.contentCardId, { designRequestId: dbReq.id }).catch(() => {});
+          db.updateContentCardDb(req.contentCardId, { designRequestId: dbReq.id })
+            .then(({ error }) => {
+              if (error) console.error("[addDesignRequest] failed to link card:", error.message);
+            })
+            .catch((err) => console.error("[addDesignRequest] network error linking card:", err));
         }
       }).catch((err) => {
         // Rollback optimistic state on DB failure

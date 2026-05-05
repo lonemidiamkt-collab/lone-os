@@ -373,6 +373,7 @@ export function snakeToDesignRequest(row: Record<string, unknown>): DesignReques
     format: (row.format as string) ?? "",
     briefing: (row.briefing as string) ?? "",
     attachments: (row.attachments as string[]) ?? [],
+    contentCardId: (row.content_card_id as string) ?? undefined,
     deadline: (row.deadline as string) ?? undefined,
     createdAt: (row.created_at as string) ?? undefined,
   };
@@ -395,6 +396,7 @@ export async function insertDesignRequest(req: Omit<DesignRequest, "id">): Promi
     format: req.format,
     briefing: req.briefing,
     attachments: req.attachments ?? [],
+    content_card_id: req.contentCardId ?? null,
     deadline: req.deadline,
   }).select("id").single();
   if (error) { console.error("[DB] insertDesignRequest:", error); throw error; }
