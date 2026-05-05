@@ -9,7 +9,7 @@
 
 ## CLÁUSULA PRIMEIRA - DO OBJETO
 
-1.1. O presente contrato tem como objeto a prestação de serviços integrados de **gestão digital completa (Combo Lone Growth)**, voltada para {{cliente_nicho}}, compreendendo de forma conjunta e integrada:
+1.1. O presente contrato tem como objeto a prestação de serviços integrados de **marketing digital (Combo Lone Growth)**, compreendendo, de forma conjunta e limitada aos termos deste instrumento, voltada para {{cliente_nicho}}:
 
 a) **Gestão de Tráfego Pago:** criação, gerenciamento e otimização de campanhas de marketing digital nas plataformas do META Ads e Google Ads;
 
@@ -17,7 +17,7 @@ b) **Gestão de Redes Sociais (Social Media):** planejamento estratégico mensal
 
 c) **Design e Criação:** desenvolvimento de artes, materiais gráficos e peças criativas para uso em campanhas pagas e conteúdo orgânico.
 
-1.2. Os serviços serão executados de forma **integrada e contínua**, com foco em posicionamento digital, crescimento de audiência, geração de leads qualificados e fortalecimento da marca da CONTRATANTE, conforme detalhadamente descrito na Cláusula Quarta deste instrumento.
+1.2. Os serviços serão executados de forma **integrada e contínua**, com foco em posicionamento digital, fortalecimento de marca, geração de demanda e apoio à captação de potenciais clientes, observados os limites de escopo, prazos, responsabilidades e condições operacionais detalhados neste instrumento.
 
 ---
 
@@ -35,7 +35,7 @@ c) **Design e Criação:** desenvolvimento de artes, materiais gráficos e peça
 
 2.6. Após cada ciclo de renovação, as partes poderão revisar valores, escopo ou condições operacionais mediante acordo formal, considerando evolução estratégica das campanhas, aumento de demanda ou ampliação dos serviços prestados.
 
-{{clausula_reajuste}}
+2.7. O valor mensal de R$ 1.500,00 (mil e quinhentos reais) possui caráter promocional e será aplicado exclusivamente durante o período mínimo inicial de 3 (três) meses. Após o término desse período, em caso de continuidade ou renovação automática do contrato, o valor mensal será reajustado para R$ 2.000,00 (dois mil reais), mantendo-se todas as demais condições contratuais vigentes, salvo manifestação expressa em contrário por qualquer das partes dentro do prazo de aviso prévio previsto neste instrumento.
 
 ---
 
@@ -78,15 +78,15 @@ A CONTRATADA se compromete a:
 
 4.1. Gerir as campanhas de marketing por meio do tráfego pago nas plataformas de anúncio do Grupo Meta e Google;
 
-4.2. Analisar os dados e entregar **relatórios semanais** de acompanhamento e **relatório mensal consolidado** com análise estratégica das campanhas;
+4.2. Analisar os dados das campanhas e realizar acompanhamento semanal dos principais indicadores, podendo tal acompanhamento ocorrer por meio de grupo de WhatsApp, e-mail, reunião, mensagem ou relatório simplificado, além de relatório mensal consolidado com análise estratégica das campanhas;
 
-4.3. Desenvolver um relatório completo para permitir uma visão global do desempenho das campanhas e do tráfego da página ou site;
+4.3. Desenvolver relatório consolidado, quando aplicável, para permitir uma visão global do desempenho das campanhas, do tráfego da página, perfil ou site, conforme as ferramentas e acessos disponibilizados pela CONTRATANTE;
 
 4.4. Configurar o Google Analytics e o Google Tag Manager para garantir a correta coleta e rastreamento de dados, caso a CONTRATANTE utilize um site para a captura dos potenciais clientes;
 
 4.5. Manter o CONTRATANTE informado sobre o progresso e desempenho das campanhas;
 
-4.6. Cumprir os prazos estabelecidos para a entrega de relatórios e análises;
+4.6. Cumprir os prazos operacionais previamente alinhados entre as partes para entregas, análises e ajustes, observada a complexidade de cada solicitação e a dependência de informações, materiais e aprovações da CONTRATANTE;
 
 4.7. Analisar e orientar sobre estratégias de 'marketing' que gerem um posicionamento melhor da marca e o reconhecimento da empresa/pessoa/marca no âmbito virtual;
 
@@ -132,9 +132,9 @@ A CONTRATADA se compromete a:
 
 4.27. Editar os vídeos fornecidos pela CONTRATANTE, adequando-os ao padrão das redes sociais e à estratégia definida; a CONTRATADA **não realiza serviços de gravação, captação ou produção presencial de conteúdo**;
 
-4.28. Entregar **relatórios semanais** de acompanhamento e **relatório mensal consolidado** contendo análise de crescimento e engajamento das plataformas;
+4.28. Realizar acompanhamento periódico do desempenho das redes sociais e entregar relatório mensal consolidado contendo análise de crescimento, engajamento e pontos estratégicos de melhoria das plataformas, podendo atualizações semanais ocorrerem por meio de grupo de WhatsApp, e-mail, reunião ou mensagem, sem obrigatoriedade de emissão de documento formal semanal;
 
-4.29. A CONTRATADA poderá incluir, dentro do planejamento estratégico, conteúdos relacionados a **datas comemorativas, campanhas sazonais ou datas simbólicas**, com caráter estratégico complementar — não sendo considerados conteúdo extra contratado, tampouco obrigação fixa em todas as datas do calendário, e não sendo contabilizados dentro do volume semanal contratado;
+4.29. A CONTRATADA poderá incluir, dentro do planejamento estratégico mensal, conteúdos relacionados a **datas comemorativas, campanhas sazonais ou datas simbólicas**, desde que haja relevância estratégica para o negócio da CONTRATANTE, sem que isso caracterize obrigação de criação extra, aumento do volume contratado ou entrega adicional fora do escopo mensal;
 
 4.30. A definição das datas comemorativas a serem trabalhadas ocorrerá com base na relevância estratégica para o negócio da CONTRATANTE, conforme planejamento mensal, e dependerá do envio de informações, materiais e aprovações por parte da CONTRATANTE dentro dos prazos operacionais definidos;
 
@@ -150,7 +150,7 @@ A CONTRATADA se compromete a:
 
 4.35. Editar vídeos publicitários e institucionais, com foco em qualidade visual, retenção e conversão;
 
-4.36. Os materiais gráficos serão produzidos conforme o planejamento mensal, respeitando o limite de **até 12 (doze) artes estáticas e 05 (cinco) edições de vídeo por mês**. Em situações de urgência operacional, a CONTRATADA poderá, a seu critério e mediante disponibilidade, liberar volume adicional sem custo extra, sem que isso caracterize obrigação contratual, alteração permanente do escopo ou aumento do volume mensal de referência.
+4.36. Os materiais gráficos serão produzidos conforme o planejamento mensal, respeitando o limite de **até 12 (doze) artes estáticas e até 05 (cinco) edições de vídeo por mês**, abrangendo conteúdos orgânicos e/ou materiais destinados a campanhas pagas, conforme necessidade estratégica. Em situações de urgência operacional, a CONTRATADA poderá, a seu exclusivo critério e mediante disponibilidade, liberar volume adicional sem custo extra, sem que isso caracterize obrigação contratual, alteração permanente do escopo ou aumento do volume mensal de referência.
 
 ---
 
@@ -284,9 +284,9 @@ O pagamento pelo serviço prestado será feito de forma mensal, na seguinte form
 
 11.12. As partes reconhecem que este contrato possui natureza estratégica contínua, não sendo caracterizado como prestação pontual ou entrega única de serviço.
 
-11.13. A continuidade da utilização de estratégias, estruturas de campanhas, funis ou metodologias desenvolvidas pela CONTRATADA após a rescisão contratual, quando realizada por terceiros com a finalidade de substituir a CONTRATADA, poderá ser interpretado como uso indevido de know-how estratégico.
+11.13. A CONTRATANTE poderá manter a titularidade e o uso das contas, páginas, perfis e ativos digitais que lhe pertençam. Contudo, não poderá reproduzir, comercializar, repassar ou permitir a terceiros o uso de metodologias internas, documentos estratégicos, scripts, processos, prompts, estruturas proprietárias, materiais técnicos exclusivos ou demais ativos de know-how desenvolvidos pela CONTRATADA fora dos limites deste contrato.
 
-11.14. A execução dos serviços pela CONTRATADA envolve a aplicação de conhecimento técnico, metodologias próprias, inteligência estratégica e processos operacionais internos, os quais não se confundem com a titularidade das contas da CONTRATANTE. Ao término do contrato, não será exigível a entrega, explicação detalhada, documentação técnica ou transferência integral de estruturas estratégicas, segmentações, arquiteturas de campanha, copies, funis ou processos internos desenvolvidos pela CONTRATADA.
+11.14. A execução dos serviços pela CONTRATADA envolve a aplicação de conhecimento técnico, metodologias próprias, inteligência estratégica e processos operacionais internos, os quais não se confundem com a titularidade das contas da CONTRATANTE. Ao término do contrato, não será exigível a entrega, explicação detalhada, documentação técnica ou transferência integral de estruturas estratégicas internas, segmentações, arquiteturas de campanha, copies, funis, prompts, fluxos de automação ou processos proprietários desenvolvidos pela CONTRATADA, preservados os acessos e ativos digitais de titularidade da CONTRATANTE.
 
 11.15. O horário de atendimento da CONTRATADA ocorrerá de **segunda a sexta-feira, das 09h às 18h**, exceto feriados nacionais e locais. Demandas enviadas fora deste período serão consideradas recebidas no próximo dia útil.
 
@@ -298,21 +298,21 @@ O pagamento pelo serviço prestado será feito de forma mensal, na seguinte form
 
 ## CLÁUSULA DÉCIMA SEGUNDA – DOS BÔNUS
 
-O CONTRATANTE terá direito aos seguintes serviços adicionais, que serão prestados durante todo o tempo de vigência deste contrato, porém como bônus, ou seja, não onerando no valor total deste contrato, esses bônus possuem o intuito de potencializar as campanhas de marketing e tráfego pago, fortalecendo a presença digital da marca da CONTRATANTE:
+O CONTRATANTE poderá ter direito aos seguintes serviços adicionais, prestados como bônus durante a vigência contratual, ou seja, sem onerar o valor total deste contrato. Tais bônus possuem o intuito de potencializar as campanhas de marketing e tráfego pago, fortalecer a presença digital da marca da CONTRATANTE e apoiar sua estrutura comercial, observados os limites de escopo, disponibilidade operacional e condições estabelecidas entre as partes:
 
-12.1. **Criação e Edição de 2 Imagens Mensais para Anúncios:** O CONTRATADO se compromete a criar e editar imagens profissionais para serem utilizadas em anúncios pagos. Essas imagens serão otimizadas para aumentar a taxa de conversão e atrair o público-alvo desejado.
+12.1. **Criação e Edição de até 2 Imagens Mensais para Anúncios:** A CONTRATADA poderá criar e editar até 2 (duas) imagens mensais para utilização em anúncios pagos, conforme necessidade estratégica. Tais imagens poderão ser contabilizadas dentro do volume mensal de materiais gráficos previsto neste contrato, salvo liberalidade da CONTRATADA, não representando aumento automático do volume total contratado.
 
-12.2. **Edição de Vídeos para Anúncios:** O CONTRATADO realizará a edição de vídeos publicitários, garantindo que estejam alinhados com a estratégia de marketing, com qualidade e atratividade para maximizar o engajamento e a conversão dos anúncios.
+12.2. **Edição de Vídeos para Anúncios:** A CONTRATADA poderá realizar a edição de vídeos publicitários para anúncios, conforme planejamento, disponibilidade operacional e envio de material bruto pela CONTRATANTE, buscando alinhamento com a estratégia de marketing, qualidade visual, retenção e conversão.
 
 12.3. **Treinamento Comercial:** O CONTRATANTE terá acesso a uma consultoria especializada em atendimento, incluindo:
 
-- Uma consultoria de tudo que está sendo feito atualmente na parte do atendimento e correção dos pontos negativos.
-- Um e-book de atendimento validado, capaz de aumentar a conversão de vendas em atendimentos feitos através do whatsapp.
-- Acompanhamento diário do atendimento, com sugestões e melhorias contínuas para otimizar o desempenho da equipe de vendas.
+- Uma consultoria ou diagnóstico estratégico sobre o atendimento atualmente realizado pela CONTRATANTE, com identificação de pontos de melhoria e orientações comerciais;
+- Um e-book de atendimento validado, capaz de aumentar a conversão de vendas em atendimentos feitos através do WhatsApp;
+- Acompanhamento estratégico periódico do atendimento, mediante envio de informações, conversas, prints ou materiais pela CONTRATANTE, com sugestões de melhoria e orientações comerciais conforme disponibilidade operacional da CONTRATADA, sem caracterizar obrigação de monitoramento diário, supervisão integral da equipe comercial ou garantia de aumento de vendas;
 
-12.4. **Treinamento de Posicionamento:** O CONTRATANTE receberá uma consultoria completa de posicionamento no Instagram, incluindo:
+12.4. **Treinamento de Posicionamento:** O CONTRATANTE receberá uma consultoria de posicionamento no Instagram, incluindo:
 
-- Uma consultoria de tudo que está sendo feito atualmente na parte das redes sociais e posicionamento do CONTRATANTE e correção dos pontos negativos.
+- Uma consultoria ou diagnóstico estratégico sobre as redes sociais e o posicionamento da CONTRATANTE, com identificação de pontos de melhoria e orientações práticas;
 - Material detalhado sobre boas práticas, desde a escolha da foto de perfil até a organização do feed.
 
 Os serviços descritos nesta cláusula serão prestados durante o período do contrato, conforme as condições estabelecidas entre as partes.
