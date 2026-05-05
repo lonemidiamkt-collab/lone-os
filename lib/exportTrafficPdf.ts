@@ -11,7 +11,6 @@ export interface TrafficReportData {
   costPerMessage: number;
   costPerClick: number;
   cpm: number;
-  // Champion adset — the best-performing (cheapest) adset across all campaigns
   bestAdsetCpa?: number;
   bestAdsetName?: string;
   videoViews25?: number;
@@ -40,138 +39,164 @@ export interface TrafficReportData {
 
 const fmt = (v: number | undefined | null) => {
   const n = v ?? 0;
-  return `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `R$&nbsp;${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 const fmtNum = (v: number | undefined | null) => (v ?? 0).toLocaleString("pt-BR");
-const safeVal = (v: number | undefined | null, fallback = "—") =>
-  !v || v === 0 ? fallback : fmt(v);
+const safeVal = (v: number | undefined | null) =>
+  !v || v === 0 ? "—" : fmt(v);
+const pad2 = (n: number) => String(n).padStart(2, "0");
 
 export function buildTrafficReportHtml(data: TrafficReportData): string {
   const logoUrl = `${window.location.origin}/logo.png`;
 
-  const hasBestAdset = data.bestAdsetCpa && data.bestAdsetCpa > 0;
+  const hasBestAdset = !!(data.bestAdsetCpa && data.bestAdsetCpa > 0);
   const hasVideo = !!(data.videoViews25 && data.videoViews25 > 0);
-
-  // ── Demographics ──────────────────────────────────────────────────────────
   const hasDemographics = !!(data.demographics && data.demographics.ageRanges.length > 0);
-  const maxAgePct = hasDemographics ? Math.max(...data.demographics!.ageRanges.map((a) => a.percentage)) : 0;
 
+  // ── KPI rows (numbered, like "cenas") ───────────────────────────────────
+  const kpiItems: { label: string; value: string; sub?: string; champion?: boolean }[] = [
+    { label: "Alcance", value: fmtNum(data.reach) + " pessoas" },
+    { label: "Impressões", value: fmtNum(data.impressions) },
+    { label: "Cliques no link", value: fmtNum(data.clicks) },
+    { label: "Mensagens iniciadas", value: fmtNum(data.messages) },
+    { label: "Investimento total", value: fmt(data.spend) },
+    { label: "Custo médio por mensagem", value: safeVal(data.costPerMessage) },
+  ];
+  if (hasBestAdset) {
+    kpiItems.push({
+      label: "Custo Campeão — melhor conjunto",
+      value: fmt(data.bestAdsetCpa),
+      sub: data.bestAdsetName ?? undefined,
+      champion: true,
+    });
+  }
+
+  const kpiRows = kpiItems.map((item, i) => `
+    <div style="display:flex;align-items:flex-start;gap:0;${item.champion ? "border-left:3px solid #0d4af5;" : "border-left:3px solid transparent;"}${i < kpiItems.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}">
+      <div style="min-width:52px;padding:14px 12px;font-size:11px;font-weight:800;color:#3b6ff5;flex-shrink:0;">${pad2(i + 1)}</div>
+      <div style="flex:1;padding:14px 0;border-left:1px solid #1a1a2e;">
+        <div style="padding-left:16px;">
+          <span style="font-size:11px;color:#a1a1aa;">${item.label}</span>
+          <span style="font-size:11px;color:#1a1a2e;"> · </span>
+          <span style="font-size:13px;font-weight:700;color:${item.champion ? "#3b6ff5" : "#ffffff"};">${item.value}</span>
+          ${item.sub ? `<div style="font-size:9px;color:#52525b;margin-top:2px;">${item.sub}</div>` : ""}
+        </div>
+      </div>
+    </div>`).join("");
+
+  // ── Campaign rows ────────────────────────────────────────────────────────
+  const activeCampaigns = data.campaigns
+    .filter((c) => c.status === "active" || c.spend > 0)
+    .sort((a, b) => (b.messages ?? 0) - (a.messages ?? 0));
+
+  const isCampaignChampion = (c: typeof activeCampaigns[number]) =>
+    hasBestAdset &&
+    (c.cheapestAdSetCostPerMessage ?? 0) > 0 &&
+    Math.abs((c.cheapestAdSetCostPerMessage ?? 0) - (data.bestAdsetCpa ?? 0)) < 0.01;
+
+  const campRows = activeCampaigns.map((c, i) => {
+    const isChamp = isCampaignChampion(c);
+    const isLast = i === activeCampaigns.length - 1;
+    return `
+    <div style="display:flex;align-items:flex-start;gap:0;${isChamp ? "border-left:3px solid #0d4af5;" : "border-left:3px solid transparent;"}${!isLast ? "border-bottom:1px solid #1a1a2e;" : ""}">
+      <div style="min-width:52px;padding:12px;font-size:11px;font-weight:800;color:#3b6ff5;flex-shrink:0;">${pad2(i + 1)}</div>
+      <div style="flex:1;padding:12px 0 12px 16px;border-left:1px solid #1a1a2e;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:0;">
+            <span style="font-size:11px;font-weight:${isChamp ? "700" : "500"};color:#e4e4e7;">${c.name}</span>
+            ${isChamp ? `<span style="display:inline-block;background:#0d4af5;color:#fff;font-size:8px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;vertical-align:middle;letter-spacing:.04em;">CAMPEÃO</span>` : ""}
+            ${c.cheapestAdSetName ? `<div style="font-size:9px;color:#52525b;margin-top:2px;">↳ ${c.cheapestAdSetName}${c.cheapestAdSetCostPerMessage ? ` · ${fmt(c.cheapestAdSetCostPerMessage)}/msg` : ""}</div>` : ""}
+          </div>
+          <div style="display:flex;gap:16px;flex-shrink:0;">
+            <div style="text-align:right;">
+              <div style="font-size:8px;color:#52525b;text-transform:uppercase;letter-spacing:.06em;">Invest.</div>
+              <div style="font-size:11px;font-weight:600;color:#a1a1aa;">${fmt(c.spend)}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:8px;color:#52525b;text-transform:uppercase;letter-spacing:.06em;">Mensagens</div>
+              <div style="font-size:11px;font-weight:700;color:#3b6ff5;">${fmtNum(c.messages)}</div>
+            </div>
+            <div style="text-align:right;padding-right:12px;">
+              <div style="font-size:8px;color:#52525b;text-transform:uppercase;letter-spacing:.06em;">C./Msg</div>
+              <div style="font-size:11px;font-weight:600;color:${isChamp ? "#3b6ff5" : "#a1a1aa"};">${c.messages > 0 ? fmt(c.costPerMessage) : "—"}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+
+  // ── Demographics ─────────────────────────────────────────────────────────
+  const maxAgePct = hasDemographics ? Math.max(...data.demographics!.ageRanges.map((a) => a.percentage)) : 0;
   const demoHtml = hasDemographics ? (() => {
     const d = data.demographics!;
     const circumference = 2 * Math.PI * 46;
     const wArc = (d.genderSplit.women / 100) * circumference;
-
-    const ageBars = d.ageRanges.map((a) => `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
-        <span style="width:38px;font-size:10px;color:#6b7280;text-align:right;flex-shrink:0;">${a.range}</span>
-        <div style="flex:1;height:14px;background:#f3f4f6;border-radius:3px;overflow:hidden;">
-          <div style="width:${Math.max((a.percentage / maxAgePct) * 100, 6)}%;height:100%;background:#0d4af5;border-radius:3px;display:flex;align-items:center;justify-content:flex-end;padding-right:4px;">
-            <span style="font-size:8px;font-weight:700;color:#fff;">${a.percentage.toFixed(1)}%</span>
+    const ageBars = d.ageRanges.map((a, i) => `
+      <div style="display:flex;align-items:flex-start;gap:0;${i < d.ageRanges.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}border-left:3px solid transparent;">
+        <div style="min-width:52px;padding:10px 12px;font-size:11px;font-weight:800;color:#3b6ff5;">${pad2(i + 1)}</div>
+        <div style="flex:1;padding:10px 16px;border-left:1px solid #1a1a2e;display:flex;align-items:center;gap:10px;">
+          <span style="width:36px;font-size:10px;color:#a1a1aa;flex-shrink:0;">${a.range}</span>
+          <div style="flex:1;height:12px;background:#0f0f14;border-radius:3px;overflow:hidden;">
+            <div style="width:${Math.max((a.percentage / maxAgePct) * 100, 5)}%;height:100%;background:linear-gradient(90deg,#0d4af5,#3b6ff7);border-radius:3px;"></div>
           </div>
+          <span style="font-size:10px;font-weight:700;color:#e4e4e7;width:36px;text-align:right;">${a.percentage.toFixed(1)}%</span>
         </div>
       </div>`).join("");
-
     return `
-    <section style="margin-bottom:20px;">
-      <div class="section-head">Público — Dados Demográficos</div>
-      <div style="display:flex;gap:24px;align-items:flex-start;margin-top:10px;">
-        <div style="flex:1;">${ageBars}</div>
-        <div style="width:120px;display:flex;flex-direction:column;align-items:center;gap:6px;">
-          <span style="font-size:9px;font-weight:700;color:#0d4af5;text-transform:uppercase;letter-spacing:.06em;">Gênero</span>
-          <div style="position:relative;width:80px;height:80px;">
-            <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
-              <circle cx="50" cy="50" r="46" fill="none" stroke="#f3f4f6" stroke-width="8"/>
-              <circle cx="50" cy="50" r="46" fill="none" stroke="#e84393" stroke-width="8"
-                stroke-dasharray="${wArc} ${circumference}"/>
-              <circle cx="50" cy="50" r="46" fill="none" stroke="#0d4af5" stroke-width="8"
-                stroke-dasharray="${circumference - wArc} ${circumference}" stroke-dashoffset="-${wArc}"/>
-            </svg>
-          </div>
-          <div style="font-size:9px;color:#374151;display:flex;flex-direction:column;gap:3px;align-items:center;">
-            <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e84393;margin-right:4px;vertical-align:middle;"></span>${d.genderSplit.women.toFixed(1)}% Mulheres</span>
-            <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#0d4af5;margin-right:4px;vertical-align:middle;"></span>${d.genderSplit.men.toFixed(1)}% Homens</span>
-          </div>
+    <section style="margin-bottom:24px;">
+      <div class="sec-label">Público — Dados Demográficos</div>
+      <div class="sec-title">Faixa Etária</div>
+      <div class="table-block">${ageBars}</div>
+      <div style="margin-top:12px;display:flex;align-items:center;gap:16px;padding:12px 16px;background:#0f0f14;border-radius:8px;border:1px solid #1a1a2e;">
+        <div style="position:relative;width:64px;height:64px;flex-shrink:0;">
+          <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
+            <circle cx="50" cy="50" r="46" fill="none" stroke="#1a1a2e" stroke-width="8"/>
+            <circle cx="50" cy="50" r="46" fill="none" stroke="#e84393" stroke-width="8" stroke-dasharray="${wArc} ${circumference}"/>
+            <circle cx="50" cy="50" r="46" fill="none" stroke="#0d4af5" stroke-width="8" stroke-dasharray="${circumference - wArc} ${circumference}" stroke-dashoffset="-${wArc}"/>
+          </svg>
+        </div>
+        <div style="display:flex;gap:20px;">
+          <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e84393;margin-right:5px;vertical-align:middle;"></span><span style="font-size:11px;color:#e4e4e7;">${d.genderSplit.women.toFixed(1)}% Mulheres</span></div>
+          <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#0d4af5;margin-right:5px;vertical-align:middle;"></span><span style="font-size:11px;color:#e4e4e7;">${d.genderSplit.men.toFixed(1)}% Homens</span></div>
         </div>
       </div>
     </section>`;
   })() : "";
 
-  // ── Campaign rows ─────────────────────────────────────────────────────────
-  const activeCampaigns = data.campaigns
-    .filter((c) => c.status === "active" || c.spend > 0)
-    .sort((a, b) => (b.messages ?? 0) - (a.messages ?? 0));
-
-  const campaignRows = activeCampaigns.map((c, i) => {
-    const rowBg = i % 2 === 0 ? "#ffffff" : "#f9fafb";
-    const cpm = c.messages > 0 ? fmt(c.costPerMessage) : "—";
-    const isBest = hasBestAdset &&
-      c.cheapestAdSetCostPerMessage !== undefined &&
-      c.cheapestAdSetCostPerMessage > 0 &&
-      Math.abs(c.cheapestAdSetCostPerMessage - (data.bestAdsetCpa ?? 0)) < 0.01;
-    return `
-      <tr style="background:${rowBg};">
-        <td style="padding:7px 10px;font-size:10px;font-weight:${isBest ? "700" : "500"};color:#111827;border-bottom:1px solid #e5e7eb;">
-          ${c.name}
-          ${isBest ? `<span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;">⭐ CAMPEÃO</span>` : ""}
-        </td>
-        <td style="padding:7px 10px;text-align:right;font-size:10px;color:#374151;border-bottom:1px solid #e5e7eb;">${fmt(c.spend)}</td>
-        <td style="padding:7px 10px;text-align:right;font-size:10px;color:#374151;border-bottom:1px solid #e5e7eb;">${fmtNum(c.impressions)}</td>
-        <td style="padding:7px 10px;text-align:right;font-size:10px;color:#374151;border-bottom:1px solid #e5e7eb;">${fmtNum(c.clicks)}</td>
-        <td style="padding:7px 10px;text-align:right;font-size:10px;font-weight:600;color:#0d4af5;border-bottom:1px solid #e5e7eb;">${fmtNum(c.messages)}</td>
-        <td style="padding:7px 10px;text-align:right;font-size:10px;color:#374151;border-bottom:1px solid #e5e7eb;">${cpm}</td>
-      </tr>
-      ${c.cheapestAdSetName && c.cheapestAdSetCostPerMessage ? `
-      <tr style="background:${rowBg};">
-        <td colspan="6" style="padding:3px 10px 7px 22px;font-size:9px;color:#6b7280;border-bottom:1px solid #e5e7eb;">
-          ↳ Conjunto campeão: <strong style="color:#374151;">${c.cheapestAdSetName}</strong> &nbsp;·&nbsp; ${fmt(c.cheapestAdSetCostPerMessage)}/msg
-        </td>
-      </tr>` : ""}`;
-  }).join("");
-
-  // ── Video funnel ──────────────────────────────────────────────────────────
+  // ── Video ────────────────────────────────────────────────────────────────
   const videoHtml = hasVideo ? `
-    <section style="margin-bottom:20px;">
-      <div class="section-head">Reprodução de Vídeo</div>
-      <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px;">
+    <section style="margin-bottom:24px;">
+      <div class="sec-label">Reprodução de Vídeo</div>
+      <div class="sec-title">Funil de Retenção</div>
+      <div class="table-block">
         ${[
-          { label: "25%", val: data.videoViews25!, w: 100 },
-          { label: "50%", val: data.videoViews50!, w: 78 },
-          { label: "75%", val: data.videoViews75!, w: 58 },
-          { label: "95%", val: data.videoViews95!, w: 40 },
-        ].map(r => `
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="width:28px;font-size:9px;font-weight:700;color:#6b7280;">${r.label}</span>
-          <span style="width:64px;font-size:10px;font-weight:600;color:#111827;text-align:right;">${fmtNum(r.val)}</span>
-          <div style="flex:1;height:16px;background:#f3f4f6;border-radius:3px;overflow:hidden;">
-            <div style="width:${r.w}%;height:100%;background:linear-gradient(90deg,#0d4af5,#5b8bf7);border-radius:3px;"></div>
+          { pct: "25%", val: data.videoViews25! },
+          { pct: "50%", val: data.videoViews50! },
+          { pct: "75%", val: data.videoViews75! },
+          { pct: "95%", val: data.videoViews95! },
+        ].map((r, i, arr) => `
+        <div style="display:flex;align-items:center;gap:0;${i < arr.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}border-left:3px solid transparent;">
+          <div style="min-width:52px;padding:12px;font-size:11px;font-weight:800;color:#3b6ff5;">${r.pct}</div>
+          <div style="flex:1;padding:12px 16px;border-left:1px solid #1a1a2e;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:12px;font-weight:600;color:#e4e4e7;width:60px;">${fmtNum(r.val)}</span>
+            <div style="flex:1;height:10px;background:#0f0f14;border-radius:3px;overflow:hidden;">
+              <div style="width:${[100, 78, 58, 38][i]}%;height:100%;background:linear-gradient(90deg,#0d4af5,#3b6ff7);border-radius:3px;"></div>
+            </div>
           </div>
         </div>`).join("")}
       </div>
     </section>` : "";
 
-  // ── Highlights ───────────────────────────────────────────────────────────
-  const highlights: { num: string; text: string; sub?: string }[] = [];
-  if (hasBestAdset) {
-    highlights.push({
-      num: "01",
-      text: `Custo Campeão: <strong style="color:#0d4af5;">${fmt(data.bestAdsetCpa)}</strong> por mensagem`,
-      sub: data.bestAdsetName ? `Conjunto: ${data.bestAdsetName}` : undefined,
-    });
-  }
-  highlights.push(
-    { num: hasBestAdset ? "02" : "01", text: `Mensagens geradas no período: <strong style="color:#0d4af5;">${fmtNum(data.messages)}</strong>` },
-    { num: hasBestAdset ? "03" : "02", text: `Investimento total: <strong style="color:#0d4af5;">${fmt(data.spend)}</strong>` },
-    { num: hasBestAdset ? "04" : "03", text: `Custo médio por mensagem: <strong style="color:#374151;">${safeVal(data.costPerMessage)}</strong>` },
-  );
-
-  const highlightsHtml = highlights.map((h, i) => `
-    <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;${i < highlights.length - 1 ? "border-bottom:1px solid #e5e7eb;" : ""}">
-      <span style="min-width:28px;height:28px;background:#0d4af5;color:#fff;border-radius:50%;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${h.num}</span>
-      <div>
-        <p style="font-size:11px;color:#111827;line-height:1.5;">${h.text}</p>
-        ${h.sub ? `<p style="font-size:9px;color:#6b7280;margin-top:2px;">${h.sub}</p>` : ""}
+  // ── Observations ─────────────────────────────────────────────────────────
+  const obsHtml = data.observations ? `
+    <section style="margin-bottom:24px;">
+      <div class="sec-label">Observações</div>
+      <div class="sec-title">Análise do Gestor</div>
+      <div style="border-left:3px solid #0d4af5;padding:14px 16px;background:#0f0f14;border-radius:0 8px 8px 0;border:1px solid #1a1a2e;border-left:3px solid #0d4af5;">
+        <p style="font-size:11px;line-height:1.8;color:#a1a1aa;">${data.observations.replace(/\n/g, "<br/>")}</p>
       </div>
-    </div>`).join("");
+    </section>` : "";
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -181,184 +206,131 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
     * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-    html,body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:#ffffff; color:#111827; }
-    .page { max-width:780px; margin:0 auto; padding:32px 36px; }
-    .section-head {
-      font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em;
-      color:#0d4af5; padding-bottom:6px; border-bottom:2px solid #0d4af5; margin-bottom:0;
-    }
+    html, body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:#09090b; color:#e4e4e7; }
+    .page { max-width:820px; margin:0 auto; padding:0 0 40px; }
+    .sec-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:#3b6ff5; margin-bottom:4px; }
+    .sec-title { font-size:18px; font-weight:800; color:#ffffff; margin-bottom:10px; letter-spacing:-.01em; }
+    .table-block { border:1px solid #1a1a2e; border-radius:8px; overflow:hidden; }
+    section { padding:0 32px; }
     @media print {
-      html,body { background:#ffffff !important; }
+      html,body { background:#09090b !important; }
       .no-print { display:none !important; }
-      .page { padding:20px 24px; }
+      .page { padding-bottom:20px; }
     }
   </style>
 </head>
 <body>
 
-<div class="no-print" style="text-align:center;padding:14px;background:#0d4af5;">
-  <button onclick="window.print()" style="padding:9px 28px;background:#fff;color:#0d4af5;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.02em;">
+<div class="no-print" style="text-align:center;padding:12px;background:#0d4af5;">
+  <button onclick="window.print()" style="padding:8px 28px;background:#09090b;color:#fff;border:1px solid #3b6ff5;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">
     Salvar como PDF / Imprimir
   </button>
 </div>
 
 <div class="page">
 
-  <!-- ── HEADER ─────────────────────────────────────────────────── -->
-  <header style="display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:20px;border-bottom:2px solid #111827;margin-bottom:24px;">
+  <!-- ══ HEADER ══════════════════════════════════════════════════════════ -->
+  <div style="border-top:3px solid #0d4af5;background:#09090b;padding:16px 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1a1a2e;margin-bottom:32px;">
     <div style="display:flex;align-items:center;gap:10px;">
-      <div style="width:48px;height:48px;background:#000;border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">
-        <img src="${logoUrl}" alt="Lone" style="width:38px;height:38px;object-fit:contain;"/>
+      <div style="width:36px;height:36px;background:#000;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">
+        <img src="${logoUrl}" alt="Lone" style="width:28px;height:28px;object-fit:contain;"/>
       </div>
-      <div>
-        <div style="font-size:16px;font-weight:900;color:#111827;letter-spacing:-.01em;">LONE MÍDIA</div>
-        <div style="font-size:9px;font-weight:600;color:#0d4af5;text-transform:uppercase;letter-spacing:.12em;">Assessoria &amp; Marketing</div>
-      </div>
+      <span style="font-size:14px;font-weight:800;color:#fff;letter-spacing:-.01em;">LONE MÍDIA</span>
     </div>
-    <div style="text-align:right;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;">Relatório de Performance</div>
-      <div style="font-size:9px;color:#9ca3af;margin-top:2px;">META ADS</div>
-    </div>
-  </header>
-
-  <!-- ── CLIENT + PERIOD ────────────────────────────────────────── -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:24px;">
-    <div>
-      <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;">Cliente</div>
-      <div style="font-size:22px;font-weight:800;color:#111827;letter-spacing:-.02em;">${data.clientName}</div>
-    </div>
-    <div style="text-align:right;">
-      <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;">Período</div>
-      <div style="font-size:13px;font-weight:600;color:#374151;">${data.period}</div>
-    </div>
+    <span style="font-size:11px;color:#52525b;">Relatório de Performance — ${data.clientName}</span>
   </div>
 
-  <!-- ── KPI STRIP ──────────────────────────────────────────────── -->
-  <div style="display:grid;grid-template-columns:repeat(5,1fr);border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:24px;">
-    ${[
-      { label: "Alcance", val: fmtNum(data.reach) },
-      { label: "Impressões", val: fmtNum(data.impressions) },
-      { label: "Cliques", val: fmtNum(data.clicks) },
-      { label: "Mensagens", val: fmtNum(data.messages), highlight: true },
-      { label: "Investimento", val: fmt(data.spend) },
-    ].map((k, i) => `
-      <div style="padding:12px 8px;text-align:center;${i < 4 ? "border-right:1px solid #e5e7eb;" : ""}${k.highlight ? "background:#eff6ff;" : ""}">
-        <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${k.highlight ? "#0d4af5" : "#9ca3af"};margin-bottom:4px;">${k.label}</div>
-        <div style="font-size:15px;font-weight:800;color:${k.highlight ? "#0d4af5" : "#111827"};">${k.val}</div>
-      </div>`).join("")}
-  </div>
+  <!-- ══ TITLE BLOCK ═══════════════════════════════════════════════════════ -->
+  <section style="margin-bottom:28px;">
+    <div class="sec-label">Relatório de Performance</div>
+    <div style="font-size:28px;font-weight:900;letter-spacing:-.02em;margin-bottom:6px;">
+      <span style="color:#ffffff;">${data.clientName}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:10px;color:#52525b;margin-bottom:14px;">
+      <span>${data.period}</span>
+      <span>·</span>
+      <span>Meta Ads</span>
+      <span>·</span>
+      <span>${activeCampaigns.length} campanha${activeCampaigns.length !== 1 ? "s" : ""}</span>
+      ${hasBestAdset ? `<span>·</span><span style="color:#3b6ff5;font-weight:600;">Custo Campeão ${fmt(data.bestAdsetCpa)}</span>` : ""}
+    </div>
+    <div style="height:2px;background:#0d4af5;border-radius:1px;"></div>
+  </section>
 
-  <!-- ── DESTAQUES DA SEMANA ────────────────────────────────────── -->
-  <section style="margin-bottom:24px;">
-    <div class="section-head">Destaques do Período</div>
-    <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:0 14px;">
-      ${highlightsHtml}
+  <!-- ══ MÉTRICAS GERAIS ════════════════════════════════════════════════ -->
+  <section style="margin-bottom:28px;">
+    <div class="sec-label">Métricas Gerais</div>
+    <div class="sec-title">Resultados do Período</div>
+    <div class="table-block">
+      <div style="display:flex;padding:8px 0 8px 52px;border-bottom:1px solid #1a1a2e;background:#0f0f14;">
+        <div style="flex:1;padding:0 16px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#3b6ff5;">Indicador</div>
+        <div style="min-width:160px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#3b6ff5;padding-right:12px;text-align:right;">Valor</div>
+      </div>
+      ${kpiRows}
     </div>
   </section>
 
-  <!-- ── COST METRICS ───────────────────────────────────────────── -->
-  <section style="margin-bottom:24px;">
-    <div class="section-head">Custo por Resultado</div>
-    <div style="display:grid;grid-template-columns:repeat(${hasBestAdset ? 4 : 3},1fr);border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;">
-      ${hasBestAdset ? `
-      <div style="padding:14px 10px;text-align:center;border-right:1px solid #e5e7eb;background:#fffbeb;">
-        <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#92400e;margin-bottom:4px;">⭐ Custo Campeão</div>
-        <div style="font-size:18px;font-weight:800;color:#b45309;">${fmt(data.bestAdsetCpa)}</div>
-        ${data.bestAdsetName ? `<div style="font-size:8px;color:#a16207;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${data.bestAdsetName.slice(0, 26)}</div>` : ""}
-      </div>` : ""}
-      <div style="padding:14px 10px;text-align:center;${hasBestAdset ? "border-right:1px solid #e5e7eb;" : "border-right:1px solid #e5e7eb;"}">
-        <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin-bottom:4px;">C. Médio/Mensagem</div>
-        <div style="font-size:18px;font-weight:800;color:#111827;">${safeVal(data.costPerMessage)}</div>
-      </div>
-      <div style="padding:14px 10px;text-align:center;border-right:1px solid #e5e7eb;">
-        <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin-bottom:4px;">C. por Clique</div>
-        <div style="font-size:18px;font-weight:800;color:#111827;">${safeVal(data.costPerClick)}</div>
-      </div>
-      <div style="padding:14px 10px;text-align:center;">
-        <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin-bottom:4px;">CPM</div>
-        <div style="font-size:18px;font-weight:800;color:#111827;">${safeVal(data.cpm)}</div>
-      </div>
+  <!-- ══ CAMPANHAS ══════════════════════════════════════════════════════ -->
+  ${campRows ? `
+  <section style="margin-bottom:28px;">
+    <div class="sec-label">Desempenho por Campanha</div>
+    <div class="sec-title">Campanhas Ativas</div>
+    <div class="table-block">
+      ${campRows}
     </div>
-  </section>
-
-  ${campaignRows ? `
-  <!-- ── CAMPAIGN TABLE ─────────────────────────────────────────── -->
-  <section style="margin-bottom:24px;">
-    <div class="section-head">Desempenho por Campanha</div>
-    <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;font-family:'Inter',sans-serif;">
-      <thead>
-        <tr style="background:#f9fafb;">
-          <th style="padding:8px 10px;text-align:left;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;border-bottom:1px solid #e5e7eb;">Campanha</th>
-          <th style="padding:8px 10px;text-align:right;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;border-bottom:1px solid #e5e7eb;">Investimento</th>
-          <th style="padding:8px 10px;text-align:right;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;border-bottom:1px solid #e5e7eb;">Impressões</th>
-          <th style="padding:8px 10px;text-align:right;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;border-bottom:1px solid #e5e7eb;">Cliques</th>
-          <th style="padding:8px 10px;text-align:right;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0d4af5;border-bottom:1px solid #e5e7eb;">Mensagens</th>
-          <th style="padding:8px 10px;text-align:right;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;border-bottom:1px solid #e5e7eb;">C./Msg</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${campaignRows}
-      </tbody>
-    </table>
   </section>
   ` : ""}
 
   ${videoHtml}
   ${demoHtml}
+  ${obsHtml}
 
-  ${data.observations ? `
-  <!-- ── OBSERVATIONS ──────────────────────────────────────────── -->
-  <section style="margin-bottom:24px;">
-    <div class="section-head">Observações do Gestor</div>
-    <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:12px 14px;">
-      <p style="font-size:11px;line-height:1.7;color:#374151;">${data.observations.replace(/\n/g, "<br/>")}</p>
-    </div>
-  </section>
-  ` : ""}
-
-  <!-- ── GLOSSARY ───────────────────────────────────────────────── -->
-  <section style="margin-bottom:20px;">
-    <div class="section-head">Tira Dúvidas</div>
-    <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:10px 14px;display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;">
+  <!-- ══ GLOSSÁRIO ═════════════════════════════════════════════════════ -->
+  <section style="margin-bottom:28px;">
+    <div class="sec-label">Tira Dúvidas</div>
+    <div class="sec-title">Glossário</div>
+    <div class="table-block">
       ${[
-        ["CPA", "Custo por aquisição"],
-        ["CPC", "Custo por clique"],
         ["CPM", "Custo por mil impressões"],
-        ["CTR", "% de cliques sobre visualizações"],
-        ["Impressões", "Vezes que os anúncios foram vistos"],
-        ["Alcance", "Pessoas únicas alcançadas"],
-        ["Mensagens", "Conversas iniciadas via WhatsApp/Messenger"],
+        ["CPC", "Custo por clique no link"],
+        ["C./Msg", "Custo por mensagem iniciada (WhatsApp/Messenger)"],
+        ["Alcance", "Pessoas únicas que viram o anúncio"],
+        ["Impressões", "Total de vezes que o anúncio foi exibido"],
         ["Frequência", "Média de exibições por pessoa"],
-      ].map(([k, v]) => `
-        <div style="padding:4px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="font-size:9px;font-weight:700;color:#0d4af5;">${k}</span>
-          <span style="font-size:9px;color:#6b7280;"> — ${v}</span>
+        ["Conjunto Campeão", "O adset com menor custo por mensagem no período"],
+      ].map(([k, v], i, arr) => `
+        <div style="display:flex;align-items:flex-start;gap:0;border-left:3px solid transparent;${i < arr.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}">
+          <div style="min-width:52px;padding:10px 12px;font-size:11px;font-weight:800;color:#3b6ff5;">${pad2(i + 1)}</div>
+          <div style="flex:1;padding:10px 16px;border-left:1px solid #1a1a2e;">
+            <span style="font-size:11px;font-weight:700;color:#e4e4e7;">${k}</span>
+            <span style="font-size:11px;color:#52525b;"> — ${v}</span>
+          </div>
         </div>`).join("")}
     </div>
   </section>
 
-  <!-- ── DISCLAIMER ─────────────────────────────────────────────── -->
-  <div style="padding:8px 12px;background:#f9fafb;border-left:3px solid #0d4af5;border-radius:4px;margin-bottom:20px;">
-    <p style="font-size:8px;color:#6b7280;line-height:1.6;">
-      <strong style="color:#0d4af5;">Nota:</strong>
-      Valores extraídos da API do Meta Ads. Pode haver variação de até 15% em relação ao Gerenciador de Anúncios
-      devido a janelas de atribuição e delays de processamento.
-    </p>
-  </div>
-
-  <!-- ── FOOTER ─────────────────────────────────────────────────── -->
-  <footer style="display:flex;align-items:center;justify-content:space-between;padding-top:16px;border-top:1px solid #e5e7eb;">
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div style="width:32px;height:32px;background:#000;border-radius:7px;display:flex;align-items:center;justify-content:center;overflow:hidden;">
-        <img src="${logoUrl}" alt="Lone" style="width:24px;height:24px;object-fit:contain;"/>
-      </div>
-      <div>
-        <div style="font-size:12px;font-weight:800;color:#111827;">LONE MÍDIA</div>
-        <div style="font-size:8px;color:#0d4af5;text-transform:uppercase;letter-spacing:.1em;">Assessoria &amp; Marketing</div>
-      </div>
+  <!-- ══ DISCLAIMER ════════════════════════════════════════════════════ -->
+  <section style="margin-bottom:28px;">
+    <div style="border-left:3px solid #0d4af5;padding:10px 14px;background:#0f0f14;border-radius:0 6px 6px 0;border:1px solid #1a1a2e;border-left:3px solid #0d4af5;">
+      <p style="font-size:9px;line-height:1.7;color:#52525b;">
+        <strong style="color:#3b6ff5;">Nota:</strong>
+        Valores extraídos diretamente da API do Meta Ads Manager. Pode haver variação de até 15%
+        em relação ao Gerenciador de Anúncios devido a janelas de atribuição e delays de processamento.
+      </p>
     </div>
-    <div style="font-size:8px;color:#9ca3af;">Lone Mídia © 2026 — Relatório gerado via Lone OS</div>
-  </footer>
+  </section>
+
+  <!-- ══ FOOTER ═════════════════════════════════════════════════════════ -->
+  <div style="padding:16px 32px 0;border-top:1px solid #1a1a2e;display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-size:9px;color:#3f3f46;">Relatório — ${data.clientName} / ${data.period}</span>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="width:28px;height:28px;background:#000;border-radius:6px;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+        <img src="${logoUrl}" alt="Lone" style="width:22px;height:22px;object-fit:contain;"/>
+      </div>
+      <span style="font-size:12px;font-weight:800;color:#ffffff;">LONE MÍDIA</span>
+    </div>
+    <span style="font-size:9px;color:#3f3f46;">Lone Mídia / Relatório de Performance</span>
+  </div>
 
 </div>
 </body>
@@ -389,13 +361,11 @@ export async function exportAllTrafficReportsZip(
 ) {
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
-
   for (const report of reports) {
     const html = buildTrafficReportHtml(report.data);
     const fileName = `relatorio-${report.clientName.replace(/\s+/g, "-").toLowerCase()}.html`;
     zip.file(fileName, html);
   }
-
   const blob = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -417,7 +387,6 @@ export function buildTrafficReportData(
   dateRange?: { startStr: string; endStr: string },
 ): TrafficReportData {
   const reportCampaigns = campaigns;
-
   let totalSpend = 0, totalImpressions = 0, totalReach = 0, totalClicks = 0, totalMessages = 0;
 
   if (dateRange) {
@@ -440,13 +409,9 @@ export function buildTrafficReportData(
     totalMessages = reportCampaigns.reduce((s, c) => s + (c.messages ?? 0), 0);
   }
 
-  // Champion adset: the adset with the lowest cost-per-message across all campaigns
   const adsetCandidates = reportCampaigns
     .filter((c) => (c.cheapestAdSetCostPerMessage ?? 0) > 0)
-    .map((c) => ({
-      cpa: c.cheapestAdSetCostPerMessage!,
-      name: c.cheapestAdSetName ?? "",
-    }));
+    .map((c) => ({ cpa: c.cheapestAdSetCostPerMessage!, name: c.cheapestAdSetName ?? "" }));
   const bestAdset = adsetCandidates.length > 0
     ? adsetCandidates.reduce((min, x) => x.cpa < min.cpa ? x : min)
     : null;
