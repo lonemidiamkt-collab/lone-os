@@ -2,9 +2,10 @@
   "name": "lone-os",
   "version": "0.1.0",
   "private": true,
+  "engines": { "node": "20.x" },
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node scripts/build-contracts.mjs",
+    "prebuild": "rm -f tsconfig.tsbuildinfo && node scripts/build-contracts.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

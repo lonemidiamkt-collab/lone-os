@@ -1,3 +1,5 @@
 {
-  "buildCommand": "rm -f tsconfig.tsbuildinfo && next build"
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "nodeVersion": "20.x"
 }
