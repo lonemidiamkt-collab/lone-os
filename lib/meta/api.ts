@@ -127,7 +127,6 @@ export async function getCampaignInsights(
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since: sinceStr, until: untilStr }),
     time_increment: "1",
-    use_account_attribution_setting: "true",
     limit: "100",
   });
 
@@ -158,7 +157,6 @@ export async function getAccountInsights(
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since: sinceStr, until: untilStr }),
     time_increment: "1",
-    use_account_attribution_setting: "true",
     limit: "100",
   });
 

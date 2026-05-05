@@ -421,7 +421,6 @@ export async function fetchCampaignInsights(
           fields: "date_start,date_stop,spend,impressions,reach,clicks,inline_link_clicks,actions",
           time_range: timeRange,
           time_increment: "1",
-          use_account_attribution_setting: "true",
           limit: "100",
         });
 
@@ -429,7 +428,6 @@ export async function fetchCampaignInsights(
           access_token: token,
           fields: "spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions",
           time_range: timeRange,
-          use_account_attribution_setting: "true",
           limit: "1",
         });
 
@@ -439,7 +437,6 @@ export async function fetchCampaignInsights(
           fields: "adset_id,adset_name,spend,actions",
           time_range: timeRange,
           level: "adset",
-          use_account_attribution_setting: "true",
           limit: "50",
         });
 
