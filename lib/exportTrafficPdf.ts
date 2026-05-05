@@ -3,6 +3,7 @@ import type { AdCampaign } from "@/lib/types";
 export interface TrafficReportData {
   clientName: string;
   period: string;
+  periodDays?: number;
   reach: number;
   impressions: number;
   clicks: number;
@@ -48,10 +49,11 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 
 export function buildTrafficReportHtml(data: TrafficReportData): string {
   const logoUrl = `${window.location.origin}/logo.png`;
+  const isCompact = (data.periodDays ?? 30) <= 7;
 
   const hasBestAdset = !!(data.bestAdsetCpa && data.bestAdsetCpa > 0);
-  const hasVideo = !!(data.videoViews25 && data.videoViews25 > 0);
-  const hasDemographics = !!(data.demographics && data.demographics.ageRanges.length > 0);
+  const hasVideo = !isCompact && !!(data.videoViews25 && data.videoViews25 > 0);
+  const hasDemographics = !isCompact && !!(data.demographics && data.demographics.ageRanges.length > 0);
 
   // ── KPI rows (numbered, like "cenas") ───────────────────────────────────
   const kpiItems: { label: string; value: string; sub?: string; champion?: boolean }[] = [
@@ -86,7 +88,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
 
   // ── Campaign rows ────────────────────────────────────────────────────────
   const activeCampaigns = data.campaigns
-    .filter((c) => c.status === "active" || c.spend > 0)
+    .filter((c) => c.status === "active")
     .sort((a, b) => (b.messages ?? 0) - (a.messages ?? 0));
 
   const isCampaignChampion = (c: typeof activeCampaigns[number]) =>
@@ -242,7 +244,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
 
   <!-- ══ TITLE BLOCK ═══════════════════════════════════════════════════════ -->
   <section style="margin-bottom:28px;">
-    <div class="sec-label">Relatório de Performance</div>
+    <div class="sec-label">${isCompact ? "Resultado Rápido — 7 dias" : "Relatório de Performance"}</div>
     <div style="font-size:28px;font-weight:900;letter-spacing:-.02em;margin-bottom:6px;">
       <span style="color:#ffffff;">${data.clientName}</span>
     </div>
@@ -251,8 +253,9 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
       <span>·</span>
       <span>Meta Ads</span>
       <span>·</span>
-      <span>${activeCampaigns.length} campanha${activeCampaigns.length !== 1 ? "s" : ""}</span>
+      <span>${activeCampaigns.length} campanha${activeCampaigns.length !== 1 ? "s" : ""} ativa${activeCampaigns.length !== 1 ? "s" : ""}</span>
       ${hasBestAdset ? `<span>·</span><span style="color:#3b6ff5;font-weight:600;">Custo Campeão ${fmt(data.bestAdsetCpa)}</span>` : ""}
+      ${isCompact ? `<span>·</span><span style="color:#52525b;font-style:italic;">Versão compacta</span>` : ""}
     </div>
     <div style="height:2px;background:#0d4af5;border-radius:1px;"></div>
   </section>
@@ -285,6 +288,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
   ${demoHtml}
   ${obsHtml}
 
+  ${!isCompact ? `
   <!-- ══ GLOSSÁRIO ═════════════════════════════════════════════════════ -->
   <section style="margin-bottom:28px;">
     <div class="sec-label">Tira Dúvidas</div>
@@ -308,6 +312,7 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
         </div>`).join("")}
     </div>
   </section>
+  ` : ""}
 
   <!-- ══ DISCLAIMER ════════════════════════════════════════════════════ -->
   <section style="margin-bottom:28px;">
@@ -385,6 +390,7 @@ export function buildTrafficReportData(
   observations?: string,
   demographics?: TrafficReportData["demographics"],
   dateRange?: { startStr: string; endStr: string },
+  periodDays?: number,
 ): TrafficReportData {
   const reportCampaigns = campaigns;
   let totalSpend = 0, totalImpressions = 0, totalReach = 0, totalClicks = 0, totalMessages = 0;
@@ -419,6 +425,7 @@ export function buildTrafficReportData(
   return {
     clientName,
     period: periodLabel,
+    periodDays,
     reach: totalReach,
     impressions: totalImpressions,
     clicks: totalClicks,

@@ -2334,6 +2334,7 @@ function AdAnalyticsTab({
           undefined,
           mockDemographics,
           !isUsingRealData ? { startStr: rangeStartStr, endStr: rangeEndStr } : undefined,
+          dateRange,
         );
 
         reports.push({ clientName: client.name, data: reportData });
@@ -2388,6 +2389,7 @@ function AdAnalyticsTab({
       undefined,
       mockDemographics,
       !isUsingRealData ? { startStr: rangeStartStr, endStr: rangeEndStr } : undefined,
+      dateRange,
     );
 
     exportTrafficReportPdf(reportData);
