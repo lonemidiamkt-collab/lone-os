@@ -278,8 +278,10 @@ export function snakeToContentCard(row: Record<string, unknown>): ContentCard {
   };
 }
 
-export async function fetchContentCards(): Promise<ContentCard[]> {
-  const { data, error } = await supabase.from("content_cards").select("*").order("created_at", { ascending: false });
+export async function fetchContentCards(filter?: { socialMedia?: string }): Promise<ContentCard[]> {
+  let query = supabase.from("content_cards").select("*").order("created_at", { ascending: false });
+  if (filter?.socialMedia) query = query.eq("social_media", filter.socialMedia);
+  const { data, error } = await query;
   if (error) { console.error("[DB] fetchContentCards:", error); return []; }
   // Also load comments for each card
   const cards = (data ?? []).map(snakeToContentCard);
@@ -379,8 +381,10 @@ export function snakeToDesignRequest(row: Record<string, unknown>): DesignReques
   };
 }
 
-export async function fetchDesignRequests(): Promise<DesignRequest[]> {
-  const { data, error } = await supabase.from("design_requests").select("*").order("created_at", { ascending: false });
+export async function fetchDesignRequests(filter?: { assignedSocialClients?: string[] }): Promise<DesignRequest[]> {
+  let query = supabase.from("design_requests").select("*").order("created_at", { ascending: false });
+  if (filter?.assignedSocialClients?.length) query = query.in("client_id", filter.assignedSocialClients);
+  const { data, error } = await query;
   if (error) { console.error("[DB] fetchDesignRequests:", error); return []; }
   return (data ?? []).map(snakeToDesignRequest);
 }

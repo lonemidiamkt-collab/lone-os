@@ -280,7 +280,14 @@ interface AppStateContextValue {
 const AppStateContext = createContext<AppStateContextValue>({} as AppStateContextValue);
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useRole();
+  const { isAuthenticated, role, currentUser } = useRole();
+
+  // Refs so Realtime callbacks always see latest user identity without needing
+  // to re-subscribe when the user profile changes (avoids stale closure).
+  const roleRef = useRef(role);
+  const currentUserRef = useRef(currentUser);
+  useEffect(() => { roleRef.current = role; }, [role]);
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
   // Load persisted state once at init
   const cached = useRef(loadFromStorage());
@@ -607,7 +614,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         ] = await Promise.all([
           db.fetchClients(),
           db.fetchTasks(),
-          db.fetchContentCards(),
+          db.fetchContentCards(role === "social" ? { socialMedia: currentUser } : undefined),
           db.fetchDesignRequests(),
           db.fetchNotices(),
           db.fetchTimeline(),
@@ -641,7 +648,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           // Re-fetch from DB after migration to get real UUIDs
           const freshClients = await db.fetchClients();
           const freshTasks = await db.fetchTasks();
-          const freshCards = await db.fetchContentCards();
+          const freshCards = await db.fetchContentCards(role === "social" ? { socialMedia: currentUser } : undefined);
           const freshDesignReqs = await db.fetchDesignRequests();
           const freshNotifications = await db.fetchNotifications();
           const freshNotices = await db.fetchNotices();
@@ -712,6 +719,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           if (!payload.new) return;
           try {
             const card = snakeToContentCard(payload.new as Record<string, unknown>);
+            // Social media users only receive cards assigned to them.
+            if (roleRef.current === "social" && card.socialMedia !== currentUserRef.current) return;
             setContentCards((prev) => prev.some((c) => c.id === card.id) ? prev : [...prev, card]);
           } catch (err) { console.error("[realtime] insert mapping:", err); }
         })
@@ -719,6 +728,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           if (!payload.new) return;
           try {
             const card = snakeToContentCard(payload.new as Record<string, unknown>);
+            if (roleRef.current === "social") {
+              if (card.socialMedia !== currentUserRef.current) {
+                // Card was reassigned away from this user — remove it from local state.
+                setContentCards((prev) => prev.filter((c) => c.id !== card.id));
+                return;
+              }
+            }
             setContentCards((prev) => prev.map((c) => c.id === card.id ? { ...c, ...card } : c));
           } catch (err) { console.error("[realtime] update mapping:", err); }
         })
@@ -747,6 +763,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           if (!payload.new) return;
           try {
             const req = snakeToDesignRequest(payload.new as Record<string, unknown>);
+            if (roleRef.current === "social") {
+              // Only receive design_requests for clients in the social media user's portfolio.
+              setClients((cls) => {
+                const myClientIds = new Set(cls.filter((c) => c.assignedSocial === currentUserRef.current).map((c) => c.id));
+                if (!myClientIds.has(req.clientId)) return cls; // discard, no state change
+                setDesignRequests((prev) => prev.some((r) => r.id === req.id) ? prev : [req, ...prev]);
+                return cls;
+              });
+              return;
+            }
             setDesignRequests((prev) => prev.some((r) => r.id === req.id) ? prev : [req, ...prev]);
           } catch (err) { console.error("[realtime] design_requests insert:", err); }
         })
@@ -754,6 +780,18 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           if (!payload.new) return;
           try {
             const req = snakeToDesignRequest(payload.new as Record<string, unknown>);
+            if (roleRef.current === "social") {
+              setClients((cls) => {
+                const myClientIds = new Set(cls.filter((c) => c.assignedSocial === currentUserRef.current).map((c) => c.id));
+                if (!myClientIds.has(req.clientId)) {
+                  setDesignRequests((prev) => prev.filter((r) => r.id !== req.id));
+                  return cls;
+                }
+                setDesignRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, ...req } : r));
+                return cls;
+              });
+              return;
+            }
             setDesignRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, ...req } : r));
           } catch (err) { console.error("[realtime] design_requests update:", err); }
         })
