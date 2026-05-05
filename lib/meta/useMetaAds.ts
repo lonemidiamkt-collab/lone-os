@@ -561,6 +561,7 @@ export async function fetchCampaignInsights(
           // Always recompute from raw spend/messages of this same request — never use
           // pre-rounded API values or adset-level figures that drift from the Meta dashboard.
           costPerMessage: totalMessages > 0 ? totalSpend / totalMessages : 0,
+          cheapestAdSetCostPerMessage,
           cheapestAdSetName,
           leads: totalLeads,
           costPerLead: totalLeads > 0 ? totalSpend / totalLeads : 0,

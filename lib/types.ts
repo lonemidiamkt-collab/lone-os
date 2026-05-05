@@ -509,6 +509,7 @@ export interface AdCampaign {
   costPerConversion: number;
   messages?: number;
   costPerMessage?: number;
+  cheapestAdSetCostPerMessage?: number;
   cheapestAdSetName?: string;
   leads?: number;
   costPerLead?: number;
