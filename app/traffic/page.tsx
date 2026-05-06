@@ -2288,42 +2288,52 @@ function AdAnalyticsTab({
       if (meta.token && linkedClients.length > 0) {
         const useCache = portfolioCampaigns.size > 0 && !customDateFrom && !customDateTo;
         if (!useCache) {
-          await Promise.all(linkedClients.map(async (client) => {
-            if (!client.metaAdAccountId || !meta.token) return;
-            try {
-              const camps = await fetchCampaignInsights(
-                meta.token,
-                client.metaAdAccountId,
-                dateRange,
-                customDateFrom || undefined,
-                customDateTo || undefined,
-              );
-              const mapped: AdCampaign[] = camps.filter((c: { error?: unknown }) => !c.error).map((c: Record<string, unknown>) => ({
-                id: c.id as string, accountId: client.metaAdAccountId!, clientId: client.id,
-                clientName: client.name, name: c.name as string, objective: mapMetaObjective(c.objective as string),
-                status: (c.status === "active" || c.status === "paused" || c.status === "completed") ? c.status as AdCampaign["status"] : "active",
-                dailyBudget: (c.dailyBudget as number) ?? 0, totalBudget: (c.totalBudget as number) ?? 0,
-                startDate: (c.startDate as string) ?? "", endDate: c.endDate as string | undefined,
-                spend: (c.spend as number) ?? 0, impressions: (c.impressions as number) ?? 0, reach: (c.reach as number) ?? 0,
-                clicks: (c.clicks as number) ?? 0, ctr: (c.ctr as number) ?? 0, cpc: (c.cpc as number) ?? 0, cpm: (c.cpm as number) ?? 0,
-                conversions: (c.conversions as number) ?? 0, costPerConversion: (c.costPerConversion as number) ?? 0,
-                messages: (c.messages as number) ?? 0, costPerMessage: (c.costPerMessage as number) ?? 0,
-                cheapestAdSetCostPerMessage: (c.cheapestAdSetCostPerMessage as number) ?? 0,
-                cheapestAdSetName: (c.cheapestAdSetName as string) ?? "",
-                leads: (c.leads as number) ?? 0, costPerLead: (c.costPerLead as number) ?? 0,
-                results: (c.results as number) ?? 0, costPerResult: (c.costPerResult as number) ?? 0,
-                frequency: (c.frequency as number) ?? 0, dailyMetrics: (c.dailyMetrics as AdCampaign["dailyMetrics"]) ?? [],
-                hasData: (c.hasData as boolean) ?? false, lastSyncAt: c.lastSyncAt as string | undefined,
-              }));
-              console.log(`[ZIP] ${client.name}: ${mapped.length} campanhas carregadas`);
-              dataByClient.set(client.id, mapped);
-            } catch (err) {
-              if (err instanceof TokenExpiredError) { meta.handleTokenError(); return; }
-              const msg = err instanceof Error ? err.message : String(err);
-              fetchErrors.push(`${client.name}: ${msg}`);
-              console.error(`[ZIP] Erro ao buscar ${client.name}:`, err);
+          // Sequencial com retry — evita burst de rate-limit do Meta (3 chamadas por campanha × N clientes)
+          const mapCamps = (client: typeof linkedClients[0], camps: Record<string, unknown>[]): AdCampaign[] =>
+            camps.filter((c: { error?: unknown }) => !c.error).map((c: Record<string, unknown>) => ({
+              id: c.id as string, accountId: client.metaAdAccountId!, clientId: client.id,
+              clientName: client.name, name: c.name as string, objective: mapMetaObjective(c.objective as string),
+              status: (c.status === "active" || c.status === "paused" || c.status === "completed") ? c.status as AdCampaign["status"] : "active",
+              dailyBudget: (c.dailyBudget as number) ?? 0, totalBudget: (c.totalBudget as number) ?? 0,
+              startDate: (c.startDate as string) ?? "", endDate: c.endDate as string | undefined,
+              spend: (c.spend as number) ?? 0, impressions: (c.impressions as number) ?? 0, reach: (c.reach as number) ?? 0,
+              clicks: (c.clicks as number) ?? 0, ctr: (c.ctr as number) ?? 0, cpc: (c.cpc as number) ?? 0, cpm: (c.cpm as number) ?? 0,
+              conversions: (c.conversions as number) ?? 0, costPerConversion: (c.costPerConversion as number) ?? 0,
+              messages: (c.messages as number) ?? 0, costPerMessage: (c.costPerMessage as number) ?? 0,
+              cheapestAdSetCostPerMessage: (c.cheapestAdSetCostPerMessage as number) ?? 0,
+              cheapestAdSetName: (c.cheapestAdSetName as string) ?? "",
+              leads: (c.leads as number) ?? 0, costPerLead: (c.costPerLead as number) ?? 0,
+              results: (c.results as number) ?? 0, costPerResult: (c.costPerResult as number) ?? 0,
+              frequency: (c.frequency as number) ?? 0, dailyMetrics: (c.dailyMetrics as AdCampaign["dailyMetrics"]) ?? [],
+              hasData: (c.hasData as boolean) ?? false, lastSyncAt: c.lastSyncAt as string | undefined,
+            }));
+
+          for (const client of linkedClients) {
+            if (!client.metaAdAccountId || !meta.token) continue;
+            let attempts = 0;
+            let success = false;
+            while (attempts < 2 && !success) {
+              try {
+                if (attempts > 0) await new Promise(r => setTimeout(r, 3000)); // backoff no retry
+                const camps = await fetchCampaignInsights(
+                  meta.token, client.metaAdAccountId, dateRange,
+                  customDateFrom || undefined, customDateTo || undefined,
+                );
+                const mapped = mapCamps(client, camps as Record<string, unknown>[]);
+                console.log(`[ZIP] ${client.name}: ${mapped.length} campanhas (tentativa ${attempts + 1})`);
+                dataByClient.set(client.id, mapped);
+                success = true;
+              } catch (err) {
+                if (err instanceof TokenExpiredError) { meta.handleTokenError(); break; }
+                attempts++;
+                if (attempts >= 2) {
+                  const msg = err instanceof Error ? err.message : String(err);
+                  fetchErrors.push(`${client.name}: ${msg}`);
+                  console.error(`[ZIP] ${client.name} falhou após ${attempts} tentativas:`, err);
+                }
+              }
             }
-          }));
+          }
           if (!customDateFrom && !customDateTo) setPortfolioCampaigns(dataByClient);
         } else {
           dataByClient = portfolioCampaigns;
