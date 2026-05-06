@@ -66,6 +66,7 @@ export default function ClientsPage() {
   const isAdmin = role === "admin" || role === "manager";
   const [drafts, setDrafts] = useState<Client[]>([]);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [draftActionError, setDraftActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -74,24 +75,36 @@ export default function ClientsPage() {
 
   const handleApprove = async (clientId: string) => {
     setApprovingId(clientId);
-    await fetch("/api/onboarding", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "approve", clientId }),
-    });
-    setDrafts((prev) => prev.filter((d) => d.id !== clientId));
-    // Refresh the page to show the newly approved client
-    window.location.reload();
+    setDraftActionError(null);
+    try {
+      const res = await fetch("/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "approve", clientId }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setDrafts((prev) => prev.filter((d) => d.id !== clientId));
+    } catch (err) {
+      setDraftActionError(`Erro ao aprovar: ${err instanceof Error ? err.message : "tente novamente"}`);
+    } finally {
+      setApprovingId(null);
+    }
   };
 
   const handleReject = async (clientId: string) => {
     if (!confirm("Tem certeza que deseja rejeitar este cadastro? Os dados serao removidos.")) return;
-    await fetch("/api/onboarding", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "reject", clientId }),
-    });
-    setDrafts((prev) => prev.filter((d) => d.id !== clientId));
+    setDraftActionError(null);
+    try {
+      const res = await fetch("/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reject", clientId }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setDrafts((prev) => prev.filter((d) => d.id !== clientId));
+    } catch (err) {
+      setDraftActionError(`Erro ao rejeitar: ${err instanceof Error ? err.message : "tente novamente"}`);
+    }
   };
 
   // Role-based: which field maps the current user to a client
@@ -176,6 +189,9 @@ export default function ClientsPage() {
                     Revisar todos <ExternalLink size={10} />
                   </Link>
                 </div>
+                {draftActionError && (
+                  <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-3 py-2">{draftActionError}</p>
+                )}
                 <div className="space-y-2">
                   {drafts.map((draft) => (
                     <div key={draft.id} className="flex items-center gap-3 bg-[#111113] border border-[#1e1e2a] rounded-lg p-3">
@@ -288,9 +304,9 @@ export default function ClientsPage() {
                     } ${hasAdError ? "ring-1 ring-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.15)]" : ""}`}
                     onClick={() => {
                       if (client.status === "onboarding") {
-                        window.location.href = `/clients/${client.id}?tab=onboarding`;
+                        router.push(`/clients/${client.id}?tab=onboarding`);
                       } else {
-                        window.location.href = `/clients/${client.id}`;
+                        router.push(`/clients/${client.id}`);
                       }
                     }}
                   >

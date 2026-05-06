@@ -11,7 +11,7 @@ import {
   KeyRound, Mail, UserCog, AlertCircle, ChevronRight, ZapOff,
   Calendar as CalendarIcon, ShieldCheck,
 } from "lucide-react";
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { USER_PROFILES } from "@/lib/context/RoleContext";
 import MedievalAvatar, { AVATAR_OPTIONS, getUserAvatar, setUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
 import type { Role } from "@/lib/types";
@@ -19,6 +19,14 @@ import { mockAdCampaigns } from "@/lib/mockData";
 
 const CORRECT_PIN = "8822";
 const PIN_SESSION_KEY = "lone-os-ceo-unlocked";
+const CEO_SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+function isCeoSessionValid(): boolean {
+  if (typeof window === "undefined") return false;
+  const ts = sessionStorage.getItem(PIN_SESSION_KEY);
+  if (!ts) return false;
+  return Date.now() - parseInt(ts, 10) < CEO_SESSION_TIMEOUT_MS;
+}
 
 export default function CEOPage() {
   const {
@@ -26,19 +34,27 @@ export default function CEOPage() {
   } = useAppState();
 
   const [pin, setPin] = useState("");
-  const [unlocked, setUnlocked] = useState(() => {
-    if (typeof window !== "undefined") return sessionStorage.getItem(PIN_SESSION_KEY) === "true";
-    return false;
-  });
+  const [unlocked, setUnlocked] = useState(() => isCeoSessionValid());
   const [pinError, setPinError] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [activeSection, setActiveSection] = useState<"overview" | "team" | "reports" | "ltv" | "manage" | "timesheet" | "workload" | "churn">("overview");
+
+  useEffect(() => {
+    if (!unlocked) return;
+    const interval = setInterval(() => {
+      if (!isCeoSessionValid()) {
+        setUnlocked(false);
+        sessionStorage.removeItem(PIN_SESSION_KEY);
+      }
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [unlocked]);
 
   const handleUnlock = () => {
     if (pin === CORRECT_PIN) {
       setUnlocked(true);
       setPinError(false);
-      try { sessionStorage.setItem(PIN_SESSION_KEY, "true"); } catch {}
+      try { sessionStorage.setItem(PIN_SESSION_KEY, String(Date.now())); } catch {}
     } else {
       setPinError(true);
       setPin("");
@@ -252,7 +268,7 @@ export default function CEOPage() {
     if (fullPin.length === 4 && newDigits.every((d) => d)) {
       if (fullPin === CORRECT_PIN) {
         setUnlocked(true);
-        try { sessionStorage.setItem(PIN_SESSION_KEY, "true"); } catch {}
+        try { sessionStorage.setItem(PIN_SESSION_KEY, String(Date.now())); } catch {}
       } else {
         setPinError(true);
         setShake(true);

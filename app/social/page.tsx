@@ -747,6 +747,13 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
       dueTime,
       briefing: briefing.trim() || undefined,
     } as Omit<ContentCard, "id">);
+    setTitle("");
+    setClientId(defaultClient?.id ?? "");
+    setFormat("Post");
+    setPriority("medium");
+    setDueDate(defaultDate ?? "");
+    setDueTime("");
+    setBriefing("");
     onClose();
   };
 
@@ -1068,8 +1075,11 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
                   onChange={(e) => updateRow(row.id, "dueTime", e.target.value)}
                   className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-2 py-2 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
                 />
-                <button onClick={() => removeRow(row.id)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-all">
+                <button
+                  onClick={() => removeRow(row.id)}
+                  disabled={rows.length <= 1}
+                  title={rows.length <= 1 ? "Mínimo de 1 linha" : "Remover linha"}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:text-zinc-700 disabled:hover:bg-transparent">
                   <Trash2 size={12} />
                 </button>
               </div>
@@ -1142,6 +1152,10 @@ function QuickTaskBar({ clients }: QuickTaskBarProps) {
       dueTime,
     });
     setTitle("");
+    setClientId("");
+    setFormat("Post");
+    setPriority("medium");
+    setColumn("ideas");
     setDueDate("");
     setDueTime("");
     setSuccess(true);
@@ -1262,12 +1276,17 @@ function AddMemberModal({ onAdd, onClose }: { onAdd: (name: string, password: st
             />
           </div>
         </div>
+        {(!name.trim() || !password.trim()) && (
+          <p className="text-xs text-amber-400 mb-3">
+            {!name.trim() && !password.trim() ? "Preencha o nome e a senha." : !name.trim() ? "Nome obrigatório." : "Senha obrigatória."}
+          </p>
+        )}
         <div className="flex gap-2">
           <button onClick={onClose} className="btn-ghost text-xs flex-1">Cancelar</button>
           <button
             onClick={() => { if (name.trim() && password.trim()) { onAdd(name.trim(), password.trim()); onClose(); }}}
             disabled={!name.trim() || !password.trim()}
-            className="btn-primary text-xs flex-1 disabled:opacity-40"
+            className="btn-primary text-xs flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Adicionar
           </button>

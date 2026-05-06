@@ -26,6 +26,7 @@ import { mockAdAccounts, mockAdCampaigns } from "@/lib/mockData";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useMetaConnection, fetchAdAccounts, fetchCampaignInsights, TokenExpiredError } from "@/lib/meta/useMetaAds";
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { exportReportAsPdf } from "@/lib/exportPdf";
 import { exportTrafficReportPdf, exportClientReportPdf, buildTrafficReportData, exportAllTrafficReportsZip } from "@/lib/exportTrafficPdf";
 import { analyzeCampaigns, generateAnalysisSummary, generateAccountReport, generateDailyRoutineAlerts } from "@/lib/ai/campaignAnalyzer";
@@ -93,6 +94,7 @@ function mapMetaObjective(objective?: string): import("@/lib/types").AdObjective
 }
 
 export default function TrafficPage() {
+  const router = useRouter();
   const {
     clients, tasks, updateClientData, updateClientStatus, addTask, updateTask,
     trafficReports, trafficRoutineChecks, addTrafficReport, updateTrafficReport, addTrafficRoutineCheck,
@@ -283,7 +285,7 @@ export default function TrafficPage() {
                 }}
                 renderCard={(client) => (
                   <div
-                    onClick={() => window.location.href = `/clients/${client.id}`}
+                    onClick={() => router.push(`/clients/${client.id}`)}
                     className={`bg-card border rounded-lg p-3 transition-colors cursor-pointer ${
                     client.status === "at_risk"
                       ? "border-red-500/30 hover:border-red-500/50"
@@ -340,7 +342,7 @@ export default function TrafficPage() {
                 }}
                 renderCard={(task) => (
                   <div
-                    onClick={() => window.location.href = `/clients/${task.clientId}`}
+                    onClick={() => router.push(`/clients/${task.clientId}`)}
                     className={`bg-card border border-border rounded-lg p-3 hover:border-primary/30 transition-colors cursor-pointer ${task.status === "done" ? "opacity-60" : ""}`}>
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <button

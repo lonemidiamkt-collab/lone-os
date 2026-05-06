@@ -165,6 +165,7 @@ function UploadArtModal({
       setError(`Erro no upload: ${msg}`);
     } finally {
       setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -393,6 +394,13 @@ export default function DesignPage() {
   const [briefingUploadError, setBriefingUploadError] = useState<string | null>(null);
   const [briefingUploadOk, setBriefingUploadOk] = useState(false);
 
+  useEffect(() => {
+    setBriefingUploading(false);
+    setBriefingUploadError(null);
+    setBriefingUploadOk(false);
+    if (briefingUploadInputRef.current) briefingUploadInputRef.current.value = "";
+  }, [briefingReq?.id]);
+
   async function handleBriefingArtUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !briefingReq) return;
@@ -464,8 +472,13 @@ export default function DesignPage() {
   }
   const [nonDeliveryCard, setNonDeliveryCard] = useState<ContentCard | null>(null);
   const [nonDeliveryReason, setNonDeliveryReason] = useState("");
+  const [nonDeliveryCustomReason, setNonDeliveryCustomReason] = useState("");
   const [blockingCard, setBlockingCard] = useState<ContentCard | null>(null);
   const [blockReason, setBlockReason] = useState("");
+
+  useEffect(() => {
+    setNonDeliveryCustomReason("");
+  }, [nonDeliveryCard?.id]);
 
   // Self-initiated task + client drawer
   const [newTaskClient, setNewTaskClient] = useState<Client | null>(null);
@@ -1214,7 +1227,7 @@ export default function DesignPage() {
       )}
 
       {nonDeliveryCard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); setNonDeliveryCustomReason(""); }}>
           <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border">
               <h3 className="font-semibold text-foreground text-sm">Reportar Não Entrega</h3>
@@ -1246,27 +1259,30 @@ export default function DesignPage() {
               </div>
               {nonDeliveryReason === "Outro" && (
                 <input
-                  value={nonDeliveryReason === "Outro" ? "" : nonDeliveryReason}
-                  onChange={(e) => setNonDeliveryReason(e.target.value || "Outro")}
+                  value={nonDeliveryCustomReason}
+                  onChange={(e) => setNonDeliveryCustomReason(e.target.value)}
                   placeholder="Descreva o motivo..."
+                  autoFocus
                   className="w-full bg-muted rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary"
                 />
               )}
             </div>
             <div className="p-5 border-t border-border flex gap-2">
-              <button onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); }} className="btn-ghost flex-1 text-sm">Cancelar</button>
+              <button onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); setNonDeliveryCustomReason(""); }} className="btn-ghost flex-1 text-sm">Cancelar</button>
               <button
                 onClick={() => {
-                  if (!nonDeliveryReason.trim()) return;
+                  const finalReason = nonDeliveryReason === "Outro" ? nonDeliveryCustomReason.trim() : nonDeliveryReason.trim();
+                  if (!finalReason) return;
                   updateContentCard(nonDeliveryCard.id, {
-                    nonDeliveryReason: nonDeliveryReason.trim(),
+                    nonDeliveryReason: finalReason,
                     nonDeliveryReportedBy: currentUser,
                     nonDeliveryReportedAt: new Date().toISOString(),
                   });
                   setNonDeliveryCard(null);
                   setNonDeliveryReason("");
+                  setNonDeliveryCustomReason("");
                 }}
-                disabled={!nonDeliveryReason.trim()}
+                disabled={!nonDeliveryReason || (nonDeliveryReason === "Outro" && !nonDeliveryCustomReason.trim())}
                 className="btn-primary flex-1 text-sm disabled:opacity-50"
               >
                 Reportar
