@@ -2338,23 +2338,30 @@ function AdAnalyticsTab({
 
       const reports: { clientName: string; data: import("@/lib/exportTrafficPdf").TrafficReportData }[] = [];
 
+      console.log(`[ZIP] dataByClient: ${dataByClient.size} entradas, clients: ${clients.length}`);
+
       for (const [clientId, clientCampaigns] of dataByClient) {
         const client = clients.find((c) => c.id === clientId);
         if (!client) { console.warn(`[ZIP] clientId ${clientId} não encontrado em clients`); continue; }
 
-        const filtered = clientCampaigns;
-        if (filtered.length === 0) { console.warn(`[ZIP] ${client.name}: 0 campanhas, pulando`); continue; }
+        if (clientCampaigns.length === 0) { console.warn(`[ZIP] ${client.name}: 0 campanhas, pulando`); continue; }
 
-        const reportData = buildTrafficReportData(
-          client.name,
-          filtered,
-          periodLabel,
-          undefined,
-          mockDemographics,
-          { startStr: rangeStartStr, endStr: rangeEndStr },
-          dateRange,
-        );
-        reports.push({ clientName: client.name, data: reportData });
+        try {
+          const reportData = buildTrafficReportData(
+            client.name,
+            clientCampaigns,
+            periodLabel,
+            undefined,
+            mockDemographics,
+            { startStr: rangeStartStr, endStr: rangeEndStr },
+            dateRange,
+          );
+          reports.push({ clientName: client.name, data: reportData });
+          console.log(`[ZIP] ${client.name}: report gerado (spend=${reportData.spend.toFixed(2)}, msgs=${reportData.messages})`);
+        } catch (err) {
+          console.error(`[ZIP] Erro ao gerar report de ${client.name}:`, err);
+          fetchErrors.push(`${client.name}: erro ao gerar report`);
+        }
       }
 
       console.log(`[ZIP] ${reports.length} relatórios prontos para exportar`);

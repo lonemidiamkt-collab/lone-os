@@ -629,14 +629,23 @@ export function exportClientReportPdf(data: TrafficReportData, mode: "preview" |
 export async function exportAllTrafficReportsZip(
   reports: { clientName: string; data: TrafficReportData }[]
 ) {
+  console.log("[ZIP] Carregando JSZip...");
   const JSZip = (await import("jszip")).default;
+  console.log("[ZIP] JSZip carregado. Gerando HTMLs...");
   const zip = new JSZip();
   for (const report of reports) {
-    const html = buildClientReportHtml(report.data);
-    const fileName = `relatorio-${report.clientName.replace(/\s+/g, "-").toLowerCase()}.html`;
-    zip.file(fileName, html);
+    try {
+      const html = buildClientReportHtml(report.data);
+      const fileName = `relatorio-${report.clientName.replace(/\s+/g, "-").toLowerCase()}.html`;
+      zip.file(fileName, html);
+      console.log(`[ZIP] HTML ok: ${fileName}`);
+    } catch (err) {
+      console.error(`[ZIP] Erro ao gerar HTML de ${report.clientName}:`, err);
+    }
   }
+  console.log("[ZIP] Gerando blob...");
   const blob = await zip.generateAsync({ type: "blob" });
+  console.log(`[ZIP] Blob gerado: ${(blob.size / 1024).toFixed(0)}KB. Iniciando download...`);
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -646,6 +655,7 @@ export async function exportAllTrafficReportsZip(
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  console.log("[ZIP] Download iniciado.");
 }
 
 export function buildTrafficReportData(
