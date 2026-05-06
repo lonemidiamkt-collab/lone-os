@@ -579,3 +579,63 @@ export async function fetchCampaignInsights(
     })
   );
 }
+
+export async function fetchAccountDemographics(
+  token: string,
+  accountId: string,
+  days: number = 30,
+  dateFrom?: string,
+  dateTo?: string,
+): Promise<{ ageRanges: { range: string; percentage: number }[]; genderSplit: { women: number; men: number } } | null> {
+  try {
+    const PRESET_MAP: Record<number, string> = { 7: "last_7d", 14: "last_14d", 30: "last_30d", 90: "last_90d" };
+    const usePreset = !dateFrom && !dateTo && days in PRESET_MAP;
+    const params = new URLSearchParams({
+      access_token: token,
+      fields: "impressions,reach",
+      breakdowns: "age,gender",
+      level: "account",
+      ...(usePreset
+        ? { date_preset: PRESET_MAP[days] }
+        : { time_range: JSON.stringify({ since: dateFrom!, until: dateTo! }) }),
+      limit: "200",
+    });
+    const res = await fetch(`https://graph.facebook.com/v21.0/${accountId}/insights?${params}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const rows: { age?: string; gender?: string; impressions?: string; reach?: string }[] = json.data ?? [];
+    if (rows.length === 0) return null;
+
+    const ageMap: Record<string, number> = {};
+    const genderMap: Record<string, number> = { male: 0, female: 0, unknown: 0 };
+    for (const row of rows) {
+      const imp = safeInt(row.impressions);
+      const age = row.age ?? "unknown";
+      const gender = (row.gender ?? "unknown").toLowerCase();
+      ageMap[age] = (ageMap[age] ?? 0) + imp;
+      if (gender === "male" || gender === "female") genderMap[gender] += imp;
+      else genderMap.unknown += imp;
+    }
+
+    const totalImpressions = Object.values(ageMap).reduce((s, v) => s + v, 0);
+    if (totalImpressions === 0) return null;
+
+    const AGE_ORDER = ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
+    const ageRanges = AGE_ORDER
+      .filter((r) => r in ageMap)
+      .map((r) => ({ range: r, percentage: parseFloat(((ageMap[r] / totalImpressions) * 100).toFixed(1)) }));
+    for (const [r, v] of Object.entries(ageMap)) {
+      if (!AGE_ORDER.includes(r) && r !== "unknown") {
+        ageRanges.push({ range: r, percentage: parseFloat(((v / totalImpressions) * 100).toFixed(1)) });
+      }
+    }
+    if (ageRanges.length === 0) return null;
+
+    const totalGender = genderMap.male + genderMap.female;
+    const men = totalGender > 0 ? parseFloat(((genderMap.male / totalGender) * 100).toFixed(1)) : 50;
+    const women = totalGender > 0 ? parseFloat(((genderMap.female / totalGender) * 100).toFixed(1)) : 50;
+    return { ageRanges, genderSplit: { women, men } };
+  } catch {
+    return null;
+  }
+}

@@ -24,7 +24,7 @@ import { getAttentionColor, getAttentionLabel, getPriorityColor, getPriorityLabe
 import type { Client, Task, TrafficMonthlyReport, AdCampaign, AdAccount, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
 import { mockAdAccounts, mockAdCampaigns } from "@/lib/mockData";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
-import { useMetaConnection, fetchAdAccounts, fetchCampaignInsights, TokenExpiredError } from "@/lib/meta/useMetaAds";
+import { useMetaConnection, fetchAdAccounts, fetchCampaignInsights, fetchAccountDemographics, TokenExpiredError } from "@/lib/meta/useMetaAds";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { exportReportAsPdf } from "@/lib/exportPdf";
@@ -2274,18 +2274,7 @@ function AdAnalyticsTab({
         ? `${new Date(customDateFrom + "T12:00:00").toLocaleDateString("pt-BR")} – ${new Date(customDateTo + "T12:00:00").toLocaleDateString("pt-BR")}`
         : (() => { const now = new Date(); const since = new Date(now); since.setDate(since.getDate() - dateRange); return `${since.toLocaleDateString("pt-BR")} – ${now.toLocaleDateString("pt-BR")}`; })();
 
-      const mockDemographics = {
-        ageRanges: [
-          { range: "18-24", percentage: 12.5 },
-          { range: "25-34", percentage: 35.2 },
-          { range: "35-44", percentage: 28.1 },
-          { range: "45-54", percentage: 14.8 },
-          { range: "55-64", percentage: 6.9 },
-          { range: "65+", percentage: 2.5 },
-        ],
-        genderSplit: { women: 62.3, men: 37.7 },
-      };
-
+      const demoByClient = new Map<string, import("@/lib/exportTrafficPdf").TrafficReportData["demographics"]>();
       let dataByClient = new Map<string, AdCampaign[]>();
       const fetchErrors: string[] = [];
 
@@ -2325,6 +2314,11 @@ function AdAnalyticsTab({
                 );
                 const mapped = mapCamps(client, camps as Record<string, unknown>[]);
                 dataByClient.set(client.id, mapped);
+                const demos = await fetchAccountDemographics(
+                  meta.token!, client.metaAdAccountId!, dateRange,
+                  customDateFrom || undefined, customDateTo || undefined,
+                );
+                if (demos) demoByClient.set(client.id, demos);
                 success = true;
               } catch (err) {
                 if (err instanceof TokenExpiredError) { meta.handleTokenError(); break; }
@@ -2362,7 +2356,7 @@ function AdAnalyticsTab({
             clientCampaigns,
             periodLabel,
             undefined,
-            mockDemographics,
+            demoByClient.get(client.id),
             { startStr: rangeStartStr, endStr: rangeEndStr },
             dateRange,
           );
@@ -2414,12 +2408,18 @@ function AdAnalyticsTab({
     if (exportingPdf) return;
     setExportingPdf(true);
     try {
+      const accountId = selectedClient !== "all"
+        ? (clients.find((c) => c.id === selectedClient)?.metaAdAccountId ?? selectedMetaAccount)
+        : selectedMetaAccount;
+      const demographics = meta.token && accountId
+        ? await fetchAccountDemographics(meta.token, accountId, dateRange, customDateFrom || undefined, customDateTo || undefined) ?? undefined
+        : undefined;
       const reportData = buildTrafficReportData(
         buildClientName(),
         filteredCampaigns,
         buildPeriodLabel(),
         undefined,
-        { ageRanges: [{ range: "18-24", percentage: 12.5 }, { range: "25-34", percentage: 35.2 }, { range: "35-44", percentage: 28.1 }, { range: "45-54", percentage: 14.8 }, { range: "55-64", percentage: 6.9 }, { range: "65+", percentage: 2.5 }], genderSplit: { women: 62.3, men: 37.7 } },
+        demographics,
         !isUsingRealData ? { startStr: rangeStartStr, endStr: rangeEndStr } : undefined,
         dateRange,
       );
@@ -2433,12 +2433,18 @@ function AdAnalyticsTab({
     if (exportingPdf) return;
     setExportingPdf(true);
     try {
+      const accountId = selectedClient !== "all"
+        ? (clients.find((c) => c.id === selectedClient)?.metaAdAccountId ?? selectedMetaAccount)
+        : selectedMetaAccount;
+      const demographics = meta.token && accountId
+        ? await fetchAccountDemographics(meta.token, accountId, dateRange, customDateFrom || undefined, customDateTo || undefined) ?? undefined
+        : undefined;
       const reportData = buildTrafficReportData(
         buildClientName(),
         filteredCampaigns,
         buildPeriodLabel(),
         undefined,
-        undefined,
+        demographics,
         !isUsingRealData ? { startStr: rangeStartStr, endStr: rangeEndStr } : undefined,
         dateRange,
       );
