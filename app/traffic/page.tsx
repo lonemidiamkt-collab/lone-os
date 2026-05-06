@@ -27,7 +27,7 @@ import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useMetaConnection, fetchAdAccounts, fetchCampaignInsights, TokenExpiredError } from "@/lib/meta/useMetaAds";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { exportReportAsPdf } from "@/lib/exportPdf";
-import { exportTrafficReportPdf, buildTrafficReportData, exportAllTrafficReportsZip } from "@/lib/exportTrafficPdf";
+import { exportTrafficReportPdf, exportClientReportPdf, buildTrafficReportData, exportAllTrafficReportsZip } from "@/lib/exportTrafficPdf";
 import { analyzeCampaigns, generateAnalysisSummary, generateAccountReport, generateDailyRoutineAlerts } from "@/lib/ai/campaignAnalyzer";
 import type { CampaignInsight, PortfolioSummary, AccountAIReport, DailyRoutineAlert } from "@/lib/ai/campaignAnalyzer";
 
@@ -1778,7 +1778,7 @@ const ALL_METRICS: { key: MetricKey; label: string; icon: typeof DollarSign; col
   { key: "cpm", label: "CPM Médio", icon: Eye, color: "text-[#0d4af5]", format: (v) => fmtMetric(v, "R$") },
   { key: "costPerConv", label: "Custo/Conversão", icon: Target, color: "text-[#0d4af5]", format: (v) => fmtMetric(v, "R$") },
   { key: "costPerLead", label: "Custo/Lead (CPL)", icon: Target, color: "text-[#0d4af5]", format: (v) => fmtMetric(v, "R$") },
-  { key: "costPerMessage", label: "Custo/Mensagem", icon: MessageCircle, color: "text-[#0d4af5]", format: (v) => fmtMetric(v, "R$") },
+  { key: "costPerMessage", label: "CPA (Melhor Conjunto)", icon: MessageCircle, color: "text-[#0d4af5]", format: (v) => v > 0 ? fmtMetric(v, "R$") : "—" },
   { key: "costPerResult", label: "Custo/Resultado", icon: Zap, color: "text-[#0d4af5]", format: (v) => fmtMetric(v, "R$") },
 ];
 
@@ -1842,6 +1842,9 @@ function AdAnalyticsTab({
   const [dateRange, setDateRange] = useState<number>(7);
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
+  const [showCustomRange, setShowCustomRange] = useState(false);
+  const [pendingFrom, setPendingFrom] = useState("");
+  const [pendingTo, setPendingTo] = useState("");
 
   // Sync Carteira state
   const [syncing, setSyncing] = useState(false);
@@ -2100,11 +2103,13 @@ function AdAnalyticsTab({
     return true;
   });
 
-  // Date range boundaries for dailyMetrics filtering
-  const rangeEnd = customDateTo ? new Date(customDateTo) : new Date();
-  const rangeStart = customDateFrom ? new Date(customDateFrom) : new Date(rangeEnd.getTime() - dateRange * 86400000);
-  const rangeStartStr = rangeStart.toISOString().slice(0, 10);
-  const rangeEndStr = rangeEnd.toISOString().slice(0, 10);
+  // Date range boundaries for dailyMetrics filtering.
+  // IMPORTANT: never convert custom date strings through new Date() — "YYYY-MM-DD" parses
+  // as UTC midnight, causing a 1-day shift for timezones behind UTC (e.g. BRT = UTC-3).
+  // Use the string directly when set; compute local date strings otherwise.
+  const localDateStr = (d: Date) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD in browser TZ
+  const rangeEndStr = customDateTo || localDateStr(new Date());
+  const rangeStartStr = customDateFrom || localDateStr(new Date(Date.now() - dateRange * 86400000));
 
   // Aggregate metrics from dailyMetrics within date range (accurate)
   // For real Meta data, the API already filters by date — use campaign totals
@@ -2160,9 +2165,19 @@ function AdAnalyticsTab({
     : 0;
   const avgCpm = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0;
   const avgCostPerConv = totalConversions > 0 ? totalSpend / totalConversions : 0;
-  const avgCostPerMessage = totalMessages > 0 ? totalSpend / totalMessages : 0;
   const avgCostPerLead = totalLeads > 0 ? totalSpend / totalLeads : 0;
   const avgCostPerResult = totalResults > 0 ? totalSpend / totalResults : 0;
+
+  // Champion CPA: cheapest ad set across all filtered campaigns (not portfolio average)
+  const championAdSet = (() => {
+    const withChampion = filteredCampaigns.filter(c => c.cheapestAdSetCostPerMessage && c.cheapestAdSetCostPerMessage > 0);
+    if (withChampion.length === 0) return null;
+    return withChampion.reduce((best, c) =>
+      c.cheapestAdSetCostPerMessage! < best.cheapestAdSetCostPerMessage! ? c : best
+    );
+  })();
+  const championCpa = championAdSet?.cheapestAdSetCostPerMessage ?? 0;
+  const championAdSetName = championAdSet?.cheapestAdSetName ?? null;
 
   // Data freshness — most recent sync timestamp across all campaigns
   const lastSyncTimestamp = filteredCampaigns.reduce((latest, c) => {
@@ -2174,7 +2189,7 @@ function AdAnalyticsTab({
     spend: totalSpend, impressions: totalImpressions, reach: totalReach,
     clicks: totalClicks, conversions: totalConversions, messages: totalMessages,
     leads: totalLeads, ctr: avgCtr, cpc: avgCpc, cpm: avgCpm,
-    costPerConv: avgCostPerConv, costPerMessage: avgCostPerMessage,
+    costPerConv: avgCostPerConv, costPerMessage: championCpa,
     costPerLead: avgCostPerLead, costPerResult: avgCostPerResult,
   };
 
@@ -2251,10 +2266,9 @@ function AdAnalyticsTab({
     setExportAllError(null);
     setExportingAll(true);
     try {
-      const now = new Date();
-      const since = new Date(now);
-      since.setDate(since.getDate() - dateRange);
-      const periodLabel = `${since.toLocaleDateString("pt-BR")} - ${now.toLocaleDateString("pt-BR")}`;
+      const periodLabel = customDateFrom && customDateTo
+        ? `${new Date(customDateFrom + "T12:00:00").toLocaleDateString("pt-BR")} – ${new Date(customDateTo + "T12:00:00").toLocaleDateString("pt-BR")}`
+        : (() => { const now = new Date(); const since = new Date(now); since.setDate(since.getDate() - dateRange); return `${since.toLocaleDateString("pt-BR")} – ${now.toLocaleDateString("pt-BR")}`; })();
 
       const mockDemographics = {
         ageRanges: [
@@ -2275,12 +2289,20 @@ function AdAnalyticsTab({
       let dataByClient = new Map<string, AdCampaign[]>();
 
       if (meta.token && linkedClients.length > 0) {
-        // Se ainda não fez refresh, busca agora (pode ter varios clientes, paralelo)
-        if (portfolioCampaigns.size === 0) {
+        // Re-fetch when custom dates are set (cached data may be from a different period).
+        // Use cache only when no custom range and cache already populated.
+        const useCache = portfolioCampaigns.size > 0 && !customDateFrom && !customDateTo;
+        if (!useCache) {
           await Promise.all(linkedClients.map(async (client) => {
             if (!client.metaAdAccountId || !meta.token) return;
             try {
-              const camps = await fetchCampaignInsights(meta.token, client.metaAdAccountId, dateRange);
+              const camps = await fetchCampaignInsights(
+                meta.token,
+                client.metaAdAccountId,
+                dateRange,
+                customDateFrom || undefined,
+                customDateTo || undefined,
+              );
               const mapped: AdCampaign[] = camps.filter((c: { error?: unknown }) => !c.error).map((c: Record<string, unknown>) => ({
                 id: c.id as string, accountId: client.metaAdAccountId!, clientId: client.id,
                 clientName: client.name, name: c.name as string, objective: mapMetaObjective(c.objective as string),
@@ -2303,8 +2325,7 @@ function AdAnalyticsTab({
               if (err instanceof TokenExpiredError) meta.handleTokenError();
             }
           }));
-          // atualiza cache pra próximos exports no mesmo ciclo
-          setPortfolioCampaigns(dataByClient);
+          if (!customDateFrom && !customDateTo) setPortfolioCampaigns(dataByClient);
         } else {
           dataByClient = portfolioCampaigns;
         }
@@ -2333,7 +2354,7 @@ function AdAnalyticsTab({
           periodLabel,
           undefined,
           mockDemographics,
-          !isUsingRealData ? { startStr: rangeStartStr, endStr: rangeEndStr } : undefined,
+          { startStr: rangeStartStr, endStr: rangeEndStr },
           dateRange,
         );
 
@@ -2355,21 +2376,17 @@ function AdAnalyticsTab({
     }
   };
 
-  const handleExportPdf = () => {
-    // Build period label
-    const now = new Date();
-    const since = new Date(now);
-    since.setDate(since.getDate() - dateRange);
-    const periodLabel = `${since.toLocaleDateString("pt-BR")} - ${now.toLocaleDateString("pt-BR")}`;
+  const handleExportPdf = (mode: "preview" | "download" = "preview") => {
+    const periodLabel = customDateFrom && customDateTo
+      ? `${new Date(customDateFrom + "T12:00:00").toLocaleDateString("pt-BR")} – ${new Date(customDateTo + "T12:00:00").toLocaleDateString("pt-BR")}`
+      : (() => { const now = new Date(); const since = new Date(now); since.setDate(since.getDate() - dateRange); return `${since.toLocaleDateString("pt-BR")} – ${now.toLocaleDateString("pt-BR")}`; })();
 
-    // Determine client name
     const clientName = selectedClient !== "all"
       ? (clients.find((c) => c.id === selectedClient)?.name ?? "Todas as Contas")
       : isUsingRealData
         ? (metaAccounts.find((a) => a.id === selectedMetaAccount)?.name ?? "Conta Meta Ads")
         : "Todas as Contas";
 
-    // Mock demographics — in production these come from Meta Insights API /age_gender breakdowns
     const mockDemographics = {
       ageRanges: [
         { range: "18-24", percentage: 12.5 },
@@ -2392,7 +2409,31 @@ function AdAnalyticsTab({
       dateRange,
     );
 
-    exportTrafficReportPdf(reportData);
+    exportTrafficReportPdf(reportData, mode);
+  };
+
+  const handleExportClientPdf = (mode: "preview" | "download" = "preview") => {
+    const periodLabel = customDateFrom && customDateTo
+      ? `${new Date(customDateFrom + "T12:00:00").toLocaleDateString("pt-BR")} – ${new Date(customDateTo + "T12:00:00").toLocaleDateString("pt-BR")}`
+      : (() => { const now = new Date(); const since = new Date(now); since.setDate(since.getDate() - dateRange); return `${since.toLocaleDateString("pt-BR")} – ${now.toLocaleDateString("pt-BR")}`; })();
+
+    const clientName = selectedClient !== "all"
+      ? (clients.find((c) => c.id === selectedClient)?.name ?? "Todas as Contas")
+      : isUsingRealData
+        ? (metaAccounts.find((a) => a.id === selectedMetaAccount)?.name ?? "Conta Meta Ads")
+        : "Todas as Contas";
+
+    const reportData = buildTrafficReportData(
+      clientName,
+      filteredCampaigns,
+      periodLabel,
+      undefined,
+      undefined,
+      !isUsingRealData ? { startStr: rangeStartStr, endStr: rangeEndStr } : undefined,
+      dateRange,
+    );
+
+    exportClientReportPdf(reportData, mode);
   };
 
   const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: string; icon: typeof AlertCircle }> = {
@@ -2804,47 +2845,76 @@ function AdAnalyticsTab({
           </div>
         )}
         <div className="flex items-center gap-2">
-          <Calendar size={14} className="text-muted-foreground" />
+          <Calendar size={14} className="text-muted-foreground flex-shrink-0" />
           <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
             {[{ days: 7, label: "7d" }, { days: 14, label: "14d" }, { days: 30, label: "30d" }, { days: 90, label: "90d" }].map((d) => (
               <button
                 key={d.days}
-                onClick={() => { setDateRange(d.days); setCustomDateFrom(""); setCustomDateTo(""); }}
+                onClick={() => { setDateRange(d.days); setCustomDateFrom(""); setCustomDateTo(""); setShowCustomRange(false); }}
                 className={`text-xs px-2.5 py-1.5 rounded-md transition-colors ${
-                  dateRange === d.days && !customDateFrom ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
+                  dateRange === d.days && !customDateFrom ? "bg-card text-foreground font-medium" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {d.label}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                if (showCustomRange) {
+                  setShowCustomRange(false);
+                  return;
+                }
+                const to = customDateTo || new Date().toISOString().slice(0, 10);
+                const from = customDateFrom || new Date(new Date().getTime() - dateRange * 86400000).toISOString().slice(0, 10);
+                setPendingFrom(from);
+                setPendingTo(to);
+                setShowCustomRange(true);
+              }}
+              className={`text-xs px-2.5 py-1.5 rounded-md transition-colors ${
+                customDateFrom ? "bg-card text-foreground font-medium" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {customDateFrom
+                ? `${customDateFrom.slice(8, 10)}/${customDateFrom.slice(5, 7)} – ${customDateTo.slice(8, 10)}/${customDateTo.slice(5, 7)}`
+                : "Personalizado"}
+            </button>
           </div>
-          <input
-            type="date"
-            value={customDateFrom}
-            max={customDateTo || undefined}
-            onChange={(e) => {
-              setCustomDateFrom(e.target.value);
-              if (customDateTo && e.target.value) {
-                const diff = Math.ceil((new Date(customDateTo).getTime() - new Date(e.target.value).getTime()) / (1000 * 60 * 60 * 24));
-                if (diff > 0) setDateRange(diff);
-              }
-            }}
-            className="text-xs px-2 py-1.5 rounded-md bg-muted border border-border text-foreground w-[120px]"
-          />
-          <span className="text-xs text-muted-foreground">até</span>
-          <input
-            type="date"
-            value={customDateTo}
-            min={customDateFrom || undefined}
-            onChange={(e) => {
-              setCustomDateTo(e.target.value);
-              if (customDateFrom && e.target.value) {
-                const diff = Math.ceil((new Date(e.target.value).getTime() - new Date(customDateFrom).getTime()) / (1000 * 60 * 60 * 24));
-                if (diff > 0) setDateRange(diff);
-              }
-            }}
-            className="text-xs px-2 py-1.5 rounded-md bg-muted border border-border text-foreground w-[120px]"
-          />
+          {showCustomRange && (
+            <div className="flex items-center gap-1.5 bg-muted border border-border rounded-lg px-2 py-1">
+              <input
+                type="date"
+                value={pendingFrom}
+                max={pendingTo || new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setPendingFrom(e.target.value)}
+                className="text-xs px-1.5 py-1 rounded bg-card border border-border text-foreground w-[120px] cursor-pointer"
+              />
+              <span className="text-xs text-muted-foreground">–</span>
+              <input
+                type="date"
+                value={pendingTo}
+                min={pendingFrom || undefined}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setPendingTo(e.target.value)}
+                className="text-xs px-1.5 py-1 rounded bg-card border border-border text-foreground w-[120px] cursor-pointer"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!pendingFrom || !pendingTo) return;
+                  const diff = Math.ceil((new Date(pendingTo).getTime() - new Date(pendingFrom).getTime()) / 86400000);
+                  if (diff > 0) setDateRange(diff);
+                  setCustomDateFrom(pendingFrom);
+                  setCustomDateTo(pendingTo);
+                  setShowCustomRange(false);
+                }}
+                disabled={!pendingFrom || !pendingTo}
+                className="text-xs px-2.5 py-1 bg-primary text-white rounded-md font-semibold hover:bg-primary/90 transition-colors disabled:opacity-40"
+              >
+                OK
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 ml-auto">
           <button
@@ -2856,9 +2926,22 @@ function AdAnalyticsTab({
             <Settings2 size={13} />
             Métricas
           </button>
-          <button onClick={handleExportPdf} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium">
+          <button onClick={() => handleExportPdf("preview")} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 transition-colors font-medium">
+            <Eye size={13} />
+            Visualizar
+          </button>
+          <button onClick={() => handleExportPdf("download")} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium">
             <Download size={13} />
-            Relatório PDF
+            Baixar PDF
+          </button>
+          <div className="w-px h-5 bg-white/10 self-center" />
+          <button onClick={() => handleExportClientPdf("preview")} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 transition-colors font-medium">
+            <Eye size={13} />
+            Cliente
+          </button>
+          <button onClick={() => handleExportClientPdf("download")} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium">
+            <Download size={13} />
+            PDF Cliente
           </button>
           <button
             onClick={handleExportAllPdf}
@@ -3134,7 +3217,9 @@ function AdAnalyticsTab({
                 </p>
               )}
               {m.key === "costPerMessage" && (
-                <p className="text-[9px] text-muted-foreground/50 mt-1">melhor conjunto ativo</p>
+                <p className="text-[9px] text-muted-foreground/50 mt-1 truncate px-1" title={championAdSetName ?? undefined}>
+                  {championAdSetName ? championAdSetName.slice(0, 22) : "melhor conjunto ativo"}
+                </p>
               )}
             </div>
           );
@@ -3378,7 +3463,7 @@ function AdAnalyticsTab({
                         { label: "Leads", value: camp.leads ? String(camp.leads) : "N/A" },
                         { label: "CPL", value: camp.costPerLead ? fmtMetric(camp.costPerLead, "R$") : "N/A" },
                         { label: "Msgs", value: camp.messages ? String(camp.messages) : "N/A" },
-                        { label: camp.cheapestAdSetName ? `Custo/Msg (${camp.cheapestAdSetName.slice(0, 18)})` : "Custo/Msg (melhor conj.)", value: camp.costPerMessage ? fmtMetric(camp.costPerMessage, "R$") : "N/A" },
+                        { label: camp.cheapestAdSetName ? `Custo Campeão (${camp.cheapestAdSetName.slice(0, 16)})` : "Custo Campeão", value: camp.cheapestAdSetCostPerMessage ? fmtMetric(camp.cheapestAdSetCostPerMessage, "R$") : "—" },
                         { label: "Resultado", value: camp.results ? String(camp.results) : "N/A" },
                         { label: "Custo/Resultado", value: camp.costPerResult ? fmtMetric(camp.costPerResult, "R$") : "N/A" },
                         { label: "Frequência", value: camp.frequency ? camp.frequency.toFixed(2) : "N/A" },

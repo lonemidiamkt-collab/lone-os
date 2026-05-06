@@ -36,6 +36,7 @@ export interface TrafficReportData {
     genderSplit: { women: number; men: number };
   };
   observations?: string;
+  dailyMessages?: { date: string; messages: number }[];
 }
 
 const fmt = (v: number | undefined | null) => {
@@ -47,7 +48,90 @@ const safeVal = (v: number | undefined | null) =>
   !v || v === 0 ? "—" : fmt(v);
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-export function buildTrafficReportHtml(data: TrafficReportData): string {
+// ── Client report chart helpers ───────────────────────────────────────────────
+
+function svgLinePath(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return "";
+  let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const cpx = ((pts[i].x + pts[i + 1].x) / 2).toFixed(1);
+    d += ` C ${cpx},${pts[i].y.toFixed(1)} ${cpx},${pts[i + 1].y.toFixed(1)} ${pts[i + 1].x.toFixed(1)},${pts[i + 1].y.toFixed(1)}`;
+  }
+  return d;
+}
+
+function toDayLabel(dateStr: string, periodDays: number): string {
+  const d = new Date(dateStr + "T12:00:00");
+  if (periodDays <= 10) return ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"][d.getDay()];
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function buildDailyChart(daily: { date: string; messages: number }[], periodDays: number): string {
+  if (daily.length < 2) return "";
+  const W = 740, H = 190, padL = 34, padR = 12, padT = 32, padB = 38;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const n = daily.length;
+  const maxVal = Math.max(...daily.map(d => d.messages), 1);
+  const chartMax = maxVal * 1.15;
+
+  const pts = daily.map((d, i) => ({
+    x: padL + (i / (n - 1)) * plotW,
+    y: padT + (1 - d.messages / chartMax) * plotH,
+    messages: d.messages,
+    date: d.date,
+  }));
+
+  const peakIdx = daily.reduce((mi, d, i, a) => d.messages > a[mi].messages ? i : mi, 0);
+  const peak = pts[peakIdx];
+
+  const linePath = svgLinePath(pts);
+  const areaPath = `${linePath} L ${pts[n - 1].x.toFixed(1)},${H - padB} L ${pts[0].x.toFixed(1)},${H - padB} Z`;
+
+  const gridLines = [0.33, 0.66, 1.0].map(pct => {
+    const y = (padT + (1 - pct) * plotH).toFixed(1);
+    return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#1c1c28" stroke-width="1" stroke-dasharray="3,5"/>
+      <text x="${padL - 5}" y="${(+y + 3.5).toFixed(1)}" font-size="8" fill="#3f3f46" text-anchor="end">${Math.round(maxVal * pct)}</text>`;
+  }).join("");
+
+  const labelEvery = Math.max(1, Math.ceil(n / 8));
+  const xLabels = pts.map((p, i) => {
+    if (i % labelEvery !== 0 && i !== n - 1) return "";
+    const isPeak = i === peakIdx;
+    return `<text x="${p.x.toFixed(1)}" y="${H - padB + 18}" font-size="${isPeak ? 9 : 8.5}" fill="${isPeak ? "#4d7af7" : "#52525b"}" font-weight="${isPeak ? "700" : "400"}" text-anchor="middle">${toDayLabel(p.date, periodDays)}</text>`;
+  }).join("");
+
+  const dots = pts.map((p, i) =>
+    i === peakIdx ? "" : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#3b6ff5" opacity="0.7"/>`
+  ).join("");
+
+  const cw = 70;
+  const cx = Math.min(Math.max(peak.x - cw / 2, padL), W - padR - cw);
+  const cy = peak.y - 34;
+  const peakEl = `
+    <line x1="${peak.x.toFixed(1)}" y1="${(cy + 20).toFixed(1)}" x2="${peak.x.toFixed(1)}" y2="${(peak.y - 8).toFixed(1)}" stroke="#0d4af5" stroke-width="1" stroke-dasharray="2,3" opacity="0.5"/>
+    <rect x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" width="${cw}" height="20" rx="10" fill="#0d4af5"/>
+    <text x="${(cx + cw / 2).toFixed(1)}" y="${(cy + 13.5).toFixed(1)}" font-size="9.5" font-weight="700" fill="#fff" text-anchor="middle">${fmtNum(peak.messages)} msgs</text>
+    <circle cx="${peak.x.toFixed(1)}" cy="${peak.y.toFixed(1)}" r="8" fill="#09090b" stroke="#0d4af5" stroke-width="2"/>
+    <circle cx="${peak.x.toFixed(1)}" cy="${peak.y.toFixed(1)}" r="3.5" fill="#ffffff"/>`;
+
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:${H}px;display:block;overflow:visible;">
+  <defs>
+    <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d4af5" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#0d4af5" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  ${gridLines}
+  <path d="${areaPath}" fill="url(#cg)"/>
+  <path d="${linePath}" fill="none" stroke="#0d4af5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  ${dots}
+  ${peakEl}
+  ${xLabels}
+</svg>`;
+}
+
+export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = false): string {
   const logoUrl = `${window.location.origin}/logo.png`;
   const isCompact = (data.periodDays ?? 30) <= 7;
 
@@ -223,11 +307,14 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
 </head>
 <body>
 
-<div class="no-print" style="text-align:center;padding:12px;background:#0d4af5;">
-  <button onclick="window.print()" style="padding:8px 28px;background:#09090b;color:#fff;border:1px solid #3b6ff5;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">
-    Salvar como PDF / Imprimir
+${autoPrint ? "" : `
+<div class="no-print" style="position:sticky;top:0;z-index:999;display:flex;align-items:center;justify-content:space-between;padding:10px 24px;background:#09090b;border-bottom:1px solid #1a1a2e;">
+  <span style="font-size:11px;color:#52525b;">Lone Mídia — Relatório de Performance</span>
+  <button onclick="window.print()" style="display:flex;align-items:center;gap:7px;padding:7px 18px;background:#0d4af5;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.01em;">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Baixar PDF
   </button>
-</div>
+</div>`}
 
 <div class="page">
 
@@ -338,12 +425,14 @@ export function buildTrafficReportHtml(data: TrafficReportData): string {
   </div>
 
 </div>
+${autoPrint ? `<script>window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 600); });</script>` : ""}
 </body>
 </html>`;
 }
 
-export function exportTrafficReportPdf(data: TrafficReportData) {
-  const html = buildTrafficReportHtml(data);
+export function exportTrafficReportPdf(data: TrafficReportData, mode: "preview" | "download" = "preview") {
+  const autoPrint = mode === "download";
+  const html = buildTrafficReportHtml(data, autoPrint);
   const win = window.open("", "_blank");
   if (win) {
     win.document.write(html);
@@ -354,6 +443,182 @@ export function exportTrafficReportPdf(data: TrafficReportData) {
     const a = document.createElement("a");
     a.href = url;
     a.download = `relatorio-${data.clientName.replace(/\s+/g, "-").toLowerCase()}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+}
+
+// ── Client-facing report ──────────────────────────────────────────────────────
+
+export function buildClientReportHtml(data: TrafficReportData, autoPrint = false): string {
+  const logoUrl = `${window.location.origin}/logo.png`;
+  const daily = data.dailyMessages ?? [];
+  const hasChart = daily.length >= 2;
+  const periodDays = data.periodDays ?? 30;
+  const hasBestAdset = !!(data.bestAdsetCpa && data.bestAdsetCpa > 0);
+
+  const chart = hasChart ? buildDailyChart(daily, periodDays) : "";
+
+  const peakDay = daily.length > 0
+    ? daily.reduce((m, d) => d.messages > m.messages ? d : m, daily[0])
+    : null;
+  const peakLabel = peakDay ? toDayLabel(peakDay.date, periodDays) : null;
+
+  const periodTitle = periodDays <= 7 ? "Resultado Semanal"
+    : periodDays <= 31 ? "Resultado Mensal"
+    : `Resultado — ${periodDays} dias`;
+
+  const actionBar = autoPrint ? "" : `
+<div class="no-print" style="position:sticky;top:0;z-index:999;display:flex;align-items:center;justify-content:space-between;padding:10px 24px;background:#09090b;border-bottom:1px solid #1a1a2e;">
+  <span style="font-size:11px;color:#52525b;">Lone Mídia — Relatório do Cliente</span>
+  <button onclick="window.print()" style="display:flex;align-items:center;gap:7px;padding:7px 18px;background:#0d4af5;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Baixar PDF
+  </button>
+</div>`;
+
+  const kpis = [
+    { label: "Mensagens recebidas", value: fmtNum(data.messages), accent: true },
+    { label: "Investimento", value: fmt(data.spend), accent: false },
+    { label: "Custo por conversa", value: safeVal(data.costPerMessage), accent: false },
+    { label: "Pessoas alcançadas", value: fmtNum(data.reach), accent: false },
+  ];
+
+  const kpiCards = kpis.map(k => `
+    <div style="flex:1;background:#0d0d10;border:1px solid ${k.accent ? "#0d4af5" : "#1a1a2e"};border-radius:10px;padding:14px 16px;">
+      <div style="font-size:10px;color:#52525b;margin-bottom:7px;line-height:1.3;">${k.label}</div>
+      <div style="font-size:${k.accent ? "26px" : "20px"};font-weight:${k.accent ? "900" : "800"};color:${k.accent ? "#fff" : "#d4d4d8"};letter-spacing:-.02em;line-height:1;">${k.value}</div>
+    </div>`).join("");
+
+  const summaryRows = [
+    ["Cliques no link", fmtNum(data.clicks)],
+    ["Total de impressões", fmtNum(data.impressions)],
+    ...(peakDay ? [["Pico de mensagens", `${fmtNum(peakDay.messages)} (${peakLabel})`]] : []),
+  ].map(([label, value]) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1a1a2e;">
+      <span style="font-size:10px;color:#52525b;">${label}</span>
+      <span style="font-size:11px;font-weight:600;color:#a1a1aa;">${value}</span>
+    </div>`).join("");
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <title>Relatório — ${data.clientName}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    html, body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:#09090b; color:#e4e4e7; }
+    .page { max-width:820px; margin:0 auto; padding-bottom:32px; }
+    @media print {
+      html, body { background:#09090b !important; }
+      .no-print { display:none !important; }
+      @page { margin:0; size:A4; }
+    }
+  </style>
+</head>
+<body>
+${actionBar}
+<div class="page">
+
+  <!-- HEADER -->
+  <div style="border-top:3px solid #0d4af5;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1a1a2e;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="width:28px;height:28px;background:#000;border-radius:6px;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+        <img src="${logoUrl}" style="width:22px;height:22px;object-fit:contain;" alt=""/>
+      </div>
+      <span style="font-size:12px;font-weight:800;color:#fff;letter-spacing:-.01em;">LONE MÍDIA</span>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:11px;font-weight:600;color:#a1a1aa;">${data.clientName}</div>
+      <div style="font-size:9px;color:#52525b;margin-top:1px;">${data.period}</div>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <div style="padding:22px 32px 0;">
+    <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#3b6ff5;margin-bottom:5px;">${periodTitle}</div>
+    <div style="font-size:28px;font-weight:900;letter-spacing:-.025em;color:#fff;line-height:1;">${data.clientName}</div>
+    <div style="font-size:11px;color:#52525b;margin-top:4px;">Resultado dos seus anúncios no período selecionado</div>
+  </div>
+
+  <div style="margin:16px 32px;height:2px;background:linear-gradient(90deg,#0d4af5 0%,#1a1a2e 65%);border-radius:1px;"></div>
+
+  <!-- KPIs -->
+  <div style="padding:0 32px;display:flex;gap:10px;margin-bottom:20px;">
+    ${kpiCards}
+  </div>
+
+  <!-- CHART -->
+  ${hasChart ? `
+  <div style="padding:0 32px;margin-bottom:20px;">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:10px;">
+      <div>
+        <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#3b6ff5;">Evolução</div>
+        <div style="font-size:15px;font-weight:800;color:#fff;letter-spacing:-.01em;">Mensagens por Dia</div>
+      </div>
+      ${peakDay ? `
+      <div style="display:flex;align-items:center;gap:6px;background:#0d4af515;border:1px solid #0d4af530;border-radius:20px;padding:5px 12px;margin-bottom:2px;">
+        <div style="width:6px;height:6px;border-radius:50%;background:#0d4af5;flex-shrink:0;"></div>
+        <span style="font-size:10px;color:#71717a;">Pico: <strong style="color:#e4e4e7;">${peakLabel} · ${fmtNum(peakDay.messages)} mensagens</strong></span>
+      </div>` : ""}
+    </div>
+    <div style="background:#0a0a0d;border:1px solid #1a1a2e;border-radius:10px;padding:16px 10px 4px;overflow:hidden;">
+      ${chart}
+    </div>
+  </div>` : ""}
+
+  <!-- CHAMPION + SUMMARY -->
+  <div style="padding:0 32px;display:flex;gap:12px;margin-bottom:20px;">
+    ${hasBestAdset ? `
+    <div style="flex:1;background:#0d0d10;border:1px solid #1a1a2e;border-radius:10px;padding:14px 16px;display:flex;align-items:flex-start;gap:10px;">
+      <div style="width:32px;height:32px;background:#0d4af515;border:1px solid #0d4af530;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0d4af5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+      </div>
+      <div style="min-width:0;flex:1;">
+        <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#3b6ff5;margin-bottom:4px;">Conjunto com Melhor Resultado</div>
+        <div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;">${data.bestAdsetName ?? "—"}</div>
+        <div style="font-size:11px;color:#71717a;">${fmt(data.bestAdsetCpa)} por conversa</div>
+      </div>
+    </div>` : ""}
+    <div style="flex:1;background:#0d0d10;border:1px solid #1a1a2e;border-radius:10px;padding:14px 16px;">
+      <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#3b6ff5;margin-bottom:10px;">Resumo do Período</div>
+      ${summaryRows}
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div style="margin:0 32px;padding-top:12px;border-top:1px solid #1a1a2e;display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-size:9px;color:#3f3f46;">Gerado via Lone OS · lonemidia.com</span>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <div style="width:20px;height:20px;background:#000;border-radius:4px;overflow:hidden;display:flex;align-items:center;justify-content:center;">
+        <img src="${logoUrl}" style="width:16px;height:16px;object-fit:contain;" alt=""/>
+      </div>
+      <span style="font-size:10px;font-weight:800;color:#fff;letter-spacing:-.01em;">LONE MÍDIA</span>
+    </div>
+    <span style="font-size:9px;color:#3f3f46;">${data.clientName} · ${data.period}</span>
+  </div>
+
+</div>
+${autoPrint ? `<script>window.addEventListener('load',function(){setTimeout(function(){window.print();},600);});</script>` : ""}
+</body>
+</html>`;
+}
+
+export function exportClientReportPdf(data: TrafficReportData, mode: "preview" | "download" = "preview") {
+  const html = buildClientReportHtml(data, mode === "download");
+  const win = window.open("", "_blank");
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+  } else {
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `resultado-${data.clientName.replace(/\s+/g, "-").toLowerCase()}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -422,6 +687,21 @@ export function buildTrafficReportData(
     ? adsetCandidates.reduce((min, x) => x.cpa < min.cpa ? x : min)
     : null;
 
+  // Aggregate daily messages across all campaigns for the chart
+  const allDates = new Set<string>();
+  reportCampaigns.forEach(c => (c.dailyMetrics ?? []).forEach(d => allDates.add(d.date)));
+  const sortedDates = Array.from(allDates).sort();
+  const chartDates = dateRange
+    ? sortedDates.filter(d => d >= dateRange.startStr && d <= dateRange.endStr)
+    : sortedDates;
+  const dailyMessages = chartDates.map(date => ({
+    date,
+    messages: reportCampaigns.reduce((sum, c) => {
+      const dm = (c.dailyMetrics ?? []).find(d => d.date === date);
+      return sum + (dm?.messages ?? 0);
+    }, 0),
+  }));
+
   return {
     clientName,
     period: periodLabel,
@@ -451,5 +731,6 @@ export function buildTrafficReportData(
     })),
     demographics,
     observations,
+    dailyMessages,
   };
 }
