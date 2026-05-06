@@ -632,7 +632,7 @@ export async function exportAllTrafficReportsZip(
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
   for (const report of reports) {
-    const html = buildTrafficReportHtml(report.data);
+    const html = buildClientReportHtml(report.data);
     const fileName = `relatorio-${report.clientName.replace(/\s+/g, "-").toLowerCase()}.html`;
     zip.file(fileName, html);
   }
