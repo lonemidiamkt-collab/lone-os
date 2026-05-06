@@ -2261,7 +2261,9 @@ function AdAnalyticsTab({
   const infoInsights = activeInsights.filter((i) => i.severity === "info");
   const successInsights = activeInsights.filter((i) => i.severity === "success");
 
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
+  const [exportAllProgress, setExportAllProgress] = useState("");
   const [exportAllError, setExportAllError] = useState<string | null>(null);
 
   const handleExportAllPdf = async () => {
@@ -2383,74 +2385,67 @@ function AdAnalyticsTab({
       }
 
 
-      await exportAllTrafficReportsZip(reports);
+      setExportAllProgress(`Gerando PDFs... 0/${reports.length}`);
+      await exportAllTrafficReportsZip(reports, (current, total, clientName) => {
+        setExportAllProgress(`Gerando PDF ${current}/${total} — ${clientName}`);
+      });
+      setExportAllProgress("");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[ZIP] Erro inesperado ao gerar relatórios:", err);
       setExportAllError(`Erro ao gerar relatórios: ${msg}`);
+      setExportAllProgress("");
     } finally {
       setExportingAll(false);
     }
   };
 
-  const handleExportPdf = (mode: "preview" | "download" = "preview") => {
-    const periodLabel = customDateFrom && customDateTo
-      ? `${new Date(customDateFrom + "T12:00:00").toLocaleDateString("pt-BR")} – ${new Date(customDateTo + "T12:00:00").toLocaleDateString("pt-BR")}`
-      : (() => { const now = new Date(); const since = new Date(now); since.setDate(since.getDate() - dateRange); return `${since.toLocaleDateString("pt-BR")} – ${now.toLocaleDateString("pt-BR")}`; })();
+  const buildPeriodLabel = () => customDateFrom && customDateTo
+    ? `${new Date(customDateFrom + "T12:00:00").toLocaleDateString("pt-BR")} – ${new Date(customDateTo + "T12:00:00").toLocaleDateString("pt-BR")}`
+    : (() => { const now = new Date(); const since = new Date(now); since.setDate(since.getDate() - dateRange); return `${since.toLocaleDateString("pt-BR")} – ${now.toLocaleDateString("pt-BR")}`; })();
 
-    const clientName = selectedClient !== "all"
-      ? (clients.find((c) => c.id === selectedClient)?.name ?? "Todas as Contas")
-      : isUsingRealData
-        ? (metaAccounts.find((a) => a.id === selectedMetaAccount)?.name ?? "Conta Meta Ads")
-        : "Todas as Contas";
+  const buildClientName = () => selectedClient !== "all"
+    ? (clients.find((c) => c.id === selectedClient)?.name ?? "Todas as Contas")
+    : isUsingRealData
+      ? (metaAccounts.find((a) => a.id === selectedMetaAccount)?.name ?? "Conta Meta Ads")
+      : "Todas as Contas";
 
-    const mockDemographics = {
-      ageRanges: [
-        { range: "18-24", percentage: 12.5 },
-        { range: "25-34", percentage: 35.2 },
-        { range: "35-44", percentage: 28.1 },
-        { range: "45-54", percentage: 14.8 },
-        { range: "55-64", percentage: 6.9 },
-        { range: "65+", percentage: 2.5 },
-      ],
-      genderSplit: { women: 62.3, men: 37.7 },
-    };
-
-    const reportData = buildTrafficReportData(
-      clientName,
-      filteredCampaigns,
-      periodLabel,
-      undefined,
-      mockDemographics,
-      !isUsingRealData ? { startStr: rangeStartStr, endStr: rangeEndStr } : undefined,
-      dateRange,
-    );
-
-    exportTrafficReportPdf(reportData, mode);
+  const handleExportPdf = async () => {
+    if (exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      const reportData = buildTrafficReportData(
+        buildClientName(),
+        filteredCampaigns,
+        buildPeriodLabel(),
+        undefined,
+        { ageRanges: [{ range: "18-24", percentage: 12.5 }, { range: "25-34", percentage: 35.2 }, { range: "35-44", percentage: 28.1 }, { range: "45-54", percentage: 14.8 }, { range: "55-64", percentage: 6.9 }, { range: "65+", percentage: 2.5 }], genderSplit: { women: 62.3, men: 37.7 } },
+        !isUsingRealData ? { startStr: rangeStartStr, endStr: rangeEndStr } : undefined,
+        dateRange,
+      );
+      await exportTrafficReportPdf(reportData);
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
-  const handleExportClientPdf = (mode: "preview" | "download" = "preview") => {
-    const periodLabel = customDateFrom && customDateTo
-      ? `${new Date(customDateFrom + "T12:00:00").toLocaleDateString("pt-BR")} – ${new Date(customDateTo + "T12:00:00").toLocaleDateString("pt-BR")}`
-      : (() => { const now = new Date(); const since = new Date(now); since.setDate(since.getDate() - dateRange); return `${since.toLocaleDateString("pt-BR")} – ${now.toLocaleDateString("pt-BR")}`; })();
-
-    const clientName = selectedClient !== "all"
-      ? (clients.find((c) => c.id === selectedClient)?.name ?? "Todas as Contas")
-      : isUsingRealData
-        ? (metaAccounts.find((a) => a.id === selectedMetaAccount)?.name ?? "Conta Meta Ads")
-        : "Todas as Contas";
-
-    const reportData = buildTrafficReportData(
-      clientName,
-      filteredCampaigns,
-      periodLabel,
-      undefined,
-      undefined,
-      !isUsingRealData ? { startStr: rangeStartStr, endStr: rangeEndStr } : undefined,
-      dateRange,
-    );
-
-    exportClientReportPdf(reportData, mode);
+  const handleExportClientPdf = async () => {
+    if (exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      const reportData = buildTrafficReportData(
+        buildClientName(),
+        filteredCampaigns,
+        buildPeriodLabel(),
+        undefined,
+        undefined,
+        !isUsingRealData ? { startStr: rangeStartStr, endStr: rangeEndStr } : undefined,
+        dateRange,
+      );
+      await exportClientReportPdf(reportData);
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: string; icon: typeof AlertCircle }> = {
@@ -2943,22 +2938,14 @@ function AdAnalyticsTab({
             <Settings2 size={13} />
             Métricas
           </button>
-          <button onClick={() => handleExportPdf("preview")} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 transition-colors font-medium">
-            <Eye size={13} />
-            Visualizar
-          </button>
-          <button onClick={() => handleExportPdf("download")} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium">
-            <Download size={13} />
-            Baixar PDF
+          <button onClick={handleExportPdf} disabled={exportingPdf} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium disabled:opacity-50">
+            {exportingPdf ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+            {exportingPdf ? "Gerando..." : "PDF Interno"}
           </button>
           <div className="w-px h-5 bg-white/10 self-center" />
-          <button onClick={() => handleExportClientPdf("preview")} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 transition-colors font-medium">
-            <Eye size={13} />
-            Cliente
-          </button>
-          <button onClick={() => handleExportClientPdf("download")} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium">
-            <Download size={13} />
-            PDF Cliente
+          <button onClick={handleExportClientPdf} disabled={exportingPdf} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium disabled:opacity-50">
+            {exportingPdf ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+            {exportingPdf ? "Gerando..." : "PDF Cliente"}
           </button>
           <button
             onClick={handleExportAllPdf}
@@ -2966,10 +2953,18 @@ function AdAnalyticsTab({
             className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium disabled:opacity-50"
           >
             {exportingAll ? <Loader2 size={13} className="animate-spin" /> : <FolderDown size={13} />}
-            {exportingAll ? "Gerando..." : "Todos os Clientes"}
+            {exportingAll ? "Gerando PDFs..." : "Todos os Clientes"}
           </button>
         </div>
       </div>
+
+      {/* Export progress banner */}
+      {exportAllProgress && (
+        <div className="flex items-center gap-2.5 px-4 py-3 bg-primary/10 border border-primary/20 rounded-xl text-xs text-primary animate-fade-in">
+          <Loader2 size={13} className="animate-spin shrink-0" />
+          <span className="flex-1">{exportAllProgress}</span>
+        </div>
+      )}
 
       {/* Export error banner */}
       {exportAllError && (

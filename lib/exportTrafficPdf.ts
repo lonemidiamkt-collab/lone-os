@@ -430,24 +430,11 @@ ${autoPrint ? `<script>window.addEventListener('load', function(){ setTimeout(fu
 </html>`;
 }
 
-export function exportTrafficReportPdf(data: TrafficReportData, mode: "preview" | "download" = "preview") {
-  const autoPrint = mode === "download";
-  const html = buildTrafficReportHtml(data, autoPrint);
-  const win = window.open("", "_blank");
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-  } else {
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `relatorio-${data.clientName.replace(/\s+/g, "-").toLowerCase()}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
+export async function exportTrafficReportPdf(data: TrafficReportData) {
+  const { downloadAsPdf } = await import("@/lib/htmlToPdf");
+  const html = buildTrafficReportHtml(data, false);
+  const filename = `relatorio-${data.clientName.replace(/\s+/g, "-").toLowerCase()}.pdf`;
+  await downloadAsPdf(html, filename);
 }
 
 // ── Client-facing report ──────────────────────────────────────────────────────
@@ -607,37 +594,32 @@ ${autoPrint ? `<script>window.addEventListener('load',function(){setTimeout(func
 </html>`;
 }
 
-export function exportClientReportPdf(data: TrafficReportData, mode: "preview" | "download" = "preview") {
-  const html = buildClientReportHtml(data, mode === "download");
-  const win = window.open("", "_blank");
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-  } else {
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `resultado-${data.clientName.replace(/\s+/g, "-").toLowerCase()}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
+export async function exportClientReportPdf(data: TrafficReportData) {
+  const { downloadAsPdf } = await import("@/lib/htmlToPdf");
+  const html = buildClientReportHtml(data, false);
+  const filename = `resultado-${data.clientName.replace(/\s+/g, "-").toLowerCase()}.pdf`;
+  await downloadAsPdf(html, filename);
 }
 
 export async function exportAllTrafficReportsZip(
-  reports: { clientName: string; data: TrafficReportData }[]
+  reports: { clientName: string; data: TrafficReportData }[],
+  onProgress?: (current: number, total: number, clientName: string) => void,
 ) {
-  const JSZip = (await import("jszip")).default;
+  const [{ default: JSZip }, { htmlToPdfBlob }] = await Promise.all([
+    import("jszip"),
+    import("@/lib/htmlToPdf"),
+  ]);
   const zip = new JSZip();
-  for (const report of reports) {
+  for (let i = 0; i < reports.length; i++) {
+    const report = reports[i];
+    onProgress?.(i + 1, reports.length, report.clientName);
     try {
       const html = buildClientReportHtml(report.data);
-      const fileName = `relatorio-${report.clientName.replace(/\s+/g, "-").toLowerCase()}.html`;
-      zip.file(fileName, html);
+      const pdfBlob = await htmlToPdfBlob(html);
+      const fileName = `relatorio-${report.clientName.replace(/\s+/g, "-").toLowerCase()}.pdf`;
+      zip.file(fileName, pdfBlob);
     } catch (err) {
-      console.error(`[ZIP] Erro ao gerar HTML de ${report.clientName}:`, err);
+      console.error(`[ZIP] Erro ao gerar PDF de ${report.clientName}:`, err);
     }
   }
   const blob = await zip.generateAsync({ type: "blob" });
