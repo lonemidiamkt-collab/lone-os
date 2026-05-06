@@ -2320,7 +2320,6 @@ function AdAnalyticsTab({
                   customDateFrom || undefined, customDateTo || undefined,
                 );
                 const mapped = mapCamps(client, camps as Record<string, unknown>[]);
-                console.log(`[ZIP] ${client.name}: ${mapped.length} campanhas (tentativa ${attempts + 1})`);
                 dataByClient.set(client.id, mapped);
                 success = true;
               } catch (err) {
@@ -2348,13 +2347,10 @@ function AdAnalyticsTab({
 
       const reports: { clientName: string; data: import("@/lib/exportTrafficPdf").TrafficReportData }[] = [];
 
-      console.log(`[ZIP] dataByClient: ${dataByClient.size} entradas, clients: ${clients.length}`);
 
       for (const [clientId, clientCampaigns] of dataByClient) {
         const client = clients.find((c) => c.id === clientId);
-        if (!client) { console.warn(`[ZIP] clientId ${clientId} não encontrado em clients`); continue; }
-
-        if (clientCampaigns.length === 0) { console.warn(`[ZIP] ${client.name}: 0 campanhas, pulando`); continue; }
+        if (!client || clientCampaigns.length === 0) continue;
 
         try {
           const reportData = buildTrafficReportData(
@@ -2367,14 +2363,12 @@ function AdAnalyticsTab({
             dateRange,
           );
           reports.push({ clientName: client.name, data: reportData });
-          console.log(`[ZIP] ${client.name}: report gerado (spend=${reportData.spend.toFixed(2)}, msgs=${reportData.messages})`);
         } catch (err) {
           console.error(`[ZIP] Erro ao gerar report de ${client.name}:`, err);
           fetchErrors.push(`${client.name}: erro ao gerar report`);
         }
       }
 
-      console.log(`[ZIP] ${reports.length} relatórios prontos para exportar`);
 
       if (reports.length === 0) {
         const detail = fetchErrors.length > 0 ? ` Erros: ${fetchErrors.join("; ")}` : "";
@@ -2386,9 +2380,6 @@ function AdAnalyticsTab({
         return;
       }
 
-      if (fetchErrors.length > 0) {
-        console.warn(`[ZIP] ${fetchErrors.length} cliente(s) com erro de fetch:`, fetchErrors);
-      }
 
       await exportAllTrafficReportsZip(reports);
     } catch (err) {

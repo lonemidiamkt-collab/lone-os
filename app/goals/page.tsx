@@ -403,6 +403,19 @@ export default function GoalsPage() {
       }`}
     >
       <div className="space-y-6 max-w-[1400px] mx-auto">
+        {/* ─── Banner de dados simulados ───────────────────────── */}
+        {timeView === "atual" && (() => {
+          const allOkrs = [...snapshot.companyOkrs, ...snapshot.teamOkrs.flatMap((t) => t.okrs)];
+          const simCount = allOkrs.filter((o) => o.isReal === false).length;
+          if (simCount === 0) return null;
+          return (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/8 border border-amber-500/20 text-amber-400/80 text-xs">
+              <span className="text-amber-400">⚠</span>
+              <span><strong>{simCount}</strong> {simCount === 1 ? "métrica usa dado simulado" : "métricas usam dados simulados"} — as demais são calculadas em tempo real. Passe o mouse sobre <span className="bg-amber-500/15 px-1 rounded">Simulado</span> para ver a fonte.</span>
+            </div>
+          );
+        })()}
+
         {/* ─── Header ──────────────────────────────────────────── */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">

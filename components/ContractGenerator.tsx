@@ -220,7 +220,8 @@ export default function ContractGenerator({ client, currentUser }: Props) {
     const currentNicho = (nichoOverride ?? client.nicho ?? "").trim();
     if (needsNicho && !currentNicho) {
       const entered = window.prompt("Qual o nicho/ramo da empresa? (aparece na cláusula 1.1 do contrato)\nEx: varejo de moda, odontologia, restaurante");
-      if (!entered?.trim()) { setDownloadError("Nicho é obrigatório para contratos de Tráfego e Lone Growth."); return; }
+      if (entered === null) return; // usuário cancelou — não mostra erro
+      if (!entered.trim()) { setDownloadError("Nicho é obrigatório para contratos de Tráfego e Lone Growth."); return; }
       const nichoValue = entered.trim();
       await supabase.from("clients").update({ nicho: nichoValue }).eq("id", client.id);
       setNichoOverride(nichoValue); // evita re-prompt no mesmo ciclo; parent vai sincronizar no próximo fetch

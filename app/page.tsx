@@ -52,6 +52,7 @@ function NoticeFormBlock() {
 
   const handleAdd = () => {
     if (!form.title.trim()) return;
+    if (form.scheduledAt && new Date(form.scheduledAt) <= new Date()) return;
     addNotice({
       title: form.title,
       body: form.body,
@@ -111,7 +112,8 @@ function NoticeFormBlock() {
               type="datetime-local"
               value={form.scheduledAt}
               onChange={(e) => setForm((p) => ({ ...p, scheduledAt: e.target.value }))}
-              className="bg-muted rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary flex-1 min-w-[160px]"
+              min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+              className={`bg-muted rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary flex-1 min-w-[160px] ${form.scheduledAt && new Date(form.scheduledAt) <= new Date() ? "ring-1 ring-red-500/60" : ""}`}
             />
           </div>
           <div className="flex items-center justify-between">
