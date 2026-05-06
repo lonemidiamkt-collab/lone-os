@@ -2282,15 +2282,10 @@ function AdAnalyticsTab({
         genderSplit: { women: 62.3, men: 37.7 },
       };
 
-      // Fonte de dados:
-      //   1º Meta Ads real (portfolioCampaigns) se tem clientes com conta Meta vinculada
-      //   2º Fallback pra campaigns (mock / pre-sync) se não tem Meta conectada
-      // Antes (bug): usava só `campaigns` que é mockAdCampaigns = [] → sempre caía no alert.
       let dataByClient = new Map<string, AdCampaign[]>();
+      const fetchErrors: string[] = [];
 
       if (meta.token && linkedClients.length > 0) {
-        // Re-fetch when custom dates are set (cached data may be from a different period).
-        // Use cache only when no custom range and cache already populated.
         const useCache = portfolioCampaigns.size > 0 && !customDateFrom && !customDateTo;
         if (!useCache) {
           await Promise.all(linkedClients.map(async (client) => {
@@ -2320,9 +2315,13 @@ function AdAnalyticsTab({
                 frequency: (c.frequency as number) ?? 0, dailyMetrics: (c.dailyMetrics as AdCampaign["dailyMetrics"]) ?? [],
                 hasData: (c.hasData as boolean) ?? false, lastSyncAt: c.lastSyncAt as string | undefined,
               }));
+              console.log(`[ZIP] ${client.name}: ${mapped.length} campanhas carregadas`);
               dataByClient.set(client.id, mapped);
             } catch (err) {
-              if (err instanceof TokenExpiredError) meta.handleTokenError();
+              if (err instanceof TokenExpiredError) { meta.handleTokenError(); return; }
+              const msg = err instanceof Error ? err.message : String(err);
+              fetchErrors.push(`${client.name}: ${msg}`);
+              console.error(`[ZIP] Erro ao buscar ${client.name}:`, err);
             }
           }));
           if (!customDateFrom && !customDateTo) setPortfolioCampaigns(dataByClient);
@@ -2330,7 +2329,6 @@ function AdAnalyticsTab({
           dataByClient = portfolioCampaigns;
         }
       } else {
-        // Sem Meta conectada: cai no mock (vai estar vazio por padrão, mas mantém compatibilidade)
         for (const client of clients) {
           const clientAccountIds = new Set(accounts.filter((a) => a.clientId === client.id).map((a) => a.id));
           const clientCampaigns = campaigns.filter((c) => clientAccountIds.has(c.accountId));
@@ -2342,11 +2340,10 @@ function AdAnalyticsTab({
 
       for (const [clientId, clientCampaigns] of dataByClient) {
         const client = clients.find((c) => c.id === clientId);
-        if (!client) continue;
+        if (!client) { console.warn(`[ZIP] clientId ${clientId} não encontrado em clients`); continue; }
 
-        // ZIP export ignores the table's statusFilter — "all clients" report includes every campaign
         const filtered = clientCampaigns;
-        if (filtered.length === 0) continue;
+        if (filtered.length === 0) { console.warn(`[ZIP] ${client.name}: 0 campanhas, pulando`); continue; }
 
         const reportData = buildTrafficReportData(
           client.name,
@@ -2357,20 +2354,30 @@ function AdAnalyticsTab({
           { startStr: rangeStartStr, endStr: rangeEndStr },
           dateRange,
         );
-
         reports.push({ clientName: client.name, data: reportData });
       }
 
+      console.log(`[ZIP] ${reports.length} relatórios prontos para exportar`);
+
       if (reports.length === 0) {
+        const detail = fetchErrors.length > 0 ? ` Erros: ${fetchErrors.join("; ")}` : "";
         if (!meta.token || linkedClients.length === 0) {
           setExportAllError("Nenhuma conta Meta conectada. Vá em Integrações e vincule a conta da agência para gerar relatórios.");
         } else {
-          setExportAllError(`Nenhum cliente com campanhas nos últimos ${dateRange} dias. Tente um período maior — use 30d ou 90d no seletor de período.`);
+          setExportAllError(`Nenhum cliente com campanhas no período selecionado.${detail}`);
         }
         return;
       }
 
+      if (fetchErrors.length > 0) {
+        console.warn(`[ZIP] ${fetchErrors.length} cliente(s) com erro de fetch:`, fetchErrors);
+      }
+
       await exportAllTrafficReportsZip(reports);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[ZIP] Erro inesperado ao gerar relatórios:", err);
+      setExportAllError(`Erro ao gerar relatórios: ${msg}`);
     } finally {
       setExportingAll(false);
     }
