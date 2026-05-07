@@ -1,25 +1,30 @@
 // lib/meta/account-balance.ts — server-side only
 // Funções puras de cálculo de saldo + fetch batch da Meta API
 
-import { META_CONFIG, getGraphUrl } from "./config";
+import { META_CONFIG } from "./config";
 
 // ── Tipos ────────────────────────────────────────────────────
 
 export interface MetaAccountFields {
   id: string;
   balance: string;          // saldo pré-pago em centavos (string)
-  amount_spent: string;     // já gasto no ciclo
-  spend_cap: string | null; // teto pós-pago (null = sem cap)
+  amount_spent: string;     // já gasto no ciclo, em centavos
+  spend_cap: string | null; // teto pós-pago em centavos (null ou "0" = sem cap real)
   currency: string;
   account_status: number;   // 1=Ativa 2=Desativada 3=Em revisão 7=Pendente 9=Grace period
   min_daily_budget?: string;
+  funding_source_details?: {
+    id?: string;
+    type: number; // 1=cartão/crédito (pós-pago) 2=boleto/Pix (pré-pago)
+    display_string?: string;
+  } | null;
 }
 
 export interface NormalizedBalance {
   metaAccountId: string;    // "act_XXXX"
   currency: string;
   accountStatus: number;
-  availableBalance: number; // valor em reais/moeda local (já calculado)
+  availableBalance: number | null; // null = não calculável (pós-pago sem cap)
   amountSpent: number;
   spendCap: number | null;
   isPrepaid: boolean;
@@ -42,40 +47,64 @@ function centsToReais(centavos: string | null | undefined): number {
   return Number.isFinite(n) ? n / 100 : 0;
 }
 
+// Spend caps acima deste valor (em centavos) são o "ilimitado" da Meta (ex: 922337203685477)
+const SPEND_CAP_INFINITY_CENTS = 10_000_000_000; // R$ 100M
+
+// ── Auto-detecção de tipo de conta ───────────────────────────
+
+export function detectAccountType(meta: MetaAccountFields): "prepaid" | "postpaid" | "unknown" {
+  const fs = meta.funding_source_details;
+  if (fs) {
+    if (fs.type === 1) return "postpaid"; // cartão de crédito
+    if (fs.type === 2) return "prepaid";  // boleto / Pix / pré-pago
+  }
+  // Fallback: spend_cap real (não o astronômico) indica pós-pago configurado
+  const capCents = parseFloat(meta.spend_cap ?? "0");
+  if (capCents > 0 && capCents < SPEND_CAP_INFINITY_CENTS) return "postpaid";
+  return "unknown";
+}
+
 // ── Cálculo de saldo disponível ──────────────────────────────
+// Retorna null quando não é possível calcular (pós-pago sem cap definido).
+// A conversão centavos→reais ocorre UMA ÚNICA VEZ aqui — tudo abaixo é em reais.
 
 export function calculateAvailableBalance(
   isPrepaid: boolean,
-  spendCap: number | null,
-  meta: MetaAccountFields,
-): number {
+  spendCap: number | null,   // já em reais (vem do DB)
+  meta: MetaAccountFields,   // valores em centavos (vem da Meta API)
+): number | null {
   if (isPrepaid) {
+    // Pré-pago: saldo da carteira (único valor significativo)
     return centsToReais(meta.balance);
   }
-  // Pós-pago: cap menos gasto atual
-  if (!spendCap && !meta.spend_cap) return Infinity;
+
+  // Pós-pago: cap - gasto. Precisamos de um cap real.
+  const rawCapCents = parseFloat(meta.spend_cap ?? "0");
+  const hasRealCap = (spendCap !== null && spendCap > 0) ||
+    (rawCapCents > 0 && rawCapCents < SPEND_CAP_INFINITY_CENTS);
+
+  if (!hasRealCap) return null; // sem cap definido, não dá pra calcular
+
   const cap = spendCap ?? centsToReais(meta.spend_cap ?? null);
   const spent = centsToReais(meta.amount_spent);
-  return cap - spent;
+  return Math.max(0, cap - spent);
 }
 
 // ── Estimativa de dias restantes ─────────────────────────────
 
 export function estimateDaysRemaining(
-  availableBalance: number,
-  last3DaysSpend: number[],
+  availableBalance: number | null,
+  avgDailySpend: number | null,
 ): number | null {
-  if (!Number.isFinite(availableBalance) || availableBalance <= 0) return null;
-  const valid = last3DaysSpend.filter((v) => v > 0);
-  if (valid.length === 0) return null;
-  const avg = valid.reduce((a, b) => a + b, 0) / valid.length;
-  if (avg === 0) return null;
-  return availableBalance / avg;
+  if (availableBalance === null || availableBalance <= 0) return null;
+  if (!avgDailySpend || avgDailySpend <= 0) return null;
+  return availableBalance / avgDailySpend;
 }
 
 export function formatDaysRemaining(days: number | null): string {
   if (days === null) return "—";
   if (days < 0) return "Negativo";
+  if (days > 365) return "> 1 ano";
   if (days < 1) {
     const hours = Math.round(days * 24);
     return `~${hours}h`;
@@ -88,14 +117,15 @@ export function formatDaysRemaining(days: number | null): string {
 export type BalanceSeverity = "critical" | "warning" | "ok" | "disabled" | "error";
 
 export function getBalanceSeverity(
-  available: number,
+  available: number | null,
   daysRemaining: number | null,
   accountStatus: number,
   warningThreshold: number | null,
   criticalThreshold: number | null,
 ): BalanceSeverity {
   if (accountStatus !== 1) return "disabled";
-  if (available < 0) return "critical"; // estourou
+  if (available === null) return "ok"; // pós-pago sem cap: não há alerta de saldo
+  if (available < 0) return "critical";
   if (criticalThreshold !== null && available <= criticalThreshold) return "critical";
   if (daysRemaining !== null && daysRemaining <= 1) return "critical";
   if (warningThreshold !== null && available <= warningThreshold) return "warning";
@@ -103,7 +133,7 @@ export function getBalanceSeverity(
   return "ok";
 }
 
-// ── Fetch batch da Meta API ──────────────────────────────────
+// ── Fetch batch da Meta API — saldos ─────────────────────────
 
 async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -112,7 +142,7 @@ async function sleep(ms: number) {
 async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    if (attempt > 0) await sleep(Math.pow(2, attempt) * 1000); // 2s, 4s
+    if (attempt > 0) await sleep(Math.pow(2, attempt) * 1000);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10_000);
     try {
@@ -126,9 +156,7 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
     } catch (err) {
       clearTimeout(timeoutId);
       lastError = err instanceof Error ? err : new Error(String(err));
-      if (lastError.name === "AbortError") {
-        lastError = new Error("Timeout Meta API (10s)");
-      }
+      if (lastError.name === "AbortError") lastError = new Error("Timeout Meta API (10s)");
     }
   }
   throw lastError ?? new Error("fetchWithRetry: todas tentativas falharam");
@@ -136,12 +164,12 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
 
 export async function fetchAccountBalances(
   token: string,
-  accountIds: string[],  // "act_XXXX"
+  accountIds: string[],
 ): Promise<Map<string, MetaAccountFields | { error: string; errorJson?: string }>> {
   const result = new Map<string, MetaAccountFields | { error: string; errorJson?: string }>();
   if (accountIds.length === 0) return result;
 
-  const fields = "balance,amount_spent,spend_cap,currency,account_status,min_daily_budget";
+  const fields = "balance,amount_spent,spend_cap,currency,account_status,min_daily_budget,funding_source_details";
   const BATCH_SIZE = 50;
 
   for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
@@ -164,7 +192,6 @@ export async function fetchAccountBalances(
         continue;
       }
 
-      // Resposta é um objeto: { "act_123": { ...fields }, "act_456": { ...fields } }
       for (const id of batch) {
         if (json[id]) {
           result.set(id, json[id] as MetaAccountFields);
@@ -175,6 +202,72 @@ export async function fetchAccountBalances(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       for (const id of batch) result.set(id, { error: msg });
+    }
+  }
+
+  return result;
+}
+
+// ── Fetch batch de gasto diário via Insights (últimos 7 dias) ─
+// Retorna mapa de act_id → array de gastos diários em reais (mais recente por último)
+
+export async function fetchBatchDailySpend(
+  token: string,
+  accountIds: string[],
+): Promise<Map<string, number[]>> {
+  const result = new Map<string, number[]>();
+  if (accountIds.length === 0) return result;
+
+  const BATCH_SIZE = 50;
+
+  for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
+    const batch = accountIds.slice(i, i + BATCH_SIZE);
+    const requests = batch.map((id) => ({
+      method: "GET",
+      relative_url: `${id}/insights?fields=spend&date_preset=last_7d&time_increment=1`,
+    }));
+
+    const body = new URLSearchParams();
+    body.set("access_token", token);
+    body.set("batch", JSON.stringify(requests));
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+      const res = await fetch(
+        `${META_CONFIG.graphApiBase}/${META_CONFIG.graphApiVersion}/`,
+        {
+          method: "POST",
+          body: body.toString(),
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          signal: controller.signal,
+        },
+      );
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        console.error("[Meta] Batch insights HTTP error:", res.status);
+        continue;
+      }
+
+      const responses: Array<{ code: number; body: string } | null> = await res.json();
+
+      for (let j = 0; j < batch.length; j++) {
+        const id = batch[j];
+        const item = responses[j];
+        if (!item || item.code !== 200) continue;
+        try {
+          const data: { data?: Array<{ spend?: string }> } = JSON.parse(item.body);
+          const days = (data.data ?? [])
+            .map((d) => parseFloat(d.spend ?? "0"))
+            .filter((v) => v > 0);
+          if (days.length > 0) result.set(id, days);
+        } catch {
+          // ignore parse errors per account
+        }
+      }
+    } catch (err) {
+      console.error("[Meta] Batch insights error:", err instanceof Error ? err.message : err);
     }
   }
 

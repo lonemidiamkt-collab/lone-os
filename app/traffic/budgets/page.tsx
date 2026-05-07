@@ -30,9 +30,11 @@ interface AdAccountRow {
   meta_account_id: string;
   account_name: string | null;
   is_prepaid: boolean;
+  billing_type_source: "auto" | "manual" | null;
   spend_cap: number | null;
   last_balance: number | null;
   last_amount_spent: number | null;
+  last_3d_avg_spend: number | null;
   daily_spend_3d: number[] | null;
   last_synced_at: string | null;
   currency: string;
@@ -52,6 +54,7 @@ interface AdAccountRow {
 interface EnrichedAccount extends AdAccountRow {
   clientName: string;
   availableBalance: number | null;
+  balanceLabel: string;
   daysRemaining: number | null;
   avgDailySpend: number | null;
   severity: BalanceSeverity;
@@ -65,14 +68,32 @@ function enrichAccount(a: AdAccountRow): EnrichedAccount {
   const clientName = a.clients?.nome_fantasia || a.clients?.name || "—";
 
   const available = a.last_balance;
-  const daily = a.daily_spend_3d ?? [];
-  const validDaily = daily.filter((v) => v > 0);
-  const avgDailySpend = validDaily.length > 0
-    ? validDaily.reduce((s, v) => s + v, 0) / validDaily.length
-    : null;
-  const daysRemaining = available !== null && avgDailySpend
+
+  // Gasto médio: usa last_3d_avg_spend (de Insights API) se disponível,
+  // senão tenta daily_spend_3d legado
+  let avgDailySpend: number | null = a.last_3d_avg_spend ?? null;
+  if (avgDailySpend === null) {
+    const legacy = (a.daily_spend_3d ?? []).filter((v) => v > 0);
+    avgDailySpend = legacy.length > 0
+      ? legacy.reduce((s, v) => s + v, 0) / legacy.length
+      : null;
+  }
+
+  const daysRemaining = available !== null && available > 0 && avgDailySpend && avgDailySpend > 0
     ? available / avgDailySpend
     : null;
+
+  // Label descritivo da coluna de saldo
+  let balanceLabel: string;
+  if (a.is_prepaid) {
+    balanceLabel = "Saldo em conta";
+  } else if (available === null) {
+    balanceLabel = "Sem cap definido";
+  } else {
+    const cap = a.spend_cap;
+    const spent = a.last_amount_spent;
+    balanceLabel = cap ? `Cap ${formatBRL(cap)} · gasto ${formatBRL(spent)}` : "Cap − gasto";
+  }
 
   const warningThreshold = a.budget_alert_rules?.find(
     (r) => r.severity === "warning" && r.is_active,
@@ -82,14 +103,14 @@ function enrichAccount(a: AdAccountRow): EnrichedAccount {
   )?.threshold_value ?? null;
 
   const severity = getBalanceSeverity(
-    available ?? 0,
+    available,
     daysRemaining,
     a.account_status ?? 0,
     warningThreshold,
     criticalThreshold,
   );
 
-  return { ...a, clientName, availableBalance: available, daysRemaining, avgDailySpend, severity, warningThreshold, criticalThreshold };
+  return { ...a, clientName, availableBalance: available, balanceLabel, daysRemaining, avgDailySpend, severity, warningThreshold, criticalThreshold };
 }
 
 const SEVERITY_ORDER: Record<BalanceSeverity, number> = {
@@ -510,6 +531,7 @@ export default function BudgetsPage() {
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<BalanceSeverity | "all">("all");
   const [modalAccount, setModalAccount] = useState<EnrichedAccount | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -566,6 +588,31 @@ export default function BudgetsPage() {
     }
   }, [load, syncing]);
 
+  const handleToggleBillingType = useCallback(async (account: EnrichedAccount, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (togglingId) return;
+    setTogglingId(account.id);
+    try {
+      const newIsPrepaid = !account.is_prepaid;
+      const res = await authedFetch("/api/traffic/billing-type", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId: account.id, isPrepaid: newIsPrepaid }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast.error(`Erro: ${d.error ?? "desconhecido"}`);
+        return;
+      }
+      toast.success(`${account.clientName} → ${newIsPrepaid ? "Pré-pago (Pix/Boleto)" : "Pós-pago (Cartão)"}`);
+      await load();
+    } catch {
+      toast.error("Falha ao alterar tipo de cobrança");
+    } finally {
+      setTogglingId(null);
+    }
+  }, [togglingId, load]);
+
   useEffect(() => {
     load();
     // Auto-refresh a cada 5 minutos
@@ -578,9 +625,11 @@ export default function BudgetsPage() {
     ? accounts
     : accounts.filter((a) => a.severity === filterSeverity);
 
-  const totalBalance = accounts
-    .filter((a) => a.availableBalance !== null && a.availableBalance !== Infinity && a.account_status === 1)
-    .reduce((s, a) => s + (a.availableBalance ?? 0), 0);
+  // Saldo agregado: só contas ativas onde o saldo é calculável
+  const computedAccounts = accounts.filter(
+    (a) => a.availableBalance !== null && a.account_status === 1,
+  );
+  const totalBalance = computedAccounts.reduce((s, a) => s + (a.availableBalance ?? 0), 0);
 
   const criticalCount = accounts.filter((a) => a.severity === "critical").length;
   const warningCount  = accounts.filter((a) => a.severity === "warning").length;
@@ -666,7 +715,7 @@ export default function BudgetsPage() {
             {
               label: "Saldo agregado",
               value: formatBRL(totalBalance),
-              sub: "contas ativas",
+              sub: `${computedAccounts.length} de ${accounts.length} contas`,
               onClick: () => setFilterSeverity("ok"),
               active: filterSeverity === "ok",
               color: "text-emerald-400",
@@ -768,14 +817,20 @@ export default function BudgetsPage() {
                     <p className="text-sm font-medium text-foreground truncate">{account.clientName}</p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-[10px] text-zinc-600 font-mono truncate">{account.meta_account_id}</p>
-                      <span className={cn(
-                        "text-[9px] px-1.5 py-0.5 rounded border",
-                        account.is_prepaid
-                          ? "text-blue-400 border-blue-500/20 bg-blue-500/[0.06]"
-                          : "text-purple-400 border-purple-500/20 bg-purple-500/[0.06]",
-                      )}>
+                      <button
+                        onClick={(e) => handleToggleBillingType(account, e)}
+                        disabled={togglingId === account.id}
+                        title={`${account.is_prepaid ? "Pré-pago" : "Pós-pago"} · definido ${account.billing_type_source === "manual" ? "manualmente" : "automaticamente"} · clique pra trocar`}
+                        className={cn(
+                          "text-[9px] px-1.5 py-0.5 rounded border transition-all cursor-pointer hover:opacity-70 disabled:opacity-40",
+                          account.is_prepaid
+                            ? "text-blue-400 border-blue-500/20 bg-blue-500/[0.06]"
+                            : "text-purple-400 border-purple-500/20 bg-purple-500/[0.06]",
+                        )}
+                      >
                         {account.is_prepaid ? "pré" : "pós"}
-                      </span>
+                        {account.billing_type_source === "manual" && " ✓"}
+                      </button>
                     </div>
                   </div>
 
@@ -803,17 +858,9 @@ export default function BudgetsPage() {
                       "text-[15px] font-semibold leading-tight",
                       isCritical ? "text-[#E24B4A]" : isWarning ? "text-[#BA7517]" : "text-foreground",
                     )}>
-                      {account.availableBalance !== null && account.availableBalance !== Infinity
-                        ? formatBRL(account.availableBalance)
-                        : account.availableBalance === Infinity ? "Sem cap" : "—"}
+                      {account.availableBalance !== null ? formatBRL(account.availableBalance) : "—"}
                     </p>
-                    <p className="text-[10px] text-zinc-600 mt-0.5">
-                      {account.is_prepaid
-                        ? account.spend_cap ? `Limite ${formatBRL(account.spend_cap)}` : "Saldo em conta"
-                        : account.spend_cap
-                          ? `Cap ${formatBRL(account.spend_cap)} · gasto ${formatBRL(account.last_amount_spent)}`
-                          : "Sem cap definido"}
-                    </p>
+                    <p className="text-[10px] text-zinc-600 mt-0.5">{account.balanceLabel}</p>
                   </div>
 
                   {/* Dias restantes */}

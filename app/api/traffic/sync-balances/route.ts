@@ -5,9 +5,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import {
   fetchAccountBalances,
+  fetchBatchDailySpend,
   calculateAvailableBalance,
   estimateDaysRemaining,
-  getAccountStatusLabel,
+  detectAccountType,
   type MetaAccountFields,
 } from "@/lib/meta/account-balance";
 
@@ -34,9 +35,9 @@ export async function GET() {
     const { data, error } = await supabaseAdmin
       .from("ad_accounts")
       .select(`
-        id, meta_account_id, account_name, is_prepaid, spend_cap,
-        last_balance, last_amount_spent, daily_spend_3d,
-        last_synced_at, currency, account_status, sync_error,
+        id, meta_account_id, account_name, is_prepaid, billing_type_source, spend_cap,
+        last_balance, last_amount_spent, last_3d_avg_spend, daily_spend_3d,
+        last_synced_at, currency, account_status, sync_error, last_error_message,
         clients!inner (
           id, name, nome_fantasia, client_finance_phone, client_pix_key
         ),
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
     // Buscar contas ativas no DB
     let query = supabaseAdmin
       .from("ad_accounts")
-      .select("id, meta_account_id, is_prepaid, spend_cap");
+      .select("id, meta_account_id, is_prepaid, spend_cap, billing_type_source");
 
     if (targetAccountIds && targetAccountIds.length > 0) {
       query = query.in("meta_account_id", targetAccountIds) as typeof query;
@@ -86,14 +87,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ synced: 0, message: "Nenhuma conta cadastrada" });
     }
 
-    const metaIds = (accounts as { id: string; meta_account_id: string; is_prepaid: boolean; spend_cap: number | null }[]).map((a) => a.meta_account_id);
-    const metaData = await fetchAccountBalances(token, metaIds);
+    type AccountRow = { id: string; meta_account_id: string; is_prepaid: boolean; spend_cap: number | null; billing_type_source: string | null };
+    const typedAccounts = accounts as AccountRow[];
+    const metaIds = typedAccounts.map((a) => a.meta_account_id);
+    const [metaData, dailySpendMap] = await Promise.all([
+      fetchAccountBalances(token, metaIds),
+      fetchBatchDailySpend(token, metaIds),
+    ]);
 
     const now = new Date().toISOString();
     let synced = 0;
     let errors = 0;
 
-    for (const account of accounts as { id: string; meta_account_id: string; is_prepaid: boolean; spend_cap: number | null }[]) {
+    for (const account of typedAccounts) {
       const raw = metaData.get(account.meta_account_id);
 
       if (!raw || "error" in raw) {
@@ -109,52 +115,56 @@ export async function POST(req: NextRequest) {
 
       const meta = raw as MetaAccountFields;
 
-      // Buscar gastos dos últimos 3 dias para calcular média
-      // Reutilizamos o valor de amount_spent como proxy: precisamos de histórico
-      // diário. No v1, estimamos via daily_spend_3d já armazenado + novo spend
-      const { data: prevAccount } = await supabaseAdmin
-        .from("ad_accounts")
-        .select("last_amount_spent, daily_spend_3d")
-        .eq("id", account.id)
-        .single();
-
-      const prevSpent = (prevAccount?.last_amount_spent as number | null) ?? null;
-      const currentSpent = parseFloat(meta.amount_spent) / 100;
-      const prevDailySpend = (prevAccount?.daily_spend_3d as number[] | null) ?? [];
-
-      // Calcular delta de gasto desde último sync (gasto do dia aproximado)
-      let todaySpend: number | null = null;
-      if (prevSpent !== null && currentSpent >= prevSpent) {
-        todaySpend = currentSpent - prevSpent;
+      // Auto-detecção de tipo de conta (só sobrescreve se não foi definido manualmente)
+      const isManual = account.billing_type_source === "manual";
+      let isPrepaid = account.is_prepaid;
+      let detectedType: "prepaid" | "postpaid" | null = null;
+      if (!isManual) {
+        const detected = detectAccountType(meta);
+        if (detected !== "unknown") {
+          isPrepaid = detected === "prepaid";
+          detectedType = detected;
+        }
       }
 
-      // Manter janela deslizante de 3 dias
-      const newDailySpend = todaySpend !== null
-        ? [...prevDailySpend.slice(-2), todaySpend]
-        : prevDailySpend.slice(-3);
+      // Gasto médio dos últimos 3 dias via Insights API (batch, já buscado acima)
+      const dailyInsights = dailySpendMap.get(account.meta_account_id) ?? [];
+      // Pegar os 3 dias mais recentes (array já vem em ordem crescente de data)
+      const last3 = dailyInsights.slice(-3).filter((v) => v > 0);
+      const avg3dSpend = last3.length > 0
+        ? last3.reduce((a, b) => a + b, 0) / last3.length
+        : null;
+
+      const currentSpent = parseFloat(meta.amount_spent) / 100;
 
       const availableBalance = calculateAvailableBalance(
-        account.is_prepaid,
+        isPrepaid,
         account.spend_cap,
         meta,
       );
 
-      await supabaseAdmin.from("ad_accounts").update({
+      const updatePayload: Record<string, unknown> = {
         last_balance:        availableBalance,
         last_amount_spent:   currentSpent,
-        daily_spend_3d:      newDailySpend.length > 0 ? newDailySpend : null,
+        daily_spend_3d:      last3.length > 0 ? last3 : null,
+        last_3d_avg_spend:   avg3dSpend,
         currency:            meta.currency ?? "BRL",
         account_status:      meta.account_status,
         spend_cap:           meta.spend_cap ? parseFloat(meta.spend_cap) / 100 : account.spend_cap,
         sync_error:          null,
         last_error_message:  null,
         last_synced_at:      now,
-        account_name:        undefined,
-      }).eq("id", account.id);
+      };
+      if (detectedType !== null) {
+        updatePayload.is_prepaid = isPrepaid;
+        updatePayload.billing_type_source = "auto";
+      }
+
+      await supabaseAdmin.from("ad_accounts").update(updatePayload).eq("id", account.id);
 
       // ── Avaliador de regras de alerta ──────────────────────
-      if (meta.account_status === 1) { // só conta ativa
-        await evaluateAlertRules(account.id, availableBalance, newDailySpend, now);
+      if (meta.account_status === 1 && availableBalance !== null) {
+        await evaluateAlertRules(account.id, availableBalance, avg3dSpend, now);
       }
 
       synced++;
@@ -176,7 +186,7 @@ export async function POST(req: NextRequest) {
 async function evaluateAlertRules(
   adAccountId: string,
   availableBalance: number,
-  dailySpend3d: number[],
+  avgDailySpend: number | null,
   now: string,
 ) {
   const { data: rules } = await supabaseAdmin
@@ -188,7 +198,7 @@ async function evaluateAlertRules(
   if (!rules || rules.length === 0) return;
 
   const today = now.slice(0, 10); // "YYYY-MM-DD"
-  const daysRemaining = estimateDaysRemaining(availableBalance, dailySpend3d);
+  const daysRemaining = estimateDaysRemaining(availableBalance, avgDailySpend);
 
   for (const rule of rules) {
     const triggered = availableBalance <= (rule.threshold_value as number);
