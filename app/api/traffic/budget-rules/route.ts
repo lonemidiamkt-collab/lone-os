@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { getServerUser } from "@/lib/supabase/server-auth";
+import { getServerUser } from "@/lib/supabase/auth-server";
 
 // ── GET /api/traffic/budget-rules?adAccountId=<uuid> ─────────
 // Retorna regras + dados da conta para o modal de configuração.
