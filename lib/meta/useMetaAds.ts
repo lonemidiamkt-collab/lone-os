@@ -115,7 +115,7 @@ export function useMetaConnection() {
           await saveGlobalToken(token, expiresInNum, "short");
           const expiresAt = expiresInNum ? Date.now() + (expiresInNum - 300) * 1000 : null;
           if (!cancelled) {
-            setState({ connected: true, loading: false, token, tokenExpired: false, tokenType: "short", tokenExpiresAt: expiresAt });
+            setState({ connected: true, loading: false, token, tokenExpired: false, tokenType: "short", tokenExpiresAt: expiresAt, exchangeFailed: false });
           }
           window.history.replaceState(null, "", window.location.pathname + window.location.search);
           // Exchange for long-lived token in background, update state when done
