@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Client, Role } from "@/lib/types";
+import type { Client, Role, ServiceType } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
   Building2, Shield, FileText, Eye, EyeOff, Download, Upload,
   Pencil, Check, Loader2, AlertTriangle, Send, ExternalLink,
-  Link as LinkIcon, Clock, CheckCircle, Mail,
+  Link as LinkIcon, Clock, CheckCircle, Mail, Settings,
 } from "lucide-react";
+import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 
 interface Props {
   client: Client;
@@ -24,6 +25,7 @@ type Tab = "overview" | "dados" | "contratos" | "chat" | "historico" | "tasks" |
 
 export default function DadosTab({ client, role, currentUser, updateClientData, onNavigateTab, generateOnboardingLink, generatingLink, onboardingLink }: Props) {
   const isAdmin = role === "admin" || role === "manager";
+  const team = useTeamMembers();
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -69,6 +71,10 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
     facebookLogin: client.facebookLogin || "", facebookPassword: client.facebookPassword || "",
     instagramLogin: client.instagramLogin || "", instagramPassword: client.instagramPassword || "",
     googleAdsLogin: client.googleAdsLogin || "", googleAdsPassword: client.googleAdsPassword || "",
+    serviceType: client.serviceType || "",
+    assignedTraffic: client.assignedTraffic || "",
+    assignedSocial: client.assignedSocial || "",
+    assignedDesigner: client.assignedDesigner || "",
   });
 
   useEffect(() => { setForm(initForm()); }, [client.id]);
@@ -106,6 +112,11 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         facebookLogin: form.facebookLogin || undefined,
         instagramLogin: form.instagramLogin || undefined,
         googleAdsLogin: form.googleAdsLogin || undefined,
+        // Operational fields
+        serviceType: (form.serviceType as ServiceType) || undefined,
+        assignedTraffic: form.assignedTraffic || undefined,
+        assignedSocial: form.assignedSocial || undefined,
+        assignedDesigner: form.assignedDesigner || undefined,
       });
 
       // Senhas: só envia se foi editada (evita regravar blob criptografado com string vazia).
@@ -618,6 +629,74 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* BLOCO: Configuração Operacional — admin only */}
+      {isAdmin && (
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
+            <Settings size={11} className="text-[#0d4af5]" /> Configuracao Operacional
+          </p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+            <div className="space-y-1 col-span-2">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Tipo de Servico</p>
+              {editing ? (
+                <select value={form.serviceType || ""} onChange={(e) => setForm((p) => ({ ...p, serviceType: e.target.value }))}
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50">
+                  <option value="">Nao definido</option>
+                  <option value="lone_growth">Lone Growth (Trafego + Social + Design)</option>
+                  <option value="assessoria_trafego">Assessoria de Trafego</option>
+                  <option value="assessoria_social">Assessoria de Social</option>
+                  <option value="assessoria_design">Assessoria de Design</option>
+                </select>
+              ) : (
+                <p className="text-sm text-foreground">
+                  {form.serviceType === "lone_growth" ? "Lone Growth" :
+                   form.serviceType === "assessoria_trafego" ? "Assessoria de Trafego" :
+                   form.serviceType === "assessoria_social" ? "Assessoria de Social" :
+                   form.serviceType === "assessoria_design" ? "Assessoria de Design" :
+                   <span className="text-zinc-600 italic">Nao definido</span>}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Responsavel Trafego</p>
+              {editing ? (
+                <select value={form.assignedTraffic || ""} onChange={(e) => setForm((p) => ({ ...p, assignedTraffic: e.target.value }))}
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50">
+                  <option value="">Nenhum</option>
+                  {team.forField("assignedTraffic").map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
+                </select>
+              ) : (
+                <p className="text-sm text-foreground">{form.assignedTraffic || <span className="text-zinc-600 italic">Nao atribuido</span>}</p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Responsavel Social</p>
+              {editing ? (
+                <select value={form.assignedSocial || ""} onChange={(e) => setForm((p) => ({ ...p, assignedSocial: e.target.value }))}
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50">
+                  <option value="">Nenhum</option>
+                  {team.forField("assignedSocial").map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
+                </select>
+              ) : (
+                <p className="text-sm text-foreground">{form.assignedSocial || <span className="text-zinc-600 italic">Nao atribuido</span>}</p>
+              )}
+            </div>
+            <div className="space-y-1 col-span-2">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Designer Responsavel</p>
+              {editing ? (
+                <select value={form.assignedDesigner || ""} onChange={(e) => setForm((p) => ({ ...p, assignedDesigner: e.target.value }))}
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50">
+                  <option value="">Nenhum</option>
+                  {team.forField("assignedDesigner").map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
+                </select>
+              ) : (
+                <p className="text-sm text-foreground">{form.assignedDesigner || <span className="text-zinc-600 italic">Nao atribuido</span>}</p>
+              )}
+            </div>
           </div>
         </div>
       )}

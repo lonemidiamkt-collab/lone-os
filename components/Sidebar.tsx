@@ -75,8 +75,9 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
       {
         title: "Verba",
         items: [
-          { label: "Controle de Investimento", icon: Wallet,   tab: "investimento" },
-          { label: "Anúncios Meta",            icon: Megaphone,tab: "anuncios",   badgeKey: "activeCampaigns" },
+          { label: "Controle de Investimento", icon: Wallet,      tab: "investimento" },
+          { label: "Anúncios Meta",            icon: Megaphone,   tab: "anuncios",   badgeKey: "activeCampaigns" },
+          { label: "Saldos & Alertas",         icon: Activity,    href: "/traffic/budgets" },
         ],
       },
       {
