@@ -69,18 +69,15 @@ function enrichAccount(a: AdAccountRow): EnrichedAccount {
   const clientName = a.clients?.nome_fantasia || a.clients?.name || "—";
 
   // Cálculo de saldo disponível:
-  // Pós-pago com verba mensal → monthly_budget - amount_spent (mais preciso que spend_cap)
+  // Pós-pago com verba mensal → mostra monthly_budget diretamente (amount_spent da Meta API é
+  //   cumulativo desde o início do ciclo de cobrança, podendo abranger vários meses).
   // Outros → last_balance já calculado no sync (display_string ou spend_cap - amount_spent)
   let available: number | null;
   let balanceLabel: string;
 
-  if (!a.is_prepaid && a.monthly_budget !== null && a.last_amount_spent !== null) {
-    const remaining = a.monthly_budget - a.last_amount_spent;
-    available = Math.max(0, remaining);
-    const overspent = remaining < 0;
-    balanceLabel = overspent
-      ? `Verba esgotada · gasto ${formatBRL(a.last_amount_spent)} / ${formatBRL(a.monthly_budget)}/mês`
-      : `${formatBRL(a.monthly_budget)}/mês · gasto ${formatBRL(a.last_amount_spent)}`;
+  if (!a.is_prepaid && a.monthly_budget !== null) {
+    available = a.monthly_budget;
+    balanceLabel = `Verba mensal contratada`;
   } else {
     available = a.last_balance;
     if (a.is_prepaid) {
