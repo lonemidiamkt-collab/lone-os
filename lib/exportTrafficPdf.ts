@@ -137,7 +137,9 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
 
   const hasBestAdset = !!(data.bestAdsetCpa && data.bestAdsetCpa > 0);
   const hasVideo = !isCompact && !!(data.videoViews25 && data.videoViews25 > 0);
-  const hasDemographics = !isCompact && !!(data.demographics && data.demographics.ageRanges.length > 0);
+  // Demographics shown for ALL period lengths — user requirement: unconditional
+  const hasDemographics = !!(data.demographics && data.demographics.ageRanges.length > 0);
+  const hasEvolution = !isCompact && (data.dailyMessages?.length ?? 0) >= 7;
 
   // ── KPI rows (numbered, like "cenas") ───────────────────────────────────
   const kpiItems: { label: string; value: string; sub?: string; champion?: boolean }[] = [
@@ -158,7 +160,7 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
   }
 
   const kpiRows = kpiItems.map((item, i) => `
-    <div style="display:flex;align-items:flex-start;gap:0;${item.champion ? "border-left:3px solid #0d4af5;" : "border-left:3px solid transparent;"}${i < kpiItems.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}">
+    <div data-pb style="display:flex;align-items:flex-start;gap:0;${item.champion ? "border-left:3px solid #0d4af5;" : "border-left:3px solid transparent;"}${i < kpiItems.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}">
       <div style="min-width:52px;padding:14px 12px;font-size:11px;font-weight:800;color:#3b6ff5;flex-shrink:0;">${pad2(i + 1)}</div>
       <div style="flex:1;padding:14px 0;border-left:1px solid #1a1a2e;">
         <div style="padding-left:16px;">
@@ -184,7 +186,7 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
     const isChamp = isCampaignChampion(c);
     const isLast = i === activeCampaigns.length - 1;
     return `
-    <div style="display:flex;align-items:flex-start;gap:0;${isChamp ? "border-left:3px solid #0d4af5;" : "border-left:3px solid transparent;"}${!isLast ? "border-bottom:1px solid #1a1a2e;" : ""}">
+    <div data-pb style="display:flex;align-items:flex-start;gap:0;${isChamp ? "border-left:3px solid #0d4af5;" : "border-left:3px solid transparent;"}${!isLast ? "border-bottom:1px solid #1a1a2e;" : ""}">
       <div style="min-width:52px;padding:12px;font-size:11px;font-weight:800;color:#3b6ff5;flex-shrink:0;">${pad2(i + 1)}</div>
       <div style="flex:1;padding:12px 0 12px 16px;border-left:1px solid #1a1a2e;">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;">
@@ -213,38 +215,56 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
   }).join("");
 
   // ── Demographics ─────────────────────────────────────────────────────────
-  const maxAgePct = hasDemographics ? Math.max(...data.demographics!.ageRanges.map((a) => a.percentage)) : 0;
   const demoHtml = hasDemographics ? (() => {
     const d = data.demographics!;
-    const circumference = 2 * Math.PI * 46;
-    const wArc = (d.genderSplit.women / 100) * circumference;
-    const ageBars = d.ageRanges.map((a, i) => `
-      <div style="display:flex;align-items:flex-start;gap:0;${i < d.ageRanges.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}border-left:3px solid transparent;">
-        <div style="min-width:52px;padding:10px 12px;font-size:11px;font-weight:800;color:#3b6ff5;">${pad2(i + 1)}</div>
-        <div style="flex:1;padding:10px 16px;border-left:1px solid #1a1a2e;display:flex;align-items:center;gap:10px;">
-          <span style="width:36px;font-size:10px;color:#a1a1aa;flex-shrink:0;">${a.range}</span>
-          <div style="flex:1;height:12px;background:#0f0f14;border-radius:3px;overflow:hidden;">
-            <div style="width:${Math.max((a.percentage / maxAgePct) * 100, 5)}%;height:100%;background:linear-gradient(90deg,#0d4af5,#3b6ff7);border-radius:3px;"></div>
-          </div>
-          <span style="font-size:10px;font-weight:700;color:#e4e4e7;width:36px;text-align:right;">${a.percentage.toFixed(1)}%</span>
+    const maxAgePct = Math.max(...d.ageRanges.map((a) => a.percentage), 1);
+    const r = 36;
+    const circumference = 2 * Math.PI * r;
+    const menArc = (d.genderSplit.men / 100) * circumference;
+    const womenArc = (d.genderSplit.women / 100) * circumference;
+    const ageBars = d.ageRanges.map((a) => `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <span style="width:34px;font-size:10px;color:#52525b;flex-shrink:0;font-weight:500;">${a.range}</span>
+        <div style="flex:1;height:6px;background:#efefef;border-radius:3px;overflow:hidden;">
+          <div style="width:${Math.max(Math.round((a.percentage / maxAgePct) * 100), 5)}%;height:100%;background:#0d4af5;border-radius:3px;"></div>
         </div>
+        <span style="font-size:10px;font-weight:700;color:#1a1a2e;width:38px;text-align:right;">${a.percentage.toFixed(1)}%</span>
       </div>`).join("");
     return `
-    <section style="margin-bottom:24px;">
+    <section data-pb style="margin-bottom:24px;">
       <div class="sec-label">Público — Dados Demográficos</div>
-      <div class="sec-title">Faixa Etária</div>
-      <div class="table-block">${ageBars}</div>
-      <div style="margin-top:12px;display:flex;align-items:center;gap:16px;padding:12px 16px;background:#0f0f14;border-radius:8px;border:1px solid #1a1a2e;">
-        <div style="position:relative;width:64px;height:64px;flex-shrink:0;">
-          <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
-            <circle cx="50" cy="50" r="46" fill="none" stroke="#1a1a2e" stroke-width="8"/>
-            <circle cx="50" cy="50" r="46" fill="none" stroke="#e84393" stroke-width="8" stroke-dasharray="${wArc} ${circumference}"/>
-            <circle cx="50" cy="50" r="46" fill="none" stroke="#0d4af5" stroke-width="8" stroke-dasharray="${circumference - wArc} ${circumference}" stroke-dashoffset="-${wArc}"/>
-          </svg>
-        </div>
-        <div style="display:flex;gap:20px;">
-          <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e84393;margin-right:5px;vertical-align:middle;"></span><span style="font-size:11px;color:#e4e4e7;">${d.genderSplit.women.toFixed(1)}% Mulheres</span></div>
-          <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#0d4af5;margin-right:5px;vertical-align:middle;"></span><span style="font-size:11px;color:#e4e4e7;">${d.genderSplit.men.toFixed(1)}% Homens</span></div>
+      <div class="sec-title">Perfil do Público</div>
+      <div style="background:#ffffff;border-radius:10px;padding:20px 24px;border:1px solid #e4e4e7;">
+        <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
+          <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:12px;min-width:110px;">
+            <div style="font-size:9px;font-weight:700;color:#52525b;letter-spacing:.06em;text-transform:uppercase;">Gênero</div>
+            <div style="position:relative;width:88px;height:88px;">
+              <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
+                <circle cx="50" cy="50" r="${r}" fill="none" stroke="#efefef" stroke-width="14"/>
+                <circle cx="50" cy="50" r="${r}" fill="none" stroke="#0d4af5" stroke-width="14"
+                  stroke-dasharray="${menArc.toFixed(2)} ${circumference.toFixed(2)}"/>
+                <circle cx="50" cy="50" r="${r}" fill="none" stroke="#3f3f46" stroke-width="14"
+                  stroke-dasharray="${womenArc.toFixed(2)} ${circumference.toFixed(2)}"
+                  stroke-dashoffset="${(-menArc).toFixed(2)}"/>
+              </svg>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;align-self:stretch;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <div style="width:9px;height:9px;border-radius:50%;background:#0d4af5;flex-shrink:0;"></div>
+                <span style="font-size:10px;color:#1a1a2e;flex:1;">Homens</span>
+                <span style="font-size:11px;font-weight:700;color:#1a1a2e;">${d.genderSplit.men.toFixed(1)}%</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <div style="width:9px;height:9px;border-radius:50%;background:#3f3f46;flex-shrink:0;"></div>
+                <span style="font-size:10px;color:#1a1a2e;flex:1;">Mulheres</span>
+                <span style="font-size:11px;font-weight:700;color:#1a1a2e;">${d.genderSplit.women.toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+          <div style="flex:1;min-width:180px;">
+            <div style="font-size:9px;font-weight:700;color:#52525b;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px;">Faixa Etária</div>
+            ${ageBars}
+          </div>
         </div>
       </div>
     </section>`;
@@ -262,7 +282,7 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
           { pct: "75%", val: data.videoViews75! },
           { pct: "95%", val: data.videoViews95! },
         ].map((r, i, arr) => `
-        <div style="display:flex;align-items:center;gap:0;${i < arr.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}border-left:3px solid transparent;">
+        <div data-pb style="display:flex;align-items:center;gap:0;${i < arr.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}border-left:3px solid transparent;">
           <div style="min-width:52px;padding:12px;font-size:11px;font-weight:800;color:#3b6ff5;">${r.pct}</div>
           <div style="flex:1;padding:12px 16px;border-left:1px solid #1a1a2e;display:flex;align-items:center;gap:10px;">
             <span style="font-size:12px;font-weight:600;color:#e4e4e7;width:60px;">${fmtNum(r.val)}</span>
@@ -372,6 +392,7 @@ ${autoPrint ? "" : `
   ` : ""}
 
   ${videoHtml}
+  ${hasEvolution ? buildWeeklyEvolutionSection(data.dailyMessages!) : ""}
   ${demoHtml}
   ${obsHtml}
 
@@ -390,7 +411,7 @@ ${autoPrint ? "" : `
         ["Frequência", "Média de exibições por pessoa"],
         ["Conjunto Campeão", "O adset com menor custo por mensagem no período"],
       ].map(([k, v], i, arr) => `
-        <div style="display:flex;align-items:flex-start;gap:0;border-left:3px solid transparent;${i < arr.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}">
+        <div data-pb style="display:flex;align-items:flex-start;gap:0;border-left:3px solid transparent;${i < arr.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}">
           <div style="min-width:52px;padding:10px 12px;font-size:11px;font-weight:800;color:#3b6ff5;">${pad2(i + 1)}</div>
           <div style="flex:1;padding:10px 16px;border-left:1px solid #1a1a2e;">
             <span style="font-size:11px;font-weight:700;color:#e4e4e7;">${k}</span>
@@ -462,7 +483,7 @@ function buildWeeklyEvolutionSection(daily: { date: string; messages: number }[]
     </div>`;
   }).join("");
   return `
-<div style="padding:0 32px;margin-bottom:20px;">
+<div data-pb style="padding:0 32px;margin-bottom:20px;">
   <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:10px;">
     <div>
       <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#3b6ff5;">Crescimento</div>
@@ -493,7 +514,7 @@ function buildClientDemographicsSection(demographics: TrafficReportData["demogra
       <span style="font-size:10px;font-weight:700;color:#1a1a2e;width:38px;text-align:right;">${a.percentage.toFixed(1)}%</span>
     </div>`).join("");
   return `
-<div style="padding:0 32px;margin-bottom:20px;">
+<div data-pb style="padding:0 32px;margin-bottom:20px;">
   <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#3b6ff5;margin-bottom:6px;">Público Alcançado</div>
   <div style="font-size:15px;font-weight:800;color:#fff;letter-spacing:-.01em;margin-bottom:12px;">Dados Demográficos</div>
   <div style="background:#ffffff;border-radius:12px;padding:20px 24px;border:1px solid #e4e4e7;">
@@ -654,7 +675,7 @@ ${actionBar}
   ${periodDays >= 14 ? buildWeeklyEvolutionSection(daily) : ""}
 
   <!-- CHAMPION + SUMMARY -->
-  <div style="padding:0 32px;display:flex;gap:12px;margin-bottom:20px;">
+  <div data-pb style="padding:0 32px;display:flex;gap:12px;margin-bottom:20px;">
     ${hasBestAdset ? `
     <div style="flex:1;background:#0d0d10;border:1px solid #1a1a2e;border-radius:10px;padding:14px 16px;display:flex;align-items:flex-start;gap:10px;">
       <div style="width:32px;height:32px;background:#0d4af515;border:1px solid #0d4af530;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">

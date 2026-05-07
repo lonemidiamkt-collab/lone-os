@@ -590,18 +590,24 @@ export async function fetchAccountDemographics(
   try {
     const PRESET_MAP: Record<number, string> = { 7: "last_7d", 14: "last_14d", 30: "last_30d", 90: "last_90d" };
     const usePreset = !dateFrom && !dateTo && days in PRESET_MAP;
+    const timeRange = !usePreset && dateFrom && dateTo
+      ? JSON.stringify({ since: dateFrom, until: dateTo })
+      : null;
     const params = new URLSearchParams({
       access_token: token,
       fields: "impressions,reach",
       breakdowns: "age,gender",
-      level: "account",
       ...(usePreset
         ? { date_preset: PRESET_MAP[days] }
-        : { time_range: JSON.stringify({ since: dateFrom!, until: dateTo! }) }),
+        : { time_range: timeRange! }),
       limit: "200",
     });
     const res = await fetch(`https://graph.facebook.com/v21.0/${accountId}/insights?${params}`);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn("[Demographics] API error:", res.status, err?.error?.message ?? "");
+      return null;
+    }
     const json = await res.json();
     const rows: { age?: string; gender?: string; impressions?: string; reach?: string }[] = json.data ?? [];
     if (rows.length === 0) return null;
