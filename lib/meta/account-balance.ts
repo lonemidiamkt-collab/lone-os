@@ -50,16 +50,30 @@ function centsToReais(centavos: string | null | undefined): number {
 // Spend caps acima deste valor (em centavos) são o "ilimitado" da Meta (ex: 922337203685477)
 const SPEND_CAP_INFINITY_CENTS = 10_000_000_000; // R$ 100M
 
+// Extrai o valor numérico de funding_source_details.display_string.
+// Ex: "Saldo disponível (R$2.880,80 BRL)" → 2880.80
+// Essa string é exatamente o que o Gerenciador de Anúncios exibe como saldo disponível.
+function parseDisplayStringBalance(displayString: string | undefined): number | null {
+  if (!displayString) return null;
+  const match = displayString.match(/R\$\s*([\d.,]+)/);
+  if (!match) return null;
+  const raw = match[1];
+  // Formato pt-BR: "2.880,80" — ponto = milhar, vírgula = decimal
+  if (raw.includes(",")) {
+    return parseFloat(raw.replace(/\./g, "").replace(",", "."));
+  }
+  return parseFloat(raw.replace(/,/g, ""));
+}
+
 // ── Auto-detecção de tipo de conta ───────────────────────────
 
 export function detectAccountType(meta: MetaAccountFields): "prepaid" | "postpaid" | "unknown" {
-  // Única fonte confiável: funding_source_details retornado pela Meta API.
-  // Heurísticos de balance/spend_cap são ambíguos — contas pré-pagas podem ter
-  // spend_cap configurado, e contas pós-pagas podem ter balance != 0 por créditos.
   const fs = meta.funding_source_details;
   if (!fs) return "unknown";
   if (fs.type === 1) return "postpaid"; // cartão de crédito
   if (fs.type === 2) return "prepaid";  // boleto / Pix / pré-pago
+  // type=20: conta com saldo pré-pago creditado (Brasil) — display_string mostra o valor real
+  if (fs.type === 20) return "prepaid";
   return "unknown";
 }
 
@@ -72,8 +86,14 @@ export function calculateAvailableBalance(
   spendCap: number | null,   // já em reais (vem do DB)
   meta: MetaAccountFields,   // valores em centavos (vem da Meta API)
 ): number | null {
+  // funding_source_details.display_string é a fonte mais precisa quando disponível —
+  // é exatamente o valor que o Gerenciador de Anúncios exibe como "Saldo disponível".
+  // O campo `balance` da API NÃO é o saldo da campanha para contas type=20.
+  const displayBalance = parseDisplayStringBalance(meta.funding_source_details?.display_string);
+  if (displayBalance !== null) return displayBalance;
+
   if (isPrepaid) {
-    // Pré-pago: saldo da carteira (único valor significativo)
+    // Pré-pago sem display_string: usar balance bruto da carteira
     return centsToReais(meta.balance);
   }
 
