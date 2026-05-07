@@ -226,7 +226,13 @@ export default function Sidebar() {
   function handlePrimaryClick(item: PrimaryItem) {
     if (item.hasSecondary && SECONDARY_NAV[item.href]) {
       if (activePrimary === item.href) {
-        setSecondaryOpen(!secondaryOpen);
+        // Em sub-rota (ex: /traffic/budgets): navega pra rota base
+        // Na rota base exata: apenas toggle do secondary
+        if (pathname !== item.href) {
+          router.push(item.href);
+        } else {
+          setSecondaryOpen(!secondaryOpen);
+        }
       } else {
         setActivePrimary(item.href);
         setSecondaryOpen(true);
@@ -247,7 +253,9 @@ export default function Sidebar() {
     const targetPath = targetHref.split("?")[0];
     if (item.tab) {
       setPendingTab(item.tab);
-      if (!pathname.startsWith(targetPath)) {
+      // Usa match exato: /traffic/budgets !== /traffic → navega
+      // startsWith causava freeze ao ficar em sub-rotas como /traffic/budgets
+      if (pathname !== targetPath) {
         router.push(targetHref);
       }
     } else {

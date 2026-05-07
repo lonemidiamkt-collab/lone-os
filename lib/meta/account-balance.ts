@@ -113,15 +113,22 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     if (attempt > 0) await sleep(Math.pow(2, attempt) * 1000); // 2s, 4s
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
     try {
-      const res = await fetch(url);
-      if (res.status === 429 || res.status === 4) {
-        lastError = new Error(`Rate limit (${res.status})`);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.status === 429) {
+        lastError = new Error(`Rate limit (429)`);
         continue;
       }
       return res;
     } catch (err) {
+      clearTimeout(timeoutId);
       lastError = err instanceof Error ? err : new Error(String(err));
+      if (lastError.name === "AbortError") {
+        lastError = new Error("Timeout Meta API (10s)");
+      }
     }
   }
   throw lastError ?? new Error("fetchWithRetry: todas tentativas falharam");

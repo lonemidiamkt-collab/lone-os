@@ -535,8 +535,13 @@ export default function BudgetsPage() {
   const handleSync = useCallback(async () => {
     if (syncing) return;
     setSyncing(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
     try {
-      const res = await authedFetch("/api/traffic/sync-balances", { method: "POST" });
+      const res = await authedFetch("/api/traffic/sync-balances", {
+        method: "POST",
+        signal: controller.signal,
+      });
       const data = await res.json();
       if (!res.ok) {
         toast.error(`Falha na sincronização: ${data.error ?? "Erro desconhecido"}`);
@@ -550,8 +555,13 @@ export default function BudgetsPage() {
       }
       await load();
     } catch (err: unknown) {
-      toast.error(`Erro de rede: ${err instanceof Error ? err.message : "desconhecido"}`);
+      if (err instanceof Error && err.name === "AbortError") {
+        toast.error("Sincronização demorou mais de 60s. Verifique o token Meta.");
+      } else {
+        toast.error(`Erro de rede: ${err instanceof Error ? err.message : "desconhecido"}`);
+      }
     } finally {
+      clearTimeout(timeoutId);
       setSyncing(false);
     }
   }, [load, syncing]);
