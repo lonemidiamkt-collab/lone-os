@@ -248,9 +248,13 @@ async function sendBudgetAlert(
 
   if (!account) return;
 
-  const clientName = (account.clients as Record<string, string> | null)?.name ?? "Cliente";
-  const phone = (account.clients as Record<string, string> | null)?.client_finance_phone ?? null;
-  const pixKey = (account.clients as Record<string, string> | null)?.client_pix_key ?? "—";
+  type ClientRow = { name: string; client_finance_phone: string | null; client_pix_key: string | null };
+  const cl = Array.isArray(account.clients)
+    ? (account.clients[0] as ClientRow | undefined)
+    : (account.clients as unknown as ClientRow | null);
+  const clientName = cl?.name ?? "Cliente";
+  const phone = cl?.client_finance_phone ?? null;
+  const pixKey = cl?.client_pix_key ?? "—";
   const daysStr = daysRemaining !== null ? `~${daysRemaining.toFixed(1)}d` : "—";
 
   // Severity label
