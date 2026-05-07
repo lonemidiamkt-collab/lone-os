@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabase/client";
 
 export class TokenExpiredError extends Error {
   constructor(message: string) {
@@ -18,14 +17,11 @@ const SCOPES = "ads_read,ads_management,business_management";
 
 async function loadGlobalToken(): Promise<{ token: string; expiresAt: number | null; tokenType: "short" | "long" } | null> {
   try {
-    const { data } = await supabase.from("agency_settings").select("key, value").in("key", ["meta_token", "meta_token_expires_at", "meta_token_type"]);
-    if (!data || data.length === 0) return null;
-    const map = new Map(data.map((r: { key: string; value: string }) => [r.key, r.value]));
-    const token = map.get("meta_token");
-    if (!token) return null;
-    const expiresAt = map.get("meta_token_expires_at") ? parseInt(map.get("meta_token_expires_at")!, 10) : null;
-    const tokenType = (map.get("meta_token_type") as "short" | "long") ?? "short";
-    return { token, expiresAt, tokenType };
+    const res = await fetch("/api/meta/token");
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.token) return null;
+    return { token: data.token, expiresAt: data.expiresAt, tokenType: data.tokenType ?? "short" };
   } catch {
     return null;
   }
@@ -33,29 +29,30 @@ async function loadGlobalToken(): Promise<{ token: string; expiresAt: number | n
 
 async function saveGlobalToken(token: string, expiresIn?: number, tokenType: "short" | "long" = "short") {
   const expiresAt = expiresIn ? String(Date.now() + (expiresIn - 300) * 1000) : null;
-  const rows = [
+  const rows: { key: string; value: string; updated_at: string }[] = [
     { key: "meta_token", value: token, updated_at: new Date().toISOString() },
     { key: "meta_token_type", value: tokenType, updated_at: new Date().toISOString() },
   ];
   if (expiresAt) {
     rows.push({ key: "meta_token_expires_at", value: expiresAt, updated_at: new Date().toISOString() });
   }
-  await supabase.from("agency_settings").upsert(rows, { onConflict: "key" }).then(({ error }) => {
-    if (error) console.error("[Meta] Failed to save global token:", error);
+  const res = await fetch("/api/meta/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rows }),
   });
-  // Also cache in localStorage for faster reads
-  localStorage.setItem("meta_access_token", token);
-  localStorage.setItem("meta_token_type", tokenType);
-  if (expiresAt) localStorage.setItem("meta_token_expires_at", expiresAt);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error("[Meta] Failed to save global token:", err);
+  }
 }
 
 async function clearGlobalToken() {
-  await supabase.from("agency_settings").delete().in("key", ["meta_token", "meta_token_expires_at", "meta_token_type"]).then(({ error }) => {
-    if (error) console.error("[Meta] Failed to clear global token:", error);
-  });
-  localStorage.removeItem("meta_access_token");
-  localStorage.removeItem("meta_token_expires_at");
-  localStorage.removeItem("meta_token_type");
+  const res = await fetch("/api/meta/token", { method: "DELETE" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error("[Meta] Failed to clear global token:", err);
+  }
 }
 
 /** Exchange a short-lived token for a long-lived one (~60 days) via server-side API route */
