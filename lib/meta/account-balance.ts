@@ -130,8 +130,8 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
 export async function fetchAccountBalances(
   token: string,
   accountIds: string[],  // "act_XXXX"
-): Promise<Map<string, MetaAccountFields | { error: string }>> {
-  const result = new Map<string, MetaAccountFields | { error: string }>();
+): Promise<Map<string, MetaAccountFields | { error: string; errorJson?: string }>> {
+  const result = new Map<string, MetaAccountFields | { error: string; errorJson?: string }>();
   if (accountIds.length === 0) return result;
 
   const fields = "balance,amount_spent,spend_cap,currency,account_status,min_daily_budget";
@@ -147,8 +147,13 @@ export async function fetchAccountBalances(
       const json = await res.json();
 
       if (!res.ok) {
-        const msg = json?.error?.message ?? `HTTP ${res.status}`;
-        for (const id of batch) result.set(id, { error: msg });
+        console.error("[Meta API ERROR] batch", batch, JSON.stringify(json, null, 2));
+        const err = json?.error;
+        const msg = err
+          ? `${err.message} (code ${err.code}${err.error_subcode ? `, subcode ${err.error_subcode}` : ""})`
+          : `HTTP ${res.status}`;
+        const fullJson = JSON.stringify(json);
+        for (const id of batch) result.set(id, { error: msg, errorJson: fullJson });
         continue;
       }
 

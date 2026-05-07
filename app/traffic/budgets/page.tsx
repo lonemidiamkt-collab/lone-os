@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { toast } from "sonner";
 import {
   RefreshCw, Settings, MessageCircle, AlertTriangle, CheckCircle,
   Clock, Wifi, WifiOff, ChevronUp, ChevronDown, ChevronsUpDown,
@@ -37,6 +38,7 @@ interface AdAccountRow {
   currency: string;
   account_status: number | null;
   sync_error: string | null;
+  last_error_message: string | null;
   clients: {
     id: string;
     name: string;
@@ -531,14 +533,28 @@ export default function BudgetsPage() {
   }, []);
 
   const handleSync = useCallback(async () => {
+    if (syncing) return;
     setSyncing(true);
     try {
-      await authedFetch("/api/traffic/sync-balances", { method: "POST" });
+      const res = await authedFetch("/api/traffic/sync-balances", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(`Falha na sincronização: ${data.error ?? "Erro desconhecido"}`);
+      } else {
+        const { synced = 0, errors: errs = 0, total = 0 } = data;
+        if (errs > 0) {
+          toast.warning(`${synced} de ${total} contas sincronizadas — ${errs} com erro (verifique o token Meta)`);
+        } else {
+          toast.success(`${synced} contas sincronizadas com sucesso`);
+        }
+      }
       await load();
+    } catch (err: unknown) {
+      toast.error(`Erro de rede: ${err instanceof Error ? err.message : "desconhecido"}`);
     } finally {
       setSyncing(false);
     }
-  }, [load]);
+  }, [load, syncing]);
 
   useEffect(() => {
     load();
@@ -761,8 +777,12 @@ export default function BudgetsPage() {
                       severity={account.severity}
                     />
                     {account.sync_error && (
-                      <p className="text-[9px] text-zinc-600 mt-0.5 truncate" title={account.sync_error}>
-                        {account.sync_error.slice(0, 30)}
+                      <p
+                        className="text-[9px] text-zinc-500 mt-0.5 truncate cursor-help"
+                        title={account.last_error_message ?? account.sync_error}
+                        style={{ maxWidth: 96 }}
+                      >
+                        {account.sync_error}
                       </p>
                     )}
                   </div>

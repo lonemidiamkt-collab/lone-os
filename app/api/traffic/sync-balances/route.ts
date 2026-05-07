@@ -97,9 +97,11 @@ export async function POST(req: NextRequest) {
       const raw = metaData.get(account.meta_account_id);
 
       if (!raw || "error" in raw) {
+        const errRaw = raw as { error: string; errorJson?: string } | undefined;
         await supabaseAdmin.from("ad_accounts").update({
-          sync_error: (raw as { error: string } | undefined)?.error ?? "Erro desconhecido",
-          last_synced_at: now,
+          sync_error:          errRaw?.error ?? "Erro desconhecido",
+          last_error_message:  errRaw?.errorJson ?? errRaw?.error ?? null,
+          last_synced_at:      now,
         }).eq("id", account.id);
         errors++;
         continue;
@@ -138,15 +140,16 @@ export async function POST(req: NextRequest) {
       );
 
       await supabaseAdmin.from("ad_accounts").update({
-        last_balance:       availableBalance,
-        last_amount_spent:  currentSpent,
-        daily_spend_3d:     newDailySpend.length > 0 ? newDailySpend : null,
-        currency:           meta.currency ?? "BRL",
-        account_status:     meta.account_status,
-        spend_cap:          meta.spend_cap ? parseFloat(meta.spend_cap) / 100 : account.spend_cap,
-        sync_error:         null,
-        last_synced_at:     now,
-        account_name:       undefined, // não sobrescreve o nome manual
+        last_balance:        availableBalance,
+        last_amount_spent:   currentSpent,
+        daily_spend_3d:      newDailySpend.length > 0 ? newDailySpend : null,
+        currency:            meta.currency ?? "BRL",
+        account_status:      meta.account_status,
+        spend_cap:           meta.spend_cap ? parseFloat(meta.spend_cap) / 100 : account.spend_cap,
+        sync_error:          null,
+        last_error_message:  null,
+        last_synced_at:      now,
+        account_name:        undefined,
       }).eq("id", account.id);
 
       // ── Avaliador de regras de alerta ──────────────────────
