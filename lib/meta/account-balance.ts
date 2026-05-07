@@ -53,18 +53,13 @@ const SPEND_CAP_INFINITY_CENTS = 10_000_000_000; // R$ 100M
 // ── Auto-detecção de tipo de conta ───────────────────────────
 
 export function detectAccountType(meta: MetaAccountFields): "prepaid" | "postpaid" | "unknown" {
+  // Única fonte confiável: funding_source_details retornado pela Meta API.
+  // Heurísticos de balance/spend_cap são ambíguos — contas pré-pagas podem ter
+  // spend_cap configurado, e contas pós-pagas podem ter balance != 0 por créditos.
   const fs = meta.funding_source_details;
-  if (fs) {
-    if (fs.type === 1) return "postpaid"; // cartão de crédito
-    if (fs.type === 2) return "prepaid";  // boleto / Pix / pré-pago
-  }
-  // Sinal forte: contas pré-pagas têm saldo na carteira (balance > 0).
-  // Contas pós-pagas têm balance = "0" porque não têm carteira própria.
-  const balanceCents = parseFloat(meta.balance ?? "0");
-  if (balanceCents > 0) return "prepaid";
-  // Fallback: spend_cap real sem saldo de carteira = pós-pago com teto configurado
-  const capCents = parseFloat(meta.spend_cap ?? "0");
-  if (capCents > 0 && capCents < SPEND_CAP_INFINITY_CENTS) return "postpaid";
+  if (!fs) return "unknown";
+  if (fs.type === 1) return "postpaid"; // cartão de crédito
+  if (fs.type === 2) return "prepaid";  // boleto / Pix / pré-pago
   return "unknown";
 }
 
