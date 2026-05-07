@@ -41,6 +41,7 @@ interface AdAccountRow {
   account_status: number | null;
   sync_error: string | null;
   last_error_message: string | null;
+  monthly_budget: number | null;
   clients: {
     id: string;
     name: string;
@@ -67,7 +68,31 @@ interface EnrichedAccount extends AdAccountRow {
 function enrichAccount(a: AdAccountRow): EnrichedAccount {
   const clientName = a.clients?.nome_fantasia || a.clients?.name || "—";
 
-  const available = a.last_balance;
+  // Cálculo de saldo disponível:
+  // Pós-pago com verba mensal → monthly_budget - amount_spent (mais preciso que spend_cap)
+  // Outros → last_balance já calculado no sync (display_string ou spend_cap - amount_spent)
+  let available: number | null;
+  let balanceLabel: string;
+
+  if (!a.is_prepaid && a.monthly_budget !== null && a.last_amount_spent !== null) {
+    const remaining = a.monthly_budget - a.last_amount_spent;
+    available = Math.max(0, remaining);
+    const overspent = remaining < 0;
+    balanceLabel = overspent
+      ? `Verba esgotada · gasto ${formatBRL(a.last_amount_spent)} / ${formatBRL(a.monthly_budget)}/mês`
+      : `${formatBRL(a.monthly_budget)}/mês · gasto ${formatBRL(a.last_amount_spent)}`;
+  } else {
+    available = a.last_balance;
+    if (a.is_prepaid) {
+      balanceLabel = "Saldo em conta";
+    } else if (available === null) {
+      balanceLabel = "Sem cap definido";
+    } else {
+      const cap = a.spend_cap;
+      const spent = a.last_amount_spent;
+      balanceLabel = cap ? `Cap ${formatBRL(cap)} · gasto ${formatBRL(spent)}` : "Cap − gasto";
+    }
+  }
 
   // Gasto médio: usa last_3d_avg_spend (de Insights API) se disponível,
   // senão tenta daily_spend_3d legado
@@ -82,18 +107,6 @@ function enrichAccount(a: AdAccountRow): EnrichedAccount {
   const daysRemaining = available !== null && available > 0 && avgDailySpend && avgDailySpend > 0
     ? available / avgDailySpend
     : null;
-
-  // Label descritivo da coluna de saldo
-  let balanceLabel: string;
-  if (a.is_prepaid) {
-    balanceLabel = "Saldo em conta";
-  } else if (available === null) {
-    balanceLabel = "Sem cap definido";
-  } else {
-    const cap = a.spend_cap;
-    const spent = a.last_amount_spent;
-    balanceLabel = cap ? `Cap ${formatBRL(cap)} · gasto ${formatBRL(spent)}` : "Cap − gasto";
-  }
 
   const warningThreshold = a.budget_alert_rules?.find(
     (r) => r.severity === "warning" && r.is_active,
@@ -207,6 +220,7 @@ interface AlertModalProps {
 function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
   const [isPrepaid, setIsPrepaid] = useState(account.is_prepaid);
   const [spendCap, setSpendCap] = useState(account.spend_cap?.toFixed(2) ?? "");
+  const [monthlyBudget, setMonthlyBudget] = useState(account.monthly_budget?.toFixed(2) ?? "");
   const [phone, setPhone] = useState(account.clients?.client_finance_phone ?? "");
   const [pixKey, setPixKey] = useState(account.clients?.client_pix_key ?? "");
 
@@ -288,6 +302,7 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
           adAccountId: account.id,
           isPrepaid,
           spendCap: spendCap ? parseFloat(spendCap) : null,
+          monthlyBudget: monthlyBudget ? parseFloat(monthlyBudget) : null,
           rules,
           phone: phone || null,
           pixKey: pixKey || null,
@@ -439,13 +454,13 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
                 onChange={(e) => setIsPrepaid(e.target.value === "prepaid")}
                 className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
               >
-                <option value="prepaid">Pré-pago</option>
-                <option value="postpaid">Pós-pago</option>
+                <option value="prepaid">Pré-pago (Pix/Boleto)</option>
+                <option value="postpaid">Pós-pago (Cartão)</option>
               </select>
             </div>
             {!isPrepaid && (
               <div className="space-y-1">
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Spend cap (R$)</p>
+                <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Spend cap Meta (R$)</p>
                 <input
                   type="number" min="0" step="100"
                   value={spendCap}
@@ -457,12 +472,35 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
             )}
           </div>
 
+          {/* Verba mensal — só aparece para pós-pago */}
+          {!isPrepaid && (
+            <div className="space-y-1">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                Verba mensal contratada (R$)
+              </p>
+              <input
+                type="number" min="0" step="100"
+                value={monthlyBudget}
+                onChange={(e) => setMonthlyBudget(e.target.value)}
+                placeholder="ex: 1000.00"
+                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+              />
+              <p className="text-[10px] text-zinc-600">
+                Quando definida, o saldo disponível exibido será{" "}
+                <span className="text-zinc-400">verba − gasto do ciclo atual</span>.
+                Mais preciso que o spend_cap da Meta quando esse é usado como teto de segurança.
+              </p>
+            </div>
+          )}
+
           {/* Contexto azul */}
           <div className="rounded-lg bg-[#0d4af5]/[0.06] border border-[#0d4af5]/20 p-3">
             <p className="text-[11px] text-[#6b9af5] leading-relaxed">
               {isPrepaid
-                ? "Pré-pago: saldo disponível = valor em conta (Meta retorna em centavos). Quando zera, campanhas pausam automaticamente."
-                : "Pós-pago: saldo disponível = spend_cap − amount_spent no ciclo atual. Sem spend_cap, a conta não tem limite definido."}
+                ? "Pré-pago: saldo disponível = carteira na Meta (funding_source_details). Quando zera, campanhas pausam automaticamente."
+                : monthlyBudget
+                  ? `Pós-pago com verba definida: mostra ${formatBRL(parseFloat(monthlyBudget) || 0)}/mês − gasto do ciclo. Ideal para clientes onde o spend_cap da Meta é maior que o orçamento real.`
+                  : "Pós-pago: saldo = spend_cap − gasto do ciclo. Se o spend_cap for um teto de segurança alto, defina a Verba mensal acima para precisão."}
             </p>
           </div>
 

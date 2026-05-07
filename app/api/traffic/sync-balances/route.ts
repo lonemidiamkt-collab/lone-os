@@ -37,7 +37,7 @@ export async function GET() {
       .select(`
         id, meta_account_id, account_name, is_prepaid, billing_type_source, spend_cap,
         last_balance, last_amount_spent, last_3d_avg_spend, daily_spend_3d,
-        last_synced_at, currency, account_status, sync_error, last_error_message,
+        last_synced_at, currency, account_status, sync_error, last_error_message, monthly_budget,
         clients!inner (
           id, name, nome_fantasia, client_finance_phone, client_pix_key
         ),

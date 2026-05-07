@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
     adAccountId: string;
     isPrepaid?: boolean;
     spendCap?: number | null;
+    monthlyBudget?: number | null;
     rules: {
       severity: "warning" | "critical";
       threshold_value: number;
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
 
-  const { adAccountId, isPrepaid, spendCap, rules, phone, pixKey } = body;
+  const { adAccountId, isPrepaid, spendCap, monthlyBudget, rules, phone, pixKey } = body;
   if (!adAccountId) return NextResponse.json({ error: "adAccountId obrigatório" }, { status: 400 });
 
   // ── Validações ───────────────────────────────────────────
@@ -94,6 +95,7 @@ export async function POST(req: NextRequest) {
   const accountUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (isPrepaid !== undefined) accountUpdate.is_prepaid = isPrepaid;
   if (spendCap !== undefined) accountUpdate.spend_cap = spendCap;
+  if (monthlyBudget !== undefined) accountUpdate.monthly_budget = monthlyBudget;
   await supabaseAdmin.from("ad_accounts").update(accountUpdate).eq("id", adAccountId);
 
   // ── Atualizar phone/pix no client ───────────────────────
