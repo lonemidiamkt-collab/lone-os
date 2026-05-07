@@ -22,6 +22,12 @@ export async function htmlToPdfBlob(html: string): Promise<Blob> {
     await new Promise((r) => setTimeout(r, 900));
 
     const body = iframe.contentDocument!.body;
+
+    // Hide .no-print elements — html2canvas doesn't honour @media print
+    body.querySelectorAll<HTMLElement>(".no-print").forEach((el) => {
+      el.style.display = "none";
+    });
+
     const scrollH = Math.max(body.scrollHeight, body.offsetHeight, 200);
     iframe.style.height = `${scrollH}px`;
 
