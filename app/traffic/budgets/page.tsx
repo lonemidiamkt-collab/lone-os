@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   RefreshCw, Settings, MessageCircle, AlertTriangle, CheckCircle,
   Clock, Wifi, WifiOff, ChevronUp, ChevronDown, ChevronsUpDown,
-  Filter, X, Loader2,
+  Filter, X, Loader2, CreditCard,
 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
@@ -892,13 +892,32 @@ export default function BudgetsPage() {
 
                   {/* Saldo disponível */}
                   <div>
-                    <p className={cn(
-                      "text-[15px] font-semibold leading-tight",
-                      isCritical ? "text-[#E24B4A]" : isWarning ? "text-[#BA7517]" : "text-foreground",
-                    )}>
-                      {account.availableBalance !== null ? formatBRL(account.availableBalance) : "—"}
-                    </p>
-                    <p className="text-[10px] text-zinc-600 mt-0.5">{account.balanceLabel}</p>
+                    {!account.is_prepaid && account.availableBalance === null ? (
+                      // Pós-pago sem verba/cap definido: mostrar indicador de cartão
+                      <button
+                        onClick={() => setModalAccount(account)}
+                        className="group flex items-center gap-1.5 text-left"
+                        title="Clique para definir a verba mensal"
+                      >
+                        <CreditCard size={13} className="text-zinc-500 shrink-0" />
+                        <div>
+                          <p className="text-[13px] font-medium text-zinc-400">Cartão de crédito</p>
+                          <p className="text-[10px] text-zinc-600 group-hover:text-[#0d4af5] transition-colors">
+                            Definir verba mensal →
+                          </p>
+                        </div>
+                      </button>
+                    ) : (
+                      <>
+                        <p className={cn(
+                          "text-[15px] font-semibold leading-tight",
+                          isCritical ? "text-[#E24B4A]" : isWarning ? "text-[#BA7517]" : "text-foreground",
+                        )}>
+                          {account.availableBalance !== null ? formatBRL(account.availableBalance) : "—"}
+                        </p>
+                        <p className="text-[10px] text-zinc-600 mt-0.5">{account.balanceLabel}</p>
+                      </>
+                    )}
                   </div>
 
                   {/* Dias restantes */}
