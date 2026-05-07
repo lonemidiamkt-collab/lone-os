@@ -1898,8 +1898,13 @@ function AdAnalyticsTab({
         setLoadingAccounts(false);
       })
       .catch((err) => {
-        setMetaError("Erro ao buscar contas: " + err.message);
         setLoadingAccounts(false);
+        if (err instanceof TokenExpiredError) {
+          meta.handleTokenError();
+          setMetaError("Token inválido ou sem permissão. Reconecte o Meta Ads.");
+        } else {
+          setMetaError("Erro ao buscar contas: " + err.message);
+        }
       });
   }, [meta.connected, meta.token]);
 
@@ -2510,9 +2515,14 @@ function AdAnalyticsTab({
                     : "Selecione uma conta abaixo"
                 }
               </p>
-              {isTokenShort && (
+              {meta.exchangeFailed && (
+                <p className="text-[10px] text-red-400 mt-0.5 font-medium">
+                  ⚠️ Upgrade para token longo falhou — token expira em ~85min. Verifique META_APP_SECRET ou reconecte.
+                </p>
+              )}
+              {isTokenShort && !meta.exchangeFailed && (
                 <p className="text-[10px] text-yellow-500/70 mt-0.5">
-                  Token de curta duração ativo. Configure META_APP_SECRET no .env.local para upgrade automático para 60 dias.
+                  Token de curta duração — upgrade automático em andamento...
                 </p>
               )}
             </div>

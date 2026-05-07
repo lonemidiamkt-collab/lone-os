@@ -12,7 +12,7 @@ export class TokenExpiredError extends Error {
 
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID ?? "";
 const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}/traffic` : "";
-const SCOPES = "ads_read,business_management";
+const SCOPES = "ads_read,ads_management,business_management";
 
 // ─── Supabase-backed global token storage ─────────────────────────────────
 
@@ -59,20 +59,25 @@ async function clearGlobalToken() {
 }
 
 /** Exchange a short-lived token for a long-lived one (~60 days) via server-side API route */
-async function exchangeForLongLivedToken(shortToken: string): Promise<void> {
+async function exchangeForLongLivedToken(shortToken: string): Promise<"ok" | "failed"> {
   try {
     const res = await fetch("/api/meta/exchange-token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ short_lived_token: shortToken }),
     });
-    if (!res.ok) return;
-
     const data = await res.json();
-    if (data.access_token) {
-      await saveGlobalToken(data.access_token, data.expires_in, "long");
+    if (!res.ok || !data.access_token) {
+      console.error("[Meta] Token exchange failed:", data.error ?? data);
+      return "failed";
     }
-  } catch {}
+    await saveGlobalToken(data.access_token, data.expires_in, "long");
+    console.log(`[Meta] Long-lived token saved (expires in ~${Math.round((data.expires_in ?? 0) / 86400)}d)`);
+    return "ok";
+  } catch (err) {
+    console.error("[Meta] Token exchange error:", err);
+    return "failed";
+  }
 }
 
 interface MetaConnectionState {
@@ -82,6 +87,7 @@ interface MetaConnectionState {
   tokenExpired: boolean;
   tokenType: "short" | "long" | null;
   tokenExpiresAt: number | null;
+  exchangeFailed: boolean;
 }
 
 export function useMetaConnection() {
@@ -92,6 +98,7 @@ export function useMetaConnection() {
     tokenExpired: false,
     tokenType: null,
     tokenExpiresAt: null,
+    exchangeFailed: false,
   });
 
   useEffect(() => {
@@ -112,13 +119,19 @@ export function useMetaConnection() {
           }
           window.history.replaceState(null, "", window.location.pathname + window.location.search);
           // Exchange for long-lived token in background, update state when done
-          exchangeForLongLivedToken(token).then(async () => {
+          exchangeForLongLivedToken(token).then(async (result) => {
             const upgraded = await loadGlobalToken();
-            if (upgraded && !cancelled) {
-              setState({
-                connected: true, loading: false, token: upgraded.token, tokenExpired: false,
-                tokenType: upgraded.tokenType, tokenExpiresAt: upgraded.expiresAt,
-              });
+            if (!cancelled) {
+              if (result === "failed") {
+                // Exchange falhou: fica conectado com short token mas avisa
+                setState((prev) => ({ ...prev, exchangeFailed: true }));
+              } else if (upgraded) {
+                setState({
+                  connected: true, loading: false, token: upgraded.token, tokenExpired: false,
+                  tokenType: upgraded.tokenType, tokenExpiresAt: upgraded.expiresAt,
+                  exchangeFailed: false,
+                });
+              }
             }
           });
           return;
@@ -130,12 +143,12 @@ export function useMetaConnection() {
       if (global) {
         if (global.expiresAt && Date.now() > global.expiresAt) {
           await clearGlobalToken();
-          if (!cancelled) setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null });
+          if (!cancelled) setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null, exchangeFailed: false });
           return;
         }
         if (!cancelled) setState({
           connected: true, loading: false, token: global.token, tokenExpired: false,
-          tokenType: global.tokenType, tokenExpiresAt: global.expiresAt,
+          tokenType: global.tokenType, tokenExpiresAt: global.expiresAt, exchangeFailed: false,
         });
         return;
       }
@@ -150,7 +163,7 @@ export function useMetaConnection() {
           localStorage.removeItem("meta_access_token");
           localStorage.removeItem("meta_token_expires_at");
           localStorage.removeItem("meta_token_type");
-          if (!cancelled) setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null });
+          if (!cancelled) setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null, exchangeFailed: false });
           return;
         }
         // Push to Supabase so all team members can use it
@@ -164,13 +177,13 @@ export function useMetaConnection() {
         console.log("[Meta] Migration complete — token now in Supabase");
         if (!cancelled) setState({
           connected: true, loading: false, token: legacyToken, tokenExpired: false,
-          tokenType: legacyType, tokenExpiresAt: legacyExpiry ? parseInt(legacyExpiry, 10) : null,
+          tokenType: legacyType, tokenExpiresAt: legacyExpiry ? parseInt(legacyExpiry, 10) : null, exchangeFailed: false,
         });
         return;
       }
 
       // 4. No token anywhere
-      if (!cancelled) setState({ connected: false, loading: false, token: null, tokenExpired: false, tokenType: null, tokenExpiresAt: null });
+      if (!cancelled) setState({ connected: false, loading: false, token: null, tokenExpired: false, tokenType: null, tokenExpiresAt: null, exchangeFailed: false });
     }
 
     init();
@@ -201,15 +214,19 @@ export function useMetaConnection() {
 
   const disconnect = useCallback(async () => {
     await clearGlobalToken();
-    setState({ connected: false, loading: false, token: null, tokenExpired: false, tokenType: null, tokenExpiresAt: null });
+    setState({ connected: false, loading: false, token: null, tokenExpired: false, tokenType: null, tokenExpiresAt: null, exchangeFailed: false });
   }, []);
 
   const handleTokenError = useCallback(async () => {
     await clearGlobalToken();
-    setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null });
+    setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null, exchangeFailed: false });
   }, []);
 
   return { ...state, connect, disconnect, handleTokenError };
+}
+
+function isMetaAuthError(status: number, body: { error?: { code?: number } }): boolean {
+  return status === 401 || status === 400 && body?.error?.code === 190;
 }
 
 // Fetch ALL ad accounts — personal + business manager
@@ -218,23 +235,26 @@ export async function fetchAdAccounts(token: string) {
   const seenIds = new Set<string>();
 
   // 1. Fetch personal ad accounts (/me/adaccounts)
-  try {
-    const personalParams = new URLSearchParams({
-      access_token: token,
-      fields: "id,name,account_id,currency,account_status",
-      limit: "100",
-    });
-    const personalRes = await fetch(`https://graph.facebook.com/v21.0/me/adaccounts?${personalParams}`);
-    if (personalRes.ok) {
-      const personalData = await personalRes.json();
-      for (const acc of personalData.data ?? []) {
-        if (!seenIds.has(acc.id)) {
-          seenIds.add(acc.id);
-          allAccounts.push(acc);
-        }
+  const personalParams = new URLSearchParams({
+    access_token: token,
+    fields: "id,name,account_id,currency,account_status",
+    limit: "100",
+  });
+  const personalRes = await fetch(`https://graph.facebook.com/v21.0/me/adaccounts?${personalParams}`);
+  if (!personalRes.ok) {
+    const err = await personalRes.json().catch(() => ({}));
+    if (isMetaAuthError(personalRes.status, err)) {
+      throw new TokenExpiredError(`Token inválido ou sem permissão (code ${err?.error?.code ?? personalRes.status})`);
+    }
+  } else {
+    const personalData = await personalRes.json();
+    for (const acc of personalData.data ?? []) {
+      if (!seenIds.has(acc.id)) {
+        seenIds.add(acc.id);
+        allAccounts.push(acc);
       }
     }
-  } catch {}
+  }
 
   // 2. Fetch business ad accounts (/me/businesses → each business's ad accounts)
   try {
@@ -387,10 +407,10 @@ export async function fetchCampaignInsights(
   const campRes = await fetch(`https://graph.facebook.com/v21.0/${accountId}/campaigns?${campParams}`);
   if (!campRes.ok) {
     const err = await campRes.json().catch(() => ({}));
-    if (campRes.status === 401 || err?.error?.code === 190) {
-      throw new TokenExpiredError("Token expirado ou inválido");
+    if (isMetaAuthError(campRes.status, err)) {
+      throw new TokenExpiredError(`Token inválido ou expirado (code ${err?.error?.code ?? campRes.status})`);
     }
-    throw new Error("Failed to fetch campaigns");
+    throw new Error(`Failed to fetch campaigns: ${err?.error?.message ?? campRes.status}`);
   }
   const campData = await campRes.json();
   const campaigns = campData.data ?? [];
