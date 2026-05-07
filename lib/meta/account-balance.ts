@@ -58,7 +58,11 @@ export function detectAccountType(meta: MetaAccountFields): "prepaid" | "postpai
     if (fs.type === 1) return "postpaid"; // cartão de crédito
     if (fs.type === 2) return "prepaid";  // boleto / Pix / pré-pago
   }
-  // Fallback: spend_cap real (não o astronômico) indica pós-pago configurado
+  // Sinal forte: contas pré-pagas têm saldo na carteira (balance > 0).
+  // Contas pós-pagas têm balance = "0" porque não têm carteira própria.
+  const balanceCents = parseFloat(meta.balance ?? "0");
+  if (balanceCents > 0) return "prepaid";
+  // Fallback: spend_cap real sem saldo de carteira = pós-pago com teto configurado
   const capCents = parseFloat(meta.spend_cap ?? "0");
   if (capCents > 0 && capCents < SPEND_CAP_INFINITY_CENTS) return "postpaid";
   return "unknown";
