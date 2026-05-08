@@ -431,33 +431,31 @@ export default function DesignPage() {
         console.error("[briefingReq upload]", { status: res.status, data });
         return;
       }
-      // Anexa URL à request + marca como concluída
       const artUrl = data.url as string;
       const nextAttachments = [...(briefingReq.attachments ?? []), artUrl];
-      updateDesignRequest(briefingReq.id, { attachments: nextAttachments, status: "done" });
-      setBriefingReq({ ...briefingReq, attachments: nextAttachments, status: "done" });
+      const isDelivery = role === "designer";
 
-      // Propaga arte para o ContentCard vinculado → social media vê "Baixar Arte"
-      // Primary: via contentCardId stored on the design request (reliable direct link)
-      // Fallback: via design_request_id stored on the content card
-      const linkedCard =
-        (briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null) ??
-        contentCards.find((c) => c.designRequestId === briefingReq.id);
-      if (linkedCard) {
-        updateContentCard(linkedCard.id, {
-          imageUrl: artUrl,
-          designerDeliveredAt: new Date().toISOString(),
-          designerDeliveredBy: currentUser,
-        }, { bypassWorkflow: true });
+      if (isDelivery) {
+        // Designer entrega arte final → marca como done + propaga para ContentCard
+        updateDesignRequest(briefingReq.id, { attachments: nextAttachments, status: "done" });
+        setBriefingReq({ ...briefingReq, attachments: nextAttachments, status: "done" });
+        const linkedCard =
+          (briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null) ??
+          contentCards.find((c) => c.designRequestId === briefingReq.id);
+        if (linkedCard) {
+          updateContentCard(linkedCard.id, {
+            imageUrl: artUrl,
+            designerDeliveredAt: new Date().toISOString(),
+            designerDeliveredBy: currentUser,
+          }, { bypassWorkflow: true });
+        }
+        pushNotification("content", "Arte entregue pelo Designer", `"${briefingReq.title}" (${briefingReq.clientName}) — arte pronta para confirmação.`, briefingReq.clientId);
+        import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
       } else {
-        console.warn("[briefingReq upload] No linked ContentCard found — art saved to DesignRequest only.", {
-          designRequestId: briefingReq.id,
-          contentCardId: briefingReq.contentCardId,
-        });
+        // Social media / outros adicionam referência — só anexa, não muda status nem notifica como entregue
+        updateDesignRequest(briefingReq.id, { attachments: nextAttachments });
+        setBriefingReq({ ...briefingReq, attachments: nextAttachments });
       }
-      // Notifica social media
-      pushNotification("content", "Arte entregue pelo Designer", `"${briefingReq.title}" (${briefingReq.clientName}) — arte pronta para confirmação.`, briefingReq.clientId);
-      import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
 
       setBriefingUploadOk(true);
       setTimeout(() => setBriefingUploadOk(false), 4000);
@@ -1462,14 +1460,16 @@ export default function DesignPage() {
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all shadow-[0_0_20px_rgba(13,74,245,0.2)] disabled:opacity-50"
                 >
                   {briefingUploading ? (
-                    <><Upload size={14} className="animate-pulse" /> Carregando arte...</>
-                  ) : (
+                    <><Upload size={14} className="animate-pulse" /> Carregando...</>
+                  ) : role === "designer" ? (
                     <><Upload size={14} /> Enviar Arte para Aprovação</>
+                  ) : (
+                    <><Upload size={14} /> Adicionar Referência</>
                   )}
                 </button>
                 {briefingUploadOk && (
                   <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-3 py-2">
-                    <CheckCircle size={12} /> Arte enviada — demanda marcada como concluída.
+                    <CheckCircle size={12} /> {role === "designer" ? "Arte enviada — demanda marcada como concluída." : "Referência adicionada ao pedido."}
                   </div>
                 )}
                 {briefingUploadError && (
