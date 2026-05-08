@@ -1431,8 +1431,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const updateClientData = useCallback(
     (clientId: string, updates: Partial<Client>) => {
+      // Skip undefined values — DadosTab sends `field || undefined` for empty inputs,
+      // which would overwrite existing fields in state even though the DB path skips them.
+      const defined = Object.fromEntries(
+        Object.entries(updates).filter(([, v]) => v !== undefined)
+      ) as Partial<Client>;
       setClients((prev) =>
-        prev.map((c) => (c.id === clientId ? { ...c, ...updates } : c))
+        prev.map((c) => (c.id === clientId ? { ...c, ...defined } : c))
       );
       db.updateClientDb(clientId, updates).catch(() => {});
     },
