@@ -4,16 +4,19 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import {
   RefreshCw, Settings, MessageCircle, AlertTriangle, CheckCircle,
-  Clock, Wifi, WifiOff, ChevronUp, ChevronDown, ChevronsUpDown,
-  Filter, X, Loader2, CreditCard,
+  Wifi, WifiOff, Filter, X, Loader2,
 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
   formatDaysRemaining,
   getBalanceSeverity,
-  getAccountStatusLabel,
   type BalanceSeverity,
 } from "@/lib/meta/account-balance";
+import {
+  getBalanceDisplay,
+  type DisplaySeverity,
+  type BalanceDisplay,
+} from "@/lib/budgets/display";
 import { cn } from "@/lib/utils";
 
 // ── Tipos ────────────────────────────────────────────────────
@@ -61,6 +64,7 @@ interface EnrichedAccount extends AdAccountRow {
   severity: BalanceSeverity;
   warningThreshold: number | null;
   criticalThreshold: number | null;
+  display: BalanceDisplay;
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -120,25 +124,29 @@ function enrichAccount(a: AdAccountRow): EnrichedAccount {
     criticalThreshold,
   );
 
-  return { ...a, clientName, availableBalance: available, balanceLabel, daysRemaining, avgDailySpend, severity, warningThreshold, criticalThreshold };
+  const enriched = { ...a, clientName, availableBalance: available, balanceLabel, daysRemaining, avgDailySpend, severity, warningThreshold, criticalThreshold };
+  const display = getBalanceDisplay(enriched);
+  return { ...enriched, display };
 }
 
-const SEVERITY_ORDER: Record<BalanceSeverity, number> = {
+const DISPLAY_SEVERITY_ORDER: Record<DisplaySeverity, number> = {
   critical: 0,
-  warning: 1,
-  ok: 2,
-  disabled: 3,
-  error: 4,
+  warning:  1,
+  review:   2,
+  ok:       3,
+  paused:   4,
 };
 
 function sortAccounts(accounts: EnrichedAccount[]): EnrichedAccount[] {
   return [...accounts].sort((a, b) => {
-    const so = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
+    const so = DISPLAY_SEVERITY_ORDER[a.display.severity] - DISPLAY_SEVERITY_ORDER[b.display.severity];
     if (so !== 0) return so;
-    // dentro do grupo: dias restantes ascendente (quem vai acabar antes fica no topo)
+    // dentro do grupo crítico/atenção: dias restantes ascendente (vai acabar antes fica no topo)
     const da = a.daysRemaining ?? Infinity;
     const db = b.daysRemaining ?? Infinity;
-    return da - db;
+    if (da !== db) return da - db;
+    // mesmo grupo e mesmos dias: alfabético por cliente
+    return (a.clientName).localeCompare(b.clientName);
   });
 }
 
@@ -158,18 +166,18 @@ function timeSince(iso: string | null): string {
 
 // ── Componentes de célula ─────────────────────────────────────
 
-function SeverityDot({ severity }: { severity: BalanceSeverity }) {
-  const styles: Record<BalanceSeverity, string> = {
+function SeverityDot({ severity }: { severity: DisplaySeverity }) {
+  const styles: Record<DisplaySeverity, string> = {
     critical: "bg-[#E24B4A] shadow-[0_0_0_4px_rgba(226,75,74,0.15)]",
     warning:  "bg-[#BA7517] shadow-[0_0_0_4px_rgba(186,117,23,0.12)]",
+    review:   "bg-amber-400",
     ok:       "bg-emerald-500",
-    disabled: "bg-zinc-600",
-    error:    "bg-zinc-500",
+    paused:   "bg-zinc-600",
   };
   return <span className={cn("inline-block w-2 h-2 rounded-full shrink-0", styles[severity])} />;
 }
 
-function StatusBadge({ status, syncError, severity }: { status: number | null; syncError: string | null; severity: BalanceSeverity }) {
+function StatusBadge({ display, syncError }: { display: BalanceDisplay; syncError: string | null }) {
   if (syncError) {
     return (
       <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
@@ -177,31 +185,17 @@ function StatusBadge({ status, syncError, severity }: { status: number | null; s
       </span>
     );
   }
-  if (severity === "critical") {
-    const label = (status !== null && status !== 1) ? getAccountStatusLabel(status) : "Crítico";
-    return (
-      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(226,75,74,0.12)] text-[#E24B4A] border border-[rgba(226,75,74,0.25)] font-medium">
-        {label}
-      </span>
-    );
-  }
-  if (severity === "warning") {
-    return (
-      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(186,117,23,0.10)] text-[#BA7517] border border-[rgba(186,117,23,0.20)] font-medium">
-        Atenção
-      </span>
-    );
-  }
-  if (severity === "disabled") {
-    return (
-      <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500 border border-zinc-700">
-        {getAccountStatusLabel(status)}
-      </span>
-    );
-  }
+  const config: Record<DisplaySeverity, { label: string; cls: string }> = {
+    critical: { label: "Crítico",     cls: "bg-[rgba(226,75,74,0.12)] text-[#E24B4A] border-[rgba(226,75,74,0.25)]"   },
+    warning:  { label: "Atenção",     cls: "bg-[rgba(186,117,23,0.10)] text-[#BA7517] border-[rgba(186,117,23,0.20)]" },
+    review:   { label: display.primary, cls: "bg-amber-500/10 text-amber-400 border-amber-500/20"                     },
+    ok:       { label: "Ativa",       cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"                 },
+    paused:   { label: display.primary, cls: "bg-zinc-800 text-zinc-500 border-zinc-700"                              },
+  };
+  const c = config[display.severity];
   return (
-    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-      Ativa
+    <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-medium", c.cls)}>
+      {c.label}
     </span>
   );
 }
@@ -564,7 +558,7 @@ export default function BudgetsPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-  const [filterSeverity, setFilterSeverity] = useState<BalanceSeverity | "all">("all");
+  const [filterSeverity, setFilterSeverity] = useState<DisplaySeverity | "all">("all");
   const [modalAccount, setModalAccount] = useState<EnrichedAccount | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -658,16 +652,23 @@ export default function BudgetsPage() {
   // ── Dados computados ─────────────────────────────────────
   const filtered = filterSeverity === "all"
     ? accounts
-    : accounts.filter((a) => a.severity === filterSeverity);
+    : accounts.filter((a) => a.display.severity === filterSeverity);
 
-  // Saldo agregado: só contas ativas onde o saldo é calculável
+  // Saldo agregado: contas ativas com saldo calculável (pré-pago + pós com cap)
   const computedAccounts = accounts.filter(
     (a) => a.availableBalance !== null && a.account_status === 1,
   );
   const totalBalance = computedAccounts.reduce((s, a) => s + (a.availableBalance ?? 0), 0);
 
-  const criticalCount = accounts.filter((a) => a.severity === "critical").length;
-  const warningCount  = accounts.filter((a) => a.severity === "warning").length;
+  const criticalCount  = accounts.filter((a) => a.display.severity === "critical").length;
+  const warningCount   = accounts.filter((a) => a.display.severity === "warning").length;
+  const reviewCount    = accounts.filter((a) => a.display.severity === "review").length;
+  // Contas cartão ativas sem monitoramento de saldo
+  const activeCardCount = accounts.filter(
+    (a) => !a.is_prepaid && a.monthly_budget === null &&
+           (a.spend_cap === null || a.spend_cap === 0) &&
+           a.account_status === 1,
+  ).length;
 
   // Alerta de sync desatualizado (>30min)
   const syncStale = lastSyncAt
@@ -679,7 +680,7 @@ export default function BudgetsPage() {
     const phone = account.clients?.client_finance_phone;
     if (!phone) return "";
     const clientName = account.clientName;
-    const balance = formatBRL(account.availableBalance);
+    const balance = account.display.primary;
     const pix = account.clients?.client_pix_key ?? "—";
     const text = encodeURIComponent(
       `Oi ${clientName}! Sua conta de anúncios está em ${balance}. Pode fazer um Pix pra não pausar as campanhas? Chave: ${pix}`
@@ -737,7 +738,7 @@ export default function BudgetsPage() {
         )}
 
         {/* Cards de resumo */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
             {
               label: "Total de contas",
@@ -750,15 +751,15 @@ export default function BudgetsPage() {
             {
               label: "Saldo agregado",
               value: formatBRL(totalBalance),
-              sub: `${computedAccounts.length} de ${accounts.length} contas`,
+              sub: `${computedAccounts.length} de ${accounts.length} com saldo`,
               onClick: () => setFilterSeverity("ok"),
               active: filterSeverity === "ok",
               color: "text-emerald-400",
             },
             {
               label: "Atenção",
-              value: warningCount,
-              sub: "contas amarelas",
+              value: warningCount + reviewCount,
+              sub: "saldo baixo ou em revisão",
               onClick: () => setFilterSeverity(filterSeverity === "warning" ? "all" : "warning"),
               active: filterSeverity === "warning",
               color: "text-[#BA7517]",
@@ -770,6 +771,14 @@ export default function BudgetsPage() {
               onClick: () => setFilterSeverity(filterSeverity === "critical" ? "all" : "critical"),
               active: filterSeverity === "critical",
               color: "text-[#E24B4A]",
+            },
+            {
+              label: "Cartão ativo",
+              value: activeCardCount,
+              sub: "sem monitor de saldo",
+              onClick: () => setFilterSeverity("all"),
+              active: false,
+              color: "text-zinc-400",
             },
           ].map((card) => (
             <button
@@ -827,9 +836,10 @@ export default function BudgetsPage() {
 
             {/* Linhas */}
             {filtered.map((account) => {
-              const isCritical = account.severity === "critical";
-              const isWarning  = account.severity === "warning";
-              const isDisabled = account.severity === "disabled";
+              const isCritical = account.display.severity === "critical";
+              const isWarning  = account.display.severity === "warning";
+              const isReview   = account.display.severity === "review";
+              const isPaused   = account.display.severity === "paused";
               const waLink = buildWaLink(account);
 
               return (
@@ -839,12 +849,13 @@ export default function BudgetsPage() {
                     "grid grid-cols-[24px_1fr_100px_130px_80px_100px_80px] gap-3 px-4 py-3 border-b border-border last:border-b-0 items-center transition-colors hover:bg-white/[0.02]",
                     isCritical && "bg-[rgba(226,75,74,0.04)] border-l-[3px] border-l-[#E24B4A]",
                     isWarning  && "bg-[rgba(186,117,23,0.03)] border-l-[3px] border-l-[#BA7517]",
-                    isDisabled && "opacity-50",
+                    isReview   && "bg-amber-500/[0.02] border-l-[3px] border-l-amber-500/40",
+                    isPaused   && "opacity-50",
                   )}
                 >
                   {/* Dot */}
                   <div className="flex items-center justify-center">
-                    <SeverityDot severity={account.severity} />
+                    <SeverityDot severity={account.display.severity} />
                   </div>
 
                   {/* Cliente / Conta */}
@@ -871,11 +882,7 @@ export default function BudgetsPage() {
 
                   {/* Status */}
                   <div>
-                    <StatusBadge
-                      status={account.account_status}
-                      syncError={account.sync_error}
-                      severity={account.severity}
-                    />
+                    <StatusBadge display={account.display} syncError={account.sync_error} />
                     {account.sync_error && (
                       <p
                         className="text-[9px] text-zinc-500 mt-0.5 truncate cursor-help"
@@ -889,31 +896,27 @@ export default function BudgetsPage() {
 
                   {/* Saldo disponível */}
                   <div>
-                    {!account.is_prepaid && account.availableBalance === null ? (
-                      // Pós-pago sem verba/cap definido: mostrar indicador de cartão
+                    <p className={cn(
+                      "text-[15px] font-semibold leading-tight",
+                      isCritical ? "text-[#E24B4A]"
+                        : isWarning ? "text-[#BA7517]"
+                        : account.display.primary === "Ativa" ? "text-emerald-400"
+                        : isPaused || isReview ? "text-zinc-500"
+                        : "text-foreground",
+                    )}>
+                      {account.display.primary}
+                    </p>
+                    <p className="text-[10px] text-zinc-600 mt-0.5">{account.display.secondary}</p>
+                    {/* CTA discreto para contas cartão sem verba definida */}
+                    {!account.is_prepaid && account.monthly_budget === null &&
+                     (account.spend_cap === null || account.spend_cap === 0) &&
+                     account.account_status === 1 && (
                       <button
                         onClick={() => setModalAccount(account)}
-                        className="group flex items-center gap-1.5 text-left"
-                        title="Clique para definir a verba mensal"
+                        className="text-[9px] text-zinc-600 hover:text-[#0d4af5] transition-colors mt-0.5"
                       >
-                        <CreditCard size={13} className="text-zinc-500 shrink-0" />
-                        <div>
-                          <p className="text-[13px] font-medium text-zinc-400">Cartão de crédito</p>
-                          <p className="text-[10px] text-zinc-600 group-hover:text-[#0d4af5] transition-colors">
-                            Definir verba mensal →
-                          </p>
-                        </div>
+                        Definir verba →
                       </button>
-                    ) : (
-                      <>
-                        <p className={cn(
-                          "text-[15px] font-semibold leading-tight",
-                          isCritical ? "text-[#E24B4A]" : isWarning ? "text-[#BA7517]" : "text-foreground",
-                        )}>
-                          {account.availableBalance !== null ? formatBRL(account.availableBalance) : "—"}
-                        </p>
-                        <p className="text-[10px] text-zinc-600 mt-0.5">{account.balanceLabel}</p>
-                      </>
                     )}
                   </div>
 
@@ -980,15 +983,16 @@ export default function BudgetsPage() {
         )}
 
         {/* Legenda */}
-        <div className="flex items-center gap-6 text-[10px] text-zinc-600 pt-1">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[10px] text-zinc-600 pt-1">
           {[
-            { color: "bg-[#E24B4A]", label: "Crítico (saldo ≤ threshold ou ≤1d)" },
-            { color: "bg-[#BA7517]", label: "Atenção (saldo ≤ threshold ou ≤3d)" },
-            { color: "bg-emerald-500", label: "Ativa (OK)" },
-            { color: "bg-zinc-600", label: "Desativada / fora de operação" },
+            { color: "bg-[#E24B4A]",  label: "Crítico — saldo abaixo do threshold ou <1d" },
+            { color: "bg-[#BA7517]",  label: "Atenção — saldo baixo ou <3d" },
+            { color: "bg-amber-400",  label: "Em revisão / Pendente — conta Meta suspensa" },
+            { color: "bg-emerald-500",label: "Ativa — saldo OK ou cartão sem limite" },
+            { color: "bg-zinc-600",   label: "Desativada / fora de operação" },
           ].map((item) => (
             <div key={item.label} className="flex items-center gap-1.5">
-              <span className={cn("w-2 h-2 rounded-full", item.color)} />
+              <span className={cn("w-2 h-2 rounded-full shrink-0", item.color)} />
               {item.label}
             </div>
           ))}
