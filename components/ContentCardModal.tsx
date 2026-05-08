@@ -57,6 +57,27 @@ function timeAgo(iso: string): string {
   return `${Math.floor(diff / 86400)}d`;
 }
 
+function DrivePreviewFallback({ clientId, label }: { clientId: string; label: string }) {
+  const { clients } = useAppState();
+  const client = clients.find((c) => c.id === clientId);
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-zinc-500 px-4">
+      <ImageIcon size={32} />
+      <p className="text-[10px] text-center">{label}</p>
+      {client?.driveLink && (
+        <a
+          href={client.driveLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] text-[#0d4af5] hover:underline flex items-center gap-1"
+        >
+          <ExternalLink size={9} /> Acesse via Google Drive
+        </a>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   card: ContentCard;
   onClose: () => void;
@@ -83,6 +104,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadOk, setUploadOk] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
@@ -95,6 +117,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
 
     setUploadError(null);
     setUploadOk(false);
+    setImgError(false);
 
     // Validações antes de subir
     if (file.size === 0) { setUploadError("Arquivo vazio."); return; }
@@ -196,33 +219,18 @@ export default function ContentCardModal({ card, onClose }: Props) {
           {/* Left: Art preview */}
           <div className="w-72 border-r border-border flex flex-col shrink-0">
             <div className="flex-1 relative bg-muted overflow-hidden">
-              {imageUrl ? (
-                imageUrl.startsWith("blob:") ? (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-zinc-500 px-4">
-                    <ImageIcon size={32} />
-                    <p className="text-[10px] text-center">Preview removido para otimizar o sistema.</p>
-                    {(() => {
-                      const { clients: cls } = useAppState();
-                      const cl = cls.find((c) => c.id === card.clientId);
-                      return cl?.driveLink ? (
-                        <a href={cl.driveLink} target="_blank" rel="noopener noreferrer"
-                          className="text-[10px] text-[#0d4af5] hover:underline flex items-center gap-1">
-                          <ExternalLink size={9} /> Acesse via Google Drive
-                        </a>
-                      ) : null;
-                    })()}
-                  </div>
-                ) : (
-                  <img
-                    src={imageUrl}
-                    alt="Arte do conteudo"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = "none";
-                      (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="w-full h-full flex flex-col items-center justify-center gap-2 text-zinc-500 px-4"><p style="font-size:10px;text-align:center">Preview indisponivel. Acesse via Google Drive.</p></div>';
-                    }}
-                  />
-                )
+              {imageUrl && !imageUrl.startsWith("blob:") && !imgError ? (
+                <img
+                  src={imageUrl}
+                  alt="Arte do conteudo"
+                  className="w-full h-full object-cover"
+                  onError={() => setImgError(true)}
+                />
+              ) : imageUrl ? (
+                <DrivePreviewFallback
+                  clientId={card.clientId}
+                  label={imgError ? "Preview indisponível." : "Preview removido para otimizar o sistema."}
+                />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
                   <ImageIcon size={40} />
