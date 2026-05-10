@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     // Buscar contas ativas no DB
     let query = supabaseAdmin
       .from("ad_accounts")
-      .select("id, meta_account_id, is_prepaid, spend_cap, billing_type_source");
+      .select("id, meta_account_id, account_name, is_prepaid, spend_cap, monthly_budget, billing_type_source");
 
     if (targetAccountIds && targetAccountIds.length > 0) {
       query = query.in("meta_account_id", targetAccountIds) as typeof query;
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ synced: 0, message: "Nenhuma conta cadastrada" });
     }
 
-    type AccountRow = { id: string; meta_account_id: string; is_prepaid: boolean; spend_cap: number | null; billing_type_source: string | null };
+    type AccountRow = { id: string; meta_account_id: string; account_name: string | null; is_prepaid: boolean; spend_cap: number | null; monthly_budget: number | null; billing_type_source: string | null };
     const typedAccounts = accounts as AccountRow[];
     const metaIds = typedAccounts.map((a) => a.meta_account_id);
     const [metaData, dailySpendMap, monthlySpendMap] = await Promise.all([
@@ -148,6 +148,36 @@ export async function POST(req: NextRequest) {
       // Gasto do mês corrente via Insights (já em reais, não centavos).
       // Usado para calcular saldo de contas pós-pagas com verba mensal contratada.
       const currentMonthSpend = monthlySpendMap.get(account.meta_account_id) ?? null;
+
+      // ── [RAIO-X] Log temporário de auditoria de saldo ────────
+      // Remover após diagnóstico confirmado.
+      console.log(`\n[RAIO-X] ===== ${account.account_name ?? account.meta_account_id} (${account.meta_account_id}) =====`);
+      console.log("[RAIO-X] META API (raw):", JSON.stringify({
+        balance:                meta.balance,
+        amount_spent:           meta.amount_spent,
+        spend_cap:              meta.spend_cap,
+        currency:               meta.currency,
+        account_status:         meta.account_status,
+        funding_source_details: meta.funding_source_details,
+      }, null, 2));
+      console.log("[RAIO-X] DB:", JSON.stringify({
+        is_prepaid:       account.is_prepaid,
+        spend_cap_db:     account.spend_cap,
+        monthly_budget:   account.monthly_budget,
+        billing_source:   account.billing_type_source,
+      }, null, 2));
+      console.log("[RAIO-X] CALCULADO:", JSON.stringify({
+        isPrepaid_final:      isPrepaid,
+        detectedType:         detectedType,
+        currentSpent_lifetime: currentSpent,
+        currentMonthSpend:    currentMonthSpend,
+        availableBalance:     availableBalance,
+        avg3dSpend:           avg3dSpend,
+        "FORMULA monthly_budget": account.monthly_budget !== null && currentMonthSpend !== null
+          ? `${account.monthly_budget} - ${currentMonthSpend} = ${Math.max(0, account.monthly_budget - currentMonthSpend)}`
+          : "N/A (sem monthly_budget ou sem dado mensal ainda)",
+      }, null, 2));
+      // ── fim do log de auditoria ───────────────────────────────
 
       const updatePayload: Record<string, unknown> = {
         last_balance:           availableBalance,
