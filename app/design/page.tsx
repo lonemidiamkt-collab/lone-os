@@ -495,10 +495,9 @@ export default function DesignPage() {
     return contentCards.filter((c) => myClientIds.has(c.clientId));
   }, [contentCards, myClientIds]);
 
-  const myDesignRequests = useMemo(() => {
-    if (!myClientIds) return designRequests;
-    return designRequests.filter((r) => myClientIds.has(r.clientId));
-  }, [designRequests, myClientIds]);
+  // Designer vê TODAS as demandas — não filtra por clientes atribuídos,
+  // pois o designer da agência atende todos os clientes.
+  const myDesignRequests = useMemo(() => designRequests, [designRequests]);
 
   // Get social media people from content cards
   const socialPeople = useMemo(() => {

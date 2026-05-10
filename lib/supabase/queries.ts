@@ -311,24 +311,14 @@ export async function fetchContentCards(filter?: { socialMedia?: string }): Prom
 }
 
 export async function insertContentCard(card: Omit<ContentCard, "id">): Promise<{ id: string }> {
-  const { data, error } = await supabase.from("content_cards").insert({
-    title: card.title,
-    client_id: card.clientId,
-    client_name: card.clientName,
-    social_media: card.socialMedia,
-    status: card.status ?? "ideas",
-    priority: card.priority ?? "medium",
-    format: card.format,
-    platform: card.platform,
-    due_date: card.dueDate,
-    due_time: card.dueTime,
-    briefing: card.briefing,
-    caption: card.caption,
-    requested_by_traffic: card.requestedByTraffic,
-    status_changed_at: new Date().toISOString(),
-    column_entered_at: { [card.status ?? "ideas"]: new Date().toISOString() },
-  }).select("id").single();
-  if (error) { console.error("[DB] insertContentCard:", error); throw error; }
+  const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+  const res = await authedFetch("/api/content-cards/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(card),
+  });
+  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  if (!res.ok) { console.error("[DB] insertContentCard:", data); throw new Error(data.error || "Falha ao criar card"); }
   return { id: data.id as string };
 }
 
@@ -390,20 +380,14 @@ export async function fetchDesignRequests(filter?: { assignedSocialClients?: str
 }
 
 export async function insertDesignRequest(req: Omit<DesignRequest, "id">): Promise<{ id: string }> {
-  const { data, error } = await supabase.from("design_requests").insert({
-    title: req.title,
-    client_id: req.clientId,
-    client_name: req.clientName,
-    requested_by: req.requestedBy,
-    priority: req.priority,
-    status: req.status ?? "queued",
-    format: req.format,
-    briefing: req.briefing,
-    attachments: req.attachments ?? [],
-    content_card_id: req.contentCardId ?? null,
-    deadline: req.deadline,
-  }).select("id").single();
-  if (error) { console.error("[DB] insertDesignRequest:", error); throw error; }
+  const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+  const res = await authedFetch("/api/design-requests/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  if (!res.ok) { console.error("[DB] insertDesignRequest:", data); throw new Error(data.error || "Falha ao criar demanda"); }
   return { id: data.id as string };
 }
 
