@@ -227,6 +227,72 @@ export async function fetchAccountBalances(
   return result;
 }
 
+// ── Fetch batch de gasto do mês atual via Insights ───────────
+// Retorna mapa de act_id → total gasto no mês corrente em reais
+// Usa date_preset=this_month (Meta: 1º do mês → ontem).
+// Campo "spend" do Insights já vem na moeda da conta (NÃO centavos).
+
+export async function fetchBatchMonthlySpend(
+  token: string,
+  accountIds: string[],
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (accountIds.length === 0) return result;
+
+  const BATCH_SIZE = 50;
+
+  for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
+    const batch = accountIds.slice(i, i + BATCH_SIZE);
+    const requests = batch.map((id) => ({
+      method: "GET",
+      relative_url: `${id}/insights?fields=spend&date_preset=this_month`,
+    }));
+
+    const body = new URLSearchParams();
+    body.set("access_token", token);
+    body.set("batch", JSON.stringify(requests));
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+      const res = await fetch(
+        `${META_CONFIG.graphApiBase}/${META_CONFIG.graphApiVersion}/`,
+        {
+          method: "POST",
+          body: body.toString(),
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          signal: controller.signal,
+        },
+      );
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        console.error("[Meta] Monthly spend HTTP error:", res.status);
+        continue;
+      }
+
+      const responses: Array<{ code: number; body: string } | null> = await res.json();
+
+      for (let j = 0; j < batch.length; j++) {
+        const id = batch[j];
+        const item = responses[j];
+        if (!item || item.code !== 200) continue;
+        try {
+          const data: { data?: Array<{ spend?: string }> } = JSON.parse(item.body);
+          const spend = parseFloat(data.data?.[0]?.spend ?? "0");
+          if (Number.isFinite(spend) && spend >= 0) result.set(id, spend);
+        } catch {
+          // ignora erros por conta
+        }
+      }
+    } catch (err) {
+      console.error("[Meta] Monthly spend error:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  return result;
+}
+
 // ── Fetch batch de gasto diário via Insights (últimos 7 dias) ─
 // Retorna mapa de act_id → array de gastos diários em reais (mais recente por último)
 

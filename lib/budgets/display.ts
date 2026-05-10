@@ -15,22 +15,34 @@ export interface AccountForDisplay {
   account_status: number | null;
   is_prepaid: boolean;
   monthly_budget: number | null;
+  current_month_spend: number | null;
   spend_cap: number | null;
   last_amount_spent: number | null;
   availableBalance: number | null;
   avgDailySpend: number | null;
   severity: BalanceSeverity;
+  currency: string;
 }
 
-function fmt(n: number | null | undefined): string {
+function fmt(n: number | null | undefined, currency = "BRL"): string {
   if (n === null || n === undefined) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return n.toLocaleString("pt-BR", { style: "currency", currency });
 }
 
 // spend_caps acima deste valor são teto de segurança da Meta, não orçamento real
 const CAP_INFINITY_BRL = 100_000_000;
 
+// Mapeia BalanceSeverity → DisplaySeverity (descarta "disabled" → "paused")
+function toDisplay(s: BalanceSeverity): DisplaySeverity {
+  if (s === "critical") return "critical";
+  if (s === "warning")  return "warning";
+  if (s === "disabled") return "paused";
+  return "ok";
+}
+
 export function getBalanceDisplay(a: AccountForDisplay): BalanceDisplay {
+  const cur = a.currency || "BRL";
+
   // 1. Status da conta (prioridade máxima — antes de qualquer lógica de saldo)
   const st = a.account_status;
   if (st === 2) return { primary: "Desativada",   secondary: "—",              severity: "paused"   };
@@ -43,19 +55,25 @@ export function getBalanceDisplay(a: AccountForDisplay): BalanceDisplay {
 
   // 2. Pré-pago: saldo da carteira calculado no sync
   if (a.is_prepaid) {
-    const bal = a.availableBalance ?? 0;
-    const sev: DisplaySeverity =
-      a.severity === "critical" ? "critical" :
-      a.severity === "warning"  ? "warning"  : "ok";
-    return { primary: fmt(bal), secondary: "Saldo em conta", severity: sev };
+    return {
+      primary:   fmt(a.availableBalance, cur),
+      secondary: "Saldo em conta",
+      severity:  toDisplay(a.severity),
+    };
   }
 
-  // 3. Pós-pago com verba mensal contratada definida pelo gestor
+  // 3. Pós-pago com verba mensal contratada
+  // Saldo = verba − gasto do mês corrente (Insights this_month).
+  // Se current_month_spend ainda não foi sincronizado, mostra "—" e mantém "ok"
+  // para não gerar falso alarme.
   if (a.monthly_budget !== null) {
+    const synced = a.current_month_spend !== null;
     return {
-      primary:   fmt(a.monthly_budget),
-      secondary: "Verba mensal contratada",
-      severity:  "ok",
+      primary:   synced ? fmt(a.availableBalance, cur) : "—",
+      secondary: synced
+        ? `Verba ${fmt(a.monthly_budget, cur)} · gasto ${fmt(a.current_month_spend, cur)}`
+        : "Verba mensal · sync pendente",
+      severity: synced ? toDisplay(a.severity) : "ok",
     };
   }
 
@@ -63,22 +81,18 @@ export function getBalanceDisplay(a: AccountForDisplay): BalanceDisplay {
   const hasRealCap =
     a.spend_cap !== null && a.spend_cap > 0 && a.spend_cap < CAP_INFINITY_BRL;
   if (hasRealCap) {
-    const available = a.availableBalance;
-    const sev: DisplaySeverity =
-      a.severity === "critical" ? "critical" :
-      a.severity === "warning"  ? "warning"  : "ok";
     return {
-      primary:   available !== null ? fmt(available) : "—",
-      secondary: `Cap ${fmt(a.spend_cap)} · gasto ${fmt(a.last_amount_spent)}`,
-      severity:  sev,
+      primary:   fmt(a.availableBalance, cur),
+      secondary: `Cap ${fmt(a.spend_cap, cur)} · gasto ${fmt(a.last_amount_spent, cur)}`,
+      severity:  toDisplay(a.severity),
     };
   }
 
-  // 5. Pós-pago sem cap definido (cartão de crédito, sem teto configurado)
+  // 5. Pós-pago sem cap definido (cartão sem teto configurado)
   return {
     primary:   "Ativa",
     secondary: a.avgDailySpend !== null
-      ? `Cartão · gasto ${fmt(a.avgDailySpend)}/dia`
+      ? `Cartão · gasto ${fmt(a.avgDailySpend, cur)}/dia`
       : "Cartão · sem dados",
     severity: "ok",
   };

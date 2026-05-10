@@ -37,6 +37,7 @@ interface AdAccountRow {
   spend_cap: number | null;
   last_balance: number | null;
   last_amount_spent: number | null;
+  current_month_spend: number | null;
   last_3d_avg_spend: number | null;
   daily_spend_3d: number[] | null;
   last_synced_at: string | null;
@@ -71,17 +72,22 @@ interface EnrichedAccount extends AdAccountRow {
 
 function enrichAccount(a: AdAccountRow): EnrichedAccount {
   const clientName = a.clients?.nome_fantasia || a.clients?.name || "—";
+  const cur = a.currency || "BRL";
 
   // Cálculo de saldo disponível:
-  // Pós-pago com verba mensal → mostra monthly_budget diretamente (amount_spent da Meta API é
-  //   cumulativo desde o início do ciclo de cobrança, podendo abranger vários meses).
-  // Outros → last_balance já calculado no sync (display_string ou spend_cap - amount_spent)
+  // Pós-pago com verba mensal → monthly_budget − current_month_spend (Insights this_month).
+  //   NÃO usamos last_amount_spent (amount_spent do endpoint da conta, pode ser vitalício).
+  //   Se current_month_spend ainda não foi sincronizado, saldo é null (exibe "—" na tela).
+  // Outros → last_balance já calculado no sync (display_string ou spend_cap - amount_spent).
   let available: number | null;
   let balanceLabel: string;
 
   if (!a.is_prepaid && a.monthly_budget !== null) {
-    available = a.monthly_budget;
-    balanceLabel = `Verba mensal contratada`;
+    const spent = a.current_month_spend;
+    available = spent !== null ? Math.max(0, a.monthly_budget - spent) : null;
+    balanceLabel = spent !== null
+      ? `Verba ${formatCurrency(a.monthly_budget, cur)} · gasto ${formatCurrency(spent, cur)}`
+      : "Verba mensal · sync pendente";
   } else {
     available = a.last_balance;
     if (a.is_prepaid) {
@@ -91,7 +97,7 @@ function enrichAccount(a: AdAccountRow): EnrichedAccount {
     } else {
       const cap = a.spend_cap;
       const spent = a.last_amount_spent;
-      balanceLabel = cap ? `Cap ${formatBRL(cap)} · gasto ${formatBRL(spent)}` : "Cap − gasto";
+      balanceLabel = cap ? `Cap ${formatCurrency(cap, cur)} · gasto ${formatCurrency(spent, cur)}` : "Cap − gasto";
     }
   }
 
@@ -124,7 +130,7 @@ function enrichAccount(a: AdAccountRow): EnrichedAccount {
     criticalThreshold,
   );
 
-  const enriched = { ...a, clientName, availableBalance: available, balanceLabel, daysRemaining, avgDailySpend, severity, warningThreshold, criticalThreshold };
+  const enriched = { ...a, clientName, availableBalance: available, balanceLabel, daysRemaining, avgDailySpend, severity, warningThreshold, criticalThreshold, currency: cur };
   const display = getBalanceDisplay(enriched);
   return { ...enriched, display };
 }
@@ -150,9 +156,9 @@ function sortAccounts(accounts: EnrichedAccount[]): EnrichedAccount[] {
   });
 }
 
-function formatBRL(n: number | null | undefined): string {
+function formatCurrency(n: number | null | undefined, currency = "BRL"): string {
   if (n === null || n === undefined) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return n.toLocaleString("pt-BR", { style: "currency", currency });
 }
 
 function timeSince(iso: string | null): string {
@@ -490,7 +496,7 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
               {isPrepaid
                 ? "Pré-pago: saldo disponível = carteira na Meta (funding_source_details). Quando zera, campanhas pausam automaticamente."
                 : monthlyBudget
-                  ? `Pós-pago com verba definida: mostra ${formatBRL(parseFloat(monthlyBudget) || 0)}/mês − gasto do ciclo. Ideal para clientes onde o spend_cap da Meta é maior que o orçamento real.`
+                  ? `Pós-pago com verba definida: mostra ${formatCurrency(parseFloat(monthlyBudget) || 0)}/mês − gasto do ciclo. Ideal para clientes onde o spend_cap da Meta é maior que o orçamento real.`
                   : "Pós-pago: saldo = spend_cap − gasto do ciclo. Se o spend_cap for um teto de segurança alto, defina a Verba mensal acima para precisão."}
             </p>
           </div>
@@ -750,7 +756,7 @@ export default function BudgetsPage() {
             },
             {
               label: "Saldo agregado",
-              value: formatBRL(totalBalance),
+              value: formatCurrency(totalBalance),
               sub: `${computedAccounts.length} de ${accounts.length} com saldo`,
               onClick: () => setFilterSeverity("ok"),
               active: filterSeverity === "ok",
@@ -935,7 +941,7 @@ export default function BudgetsPage() {
                   {/* Gasto médio */}
                   <div>
                     <p className="text-sm text-foreground">
-                      {account.avgDailySpend !== null ? formatBRL(account.avgDailySpend) : "—"}
+                      {account.avgDailySpend !== null ? formatCurrency(account.avgDailySpend) : "—"}
                     </p>
                     {account.avgDailySpend !== null && (
                       <p className="text-[10px] text-zinc-600">/dia</p>

@@ -6,6 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import {
   fetchAccountBalances,
   fetchBatchDailySpend,
+  fetchBatchMonthlySpend,
   calculateAvailableBalance,
   estimateDaysRemaining,
   detectAccountType,
@@ -36,7 +37,7 @@ export async function GET() {
       .from("ad_accounts")
       .select(`
         id, meta_account_id, account_name, is_prepaid, billing_type_source, spend_cap,
-        last_balance, last_amount_spent, last_3d_avg_spend, daily_spend_3d,
+        last_balance, last_amount_spent, current_month_spend, last_3d_avg_spend, daily_spend_3d,
         last_synced_at, currency, account_status, sync_error, last_error_message, monthly_budget,
         clients!inner (
           id, name, nome_fantasia, client_finance_phone, client_pix_key
@@ -90,9 +91,10 @@ export async function POST(req: NextRequest) {
     type AccountRow = { id: string; meta_account_id: string; is_prepaid: boolean; spend_cap: number | null; billing_type_source: string | null };
     const typedAccounts = accounts as AccountRow[];
     const metaIds = typedAccounts.map((a) => a.meta_account_id);
-    const [metaData, dailySpendMap] = await Promise.all([
+    const [metaData, dailySpendMap, monthlySpendMap] = await Promise.all([
       fetchAccountBalances(token, metaIds),
       fetchBatchDailySpend(token, metaIds),
+      fetchBatchMonthlySpend(token, metaIds),
     ]);
 
     const now = new Date().toISOString();
@@ -143,17 +145,22 @@ export async function POST(req: NextRequest) {
         meta,
       );
 
+      // Gasto do mês corrente via Insights (já em reais, não centavos).
+      // Usado para calcular saldo de contas pós-pagas com verba mensal contratada.
+      const currentMonthSpend = monthlySpendMap.get(account.meta_account_id) ?? null;
+
       const updatePayload: Record<string, unknown> = {
-        last_balance:        availableBalance,
-        last_amount_spent:   currentSpent,
-        daily_spend_3d:      last3.length > 0 ? last3 : null,
-        last_3d_avg_spend:   avg3dSpend,
-        currency:            meta.currency ?? "BRL",
-        account_status:      meta.account_status,
-        spend_cap:           meta.spend_cap ? parseFloat(meta.spend_cap) / 100 : account.spend_cap,
-        sync_error:          null,
-        last_error_message:  null,
-        last_synced_at:      now,
+        last_balance:           availableBalance,
+        last_amount_spent:      currentSpent,
+        current_month_spend:    currentMonthSpend,
+        daily_spend_3d:         last3.length > 0 ? last3 : null,
+        last_3d_avg_spend:      avg3dSpend,
+        currency:               meta.currency ?? "BRL",
+        account_status:         meta.account_status,
+        spend_cap:              meta.spend_cap ? parseFloat(meta.spend_cap) / 100 : account.spend_cap,
+        sync_error:             null,
+        last_error_message:     null,
+        last_synced_at:         now,
       };
       if (detectedType !== null) {
         updatePayload.is_prepaid = isPrepaid;
