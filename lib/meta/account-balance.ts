@@ -229,7 +229,8 @@ export async function fetchAccountBalances(
 
 // ── Fetch batch de gasto do mês atual via Insights ───────────
 // Retorna mapa de act_id → total gasto no mês corrente em reais
-// Usa date_preset=this_month (Meta: 1º do mês → ontem).
+// Usa time_range explícito (1º do mês → hoje) para capturar gasto parcial de hoje.
+// date_preset=this_month cobre apenas até ontem — usamos range explícito para incluir hoje.
 // Campo "spend" do Insights já vem na moeda da conta (NÃO centavos).
 
 export async function fetchBatchMonthlySpend(
@@ -239,13 +240,17 @@ export async function fetchBatchMonthlySpend(
   const result = new Map<string, number>();
   if (accountIds.length === 0) return result;
 
+  const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const firstDay = today.slice(0, 8) + "01"; // "YYYY-MM-01"
+  const timeRange = encodeURIComponent(JSON.stringify({ since: firstDay, until: today }));
+
   const BATCH_SIZE = 50;
 
   for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
     const batch = accountIds.slice(i, i + BATCH_SIZE);
     const requests = batch.map((id) => ({
       method: "GET",
-      relative_url: `${id}/insights?fields=spend&date_preset=this_month`,
+      relative_url: `${id}/insights?fields=spend&time_range=${timeRange}`,
     }));
 
     const body = new URLSearchParams();
