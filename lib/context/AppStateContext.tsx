@@ -716,21 +716,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       channel = supabase
         .channel("public:content_cards")
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "content_cards" }, (payload) => {
-          if (!payload.new) return;
+          if (cancelled || !payload.new) return;
           try {
             const card = snakeToContentCard(payload.new as Record<string, unknown>);
-            // Social media users only receive cards assigned to them.
             if (roleRef.current === "social" && card.socialMedia !== currentUserRef.current) return;
             setContentCards((prev) => prev.some((c) => c.id === card.id) ? prev : [...prev, card]);
           } catch (err) { console.error("[realtime] insert mapping:", err); }
         })
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "content_cards" }, (payload) => {
-          if (!payload.new) return;
+          if (cancelled || !payload.new) return;
           try {
             const card = snakeToContentCard(payload.new as Record<string, unknown>);
             if (roleRef.current === "social") {
               if (card.socialMedia !== currentUserRef.current) {
-                // Card was reassigned away from this user — remove it from local state.
                 setContentCards((prev) => prev.filter((c) => c.id !== card.id));
                 return;
               }
@@ -739,6 +737,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           } catch (err) { console.error("[realtime] update mapping:", err); }
         })
         .on("postgres_changes", { event: "DELETE", schema: "public", table: "content_cards" }, (payload) => {
+          if (cancelled) return;
           const id = (payload.old as { id?: string } | undefined)?.id;
           if (id) setContentCards((prev) => prev.filter((c) => c.id !== id));
         })
@@ -760,14 +759,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       channel = supabase
         .channel("public:design_requests")
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "design_requests" }, (payload) => {
-          if (!payload.new) return;
+          if (cancelled || !payload.new) return;
           try {
             const req = snakeToDesignRequest(payload.new as Record<string, unknown>);
             if (roleRef.current === "social") {
-              // Only receive design_requests for clients in the social media user's portfolio.
               setClients((cls) => {
                 const myClientIds = new Set(cls.filter((c) => c.assignedSocial === currentUserRef.current).map((c) => c.id));
-                if (!myClientIds.has(req.clientId)) return cls; // discard, no state change
+                if (!myClientIds.has(req.clientId)) return cls;
                 setDesignRequests((prev) => prev.some((r) => r.id === req.id) ? prev : [req, ...prev]);
                 return cls;
               });
@@ -777,7 +775,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           } catch (err) { console.error("[realtime] design_requests insert:", err); }
         })
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "design_requests" }, (payload) => {
-          if (!payload.new) return;
+          if (cancelled || !payload.new) return;
           try {
             const req = snakeToDesignRequest(payload.new as Record<string, unknown>);
             if (roleRef.current === "social") {
@@ -796,6 +794,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           } catch (err) { console.error("[realtime] design_requests update:", err); }
         })
         .on("postgres_changes", { event: "DELETE", schema: "public", table: "design_requests" }, (payload) => {
+          if (cancelled) return;
           const id = (payload.old as { id?: string } | undefined)?.id;
           if (id) setDesignRequests((prev) => prev.filter((r) => r.id !== id));
         })
@@ -1431,17 +1430,25 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const updateClientData = useCallback(
     (clientId: string, updates: Partial<Client>) => {
-      // Skip undefined values — DadosTab sends `field || undefined` for empty inputs,
-      // which would overwrite existing fields in state even though the DB path skips them.
       const defined = Object.fromEntries(
         Object.entries(updates).filter(([, v]) => v !== undefined)
       ) as Partial<Client>;
-      setClients((prev) =>
-        prev.map((c) => (c.id === clientId ? { ...c, ...defined } : c))
-      );
-      db.updateClientDb(clientId, updates).catch(() => {});
+      let backup: Client | undefined;
+      setClients((prev) => {
+        backup = prev.find((c) => c.id === clientId);
+        return prev.map((c) => (c.id === clientId ? { ...c, ...defined } : c));
+      });
+      db.updateClientDb(clientId, updates).catch((err) => {
+        if (backup) setClients((prev) => prev.map((c) => (c.id === clientId ? backup! : c)));
+        pushNotification(
+          "system",
+          "Falha ao salvar cliente",
+          err instanceof Error ? err.message : "Erro desconhecido ao salvar dados.",
+          clientId
+        );
+      });
     },
-    []
+    [pushNotification]
   );
 
   const updateInvestmentData = useCallback(
@@ -1519,8 +1526,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   );
 
   const deleteNotice = useCallback((id: string) => {
-    setNotices((prev) => prev.filter((n) => n.id !== id));
-    db.deleteNoticeDb(id).catch(() => {});
+    let backup: typeof notices[number] | undefined;
+    setNotices((prev) => {
+      backup = prev.find((n) => n.id === id);
+      return prev.filter((n) => n.id !== id);
+    });
+    db.deleteNoticeDb(id).catch(() => {
+      if (backup) setNotices((prev) => (prev.some((n) => n.id === id) ? prev : [...prev, backup!]));
+    });
   }, []);
 
   const addCardComment = useCallback(
@@ -1579,6 +1592,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const updateDesignRequest = useCallback(
     (id: string, updates: Partial<DesignRequest>) => {
       let prevSnapshot: DesignRequest[] | null = null;
+      let prevCards: ContentCard[] | null = null;
       let reqRef: DesignRequest | undefined;
       setDesignRequests((prev) => {
         prevSnapshot = prev;
@@ -1591,10 +1605,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             `"${req.title}" para ${req.clientName} está pronto. Social pode avançar o card.`,
             req.clientId
           );
-          setContentCards((cards) =>
-            cards.map((c) => {
+          setContentCards((cards) => {
+            prevCards = cards;
+            return cards.map((c) => {
               if (c.designRequestId !== req.id) return c;
-              // Only set delivery info if not already set by UploadArtModal
               if (c.designerDeliveredAt) return c;
               const cardUpdates = {
                 designerDeliveredAt: new Date().toISOString(),
@@ -1602,8 +1616,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
               };
               db.updateContentCardDb(c.id, cardUpdates).catch(() => {});
               return { ...c, ...cardUpdates };
-            })
-          );
+            });
+          });
           pushTimeline({
             clientId: req.clientId,
             type: "design",
@@ -1617,6 +1631,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       db.updateDesignRequestDb(id, updates).then(({ error }) => {
         if (error && prevSnapshot) {
           setDesignRequests(prevSnapshot);
+          if (prevCards) setContentCards(prevCards);
           pushNotification(
             "system",
             "Falha ao salvar demanda",
@@ -1783,8 +1798,25 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ─── Delete functions ─────────────────────────────────────
-  const deleteTask = useCallback((id: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
+  const deleteTask = useCallback(async (id: string) => {
+    let backup: Task | undefined;
+    setTasks((prev) => {
+      backup = prev.find((t) => t.id === id);
+      return prev.filter((t) => t.id !== id);
+    });
+    try {
+      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+      const res = await authedFetch("/api/tasks/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) {
+        if (backup) setTasks((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, backup!]));
+      }
+    } catch {
+      if (backup) setTasks((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, backup!]));
+    }
   }, []);
 
   const deleteContentCard = useCallback(async (id: string) => {

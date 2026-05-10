@@ -172,10 +172,17 @@ export async function insertClient(client: Omit<Client, "id"> & { id?: string })
 }
 
 export async function updateClientDb(id: string, updates: Partial<Client>): Promise<void> {
-  const row = clientToSnake(updates);
-  if (Object.keys(row).length === 0) return;
-  const { error } = await supabase.from("clients").update(row).eq("id", id);
-  if (error) console.error("[DB] updateClient:", error);
+  const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+  const res = await authedFetch("/api/clients/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, ...updates }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    console.error("[DB] updateClient:", data.error ?? `HTTP ${res.status}`);
+    throw new Error(data.error || `Falha ao salvar cliente (HTTP ${res.status})`);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -207,34 +214,25 @@ export async function fetchTasks(): Promise<Task[]> {
 }
 
 export async function insertTask(task: Omit<Task, "id">): Promise<{ id: string }> {
-  const { data, error } = await supabase.from("tasks").insert({
-    title: task.title,
-    client_id: task.clientId,
-    client_name: task.clientName,
-    assigned_to: task.assignedTo,
-    role: task.role,
-    status: task.status ?? "pending",
-    priority: task.priority ?? "medium",
-    start_date: task.startDate,
-    due_date: task.dueDate,
-    description: task.description,
-  }).select("id").single();
-  if (error) { console.error("[DB] insertTask:", error); throw error; }
+  const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+  const res = await authedFetch("/api/tasks/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(task),
+  });
+  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  if (!res.ok) { console.error("[DB] insertTask:", data); throw new Error(data.error || "Falha ao criar tarefa"); }
   return { id: data.id as string };
 }
 
 export async function updateTaskDb(id: string, updates: Partial<Task>): Promise<void> {
-  const row: Record<string, unknown> = {};
-  if (updates.status !== undefined) row.status = updates.status;
-  if (updates.priority !== undefined) row.priority = updates.priority;
-  if (updates.assignedTo !== undefined) row.assigned_to = updates.assignedTo;
-  if (updates.dueDate !== undefined) row.due_date = updates.dueDate;
-  if (updates.description !== undefined) row.description = updates.description;
-  if (updates.workStartedAt !== undefined) row.work_started_at = updates.workStartedAt;
-  if (updates.totalTimeSpentMs !== undefined) row.total_time_spent_ms = updates.totalTimeSpentMs;
-  if (Object.keys(row).length === 0) return;
-  const { error } = await supabase.from("tasks").update(row).eq("id", id);
-  if (error) console.error("[DB] updateTask:", error);
+  const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+  const res = await authedFetch("/api/tasks/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, ...updates }),
+  });
+  if (!res.ok) console.error("[DB] updateTask: HTTP", res.status);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -323,30 +321,20 @@ export async function insertContentCard(card: Omit<ContentCard, "id">): Promise<
 }
 
 export async function updateContentCardDb(id: string, updates: Record<string, unknown>): Promise<{ error: Error | null }> {
-  const row: Record<string, unknown> = {};
-  const keyMap: Record<string, string> = {
-    status: "status", priority: "priority", imageUrl: "image_url",
-    statusChangedAt: "status_changed_at", columnEnteredAt: "column_entered_at",
-    designRequestId: "design_request_id", designerDeliveredAt: "designer_delivered_at",
-    designerDeliveredBy: "designer_delivered_by", socialConfirmedAt: "social_confirmed_at",
-    socialConfirmedBy: "social_confirmed_by", caption: "caption", hashtags: "hashtags",
-    observations: "observations", platform: "platform", dueDate: "due_date",
-    nonDeliveryReason: "non_delivery_reason", nonDeliveryReportedBy: "non_delivery_reported_by",
-    nonDeliveryReportedAt: "non_delivery_reported_at", workStartedAt: "work_started_at",
-    totalTimeSpentMs: "total_time_spent_ms", publishVerifiedAt: "publish_verified_at",
-    publishVerifiedBy: "publish_verified_by",
-    blockedReason: "blocked_reason", blockedBy: "blocked_by", blockedAt: "blocked_at",
-    scheduledAt: "scheduled_at", requestedByTraffic: "requested_by_traffic",
-    trafficSuggestion: "traffic_suggestion", lastKanbanActivity: "last_kanban_activity",
-  };
-  for (const [key, val] of Object.entries(updates)) {
-    const dbKey = keyMap[key] ?? key;
-    row[dbKey] = val;
+  if (Object.keys(updates).length === 0) return { error: null };
+  const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+  const res = await authedFetch("/api/content-cards/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, ...updates }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const err = new Error(data.error || `HTTP ${res.status}`);
+    console.error("[DB] updateContentCard:", err.message);
+    return { error: err };
   }
-  if (Object.keys(row).length === 0) return { error: null };
-  const { error } = await supabase.from("content_cards").update(row).eq("id", id);
-  if (error) console.error("[DB] updateContentCard:", error);
-  return { error: error ? new Error(error.message) : null };
+  return { error: null };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -392,17 +380,19 @@ export async function insertDesignRequest(req: Omit<DesignRequest, "id">): Promi
 }
 
 export async function updateDesignRequestDb(id: string, updates: Partial<DesignRequest>): Promise<{ error: Error | null }> {
-  const row: Record<string, unknown> = {};
-  if (updates.status !== undefined) row.status = updates.status;
-  if (updates.priority !== undefined) row.priority = updates.priority;
-  if (updates.briefing !== undefined) row.briefing = updates.briefing;
-  if (updates.format !== undefined) row.format = updates.format;
-  if (updates.deadline !== undefined) row.deadline = updates.deadline;
-  if (updates.attachments !== undefined) row.attachments = updates.attachments;
-  if (Object.keys(row).length === 0) return { error: null };
-  const { error } = await supabase.from("design_requests").update(row).eq("id", id);
-  if (error) console.error("[DB] updateDesignRequest:", error);
-  return { error: error ? new Error(error.message) : null };
+  const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+  const res = await authedFetch("/api/design-requests/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, ...updates }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const err = new Error(data.error || `HTTP ${res.status}`);
+    console.error("[DB] updateDesignRequest:", err.message);
+    return { error: err };
+  }
+  return { error: null };
 }
 
 // ═══════════════════════════════════════════════════════════
