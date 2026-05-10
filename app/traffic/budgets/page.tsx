@@ -469,26 +469,24 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
             )}
           </div>
 
-          {/* Verba mensal — só aparece para pós-pago */}
-          {!isPrepaid && (
-            <div className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">
-                Verba mensal contratada (R$)
-              </p>
-              <input
-                type="number" min="0" step="100"
-                value={monthlyBudget}
-                onChange={(e) => setMonthlyBudget(e.target.value)}
-                placeholder="ex: 1000.00"
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
-              />
-              <p className="text-[10px] text-zinc-600">
-                Quando definida, o saldo disponível exibido será{" "}
-                <span className="text-zinc-400">verba − gasto do ciclo atual</span>.
-                Mais preciso que o spend_cap da Meta quando esse é usado como teto de segurança.
-              </p>
-            </div>
-          )}
+          {/* Verba mensal — sempre visível */}
+          <div className="space-y-1">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-wider">
+              Verba mensal contratada (R$)
+            </p>
+            <input
+              type="number" min="0" step="100"
+              value={monthlyBudget}
+              onChange={(e) => setMonthlyBudget(e.target.value)}
+              placeholder="ex: 1000.00"
+              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+            />
+            <p className="text-[10px] text-zinc-600">
+              {isPrepaid
+                ? "Pré-pago: deixe em branco para usar o saldo da carteira Meta. Preencha para monitorar por verba contratada."
+                : <>Pós-pago: saldo exibido = <span className="text-zinc-400">verba − gasto do mês (Insights)</span>. Mais preciso que o spend_cap quando esse é teto de segurança.</>}
+            </p>
+          </div>
 
           {/* Contexto azul */}
           <div className="rounded-lg bg-[#0d4af5]/[0.06] border border-[#0d4af5]/20 p-3">
