@@ -197,7 +197,8 @@ export async function POST(req: NextRequest) {
         updatePayload.billing_type_source = "auto";
       }
 
-      await supabaseAdmin.from("ad_accounts").update(updatePayload).eq("id", account.id);
+      const { error: updErr } = await supabaseAdmin.from("ad_accounts").update(updatePayload).eq("id", account.id);
+      if (updErr) console.error(`[sync] UPDATE failed for ${account.meta_account_id}:`, updErr.message, updErr.code);
 
       // ── Avaliador de regras de alerta ──────────────────────
       if (meta.account_status === 1 && availableBalance !== null) {
