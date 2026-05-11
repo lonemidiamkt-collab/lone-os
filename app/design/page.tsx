@@ -3,7 +3,9 @@
 import Header from "@/components/Header";
 import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import {
   Palette, Filter, Clock, CheckCircle, Loader, Paperclip, X,
@@ -82,7 +84,11 @@ function UploadArtModal({
   card: ContentCard;
   onClose: () => void;
 }) {
-  const { updateContentCard, updateDesignRequest, designRequests, clients, pushNotification } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const designRequests = useContentStore((s) => s.designRequests);
+  const updateContentCard = useContentStore((s) => s.updateContentCard);
+  const updateDesignRequest = useContentStore((s) => s.updateDesignRequest);
+  const pushNotification = useNotificationsStore((s) => s.push);
   const { currentUser } = useRole();
   const [artLink, setArtLink] = useState(
     card.imageUrl && card.imageUrl.includes("drive.google.com") ? card.imageUrl : ""
@@ -366,8 +372,32 @@ function DownloadButton({ url, title }: { url: string; title: string }) {
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DesignPage() {
-  const { clients, contentCards, designRequests, updateDesignRequest, updateContentCard, deleteContentCard, deleteDesignRequest, pushNotification, addDesignRequest, updateClientData } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const updateClientData = useClientsStore((s) => s.updateClient);
+  const initClients = useClientsStore((s) => s.init);
+  const subClients = useClientsStore((s) => s.subscribeRealtime);
+
+  const contentCards = useContentStore((s) => s.contentCards);
+  const designRequests = useContentStore((s) => s.designRequests);
+  const updateContentCard = useContentStore((s) => s.updateContentCard);
+  const updateDesignRequest = useContentStore((s) => s.updateDesignRequest);
+  const deleteContentCard = useContentStore((s) => s.deleteContentCard);
+  const deleteDesignRequest = useContentStore((s) => s.deleteDesignRequest);
+  const addDesignRequest = useContentStore((s) => s.addDesignRequest);
+  const initContent = useContentStore((s) => s.init);
+  const subContent = useContentStore((s) => s.subscribeRealtime);
+
+  const pushNotification = useNotificationsStore((s) => s.push);
+
   const { role, currentUser } = useRole();
+
+  useEffect(() => {
+    initClients();
+    initContent();
+    const u1 = subClients();
+    const u2 = subContent();
+    return () => { u1(); u2(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState<TabView>("kanbans");
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();
 
@@ -2121,8 +2151,8 @@ function NewTaskModal({
   clients: Client[];
   preselectedClient: Client | null;
   requestedBy: string;
-  addDesignRequest: (req: Omit<DesignRequest, "id">) => DesignRequest;
-  pushNotification: (type: "sla" | "status" | "content" | "checkin" | "system", title: string, body: string, clientId?: string) => void;
+  addDesignRequest: (req: Omit<DesignRequest, "id">) => DesignRequest | Promise<DesignRequest>;
+  pushNotification: (type: "sla" | "status" | "content" | "checkin" | "system", title: string, body: string, clientId?: string) => void | Promise<void>;
   onClose: () => void;
 }) {
   const [clientId, setClientId] = useState(preselectedClient?.id ?? "");
