@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
-import type { ContentCard, DesignRequest } from "@/lib/types";
+import type { ContentCard, DesignRequest, ContentApproval, SocialMonthlyReport } from "@/lib/types";
 import * as db from "@/lib/supabase/queries";
 import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
@@ -8,6 +8,8 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 interface ContentState {
   contentCards: ContentCard[];
   designRequests: DesignRequest[];
+  contentApprovals: ContentApproval[];
+  socialReports: SocialMonthlyReport[];
   loading: boolean;
   initialized: boolean;
 
@@ -18,13 +20,21 @@ interface ContentState {
   updateContentCard: (id: string, updates: Partial<ContentCard>, options?: { bypassWorkflow?: boolean }) => Promise<void>;
   deleteContentCard: (id: string) => Promise<void>;
 
+  approveContent: (cardId: string, reviewer: string) => void;
+  rejectContent: (cardId: string, reviewer: string, reason: string) => void;
+
   addDesignRequest: (req: Omit<DesignRequest, "id"> & { contentCardId?: string }) => Promise<DesignRequest>;
   updateDesignRequest: (id: string, updates: Partial<DesignRequest>) => Promise<void>;
   deleteDesignRequest: (id: string) => Promise<void>;
+
+  addSocialReport: (report: Omit<SocialMonthlyReport, "id" | "createdAt">) => Promise<SocialMonthlyReport>;
+  updateSocialReport: (id: string, updates: Partial<SocialMonthlyReport>) => Promise<void>;
 }
 
 export const selectContentCards = (s: ContentState) => s.contentCards;
 export const selectDesignRequests = (s: ContentState) => s.designRequests;
+export const selectContentApprovals = (s: ContentState) => s.contentApprovals;
+export const selectSocialReports = (s: ContentState) => s.socialReports;
 export const selectContentLoading = (s: ContentState) => s.loading;
 export const selectCardsByClient = (clientId: string) => (s: ContentState) =>
   s.contentCards.filter((c) => c.clientId === clientId);
@@ -36,6 +46,8 @@ export const useContentStore = create<ContentState>()(
     subscribeWithSelector((set, get) => ({
       contentCards: [],
       designRequests: [],
+      contentApprovals: [],
+      socialReports: [],
       loading: false,
       initialized: false,
 
@@ -43,11 +55,13 @@ export const useContentStore = create<ContentState>()(
         if (get().initialized || get().loading) return;
         set({ loading: true }, false, "content/init/start");
         try {
-          const [contentCards, designRequests] = await Promise.all([
+          const [contentCards, designRequests, contentApprovals, socialReports] = await Promise.all([
             db.fetchContentCards(filter),
             db.fetchDesignRequests(),
+            db.fetchContentApprovals(),
+            db.fetchSocialReports(),
           ]);
-          set({ contentCards, designRequests, loading: false, initialized: true }, false, "content/init/done");
+          set({ contentCards, designRequests, contentApprovals, socialReports, loading: false, initialized: true }, false, "content/init/done");
         } catch {
           set({ loading: false }, false, "content/init/error");
         }
@@ -155,6 +169,83 @@ export const useContentStore = create<ContentState>()(
           }
         } catch (err) {
           if (prev) set((s) => ({ contentCards: s.contentCards.some((c) => c.id === id) ? s.contentCards : [...s.contentCards, prev] }), false, "content/card/delete/rollback");
+          throw err;
+        }
+      },
+
+      approveContent: (cardId, reviewer) => {
+        const card = get().contentCards.find((c) => c.id === cardId);
+        const approval: ContentApproval = {
+          id: `ca-${Date.now()}`,
+          cardId,
+          status: "approved",
+          reviewedBy: reviewer,
+          reviewedAt: new Date().toISOString(),
+        };
+        set((s) => ({
+          contentApprovals: [...s.contentApprovals.filter((a) => a.cardId !== cardId), approval],
+          contentCards: s.contentCards.map((c) =>
+            c.id === cardId ? { ...c, status: "scheduled" as const, statusChangedAt: new Date().toISOString() } : c
+          ),
+        }), false, "content/approve");
+        db.upsertContentApproval({ cardId, status: "approved", reviewedBy: reviewer, reviewedAt: new Date().toISOString() }).catch(() => {});
+        db.updateContentCardDb(cardId, { status: "scheduled" }).catch(() => {});
+        if (card) {
+          import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
+            useNotificationsStore.getState().push("content", "Conteúdo aprovado", `"${card.title}" de ${card.clientName} foi aprovado por ${reviewer}. Pronto para agendamento.`, card.clientId);
+          });
+        }
+      },
+
+      rejectContent: (cardId, reviewer, reason) => {
+        const card = get().contentCards.find((c) => c.id === cardId);
+        const approval: ContentApproval = {
+          id: `ca-${Date.now()}`,
+          cardId,
+          status: "rejected",
+          reviewedBy: reviewer,
+          reviewedAt: new Date().toISOString(),
+          reason,
+        };
+        set((s) => ({
+          contentApprovals: [...s.contentApprovals.filter((a) => a.cardId !== cardId), approval],
+          contentCards: s.contentCards.map((c) =>
+            c.id === cardId ? { ...c, status: "in_production" as const, statusChangedAt: new Date().toISOString() } : c
+          ),
+        }), false, "content/reject");
+        db.upsertContentApproval({ cardId, status: "rejected", reviewedBy: reviewer, reviewedAt: new Date().toISOString(), reason }).catch(() => {});
+        db.updateContentCardDb(cardId, { status: "in_production" }).catch(() => {});
+        if (card) {
+          import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
+            useNotificationsStore.getState().push("content", "Conteúdo reprovado", `"${card.title}" de ${card.clientName} foi reprovado: ${reason}`, card.clientId);
+          });
+        }
+      },
+
+      addSocialReport: async (report) => {
+        const tempId = `temp-sr-${Date.now()}`;
+        const optimistic: SocialMonthlyReport = { ...report, id: tempId, createdAt: new Date().toISOString() } as SocialMonthlyReport;
+        set((s) => ({ socialReports: [optimistic, ...s.socialReports] }), false, "content/socialReport/add/optimistic");
+        try {
+          await db.insertSocialReport(report);
+          const updated = await db.fetchSocialReports();
+          set({ socialReports: updated }, false, "content/socialReport/add/confirmed");
+          return updated.find((r) => r.id !== tempId) ?? optimistic;
+        } catch (err) {
+          set((s) => ({ socialReports: s.socialReports.filter((r) => r.id !== tempId) }), false, "content/socialReport/add/rollback");
+          throw err;
+        }
+      },
+
+      updateSocialReport: async (id, updates) => {
+        const prev = get().socialReports.find((r) => r.id === id);
+        set((s) => ({
+          socialReports: s.socialReports.map((r) => r.id === id ? { ...r, ...updates } : r),
+        }), false, "content/socialReport/update/optimistic");
+        try {
+          await db.updateSocialReportDb(id, updates);
+        } catch (err) {
+          if (prev) set((s) => ({ socialReports: s.socialReports.map((r) => r.id === id ? prev : r) }), false, "content/socialReport/update/rollback");
           throw err;
         }
       },

@@ -11,6 +11,9 @@ import type {
   SocialProofEntry,
   CrisisNote,
   QuinzReport,
+  MoodEntry,
+  MoodType,
+  ClientAccess,
 } from "@/lib/types";
 import * as db from "@/lib/supabase/queries";
 import { supabase } from "@/lib/supabase/client";
@@ -25,6 +28,8 @@ interface OperationalState {
   socialProofs: Record<string, SocialProofEntry[]>;
   crisisNotes: Record<string, CrisisNote[]>;
   quinzReports: QuinzReport[];
+  moodHistory: Record<string, MoodEntry[]>;
+  clientAccess: Record<string, ClientAccess>;
   initialized: boolean;
 
   init: () => Promise<void>;
@@ -38,6 +43,8 @@ interface OperationalState {
   addSocialProof: (entry: Omit<SocialProofEntry, "id" | "createdAt">) => Promise<void>;
   addCrisisNote: (clientId: string, note: string, actor: string) => Promise<void>;
   addQuinzReport: (report: Omit<QuinzReport, "id" | "createdAt">) => Promise<void>;
+  addMoodEntry: (clientId: string, mood: MoodType, note: string, actor: string) => void;
+  updateClientAccess: (clientId: string, access: Partial<ClientAccess>, actor: string) => Promise<void>;
 
   addTask: (task: Omit<Task, "id">) => Promise<Task>;
   updateTask: (id: string, updates: Partial<Task>) => Promise<void>;
@@ -57,6 +64,10 @@ export const selectCrisisNotes = (s: OperationalState) => s.crisisNotes;
 export const selectClientCrisisNotes = (clientId: string) => (s: OperationalState) =>
   s.crisisNotes[clientId] ?? [];
 export const selectQuinzReports = (s: OperationalState) => s.quinzReports;
+export const selectMoodHistory = (s: OperationalState) => s.moodHistory;
+export const selectClientMoodHistory = (clientId: string) => (s: OperationalState) =>
+  s.moodHistory[clientId] ?? [];
+export const selectClientAccess = (s: OperationalState) => s.clientAccess;
 export const selectTimeline = (s: OperationalState) => s.timeline;
 export const selectClientTimeline = (clientId: string) => (s: OperationalState) =>
   s.timeline[clientId] ?? [];
@@ -79,12 +90,14 @@ export const useOperationalStore = create<OperationalState>()(
       socialProofs: {},
       crisisNotes: {},
       quinzReports: [],
+      moodHistory: {},
+      clientAccess: {},
       initialized: false,
 
       init: async () => {
         if (get().initialized) return;
         try {
-          const [timeline, onboarding, globalChat, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports] = await Promise.all([
+          const [timeline, onboarding, globalChat, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodHistory, clientAccess] = await Promise.all([
             db.fetchTimeline(),
             db.fetchOnboardingItems(),
             db.fetchGlobalChat(),
@@ -94,8 +107,10 @@ export const useOperationalStore = create<OperationalState>()(
             db.fetchSocialProofs(),
             db.fetchCrisisNotes(),
             db.fetchQuinzReports(),
+            db.fetchMoodEntries(),
+            db.fetchClientAccess(),
           ]);
-          set({ timeline, onboarding, globalChat, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, initialized: true }, false, "ops/init/done");
+          set({ timeline, onboarding, globalChat, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodHistory, clientAccess, initialized: true }, false, "ops/init/done");
         } catch {}
       },
 
@@ -184,6 +199,40 @@ export const useOperationalStore = create<OperationalState>()(
             globalChat: s.globalChat.filter((m) => m.id !== tempMsg.id),
           }), false, "ops/globalchat/rollback");
         });
+      },
+
+      addMoodEntry: (clientId, mood, note, actor) => {
+        const entry: MoodEntry = {
+          id: `mood-${Date.now()}`,
+          mood,
+          note: note || undefined,
+          recordedBy: actor,
+          date: new Date().toISOString().split("T")[0],
+        };
+        set((s) => ({
+          moodHistory: {
+            ...s.moodHistory,
+            [clientId]: [entry, ...(s.moodHistory[clientId] ?? [])],
+          },
+        }), false, "ops/mood/add/optimistic");
+        db.insertMoodEntry(clientId, mood, note, actor).catch(() => {});
+      },
+
+      updateClientAccess: async (clientId, access, actor) => {
+        const prev = get().clientAccess[clientId];
+        set((s) => ({
+          clientAccess: {
+            ...s.clientAccess,
+            [clientId]: { ...(s.clientAccess[clientId] ?? { clientId }), ...access, clientId, updatedBy: actor, updatedAt: new Date().toISOString() },
+          },
+        }), false, "ops/access/update/optimistic");
+        try {
+          await db.upsertClientAccess(clientId, access, actor);
+        } catch {
+          if (prev !== undefined) {
+            set((s) => ({ clientAccess: { ...s.clientAccess, [clientId]: prev } }), false, "ops/access/update/rollback");
+          }
+        }
       },
 
       addCreativeAsset: async (asset) => {
