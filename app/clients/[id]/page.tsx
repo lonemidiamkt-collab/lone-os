@@ -5,10 +5,14 @@ import Header from "@/components/Header";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import HolidaysPdfButton from "@/components/HolidaysPdfButton";
 import { MarkdownEditor } from "@/components/Markdown";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { mockTasks, mockAdAccounts } from "@/lib/mockData";
 import { useMetaConnection, fetchAdAccounts } from "@/lib/meta/useMetaAds";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { toast } from "sonner";
 import {
   getAttentionColor,
   getAttentionLabel,
@@ -92,7 +96,37 @@ export default function ClientDetailPage() {
   const params = useParams();
   const clientId = params.id as string;
   const { role, currentUser } = useRole();
-  const { clients, contentCards, tasks, timeline, clientChats, onboarding, creativeAssets, socialProofs, crisisNotes, quinzReports, designRequests, addCreativeAsset, sendClientMessage, addTimelineEntry, toggleOnboardingItem, updateClientStatus, updateClientData, addSocialProof, addCrisisNote, addQuinzReport, addDesignRequest } = useAppState();
+  // ── Zustand stores (migrado de AppStateContext) ───────────────────────────
+  const clients = useClientsStore((s) => s.clients);
+  const clientChats = useClientsStore((s) => s.clientChats);
+  const sendClientMessage = useClientsStore((s) => s.sendClientMessage);
+  const updateClientStatus = useClientsStore((s) => s.updateClientStatus);
+  const updateClientData = useClientsStore((s) => s.updateClient);
+
+  const contentCards = useContentStore((s) => s.contentCards);
+  const designRequests = useContentStore((s) => s.designRequests);
+  const addDesignRequest = useContentStore((s) => s.addDesignRequest);
+
+  const tasks = useOperationalStore((s) => s.tasks);
+  const timeline = useOperationalStore((s) => s.timeline);
+  const onboarding = useOperationalStore((s) => s.onboarding);
+  const creativeAssets = useOperationalStore((s) => s.creativeAssets);
+  const socialProofs = useOperationalStore((s) => s.socialProofs);
+  const crisisNotes = useOperationalStore((s) => s.crisisNotes);
+  const quinzReports = useOperationalStore((s) => s.quinzReports);
+  const addCreativeAsset = useOperationalStore((s) => s.addCreativeAsset);
+  const addTimelineEntry = useOperationalStore((s) => s.addTimelineEntry);
+  const toggleOnboardingItem = useOperationalStore((s) => s.toggleOnboardingItem);
+  const addSocialProof = useOperationalStore((s) => s.addSocialProof);
+  const addCrisisNote = useOperationalStore((s) => s.addCrisisNote);
+  const addQuinzReport = useOperationalStore((s) => s.addQuinzReport);
+
+  const initClients = useClientsStore((s) => s.init);
+  const subClients = useClientsStore((s) => s.subscribeRealtime);
+  const initContent = useContentStore((s) => s.init);
+  const subContent = useContentStore((s) => s.subscribeRealtime);
+  const initOps = useOperationalStore((s) => s.init);
+  const subOps = useOperationalStore((s) => s.subscribeRealtime);
 
   const client = clients.find((c) => c.id === clientId);
 
@@ -143,6 +177,16 @@ export default function ClientDetailPage() {
     googleAdsLogin: client?.googleAdsLogin || "",
     googleAdsPassword: client?.googleAdsPassword || "",
   });
+
+  useEffect(() => {
+    initClients();
+    initContent();
+    initOps();
+    const u1 = subClients();
+    const u2 = subContent();
+    const u3 = subOps();
+    return () => { u1(); u2(); u3(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (client) setDadosForm(initDadosForm());
@@ -261,6 +305,7 @@ export default function ClientDetailPage() {
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
   const [showMetaPicker, setShowMetaPicker] = useState(false);
   const [metaSearch, setMetaSearch] = useState("");
+  const [linkingAccount, setLinkingAccount] = useState(false);
 
   useEffect(() => {
     if (meta.connected && meta.token) {
@@ -703,7 +748,10 @@ export default function ClientDetailPage() {
                       <div className="fixed inset-0 z-40" onClick={() => { setShowMetaPicker(false); setMetaSearch(""); }} />
                       <div className="absolute right-0 top-full mt-1 w-72 bg-card border border-border rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.6)] z-50 animate-fade-in overflow-hidden">
                         <div className="px-3 py-2.5 border-b border-border flex items-center justify-between">
-                          <span className="text-xs font-semibold text-foreground">Vincular Conta de Anúncio</span>
+                          <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                            {linkingAccount && <Loader2 size={10} className="animate-spin" />}
+                            Vincular Conta de Anúncio
+                          </span>
                           {client.metaAdAccountId && (
                             <button
                               onClick={() => {
@@ -736,15 +784,40 @@ export default function ClientDetailPage() {
                             return (
                               <button
                                 key={account.id}
-                                onClick={() => {
+                                disabled={linkingAccount}
+                                onClick={async () => {
+                                  // 1. Update clients table
                                   updateClientData(clientId, {
                                     metaAdAccountId: account.id,
                                     metaAdAccountName: account.name,
                                   });
                                   setShowMetaPicker(false);
                                   setMetaSearch("");
+                                  // 2. Register in ad_accounts + sync (ignore if already linked)
+                                  setLinkingAccount(true);
+                                  try {
+                                    const res = await authedFetch("/api/traffic/ad-accounts", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({
+                                        clientId,
+                                        metaAccountId: account.id,
+                                        accountName: account.name,
+                                      }),
+                                    });
+                                    if (res.ok) {
+                                      toast.success(`${account.name} adicionada à carteira — sincronizando...`);
+                                      await authedFetch("/api/traffic/sync-balances", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ accountIds: [account.id] }),
+                                      });
+                                    }
+                                    // 409 = já cadastrada — silencioso
+                                  } catch { /* ignora erro de rede */ }
+                                  finally { setLinkingAccount(false); }
                                 }}
-                                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-all hover:bg-primary/5 ${isSelected ? "bg-primary/10" : ""}`}
+                                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-all hover:bg-primary/5 ${isSelected ? "bg-primary/10" : ""} disabled:opacity-50`}
                               >
                                 <div className="w-6 h-6 rounded-md bg-[#1877F2]/10 flex items-center justify-center shrink-0">
                                   <Facebook size={11} className="text-[#1877F2]" />

@@ -11,7 +11,7 @@ import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import { MarkdownEditor } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
-import type { ContentCard, Client, MoodType, Priority, SocialMonthlyReport, MonthlyDeliveryReport, SocialPerformanceScore } from "@/lib/types";
+import type { ContentCard, Client, MoodType, Priority, SocialMonthlyReport, MonthlyDeliveryReport, SocialPerformanceScore, MoodEntry, OnboardingItem, PerformanceLevel } from "@/lib/types";
 import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import {
   AlertTriangle, Calendar, Instagram, ImageIcon,
@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
-import { useAppState } from "@/lib/context/AppStateContext";
+// AppStateContext removed — all state from Zustand stores
 import { useNav } from "@/lib/context/NavContext";
 // SocialAuthModal removed — using global session auth only
 import Link from "next/link";
@@ -34,6 +34,10 @@ import { Button } from "@/components/ui/button";
 import { exportReportAsPdf } from "@/lib/exportPdf";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
+import { useNotificationsStore } from "@/stores/useNotificationsStore";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -339,7 +343,7 @@ interface PersonalDashboardProps {
   userName: string;
   cards: ContentCard[];
   clients: Client[];
-  moodHistory: Record<string, ReturnType<typeof useAppState>["moodHistory"][string]>;
+  moodHistory: Record<string, MoodEntry[]>;
 }
 
 function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDashboardProps) {
@@ -495,8 +499,8 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
 
 interface ClientCardProps {
   client: Client;
-  moodEntries: ReturnType<typeof useAppState>["moodHistory"][string];
-  onboarding: ReturnType<typeof useAppState>["onboarding"][string];
+  moodEntries: MoodEntry[];
+  onboarding: OnboardingItem[];
   onMood: (clientId: string) => void;
   onIdeas: (client: Client) => void;
   onOpen360: () => void;
@@ -711,7 +715,8 @@ interface NewContentCardModalProps {
 }
 
 function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContentCardModalProps) {
-  const { clients, addContentCard } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const addContentCard = useContentStore((s) => s.addContentCard);
   const { currentUser, role } = useRole();
 
   // Social media só vê seus clientes (carteira). Admin/manager/designer veem todos.
@@ -926,7 +931,7 @@ interface BatchRow {
 }
 
 function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: () => void }) {
-  const { addContentCard } = useAppState();
+  const addContentCard = useContentStore((s) => s.addContentCard);
   const { currentUser, role } = useRole();
 
   const [clientId, setClientId] = useState(clients[0]?.id ?? "");
@@ -1133,7 +1138,7 @@ function QuickTaskBar({ clients }: QuickTaskBarProps) {
   const [dueTime, setDueTime] = useState("");
   const [success, setSuccess] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { addContentCard } = useAppState();
+  const addContentCard = useContentStore((s) => s.addContentCard);
   const { currentUser, role } = useRole();
 
   const canCreate = title.trim() && clientId && dueDate && dueTime;
@@ -1875,33 +1880,51 @@ export default function SocialPage() {
   const [showBatchCreate, setShowBatchCreate] = useState(false);
 
   const { role, currentUser } = useRole();
-  const {
-    clients,
-    contentCards,
-    onboarding,
-    moodHistory,
-    updateContentCard,
-    deleteContentCard,
-    addMoodEntry,
-    updateClientStatus,
-    toggleOnboardingItem,
-    socialTeam,
-    addSocialTeamMember,
-    designRequests,
-    clientAccess,
-    updateClientAccess,
-    clientChats,
-    sendClientMessage,
-    socialReports,
-    addSocialReport,
-    updateSocialReport,
-    contentApprovals,
-    approveContent,
-    rejectContent,
-    monthlyDeliveryReports,
-    socialPerformanceScores,
-    pushNotification,
-  } = useAppState();
+
+  // ── Zustand stores (migrado de AppStateContext) ───────────────────────────
+  const clients = useClientsStore((s) => s.clients);
+  const clientChats = useClientsStore((s) => s.clientChats);
+  const sendClientMessage = useClientsStore((s) => s.sendClientMessage);
+  const updateClientStatus = useClientsStore((s) => s.updateClientStatus);
+  const initClients = useClientsStore((s) => s.init);
+  const subClients = useClientsStore((s) => s.subscribeRealtime);
+
+  const contentCards = useContentStore((s) => s.contentCards);
+  const designRequests = useContentStore((s) => s.designRequests);
+  const contentApprovals = useContentStore((s) => s.contentApprovals);
+  const socialReports = useContentStore((s) => s.socialReports);
+  const updateContentCard = useContentStore((s) => s.updateContentCard);
+  const deleteContentCard = useContentStore((s) => s.deleteContentCard);
+  const approveContent = useContentStore((s) => s.approveContent);
+  const rejectContent = useContentStore((s) => s.rejectContent);
+  const addSocialReport = useContentStore((s) => s.addSocialReport);
+  const updateSocialReport = useContentStore((s) => s.updateSocialReport);
+  const initContent = useContentStore((s) => s.init);
+  const subContent = useContentStore((s) => s.subscribeRealtime);
+
+  const onboarding = useOperationalStore((s) => s.onboarding);
+  const moodHistory = useOperationalStore((s) => s.moodHistory);
+  const clientAccess = useOperationalStore((s) => s.clientAccess);
+  const addMoodEntry = useOperationalStore((s) => s.addMoodEntry);
+  const toggleOnboardingItem = useOperationalStore((s) => s.toggleOnboardingItem);
+  const updateClientAccess = useOperationalStore((s) => s.updateClientAccess);
+  const initOps = useOperationalStore((s) => s.init);
+  const subOps = useOperationalStore((s) => s.subscribeRealtime);
+
+  const pushNotification = useNotificationsStore((s) => s.push);
+
+  // ── Store init on mount ────────────────────────────────────────────────────
+  const isAdmin = role === "admin" || role === "manager";
+
+  useEffect(() => {
+    initClients();
+    initContent();
+    initOps();
+    const u1 = subClients();
+    const u2 = subContent();
+    const u3 = subOps();
+    return () => { u1(); u2(); u3(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── NavContext: secondary sidebar tab navigation ──────────────
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();
@@ -1946,14 +1969,13 @@ export default function SocialPage() {
   }, [searchParams, router, pathname]);
 
   // Auth: use global session (no secondary login needed)
-  const isAdmin = role === "admin" || role === "manager";
   const isDesigner = role === "designer";
   const canSelectWorkspace = isAdmin || isDesigner;
   const isReadOnly = isDesigner; // Designer can view but not move cards
 
   const team = useTeamMembers();
   const socialMemberNames = team.social.map((m) => m.name);
-  const workspaceOptions = socialMemberNames.length > 0 ? socialMemberNames : socialTeam.map((m) => m.name);
+  const workspaceOptions = socialMemberNames;
 
   const activeWorkspace = canSelectWorkspace ? adminWorkspace : currentUser;
 
@@ -1987,6 +2009,74 @@ export default function SocialPage() {
     const isInactive = hoursSince(c.lastKanbanActivity) >= 48;
     return hasAngry && isInactive;
   });
+
+  const monthlyDeliveryReports = useMemo<MonthlyDeliveryReport[]>(() => {
+    const reports: MonthlyDeliveryReport[] = [];
+    const monthSet = new Set<string>();
+    contentCards.forEach((c) => {
+      if (c.dueDate) monthSet.add(c.dueDate.slice(0, 7));
+      if (c.statusChangedAt) monthSet.add(c.statusChangedAt.slice(0, 10).slice(0, 7));
+    });
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    monthSet.add(currentMonth);
+    const activeClients = clients.filter((cl) => cl.status !== "onboarding");
+    for (const month of Array.from(monthSet).sort()) {
+      for (const client of activeClients) {
+        const clientCards = contentCards.filter((c) => c.clientId === client.id && c.dueDate?.startsWith(month));
+        const publishedThisMonth = contentCards.filter(
+          (c) => c.clientId === client.id && c.status === "published" &&
+            (c.dueDate?.startsWith(month) || c.statusChangedAt?.startsWith(month))
+        );
+        const goal = client.postsGoal ?? 12;
+        const delivered = publishedThisMonth.length;
+        const scheduled = clientCards.filter((c) => c.status === "scheduled").length;
+        const inProd = clientCards.filter((c) => ["in_production", "approval", "client_approval", "script"].includes(c.status)).length;
+        const ideas = clientCards.filter((c) => c.status === "ideas").length;
+        const formatMap = new Map<string, number>();
+        publishedThisMonth.forEach((c) => { formatMap.set(c.format, (formatMap.get(c.format) ?? 0) + 1); });
+        reports.push({
+          id: `mdr-${client.id}-${month}`,
+          clientId: client.id,
+          clientName: client.name,
+          socialMedia: client.assignedSocial,
+          month,
+          postsGoal: goal,
+          postsDelivered: delivered,
+          completionRate: goal > 0 ? Math.round((delivered / goal) * 100) : 0,
+          cardsByStatus: { published: delivered, scheduled, inProduction: inProd, ideas },
+          formats: Array.from(formatMap).map(([format, count]) => ({ format, count })),
+          generatedAt: new Date().toISOString(),
+        });
+      }
+    }
+    return reports;
+  }, [contentCards, clients]);
+
+  const socialPerformanceScores = useMemo<SocialPerformanceScore[]>(() => {
+    const socialPeople = [...new Set(clients.filter((c) => c.status !== "onboarding").map((c) => c.assignedSocial))];
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    return socialPeople.map((person) => {
+      const personClients = clients.filter((c) => c.assignedSocial === person && c.status !== "onboarding");
+      let totalGoal = 0;
+      let totalDelivered = 0;
+      const breakdown = personClients.map((client) => {
+        const goal = client.postsGoal ?? 12;
+        const delivered = contentCards.filter(
+          (c) => c.clientId === client.id && c.status === "published" &&
+            (c.dueDate?.startsWith(currentMonth) || c.statusChangedAt?.startsWith(currentMonth))
+        ).length;
+        totalGoal += goal;
+        totalDelivered += delivered;
+        return { clientId: client.id, clientName: client.name, goal, delivered, rate: goal > 0 ? Math.round((delivered / goal) * 100) : 0 };
+      });
+      const overallRate = totalGoal > 0 ? Math.round((totalDelivered / totalGoal) * 100) : 0;
+      let level: PerformanceLevel = "excellent";
+      if (overallRate < 70) level = "critical";
+      else if (overallRate < 80) level = "warning";
+      else if (overallRate < 95) level = "good";
+      return { socialMedia: person, totalClients: personClients.length, totalPostsGoal: totalGoal, totalPostsDelivered: totalDelivered, overallRate, level, clientBreakdown: breakdown };
+    });
+  }, [contentCards, clients]);
 
   const handleOnboardingToggle = (clientId: string, itemId: string) => {
     const client = clients.find((c) => c.id === clientId);
@@ -2943,7 +3033,7 @@ function SocialReportsTab({
   clients: Client[];
   reports: SocialMonthlyReport[];
   contentCards: ContentCard[];
-  onAddReport: (r: Omit<SocialMonthlyReport, "id" | "createdAt">) => SocialMonthlyReport;
+  onAddReport: (r: Omit<SocialMonthlyReport, "id" | "createdAt">) => SocialMonthlyReport | Promise<SocialMonthlyReport>;
   onUpdateReport: (id: string, updates: Partial<SocialMonthlyReport>) => void;
   currentUser: string;
   contentApprovals: import("@/lib/types").ContentApproval[];

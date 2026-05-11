@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import NewClientModal from "@/components/NewClientModal";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import type { Client } from "@/lib/types";
 import {
@@ -41,8 +41,18 @@ function HealthBar({ score }: { score: number }) {
 
 export default function ClientsPage() {
   const router = useRouter();
-  const { clients, clientChats, sendClientMessage } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const clientChats = useClientsStore((s) => s.clientChats);
+  const sendClientMessage = useClientsStore((s) => s.sendClientMessage);
+  const init = useClientsStore((s) => s.init);
+  const subscribeRealtime = useClientsStore((s) => s.subscribeRealtime);
   const { role, currentUser } = useRole();
+
+  useEffect(() => {
+    init();
+    const unsub = subscribeRealtime();
+    return unsub;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
