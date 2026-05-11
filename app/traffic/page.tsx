@@ -2,6 +2,7 @@
 
 import Header from "@/components/Header";
 import DefesaAlertBanner from "@/components/DefesaAlertBanner";
+import SystemAlertBanner from "@/components/SystemAlertBanner";
 import MetricCard from "@/components/MetricCard";
 import KanbanBoard from "@/components/KanbanBoard";
 import AdsInsightCard from "@/components/AdsInsightCard";
@@ -174,6 +175,7 @@ export default function TrafficPage() {
 
       <div className="p-6 space-y-6 animate-fade-in">
         <DefesaAlertBanner />
+        {isAdmin && <SystemAlertBanner />}
         {/* Workspace Filter */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">

@@ -23,6 +23,7 @@ import PostCounter from "@/components/sector/PostCounter";
 import DesignQueue from "@/components/sector/DesignQueue";
 import BudgetAlert from "@/components/sector/BudgetAlert";
 import SmartAlerts from "@/components/SmartAlerts";
+import SystemAlertBanner from "@/components/SystemAlertBanner";
 import ClientHealthRadar from "@/components/ClientHealthRadar";
 import PlatformUpdatesWidget from "@/components/PlatformUpdatesWidget";
 
@@ -1022,6 +1023,7 @@ export default function DashboardPage() {
       <div className="p-6 space-y-6 animate-fade-in">
         {/* Platform updates widget — aparece quando tem novidade nao lida */}
         <PlatformUpdatesWidget />
+        {isAdmin && <SystemAlertBanner />}
 
         {/* Urgent broadcast banner — visible to all */}
         {notices.filter((n) => n.urgent).length > 0 && (
