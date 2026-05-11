@@ -315,7 +315,10 @@ export async function fetchAdAccounts(token: string) {
 // A Meta usa tipos diferentes dependendo do canal e da versão da API.
 // Usamos o PRIMEIRO tipo encontrado (prioridade: mais específico primeiro).
 const MESSAGE_ACTION_TYPES = [
-  // WhatsApp Business (Click-to-WhatsApp)
+  // Métrica agregada nova da Meta (soma de todos os tipos de conexão de mensagem).
+  // O Gerenciador exibe esse como "Resultados" para campanhas de mensagens.
+  "onsite_conversion.total_messaging_connection",
+  // WhatsApp Business (Click-to-WhatsApp) — formato 7d
   "onsite_conversion.messaging_conversation_started_7d",
   // Messenger e Instagram DM
   "onsite_conversion.messaging_first_conversation_started",
