@@ -33,6 +33,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { exportReportAsPdf } from "@/lib/exportPdf";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1847,7 +1848,15 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
 
 export default function SocialPage() {
   const [activeTab, setActiveTab] = useState<"carteira" | "kanban" | "calendar" | "onboarding" | "acessos" | "chat" | "metricas" | "entregas" | "relatorios">("carteira"); // SocialTab — kept inline for readability
-  const [adminWorkspace, setAdminWorkspace] = useState("Todos");
+  const [adminWorkspace, setAdminWorkspaceRaw] = useState("Todos");
+  const setAdminWorkspace = (value: string) => {
+    setAdminWorkspaceRaw(value);
+    authedFetch("/api/preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "social_workspace", value }),
+    }).catch(() => { /* silent — preference failure is non-critical */ });
+  };
   const [selectedCard, setSelectedCard] = useState<ContentCard | null>(null);
   const [nonDeliveryCard, setNonDeliveryCard] = useState<ContentCard | null>(null);
   const [cardToDelete, setCardToDelete] = useState<ContentCard | null>(null);
@@ -1910,6 +1919,18 @@ export default function SocialPage() {
   useEffect(() => {
     setCurrentTab(activeTab);
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Carrega workspace preferido do usuário (persiste entre sessões)
+  useEffect(() => {
+    authedFetch("/api/preferences?keys=social_workspace")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.social_workspace && typeof data.social_workspace === "string") {
+          setAdminWorkspaceRaw(data.social_workspace);
+        }
+      })
+      .catch(() => { /* silent */ });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Atalho de URL: ?action=new-content abre direto o modal "Novo Conteúdo"
   // Disparado pelo dropdown do header global e pelo command palette (GlobalSearch).
