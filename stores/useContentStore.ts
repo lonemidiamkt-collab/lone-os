@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
-import type { ContentCard, DesignRequest, ContentApproval, SocialMonthlyReport } from "@/lib/types";
+import type { ContentCard, DesignRequest, ContentApproval, SocialMonthlyReport, CardComment, Role } from "@/lib/types";
 import * as db from "@/lib/supabase/queries";
 import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
@@ -29,6 +29,8 @@ interface ContentState {
 
   addSocialReport: (report: Omit<SocialMonthlyReport, "id" | "createdAt">) => Promise<SocialMonthlyReport>;
   updateSocialReport: (id: string, updates: Partial<SocialMonthlyReport>) => Promise<void>;
+
+  addCardComment: (cardId: string, author: string, role: Role, text: string) => void;
 }
 
 export const selectContentCards = (s: ContentState) => s.contentCards;
@@ -277,6 +279,28 @@ export const useContentStore = create<ContentState>()(
         } catch (err) {
           if (prev) set((s) => ({ designRequests: s.designRequests.map((r) => r.id === id ? prev : r) }), false, "content/design/update/rollback");
           throw err;
+        }
+      },
+
+      addCardComment: (cardId, author, role, text) => {
+        const comment: CardComment = {
+          id: `cmt-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+          author,
+          role,
+          text,
+          createdAt: new Date().toISOString(),
+        };
+        set((s) => ({
+          contentCards: s.contentCards.map((c) =>
+            c.id === cardId ? { ...c, comments: [...(c.comments ?? []), comment] } : c
+          ),
+        }), false, "content/card/comment/add");
+        db.insertCardComment(cardId, author, text).catch(() => {});
+        const card = get().contentCards.find((c) => c.id === cardId);
+        if (card) {
+          import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
+            useNotificationsStore.getState().push("content", "Novo comentário", `${author} comentou em "${card.title}" — ${card.clientName}: "${text.slice(0, 60)}${text.length > 60 ? "..." : ""}"`, card.clientId);
+          });
         }
       },
 

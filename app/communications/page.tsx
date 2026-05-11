@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import Header from "@/components/Header";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useRole } from "@/lib/context/RoleContext";
 import {
   MessageCircle, Globe, Search, Send, Activity,
@@ -32,7 +33,11 @@ type Mode = "global" | string;
 
 export default function CommunicationsPage() {
   const { role, currentUser } = useRole();
-  const { clients, globalChat, clientChats, sendClientMessage, sendGlobalMessage } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const clientChats = useClientsStore((s) => s.clientChats);
+  const sendClientMessage = useClientsStore((s) => s.sendClientMessage);
+  const globalChat = useOperationalStore((s) => s.globalChat);
+  const sendGlobalMessage = useOperationalStore((s) => s.sendGlobalMessage);
   const [mode, setMode] = useState<Mode>("global");
   const [input, setInput] = useState("");
   const [clientSearch, setClientSearch] = useState("");

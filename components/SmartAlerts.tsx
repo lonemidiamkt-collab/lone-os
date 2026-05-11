@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
 import Link from "next/link";
 import {
   AlertTriangle, Clock, FileText, Instagram,
@@ -19,7 +21,10 @@ interface Alert {
 }
 
 export default function SmartAlerts() {
-  const { clients, contentCards, tasks, timeline } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const contentCards = useContentStore((s) => s.contentCards);
+  const tasks = useOperationalStore((s) => s.tasks);
+  const timeline = useOperationalStore((s) => s.timeline);
 
   const alerts = useMemo<Alert[]>(() => {
     const result: Alert[] = [];

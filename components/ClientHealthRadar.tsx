@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
 import { calcHealthScore } from "@/lib/utils";
 import Link from "next/link";
 import { Activity } from "lucide-react";
 
 export default function ClientHealthRadar() {
-  const { clients } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
 
   const healthData = useMemo(() => {
     return clients

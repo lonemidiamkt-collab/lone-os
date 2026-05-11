@@ -15,7 +15,10 @@ import { useRole } from "@/lib/context/RoleContext";
 import MedievalAvatar, { getUserAvatar } from "@/components/MedievalAvatars";
 import { Logo } from "@/components/ui/Logo";
 import { useTheme } from "@/lib/context/ThemeContext";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
+import { useTrafficStore } from "@/stores/useTrafficStore";
 import { useNav } from "@/lib/context/NavContext";
 import { useState, useEffect, useMemo } from "react";
 
@@ -152,7 +155,12 @@ export default function Sidebar() {
   const router   = useRouter();
   const { role, currentProfile, roleLabel, logout } = useRole();
   const { theme, toggleTheme } = useTheme();
-  const { clients, tasks, trafficRoutineChecks, contentCards, onboarding, designRequests } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const contentCards = useContentStore((s) => s.contentCards);
+  const designRequests = useContentStore((s) => s.designRequests);
+  const tasks = useOperationalStore((s) => s.tasks);
+  const onboarding = useOperationalStore((s) => s.onboarding);
+  const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
   const { secondaryOpen, setSecondaryOpen, setPendingTab, currentTab, mobileOpen, setMobileOpen } = useNav();
 
   const visibleItems = useMemo(

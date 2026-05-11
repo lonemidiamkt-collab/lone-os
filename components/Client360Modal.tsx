@@ -7,7 +7,9 @@ import {
   ChevronRight, Key, Palette,
 } from "lucide-react";
 import Link from "next/link";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
 import type { Client } from "@/lib/types";
 import {
   Dialog,
@@ -45,7 +47,12 @@ interface Props {
 }
 
 export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCampaign, onOpenMood }: Props) {
-  const { clientChats, moodHistory, onboarding, timeline, clientAccess, designRequests } = useAppState();
+  const clientChats = useClientsStore((s) => s.clientChats);
+  const designRequests = useContentStore((s) => s.designRequests);
+  const moodHistory = useOperationalStore((s) => s.moodHistory);
+  const onboarding = useOperationalStore((s) => s.onboarding);
+  const timeline = useOperationalStore((s) => s.timeline);
+  const clientAccess = useOperationalStore((s) => s.clientAccess);
   const [activeTab, setActiveTab] = useState<"overview" | "history">("overview");
   const health = HEALTH_CONFIG[client.status] ?? HEALTH_CONFIG.good;
 

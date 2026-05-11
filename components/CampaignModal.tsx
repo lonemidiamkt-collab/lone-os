@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Megaphone, Sparkles, Copy, Check, Target } from "lucide-react";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
 import type { Client } from "@/lib/types";
 import {
   Dialog,
@@ -99,7 +99,7 @@ interface Props {
 }
 
 export default function CampaignModal({ client, onClose }: Props) {
-  const { updateClientData } = useAppState();
+  const updateClientData = useClientsStore((s) => s.updateClient);
   const [briefing, setBriefing] = useState(client.campaignBriefing ?? "");
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
   const [generating, setGenerating] = useState(false);

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import { Logo } from "@/components/ui/Logo";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { supabase } from "@/lib/supabase/client";
 import NewPlatformUpdateModal from "@/components/NewPlatformUpdateModal";
@@ -24,7 +24,7 @@ interface PlatformUpdate {
 }
 
 export default function SobrePage() {
-  const { clients } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
   const { currentProfile, role } = useRole();
   const isAdmin = role === "admin" || role === "manager";
   const [updates, setUpdates] = useState<PlatformUpdate[]>([]);

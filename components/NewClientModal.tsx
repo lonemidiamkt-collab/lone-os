@@ -6,7 +6,9 @@ import {
   ExternalLink, Phone, Mail, Upload, Camera,
   CreditCard, Eye, EyeOff, Shield, Briefcase, MapPin,
 } from "lucide-react";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
+import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import type { Client, LeadSource } from "@/lib/types";
 import {
@@ -86,7 +88,9 @@ function DocUpload({ label, onUploaded, uploaded }: { label: string; onUploaded:
 
 // ─── Main Component ────────────────────────────────────────
 export default function NewClientModal({ onClose, onSuccess }: Props) {
-  const { addClient, addTask, pushNotification } = useAppState();
+  const addClient = useClientsStore((s) => s.addClient);
+  const addTask = useOperationalStore((s) => s.addTask);
+  const pushNotification = useNotificationsStore((s) => s.push);
   const { role, currentUser } = useRole();
   const team = useTeamMembers();
   const isAdmin = role === "admin" || role === "manager";

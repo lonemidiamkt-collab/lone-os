@@ -6,7 +6,9 @@ import {
   TrendingUp, Instagram, ChevronRight, CheckCircle, Filter,
   Eye, Bell,
 } from "lucide-react";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
+import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs } from "@/lib/utils";
 import Link from "next/link";
@@ -15,7 +17,11 @@ import type { Task, ContentCard, DesignRequest } from "@/lib/types";
 type FilterType = "all" | "tasks" | "content" | "design" | "approvals";
 
 export default function MyWorkPage() {
-  const { tasks, contentCards, designRequests, notifications, markNotificationRead } = useAppState();
+  const tasks = useOperationalStore((s) => s.tasks);
+  const contentCards = useContentStore((s) => s.contentCards);
+  const designRequests = useContentStore((s) => s.designRequests);
+  const notifications = useNotificationsStore((s) => s.notifications);
+  const markNotificationRead = useNotificationsStore((s) => s.markRead);
   const { role, currentUser } = useRole();
   const [filter, setFilter] = useState<FilterType>("all");
 
@@ -255,7 +261,7 @@ export default function MyWorkPage() {
 }
 
 function TaskRow({ task }: { task: Task }) {
-  const { updateTask } = useAppState();
+  const updateTask = useOperationalStore((s) => s.updateTask);
   const statusConfig: Record<string, { label: string; color: string }> = {
     pending: { label: "Aguardando", color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
     in_progress: { label: "Em Execucao", color: "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" },

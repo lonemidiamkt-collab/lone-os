@@ -27,7 +27,11 @@ import {
   ExternalLink,
   GripVertical,
 } from "lucide-react";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useAppState } from "@/lib/context/AppStateContext"; // kept for reminders (localStorage-only, no DB equivalent)
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
+import { useTrafficStore } from "@/stores/useTrafficStore";
 import { useRole } from "@/lib/context/RoleContext";
 import DriveButton from "@/components/DriveButton";
 import type { ContentCard, Task, TrafficRoutineCheck, TaskStatus, Priority, Reminder, Role } from "@/lib/types";
@@ -118,11 +122,16 @@ const PRIORITY_COLORS: Record<Priority, string> = {
 type CreateType = "task" | "social" | "reminder";
 
 export default function CalendarPage() {
-  const {
-    contentCards, tasks, trafficRoutineChecks, clients, updateTask,
-    reminders, addReminder, toggleReminder, updateReminder,
-    addTask, addContentCard, updateContentCard,
-  } = useAppState();
+  // reminders/addReminder/toggleReminder/updateReminder stay on AppStateContext (localStorage-only)
+  const { reminders, addReminder, toggleReminder, updateReminder } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const contentCards = useContentStore((s) => s.contentCards);
+  const addContentCard = useContentStore((s) => s.addContentCard);
+  const updateContentCard = useContentStore((s) => s.updateContentCard);
+  const tasks = useOperationalStore((s) => s.tasks);
+  const addTask = useOperationalStore((s) => s.addTask);
+  const updateTask = useOperationalStore((s) => s.updateTask);
+  const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
   const { role, currentUser } = useRole();
 
   const today = new Date();

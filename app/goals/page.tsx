@@ -8,7 +8,7 @@ import {
   Maximize2, Minimize2, Brain, AlertTriangle, Zap,
   Activity, CheckCircle, TrendingDown, Shield, Settings, Pencil, Save, Trash2,
 } from "lucide-react";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { calcHealthScore } from "@/lib/utils";
 import { useOKRMetrics, type KPIValue } from "@/lib/hooks/useOKRMetrics";
@@ -172,7 +172,7 @@ function SimTag({ isReal, source }: { isReal?: boolean; source?: string }) {
 }
 
 export default function GoalsPage() {
-  const { clients } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
   const { role } = useRole();
   const isAdmin = role === "admin" || role === "manager";
   const { members: teamMembers } = useTeamMembers();

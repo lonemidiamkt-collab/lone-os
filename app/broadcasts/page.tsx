@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
   Send, Loader2, Check, AlertCircle, Bold, Italic, List, Link as LinkIcon,
@@ -26,7 +26,7 @@ interface Broadcast {
 
 export default function BroadcastsPage() {
   const { role, currentProfile } = useRole();
-  const { clients } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
   const isAdmin = role === "admin" || role === "manager";
   const adminEmail = currentProfile?.email || "";
 

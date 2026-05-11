@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { RoleProvider, useRole } from "@/lib/context/RoleContext";
-import { AppStateProvider, useAppState } from "@/lib/context/AppStateContext";
+import { AppStateProvider } from "@/lib/context/AppStateContext";
 import { ThemeProvider } from "@/lib/context/ThemeContext";
 import { NavProvider, useNav } from "@/lib/context/NavContext";
 import Sidebar from "@/components/Sidebar";
@@ -43,8 +43,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { secondaryOpen, mobileOpen, setMobileOpen } = useNav();
-  const { pushNotification } = useAppState();
-
   // Meta token expiry check is handled by useMetaConnection (Supabase-backed)
 
   // Secondary sidebar is 240px; primary is 72px

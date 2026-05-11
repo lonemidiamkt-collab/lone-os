@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useOperationalStore } from "@/stores/useOperationalStore";
 import { X, Bell, Calendar, Clock, Megaphone, AlertTriangle } from "lucide-react";
 import type { Notice } from "@/lib/types";
 
@@ -55,7 +55,7 @@ interface PopupNotice {
 }
 
 export default function ScheduledNoticePopup() {
-  const { notices } = useAppState();
+  const notices = useOperationalStore((s) => s.notices);
   const [popups, setPopups] = useState<PopupNotice[]>([]);
   const triggeredRef = useRef<Set<string>>(new Set());
   const initialLoadRef = useRef(true);

@@ -6,7 +6,9 @@ import {
   Save, ImageIcon, Hash, AlignLeft, Globe,
   Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Palette,
 } from "lucide-react";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import type { ContentCard, SocialPlatform } from "@/lib/types";
@@ -58,7 +60,7 @@ function timeAgo(iso: string): string {
 }
 
 function DrivePreviewFallback({ clientId, label }: { clientId: string; label: string }) {
-  const { clients } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
   const client = clients.find((c) => c.id === clientId);
   return (
     <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-zinc-500 px-4">
@@ -84,7 +86,13 @@ interface Props {
 }
 
 export default function ContentCardModal({ card, onClose }: Props) {
-  const { updateContentCard, addCardComment, approveContent, rejectContent, addDesignRequest, pushNotification } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const updateContentCard = useContentStore((s) => s.updateContentCard);
+  const addCardComment = useContentStore((s) => s.addCardComment);
+  const approveContent = useContentStore((s) => s.approveContent);
+  const rejectContent = useContentStore((s) => s.rejectContent);
+  const addDesignRequest = useContentStore((s) => s.addDesignRequest);
+  const pushNotification = useNotificationsStore((s) => s.push);
   const { role, currentUser } = useRole();
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -595,7 +603,6 @@ export default function ContentCardModal({ card, onClose }: Props) {
 
         {/* Drive link — prominent button */}
         {(() => {
-          const { clients } = useAppState();
           const cl = clients.find((c) => c.id === card.clientId);
           return cl?.driveLink ? (
             <div className="px-6 py-3 border-t border-border">

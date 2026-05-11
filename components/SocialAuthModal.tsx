@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { Zap, Lock, ChevronDown } from "lucide-react";
-import { useAppState } from "@/lib/context/AppStateContext";
+// SocialAuthModal is legacy — global session auth is used instead (social page comment confirms removal)
 
 export default function SocialAuthModal() {
-  const { socialTeam, loginSocial } = useAppState();
+  const socialTeam: { id: string; name: string; password: string }[] = [];
+  const loginSocial = (_name: string, _password: string) => false;
   const [selectedName, setSelectedName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);

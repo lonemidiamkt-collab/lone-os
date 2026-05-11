@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { X, Bell, AlertTriangle, FileText, Activity, Settings, CheckCircle, Zap } from "lucide-react";
 import type { AppNotification } from "@/lib/types";
 
@@ -46,7 +46,8 @@ function playPremiumPing() {
 }
 
 export default function NotificationToast() {
-  const { notifications, markNotificationRead } = useAppState();
+  const notifications = useNotificationsStore((s) => s.notifications);
+  const markNotificationRead = useNotificationsStore((s) => s.markRead);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const seenRef = useRef<Set<string>>(new Set());
   const initialLoadRef = useRef(true);

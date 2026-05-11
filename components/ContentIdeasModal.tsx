@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Sparkles, RefreshCw, Target, Zap, TrendingUp } from "lucide-react";
 import type { Client, ToneOfVoice } from "@/lib/types";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useContentStore } from "@/stores/useContentStore";
 import { useRole } from "@/lib/context/RoleContext";
 import {
   Dialog,
@@ -105,7 +105,7 @@ interface Props {
 export default function ContentIdeasModal({ client, onClose }: Props) {
   const ideas = getIdeasForClient(client.industry, client.toneOfVoice);
   const [added, setAdded] = useState<Set<number>>(new Set());
-  const { addContentCard } = useAppState();
+  const addContentCard = useContentStore((s) => s.addContentCard);
   const { currentUser } = useRole();
 
   const TONE_LABELS: Record<ToneOfVoice, string> = {

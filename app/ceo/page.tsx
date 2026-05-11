@@ -1,7 +1,10 @@
 "use client";
 
 import Header from "@/components/Header";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
+import { useTrafficStore } from "@/stores/useTrafficStore";
 import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import { exportReportAsPdf } from "@/lib/exportPdf";
 import {
@@ -30,8 +33,12 @@ function isCeoSessionValid(): boolean {
 
 export default function CEOPage() {
   const {
-    clients, tasks, contentCards, designRequests, trafficRoutineChecks, quinzReports,
-  } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const contentCards = useContentStore((s) => s.contentCards);
+  const designRequests = useContentStore((s) => s.designRequests);
+  const tasks = useOperationalStore((s) => s.tasks);
+  const quinzReports = useOperationalStore((s) => s.quinzReports);
+  const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
 
   const [pin, setPin] = useState("");
   const [unlocked, setUnlocked] = useState(() => isCeoSessionValid());

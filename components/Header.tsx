@@ -4,7 +4,10 @@ import { Bell, ChevronDown, Plus, X, UserPlus, FileText, Smile, Search, ChevronR
 import { useState, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
 import MedievalAvatar, { getUserAvatar } from "@/components/MedievalAvatars";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
+import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import Link from "next/link";
 import type { AppNotification } from "@/lib/types";
 
@@ -23,7 +26,12 @@ interface HeaderProps {
 
 export default function Header({ title, subtitle }: HeaderProps) {
   const { currentProfile, roleLabel, logout } = useRole();
-  const { notifications, markNotificationRead, markAllNotificationsRead, clients, contentCards, tasks } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const contentCards = useContentStore((s) => s.contentCards);
+  const tasks = useOperationalStore((s) => s.tasks);
+  const notifications = useNotificationsStore((s) => s.notifications);
+  const markNotificationRead = useNotificationsStore((s) => s.markRead);
+  const markAllNotificationsRead = useNotificationsStore((s) => s.markAllRead);
   const [showMenu, setShowMenu] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [showQuick, setShowQuick] = useState(false);

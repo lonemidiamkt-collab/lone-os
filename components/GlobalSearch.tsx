@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
 import {
   Search, Users, FileText, TrendingUp, Instagram,
   Palette, MessageCircle, Calendar, Lock, Inbox,
@@ -56,7 +58,9 @@ export default function GlobalSearch() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-  const { clients, tasks, contentCards } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const contentCards = useContentStore((s) => s.contentCards);
+  const tasks = useOperationalStore((s) => s.tasks);
 
   // Cmd+K / Ctrl+K to open
   useEffect(() => {

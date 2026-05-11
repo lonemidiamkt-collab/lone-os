@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Bell, X, CheckCheck, AlertTriangle, Activity, FileText, Settings, Clock, Trash2 } from "lucide-react";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useNotificationsStore } from "@/stores/useNotificationsStore";
 
 const TYPE_CONFIG: Record<string, { icon: typeof Bell; color: string; bg: string }> = {
   sla:     { icon: AlertTriangle, color: "text-red-400",   bg: "bg-red-500/[0.08]" },
@@ -21,7 +21,9 @@ function timeAgo(iso: string): string {
 }
 
 export default function NotificationCenter() {
-  const { notifications, markNotificationRead, markAllNotificationsRead } = useAppState();
+  const notifications = useNotificationsStore((s) => s.notifications);
+  const markNotificationRead = useNotificationsStore((s) => s.markRead);
+  const markAllNotificationsRead = useNotificationsStore((s) => s.markAllRead);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread">("all");
 

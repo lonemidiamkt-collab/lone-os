@@ -5,7 +5,7 @@ import {
   Pencil, Building2, Users, Instagram, FileText, Facebook,
   Check, Loader2, User, Shield, MapPin, Phone, Mail, CreditCard, Briefcase,
 } from "lucide-react";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
 import type { Client } from "@/lib/types";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useRole } from "@/lib/context/RoleContext";
@@ -34,7 +34,7 @@ interface Props {
 }
 
 export default function EditClientModal({ client, onClose }: Props) {
-  const { updateClientData } = useAppState();
+  const updateClientData = useClientsStore((s) => s.updateClient);
   const team = useTeamMembers();
   const { role } = useRole();
   const isAdmin = role === "admin" || role === "manager";

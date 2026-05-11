@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { fetchDraftClients } from "@/lib/supabase/queries";
 import { supabase } from "@/lib/supabase/client";
 import type { Client } from "@/lib/types";
@@ -59,7 +59,7 @@ function getContactDisplay(draft: Client, sub?: Submission | null): string {
 // ─── Main Page ────────────────────────────────────────────
 export default function PendingClientsPage() {
   const { role } = useRole();
-  const { pushNotification } = useAppState();
+  const pushNotification = useNotificationsStore((s) => s.push);
   const team = useTeamMembers();
   const isAdmin = role === "admin" || role === "manager";
 
