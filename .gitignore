@@ -37,6 +37,10 @@ next-env.d.ts
 # iCloud Drive / Next.js cache workaround
 /.next.nosync/
 .next
+.next.old*/
+
+# Pasta sem título (artefatos de sistema)
+"pasta sem t*"
 
 # Claude Code local settings (may contain secrets)
 .claude/
