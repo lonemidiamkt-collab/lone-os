@@ -8,6 +8,7 @@ import {
   Pencil, Check, Loader2, AlertTriangle, Send, ExternalLink,
   Link as LinkIcon, Clock, CheckCircle, Mail, Settings,
 } from "lucide-react";
+import PublicReportCard from "@/components/PublicReportCard";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 
 interface Props {
@@ -718,6 +719,14 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           </div>
           <p className="text-[10px] text-zinc-600">Envia o e-mail de boas-vindas para {form.emailCorporativo || form.phone || "(sem e-mail)"}</p>
         </div>
+      )}
+
+      {/* Portal Público — só admin/manager */}
+      {isAdmin && (
+        <PublicReportCard
+          client={client}
+          onUpdate={(patch) => updateClientData(client.id, patch)}
+        />
       )}
     </div>
   );

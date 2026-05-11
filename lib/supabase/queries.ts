@@ -85,6 +85,12 @@ function snakeToClient(row: Record<string, unknown>): Client {
     firstValueDeliveredAt: (row.first_value_delivered_at as string) ?? undefined,
     activatedAt: (row.activated_at as string) ?? undefined,
     ttvDays: (row.ttv_days as number) ?? undefined,
+    // Portal público
+    publicReportToken: (row.public_report_token as string) ?? undefined,
+    publicReportTokenCreatedAt: (row.public_report_token_created_at as string) ?? undefined,
+    publicReportTokenRevokedAt: (row.public_report_token_revoked_at as string) ?? undefined,
+    publicReportEnabled: (row.public_report_enabled as boolean) ?? false,
+    whatsappTeamPhone: (row.whatsapp_team_phone as string) ?? undefined,
   };
 }
 

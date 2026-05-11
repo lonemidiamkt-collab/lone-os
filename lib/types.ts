@@ -91,6 +91,12 @@ export interface Client {
   firstValueDeliveredAt?: string;
   activatedAt?: string;
   ttvDays?: number;
+  // ─── Portal Público de Resultados ──────────────────────
+  publicReportToken?: string;
+  publicReportTokenCreatedAt?: string;
+  publicReportTokenRevokedAt?: string;
+  publicReportEnabled?: boolean;
+  whatsappTeamPhone?: string;
 }
 
 export interface MoodEntry {
