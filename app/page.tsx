@@ -11,7 +11,10 @@ import {
   Target, Zap, FileText, ChevronRight, Plus, Inbox,
 } from "lucide-react";
 import { getStatusLed, getStatusLabel } from "@/lib/utils";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
+import { useTrafficStore } from "@/stores/useTrafficStore";
 import { useRole } from "@/lib/context/RoleContext";
 import Link from "next/link";
 import { useState, useMemo, useEffect } from "react";
@@ -42,7 +45,9 @@ const STATUS_FILTER_CONFIG = [
 
 // ── Notice Form (Admin/Manager only) ──
 function NoticeFormBlock() {
-  const { addNotice, deleteNotice, notices } = useAppState();
+  const notices = useOperationalStore((s) => s.notices);
+  const addNotice = useOperationalStore((s) => s.addNotice);
+  const deleteNotice = useOperationalStore((s) => s.deleteNotice);
   const { role, currentUser } = useRole();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
@@ -180,10 +185,13 @@ function NoticeFormBlock() {
 
 // ── Employee Dashboard (Traffic/Social/Designer) ──
 function EmployeeDashboard() {
-  const {
-    clients, tasks, contentCards, designRequests, notices,
-    trafficRoutineChecks, timeline,
-  } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const contentCards = useContentStore((s) => s.contentCards);
+  const designRequests = useContentStore((s) => s.designRequests);
+  const tasks = useOperationalStore((s) => s.tasks);
+  const notices = useOperationalStore((s) => s.notices);
+  const timeline = useOperationalStore((s) => s.timeline);
+  const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
   const { role, currentUser } = useRole();
 
   // My tasks
@@ -457,10 +465,13 @@ function EmployeeDashboard() {
 
 // ── Admin/Manager/CEO Dashboard (Full view) ──
 function AdminDashboard() {
-  const {
-    clients, contentCards, tasks, designRequests,
-    trafficRoutineChecks, timeline, updateTask,
-  } = useAppState();
+  const clients = useClientsStore((s) => s.clients);
+  const contentCards = useContentStore((s) => s.contentCards);
+  const designRequests = useContentStore((s) => s.designRequests);
+  const tasks = useOperationalStore((s) => s.tasks);
+  const updateTask = useOperationalStore((s) => s.updateTask);
+  const timeline = useOperationalStore((s) => s.timeline);
+  const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
   const { role } = useRole();
 
   const [statusFilter, setStatusFilter] = useState<ClientStatus | "all">("all");
@@ -1009,7 +1020,20 @@ function AdminDashboard() {
 // ── Main Dashboard Page ──
 export default function DashboardPage() {
   const { role, currentUser } = useRole();
-  const { notices } = useAppState();
+  const notices = useOperationalStore((s) => s.notices);
+  const initClients = useClientsStore((s) => s.init);
+  const initContent = useContentStore((s) => s.init);
+  const initOps = useOperationalStore((s) => s.init);
+  const initTraffic = useTrafficStore((s) => s.init);
+  const subClients = useClientsStore((s) => s.subscribeRealtime);
+  const subContent = useContentStore((s) => s.subscribeRealtime);
+  const subOps = useOperationalStore((s) => s.subscribeRealtime);
+
+  useEffect(() => {
+    initClients(); initContent(); initOps(); initTraffic();
+    const u1 = subClients(); const u2 = subContent(); const u3 = subOps();
+    return () => { u1(); u2(); u3(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isAdmin = role === "admin" || role === "manager";
 

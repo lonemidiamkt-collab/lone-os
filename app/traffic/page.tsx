@@ -6,7 +6,11 @@ import SystemAlertBanner from "@/components/SystemAlertBanner";
 import MetricCard from "@/components/MetricCard";
 import KanbanBoard from "@/components/KanbanBoard";
 import AdsInsightCard from "@/components/AdsInsightCard";
-import { useAppState } from "@/lib/context/AppStateContext";
+import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
+import { useTrafficStore } from "@/stores/useTrafficStore";
+import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
 import {
@@ -96,12 +100,46 @@ function mapMetaObjective(objective?: string): import("@/lib/types").AdObjective
 
 export default function TrafficPage() {
   const router = useRouter();
-  const {
-    clients, tasks, updateClientData, updateClientStatus, addTask, updateTask,
-    trafficReports, trafficRoutineChecks, addTrafficReport, updateTrafficReport, addTrafficRoutineCheck,
-    addDesignRequest, addContentCard, pushNotification, deleteTask,
-    investmentData, updateInvestmentData,
-  } = useAppState();
+  // ── Zustand stores ────────────────────────────────────────────────────────
+  const clients = useClientsStore((s) => s.clients);
+  const updateClientData = useClientsStore((s) => s.updateClient);
+  const updateClientStatus = useClientsStore((s) => s.updateClientStatus);
+  const initClients = useClientsStore((s) => s.init);
+  const subClients = useClientsStore((s) => s.subscribeRealtime);
+
+  const addContentCard = useContentStore((s) => s.addContentCard);
+  const addDesignRequest = useContentStore((s) => s.addDesignRequest);
+  const initContent = useContentStore((s) => s.init);
+  const subContent = useContentStore((s) => s.subscribeRealtime);
+
+  const tasks = useOperationalStore((s) => s.tasks);
+  const addTask = useOperationalStore((s) => s.addTask);
+  const updateTask = useOperationalStore((s) => s.updateTask);
+  const deleteTask = useOperationalStore((s) => s.deleteTask);
+  const initOps = useOperationalStore((s) => s.init);
+  const subOps = useOperationalStore((s) => s.subscribeRealtime);
+
+  const trafficReports = useTrafficStore((s) => s.trafficReports);
+  const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
+  const investmentData = useTrafficStore((s) => s.investmentData);
+  const addTrafficReport = useTrafficStore((s) => s.addTrafficReport);
+  const updateTrafficReport = useTrafficStore((s) => s.updateTrafficReport);
+  const addTrafficRoutineCheck = useTrafficStore((s) => s.addTrafficRoutineCheck);
+  const updateInvestmentData = useTrafficStore((s) => s.updateInvestmentData);
+  const initTraffic = useTrafficStore((s) => s.init);
+
+  const pushNotification = useNotificationsStore((s) => s.push);
+
+  useEffect(() => {
+    initClients();
+    initContent();
+    initOps();
+    initTraffic();
+    const u1 = subClients();
+    const u2 = subContent();
+    const u3 = subOps();
+    return () => { u1(); u2(); u3(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Creative request modal state
   const [creativeModal, setCreativeModal] = useState<{
@@ -745,7 +783,7 @@ function RoutineTab({
 }: {
   clients: Client[];
   routineChecks: typeof import("@/lib/mockData").mockTrafficRoutineChecks;
-  onCheck: (check: { clientId: string; clientName: string; date: string; type: "support" | "report" | "feedback" | "analysis"; completedBy: string; note?: string }) => void;
+  onCheck: (check: { clientId: string; clientName: string; date: string; type: "support" | "report" | "feedback" | "analysis"; completedBy: string; note?: string }) => void | Promise<void>;
   currentUser: string;
   effectiveFilter: string;
   tasks: Task[];
@@ -1131,8 +1169,8 @@ function MonthlyReportsTab({
 }: {
   clients: Client[];
   reports: TrafficMonthlyReport[];
-  onAddReport: (r: Omit<TrafficMonthlyReport, "id" | "createdAt">) => TrafficMonthlyReport;
-  onUpdateReport: (id: string, updates: Partial<TrafficMonthlyReport>) => void;
+  onAddReport: (r: Omit<TrafficMonthlyReport, "id" | "createdAt">) => TrafficMonthlyReport | Promise<TrafficMonthlyReport>;
+  onUpdateReport: (id: string, updates: Partial<TrafficMonthlyReport>) => void | Promise<void>;
   currentUser: string;
   effectiveFilter: string;
 }) {
@@ -1552,7 +1590,7 @@ function EditReportForm({
 // ══════════════════════════════════════════════════════════════
 
 function TrafficReportTab({ clients }: { clients: Client[] }) {
-  const { updateClientData } = useAppState();
+  const updateClientData = useClientsStore((s) => s.updateClient);
   const relevantClients = clients.filter(
     (c) => c.status === "at_risk" || c.attentionLevel === "high" || c.attentionLevel === "critical"
   );
@@ -1801,7 +1839,7 @@ function AdAnalyticsTab({
   clients: Client[];
   accounts: AdAccount[];
   campaigns: AdCampaign[];
-  addDesignRequest: (req: Omit<import("@/lib/types").DesignRequest, "id"> & { contentCardId?: string }) => import("@/lib/types").DesignRequest;
+  addDesignRequest: (req: Omit<import("@/lib/types").DesignRequest, "id"> & { contentCardId?: string }) => import("@/lib/types").DesignRequest | Promise<import("@/lib/types").DesignRequest>;
   updateClientData: (id: string, data: Partial<Client>) => void;
   currentUser: string;
   onRealDataChange?: (campaigns: AdCampaign[], isReal: boolean) => void;
