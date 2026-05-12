@@ -82,22 +82,14 @@ create policy "traffic_insert_agency_actions"
   on agency_actions for insert
   to authenticated
   with check (
-    exists (
-      select 1 from team_members tm
-      where tm.auth_user_id = auth.uid()
-        and tm.role in ('admin', 'manager', 'traffic')
-    )
+    auth.user_role() = any(array['admin','manager','traffic'])
   );
 
 create policy "traffic_update_agency_actions"
   on agency_actions for update
   to authenticated
   using (
-    exists (
-      select 1 from team_members tm
-      where tm.auth_user_id = auth.uid()
-        and tm.role in ('admin', 'manager', 'traffic')
-    )
+    auth.user_role() = any(array['admin','manager','traffic'])
   );
 
 -- ── 4. Log de acessos ao portal ───────────────────────────────────────────────
