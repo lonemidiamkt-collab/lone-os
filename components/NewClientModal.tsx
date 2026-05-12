@@ -176,11 +176,11 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
   };
 
   // ─── Manual Submit ────────────────────────────
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const name = form.nomeFantasia.trim() || form.razaoSocial.trim();
     if (!name) { setError("Nome Fantasia ou Razao Social e obrigatorio."); return; }
 
-    const newClient = addClient({
+    const newClient = await addClient({
       name,
       industry: form.industry,
       serviceType: form.serviceType,

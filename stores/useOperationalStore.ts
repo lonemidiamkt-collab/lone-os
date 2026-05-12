@@ -144,7 +144,7 @@ export const useOperationalStore = create<OperationalState>()(
               user: row.user as string,
               role: row.role as Role,
               text: row.text as string,
-              createdAt: row.created_at as string,
+              timestamp: row.created_at as string,
             };
             set((s) => ({
               globalChat: s.globalChat.some((m) => m.id === msg.id) ? s.globalChat : [...s.globalChat, msg],
@@ -191,7 +191,7 @@ export const useOperationalStore = create<OperationalState>()(
           user,
           role,
           text,
-          createdAt: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
         };
         set((s) => ({ globalChat: [...s.globalChat, tempMsg] }), false, "ops/globalchat/optimistic");
         db.insertGlobalChatMessage(user, role, text).catch(() => {

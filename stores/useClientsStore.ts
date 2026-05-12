@@ -19,7 +19,7 @@ interface ClientsState {
   init: () => Promise<void>;
   subscribeRealtime: () => () => void;
 
-  addClient: (data: Omit<Client, "id">) => Promise<Client>;
+  addClient: (data: Omit<Client, "id" | "status" | "attentionLevel" | "tags" | "joinDate" | "lastPostDate"> & Partial<Pick<Client, "status" | "attentionLevel" | "tags" | "joinDate" | "lastPostDate">>) => Promise<Client>;
   updateClient: (id: string, updates: Partial<Client>) => Promise<void>;
   updateClientStatus: (id: string, status: ClientStatus, actor: string) => Promise<void>;
   sendClientMessage: (clientId: string, user: string, text: string) => void;
@@ -90,7 +90,7 @@ export const useClientsStore = create<ClientsState>()(
           .on("postgres_changes", { event: "INSERT", schema: "public", table: "client_timeline_messages" }, (p) => {
             if (!p.new) return;
             const row = p.new as { client_id: string; id: string; user: string; text: string; created_at: string };
-            const msg: ChatMessage = { id: row.id, user: row.user, text: row.text, createdAt: row.created_at };
+            const msg: ChatMessage = { id: row.id, user: row.user, text: row.text, timestamp: row.created_at };
             set((s) => ({
               clientChats: {
                 ...s.clientChats,
@@ -160,7 +160,7 @@ export const useClientsStore = create<ClientsState>()(
         try {
           await db.updateClientDb(id, { status });
           // Log timeline entry
-          await db.insertTimelineEntry({ clientId: id, type: "status", actor, content: `Status atualizado para ${status}` });
+          await db.insertTimelineEntry({ clientId: id, type: "status", actor, description: `Status atualizado para ${status}` });
         } catch (err) {
           if (prev) {
             set((s) => ({
@@ -177,7 +177,7 @@ export const useClientsStore = create<ClientsState>()(
           id: `temp-msg-${Date.now()}`,
           user,
           text,
-          createdAt: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
         };
         set((s) => ({
           clientChats: {

@@ -627,7 +627,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
               variant="outline"
               className="mr-auto flex items-center gap-2 text-[#8b5cf6] border-[#8b5cf6]/30 hover:bg-[#8b5cf6]/10"
               onClick={() => {
-                const req = addDesignRequest({
+                addDesignRequest({
                   title: `Arte: ${card.title}`,
                   clientId: card.clientId,
                   clientName: card.clientName,
@@ -636,8 +636,9 @@ export default function ContentCardModal({ card, onClose }: Props) {
                   status: "queued",
                   format: card.format || "Post Feed",
                   briefing: card.briefing || card.observations || `Criar arte para: ${card.title}`,
+                }).then((req) => {
+                  updateContentCard(card.id, { designRequestId: req.id });
                 });
-                updateContentCard(card.id, { designRequestId: req.id });
                 pushNotification("content", "Design solicitado", `Pedido de arte para "${card.title}" enviado ao designer.`, card.clientId);
               }}
             >
