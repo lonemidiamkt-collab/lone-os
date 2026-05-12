@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import AppShell from "@/components/AppShell";
 
-const PUBLIC_ROUTES = ["/onboarding", "/relatorio"];
+const PUBLIC_ROUTES = ["/onboarding", "/relatorio", "/portal"];
 
 export default function ConditionalAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
