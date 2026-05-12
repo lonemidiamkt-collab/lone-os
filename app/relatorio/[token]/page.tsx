@@ -241,10 +241,11 @@ function AgeBars({ ranges }: { ranges: ReportData["age_ranges"] }) {
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 
-export default function RelatorioPub({ params }: { params: { token: string } }) {
-  // TODO: const data = await fetchReportByToken(params.token)
+export default async function RelatorioPub({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  // TODO: const data = await fetchReportByToken(token)
   // TODO: if (!data) notFound()
-  void params.token;
+  void token;
   const D = MOCK_DATA;
 
   const kpiDefs: { key: keyof ReportData["kpis"]; label: string; first?: boolean }[] = [
