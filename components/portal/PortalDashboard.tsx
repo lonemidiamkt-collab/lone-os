@@ -91,9 +91,8 @@ function Thumbnail({ url, name }: { url: string | null; name: string }) {
   );
 }
 
-// Scroll pills shared by period tabs and metric tabs
-const scrollRowCls =
-  "flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+// Scroll pills — flex row com scroll horizontal, sem wrap, scrollbar invisível
+const scrollRowCls = "flex flex-nowrap gap-2 overflow-x-auto pb-1 no-scrollbar";
 
 function SectionHeader({
   title, phone, context, section,
@@ -218,9 +217,12 @@ export default function PortalDashboard({
         <div className="space-y-3 sm:space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[11px] sm:text-xs font-medium mb-1" style={{ color: "#6B7280" }}>
-                Painel de Resultados
-              </p>
+              <div className="flex items-center gap-2 mb-1">
+                <img src="/logo.png" alt="Lone Mídia" className="h-4 w-auto opacity-70" />
+                <p className="text-[11px] sm:text-xs font-medium" style={{ color: "#6B7280" }}>
+                  Painel de Resultados
+                </p>
+              </div>
               <h1
                 className="font-bold tracking-tight break-words"
                 style={{ fontSize: "clamp(22px, 5.5vw, 38px)", lineHeight: 1.15 }}
@@ -641,10 +643,12 @@ export default function PortalDashboard({
 
         {/* ── Footer ───────────────────────────────────────────────────── */}
         {/* pb-20 em mobile pra não ficar atrás do FAB */}
-        <div className="text-center pt-4 pb-20 lg:pb-8 space-y-1">
-          <p className="text-xs font-semibold" style={{ color: "#6B7280" }}>
-            Lone Mídia
-          </p>
+        <div className="text-center pt-4 pb-20 lg:pb-8 space-y-2">
+          <img
+            src="/logo.png"
+            alt="Lone Mídia"
+            className="h-7 w-auto mx-auto opacity-60"
+          />
           <p className="text-[11px]" style={{ color: "#6B7280" }}>
             Relatório exclusivo ·{" "}
             {new Date().toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}

@@ -335,3 +335,7 @@
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
 .theme-light ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); }
 .theme-light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.18); }
+
+/* Utility: ocultar scrollbar mantendo scroll funcional (portal tabs) */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
