@@ -270,11 +270,12 @@ export default function PortalDashboard({
           {/* Mobile: 1 col com valor + delta lado a lado / Tablet: 2 cols / Desktop: 4 cols */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
             {([
-              { key: "messages", label: "Mensagens", val: kpis?.messages, format: (v: number) => fmt(v)  },
-              { key: "spend",    label: "Investido", val: kpis?.spend,    format: fmtBrl, inverse: false },
-              { key: "cpa",      label: "Custo/msg", val: kpis?.cpa,      format: fmtBrl, inverse: true  },
-              { key: "reach",    label: "Alcance",   val: kpis?.reach,    format: (v: number) => fmt(v)  },
-            ] as const).map(({ key, label, val, format, inverse }) => (
+              { key: "messages", label: "Mensagens", val: kpis?.messages, format: (v: number) => fmt(v)                  },
+              { key: "spend",    label: "Investido", val: kpis?.spend,    format: (v: number) => fmtBrl(v), inverse: false },
+              { key: "cpa",      label: "Custo/msg", val: kpis?.cpa,      format: (v: number) => fmtBrl(v), inverse: true  },
+              { key: "reach",    label: "Alcance",   val: kpis?.reach,    format: (v: number) => fmt(v)                  },
+            ] as Array<{ key: string; label: string; val: typeof kpis?.messages; format: (v: number) => string; inverse?: boolean }>)
+            .map(({ key, label, val, format, inverse }) => (
               <div
                 key={key}
                 className="rounded-xl p-3 sm:p-4 flex sm:block items-center justify-between"
