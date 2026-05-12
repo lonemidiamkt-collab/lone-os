@@ -145,8 +145,8 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
 
   async function copyWhatsAppMessage() {
     if (!portalUrl) return;
-    const phone = whatsapp || client.whatsappTeamPhone || "";
-    const teamLine = phone ? `\n\nDúvidas? Fale com a equipe: wa.me/${phone}` : "";
+    const phone = whatsapp || client.whatsappTeamPhone || "5522981530700";
+    const teamLine = `\n\nDúvidas? Fale com a equipe: wa.me/${phone}`;
     const welcome = welcomeMsg || client.portalWelcomeMessage || "";
     const text =
       (welcome ? `${welcome}\n\n` : `Olá! Preparamos seu painel de resultados da Lone Mídia.\n\n`) +

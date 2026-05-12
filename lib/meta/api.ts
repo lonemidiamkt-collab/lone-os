@@ -166,6 +166,104 @@ export async function getAccountInsights(
   return data.data ?? [];
 }
 
+// ── Portal: date-range insights ──────────────────────────────────────────────
+
+export interface MetaAdInsight {
+  ad_id: string;
+  ad_name: string;
+  spend: string;
+  impressions: string;
+  reach: string;
+  clicks: string;
+  ctr: string;
+  frequency?: string;
+  actions?: { action_type: string; value: string }[];
+}
+
+export interface MetaDemographicRow {
+  age: string;
+  gender: string;
+  reach: string;
+  impressions: string;
+}
+
+export async function getInsightsByDateRange(
+  accountId: string,
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<MetaInsight[]> {
+  const url = getGraphUrl(`/${accountId}/insights`);
+  const params = new URLSearchParams({
+    access_token: accessToken,
+    fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
+    time_range: JSON.stringify({ since, until }),
+    time_increment: "1",
+    limit: "100",
+  });
+  const res = await fetch(`${url}?${params}`);
+  if (!res.ok) throw new Error(`Meta insights failed for ${accountId}`);
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+export async function getTopAdInsights(
+  accountId: string,
+  accessToken: string,
+  since: string,
+  until: string,
+  limit = 10,
+): Promise<MetaAdInsight[]> {
+  const url = getGraphUrl(`/${accountId}/insights`);
+  const params = new URLSearchParams({
+    access_token: accessToken,
+    fields: "ad_id,ad_name,spend,impressions,reach,clicks,ctr,frequency,actions",
+    time_range: JSON.stringify({ since, until }),
+    level: "ad",
+    sort: "spend_descending",
+    limit: String(limit),
+  });
+  const res = await fetch(`${url}?${params}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+export async function getAdThumbnail(
+  adId: string,
+  accessToken: string,
+): Promise<string | null> {
+  const url = getGraphUrl(`/${adId}`);
+  const params = new URLSearchParams({
+    access_token: accessToken,
+    fields: "creative{thumbnail_url}",
+  });
+  const res = await fetch(`${url}?${params}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data?.creative?.thumbnail_url ?? null;
+}
+
+export async function getDemographicBreakdown(
+  accountId: string,
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<MetaDemographicRow[]> {
+  const url = getGraphUrl(`/${accountId}/insights`);
+  const params = new URLSearchParams({
+    access_token: accessToken,
+    fields: "reach,impressions",
+    breakdowns: "gender,age",
+    time_range: JSON.stringify({ since, until }),
+    limit: "100",
+  });
+  const res = await fetch(`${url}?${params}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.data ?? [];
+}
+
 // Helper: extract conversions from actions array
 export function extractConversions(actions?: { action_type: string; value: string }[]): number {
   if (!actions) return 0;
