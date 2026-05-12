@@ -160,7 +160,7 @@ export const useClientsStore = create<ClientsState>()(
         try {
           await db.updateClientDb(id, { status });
           // Log timeline entry
-          await db.insertTimelineEntry({ clientId: id, type: "status", actor, description: `Status atualizado para ${status}` });
+          await db.insertTimelineEntry({ clientId: id, type: "status", actor, description: `Status atualizado para ${status}`, timestamp: new Date().toISOString() });
         } catch (err) {
           if (prev) {
             set((s) => ({
