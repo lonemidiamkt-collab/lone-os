@@ -7,7 +7,6 @@ import {
 } from "recharts";
 import { ImageIcon } from "lucide-react";
 import type { SnapshotData, PeriodKind } from "@/lib/portal/types";
-import HelpButton from "./HelpButton";
 import MobileFAB from "./MobileFAB";
 
 const WA_NUMBER = "5522981530700";
@@ -85,15 +84,12 @@ function Thumbnail({ url, name }: { url: string | null; name: string }) {
 
 const scrollRow = "flex flex-nowrap gap-2 overflow-x-auto pb-1 no-scrollbar";
 
-function SectionHeader({ title, phone, context, section }: {
-  title: string; phone: string; context: string; section: string;
-}) {
+function SectionHeader({ title }: { title: string }) {
   return (
-    <div className="flex items-center justify-between mb-3">
+    <div className="mb-3">
       <h2 className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#8b91a1" }}>
         {title}
       </h2>
-      <HelpButton phone={phone} context={context} section={section} />
     </div>
   );
 }
@@ -287,12 +283,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
 
             {/* Gráfico */}
             <Card className="p-4 lg:p-5">
-              <SectionHeader
-                title="Evolução diária"
-                phone={phone}
-                context={`Olá! Tenho uma dúvida sobre o gráfico de evolução no portal de ${clientName}.`}
-                section="evolução diária"
-              />
+              <SectionHeader title="Evolução diária" />
 
               {/* Metric tabs */}
               <div className={`${scrollRow} mb-4`}>
@@ -349,12 +340,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
             {/* Demografia */}
             {(loading || demo?.gender || (demo?.age_ranges?.length ?? 0) > 0) && (
               <div>
-                <SectionHeader
-                  title="Quem está vendo seus anúncios"
-                  phone={phone}
-                  context={`Olá! Tenho uma dúvida sobre a demografia no portal de ${clientName}.`}
-                  section="demografia"
-                />
+                <SectionHeader title="Quem está vendo seus anúncios" />
                 <div className="rounded-xl p-4 lg:p-5" style={{ background: "#FFFFFF", color: "#0B0E1E" }}>
                   {loading ? (
                     <div className={`h-28 rounded-lg ${pulse}`} style={{ background: "#F3F4F6" }} />
@@ -409,12 +395,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
             {/* Top Criativos */}
             {(loading || top.length > 0) && (
               <div>
-                <SectionHeader
-                  title="Top criativos"
-                  phone={phone}
-                  context={`Olá! Tenho uma dúvida sobre os criativos no portal de resultados da ${clientName}.`}
-                  section="criativos"
-                />
+                <SectionHeader title="Top criativos" />
                 <div className="space-y-2">
                   {loading
                     ? Array.from({ length: 3 }).map((_, i) => (
@@ -478,12 +459,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
             {/* Timeline */}
             {(loading || actions.length > 0) && (
               <div>
-                <SectionHeader
-                  title="O que fizemos"
-                  phone={phone}
-                  context={`Olá! Tenho uma dúvida sobre uma das ações realizadas no portal de ${clientName}.`}
-                  section="ações da equipe"
-                />
+                <SectionHeader title="O que fizemos" />
                 <div className="space-y-2">
                   {loading
                     ? Array.from({ length: 2 }).map((_, i) => (
