@@ -1174,8 +1174,8 @@ export default function CalendarPage() {
             addReminder(rem);
             setShowCreate(false);
           }}
-          onSaveAndOpen={(task) => {
-            const created = addTask(task);
+          onSaveAndOpen={async (task) => {
+            const created = await addTask(task);
             setShowCreate(false);
             setSelectedTask(created);
           }}
