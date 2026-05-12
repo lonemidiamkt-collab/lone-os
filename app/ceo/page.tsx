@@ -32,7 +32,6 @@ function isCeoSessionValid(): boolean {
 }
 
 export default function CEOPage() {
-  const {
   const clients = useClientsStore((s) => s.clients);
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
