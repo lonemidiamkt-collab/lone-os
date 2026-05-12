@@ -43,6 +43,7 @@ import ClientNPS from "@/components/sector/ClientNPS";
 import WhatsAppTemplates from "@/components/WhatsAppTemplates";
 import MeetingScheduler from "@/components/MeetingScheduler";
 const ContractGenerator = dynamic(() => import("@/components/ContractGenerator"), { ssr: false });
+import PortalManagementCard from "@/components/PortalManagementCard";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { exportReportAsPdf } from "@/lib/exportPdf";
@@ -74,7 +75,7 @@ const ASSET_TYPE_CONFIG: Record<CreativeAsset["type"], { label: string; color: s
   logo:       { label: "Logo",       color: "text-primary",  icon: Star },
 };
 
-const TABS = ["overview", "dados", "resultados", "analise-ia", "contratos", "chat", "historico", "tasks", "content", "onboarding", "wallet", "reports"] as const;
+const TABS = ["overview", "dados", "resultados", "analise-ia", "contratos", "chat", "historico", "tasks", "content", "onboarding", "wallet", "reports", "portal"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -90,6 +91,7 @@ const TAB_LABELS: Record<Tab, string> = {
   onboarding: "Onboarding",
   wallet: "Creative Wallet",
   reports: "Relatórios",
+  portal: "Portal",
 };
 
 export default function ClientDetailPage() {
@@ -403,7 +405,7 @@ export default function ClientDetailPage() {
 
   const isAdmin = role === "admin" || role === "manager";
   const visibleTabs = TABS.filter((tab) => {
-    if (tab === "reports" || tab === "wallet" || tab === "contratos") return isAdmin;
+    if (tab === "reports" || tab === "wallet" || tab === "contratos" || tab === "portal") return isAdmin;
     return true;
   });
 
@@ -1574,6 +1576,16 @@ export default function ClientDetailPage() {
                   <button type="submit" className="btn-primary flex items-center gap-2"><FileText size={14} /> Salvar Relatório</button>
                 </form>
               </div>
+            </div>
+          )}
+
+          {/* ── PORTAL ───────────────────────────────────────────────────── */}
+          {activeTab === "portal" && isAdmin && (
+            <div className="animate-fade-in max-w-xl">
+              <PortalManagementCard
+                client={client}
+                onUpdate={(patch) => updateClientData(client.id, patch)}
+              />
             </div>
           )}
         </div>

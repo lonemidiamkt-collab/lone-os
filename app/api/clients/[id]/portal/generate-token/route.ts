@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 
-const BASE_URL = process.env.PUBLIC_REPORT_DOMAIN ?? "https://painel.lonemidia.com";
+const BASE_URL = process.env.NEXT_PUBLIC_PORTAL_DOMAIN ?? "https://resultados.lonemidia.com";
 
 export async function POST(
   req: NextRequest,
@@ -49,6 +49,6 @@ export async function POST(
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
   }
 
-  const fullUrl = `${BASE_URL}/relatorio/${token}`;
+  const fullUrl = `${BASE_URL}/portal/${token}`;
   return NextResponse.json({ success: true, token, full_url: fullUrl });
 }

@@ -97,6 +97,7 @@ export interface Client {
   publicReportTokenRevokedAt?: string;
   publicReportEnabled?: boolean;
   whatsappTeamPhone?: string;
+  portalWelcomeMessage?: string;
 }
 
 export interface MoodEntry {
