@@ -1,6 +1,7 @@
 // Meta Marketing API client — server-side only
 
 import { META_CONFIG, getGraphUrl } from "./config";
+import { getDateRangeBRT } from "./timezone";
 
 interface TokenResponse {
   access_token: string;
@@ -113,19 +114,14 @@ export async function getCampaignInsights(
   days: number = 7,
 ): Promise<MetaInsight[]> {
   const url = getGraphUrl(`/${campaignId}/insights`);
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const since = new Date(yesterday);
-  since.setDate(since.getDate() - (days - 1));
-
-  const sinceStr = since.toISOString().slice(0, 10);
-  const untilStr = yesterday.toISOString().slice(0, 10);
-  console.log(`[Meta API] getCampaignInsights ${campaignId}: ${sinceStr} → ${untilStr} (UTC)`);
+  const { since: sinceStr, until: untilStr } = getDateRangeBRT(days);
+  console.log(`[Meta API] getCampaignInsights ${campaignId}: ${sinceStr} → ${untilStr} (BRT)`);
 
   const params = new URLSearchParams({
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since: sinceStr, until: untilStr }),
+    action_attribution_windows: '["7d_click","1d_view"]',
     time_increment: "1",
     limit: "100",
   });
@@ -143,19 +139,14 @@ export async function getAccountInsights(
   days: number = 30,
 ): Promise<MetaInsight[]> {
   const url = getGraphUrl(`/${accountId}/insights`);
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const since = new Date(yesterday);
-  since.setDate(since.getDate() - (days - 1));
-
-  const sinceStr = since.toISOString().slice(0, 10);
-  const untilStr = yesterday.toISOString().slice(0, 10);
-  console.log(`[Meta API] getAccountInsights ${accountId}: ${sinceStr} → ${untilStr} (UTC)`);
+  const { since: sinceStr, until: untilStr } = getDateRangeBRT(days);
+  console.log(`[Meta API] getAccountInsights ${accountId}: ${sinceStr} → ${untilStr} (BRT)`);
 
   const params = new URLSearchParams({
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since: sinceStr, until: untilStr }),
+    action_attribution_windows: '["7d_click","1d_view"]',
     time_increment: "1",
     limit: "100",
   });
@@ -198,6 +189,7 @@ export async function getInsightsByDateRange(
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since, until }),
+    action_attribution_windows: '["7d_click","1d_view"]',
     time_increment: "1",
     limit: "100",
   });
@@ -219,6 +211,7 @@ export async function getTopAdInsights(
     access_token: accessToken,
     fields: "ad_id,ad_name,spend,impressions,reach,clicks,ctr,frequency,actions",
     time_range: JSON.stringify({ since, until }),
+    action_attribution_windows: '["7d_click","1d_view"]',
     level: "ad",
     sort: "spend_descending",
     limit: String(limit),

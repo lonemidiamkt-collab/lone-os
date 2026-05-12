@@ -4,14 +4,13 @@ import {
   getTopAdInsights,
   getAdThumbnail,
   getDemographicBreakdown,
-  extractConversions,
 } from "@/lib/meta/api";
+import { countMessagesFromActions } from "@/lib/meta/messages";
+import { toBRTDateStr } from "@/lib/meta/timezone";
 import type { PeriodKind, SnapshotData, CreativeItem, DemographicRow } from "./types";
 
-const BRT = "America/Sao_Paulo";
-
 function toDateStr(d: Date): string {
-  return d.toLocaleDateString("sv-SE", { timeZone: BRT }); // YYYY-MM-DD
+  return toBRTDateStr(d);
 }
 
 function addDays(d: Date, n: number): Date {
@@ -21,14 +20,14 @@ function addDays(d: Date, n: number): Date {
 }
 
 function startOfMonth(d: Date, offset = 0): Date {
-  const s = new Date(d.toLocaleString("en-US", { timeZone: BRT }));
+  const s = new Date(d.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
   s.setMonth(s.getMonth() + offset, 1);
   s.setHours(0, 0, 0, 0);
   return s;
 }
 
 function endOfMonth(d: Date, offset = 0): Date {
-  const s = new Date(d.toLocaleString("en-US", { timeZone: BRT }));
+  const s = new Date(d.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
   s.setMonth(s.getMonth() + offset + 1, 0);
   s.setHours(0, 0, 0, 0);
   return s;
@@ -170,12 +169,12 @@ export async function buildSnapshot(params: {
   const sumNum = (rows: typeof cur, field: keyof typeof cur[0]) =>
     rows.reduce((acc, r) => acc + (parseFloat(r[field] as string) || 0), 0);
 
-  const curMessages = cur.reduce((acc, r) => acc + extractConversions(r.actions), 0);
+  const curMessages = cur.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
   const curSpend    = sumNum(cur, "spend");
   const curReach    = sumNum(cur, "reach");
   const curCpa      = curMessages > 0 ? curSpend / curMessages : 0;
 
-  const prevMessages = prev.reduce((acc, r) => acc + extractConversions(r.actions), 0);
+  const prevMessages = prev.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
   const prevSpend    = sumNum(prev, "spend");
   const prevReach    = sumNum(prev, "reach");
   const prevCpa      = prevMessages > 0 ? prevSpend / prevMessages : 0;
@@ -183,12 +182,12 @@ export async function buildSnapshot(params: {
   // ── Chart (série diária) ──────────────────────────────────────────────────
   const sortedDays = [...cur].sort((a, b) => a.date_start.localeCompare(b.date_start));
   const days = sortedDays.map((r) => r.date_start);
-  const msgSeries  = sortedDays.map((r) => extractConversions(r.actions));
+  const msgSeries  = sortedDays.map((r) => countMessagesFromActions(r.actions));
   const peakIdx    = msgSeries.indexOf(Math.max(...msgSeries));
 
   // ── Top 5 criativos ───────────────────────────────────────────────────────
   const byMessages = [...ads]
-    .map((a) => ({ ...a, msgs: extractConversions(a.actions) }))
+    .map((a) => ({ ...a, msgs: countMessagesFromActions(a.actions) }))
     .sort((a, b) => b.msgs - a.msgs)
     .slice(0, 5);
 

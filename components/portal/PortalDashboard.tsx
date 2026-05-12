@@ -493,7 +493,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
             {new Date().toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
           </p>
           <p className="text-[10px]" style={{ color: "#4B5563" }}>
-            Atribuição: 7 dias clique + 1 dia visualização
+            Atribuição: 7 dias de clique + 1 dia de visualização · Valores podem divergir em até 5% do Gerenciador por atribuição diferida
           </p>
         </div>
       </div>
