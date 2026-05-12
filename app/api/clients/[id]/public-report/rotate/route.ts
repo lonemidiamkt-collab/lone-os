@@ -9,12 +9,13 @@ const BASE_URL = process.env.PUBLIC_REPORT_DOMAIN ?? "https://painel.lonemidia.c
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
   if (!user.isAdmin) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
 
+  const { id } = await params;
   const newToken = crypto.randomUUID();
 
   // Revoga o token atual e emite um novo atomicamente
@@ -26,7 +27,7 @@ export async function POST(
       public_report_token_revoked_at: null,
       public_report_enabled: true,
     })
-    .eq("id", params.id);
+    .eq("id", id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

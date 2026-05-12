@@ -9,13 +9,13 @@ const BASE_URL = process.env.PUBLIC_REPORT_DOMAIN ?? "https://painel.lonemidia.c
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
   if (!user.isAdmin) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
 
-  const clientId = params.id;
+  const { id: clientId } = await params;
 
   // Verifica se o cliente existe
   const { data: client, error: fetchErr } = await supabaseAdmin
