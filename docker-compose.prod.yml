@@ -8,6 +8,7 @@ services:
         NEXT_PUBLIC_SUPABASE_URL: https://painel.lonemidia.com/supabase
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
         NEXT_PUBLIC_META_APP_ID: ${NEXT_PUBLIC_META_APP_ID}
+        NEXT_PUBLIC_PORTAL_DOMAIN: https://painel.lonemidia.com
     restart: always
     ports:
       - "3000:3000"

@@ -1,6 +1,7 @@
 // Meta Marketing API client — server-side only
 
 import { META_CONFIG, getGraphUrl } from "./config";
+import { getDateRangeBRT } from "./timezone";
 
 interface TokenResponse {
   access_token: string;
@@ -113,19 +114,14 @@ export async function getCampaignInsights(
   days: number = 7,
 ): Promise<MetaInsight[]> {
   const url = getGraphUrl(`/${campaignId}/insights`);
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const since = new Date(yesterday);
-  since.setDate(since.getDate() - (days - 1));
-
-  const sinceStr = since.toISOString().slice(0, 10);
-  const untilStr = yesterday.toISOString().slice(0, 10);
-  console.log(`[Meta API] getCampaignInsights ${campaignId}: ${sinceStr} → ${untilStr} (UTC)`);
+  const { since: sinceStr, until: untilStr } = getDateRangeBRT(days);
+  console.log(`[Meta API] getCampaignInsights ${campaignId}: ${sinceStr} → ${untilStr} (BRT)`);
 
   const params = new URLSearchParams({
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since: sinceStr, until: untilStr }),
+    action_attribution_windows: '["7d_click","1d_view"]',
     time_increment: "1",
     limit: "100",
   });
@@ -143,25 +139,120 @@ export async function getAccountInsights(
   days: number = 30,
 ): Promise<MetaInsight[]> {
   const url = getGraphUrl(`/${accountId}/insights`);
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const since = new Date(yesterday);
-  since.setDate(since.getDate() - (days - 1));
-
-  const sinceStr = since.toISOString().slice(0, 10);
-  const untilStr = yesterday.toISOString().slice(0, 10);
-  console.log(`[Meta API] getAccountInsights ${accountId}: ${sinceStr} → ${untilStr} (UTC)`);
+  const { since: sinceStr, until: untilStr } = getDateRangeBRT(days);
+  console.log(`[Meta API] getAccountInsights ${accountId}: ${sinceStr} → ${untilStr} (BRT)`);
 
   const params = new URLSearchParams({
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since: sinceStr, until: untilStr }),
+    action_attribution_windows: '["7d_click","1d_view"]',
     time_increment: "1",
     limit: "100",
   });
 
   const res = await fetch(`${url}?${params}`);
   if (!res.ok) throw new Error(`Failed to fetch account insights for ${accountId}`);
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+// ── Portal: date-range insights ──────────────────────────────────────────────
+
+export interface MetaAdInsight {
+  ad_id: string;
+  ad_name: string;
+  spend: string;
+  impressions: string;
+  reach: string;
+  clicks: string;
+  ctr: string;
+  frequency?: string;
+  actions?: { action_type: string; value: string }[];
+}
+
+export interface MetaDemographicRow {
+  age: string;
+  gender: string;
+  reach: string;
+  impressions: string;
+}
+
+export async function getInsightsByDateRange(
+  accountId: string,
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<MetaInsight[]> {
+  const url = getGraphUrl(`/${accountId}/insights`);
+  const params = new URLSearchParams({
+    access_token: accessToken,
+    fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
+    time_range: JSON.stringify({ since, until }),
+    action_attribution_windows: '["7d_click","1d_view"]',
+    time_increment: "1",
+    limit: "100",
+  });
+  const res = await fetch(`${url}?${params}`);
+  if (!res.ok) throw new Error(`Meta insights failed for ${accountId}`);
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+export async function getTopAdInsights(
+  accountId: string,
+  accessToken: string,
+  since: string,
+  until: string,
+  limit = 10,
+): Promise<MetaAdInsight[]> {
+  const url = getGraphUrl(`/${accountId}/insights`);
+  const params = new URLSearchParams({
+    access_token: accessToken,
+    fields: "ad_id,ad_name,spend,impressions,reach,clicks,ctr,frequency,actions",
+    time_range: JSON.stringify({ since, until }),
+    action_attribution_windows: '["7d_click","1d_view"]',
+    level: "ad",
+    sort: "spend_descending",
+    limit: String(limit),
+  });
+  const res = await fetch(`${url}?${params}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+export async function getAdThumbnail(
+  adId: string,
+  accessToken: string,
+): Promise<string | null> {
+  const url = getGraphUrl(`/${adId}`);
+  const params = new URLSearchParams({
+    access_token: accessToken,
+    fields: "creative{thumbnail_url}",
+  });
+  const res = await fetch(`${url}?${params}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data?.creative?.thumbnail_url ?? null;
+}
+
+export async function getDemographicBreakdown(
+  accountId: string,
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<MetaDemographicRow[]> {
+  const url = getGraphUrl(`/${accountId}/insights`);
+  const params = new URLSearchParams({
+    access_token: accessToken,
+    fields: "reach,impressions",
+    breakdowns: "gender,age",
+    time_range: JSON.stringify({ since, until }),
+    limit: "100",
+  });
+  const res = await fetch(`${url}?${params}`);
+  if (!res.ok) return [];
   const data = await res.json();
   return data.data ?? [];
 }

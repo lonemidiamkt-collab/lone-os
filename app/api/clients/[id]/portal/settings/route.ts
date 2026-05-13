@@ -5,9 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 
-const BASE_URL = process.env.PUBLIC_REPORT_DOMAIN ?? "https://painel.lonemidia.com";
-
-export async function POST(
+export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -16,21 +14,21 @@ export async function POST(
   if (!user.isAdmin) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
 
   const { id } = await params;
-  const newToken = crypto.randomUUID();
+  const body = await req.json();
 
-  // Revoga o token atual e emite um novo atomicamente
-  const { error } = await supabaseAdmin
-    .from("clients")
-    .update({
-      public_report_token: newToken,
-      public_report_token_created_at: new Date().toISOString(),
-      public_report_token_revoked_at: null,
-      public_report_enabled: true,
-    })
-    .eq("id", id);
+  const patch: Record<string, unknown> = {};
+  if (typeof body.whatsapp_team_phone === "string") {
+    patch.whatsapp_team_phone = body.whatsapp_team_phone.trim() || null;
+  }
+  if (typeof body.portal_welcome_message === "string") {
+    patch.portal_welcome_message = body.portal_welcome_message.slice(0, 280).trim() || null;
+  }
 
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: "Nenhum campo válido" }, { status: 400 });
+  }
+
+  const { error } = await supabaseAdmin.from("clients").update(patch).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  const fullUrl = `${BASE_URL}/relatorio/${newToken}`;
-  return NextResponse.json({ success: true, token: newToken, full_url: fullUrl });
+  return NextResponse.json({ success: true });
 }

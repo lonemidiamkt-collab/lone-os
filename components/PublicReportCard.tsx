@@ -41,7 +41,7 @@ export default function PublicReportCard({ client, onUpdate }: Props) {
     setError(null);
     try {
       const res = await authedFetch(
-        `/api/clients/${client.id}/public-report/${endpoint}`,
+        `/api/clients/${client.id}/portal/${endpoint}`,
         { method: "POST" }
       );
       const json = await res.json();
