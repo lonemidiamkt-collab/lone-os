@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { buildSnapshot } from "@/lib/portal/buildSnapshot";
@@ -30,6 +31,8 @@ export async function POST(req: NextRequest) {
   for (const c of clients as Array<{ id: string; nome_fantasia?: string; name: string }>) {
     const clientName = c.nome_fantasia || c.name;
     try {
+      Sentry.setContext("snapshot_client", { client_id: c.id, client_name: clientName });
+      Sentry.setTag("cron_endpoint", "true");
       const snap = await buildSnapshot({ clientId: c.id, periodKind: "last_week", now });
       await supabaseAdmin
         .from("client_report_snapshots")

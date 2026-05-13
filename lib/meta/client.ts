@@ -7,6 +7,7 @@
 // EXEMPT: lib/meta/useMetaAds.ts (hook de browser, auth diferente, lida com
 // date_preset em vez de time_range — não compatível com este wrapper).
 
+import * as Sentry from "@sentry/nextjs";
 import { getGraphUrl } from "./config";
 
 export interface InsightsFetchOptions {
@@ -38,9 +39,17 @@ export async function metaInsightsFetch(
   if (opts.sort) params.set("sort", opts.sort);
   if (opts.timeIncrement !== undefined) params.set("time_increment", String(opts.timeIncrement));
 
+  Sentry.addBreadcrumb({
+    category: "meta-api",
+    message: `GET ${endpoint}`,
+    data: { since: opts.timeRange.since, until: opts.timeRange.until, level: opts.level },
+    level: "info",
+  });
+
   const res = await fetch(`${url}?${params}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    Sentry.setTag("meta_api_call", true);
     throw new Error(`Meta insights failed for ${endpoint}: ${JSON.stringify(err)}`);
   }
   const data = await res.json();
