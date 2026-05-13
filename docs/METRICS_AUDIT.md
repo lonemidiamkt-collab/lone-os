@@ -130,12 +130,17 @@ Sem esse parâmetro, a Meta usa a janela padrão da conta (`7d_click + 1d_view` 
 
 ### SUSPEITO-1 — Categoria D: Duas fontes de spend
 
-- Portal: `/act_X/insights` (account-level) → inclui campanhas deletadas no período
-- Tráfego: soma por campanha → exclui campanhas deletadas se não listadas
+**Status: MONITORADO — sem divergência relevante (2026-05-13)**
 
-Hipótese: cliente pausou campanha no meio do período. Portal conta o spend dela, tráfego não lista mais. Divergência de X% do spend da campanha pausada.
+Auditado via `GET /api/system/audit-spend` em 3 clientes, últimos 30 dias:
 
-**Como confirmar:** comparar soma das campanhas ativas vs total da conta para o mesmo período no banco.
+| Cliente | Spend Portal | Spend Traffic | Divergência |
+|---------|-------------|---------------|-------------|
+| MADEIRAO MÓVEIS | R$ 677,99 | R$ 677,99 | 0% ✅ |
+| Quero Tintas | R$ 178,76 | R$ 178,76 | 0% ✅ |
+| Óticas Rhodrigo | R$ 990,32 | R$ 990,32 | 0% ✅ |
+
+Hipótese original não confirmada nos dados reais. Remonitorar se cliente reportar divergência.
 
 ### SUSPEITO-2 — Categoria G: Cache 6h mascara geração recente
 
