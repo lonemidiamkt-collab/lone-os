@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const SUPABASE_INTERNAL = process.env.SUPABASE_INTERNAL_URL ?? "http://supabase-kong-1:8000";
 
@@ -21,4 +22,11 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  org: "lone-midia",
+  project: "lone-os-portal",
+  silent: true,
+  disableLogger: true,
+  // Não bloqueia build se Sentry não estiver configurado
+  telemetry: false,
+});
