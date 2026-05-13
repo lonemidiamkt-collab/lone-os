@@ -23,10 +23,16 @@ const nextConfig: NextConfig = {
 };
 
 export default withSentryConfig(nextConfig, {
-  org: "lone-midia",
-  project: "lone-os-portal",
-  silent: true,
-  disableLogger: true,
-  // Não bloqueia build se Sentry não estiver configurado
+  org: process.env.SENTRY_ORG ?? "lone-midia",
+  project: process.env.SENTRY_PROJECT ?? "lone-os-portal",
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Upload source maps mais abrangente para stack traces legíveis
+  widenClientFileUpload: true,
+
+  // Tunnel route: evita bloqueio por ad-blockers
+  tunnelRoute: "/monitoring",
+
+  silent: !process.env.CI,
   telemetry: false,
 });

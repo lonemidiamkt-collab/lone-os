@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { buildSnapshot } from "@/lib/portal/buildSnapshot";
@@ -69,6 +70,8 @@ export async function POST(
   }
 
   // Gera snapshot fresco
+  Sentry.setContext("portal_snapshot", { client_id: client.id, period_kind: periodKind });
+  Sentry.setTag("portal_endpoint", "true");
   const data = await buildSnapshot({ clientId: client.id as string, periodKind, now });
 
   // Calcula period_start/end para o upsert
