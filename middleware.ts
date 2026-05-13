@@ -9,7 +9,12 @@ export function middleware(request: NextRequest) {
 
   // Allow public assets and API routes
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    // Portal público — não indexar
+    if (pathname.startsWith("/portal")) {
+      res.headers.set("X-Robots-Tag", "noindex, nofollow");
+    }
+    return res;
   }
 
   // Auth gate pra /api/*: aceita 3 fontes (sincronizado com lib/supabase/auth-server.ts).
