@@ -172,12 +172,12 @@ export async function buildSnapshot(params: {
   const curMessages = cur.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
   const curSpend    = sumNum(cur, "spend");
   const curReach    = sumNum(cur, "reach");
-  const curCpa      = curMessages > 0 ? curSpend / curMessages : 0;
+  const curCpa: number | null  = curMessages > 0 ? curSpend / curMessages : null;
 
   const prevMessages = prev.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
   const prevSpend    = sumNum(prev, "spend");
   const prevReach    = sumNum(prev, "reach");
-  const prevCpa      = prevMessages > 0 ? prevSpend / prevMessages : 0;
+  const prevCpa: number | null = prevMessages > 0 ? prevSpend / prevMessages : null;
 
   // ── Chart (série diária) ──────────────────────────────────────────────────
   const sortedDays = [...cur].sort((a, b) => a.date_start.localeCompare(b.date_start));
@@ -253,7 +253,9 @@ export async function buildSnapshot(params: {
     kpis: {
       messages: { value: curMessages, ...delta(curMessages, prevMessages) },
       spend:    { value: Math.round(curSpend * 100) / 100, ...delta(curSpend, prevSpend) },
-      cpa:      { value: Math.round(curCpa * 100) / 100, ...delta(curCpa, prevCpa) },
+      cpa: curCpa !== null
+        ? { value: Math.round(curCpa * 100) / 100, ...delta(curCpa, prevCpa ?? 0) }
+        : { value: null, delta_pct: null, direction: "neutral" as const },
       reach:    { value: curReach, ...delta(curReach, prevReach) },
     },
     chart: {

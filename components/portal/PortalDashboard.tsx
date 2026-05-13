@@ -180,7 +180,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
 
   const kpiItems: Array<{
     key: string; label: string;
-    val: { value: number; delta_pct: number | null; direction: string } | undefined;
+    val: { value: number | null; delta_pct: number | null; direction: string } | undefined;
     format: (v: number) => string;
     inverse?: boolean;
   }> = [
@@ -261,9 +261,9 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
               ) : (
                 <div className="flex items-end gap-2">
                   <p className="text-3xl font-bold leading-none">
-                    {val ? format(val.value) : "—"}
+                    {val?.value != null ? format(val.value) : "—"}
                   </p>
-                  {val && <DeltaBadge delta={val.delta_pct} inverse={inverse} />}
+                  {val?.value != null && <DeltaBadge delta={val.delta_pct} inverse={inverse} />}
                 </div>
               )}
             </Card>

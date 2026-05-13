@@ -1,7 +1,7 @@
 export type PeriodKind = "last_week" | "last_2_weeks" | "this_month" | "last_month";
 
 export interface KpiValue {
-  value: number;
+  value: number | null;
   delta_pct: number | null;
   direction: "up" | "down" | "neutral";
 }

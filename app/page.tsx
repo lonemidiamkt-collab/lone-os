@@ -27,6 +27,7 @@ import DesignQueue from "@/components/sector/DesignQueue";
 import BudgetAlert from "@/components/sector/BudgetAlert";
 import SmartAlerts from "@/components/SmartAlerts";
 import SystemAlertBanner from "@/components/SystemAlertBanner";
+import MetaHealthCard from "@/components/MetaHealthCard";
 import ClientHealthRadar from "@/components/ClientHealthRadar";
 import PlatformUpdatesWidget from "@/components/PlatformUpdatesWidget";
 
@@ -1048,6 +1049,7 @@ export default function DashboardPage() {
         {/* Platform updates widget — aparece quando tem novidade nao lida */}
         <PlatformUpdatesWidget />
         {isAdmin && <SystemAlertBanner />}
+        {isAdmin && <MetaHealthCard />}
 
         {/* Urgent broadcast banner — visible to all */}
         {notices.filter((n) => n.urgent).length > 0 && (
