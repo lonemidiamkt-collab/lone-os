@@ -33,7 +33,8 @@ export async function POST(req: NextRequest) {
       status: res.status,
       headers: { "Content-Type": res.headers.get("Content-Type") ?? "text/plain" },
     });
-  } catch {
-    return NextResponse.json({ error: "Tunnel error" }, { status: 500 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Tunnel error";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 }
