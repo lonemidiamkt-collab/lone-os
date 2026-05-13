@@ -256,24 +256,3 @@ export async function getDemographicBreakdown(
   const data = await res.json();
   return data.data ?? [];
 }
-
-// Helper: extract conversions from actions array
-export function extractConversions(actions?: { action_type: string; value: string }[]): number {
-  if (!actions) return 0;
-  const convTypes = ["offsite_conversion", "lead", "onsite_conversion.messaging_conversation_started_7d", "omni_purchase"];
-  let total = 0;
-  for (const action of actions) {
-    if (convTypes.some((t) => action.action_type.includes(t))) {
-      total += parseInt(action.value, 10) || 0;
-    }
-  }
-  // fallback: use "results" or any messaging action
-  if (total === 0) {
-    for (const action of actions) {
-      if (action.action_type === "onsite_conversion.messaging_conversation_started_7d" || action.action_type === "link_click") {
-        total += parseInt(action.value, 10) || 0;
-      }
-    }
-  }
-  return total;
-}
