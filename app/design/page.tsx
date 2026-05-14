@@ -1,6 +1,7 @@
 "use client";
 
 import Header from "@/components/Header";
+import SignedImage from "@/components/shared/SignedImage";
 import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -271,8 +272,7 @@ function UploadArtModal({
           {artLink && artLink.includes("http") && (
             isImageUrl(artLink) ? (
               <div className="rounded-xl overflow-hidden border border-[#1a1a1a] bg-[#0a0a0a]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={artLink} alt="Preview da arte" className="w-full max-h-48 object-contain" />
+                <SignedImage src={artLink} alt="Preview da arte" className="w-full max-h-48 object-contain" />
               </div>
             ) : (
               <a
@@ -825,7 +825,7 @@ export default function DesignPage() {
                           {/* Art thumbnail */}
                           {hasArt && (
                             <div className="w-full h-20 rounded-md overflow-hidden bg-muted">
-                              <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                              <SignedImage src={item.imageUrl!} alt="" className="w-full h-full object-cover" />
                             </div>
                           )}
 
@@ -1104,7 +1104,7 @@ export default function DesignPage() {
                     className="card p-4 flex items-center gap-4 cursor-pointer hover:border-[#0d4af5]/20 transition-all">
                     {card.imageUrl ? (
                       <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted shrink-0">
-                        <img src={card.imageUrl} alt="" className="w-full h-full object-cover" />
+                        <SignedImage src={card.imageUrl!} alt="" className="w-full h-full object-cover" />
                       </div>
                     ) : (
                       <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
