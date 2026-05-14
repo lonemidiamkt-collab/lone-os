@@ -9,7 +9,7 @@ services:
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
         NEXT_PUBLIC_META_APP_ID: ${NEXT_PUBLIC_META_APP_ID}
         NEXT_PUBLIC_PORTAL_DOMAIN: https://resultados.lonemidia.com
-      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
     restart: always
     ports:
       - "3000:3000"
