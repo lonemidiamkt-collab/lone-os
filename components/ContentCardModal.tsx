@@ -125,7 +125,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
 
     setUploadError(null);
     setUploadOk(false);
-    setImgError(false);
+
 
     // Validações antes de subir
     if (file.size === 0) { setUploadError("Arquivo vazio."); return; }
