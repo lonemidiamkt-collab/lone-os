@@ -13,6 +13,7 @@ import { useRole } from "@/lib/context/RoleContext";
 import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs } from "@/lib/utils";
 import Link from "next/link";
 import type { Task, ContentCard, DesignRequest } from "@/lib/types";
+import SignedImage from "@/components/shared/SignedImage";
 
 type FilterType = "all" | "tasks" | "content" | "design" | "approvals";
 
@@ -324,7 +325,7 @@ function CardRow({ card, isApproval }: { card: ContentCard; isApproval?: boolean
     }`}>
       {card.imageUrl && card.imageUrl.includes("http") ? (
         <div className="w-10 h-10 rounded-lg overflow-hidden bg-muted shrink-0">
-          <img src={card.imageUrl} alt="" className="w-full h-full object-cover" />
+          <SignedImage src={card.imageUrl} alt="" className="w-full h-full object-cover" />
         </div>
       ) : (
         <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
