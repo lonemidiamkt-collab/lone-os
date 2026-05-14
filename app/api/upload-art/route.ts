@@ -97,7 +97,19 @@ export async function POST(req: NextRequest) {
     }
 
     const { data: pub } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
-    return NextResponse.json({ url: pub.publicUrl, path, size: blob.size, type: blob.type });
+
+    // supabaseAdmin usa SUPABASE_INTERNAL_URL (hostname Docker interno) como base.
+    // getPublicUrl() constrói a URL sem fazer request — usa esse hostname diretamente.
+    // Resultado: "http://supabase-kong-1:8000/..." que browsers não conseguem resolver.
+    // Reescreve para a URL pública igual ao que signed-url/route.ts já faz.
+    let resolvedUrl = pub.publicUrl;
+    const internalBase = process.env.SUPABASE_INTERNAL_URL ?? "";
+    const publicBase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    if (internalBase && publicBase && resolvedUrl.startsWith(internalBase)) {
+      resolvedUrl = publicBase + resolvedUrl.slice(internalBase.length);
+    }
+
+    return NextResponse.json({ url: resolvedUrl, path, size: blob.size, type: blob.type });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
     console.error("[upload-art] unhandled:", err);
