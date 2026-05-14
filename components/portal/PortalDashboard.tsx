@@ -7,7 +7,6 @@ import {
 } from "recharts";
 import { ImageIcon } from "lucide-react";
 import type { SnapshotData, PeriodKind } from "@/lib/portal/types";
-import { formatDelta, type MetricType } from "@/lib/portal/formatDelta";
 import MobileFAB from "./MobileFAB";
 
 const WA_NUMBER = "5522981530700";
@@ -169,14 +168,14 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
   const pulse = reducedMotion ? "" : "animate-pulse";
 
   const kpiItems: Array<{
-    metric: MetricType; label: string;
+    key: string; label: string;
     val: { value: number | null; delta_pct: number | null; direction: string } | undefined;
     format: (v: number) => string;
   }> = [
-    { metric: "messages", label: "Mensagens", val: kpis?.messages, format: (v) => fmt(v) },
-    { metric: "spend",    label: "Investido", val: kpis?.spend,    format: (v) => fmtBrl(v) },
-    { metric: "cpa",      label: "Custo/msg", val: kpis?.cpa,      format: (v) => fmtBrl(v) },
-    { metric: "reach",    label: "Alcance",   val: kpis?.reach,    format: (v) => fmt(v) },
+    { key: "messages", label: "Mensagens", val: kpis?.messages, format: (v) => fmt(v) },
+    { key: "spend",    label: "Investido", val: kpis?.spend,    format: (v) => fmtBrl(v) },
+    { key: "cpa",      label: "Custo/msg", val: kpis?.cpa,      format: (v) => fmtBrl(v) },
+    { key: "reach",    label: "Alcance",   val: kpis?.reach,    format: (v) => fmt(v) },
   ];
 
   return (
@@ -242,33 +241,18 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
 
         {/* ── KPIs — sempre 4 colunas no desktop, 2 no tablet, 1 no mobile */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6 lg:mb-7">
-          {kpiItems.map(({ metric, label, val, format }) => {
-            const delta = val?.value != null
-              ? formatDelta(metric, val.delta_pct, period)
-              : null;
-            return (
-              <Card key={metric} className="p-4">
-                <p className="text-xs mb-3" style={{ color: "#6B7280" }}>{label}</p>
-                {loading ? (
-                  <div className={`h-8 w-24 rounded ${pulse}`} style={{ background: "#1A1F33" }} />
-                ) : (
-                  <div>
-                    <p className="text-3xl font-bold leading-none">
-                      {val?.value != null ? format(val.value) : "—"}
-                    </p>
-                    {delta && (
-                      <p
-                        className="text-[11px] font-medium mt-1.5 leading-tight"
-                        style={{ color: delta.color }}
-                      >
-                        {delta.text}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </Card>
-            );
-          })}
+          {kpiItems.map(({ key, label, val, format }) => (
+            <Card key={key} className="p-4">
+              <p className="text-xs mb-3" style={{ color: "#6B7280" }}>{label}</p>
+              {loading ? (
+                <div className={`h-8 w-24 rounded ${pulse}`} style={{ background: "#1A1F33" }} />
+              ) : (
+                <p className="text-3xl font-bold leading-none">
+                  {val?.value != null ? format(val.value) : "—"}
+                </p>
+              )}
+            </Card>
+          ))}
         </div>
 
         {/* ══════════════════════════════════════════════════════════════
