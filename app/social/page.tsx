@@ -3,6 +3,7 @@
 import Header from "@/components/Header";
 import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
+import SignedImage from "@/components/shared/SignedImage";
 import ContentIdeasModal from "@/components/ContentIdeasModal";
 import Client360Modal from "@/components/Client360Modal";
 import CampaignModal from "@/components/CampaignModal";
@@ -1724,7 +1725,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
               >
                 {card.imageUrl ? (
                   <div className="aspect-video w-full overflow-hidden bg-muted">
-                    <img src={card.imageUrl} alt={card.title}
+                    <SignedImage src={card.imageUrl!} alt={card.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                   </div>
                 ) : (
