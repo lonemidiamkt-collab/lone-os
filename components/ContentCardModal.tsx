@@ -12,6 +12,7 @@ import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import type { ContentCard, SocialPlatform } from "@/lib/types";
+import SignedImage from "@/components/shared/SignedImage";
 import {
   Dialog,
   DialogContent,
@@ -112,7 +113,6 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadOk, setUploadOk] = useState(false);
-  const [imgError, setImgError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
@@ -227,17 +227,16 @@ export default function ContentCardModal({ card, onClose }: Props) {
           {/* Left: Art preview */}
           <div className="w-72 border-r border-border flex flex-col shrink-0">
             <div className="flex-1 relative bg-muted overflow-hidden">
-              {imageUrl && !imageUrl.startsWith("blob:") && !imgError ? (
-                <img
+              {imageUrl && !imageUrl.startsWith("blob:") ? (
+                <SignedImage
                   src={imageUrl}
-                  alt="Arte do conteudo"
+                  alt="Arte do conteúdo"
                   className="w-full h-full object-cover"
-                  onError={() => setImgError(true)}
                 />
               ) : imageUrl ? (
                 <DrivePreviewFallback
                   clientId={card.clientId}
-                  label={imgError ? "Preview indisponível." : "Preview removido para otimizar o sistema."}
+                  label="Preview removido para otimizar o sistema."
                 />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
