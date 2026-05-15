@@ -61,13 +61,16 @@ function Thumbnail({ url, path, name }: { url: string | null; path: string | nul
   })();
 
   if (!src || broken) {
+    const isVideo = name.toLowerCase().includes("video") || name.toLowerCase().includes("vídeo") || name.toLowerCase().includes("reel");
     return (
       <div
         className="w-14 h-14 rounded-lg shrink-0 flex flex-col items-center justify-center gap-0.5"
-        style={{ background: "#2a2a2a", border: "1px solid #1A1F33" }}
+        style={{ background: "#1a1a2e", border: "1px solid #1A1F33" }}
       >
-        <ImageIcon size={14} color="#6B7280" />
-        <span className="text-[9px]" style={{ color: "#6B7280" }}>Sem imagem</span>
+        <span style={{ fontSize: 18 }}>{isVideo ? "🎬" : "🖼️"}</span>
+        <span className="text-[8px] text-center px-1" style={{ color: "#6B7280", lineHeight: 1.2 }}>
+          {isVideo ? "Vídeo" : "Arte"}
+        </span>
       </div>
     );
   }
