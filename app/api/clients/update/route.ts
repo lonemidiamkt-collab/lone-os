@@ -105,6 +105,19 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Sincroniza ad_accounts quando meta_ad_account_id muda
+    if (row.meta_ad_account_id) {
+      const accountId = String(row.meta_ad_account_id);
+      // Remove entradas antigas deste cliente (evita duplicatas que quebram .single())
+      await supabaseAdmin.from("ad_accounts").delete().eq("client_id", id).neq("meta_account_id", accountId);
+      // Upsert da entrada correta
+      await supabaseAdmin.from("ad_accounts").upsert(
+        { client_id: id, meta_account_id: accountId },
+        { onConflict: "meta_account_id" },
+      );
+    }
+
     return NextResponse.json({ success: true, client: updated });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

@@ -65,6 +65,7 @@ export default function EditClientModal({ client, onClose }: Props) {
     assignedSocial: client.assignedSocial ?? "",
     assignedDesigner: client.assignedDesigner ?? "",
     // Acessos (cofre)
+    metaAdAccountId: client.metaAdAccountId ?? "",
     facebookLogin: client.facebookLogin ?? "",
     facebookPassword: client.facebookPassword ?? "",
     googleAdsLogin: client.googleAdsLogin ?? "",
@@ -109,6 +110,9 @@ export default function EditClientModal({ client, onClose }: Props) {
       assignedTraffic: needsTraffic ? form.assignedTraffic : "",
       assignedSocial: needsSocial ? form.assignedSocial : "",
       assignedDesigner: needsDesigner ? form.assignedDesigner : "",
+      metaAdAccountId: form.metaAdAccountId
+        ? (form.metaAdAccountId.startsWith("act_") ? form.metaAdAccountId : `act_${form.metaAdAccountId}`)
+        : undefined,
       facebookLogin: form.facebookLogin || undefined,
       facebookPassword: form.facebookPassword || undefined,
       googleAdsLogin: form.googleAdsLogin || undefined,
@@ -285,6 +289,23 @@ export default function EditClientModal({ client, onClose }: Props) {
           {/* ═══ ACESSOS ═══ */}
           {tab === "acessos" && (
             <div className="space-y-4 animate-fade-in">
+              {/* Conta de Anúncio Meta — apenas admin/manager */}
+              {isAdmin && (
+                <div className="rounded-lg border border-[#1e2a3a] bg-[#0a0f1a] p-3 space-y-2">
+                  <p className="text-[10px] text-[#0d4af5] uppercase tracking-wider flex items-center gap-1.5">
+                    <Facebook size={10} /> Conta de Anúncio Meta (Portal de Resultados)
+                  </p>
+                  <Input
+                    value={form.metaAdAccountId}
+                    onChange={(e) => set("metaAdAccountId", e.target.value)}
+                    placeholder="Ex: 1414336926507044 ou act_1414336926507044"
+                    className="text-xs font-mono"
+                  />
+                  <p className="text-[9px] text-zinc-600">
+                    ID da conta de anúncios no Gerenciador da Meta. Usado para gerar o relatório do portal do cliente.
+                  </p>
+                </div>
+              )}
               <p className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
                 <Shield size={10} className="text-[#0d4af5]" /> Cofre de Acessos
               </p>
