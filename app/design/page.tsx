@@ -482,9 +482,10 @@ export default function DesignPage() {
         pushNotification("content", "Arte entregue pelo Designer", `"${briefingReq.title}" (${briefingReq.clientName}) — arte pronta para confirmação.`, briefingReq.clientId);
         import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
       } else {
-        // Social media / outros adicionam referência — só anexa, não muda status nem notifica como entregue
+        // Social media / outros adicionam referência — anexa e notifica designer
         updateDesignRequest(briefingReq.id, { attachments: nextAttachments });
         setBriefingReq({ ...briefingReq, attachments: nextAttachments });
+        pushNotification("content", "Referência enviada", `"${briefingReq.title}" (${briefingReq.clientName}) — ${currentUser} enviou uma imagem de referência.`, briefingReq.clientId);
       }
 
       setBriefingUploadOk(true);
@@ -1432,42 +1433,52 @@ export default function DesignPage() {
               {briefingReq.attachments && briefingReq.attachments.length > 0 && (
                 <div className="space-y-1.5">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Artes anexadas ({briefingReq.attachments.length})</p>
-                  <div className="space-y-1">
-                    {briefingReq.attachments.map((url, i) => (
-                      <div key={i} className="flex items-center gap-1.5">
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0d4af5]/[0.05] border border-[#0d4af5]/20 hover:border-[#0d4af5]/40 transition-all text-xs text-[#3b6ff5] min-w-0"
-                        >
-                          <ExternalLink size={11} className="shrink-0" />
-                          <span className="truncate">Anexo #{i + 1}</span>
-                        </a>
-                        <a
-                          href={url}
-                          download
-                          className="p-2 rounded-lg border border-border hover:border-emerald-500/30 hover:text-emerald-400 text-muted-foreground transition-colors"
-                          title="Baixar arquivo"
-                        >
-                          <Download size={11} />
-                        </a>
-                        {(role === "designer" || role === "admin" || role === "manager") && (
-                          <button
-                            onClick={() => {
-                              const next = briefingReq.attachments!.filter((_, idx) => idx !== i);
-                              const nextStatus = next.length === 0 ? "in_progress" : briefingReq.status;
-                              updateDesignRequest(briefingReq.id, { attachments: next, status: nextStatus });
-                              setBriefingReq({ ...briefingReq, attachments: next, status: nextStatus });
-                            }}
-                            className="p-2 rounded-lg border border-border hover:border-red-500/30 hover:text-red-400 text-muted-foreground transition-colors"
-                            title="Remover anexo"
-                          >
-                            <X size={11} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                  <div className="space-y-2">
+                    {briefingReq.attachments.map((url, i) => {
+                      const isImg = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
+                      return (
+                        <div key={i} className="space-y-1">
+                          {isImg && (
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="block w-full rounded-lg overflow-hidden border border-border hover:border-primary/30 transition-colors">
+                              <SignedImage src={url} alt={`Anexo ${i + 1}`} className="w-full max-h-48 object-contain bg-muted" />
+                            </a>
+                          )}
+                          <div className="flex items-center gap-1.5">
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0d4af5]/[0.05] border border-[#0d4af5]/20 hover:border-[#0d4af5]/40 transition-all text-xs text-[#3b6ff5] min-w-0"
+                            >
+                              <ExternalLink size={11} className="shrink-0" />
+                              <span className="truncate">{isImg ? `Imagem ${i + 1}` : `Anexo #${i + 1}`}</span>
+                            </a>
+                            <a
+                              href={url}
+                              download
+                              className="p-2 rounded-lg border border-border hover:border-emerald-500/30 hover:text-emerald-400 text-muted-foreground transition-colors"
+                              title="Baixar arquivo"
+                            >
+                              <Download size={11} />
+                            </a>
+                            {(role === "designer" || role === "admin" || role === "manager") && (
+                              <button
+                                onClick={() => {
+                                  const next = briefingReq.attachments!.filter((_, idx) => idx !== i);
+                                  const nextStatus = next.length === 0 ? "in_progress" : briefingReq.status;
+                                  updateDesignRequest(briefingReq.id, { attachments: next, status: nextStatus });
+                                  setBriefingReq({ ...briefingReq, attachments: next, status: nextStatus });
+                                }}
+                                className="p-2 rounded-lg border border-border hover:border-red-500/30 hover:text-red-400 text-muted-foreground transition-colors"
+                                title="Remover anexo"
+                              >
+                                <X size={11} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
