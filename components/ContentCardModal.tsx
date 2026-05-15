@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import {
   Upload, Calendar, FileText, User, Tag,
-  Save, ImageIcon, Hash, AlignLeft, Globe,
+  Save, ImageIcon, Hash, AlignLeft,
   Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Palette,
 } from "lucide-react";
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -11,7 +11,7 @@ import { useContentStore } from "@/stores/useContentStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
-import type { ContentCard, SocialPlatform } from "@/lib/types";
+import type { ContentCard } from "@/lib/types";
 import SignedImage from "@/components/shared/SignedImage";
 import {
   Dialog,
@@ -26,13 +26,6 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { MarkdownEditor, MarkdownView, htmlToMarkdown } from "@/components/Markdown";
 
-const PLATFORM_OPTIONS: { value: SocialPlatform; label: string; emoji: string }[] = [
-  { value: "instagram", label: "Instagram", emoji: "📸" },
-  { value: "tiktok",    label: "TikTok",    emoji: "🎵" },
-  { value: "linkedin",  label: "LinkedIn",  emoji: "💼" },
-  { value: "youtube",   label: "YouTube",   emoji: "▶️" },
-  { value: "facebook",  label: "Facebook",  emoji: "👥" },
-];
 
 const STATUS_OPTIONS: { value: ContentCard["status"]; label: string; color: string }[] = [
   { value: "ideas", label: "Ideias", color: "bg-zinc-500" },
@@ -103,7 +96,6 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [briefing, setBriefing] = useState(htmlToMarkdown(card.briefing ?? ""));
   const [caption, setCaption] = useState(card.caption ?? "");
   const [hashtags, setHashtags] = useState(card.hashtags ?? "");
-  const [platform, setPlatform] = useState<SocialPlatform | "">(card.platform ?? "");
   const [dueDate, setDueDate] = useState(card.dueDate ?? "");
   const [status, setStatus] = useState(card.status);
   const [imageUrl, setImageUrl] = useState(card.imageUrl ?? "");
@@ -182,7 +174,6 @@ export default function ContentCardModal({ card, onClose }: Props) {
       briefing: briefing || undefined,
       caption: caption || undefined,
       hashtags: hashtags || undefined,
-      platform: (platform as SocialPlatform) || undefined,
       dueDate: dueDate || undefined,
       status,
       imageUrl: imageUrl || undefined,
@@ -302,30 +293,6 @@ export default function ContentCardModal({ card, onClose }: Props) {
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Tag size={12} />
                 <span>{card.format}</span>
-              </div>
-            </div>
-
-            {/* Platform */}
-            <div>
-              <Label className="flex items-center gap-1.5 mb-2">
-                <Globe size={12} />
-                Rede Social
-              </Label>
-              <div className="flex flex-wrap gap-1.5">
-                {PLATFORM_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setPlatform(platform === opt.value ? "" : opt.value)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                      platform === opt.value
-                        ? "bg-primary/20 text-primary border border-primary/30"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <span>{opt.emoji}</span>
-                    {opt.label}
-                  </button>
-                ))}
               </div>
             </div>
 
