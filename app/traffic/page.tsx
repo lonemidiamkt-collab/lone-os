@@ -23,7 +23,7 @@ import {
   Pause, AlertCircle, Download, ChevronDown, ChevronUp,
   Settings2, GripVertical, Zap, Activity, TrendingDown,
   Brain, ShieldAlert, Sparkles, CircleDot, Bell, FolderDown, Loader2, Facebook, Send,
-  Wallet, CreditCard, Banknote, AlertOctagon, Info,
+  Wallet, CreditCard, Banknote, AlertOctagon, Info, Palette,
 } from "lucide-react";
 import { getAttentionColor, getAttentionLabel, getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import type { Client, Task, TrafficMonthlyReport, AdCampaign, AdAccount, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
@@ -146,6 +146,7 @@ export default function TrafficPage() {
     campaign: import("@/lib/types").AdCampaign;
     client: import("@/lib/types").Client;
   } | null>(null);
+  const [showDesignModal, setShowDesignModal] = useState(false);
   const { currentUser, role } = useRole();
   const isAdmin = role === "admin" || role === "manager";
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();
@@ -245,9 +246,15 @@ export default function TrafficPage() {
               </button>
             ))}
           </div>
-          <span className="text-xs text-muted-foreground ml-auto">
+          <span className="text-xs text-muted-foreground">
             {filteredClients.length} cliente(s)
           </span>
+          <button
+            onClick={() => setShowDesignModal(true)}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d4af5]/10 border border-[#0d4af5]/30 text-[#0d4af5] text-xs font-medium hover:bg-[#0d4af5]/20 transition-colors"
+          >
+            <Palette size={13} /> Solicitar Arte ao Designer
+          </button>
         </div>
 
         {/* Metrics */}
@@ -512,6 +519,21 @@ export default function TrafficPage() {
         />
       )}
 
+      {/* Pedido de arte direto (sem campanha) */}
+      {showDesignModal && (
+        <TrafficDesignRequestModal
+          clients={filteredClients}
+          currentUser={currentUser}
+          onClose={() => setShowDesignModal(false)}
+          onSubmit={(req) => {
+            addDesignRequest(req);
+            pushNotification("content", "Arte solicitada ao Designer", `Pedido de arte para "${req.clientName}" enviado para a fila do Designer.`, req.clientId);
+            import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
+            setShowDesignModal(false);
+          }}
+        />
+      )}
+
       {/* Creative Request Modal */}
       {creativeModal && (
         <CreativeRequestModal
@@ -528,6 +550,160 @@ export default function TrafficPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// TRAFFIC DESIGN REQUEST MODAL (pedido direto sem campanha)
+// ══════════════════════════════════════════════════════════════
+
+const AD_FORMATS = [
+  "Video Selfie (9:16)", "Video Demonstracao (9:16)", "Reel Bastidores (9:16)",
+  "Post Feed (1:1)", "Post Feed (4:5)", "Carrossel (1:1)", "Story (9:16)",
+  "Banner Display", "Antes/Depois", "Outro",
+];
+
+function TrafficDesignRequestModal({
+  clients, currentUser, onClose, onSubmit,
+}: {
+  clients: import("@/lib/types").Client[];
+  currentUser: string;
+  onClose: () => void;
+  onSubmit: (req: Omit<import("@/lib/types").DesignRequest, "id">) => void;
+}) {
+  const [clientId, setClientId] = useState(clients[0]?.id ?? "");
+  const [format, setFormat] = useState("Post Feed (1:1)");
+  const [briefing, setBriefing] = useState("");
+  const [priority, setPriority] = useState<"low" | "medium" | "high" | "critical">("medium");
+  const [deadline, setDeadline] = useState("");
+
+  const selectedClient = clients.find((c) => c.id === clientId);
+
+  const handleSubmit = () => {
+    if (!selectedClient || !briefing.trim()) return;
+    onSubmit({
+      title: `Arte Tráfego — ${selectedClient.name}`,
+      clientId: selectedClient.id,
+      clientName: selectedClient.name,
+      requestedBy: currentUser,
+      priority,
+      status: "queued",
+      format,
+      briefing: briefing.trim(),
+      deadline: deadline || undefined,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold flex items-center gap-2">
+              <Palette size={16} className="text-[#0d4af5]" /> Solicitar Arte ao Designer
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Pedido direto do Tráfego → fila do Designer</p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Cliente */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-foreground">Cliente</label>
+          <select
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+          >
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Formato */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-foreground">Formato</label>
+          <div className="flex flex-wrap gap-1.5">
+            {AD_FORMATS.map((f) => (
+              <button
+                key={f}
+                onClick={() => setFormat(f)}
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                  format === f
+                    ? "bg-primary/20 text-primary border-primary/30"
+                    : "bg-muted text-muted-foreground border-border hover:text-foreground"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Briefing */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-foreground">Briefing / Objetivo do anúncio</label>
+          <textarea
+            value={briefing}
+            onChange={(e) => setBriefing(e.target.value)}
+            rows={3}
+            placeholder="Ex: Anuncio para campanha de mensagens. Produto: Camisetas. CTA: Chame no WhatsApp. Tom: descontraido..."
+            className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary resize-none"
+          />
+        </div>
+
+        {/* Prioridade + Prazo */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">Prioridade</label>
+            <div className="flex gap-1.5">
+              {(["low","medium","high","critical"] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPriority(p)}
+                  className={`flex-1 text-xs py-1.5 rounded-lg border transition-colors ${
+                    priority === p
+                      ? p === "critical" ? "bg-red-500/20 text-red-400 border-red-500/30"
+                      : p === "high" ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
+                      : p === "medium" ? "bg-primary/20 text-primary border-primary/30"
+                      : "bg-muted text-muted-foreground border-border"
+                      : "bg-muted text-muted-foreground border-border hover:text-foreground"
+                  }`}
+                >
+                  {p === "critical" ? "Urgente" : p === "high" ? "Alta" : p === "medium" ? "Média" : "Baixa"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">Prazo (opcional)</label>
+            <input
+              type="date"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-border text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Cancelar
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!briefing.trim() || !clientId}
+            className="flex-1 py-2 rounded-xl bg-[#0d4af5] text-white text-sm font-medium hover:bg-[#1a56ff] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            <Palette size={14} /> Enviar para o Designer
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
