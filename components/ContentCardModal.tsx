@@ -157,6 +157,11 @@ export default function ContentCardModal({ card, onClose }: Props) {
       }
 
       setImageUrl(data.url);
+      // Persiste imediatamente ao banco — não espera o botão "Salvar"
+      // Garante que outros usuários (ex: Designer) vejam a referência sem depender do save manual
+      updateContentCard(card.id, { imageUrl: data.url }).catch((err) => {
+        console.error("[ContentCardModal] auto-save imageUrl failed:", err);
+      });
       setUploadOk(true);
       // Limpa o feedback de sucesso após 3s
       setTimeout(() => setUploadOk(false), 3000);
@@ -271,7 +276,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
               {/* Toast inline — sucesso ou erro */}
               {uploadOk && (
                 <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2 py-1.5">
-                  <CheckCircle size={11} /> Arte enviada — clique em &quot;Salvar&quot; pra confirmar
+                  <CheckCircle size={11} /> Arte salva — visível para todos da equipe
                 </div>
               )}
               {uploadError && (

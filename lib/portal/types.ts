@@ -10,6 +10,9 @@ export interface CreativeItem {
   id: string;
   name: string;
   thumbnail_url: string | null;
+  /** Path relativo no bucket público meta-thumbnails (ex: "clientId/adId.jpg").
+   *  Preferir este sobre thumbnail_url — não expira e não depende da Meta CDN. */
+  thumbnail_path: string | null;
   messages: number;
   spend: number;
   cpa: number | null;

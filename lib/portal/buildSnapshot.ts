@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import {
   getInsightsByDateRange,
@@ -8,6 +9,43 @@ import {
 import { countMessagesFromActions } from "@/lib/meta/messages";
 import { toBRTDateStr } from "@/lib/meta/timezone";
 import type { PeriodKind, SnapshotData, CreativeItem, DemographicRow } from "./types";
+
+const THUMBNAIL_BUCKET = "meta-thumbnails";
+
+/** Baixa thumbnail da Meta CDN e faz cache no nosso Storage.
+ *  Retorna o path relativo no bucket (ex: "clientId/adId.jpg") ou null se falhar.
+ *  O bucket é público, então a URL final é:
+ *    NEXT_PUBLIC_SUPABASE_URL/storage/v1/object/public/meta-thumbnails/{path}
+ */
+async function cacheMetaThumbnail(
+  clientId: string,
+  adId: string,
+  metaUrl: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(metaUrl, { signal: AbortSignal.timeout(5_000) });
+    if (!res.ok) return null;
+
+    const contentType = res.headers.get("content-type") ?? "image/jpeg";
+    const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
+    const path = `${clientId}/${adId}.${ext}`;
+    const buffer = Buffer.from(await res.arrayBuffer());
+
+    const { error } = await supabaseAdmin.storage
+      .from(THUMBNAIL_BUCKET)
+      .upload(path, buffer, { contentType, upsert: true });
+
+    if (error) {
+      Sentry.captureException(error, { extra: { clientId, adId, source: "meta_thumbnail_cache" } });
+      return null;
+    }
+
+    return path;
+  } catch (err) {
+    Sentry.captureException(err, { extra: { clientId, adId, source: "meta_thumbnail_cache" } });
+    return null;
+  }
+}
 
 function toDateStr(d: Date): string {
   return toBRTDateStr(d);
@@ -201,6 +239,14 @@ export async function buildSnapshot(params: {
     byMessages.map((a) => getAdThumbnail(a.ad_id, metaToken)),
   );
 
+  // Cache thumbnails no nosso Storage para não depender da expiração da Meta CDN
+  const thumbnailPaths = await Promise.allSettled(
+    byMessages.map((a, i) => {
+      const metaUrl = thumbnails[i].status === "fulfilled" ? thumbnails[i].value : null;
+      return metaUrl ? cacheMetaThumbnail(params.clientId, a.ad_id, metaUrl) : Promise.resolve(null);
+    }),
+  );
+
   const top_creatives: CreativeItem[] = byMessages.map((a, i) => {
     const sp = parseFloat(a.spend) || 0;
     const cpa = a.msgs > 0 ? sp / a.msgs : null;
@@ -208,6 +254,7 @@ export async function buildSnapshot(params: {
       id: a.ad_id,
       name: a.ad_name,
       thumbnail_url: thumbnails[i].status === "fulfilled" ? thumbnails[i].value : null,
+      thumbnail_path: thumbnailPaths[i].status === "fulfilled" ? thumbnailPaths[i].value : null,
       messages: a.msgs,
       spend: sp,
       cpa,
