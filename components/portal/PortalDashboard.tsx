@@ -48,9 +48,19 @@ function fmtDate(d: string): string {
 }
 
 
-function Thumbnail({ url, name }: { url: string | null; name: string }) {
+function Thumbnail({ url, path, name }: { url: string | null; path: string | null; name: string }) {
   const [broken, setBroken] = useState(false);
-  if (!url || broken) {
+
+  // Prefere imagem cacheada no nosso Storage (não expira) sobre URL direta da Meta CDN
+  const src = (() => {
+    if (path) {
+      const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+      return `${base}/storage/v1/object/public/meta-thumbnails/${path}`;
+    }
+    return url;
+  })();
+
+  if (!src || broken) {
     return (
       <div
         className="w-14 h-14 rounded-lg shrink-0 flex flex-col items-center justify-center gap-0.5"
@@ -63,7 +73,7 @@ function Thumbnail({ url, name }: { url: string | null; name: string }) {
   }
   return (
     <img
-      src={url} alt={name} loading="lazy"
+      src={src} alt={name} loading="lazy"
       onError={() => setBroken(true)}
       className="w-14 h-14 rounded-lg object-cover shrink-0"
       style={{ border: "1px solid #1A1F33" }}
@@ -394,7 +404,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
                             onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
                           >
                             <div className="flex items-center gap-3">
-                              <Thumbnail url={c.thumbnail_url} name={c.name} />
+                              <Thumbnail url={c.thumbnail_url} path={c.thumbnail_path ?? null} name={c.name} />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-start gap-1.5 flex-wrap">
                                   <p className="text-sm font-semibold leading-snug break-words">{c.name}</p>
