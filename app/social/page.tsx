@@ -2556,7 +2556,7 @@ export default function SocialPage() {
 
             <KanbanErrorBoundary context="Kanban Social Media">
             <KanbanByClient
-              clients={filteredClients.filter((c) => c.status !== "onboarding")}
+              clients={filteredClients}
               allClients={clients}
               contentCards={filteredCards}
               designRequests={designRequests}
