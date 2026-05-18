@@ -143,6 +143,14 @@ export default function ClientDetailPage() {
     return "overview" as Tab;
   })();
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  // Dot indicator: true se o cliente tem briefing cadastrado
+  const [hasBriefing, setHasBriefing] = useState(false);
+  useEffect(() => {
+    fetch(`/api/clients/${clientId}/briefing`)
+      .then((r) => r.json())
+      .then((d) => setHasBriefing(!!d.briefing))
+      .catch(() => {});
+  }, [clientId]);
   const [chatInput, setChatInput] = useState("");
   const [manualNote, setManualNote] = useState("");
   const [showNoteInput, setShowNoteInput] = useState(false);
@@ -633,6 +641,9 @@ export default function ClientDetailPage() {
                 }`}
               >
                 {TAB_LABELS[tab]}
+                {tab === "briefing" && hasBriefing && (
+                  <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-primary align-middle" />
+                )}
                 {tab === "historico" && entries.length > 0 && (
                   <span className="ml-1.5 text-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded-full">
                     {entries.length}
@@ -710,6 +721,18 @@ export default function ClientDetailPage() {
                   </div>
                 </div>
               )}
+
+              {/* ── Acesso rápido ao Briefing ─────────────────────────────────── */}
+              <button
+                onClick={() => setActiveTab("briefing")}
+                className="w-full flex items-center justify-between p-4 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors text-left group"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-primary">Briefing Estratégico</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Posicionamento, ICP, dores, ganchos e CTAs do cliente</p>
+                </div>
+                <span className="text-primary text-lg group-hover:translate-x-1 transition-transform">→</span>
+              </button>
 
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <div className="card space-y-0">
