@@ -6,6 +6,8 @@
 --            is_current marca a versão ativa.
 -- ============================================================
 
+BEGIN;
+
 -- ── 1. TABELA PRINCIPAL ──────────────────────────────────────
 
 CREATE TABLE client_briefings (
@@ -267,5 +269,7 @@ JOIN  clients           c  ON c.id  = cb.client_id
 LEFT JOIN team_members  tm ON tm.id = cb.created_by
 
 WHERE cb.is_current = true;
+
+COMMIT;
 
 -- ── FIM DA MIGRATION 043 ─────────────────────────────────────
