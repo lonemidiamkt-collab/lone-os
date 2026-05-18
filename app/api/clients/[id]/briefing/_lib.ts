@@ -116,6 +116,10 @@ export async function fetchBriefingVersion(
 // Cache em memória com TTL de 24h.
 // Sobrevive dentro do mesmo processo Next.js; não sobrevive a restart.
 // Suficiente para evitar duplo-submit do mesmo cliente num curto período.
+//
+// TODO(débito técnico): migrar para tabela `idempotency_records` no banco.
+// Limitação atual: restart do container perde o cache e permite duplicata.
+// Ver docs/BACKLOG.md → "Idempotency persistente para briefings".
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 const _idemCache = new Map<string, { status: number; body: unknown; expiresAt: number }>();
