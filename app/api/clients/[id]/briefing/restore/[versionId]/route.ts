@@ -19,9 +19,9 @@ import {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string; versionId: string } },
+  { params }: { params: Promise<{ id: string; versionId: string }> },
 ) {
-  const { id: clientId, versionId } = params;
+  const { id: clientId, versionId } = await params;
 
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });

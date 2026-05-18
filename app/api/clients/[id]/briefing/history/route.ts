@@ -13,9 +13,9 @@ import { canWrite, fetchBriefingHistory } from "../_lib";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const clientId = params.id;
+  const { id: clientId } = await params;
 
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
