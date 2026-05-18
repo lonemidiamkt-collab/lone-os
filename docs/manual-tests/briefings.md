@@ -1,7 +1,176 @@
 # Testes Manuais — Banco de Briefings
 
 ## Pré-requisito
-Migration 043 aplicada. App rodando localmente ou em produção.
+Migration 043 aplicada. App rodando em produção (ou local na porta 3000).
+
+Substitua nas chamadas abaixo:
+- `CLIENT_ID` → ID real de um cliente (ex: `01983043-677a-46ea-9505-b5bdbd9b5cb1`)
+- `TOKEN` → access_token da sessão (ou use `LocalSession lonemidiamkt@gmail.com` para admin)
+- `VERSION_ID` → UUID retornado por chamadas anteriores
+
+---
+
+## Bloco E — API (cenários 1–10)
+
+### Cenário 1: GET briefing inexistente
+
+```bash
+curl -s -X GET https://painel.lonemidia.com/api/clients/CLIENT_ID/briefing \
+  -H "Authorization: LocalSession lonemidiamkt@gmail.com" | jq .
+```
+
+✅ **Passou:** `{ "briefing": null, "total_versions": 0 }`
+❌ **Falhou:** status 401/403 → problema de auth. Status 500 → erro de banco.
+
+---
+
+### Cenário 2: POST primeiro briefing (cria versão 1)
+
+```bash
+curl -s -X POST https://painel.lonemidia.com/api/clients/CLIENT_ID/briefing \
+  -H "Authorization: LocalSession lonemidiamkt@gmail.com" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: teste-v1-$(date +%s)" \
+  -d '{
+    "resumo_estrategico": "Briefing de teste v1",
+    "produtos": ["Produto A", "Produto B"],
+    "ctas": ["Chama no WhatsApp"]
+  }' | jq .
+```
+
+✅ **Passou:** status 201, `briefing.version = 1`, `briefing.is_current = true`,
+`completeness_percent > 0`, `total_versions = 1`
+❌ **Falhou:** 403 → usuário não é admin/manager. 422 → payload inválido.
+
+---
+
+### Cenário 3: POST segundo briefing (cria versão 2, v1 vira histórico)
+
+```bash
+curl -s -X POST https://painel.lonemidia.com/api/clients/CLIENT_ID/briefing \
+  -H "Authorization: LocalSession lonemidiamkt@gmail.com" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resumo_estrategico": "Briefing de teste v2 atualizado",
+    "produtos": ["Produto A", "Produto B", "Produto C"],
+    "ctas": ["Chama no WhatsApp"],
+    "tom_voz": "informal"
+  }' | jq .
+```
+
+✅ **Passou:** status 201, `briefing.version = 2`, `total_versions = 2`
+
+Verificar no banco que v1 virou `is_current = false`:
+```sql
+SELECT version, is_current FROM client_briefings WHERE client_id = 'CLIENT_ID' ORDER BY version;
+-- Esperado: version 1 → is_current = false, version 2 → is_current = true
+```
+
+---
+
+### Cenário 4: GET após 2 POSTs (retorna v2 + total = 2)
+
+```bash
+curl -s -X GET https://painel.lonemidia.com/api/clients/CLIENT_ID/briefing \
+  -H "Authorization: LocalSession lonemidiamkt@gmail.com" | jq '{version: .briefing.version, total: .total_versions}'
+```
+
+✅ **Passou:** `{ "version": 2, "total": 2 }`
+
+---
+
+### Cenário 5: GET history (retorna lista com v1 e v2)
+
+```bash
+curl -s -X GET "https://painel.lonemidia.com/api/clients/CLIENT_ID/briefing/history?limit=20&offset=0" \
+  -H "Authorization: LocalSession lonemidiamkt@gmail.com" | jq '{total: .total, versions: [.versions[] | {v: .version, current: .is_current}]}'
+```
+
+✅ **Passou:** `total = 2`, lista com versões 2 e 1 (order desc), ambas visíveis.
+
+---
+
+### Cenário 6: POST com payload inválido (retorna 422)
+
+```bash
+curl -s -X POST https://painel.lonemidia.com/api/clients/CLIENT_ID/briefing \
+  -H "Authorization: LocalSession lonemidiamkt@gmail.com" \
+  -H "Content-Type: application/json" \
+  -d '{ "tom_voz": "INVALIDO", "logo_url": "nao-e-url" }' | jq .
+```
+
+✅ **Passou:** status 422, campo `issues` listando os erros Zod
+(`tom_voz` enum inválido, `logo_url` URL inválida)
+
+---
+
+### Cenário 7: POST sem admin/manager (retorna 403)
+
+```bash
+curl -s -X POST https://painel.lonemidia.com/api/clients/CLIENT_ID/briefing \
+  -H "Authorization: LocalSession carlos@lonemidia.com" \
+  -H "Content-Type: application/json" \
+  -d '{ "resumo_estrategico": "teste" }' | jq .
+```
+
+✅ **Passou:** status 403, `{ "error": "Sem permissão" }`
+
+---
+
+### Cenário 8: GET com role social (deve funcionar)
+
+```bash
+curl -s -X GET https://painel.lonemidia.com/api/clients/CLIENT_ID/briefing \
+  -H "Authorization: LocalSession carlos@lonemidia.com" | jq '{version: .briefing.version}'
+```
+
+✅ **Passou:** status 200, retorna briefing (version = 2)
+
+---
+
+### Cenário 9: Idempotency — mesmo key não cria duplicata
+
+```bash
+# Definir key fixa
+IDEM_KEY="meu-key-fixo-123"
+
+# 1ª chamada
+curl -s -X POST https://painel.lonemidia.com/api/clients/CLIENT_ID/briefing \
+  -H "Authorization: LocalSession lonemidiamkt@gmail.com" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $IDEM_KEY" \
+  -d '{ "resumo_estrategico": "Teste idempotency" }' | jq '.briefing.version'
+
+# 2ª chamada (mesmo key — deve retornar mesmo resultado, sem criar v nova)
+curl -s -X POST https://painel.lonemidia.com/api/clients/CLIENT_ID/briefing \
+  -H "Authorization: LocalSession lonemidiamkt@gmail.com" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $IDEM_KEY" \
+  -d '{ "resumo_estrategico": "Teste idempotency" }' | jq '.briefing.version'
+```
+
+✅ **Passou:** ambas as chamadas retornam a mesma `version`; verificar no banco
+que não há versão extra criada.
+
+---
+
+### Cenário 10: Restore de versão antiga
+
+Pegue o UUID da versão 1 via history:
+```bash
+VER1_ID=$(curl -s "https://painel.lonemidia.com/api/clients/CLIENT_ID/briefing/history" \
+  -H "Authorization: LocalSession lonemidiamkt@gmail.com" | jq -r '.versions[-1].id')
+
+curl -s -X POST "https://painel.lonemidia.com/api/clients/CLIENT_ID/briefing/restore/$VER1_ID" \
+  -H "Authorization: LocalSession lonemidiamkt@gmail.com" | jq '{
+    new_version: .briefing.version,
+    restored_from: .restored_from_version,
+    total: .total_versions
+  }'
+```
+
+✅ **Passou:** `new_version = 3` (ou próximo), `restored_from = 1`, `total = 3`
+Verificar que `resumo_estrategico` da v3 é igual ao da v1 ("Briefing de teste v1").
 
 ---
 
