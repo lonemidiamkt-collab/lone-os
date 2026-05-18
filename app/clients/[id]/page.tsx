@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import HolidaysPdfButton from "@/components/HolidaysPdfButton";
 import { MarkdownEditor } from "@/components/Markdown";
+import BriefingTab from "./BriefingTab";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
@@ -75,7 +76,7 @@ const ASSET_TYPE_CONFIG: Record<CreativeAsset["type"], { label: string; color: s
   logo:       { label: "Logo",       color: "text-primary",  icon: Star },
 };
 
-const TABS = ["overview", "dados", "resultados", "analise-ia", "contratos", "chat", "historico", "tasks", "content", "onboarding", "wallet", "reports", "portal"] as const;
+const TABS = ["overview", "dados", "resultados", "analise-ia", "briefing", "contratos", "chat", "historico", "tasks", "content", "onboarding", "wallet", "reports", "portal"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -83,6 +84,7 @@ const TAB_LABELS: Record<Tab, string> = {
   dados: "Dados",
   resultados: "Resultados",
   "analise-ia": "Análise IA",
+  briefing: "Briefing",
   contratos: "Contratos",
   chat: "Chat",
   historico: "Histórico Operacional",
@@ -409,6 +411,7 @@ export default function ClientDetailPage() {
     return true;
   });
 
+
   const handleWalletUpload = (e: React.ChangeEvent<HTMLInputElement>, type: CreativeAsset["type"]) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -661,6 +664,11 @@ export default function ClientDetailPage() {
           {/* ── ANALISE IA ──────────────────────────────────────────────────── */}
           {activeTab === "analise-ia" && (
             <AIAuditsTab clientId={clientId} isAdmin={isAdmin} />
+          )}
+
+          {/* ── BRIEFING ─────────────────────────────────────────────────────── */}
+          {activeTab === "briefing" && (
+            <BriefingTab clientId={clientId} />
           )}
 
           {/* ── CONTRATOS ────────────────────────────────────────────────────── */}
