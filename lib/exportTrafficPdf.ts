@@ -455,7 +455,8 @@ export async function exportTrafficReportPdf(data: TrafficReportData) {
   const { downloadAsPdf } = await import("@/lib/htmlToPdf");
   const html = buildTrafficReportHtml(data, false);
   const filename = `relatorio-${data.clientName.replace(/\s+/g, "-").toLowerCase()}.pdf`;
-  await downloadAsPdf(html, filename);
+  // multiPage: true preserves A4 pagination — internal report may span multiple pages
+  await downloadAsPdf(html, filename, { multiPage: true });
 }
 
 // ── Client-facing report ──────────────────────────────────────────────────────

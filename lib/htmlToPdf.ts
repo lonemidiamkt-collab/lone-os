@@ -20,6 +20,7 @@ function docTop(el: HTMLElement, root: HTMLElement): number {
  * Inserts invisible spacer <div>s before any [data-pb] element that would be
  * sliced by an A4 page boundary.  Restarts after each insertion so positions
  * are always fresh (max 40 passes to prevent infinite loops).
+ * Only called in multiPage mode.
  */
 function avoidPageBreaks(body: HTMLElement): void {
   for (let pass = 0; pass < 40; pass++) {
@@ -49,7 +50,20 @@ function avoidPageBreaks(body: HTMLElement): void {
   }
 }
 
-export async function htmlToPdfBlob(html: string): Promise<Blob> {
+/**
+ * Converts an HTML string to a PDF Blob using html2canvas + jsPDF.
+ *
+ * @param options.multiPage - `true`: renders as standard A4 pages (210×297 mm) with automatic
+ *   pagination and page-break avoidance. Use for reports that span multiple pages or need to
+ *   be printed (e.g. internal traffic reports via `exportTrafficReportPdf`).
+ *
+ *   `false` (default): renders as a single page whose height matches the content exactly.
+ *   Eliminates the white-border artifact that occurs when content is shorter than 297 mm.
+ *   Use for client-facing custom reports (e.g. `exportClientReportPdf`).
+ */
+export async function htmlToPdfBlob(html: string, options?: { multiPage?: boolean }): Promise<Blob> {
+  const multiPage = options?.multiPage ?? false;
+
   const iframe = document.createElement("iframe");
   iframe.style.cssText =
     "position:fixed;left:-9999px;top:0;width:860px;height:1px;border:none;visibility:hidden;";
@@ -79,16 +93,17 @@ export async function htmlToPdfBlob(html: string): Promise<Blob> {
     iframe.style.height = `${scrollH}px`;
     await new Promise((r) => requestAnimationFrame(r));
 
-    // Insert spacers to prevent elements from being sliced at page boundaries
-    avoidPageBreaks(body);
-
-    // Re-measure after spacers
-    scrollH = Math.max(body.scrollHeight, body.offsetHeight, 200);
-    iframe.style.height = `${scrollH}px`;
-    await new Promise((r) => requestAnimationFrame(r));
+    if (multiPage) {
+      // Insert spacers to prevent elements from being sliced at page boundaries
+      avoidPageBreaks(body);
+      // Re-measure after spacers
+      scrollH = Math.max(body.scrollHeight, body.offsetHeight, 200);
+      iframe.style.height = `${scrollH}px`;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
 
     const canvas = await html2canvas(body, {
-      backgroundColor: "#09090b",
+      backgroundColor: "#060814",
       scale: 2,
       useCORS: true,
       allowTaint: true,
@@ -98,31 +113,38 @@ export async function htmlToPdfBlob(html: string): Promise<Blob> {
       windowWidth: PDF_PX_W,
     });
 
-    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-    const pageW = pdf.internal.pageSize.getWidth();   // 210 mm
-    const pageH = pdf.internal.pageSize.getHeight();  // 297 mm
-
-    const imgW = pageW;
-    const imgH = (canvas.height / canvas.width) * imgW;
     const imgDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    const imgWidth = 210; // A4 width in mm
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-    let yOffset = 0;
-    let page = 0;
-    while (yOffset < imgH) {
-      if (page > 0) pdf.addPage();
-      pdf.addImage(imgDataUrl, "JPEG", 0, -yOffset, imgW, imgH);
-      yOffset += pageH;
-      page++;
+    if (multiPage) {
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();   // 210 mm
+      const pageH = pdf.internal.pageSize.getHeight();  // 297 mm
+
+      let yOffset = 0;
+      let page = 0;
+      while (yOffset < imgHeight) {
+        if (page > 0) pdf.addPage();
+        pdf.addImage(imgDataUrl, "JPEG", 0, -yOffset, pageW, imgHeight);
+        yOffset += pageH;
+        page++;
+      }
+
+      return pdf.output("blob");
     }
 
+    // Dynamic height: page matches content exactly — no white border
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [imgWidth, imgHeight] });
+    pdf.addImage(imgDataUrl, "JPEG", 0, 0, imgWidth, imgHeight);
     return pdf.output("blob");
   } finally {
     document.body.removeChild(iframe);
   }
 }
 
-export async function downloadAsPdf(html: string, filename: string): Promise<void> {
-  const blob = await htmlToPdfBlob(html);
+export async function downloadAsPdf(html: string, filename: string, options?: { multiPage?: boolean }): Promise<void> {
+  const blob = await htmlToPdfBlob(html, options);
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
