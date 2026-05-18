@@ -128,3 +128,4 @@ zip.file(filename, pdfBlob);
 |---|---|---|
 | 2026-05-18 | Adicionada flag `multiPage` em `htmlToPdfBlob` | Separar comportamento entre relatório interno (A4 fixo) e relatório personalizado (altura dinâmica), sem quebrar o que já funcionava |
 | 2026-05-18 | `backgroundColor` trocado de `#09090b` para `#060814` | Alinhamento com identidade visual; previne fundo branco no Safari com backgrounds transparentes |
+| 2026-05-18 | Merge em main + deploy em produção (commit 8b0e5e5) | Fix validado em Chrome e Safari; backup do dia `loneos_20260518_0300.dump.gz` confirmado antes do deploy |
