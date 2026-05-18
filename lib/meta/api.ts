@@ -121,7 +121,7 @@ export async function getCampaignInsights(
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since: sinceStr, until: untilStr }),
-    action_attribution_windows: '["7d_click","1d_view"]',
+    action_attribution_windows: '["7d_click"]',
     time_increment: "1",
     limit: "100",
   });
@@ -146,7 +146,7 @@ export async function getAccountInsights(
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since: sinceStr, until: untilStr }),
-    action_attribution_windows: '["7d_click","1d_view"]',
+    action_attribution_windows: '["7d_click"]',
     time_increment: "1",
     limit: "100",
   });
@@ -189,7 +189,7 @@ export async function getInsightsByDateRange(
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since, until }),
-    action_attribution_windows: '["7d_click","1d_view"]',
+    action_attribution_windows: '["7d_click"]',
     time_increment: "1",
     limit: "100",
   });
@@ -211,7 +211,7 @@ export async function getTopAdInsights(
     access_token: accessToken,
     fields: "ad_id,ad_name,spend,impressions,reach,clicks,ctr,frequency,actions",
     time_range: JSON.stringify({ since, until }),
-    action_attribution_windows: '["7d_click","1d_view"]',
+    action_attribution_windows: '["7d_click"]',
     level: "ad",
     sort: "spend_descending",
     limit: String(limit),

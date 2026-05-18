@@ -7,6 +7,11 @@
 // Click-to-WhatsApp. total_messaging_connection inclui reconexões e
 // retornos de conversas já abertas — infla o número vs Gerenciador.
 //
+// JANELA DE ATRIBUIÇÃO: usar apenas "7d_click" (sem "1d_view").
+// "1d_view" soma conversões view-through (quem viu o anúncio sem clicar)
+// que o Gerenciador NÃO exibe na coluna Resultados por padrão.
+// Evidência: Madeirão Móveis (87 vs 79) e Madeireira D'Aldeia (39 vs 32) — 2026-05-18.
+//
 // Evidência: Império dos Pisos dia 07/05
 //   total_messaging_connection:      53  ← inflado (reconexões incluídas)
 //   messaging_conversation_started_7d: 43  ← correto (Gerenciador: ~41)
