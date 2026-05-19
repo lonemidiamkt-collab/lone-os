@@ -145,3 +145,43 @@ criados mas não renderizados até que dados reais existam.
 **Quando priorizar:** Quando o time de tráfego pedir visibilidade de
 erros de campanha diretamente no dashboard (hoje consultam no Meta Ads
 Manager diretamente).
+
+---
+
+## 6. Auditoria de drift git→produção (recorrente)
+
+**Contexto:** Padrão de incidente recorrente onde arquivos criados no
+working directory nunca foram adicionados ao git, causando divergência
+silenciosa entre código local e produção.
+
+**Histórico de incidentes:**
+- **Abril/2026:** 12 rotas de API ficaram untracked por ~2 meses.
+  Produção quebrou silenciosamente (calendário, contratos, AI).
+  Só descoberto ao investigar bug de calendário.
+- **Maio/2026:** 13 arquivos descobertos via auditoria pré-emptiva
+  antes da Fase 1.3. Pegou antes de causar problema.
+
+**Limitação atual:**
+Não existe processo automatizado que compare o working directory com
+o índice git ou com produção. A detecção depende de checagem manual.
+
+**Proposta de implementação:**
+Criar `scripts/audit-drift.mjs` que:
+1. Roda `git ls-files --others --exclude-standard` nos diretórios
+   relevantes: `app/`, `components/`, `lib/`, `scripts/`, `docs/`
+2. Filtra padrões irrelevantes (`.DS_Store`, `node_modules`, etc.)
+3. Se encontrar arquivos `??`, gera relatório em
+   `docs/AUDIT_REPORTS/YYYY-MM-DD.md` e imprime alerta no terminal
+4. (Opcional) Comparar com produção via SSH: `git -C /opt/loneos log --oneline -1`
+
+Adicionar ao `CLAUDE.md`: rodar `node scripts/audit-drift.mjs` ao
+final de cada sessão que criar novos arquivos.
+
+**Nota sobre `pasta sem título/`:** Esta pasta ainda aparece como `??`
+no git status. O nome contém `í` (UTF-8 `\303\255`) que impede o match
+com o `.gitignore`. Para resolver definitivamente, usar o nome exato
+que o git reporta na entrada do `.gitignore`, ou mover/deletar a pasta
+manualmente.
+
+**Quando priorizar:** Alta prioridade. Próximo incidente pode quebrar
+features críticas em produção sem nenhum erro visível.
