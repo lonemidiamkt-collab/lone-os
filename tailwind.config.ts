@@ -59,6 +59,37 @@ const config: Config = {
         input: "var(--input)",
         ring: "var(--ring)",
         surface: "var(--muted)",
+
+        // ── Design System v2 — cores lone-* ──────────────────
+        // Todas referenciam CSS vars --lone-* definidos em globals.css.
+        // Prefixo lone- garante zero colisão com cores existentes.
+        lone: {
+          bg: {
+            primary:  "var(--lone-bg-primary)",
+            card:     "var(--lone-bg-card)",
+            elevated: "var(--lone-bg-elevated)",
+          },
+          border: {
+            DEFAULT: "var(--lone-border-default)",
+            strong:  "var(--lone-border-strong)",
+          },
+          text: {
+            primary:   "var(--lone-text-primary)",
+            secondary: "var(--lone-text-secondary)",
+            tertiary:  "var(--lone-text-tertiary)",
+            disabled:  "var(--lone-text-disabled)",
+          },
+          brand: {
+            DEFAULT: "var(--lone-brand-primary)",
+            soft:    "var(--lone-brand-soft)",
+            "bg-soft": "var(--lone-brand-bg-soft)",
+          },
+          danger:  "var(--lone-danger)",
+          warning: "var(--lone-warning)",
+          success: "var(--lone-success)",
+          info:    "var(--lone-info)",
+        },
+
         sidebar: {
           DEFAULT: "var(--sidebar)",
           foreground: "var(--sidebar-foreground)",
@@ -79,7 +110,22 @@ const config: Config = {
         "3xl": "1.5rem",
       },
       fontFamily: {
+        // Sistema existente — intacto
         sans: ["Montserrat", "Inter", "ui-sans-serif", "sans-serif"],
+        // Design System v2
+        inter:  ["var(--font-inter)", "ui-sans-serif", "sans-serif"],
+        mono:   ["var(--font-jetbrains-mono)", "ui-monospace", "monospace"],
+      },
+      fontSize: {
+        // ── Tipografia lone-* (Design System v2) ──────────────
+        // Coexiste com os tamanhos Tailwind existentes (sm, base, lg…)
+        "lone-hero":    ["28px", { lineHeight: "1.1",  fontWeight: "500" }],
+        "lone-h1":      ["22px", { lineHeight: "1.2",  fontWeight: "500" }],
+        "lone-h2":      ["15px", { lineHeight: "1.3",  fontWeight: "500" }],
+        "lone-body":    ["13px", { lineHeight: "1.5",  fontWeight: "400" }],
+        "lone-caption": ["11px", { lineHeight: "1.4",  fontWeight: "400" }],
+        "lone-eyebrow": ["10px", { lineHeight: "1.4",  fontWeight: "500",
+                                    letterSpacing: "1.5px" }],
       },
       animation: {
         "fade-in": "fadeIn 0.3s ease-out",

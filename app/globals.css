@@ -74,6 +74,53 @@
     /* Glow — minimal */
     --glow-primary: rgba(13, 74, 245, 0.06);
     --glow-primary-strong: rgba(13, 74, 245, 0.1);
+
+    /* ── Design System v2 — tokens lone-* ──────────────────────
+       Prefixo lone- garante coexistência com tokens existentes.
+       Telas antigas continuam usando vars acima; novas usam lone-*.
+       ─────────────────────────────────────────────────────────── */
+
+    /* Fundos */
+    --lone-bg-primary:  #13141A;
+    --lone-bg-card:     #1A1B23;
+    --lone-bg-elevated: #22242E;
+
+    /* Bordas */
+    --lone-border-default: #2A2C36;
+    --lone-border-strong:  #3A3D48;
+
+    /* Texto */
+    --lone-text-primary:   #FFFFFF;
+    --lone-text-secondary: #9EA1AB;
+    --lone-text-tertiary:  #7B7E89;
+    --lone-text-disabled:  #6B6E78;
+
+    /* Marca */
+    --lone-brand-primary:  #2B3CFF;
+    --lone-brand-soft:     #8DA4FF;
+    --lone-brand-bg-soft:  rgba(43, 60, 255, 0.20);
+
+    /* Semântico */
+    --lone-danger:  #F87171;
+    --lone-warning: #FBB13C;
+    --lone-success: #4ADE80;
+    --lone-info:    #8DA4FF;
+
+    /* Semântico com opacidade — para fundos de badge/banner */
+    --lone-danger-bg:  rgba(248, 113, 113, 0.08);
+    --lone-warning-bg: rgba(251, 177, 60,  0.08);
+    --lone-success-bg: rgba(74,  222, 128, 0.08);
+    --lone-info-bg:    rgba(141, 164, 255, 0.08);
+
+    --lone-danger-border:  rgba(248, 113, 113, 0.25);
+    --lone-warning-border: rgba(251, 177, 60,  0.25);
+    --lone-success-border: rgba(74,  222, 128, 0.25);
+    --lone-info-border:    rgba(141, 164, 255, 0.25);
+
+    --lone-danger-icon-bg:  rgba(248, 113, 113, 0.15);
+    --lone-warning-icon-bg: rgba(251, 177, 60,  0.15);
+    --lone-success-icon-bg: rgba(74,  222, 128, 0.15);
+    --lone-info-icon-bg:    rgba(141, 164, 255, 0.15);
   }
 
   /* ─── Light theme ────────────────────────────────────────── */
