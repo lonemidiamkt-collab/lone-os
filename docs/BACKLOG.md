@@ -185,3 +185,21 @@ manualmente.
 
 **Quando priorizar:** Alta prioridade. Próximo incidente pode quebrar
 features críticas em produção sem nenhum erro visível.
+
+---
+
+## 7. Investigar supabase-studio-1 unhealthy
+
+**Contexto:** Container `supabase-studio-1` aparece como `(unhealthy)` no
+`docker ps` há pelo menos semanas (observado em 2026-05-19). É a UI de
+administração do Supabase self-hosted.
+
+**Impacto:** Nenhum no app em produção. O `loneos-app-1` e
+`supabase-db-1` (healthy) não dependem do studio. Acesso ao banco
+continua via `supabase-kong-1` e `supabase-rest-1`.
+
+**Quando priorizar:** Baixa. Investigar quando houver necessidade de usar
+a UI do Supabase diretamente no VPS (ex: query rápida sem SSH).
+
+**Referência:** VPS `/opt/backups/postgres/` — backups em `/opt/backups/postgres/`,
+não em `/opt/loneos/backups/` (path corrigido em 2026-05-19).
