@@ -52,3 +52,17 @@ infrastructure/supabase/.env
 contract-templates/*.docx
 contract-templates/node_modules
 .env.sentry-build-plugin
+
+# Pastas operacionais (não versionar)
+CLientes lone midia/
+pasta sem título/
+
+# Artefatos gerados pelos scripts de PDF (regeneráveis via generate-pdf.mjs)
+docs/lone-os-system-doc.html
+docs/lone-os-system-doc.pdf
+docs/meta-api-status.html
+docs/meta-api-status.pdf
+
+# Padrão genérico — qualquer html/pdf futuro em docs/ (force-add se quiser versionar)
+docs/*.html
+docs/*.pdf
