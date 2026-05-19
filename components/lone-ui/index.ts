@@ -9,9 +9,14 @@
  *   import { Badge } from '@/components/ui/badge'
  */
 
-// Exportações adicionadas em Fase 0.3:
-// export { KPICard }      from './KPICard'
-// export { SectionDivider } from './SectionDivider'
-// export { TeamMemberRow }  from './TeamMemberRow'
-// export { AlertBanner }    from './AlertBanner'
-// export { PillBadge }      from './PillBadge'
+export { KPICard }        from "./KPICard";
+export { SectionDivider } from "./SectionDivider";
+export { TeamMemberRow }  from "./TeamMemberRow";
+export { AlertBanner }    from "./AlertBanner";
+export { PillBadge }      from "./PillBadge";
+
+export type { KPICardProps }        from "./KPICard";
+export type { SectionDividerProps } from "./SectionDivider";
+export type { TeamMemberRowProps }  from "./TeamMemberRow";
+export type { AlertBannerProps }    from "./AlertBanner";
+export type { PillBadgeProps }      from "./PillBadge";

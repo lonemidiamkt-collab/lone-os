@@ -113,8 +113,9 @@ const config: Config = {
         // Sistema existente — intacto
         sans: ["Montserrat", "Inter", "ui-sans-serif", "sans-serif"],
         // Design System v2
-        inter:  ["var(--font-inter)", "ui-sans-serif", "sans-serif"],
-        mono:   ["var(--font-jetbrains-mono)", "ui-monospace", "monospace"],
+        inter:      ["var(--font-inter)", "ui-sans-serif", "sans-serif"],
+        mono:       ["var(--font-jetbrains-mono)", "ui-monospace", "monospace"],
+        jetbrains:  ["var(--font-jetbrains-mono)", "ui-monospace", "monospace"],
       },
       fontSize: {
         // ── Tipografia lone-* (Design System v2) ──────────────
