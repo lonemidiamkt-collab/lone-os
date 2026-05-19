@@ -4,7 +4,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 export interface DashboardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
-  title: string;
+  title?: string;
   subtitle?: string;
   eyebrow?: string;
   userName?: string;
@@ -25,9 +25,11 @@ const DashboardHeader = React.forwardRef<HTMLDivElement, DashboardHeaderProps>(
               {eyebrow}
             </p>
           )}
-          <h1 className="text-lone-h1 font-inter font-medium text-lone-text-primary leading-tight">
-            {title}
-          </h1>
+          {title && (
+            <h1 className="text-lone-h1 font-inter font-medium text-lone-text-primary leading-tight">
+              {title}
+            </h1>
+          )}
           {subtitle && (
             <p className="text-lone-body font-inter text-lone-text-secondary mt-0.5">
               {subtitle}
