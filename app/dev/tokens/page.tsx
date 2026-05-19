@@ -2,9 +2,16 @@
 
 /**
  * /dev/tokens — Preview do Design System v2
+ *
+ * Proteção:
+ *   - Development: qualquer pessoa acessa
+ *   - Production:  só admin/manager (verificado via sessionStorage)
+ *
  * Acesse em http://localhost:3000/dev/tokens
  */
 
+import { useEffect, useState } from "react";
+import { USER_PROFILES } from "@/lib/context/RoleContext";
 import {
   KPICard,
   SectionDivider,
@@ -43,7 +50,58 @@ const TYPE_SCALE = [
 
 const groups = [...new Set(COLORS.map((c) => c.group))];
 
+// ── Dev gate ──────────────────────────────────────────────────
+
+function useDevGate(): "loading" | "allowed" | "denied" {
+  const isDev = process.env.NODE_ENV === "development";
+  const [state, setState] = useState<"loading" | "allowed" | "denied">(
+    isDev ? "allowed" : "loading",
+  );
+
+  useEffect(() => {
+    if (isDev) return; // já está "allowed" desde o início
+    try {
+      const sessionId = sessionStorage.getItem("lone_local_session");
+      const profile = USER_PROFILES.find((p) => p.id === sessionId);
+      setState(
+        profile?.role === "admin" || profile?.role === "manager"
+          ? "allowed"
+          : "denied",
+      );
+    } catch {
+      setState("denied");
+    }
+  }, [isDev]);
+
+  return state;
+}
+
+// ── Page ──────────────────────────────────────────────────────
+
 export default function TokensPage() {
+  const gate = useDevGate();
+
+  if (gate === "loading") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-lone-bg-primary">
+        <span className="font-inter text-lone-caption text-lone-text-tertiary">
+          Verificando acesso…
+        </span>
+      </div>
+    );
+  }
+
+  if (gate === "denied") {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-lone-bg-primary">
+        <span className="font-inter text-lone-h1 font-medium text-lone-danger">403</span>
+        <p className="font-inter text-lone-body text-lone-text-secondary">
+          Página restrita a admin e manager em produção.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen p-8 font-inter bg-lone-bg-primary text-lone-text-primary">
       <div className="max-w-5xl mx-auto space-y-14">
