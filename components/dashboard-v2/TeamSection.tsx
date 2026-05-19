@@ -36,10 +36,10 @@ function initials(name: string): string {
 function metricTone(
   done: number,
   total: number
-): "default" | "warning" | "danger" | "success" {
+): "default" | "warning" | "danger" {
   if (total === 0) return "default";
   const pct = done / total;
-  if (pct >= 1) return "success";
+  if (pct >= 1) return "default";
   if (pct >= 0.5) return "default";
   if (pct >= 0.25) return "warning";
   return "danger";
@@ -73,7 +73,7 @@ const TeamSection = React.forwardRef<HTMLDivElement, TeamSectionProps>(
                 metric={{
                   label: "publicados",
                   value: String(member.published),
-                  tone: member.published >= 10 ? "success" : member.published >= 5 ? "default" : "warning",
+                  tone: member.published >= 5 ? "default" : "warning",
                 }}
                 last={i === socialTeam.length - 1}
               />
