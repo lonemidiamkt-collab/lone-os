@@ -1,9 +1,23 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import * as Sentry from "@sentry/nextjs";
-import { useRole } from "@/lib/context/RoleContext";
+import { useRole, USER_PROFILES } from "@/lib/context/RoleContext";
 import type { BriefingWithMeta } from "@/lib/types/briefing";
+
+/** Monta o header Authorization para chamadas à API a partir da sessão local. */
+function useAuthHeader(): string {
+  return useMemo(() => {
+    try {
+      const sessionId = sessionStorage.getItem("lone_local_session");
+      if (sessionId) {
+        const profile = USER_PROFILES.find((p) => p.id === sessionId);
+        if (profile?.email) return `LocalSession ${profile.email}`;
+      }
+    } catch { /* sessionStorage indisponível (SSR) */ }
+    return "";
+  }, []);
+}
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -192,6 +206,7 @@ function formToPayload(f: FormState) {
 export default function BriefingTab({ clientId }: { clientId: string }) {
   const { role } = useRole();
   const canEdit = role === "admin" || role === "manager";
+  const authHeader = useAuthHeader();
 
   const [briefing, setBriefing] = useState<BriefingWithMeta | null>(null);
   const [totalVersions, setTotalVersions] = useState(0);
@@ -204,7 +219,9 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/clients/${clientId}/briefing`);
+      const res = await fetch(`/api/clients/${clientId}/briefing`, {
+        headers: authHeader ? { Authorization: authHeader } : {},
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setBriefing(data.briefing ?? null);
@@ -214,7 +231,7 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [clientId]);
+  }, [clientId, authHeader]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -232,7 +249,10 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
     try {
       const res = await fetch(`/api/clients/${clientId}/briefing`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
         body: JSON.stringify(formToPayload(form)),
       });
       if (!res.ok) {

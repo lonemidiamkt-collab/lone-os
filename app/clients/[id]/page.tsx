@@ -9,7 +9,7 @@ import BriefingTab from "./BriefingTab";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
-import { useRole } from "@/lib/context/RoleContext";
+import { useRole, USER_PROFILES } from "@/lib/context/RoleContext";
 import { mockTasks, mockAdAccounts } from "@/lib/mockData";
 import { useMetaConnection, fetchAdAccounts } from "@/lib/meta/useMetaAds";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
@@ -146,10 +146,17 @@ export default function ClientDetailPage() {
   // Dot indicator: true se o cliente tem briefing cadastrado
   const [hasBriefing, setHasBriefing] = useState(false);
   useEffect(() => {
-    fetch(`/api/clients/${clientId}/briefing`)
-      .then((r) => r.json())
-      .then((d) => setHasBriefing(!!d.briefing))
-      .catch(() => {});
+    try {
+      const sessionId = sessionStorage.getItem("lone_local_session");
+      const profile = USER_PROFILES.find((p) => p.id === sessionId);
+      const auth = profile?.email ? `LocalSession ${profile.email}` : "";
+      fetch(`/api/clients/${clientId}/briefing`, {
+        headers: auth ? { Authorization: auth } : {},
+      })
+        .then((r) => r.json())
+        .then((d) => setHasBriefing(!!d.briefing))
+        .catch(() => {});
+    } catch { /* sessionStorage não disponível */ }
   }, [clientId]);
   const [chatInput, setChatInput] = useState("");
   const [manualNote, setManualNote] = useState("");
