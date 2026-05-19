@@ -13,6 +13,16 @@ import {
   AlertBanner,
   PillBadge,
 } from "@/components/lone-ui";
+import {
+  DashboardHeader,
+  CriticalAlertBanner,
+  QuickActions,
+  TeamSection,
+  WeeklyAttention,
+  ClientStatusList,
+} from "@/components/dashboard-v2";
+import { Plus, FileText, Inbox } from "lucide-react";
+import React from "react";
 
 const COLORS = [
   { label: "lone-bg-primary",  hex: "#13141A", group: "Fundos",    css: "var(--lone-bg-primary)" },
@@ -206,13 +216,141 @@ export default function TokensContent() {
           </div>
         </section>
 
+        {/* ── Dashboard Components (Onda UI-1 Fase 1.2) ─────────────────── */}
+        <section>
+          <SectionDivider label="Dashboard Components" badge="Onda UI-1 Fase 1.2" className="mb-6" />
+
+          {/* DashboardHeader */}
+          <div className="mb-8">
+            <p className="text-lone-eyebrow text-lone-text-disabled tracking-[1.5px] mb-3">DASHBOARDHEADER</p>
+            <div className="rounded-xl border border-lone-border bg-lone-bg-card p-5 space-y-4">
+              <DashboardHeader
+                title="Dashboard"
+                subtitle="Visão 360° da operação"
+                eyebrow="LONE OS"
+                userName="Roberto Lino"
+                dateLabel="Seg, 19 mai 2026"
+              />
+              <div className="border-t border-lone-border pt-4">
+                <DashboardHeader
+                  title="Dashboard"
+                  subtitle="Painel de Roberto"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* CriticalAlertBanner */}
+          <div className="mb-8">
+            <p className="text-lone-eyebrow text-lone-text-disabled tracking-[1.5px] mb-3">CRITICALALERTBANNER</p>
+            <div className="space-y-3">
+              <CriticalAlertBanner
+                alerts={[
+                  { type: "clients_at_risk",    count: 3, href: "/clients?filter=at_risk" },
+                  { type: "stuck_cards",         count: 5, href: "/social" },
+                  { type: "urgent_tasks",        count: 2, href: "/calendar" },
+                  { type: "expiring_contracts",  count: 1, href: "/clients" },
+                ]}
+              />
+              <CriticalAlertBanner
+                alerts={[
+                  { type: "pending_approval", count: 4, href: "/social" },
+                ]}
+              />
+              <div className="rounded-xl border border-lone-border bg-lone-bg-card p-3">
+                <p className="text-lone-caption font-inter text-lone-text-disabled text-center">
+                  Quando count = 0 em todos: componente não renderiza (null)
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* QuickActions */}
+          <div className="mb-8">
+            <p className="text-lone-eyebrow text-lone-text-disabled tracking-[1.5px] mb-3">QUICKACTIONS</p>
+            <div className="rounded-xl border border-lone-border bg-lone-bg-card p-5 space-y-4">
+              <QuickActions
+                actions={[
+                  { id: "task",   label: "Nova Tarefa",  href: "/calendar",  variant: "primary",    icon: <Plus size={12} /> },
+                  { id: "card",   label: "Novo Card",    href: "/social",    variant: "secondary",  icon: <FileText size={12} /> },
+                  { id: "work",   label: "Meu Trabalho", href: "/my-work",   variant: "secondary",  icon: <Inbox size={12} /> },
+                ]}
+              />
+              <QuickActions
+                label=""
+                actions={[
+                  { id: "a", label: "Sem label", href: "#", variant: "secondary" },
+                  { id: "b", label: "Primário",  href: "#", variant: "primary" },
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* TeamSection */}
+          <div className="mb-8">
+            <p className="text-lone-eyebrow text-lone-text-disabled tracking-[1.5px] mb-3">TEAMSECTION</p>
+            <TeamSection
+              socialTeam={[
+                { name: "Carlos Melo",    clientCount: 11, published: 14, inPipeline: 6 },
+                { name: "Mariana Costa",  clientCount: 8,  published: 9,  inPipeline: 4 },
+              ]}
+              trafficTeam={[
+                { name: "Ana Lima",   clientCount: 9,  supportDone: 9,  supportTotal: 9 },
+                { name: "Pedro Alves", clientCount: 10, supportDone: 6, supportTotal: 10 },
+              ]}
+            />
+          </div>
+
+          {/* WeeklyAttention */}
+          <div className="mb-8">
+            <p className="text-lone-eyebrow text-lone-text-disabled tracking-[1.5px] mb-3">WEEKLYATTENTION</p>
+            <WeeklyAttention
+              clients={[
+                { id: "1", name: "Calabria Decorações", industry: "Decoração",   reason: "both" },
+                { id: "2", name: "Iron Fox",             industry: "Pet Shop",    reason: "no_kanban_7d" },
+                { id: "3", name: "Araruama Tintas",      industry: "Tintas",      reason: "no_posts" },
+                { id: "4", name: "Elace Glass",          industry: "Vidraçaria",  reason: "both" },
+              ]}
+            />
+          </div>
+
+          {/* ClientStatusList */}
+          <div className="mb-8">
+            <p className="text-lone-eyebrow text-lone-text-disabled tracking-[1.5px] mb-3">CLIENTSTATUSLIST</p>
+            <ClientStatusListPreview />
+          </div>
+        </section>
+
         <div className="border-t border-lone-border pt-6 text-center">
           <p className="text-lone-caption text-lone-text-disabled">
-            Lone OS Design System v2 · Onda UI-1 Fase 0 · 2026-05-19
+            Lone OS Design System v2 · Onda UI-1 Fase 1.2 · 2026-05-19
           </p>
         </div>
 
       </div>
     </div>
+  );
+}
+
+function ClientStatusListPreview() {
+  const [filter, setFilter] = React.useState<import("@/components/dashboard-v2").StatusFilterValue>("all");
+
+  const ALL_CLIENTS: import("@/components/dashboard-v2").ClientRowData[] = [
+    { id: "1", name: "Madeirão Móveis",      status: "good",       postsThisMonth: 11, postsGoal: 12, assignedTraffic: "Ana Lima",   assignedSocial: "Carlos Melo" },
+    { id: "2", name: "Calabria Decorações",  status: "average",    postsThisMonth: 4,  postsGoal: 12, assignedTraffic: "Pedro Alves", assignedSocial: "Mariana Costa" },
+    { id: "3", name: "Iron Fox",             status: "at_risk",    postsThisMonth: 0,  postsGoal: 8,  assignedTraffic: "Ana Lima",   assignedSocial: "Carlos Melo" },
+    { id: "4", name: "Atlas Inc",            status: "onboarding", postsThisMonth: 0,  postsGoal: 12, assignedTraffic: "Pedro Alves", assignedSocial: "Mariana Costa" },
+    { id: "5", name: "Dinheo Cell",          status: "good",       postsThisMonth: 14, postsGoal: 12, assignedTraffic: "Ana Lima",   assignedSocial: "Carlos Melo" },
+  ];
+
+  const filtered = filter === "all" ? ALL_CLIENTS : ALL_CLIENTS.filter((c) => c.status === filter);
+
+  return (
+    <ClientStatusList
+      clients={filtered}
+      totalCount={ALL_CLIENTS.length}
+      statusFilter={filter}
+      onFilterChange={setFilter}
+    />
   );
 }

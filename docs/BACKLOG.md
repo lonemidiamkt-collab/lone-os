@@ -95,3 +95,111 @@ nas rotas de API usa `getServerUser(req)` em `lib/supabase/auth-server.ts`.
 - Sistema tiver mais de 10 usuários simultâneos, **ou**
 - Antes de adicionar clientes finais com acesso ao painel, **ou**
 - Quando for implementado acesso externo (integrações, API pública)
+
+---
+
+## 4. Refatorar arquitetura do dashboard (app/page.tsx)
+
+**Contexto:** `app/page.tsx` tem 1075 linhas, é um único Client Component
+(`"use client"`) com dois sub-componentes (`AdminDashboard`,
+`EmployeeDashboard`) e toda a lógica inline.
+
+**Limitação conhecida:**
+- Um único arquivo grande dificulta manutenção e onboarding de novos devs
+- "use client" no topo força todo o bundle a ser carregado no cliente,
+  incluindo partes que poderiam ser Server Components
+- Impossível fazer streaming/Suspense por seção enquanto for monolítico
+
+**Proposta de implementação futura:**
+1. Extrair `AdminDashboard` e `EmployeeDashboard` para arquivos próprios
+   em `app/(dashboard)/`
+2. Converter shells externos (header, layout) para Server Components
+3. Manter apenas stores Zustand e interações UI como Client Components
+4. Usar `React.lazy` / `Suspense` por seção para loading progressivo
+
+**Quando priorizar:** Quando aparecer queixa de lentidão no dashboard,
+ou ao próximo onboarding de desenvolvedor na equipe.
+
+**Referência:** `app/page.tsx` — auditado em 2026-05-19, DASHBOARD_AUDIT.md
+
+---
+
+## 5. Implementar fonte de dados real para Ad Rejection e MorningBriefing
+
+**Contexto:** Dois blocos do AdminDashboard usam `mockAdCampaigns`
+(dados estáticos em `lib/mockData.ts`):
+1. **Ad Rejection Alert** — lista campanhas com `status === "error"`
+2. **MorningBriefing** — monta prompt com spend, budget e campanhas por cliente
+
+**Decisão Onda UI-1:** Esses blocos foram **removidos do novo dashboard**
+(Fase 1.3) para não exibir dados falsos. Os componentes visuais serão
+criados mas não renderizados até que dados reais existam.
+
+**Proposta de implementação futura:**
+1. Criar tabela `ad_campaign_snapshots` no Supabase com dados
+   importados periodicamente via Meta API (cron ou webhook)
+2. Expor via `GET /api/meta/campaigns` com cache de 15 min
+3. Substituir `mockAdCampaigns` pelo fetch real nos componentes
+4. Reintroduzir Ad Rejection Alert e MorningBriefing no dashboard novo
+
+**Quando priorizar:** Quando o time de tráfego pedir visibilidade de
+erros de campanha diretamente no dashboard (hoje consultam no Meta Ads
+Manager diretamente).
+
+---
+
+## 6. Auditoria de drift git→produção (recorrente)
+
+**Contexto:** Padrão de incidente recorrente onde arquivos criados no
+working directory nunca foram adicionados ao git, causando divergência
+silenciosa entre código local e produção.
+
+**Histórico de incidentes:**
+- **Abril/2026:** 12 rotas de API ficaram untracked por ~2 meses.
+  Produção quebrou silenciosamente (calendário, contratos, AI).
+  Só descoberto ao investigar bug de calendário.
+- **Maio/2026:** 13 arquivos descobertos via auditoria pré-emptiva
+  antes da Fase 1.3. Pegou antes de causar problema.
+
+**Limitação atual:**
+Não existe processo automatizado que compare o working directory com
+o índice git ou com produção. A detecção depende de checagem manual.
+
+**Proposta de implementação:**
+Criar `scripts/audit-drift.mjs` que:
+1. Roda `git ls-files --others --exclude-standard` nos diretórios
+   relevantes: `app/`, `components/`, `lib/`, `scripts/`, `docs/`
+2. Filtra padrões irrelevantes (`.DS_Store`, `node_modules`, etc.)
+3. Se encontrar arquivos `??`, gera relatório em
+   `docs/AUDIT_REPORTS/YYYY-MM-DD.md` e imprime alerta no terminal
+4. (Opcional) Comparar com produção via SSH: `git -C /opt/loneos log --oneline -1`
+
+Adicionar ao `CLAUDE.md`: rodar `node scripts/audit-drift.mjs` ao
+final de cada sessão que criar novos arquivos.
+
+**Nota sobre `pasta sem título/`:** Esta pasta ainda aparece como `??`
+no git status. O nome contém `í` (UTF-8 `\303\255`) que impede o match
+com o `.gitignore`. Para resolver definitivamente, usar o nome exato
+que o git reporta na entrada do `.gitignore`, ou mover/deletar a pasta
+manualmente.
+
+**Quando priorizar:** Alta prioridade. Próximo incidente pode quebrar
+features críticas em produção sem nenhum erro visível.
+
+---
+
+## 7. Investigar supabase-studio-1 unhealthy
+
+**Contexto:** Container `supabase-studio-1` aparece como `(unhealthy)` no
+`docker ps` há pelo menos semanas (observado em 2026-05-19). É a UI de
+administração do Supabase self-hosted.
+
+**Impacto:** Nenhum no app em produção. O `loneos-app-1` e
+`supabase-db-1` (healthy) não dependem do studio. Acesso ao banco
+continua via `supabase-kong-1` e `supabase-rest-1`.
+
+**Quando priorizar:** Baixa. Investigar quando houver necessidade de usar
+a UI do Supabase diretamente no VPS (ex: query rápida sem SSH).
+
+**Referência:** VPS `/opt/backups/postgres/` — backups em `/opt/backups/postgres/`,
+não em `/opt/loneos/backups/` (path corrigido em 2026-05-19).

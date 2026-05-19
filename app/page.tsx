@@ -17,10 +17,21 @@ import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
 import { useRole } from "@/lib/context/RoleContext";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
 import type { ClientStatus } from "@/lib/types";
 import { mockAdCampaigns } from "@/lib/mockData";
 import { supabase } from "@/lib/supabase/client";
+import { getDashboardData } from "@/lib/dashboard/getDashboardData";
+import {
+  DashboardHeader,
+  CriticalAlertBanner,
+  QuickActions,
+  TeamSection,
+  WeeklyAttention,
+  ClientStatusList,
+} from "@/components/dashboard-v2";
+import { KPICard } from "@/components/lone-ui";
 import TrafficChecklist from "@/components/sector/TrafficChecklist";
 import PostCounter from "@/components/sector/PostCounter";
 import DesignQueue from "@/components/sector/DesignQueue";
@@ -471,9 +482,8 @@ function AdminDashboard() {
   const designRequests = useContentStore((s) => s.designRequests);
   const tasks = useOperationalStore((s) => s.tasks);
   const updateTask = useOperationalStore((s) => s.updateTask);
-  const timeline = useOperationalStore((s) => s.timeline);
   const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
-  const { role } = useRole();
+  const router = useRouter();
 
   const [statusFilter, setStatusFilter] = useState<ClientStatus | "all">("all");
   const [contractStats, setContractStats] = useState({ active: 0, pending: 0, expiring: 0 });
@@ -493,121 +503,98 @@ function AdminDashboard() {
     return () => { mounted = false; };
   }, []);
 
-  const activeClients = clients.filter((c) => c.status !== "onboarding");
-  const atRiskClients = clients.filter((c) => c.status === "at_risk");
-  const onboardingClients = clients.filter((c) => c.status === "onboarding");
-  const urgentTasks = tasks.filter((t) => t.priority === "critical" && t.status !== "done");
-
-  const pipelineCards = contentCards.filter((c) => c.status !== "published");
-  const publishedThisMonth = contentCards.filter((c) => c.status === "published").length;
-  const stuckCards = pipelineCards.filter((c) => {
-    const enteredAt = c.columnEnteredAt?.[c.status] ?? c.statusChangedAt;
-    return hoursSince(enteredAt) >= 48;
-  });
-  const pendingApproval = contentCards.filter((c) => c.status === "approval" || c.status === "client_approval").length;
-
-  const designQueued = designRequests.filter((r) => r.status === "queued").length;
-  const designInProg = designRequests.filter((r) => r.status === "in_progress").length;
-
-  const teamProductivity = useMemo(() => {
-    const socialMembers = [...new Set(clients.map((c) => c.assignedSocial))];
-    return socialMembers.map((name) => {
-      const memberClients = clients.filter((c) => c.assignedSocial === name && c.status !== "onboarding");
-      const memberCards = contentCards.filter((c) => c.socialMedia === name);
-      const published = memberCards.filter((c) => c.status === "published").length;
-      const inPipeline = memberCards.filter((c) => c.status !== "published").length;
-      return { name, clientCount: memberClients.length, published, inPipeline };
-    });
-  }, [clients, contentCards]);
-
-  const trafficProductivity = useMemo(() => {
-    const managers = [...new Set(clients.map((c) => c.assignedTraffic))];
-    const today = new Date().toISOString().slice(0, 10);
-    return managers.map((name) => {
-      const memberClients = clients.filter((c) => c.assignedTraffic === name && c.status !== "onboarding");
-      const todayChecks = trafficRoutineChecks.filter((c) => c.date === today && c.completedBy === name);
-      const supportDone = todayChecks.filter((c) => c.type === "support").length;
-      return { name, clientCount: memberClients.length, supportDone, supportTotal: memberClients.length };
-    });
-  }, [clients, trafficRoutineChecks]);
-
-  const inactivityAlerts = clients
-    .filter((c) => c.status !== "onboarding")
-    .map((c) => ({ client: c, hours: hoursSince(c.lastKanbanActivity) }))
-    .filter((x) => x.hours >= 24)
-    .sort((a, b) => b.hours - a.hours);
-
-  const zeroPostClients = clients.filter(
-    (c) => (c.postsThisMonth ?? 0) === 0 && c.status !== "onboarding"
+  const {
+    activeClients, atRiskClients, onboardingClients, urgentTasks,
+    pipelineCards, publishedThisMonth, stuckCards, pendingApproval,
+    designQueued, designInProg, teamProductivity, trafficProductivity,
+    inactiveSevenDays,
+  } = useMemo(
+    () => getDashboardData({ clients, contentCards, designRequests, tasks, trafficRoutineChecks }),
+    [clients, contentCards, designRequests, tasks, trafficRoutineChecks]
   );
 
-  const sevenDaysAgo = Date.now() - 7 * 86400000;
-  const inactiveSevenDays = clients.filter((c) => {
-    const noKanban = !c.lastKanbanActivity || new Date(c.lastKanbanActivity).getTime() < sevenDaysAgo;
-    const noPost = !c.lastPostDate || new Date(c.lastPostDate).getTime() < sevenDaysAgo;
-    return noKanban && noPost && c.status !== "onboarding";
+  const tableClients = useMemo(
+    () => statusFilter === "all" ? clients : clients.filter((c) => c.status === statusFilter),
+    [clients, statusFilter]
+  );
+
+  const bottlenecks = useMemo(() => {
+    const counts: Record<string, { count: number; clients: string[] }> = {};
+    contentCards.filter((c) => c.status !== "published").forEach((c) => {
+      if (!counts[c.status]) counts[c.status] = { count: 0, clients: [] };
+      counts[c.status].count++;
+      if (!counts[c.status].clients.includes(c.clientName)) counts[c.status].clients.push(c.clientName);
+    });
+    return Object.entries(counts).filter(([, v]) => v.count >= 2).sort((a, b) => b[1].count - a[1].count);
+  }, [contentCards]);
+
+  const bottleneckLabels: Record<string, string> = {
+    ideas: "Ideias", script: "Roteiro", in_production: "Em Produção",
+    approval: "Aprovação Interna", client_approval: "Aprovação do Cliente", scheduled: "Agendado",
+  };
+
+  const dateLabel = new Date().toLocaleDateString("pt-BR", {
+    weekday: "long", day: "numeric", month: "short", year: "numeric",
   });
-
-  const recentActivities = useMemo(() => {
-    const allEntries: { clientId: string; actor: string; description: string; timestamp: string; type: string }[] = [];
-    for (const [, entries] of Object.entries(timeline)) {
-      entries.forEach((e) => allEntries.push(e));
-    }
-    return allEntries.sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 10);
-  }, [timeline]);
-
-  const tableClients = statusFilter === "all"
-    ? clients
-    : clients.filter((c) => c.status === statusFilter);
 
   return (
     <>
-      {/* Metrics Row */}
+      {/* Barra de contexto: data */}
+      <DashboardHeader subtitle={`Hoje, ${dateLabel}`} />
+
+      {/* KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-        <MetricCard icon={Users} label="Clientes Ativos" value={activeClients.length} sub="clientes em operacao" iconColor="text-primary" iconBg="bg-primary/10" href="/clients" />
-        <MetricCard icon={AlertTriangle} label="Em Risco" value={atRiskClients.length} sub="precisam de atencao" iconColor="text-red-500" iconBg="bg-red-500/10" href="/clients?filter=at_risk" />
-        <MetricCard icon={UserPlus} label="Onboarding" value={onboardingClients.length} sub="novos clientes" iconColor="text-primary" iconBg="bg-primary/10" href="/clients?filter=onboarding" />
-        <MetricCard icon={Clock} label="Tarefas Urgentes" value={urgentTasks.length} sub="prioridade critica" iconColor="text-primary" iconBg="bg-primary/10" href="/my-work" />
+        <KPICard label="Clientes Ativos" value={activeClients.length} caption="em operação" tone="default" accent onClick={() => router.push("/clients")} />
+        <KPICard label="Em Risco" value={atRiskClients.length} caption="precisam atenção" tone={atRiskClients.length > 0 ? "danger" : "default"} accent onClick={() => setStatusFilter("at_risk")} />
+        <KPICard label="Onboarding" value={onboardingClients.length} caption="novos clientes" tone={onboardingClients.length > 0 ? "info" : "default"} accent onClick={() => router.push("/clients?filter=onboarding")} />
+        <KPICard label="Tarefas Urgentes" value={urgentTasks.length} caption="prioridade crítica" tone={urgentTasks.length > 0 ? "warning" : "default"} accent onClick={() => router.push("/my-work")} />
       </div>
 
-      {/* Quick Actions */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-muted-foreground mr-1">Ações rápidas:</span>
-        <Link href="/calendar" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 transition-all">
-          <Plus size={12} /> Nova Tarefa
-        </Link>
-        <Link href="/social" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-muted text-foreground border border-border hover:bg-muted/70 transition-all">
-          <FileText size={12} /> Novo Card
-        </Link>
-        <Link href="/my-work" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-muted text-foreground border border-border hover:bg-muted/70 transition-all">
-          <Inbox size={12} /> Meu Trabalho
-        </Link>
-        <span className="ml-auto text-[10px] text-muted-foreground/50">⌘K para buscar</span>
-      </div>
+      {/* Ações rápidas */}
+      <QuickActions
+        actions={[
+          { id: "task", label: "Nova Tarefa", href: "/calendar", variant: "primary", icon: <Plus size={12} /> },
+          { id: "card", label: "Novo Card", href: "/social", variant: "secondary", icon: <FileText size={12} /> },
+          { id: "work", label: "Meu Trabalho", href: "/my-work", variant: "secondary", icon: <Inbox size={12} /> },
+        ]}
+      />
 
-      {/* Onboarding Pending Alert */}
+      {/* Onboarding pendente */}
       {onboardingClients.length > 0 && (
-        <Link href="/clients/pending" className="block rounded-xl border border-[#0d4af5]/20 bg-[#0d4af5]/[0.03] p-4 hover:bg-[#0d4af5]/[0.06] transition-all group">
+        <Link href="/clients/pending" className="block rounded-xl border border-lone-brand/20 bg-lone-brand/[0.03] p-4 hover:bg-lone-brand/[0.06] transition-all group">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-[#0d4af5]/15 flex items-center justify-center">
-                <UserPlus size={18} className="text-[#0d4af5]" />
+              <div className="w-9 h-9 rounded-lg bg-lone-brand/15 flex items-center justify-center">
+                <UserPlus size={18} className="text-lone-brand" aria-hidden="true" />
               </div>
               <div>
-                <p className="text-sm font-medium text-foreground">{onboardingClients.length} cadastro{onboardingClients.length > 1 ? "s" : ""} pendente{onboardingClients.length > 1 ? "s" : ""}</p>
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-lone-body font-inter font-medium text-lone-text-primary">
+                  {onboardingClients.length} cadastro{onboardingClients.length > 1 ? "s" : ""} pendente{onboardingClients.length > 1 ? "s" : ""}
+                </p>
+                <p className="text-lone-caption font-inter text-lone-text-tertiary">
                   {onboardingClients.map((c) => c.nomeFantasia || c.name).slice(0, 3).join(", ")}
                   {onboardingClients.length > 3 ? ` +${onboardingClients.length - 3}` : ""}
                 </p>
               </div>
             </div>
-            <ChevronRight size={16} className="text-muted-foreground/70 group-hover:text-[#0d4af5] transition-colors" />
+            <ChevronRight size={16} className="text-lone-text-disabled group-hover:text-lone-brand transition-colors" aria-hidden="true" />
           </div>
         </Link>
       )}
 
-      {/* Budget alerts */}
+      {/* Alertas de orçamento */}
       <BudgetAlert clients={clients} />
+
+      {/* Banner de urgências */}
+      <CriticalAlertBanner
+        alerts={[
+          { type: "clients_at_risk",   count: atRiskClients.length,    onClick: () => setStatusFilter("at_risk") },
+          { type: "stuck_cards",        count: stuckCards.length,        href: "/social" },
+          { type: "urgent_tasks",       count: urgentTasks.length,       href: "/calendar" },
+          { type: "expiring_contracts", count: contractStats.expiring,   href: "/clients" },
+          { type: "pending_approval",   count: pendingApproval,          href: "/social" },
+        ]}
+      />
 
       {/* Health Radar + Smart Alerts */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -615,405 +602,147 @@ function AdminDashboard() {
         <SmartAlerts />
       </div>
 
-      {/* Contracts summary */}
+      {/* Resumo de contratos — somente admin */}
       {(contractStats.active > 0 || contractStats.pending > 0 || contractStats.expiring > 0) && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground mb-3 flex items-center gap-1.5"><FileText size={11} /> Contratos</p>
-          <div className="flex gap-4">
+        <div className="rounded-xl border border-lone-border bg-lone-bg-card p-4">
+          <p className="text-lone-eyebrow font-inter text-lone-text-tertiary mb-3 flex items-center gap-1.5 tracking-[1.5px]">
+            <FileText size={11} aria-hidden="true" /> CONTRATOS
+          </p>
+          <div className="flex gap-6">
             <div>
-              <p className="text-lg font-bold text-emerald-400">{contractStats.active}</p>
-              <p className="text-[10px] text-muted-foreground">Assinados</p>
+              <p className="text-lone-h1 font-inter text-[var(--lone-success)]">{contractStats.active}</p>
+              <p className="text-lone-caption font-inter text-lone-text-tertiary">Assinados</p>
             </div>
             <div>
-              <p className="text-lg font-bold text-amber-400">{contractStats.pending}</p>
-              <p className="text-[10px] text-muted-foreground">Pendentes</p>
+              <p className="text-lone-h1 font-inter text-[var(--lone-warning)]">{contractStats.pending}</p>
+              <p className="text-lone-caption font-inter text-lone-text-tertiary">Pendentes</p>
             </div>
             {contractStats.expiring > 0 && (
               <div>
-                <p className="text-lg font-bold text-red-400">{contractStats.expiring}</p>
-                <p className="text-[10px] text-muted-foreground">Vence em 30d</p>
+                <p className="text-lone-h1 font-inter text-[var(--lone-danger)]">{contractStats.expiring}</p>
+                <p className="text-lone-caption font-inter text-lone-text-tertiary">Vence em 30d</p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Ad Rejection Alert */}
-      {mockAdCampaigns.filter((c) => c.status === "error").length > 0 && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 kpi-danger animate-fade-in">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-lg bg-red-500/15 flex items-center justify-center shrink-0">
-              <AlertCircle size={18} className="text-red-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <h4 className="text-sm font-bold text-red-400">Anúncios Rejeitados / com Erro</h4>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/20 font-bold">
-                  {mockAdCampaigns.filter((c) => c.status === "error").length}
-                </span>
-              </div>
-              <div className="space-y-1.5">
-                {mockAdCampaigns.filter((c) => c.status === "error").map((camp) => (
-                  <div key={camp.id} className="flex items-center gap-2 text-xs">
-                    <ZapOff size={12} className="text-red-400 shrink-0" />
-                    <span className="text-foreground font-medium">{camp.name}</span>
-                    <span className="text-muted-foreground">·</span>
-                    <span className="text-muted-foreground">{camp.clientName}</span>
-                    <Link href="/traffic" className="text-[#0d4af5] hover:text-[#3b6ff5] font-medium ml-auto flex items-center gap-1">
-                      Ver detalhes <ChevronRight size={11} />
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Morning Briefing (AI) — only for traffic/admin/manager */}
-      {(role === "admin" || role === "manager" || role === "traffic") && (
-        <MorningBriefing
-          clients={clients.filter((c) => c.status !== "onboarding").map((c) => ({
-            id: c.id,
-            name: c.name,
-            campaigns: mockAdCampaigns.filter((camp) => camp.clientId === c.id),
-            totalSpend: mockAdCampaigns.filter((camp) => camp.clientId === c.id).reduce((s, camp) => s + camp.spend, 0),
-            totalBudget: mockAdCampaigns.filter((camp) => camp.clientId === c.id).reduce((s, camp) => s + camp.totalBudget, 0),
-          }))}
-        />
-      )}
-
-      {/* Urgências do Dia */}
-      {(pendingApproval > 0 || urgentTasks.length > 0 || stuckCards.length > 0 || atRiskClients.length > 0) && (
-        <div className="rounded-xl border border-[#0d4af5]/20 bg-[#0d4af5]/[0.03] p-4 animate-fade-in">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-lg bg-[#0d4af5]/15 flex items-center justify-center">
-              <Zap size={14} className="text-[#0d4af5]" />
-            </div>
-            <h4 className="text-sm font-bold text-foreground">Urgências do Dia</h4>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-            {pendingApproval > 0 && (
-              <Link href="/social" className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/15 hover:border-amber-500/30 transition-all">
-                <Clock size={13} className="text-amber-400 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-foreground">{pendingApproval} aguardando aprovação</p>
-                  <p className="text-[10px] text-muted-foreground">posts sem validação</p>
-                </div>
-              </Link>
-            )}
-            {urgentTasks.length > 0 && (
-              <Link href="/calendar" className="flex items-center gap-2 p-2.5 rounded-lg bg-red-500/5 border border-red-500/15 hover:border-red-500/30 transition-all">
-                <AlertCircle size={13} className="text-red-400 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-foreground">{urgentTasks.length} tarefas críticas</p>
-                  <p className="text-[10px] text-muted-foreground">prioridade máxima</p>
-                </div>
-              </Link>
-            )}
-            {stuckCards.length > 0 && (
-              <Link href="/social" className="flex items-center gap-2 p-2.5 rounded-lg bg-orange-500/5 border border-orange-500/15 hover:border-orange-500/30 transition-all">
-                <AlertTriangle size={13} className="text-orange-400 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-foreground">{stuckCards.length} cards parados</p>
-                  <p className="text-[10px] text-muted-foreground">mais de 48h sem mover</p>
-                </div>
-              </Link>
-            )}
-            {atRiskClients.length > 0 && (
-              <button onClick={() => setStatusFilter("at_risk")} className="flex items-center gap-2 p-2.5 rounded-lg bg-red-500/5 border border-red-500/15 hover:border-red-500/30 transition-all text-left">
-                <Users size={13} className="text-red-400 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-foreground">{atRiskClients.length} clientes em risco</p>
-                  <p className="text-[10px] text-muted-foreground">atenção imediata</p>
-                </div>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Ad Rejection Alert — oculto: dados dependem de mockAdCampaigns (ver BACKLOG #5) */}
+      {/* MorningBriefing (AI) — oculto: dados dependem de mockAdCampaigns (ver BACKLOG #5) */}
 
       {/* Pipeline Quick Stats */}
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
-        <Link href="/social" className="bg-card border border-border rounded-xl p-4 hover:border-[#0d4af5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pipeline</p>
-          <p className="text-xl font-bold text-foreground">{pipelineCards.length}</p>
-          <p className="text-xs text-muted-foreground">cards em andamento</p>
-        </Link>
-        <Link href="/social" className="bg-card border border-border rounded-xl p-4 hover:border-[#0d4af5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Publicados</p>
-          <p className="text-xl font-bold text-primary">{publishedThisMonth}</p>
-          <p className="text-xs text-muted-foreground">este mês</p>
-        </Link>
-        <Link href="/social" className={`bg-card border rounded-xl p-4 hover:border-[#0d4af5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer ${stuckCards.length > 0 ? "border-red-500/20" : "border-border"}`}>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Parados 48h+</p>
-          <p className={`text-xl font-bold ${stuckCards.length > 0 ? "text-red-500" : "text-foreground"}`}>{stuckCards.length}</p>
-          <p className="text-xs text-muted-foreground">SLA violado</p>
-        </Link>
-        <Link href="/social" className="bg-card border border-border rounded-xl p-4 hover:border-[#0d4af5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Aprovação</p>
-          <p className="text-xl font-bold text-foreground">{pendingApproval}</p>
-          <p className="text-xs text-muted-foreground">aguardando review</p>
-        </Link>
-        <Link href="/design" className="bg-card border border-border rounded-xl p-4 hover:border-[#0d4af5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)] transition-all cursor-pointer">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Design</p>
-          <p className="text-xl font-bold text-foreground">{designQueued + designInProg}</p>
-          <p className="text-xs text-muted-foreground">{designQueued} fila · {designInProg} produzindo</p>
-        </Link>
+        <KPICard label="Pipeline"    value={pipelineCards.length}       caption="cards em andamento"   onClick={() => router.push("/social")} />
+        <KPICard label="Publicados"  value={publishedThisMonth}         caption="este mês"             tone="success" onClick={() => router.push("/social")} />
+        <KPICard label="Parados 48h+" value={stuckCards.length}         caption="SLA violado"          tone={stuckCards.length > 0 ? "danger" : "default"} onClick={() => router.push("/social")} />
+        <KPICard label="Aprovação"   value={pendingApproval}            caption="aguardando review"    tone={pendingApproval > 0 ? "warning" : "default"} onClick={() => router.push("/social")} />
+        <KPICard label="Design"      value={designQueued + designInProg} caption={`${designQueued} fila · ${designInProg} prod`} onClick={() => router.push("/design")} />
       </div>
 
-      {/* Bottlenecks */}
-      {(() => {
-        const statusCounts: Record<string, { count: number; clients: string[] }> = {};
-        const statusLabels: Record<string, string> = {
-          ideas: "Ideias", script: "Roteiro", in_production: "Em Produção",
-          approval: "Aprovação Interna", client_approval: "Aprovação do Cliente", scheduled: "Agendado",
-        };
-        contentCards.filter((c) => c.status !== "published").forEach((c) => {
-          if (!statusCounts[c.status]) statusCounts[c.status] = { count: 0, clients: [] };
-          statusCounts[c.status].count++;
-          if (!statusCounts[c.status].clients.includes(c.clientName)) {
-            statusCounts[c.status].clients.push(c.clientName);
-          }
-        });
-        const bottlenecks = Object.entries(statusCounts).filter(([, v]) => v.count >= 2).sort((a, b) => b[1].count - a[1].count);
-        if (bottlenecks.length === 0) return null;
-        return (
-          <div className="card border border-border">
-            <div className="flex items-center gap-2 mb-3">
-              <LayoutList size={16} className="text-muted-foreground" />
-              <h3 className="font-semibold text-foreground text-sm">Gargalos da Semana</h3>
-              <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full border border-border">
-                {bottlenecks.length} gargalo{bottlenecks.length > 1 ? "s" : ""}
-              </span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              {bottlenecks.map(([status, data]) => (
-                <Link
-                  key={status}
-                  href={status === "in_production" || status === "ideas" || status === "script" ? "/social" : status === "approval" || status === "client_approval" ? "/social" : "/social"}
-                  className="flex items-start gap-3 bg-muted border border-border rounded-lg p-3 hover:border-primary/30 transition-colors group"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                    <span className="text-sm font-bold text-muted-foreground">{data.count}</span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-foreground">{statusLabels[status] ?? status}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{data.count} itens parados</p>
-                    <p className="text-xs text-muted-foreground mt-1 truncate">
-                      {data.clients.slice(0, 3).join(", ")}{data.clients.length > 3 ? ` +${data.clients.length - 3}` : ""}
-                    </p>
-                  </div>
-                  <ChevronRight size={14} className="text-muted-foreground/30 group-hover:text-primary shrink-0 mt-1 transition-colors" />
-                </Link>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Team Productivity */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div className="card">
-          <h3 className="font-semibold text-foreground flex items-center gap-2 mb-3 text-sm">
-            <Instagram size={15} className="text-primary" />
-            Equipe Social
-          </h3>
-          <div className="space-y-2">
-            {teamProductivity.map((m) => (
-              <div key={m.name} className="flex items-center gap-3 p-2.5 bg-muted/30 rounded-lg">
-                <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-                  <span className="text-[10px] font-bold text-primary">{m.name.split(" ").map((n) => n[0]).join("")}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground">{m.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{m.clientCount} clientes</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-primary font-bold">{m.published}</p>
-                  <p className="text-[10px] text-muted-foreground">publicados</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-foreground font-bold">{m.inPipeline}</p>
-                  <p className="text-[10px] text-muted-foreground">pipeline</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="card">
-          <h3 className="font-semibold text-foreground flex items-center gap-2 mb-3 text-sm">
-            <TrendingUp size={15} className="text-primary" />
-            Equipe Tráfego
-          </h3>
-          <div className="space-y-2">
-            {trafficProductivity.map((m) => (
-              <div key={m.name} className="flex items-center gap-3 p-2.5 bg-muted/30 rounded-lg">
-                <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-                  <span className="text-[10px] font-bold text-primary">{m.name.split(" ").map((n) => n[0]).join("")}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground">{m.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{m.clientCount} clientes</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-foreground">{m.supportDone}/{m.supportTotal}</p>
-                  <p className="text-[10px] text-muted-foreground">suporte hoje</p>
-                </div>
-                <div className="w-16">
-                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${m.supportDone >= m.supportTotal ? "bg-primary" : "bg-zinc-500"}`}
-                      style={{ width: `${m.supportTotal > 0 ? Math.round((m.supportDone / m.supportTotal) * 100) : 0}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Main grid — cleaned up per Lucas feedback */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Avisos da Empresa — unico lugar */}
-        <div className="xl:col-span-2">
-          <NoticeFormBlock />
-        </div>
-
-        {/* Tarefas Urgentes — com acoes rapidas */}
-        <div className="card">
-          <h3 className="font-semibold text-foreground flex items-center gap-2 mb-3">
-            <AlertTriangle size={15} className="text-[#0d4af5]" />
-            Tarefas Urgentes
-          </h3>
-          <div className="space-y-2">
-            {tasks.filter((t) => ["critical", "high"].includes(t.priority) && t.status !== "done").slice(0, 6).map((task) => (
-              <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors group">
-                <button
-                  onClick={() => updateTask(task.id, { status: task.status === "done" ? "pending" : "done" })}
-                  className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
-                    task.status === "done" ? "bg-[#0d4af5] border-[#0d4af5] text-white" : "border-border hover:border-[#0d4af5]"
-                  }`}>
-                  {task.status === "done" && <Check size={10} />}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-foreground leading-tight">{task.title}</p>
-                  <p className="text-[10px] text-muted-foreground">{task.clientName} · {task.assignedTo}</p>
-                </div>
-                <Link href={task.role === "social" ? "/social" : task.role === "designer" ? "/design" : "/traffic"} className="text-[10px] text-muted-foreground/70 hover:text-[#0d4af5]">
-                  <ChevronRight size={10} />
-                </Link>
-              </div>
-            ))}
-            {tasks.filter((t) => ["critical", "high"].includes(t.priority) && t.status !== "done").length === 0 && (
-              <p className="text-xs text-muted-foreground/70 text-center py-4">Nenhuma tarefa urgente</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Old Feed/Alerts/Tasks/Notices sections removed per Lucas feedback.
-         Content consolidated: Tarefas Urgentes above, Feed in NotificationCenter,
-         Avisos in NoticeFormBlock above. */}
-
-      {/* 7-day report */}
-      {inactiveSevenDays.length > 0 && (
-        <div className="card border border-border">
+      {/* Gargalos da semana */}
+      {bottlenecks.length > 0 && (
+        <div className="rounded-xl border border-lone-border bg-lone-bg-card p-4">
           <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle size={15} className="text-muted-foreground" />
-            <h3 className="font-semibold text-foreground text-sm">
-              Relatório 7 Dias — {inactiveSevenDays.length} cliente(s) sem qualquer interação
-            </h3>
+            <LayoutList size={15} className="text-lone-text-tertiary" aria-hidden="true" />
+            <h3 className="text-lone-h2 font-inter font-medium text-lone-text-primary">Gargalos da Semana</h3>
+            <span className="text-lone-caption font-inter text-lone-text-tertiary bg-lone-bg-elevated px-2 py-0.5 rounded-full border border-lone-border">
+              {bottlenecks.length} gargalo{bottlenecks.length > 1 ? "s" : ""}
+            </span>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {inactiveSevenDays.map((c) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {bottlenecks.map(([status, data]) => (
               <Link
-                key={c.id}
-                href={`/clients/${c.id}`}
-                className="flex items-center gap-2 bg-muted border border-border rounded-lg px-3 py-2 hover:border-muted-foreground/40 transition-colors"
+                key={status}
+                href="/social"
+                className="flex items-start gap-3 bg-lone-bg-elevated border border-lone-border rounded-lg p-3 hover:border-lone-brand/30 transition-colors group"
               >
-                <span className="w-2 h-2 rounded-full bg-zinc-500" />
-                <span className="text-sm text-foreground">{c.name}</span>
-                <span className="text-xs text-muted-foreground">{c.industry}</span>
+                <div className="w-8 h-8 rounded-lg bg-lone-bg-primary flex items-center justify-center shrink-0">
+                  <span className="text-lone-body font-inter font-bold text-lone-text-secondary">{data.count}</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-lone-body font-inter font-medium text-lone-text-primary">{bottleneckLabels[status] ?? status}</p>
+                  <p className="text-lone-caption font-inter text-lone-text-tertiary mt-0.5">{data.count} itens parados</p>
+                  <p className="text-lone-caption font-inter text-lone-text-disabled mt-1 truncate">
+                    {data.clients.slice(0, 3).join(", ")}{data.clients.length > 3 ? ` +${data.clients.length - 3}` : ""}
+                  </p>
+                </div>
+                <ChevronRight size={14} className="text-lone-text-disabled group-hover:text-lone-brand shrink-0 mt-1 transition-colors" aria-hidden="true" />
               </Link>
             ))}
           </div>
         </div>
       )}
 
-      {/* Client Status Table */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <h3 className="font-semibold text-foreground">Status dos Clientes</h3>
-          <div className="flex items-center gap-2">
-            <div className="flex gap-1">
-              {STATUS_FILTER_CONFIG.map((f) => (
-                <button
-                  key={f.key}
-                  onClick={() => setStatusFilter(f.key as ClientStatus | "all")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                    statusFilter === f.key
-                      ? "bg-primary/20 text-primary border border-primary/30"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  }`}
-                >
-                  {f.label}
-                  <span className="ml-1 text-muted-foreground/50">
-                    ({f.key === "all" ? clients.length : clients.filter((c) => c.status === f.key).length})
-                  </span>
-                </button>
+      {/* Equipes */}
+      <TeamSection socialTeam={teamProductivity} trafficTeam={trafficProductivity} />
+
+      {/* Avisos + Tarefas Urgentes */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2">
+          <NoticeFormBlock />
+        </div>
+        <div className="rounded-xl border border-lone-border bg-lone-bg-card p-4">
+          <h3 className="text-lone-h2 font-inter font-medium text-lone-text-primary flex items-center gap-2 mb-3">
+            <AlertTriangle size={14} className="text-lone-brand" aria-hidden="true" />
+            Tarefas Urgentes
+          </h3>
+          <div className="space-y-2">
+            {tasks
+              .filter((t) => ["critical", "high"].includes(t.priority) && t.status !== "done")
+              .slice(0, 6)
+              .map((task) => (
+                <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-lone-bg-elevated transition-colors group">
+                  <button
+                    onClick={() => updateTask(task.id, { status: task.status === "done" ? "pending" : "done" })}
+                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
+                      task.status === "done"
+                        ? "bg-lone-brand border-lone-brand text-white"
+                        : "border-lone-border hover:border-lone-brand"
+                    }`}
+                    aria-label={task.status === "done" ? "Marcar como pendente" : "Marcar como concluída"}
+                  >
+                    {task.status === "done" && <Check size={10} />}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-lone-body font-inter text-lone-text-primary leading-tight">{task.title}</p>
+                    <p className="text-lone-caption font-inter text-lone-text-tertiary">{task.clientName} · {task.assignedTo}</p>
+                  </div>
+                  <Link
+                    href={task.role === "social" ? "/social" : task.role === "designer" ? "/design" : "/traffic"}
+                    className="text-lone-text-disabled hover:text-lone-brand transition-colors"
+                    aria-label="Ir para seção da tarefa"
+                  >
+                    <ChevronRight size={10} />
+                  </Link>
+                </div>
               ))}
-            </div>
-            <Link href="/clients" className="text-xs text-primary hover:underline">Ver todos</Link>
+            {tasks.filter((t) => ["critical", "high"].includes(t.priority) && t.status !== "done").length === 0 && (
+              <p className="text-lone-caption font-inter text-lone-text-disabled text-center py-4">
+                Nenhuma tarefa urgente
+              </p>
+            )}
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left py-2.5 px-3 text-muted-foreground font-medium text-xs">Cliente</th>
-                <th className="text-left py-2.5 px-3 text-muted-foreground font-medium text-xs">Status</th>
-                <th className="text-left py-2.5 px-3 text-muted-foreground font-medium text-xs">Posts/Mês</th>
-                <th className="text-left py-2.5 px-3 text-muted-foreground font-medium text-xs">Responsáveis</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tableClients.map((client) => {
-                const posts = client.postsThisMonth ?? 0;
-                const goal = client.postsGoal ?? 12;
-                const pct = Math.min(100, Math.round((posts / goal) * 100));
-                return (
-                  <tr key={client.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`${getStatusLed(client.status)}`} />
-                        <Link href={`/clients/${client.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
-                          {client.name}
-                        </Link>
-                      </div>
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className="text-xs text-muted-foreground">{getStatusLabel(client.status)}</span>
-                    </td>
-                    <td className="py-3 px-3">
-                      {client.status !== "onboarding" && (
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-1 bg-muted rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="text-xs text-muted-foreground">{posts}/{goal}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-muted-foreground text-xs">{client.assignedTraffic}, {client.assignedSocial}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
       </div>
+
+      {/* Clientes sem interação — 7 dias */}
+      <WeeklyAttention clients={inactiveSevenDays} />
+
+      {/* Lista de status dos clientes */}
+      <ClientStatusList
+        clients={tableClients.map((c) => ({
+          id: c.id,
+          name: c.name,
+          status: c.status,
+          postsThisMonth: c.postsThisMonth ?? 0,
+          postsGoal: c.postsGoal ?? 12,
+          assignedTraffic: c.assignedTraffic,
+          assignedSocial: c.assignedSocial,
+        }))}
+        totalCount={clients.length}
+        statusFilter={statusFilter}
+        onFilterChange={setStatusFilter}
+      />
     </>
   );
 }
