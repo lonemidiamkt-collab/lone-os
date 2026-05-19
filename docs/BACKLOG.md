@@ -63,3 +63,35 @@ para a camada TypeScript replicando a lógica da função SQL.
 
 **Quando priorizar:** Quando a UI de histórico for construída e o
 design exigir completude por versão.
+
+---
+
+## 3. Migrar autenticação de sessionStorage para JWT em cookie httpOnly
+
+**Contexto:** O mecanismo de autenticação principal do Lone OS usa
+`sessionStorage.lone_local_session` para armazenar o ID do perfil do
+usuário (`roberto`, `carlos`, etc.) e derivar role/email a partir de
+`USER_PROFILES` hardcoded em `RoleContext.tsx`. A verificação de admin
+nas rotas de API usa `getServerUser(req)` em `lib/supabase/auth-server.ts`.
+
+**Limitação conhecida:**
+- `sessionStorage` é manipulável via DevTools por qualquer pessoa com
+  acesso ao browser — um usuário pode trocar o `lone_local_session`
+  para `roberto` e obter acesso de admin na UI
+- `sessionStorage` não sobrevive ao fechar a aba
+- Páginas que precisam de proteção server-side (ex: `/dev/tokens`) não
+  conseguem ler `sessionStorage` — precisam de outra fonte de verdade
+- Não escala para múltiplos usuários simultâneos com sessões independentes
+
+**Proposta de implementação futura:**
+1. Implementar login real via Supabase Auth (email/senha ou magic link)
+2. JWT armazenado em cookie `httpOnly; SameSite=Strict` (não acessível
+   por JavaScript)
+3. `getServerUser(req)` já suporta este fluxo — lê cookie `sb-*-auth-token`
+4. Remover `USER_PROFILES` hardcoded e `lone_local_session`
+5. Roles/permissões via `user_metadata` ou tabela separada no Supabase
+
+**Quando priorizar:** Alta prioridade quando:
+- Sistema tiver mais de 10 usuários simultâneos, **ou**
+- Antes de adicionar clientes finais com acesso ao painel, **ou**
+- Quando for implementado acesso externo (integrações, API pública)
