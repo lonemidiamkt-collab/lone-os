@@ -223,13 +223,14 @@ export default function ContentCardModal({ card, onClose }: Props) {
         <div className="flex flex-1 overflow-hidden">
           {/* Left: Art preview */}
           <div className="w-72 border-r border-border flex flex-col shrink-0">
-            {/* Imagem com proporção correta — object-contain mostra a arte completa */}
-            <div className="flex-1 relative bg-zinc-950 overflow-hidden flex items-center justify-center min-h-[200px]">
+            {/* Preview de arte — imagem completa sem corte */}
+            <div className="flex-1 bg-zinc-950 flex items-center justify-center overflow-hidden min-h-[220px] p-1">
               {imageUrl && !imageUrl.startsWith("blob:") ? (
                 <SignedImage
                   src={imageUrl}
                   alt="Arte do conteúdo"
-                  className="w-full h-full object-contain"
+                  className="max-w-full max-h-full object-contain block"
+                  style={{ maxHeight: "100%", maxWidth: "100%" }}
                 />
               ) : imageUrl ? (
                 <DrivePreviewFallback

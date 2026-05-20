@@ -1725,12 +1725,12 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                 onClick={() => onCardClick(card)}
               >
                 {card.imageUrl ? (
-                  <div className="aspect-video w-full overflow-hidden bg-muted">
+                  <div className="aspect-[4/5] w-full overflow-hidden bg-zinc-950 flex items-center justify-center">
                     <SignedImage src={card.imageUrl!} alt={card.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      className="w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-300" />
                   </div>
                 ) : (
-                  <div className="aspect-video w-full flex items-center justify-center bg-muted text-muted-foreground">
+                  <div className="aspect-[4/5] w-full flex items-center justify-center bg-muted text-muted-foreground">
                     <ImageIcon size={20} />
                   </div>
                 )}
