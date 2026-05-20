@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import { Camera, TrendingUp, Plus } from "lucide-react";
+import { TeamMemberRow } from "@/components/lone-ui";
 import { cn } from "@/lib/utils";
 
 export interface SocialMember {
@@ -40,43 +42,43 @@ const TeamSection = React.forwardRef<HTMLDivElement, TeamSectionProps>(
         <div className="rounded-xl border border-lone-border bg-lone-bg-card overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-lone-border">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded border border-lone-brand/40 bg-lone-brand/10 shrink-0" aria-hidden="true" />
-              <span className="text-lone-body font-inter font-semibold text-lone-text-primary">Equipe Social</span>
+              <Camera size={14} className="text-lone-brand shrink-0" aria-hidden="true" />
+              <span className="text-lone-body font-inter font-semibold text-lone-text-primary">
+                Equipe Social
+              </span>
             </div>
             <span className="text-lone-caption font-inter text-lone-text-tertiary">
               {totalPublished} publicados · {totalPipeline} pipeline
             </span>
           </div>
 
-          {socialTeam.map((member, i) => (
-            <div
-              key={member.name}
-              className={cn(
-                "flex items-center gap-3 px-4 py-3",
-                i < socialTeam.length - 1 && "border-b border-lone-border"
-              )}
-            >
-              <div className="w-9 h-9 rounded-full bg-lone-bg-elevated flex items-center justify-center shrink-0">
-                <span className="text-lone-caption font-inter font-bold text-lone-text-secondary">
-                  {initials(member.name)}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-lone-body font-inter font-medium text-lone-text-primary">{member.name}</p>
-                <p className="text-lone-caption font-inter text-lone-text-tertiary">{member.clientCount} clientes</p>
-              </div>
-              <span className={cn(
-                "text-lone-body font-inter font-medium tabular-nums shrink-0",
-                member.inPipeline > 0 ? "text-lone-brand" : "text-lone-text-tertiary"
-              )}>
-                {member.inPipeline} / {member.published + member.inPipeline} pipeline
-              </span>
-            </div>
-          ))}
+          <div className="px-4">
+            {socialTeam.map((member, i) => (
+              <TeamMemberRow
+                key={member.name}
+                name={member.name}
+                role={`${member.clientCount} clientes`}
+                initials={initials(member.name)}
+                metric={{
+                  value: `${member.inPipeline} / ${member.published + member.inPipeline}`,
+                  label: "pipeline",
+                  tone: "default",
+                }}
+                last={i === socialTeam.length - 1}
+              />
+            ))}
+            {socialTeam.length === 0 && (
+              <p className="text-lone-caption font-inter text-lone-text-disabled text-center py-4">
+                Nenhum membro
+              </p>
+            )}
+          </div>
 
-          <div className="flex items-center justify-between px-4 py-3 border-t border-lone-border">
-            <span className="text-lone-caption font-inter italic text-lone-text-disabled">Adicionar membro</span>
-            <div className="w-4 h-4 rounded border border-lone-border/60" aria-hidden="true" />
+          <div className="flex items-center justify-between px-4 py-2.5 border-t border-lone-border">
+            <span className="text-lone-caption font-inter italic text-lone-text-disabled">
+              Adicionar membro
+            </span>
+            <Plus size={13} className="text-lone-text-disabled" aria-hidden="true" />
           </div>
         </div>
 
@@ -84,45 +86,43 @@ const TeamSection = React.forwardRef<HTMLDivElement, TeamSectionProps>(
         <div className="rounded-xl border border-lone-border bg-lone-bg-card overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-lone-border">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded border border-lone-brand/40 bg-lone-brand/10 shrink-0" aria-hidden="true" />
-              <span className="text-lone-body font-inter font-semibold text-lone-text-primary">Equipe Tráfego</span>
+              <TrendingUp size={14} className="text-lone-brand shrink-0" aria-hidden="true" />
+              <span className="text-lone-body font-inter font-semibold text-lone-text-primary">
+                Equipe Tráfego
+              </span>
             </div>
             <span className="text-lone-caption font-inter text-lone-text-tertiary">
               {totalSupDone}/{totalSupTotal} atendidos hoje
             </span>
           </div>
 
-          {trafficTeam.map((member, i) => (
-            <div
-              key={member.name}
-              className={cn(
-                "flex items-center gap-3 px-4 py-3",
-                i < trafficTeam.length - 1 && "border-b border-lone-border"
-              )}
-            >
-              <div className="w-9 h-9 rounded-full bg-lone-bg-elevated flex items-center justify-center shrink-0">
-                <span className="text-lone-caption font-inter font-bold text-lone-text-secondary">
-                  {initials(member.name)}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-lone-body font-inter font-medium text-lone-text-primary">{member.name}</p>
-                <p className="text-lone-caption font-inter text-lone-text-tertiary">{member.clientCount} clientes</p>
-              </div>
-              <span className={cn(
-                "text-lone-body font-inter font-medium tabular-nums shrink-0",
-                member.supportDone < member.supportTotal
-                  ? "text-[var(--lone-warning)]"
-                  : "text-lone-text-tertiary"
-              )}>
-                {member.supportDone} / {member.supportTotal} suporte
-              </span>
-            </div>
-          ))}
+          <div className="px-4">
+            {trafficTeam.map((member, i) => (
+              <TeamMemberRow
+                key={member.name}
+                name={member.name}
+                role={`${member.clientCount} clientes`}
+                initials={initials(member.name)}
+                metric={{
+                  value: `${member.supportDone} / ${member.supportTotal}`,
+                  label: "suporte",
+                  tone: member.supportDone < member.supportTotal ? "warning" : "default",
+                }}
+                last={i === trafficTeam.length - 1}
+              />
+            ))}
+            {trafficTeam.length === 0 && (
+              <p className="text-lone-caption font-inter text-lone-text-disabled text-center py-4">
+                Nenhum membro
+              </p>
+            )}
+          </div>
 
-          <div className="flex items-center justify-between px-4 py-3 border-t border-lone-border">
-            <span className="text-lone-caption font-inter italic text-lone-text-disabled">Adicionar membro</span>
-            <div className="w-4 h-4 rounded border border-lone-border/60" aria-hidden="true" />
+          <div className="flex items-center justify-between px-4 py-2.5 border-t border-lone-border">
+            <span className="text-lone-caption font-inter italic text-lone-text-disabled">
+              Adicionar membro
+            </span>
+            <Plus size={13} className="text-lone-text-disabled" aria-hidden="true" />
           </div>
         </div>
 

@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { Clock, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface AttentionItem {
@@ -43,21 +44,25 @@ const WeeklyAttention = React.forwardRef<HTMLDivElement, WeeklyAttentionProps>(
               i < items.length - 1 && "border-b border-lone-border"
             )}
           >
-            <div
-              className={cn(
-                "w-4 h-4 rounded border shrink-0",
-                item.tone === "danger"
-                  ? "border-[var(--lone-danger)]/40 bg-[var(--lone-danger)]/10"
-                  : "border-[var(--lone-warning)]/40 bg-[var(--lone-warning)]/10"
-              )}
-              aria-hidden="true"
-            />
+            {item.tone === "warning" ? (
+              <Clock
+                size={14}
+                className="text-[var(--lone-warning)] shrink-0"
+                aria-hidden="true"
+              />
+            ) : (
+              <AlertTriangle
+                size={14}
+                className="text-[var(--lone-danger)] shrink-0"
+                aria-hidden="true"
+              />
+            )}
             <p className="flex-1 text-lone-body font-inter text-lone-text-primary min-w-0">
               {item.text}
             </p>
             <Link
               href={item.href}
-              className="text-lone-caption font-inter text-lone-brand hover:underline shrink-0"
+              className="text-lone-caption font-inter text-lone-brand hover:underline shrink-0 whitespace-nowrap"
             >
               {item.actionLabel} →
             </Link>

@@ -42,6 +42,12 @@ import MetaHealthCard from "@/components/MetaHealthCard";
 import ClientHealthRadar from "@/components/ClientHealthRadar";
 import PlatformUpdatesWidget from "@/components/PlatformUpdatesWidget";
 
+// Fora do componente — objeto estático, nunca muda
+const BOTTLENECK_LABELS: Record<string, string> = {
+  ideas: "Ideias", script: "Roteiro", in_production: "Em Produção",
+  approval: "Aprovação Interna", client_approval: "Aprovação do Cliente", scheduled: "Agendado",
+};
+
 function hoursSince(isoString?: string): number {
   if (!isoString) return 9999;
   return (Date.now() - new Date(isoString).getTime()) / 3600000;
@@ -528,11 +534,6 @@ function AdminDashboard() {
     return Object.entries(counts).filter(([, v]) => v.count >= 2).sort((a, b) => b[1].count - a[1].count);
   }, [contentCards]);
 
-  const bottleneckLabels: Record<string, string> = {
-    ideas: "Ideias", script: "Roteiro", in_production: "Em Produção",
-    approval: "Aprovação Interna", client_approval: "Aprovação do Cliente", scheduled: "Agendado",
-  };
-
   const attentionItems = useMemo(() => {
     const items: import("@/components/dashboard-v2").AttentionItem[] = [];
     if (inactiveSevenDays.length > 0) {
@@ -548,13 +549,13 @@ function AdminDashboard() {
       items.push({
         id: `bottleneck-${status}`,
         tone: "danger",
-        text: `1 gargalo: ${bottleneckLabels[status] ?? status} com ${data.count} itens parados`,
+        text: `1 gargalo: ${BOTTLENECK_LABELS[status] ?? status} com ${data.count} itens parados`,
         actionLabel: "Resolver",
         href: "/social",
       });
     });
     return items;
-  }, [inactiveSevenDays, bottlenecks, bottleneckLabels]);
+  }, [inactiveSevenDays, bottlenecks]);
 
   const dateLabel = new Date().toLocaleDateString("pt-BR", {
     weekday: "long", day: "numeric", month: "short", year: "numeric",
@@ -567,10 +568,22 @@ function AdminDashboard() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-        <KPICard label="Clientes Ativos" value={activeClients.length} caption="em operação" tone="default" accent onClick={() => router.push("/clients")} />
-        <KPICard label="Em Risco" value={atRiskClients.length} caption="precisam atenção" tone={atRiskClients.length > 0 ? "danger" : "default"} accent onClick={() => setStatusFilter("at_risk")} />
-        <KPICard label="Onboarding" value={onboardingClients.length} caption="novos clientes" tone={onboardingClients.length > 0 ? "info" : "default"} accent onClick={() => router.push("/clients?filter=onboarding")} />
-        <KPICard label="Tarefas Urgentes" value={urgentTasks.length} caption="prioridade crítica" tone={urgentTasks.length > 0 ? "warning" : "default"} accent onClick={() => router.push("/my-work")} />
+        <KPICard label="Ativos" value={activeClients.length} caption="em operação"
+          tone="default" accent
+          icon={<Users size={12} />}
+          onClick={() => router.push("/clients")} />
+        <KPICard label="Em Risco" value={atRiskClients.length} caption="precisam atenção"
+          tone={atRiskClients.length > 0 ? "danger" : "default"} accent
+          icon={<AlertCircle size={12} />}
+          onClick={() => setStatusFilter("at_risk")} />
+        <KPICard label="Onboarding" value={onboardingClients.length} caption="novos clientes"
+          tone={onboardingClients.length > 0 ? "info" : "default"} accent
+          icon={<UserPlus size={12} />}
+          onClick={() => router.push("/clients?filter=onboarding")} />
+        <KPICard label="Urgentes" value={urgentTasks.length} caption="prioridade crítica"
+          tone={urgentTasks.length > 0 ? "warning" : "default"} accent
+          icon={<Clock size={12} />}
+          onClick={() => router.push("/my-work")} />
       </div>
 
       {/* Ações rápidas */}

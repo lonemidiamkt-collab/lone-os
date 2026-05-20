@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 // ── Variant: metric tone ──────────────────────────────────────
 
-const metricTone = cva("font-inter font-medium tabular-nums leading-none", {
+const metricTone = cva("font-jetbrains font-medium tabular-nums leading-none", {
   variants: {
     tone: {
       default: "text-lone-text-primary",

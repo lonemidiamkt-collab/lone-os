@@ -85,7 +85,7 @@ const KPICard = React.forwardRef<HTMLDivElement, KPICardProps>(
         </div>
 
         {/* Value */}
-        <p className={cn("font-inter font-medium leading-none tabular-nums", toneValue({ tone }))}
+        <p className={cn("font-jetbrains font-medium leading-none tabular-nums", toneValue({ tone }))}
            style={{ fontSize: "27px" }}>
           {value}
         </p>
