@@ -1,0 +1,46 @@
+# Lone OS — Production (app only, Supabase runs separately)
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: https://painel.lonemidia.com/supabase
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_META_APP_ID: ${NEXT_PUBLIC_META_APP_ID}
+        NEXT_PUBLIC_PORTAL_DOMAIN: https://resultados.lonemidia.com
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
+        SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN}
+        SENTRY_ORG: ${SENTRY_ORG}
+        SENTRY_PROJECT: lone-os-portal
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_SUPABASE_URL: https://painel.lonemidia.com/supabase
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_INTERNAL_URL: http://supabase-kong-1:8000
+      NEXT_PUBLIC_META_APP_ID: ${NEXT_PUBLIC_META_APP_ID}
+      META_APP_SECRET: ${META_APP_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      # AES-256 key pra vault de senhas de cliente (base64 32 bytes).
+      # Gere uma e guarde BACKUP — perder essa chave = perder acesso às senhas armazenadas.
+      VAULT_KEY: ${VAULT_KEY}
+      CRON_SECRET: ${CRON_SECRET}
+      SENTRY_DSN: ${SENTRY_DSN}
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
+      SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN}
+      SENTRY_ORG: ${SENTRY_ORG}
+      NEXT_PUBLIC_PORTAL_DOMAIN: https://resultados.lonemidia.com
+    networks:
+      - default
+      - supabase_default
+
+networks:
+  default:
+  supabase_default:
+    external: true
