@@ -305,11 +305,10 @@ export default function TokensContent() {
           <div className="mb-8">
             <p className="text-lone-eyebrow text-lone-text-disabled tracking-[1.5px] mb-3">WEEKLYATTENTION</p>
             <WeeklyAttention
-              clients={[
-                { id: "1", name: "Calabria Decorações", industry: "Decoração",   reason: "both" },
-                { id: "2", name: "Iron Fox",             industry: "Pet Shop",    reason: "no_kanban_7d" },
-                { id: "3", name: "Araruama Tintas",      industry: "Tintas",      reason: "no_posts" },
-                { id: "4", name: "Elace Glass",          industry: "Vidraçaria",  reason: "both" },
+              items={[
+                { id: "inactive", tone: "warning", text: "32 clientes sem interação há 7+ dias", actionLabel: "Ver lista", href: "/clients" },
+                { id: "bottleneck-ideas", tone: "danger", text: "1 gargalo: Ideias com 23 itens parados", actionLabel: "Resolver", href: "/social" },
+                { id: "bottleneck-approval", tone: "danger", text: "1 gargalo: Aprovação com 8 itens parados", actionLabel: "Resolver", href: "/social" },
               ]}
             />
           </div>

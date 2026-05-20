@@ -11,7 +11,7 @@ export { default as TeamSection } from "./TeamSection";
 export type { TeamSectionProps, SocialMember, TrafficMember } from "./TeamSection";
 
 export { default as WeeklyAttention } from "./WeeklyAttention";
-export type { WeeklyAttentionProps, InactiveClientEntry, InactivityReason } from "./WeeklyAttention";
+export type { WeeklyAttentionProps, AttentionItem } from "./WeeklyAttention";
 
 export { default as ClientStatusList } from "./ClientStatusList";
 export type { ClientStatusListProps, ClientRowData, StatusFilterValue } from "./ClientStatusList";

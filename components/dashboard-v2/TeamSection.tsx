@@ -1,8 +1,6 @@
 "use client";
 
 import React from "react";
-import { Instagram, TrendingUp } from "lucide-react";
-import { TeamMemberRow, SectionDivider } from "@/components/lone-ui";
 import { cn } from "@/lib/utils";
 
 export interface SocialMember {
@@ -25,99 +23,109 @@ export interface TeamSectionProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 function initials(name: string): string {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
-function metricTone(
-  done: number,
-  total: number
-): "default" | "warning" | "danger" {
-  if (total === 0) return "default";
-  const pct = done / total;
-  if (pct >= 1) return "default";
-  if (pct >= 0.5) return "default";
-  if (pct >= 0.25) return "warning";
-  return "danger";
+  return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
 const TeamSection = React.forwardRef<HTMLDivElement, TeamSectionProps>(
   ({ socialTeam, trafficTeam, className, ...props }, ref) => {
+    const totalPublished = socialTeam.reduce((s, m) => s + m.published, 0);
+    const totalPipeline  = socialTeam.reduce((s, m) => s + m.inPipeline, 0);
+    const totalSupDone   = trafficTeam.reduce((s, m) => s + m.supportDone, 0);
+    const totalSupTotal  = trafficTeam.reduce((s, m) => s + m.supportTotal, 0);
+
     return (
-      <div
-        ref={ref}
-        className={cn("grid grid-cols-1 xl:grid-cols-2 gap-4", className)}
-        {...props}
-      >
-        {/* Social Team */}
-        <div className="rounded-xl border border-lone-border bg-lone-bg-card p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Instagram size={13} className="text-lone-text-tertiary shrink-0" aria-hidden="true" />
-            <SectionDivider
-              label="Equipe Social"
-              badge={`${socialTeam.length} membro${socialTeam.length !== 1 ? "s" : ""}`}
-              className="flex-1"
-            />
+      <div ref={ref} className={cn("grid grid-cols-1 xl:grid-cols-2 gap-4", className)} {...props}>
+
+        {/* Equipe Social */}
+        <div className="rounded-xl border border-lone-border bg-lone-bg-card overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-lone-border">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded border border-lone-brand/40 bg-lone-brand/10 shrink-0" aria-hidden="true" />
+              <span className="text-lone-body font-inter font-semibold text-lone-text-primary">Equipe Social</span>
+            </div>
+            <span className="text-lone-caption font-inter text-lone-text-tertiary">
+              {totalPublished} publicados · {totalPipeline} pipeline
+            </span>
           </div>
-          <div className="rounded-xl border border-lone-border bg-lone-bg-elevated mt-3">
-            {socialTeam.map((member, i) => (
-              <TeamMemberRow
-                key={member.name}
-                name={member.name}
-                role={`${member.clientCount} cliente${member.clientCount !== 1 ? "s" : ""}`}
-                initials={initials(member.name)}
-                metric={{
-                  label: "publicados",
-                  value: String(member.published),
-                  tone: member.published >= 5 ? "default" : "warning",
-                }}
-                last={i === socialTeam.length - 1}
-              />
-            ))}
-            {socialTeam.length === 0 && (
-              <p className="text-lone-caption font-inter text-lone-text-disabled text-center py-4">
-                Nenhum membro
-              </p>
-            )}
+
+          {socialTeam.map((member, i) => (
+            <div
+              key={member.name}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3",
+                i < socialTeam.length - 1 && "border-b border-lone-border"
+              )}
+            >
+              <div className="w-9 h-9 rounded-full bg-lone-bg-elevated flex items-center justify-center shrink-0">
+                <span className="text-lone-caption font-inter font-bold text-lone-text-secondary">
+                  {initials(member.name)}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-lone-body font-inter font-medium text-lone-text-primary">{member.name}</p>
+                <p className="text-lone-caption font-inter text-lone-text-tertiary">{member.clientCount} clientes</p>
+              </div>
+              <span className={cn(
+                "text-lone-body font-inter font-medium tabular-nums shrink-0",
+                member.inPipeline > 0 ? "text-lone-brand" : "text-lone-text-tertiary"
+              )}>
+                {member.inPipeline} / {member.published + member.inPipeline} pipeline
+              </span>
+            </div>
+          ))}
+
+          <div className="flex items-center justify-between px-4 py-3 border-t border-lone-border">
+            <span className="text-lone-caption font-inter italic text-lone-text-disabled">Adicionar membro</span>
+            <div className="w-4 h-4 rounded border border-lone-border/60" aria-hidden="true" />
           </div>
         </div>
 
-        {/* Traffic Team */}
-        <div className="rounded-xl border border-lone-border bg-lone-bg-card p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <TrendingUp size={13} className="text-lone-text-tertiary shrink-0" aria-hidden="true" />
-            <SectionDivider
-              label="Equipe Tráfego"
-              badge={`${trafficTeam.length} membro${trafficTeam.length !== 1 ? "s" : ""}`}
-              className="flex-1"
-            />
+        {/* Equipe Tráfego */}
+        <div className="rounded-xl border border-lone-border bg-lone-bg-card overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-lone-border">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded border border-lone-brand/40 bg-lone-brand/10 shrink-0" aria-hidden="true" />
+              <span className="text-lone-body font-inter font-semibold text-lone-text-primary">Equipe Tráfego</span>
+            </div>
+            <span className="text-lone-caption font-inter text-lone-text-tertiary">
+              {totalSupDone}/{totalSupTotal} atendidos hoje
+            </span>
           </div>
-          <div className="rounded-xl border border-lone-border bg-lone-bg-elevated mt-3">
-            {trafficTeam.map((member, i) => (
-              <TeamMemberRow
-                key={member.name}
-                name={member.name}
-                role={`${member.clientCount} cliente${member.clientCount !== 1 ? "s" : ""}`}
-                initials={initials(member.name)}
-                metric={{
-                  label: "suporte hoje",
-                  value: `${member.supportDone}/${member.supportTotal}`,
-                  tone: metricTone(member.supportDone, member.supportTotal),
-                }}
-                last={i === trafficTeam.length - 1}
-              />
-            ))}
-            {trafficTeam.length === 0 && (
-              <p className="text-lone-caption font-inter text-lone-text-disabled text-center py-4">
-                Nenhum membro
-              </p>
-            )}
+
+          {trafficTeam.map((member, i) => (
+            <div
+              key={member.name}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3",
+                i < trafficTeam.length - 1 && "border-b border-lone-border"
+              )}
+            >
+              <div className="w-9 h-9 rounded-full bg-lone-bg-elevated flex items-center justify-center shrink-0">
+                <span className="text-lone-caption font-inter font-bold text-lone-text-secondary">
+                  {initials(member.name)}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-lone-body font-inter font-medium text-lone-text-primary">{member.name}</p>
+                <p className="text-lone-caption font-inter text-lone-text-tertiary">{member.clientCount} clientes</p>
+              </div>
+              <span className={cn(
+                "text-lone-body font-inter font-medium tabular-nums shrink-0",
+                member.supportDone < member.supportTotal
+                  ? "text-[var(--lone-warning)]"
+                  : "text-lone-text-tertiary"
+              )}>
+                {member.supportDone} / {member.supportTotal} suporte
+              </span>
+            </div>
+          ))}
+
+          <div className="flex items-center justify-between px-4 py-3 border-t border-lone-border">
+            <span className="text-lone-caption font-inter italic text-lone-text-disabled">Adicionar membro</span>
+            <div className="w-4 h-4 rounded border border-lone-border/60" aria-hidden="true" />
           </div>
         </div>
+
       </div>
     );
   }

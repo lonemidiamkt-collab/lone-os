@@ -533,6 +533,29 @@ function AdminDashboard() {
     approval: "Aprovação Interna", client_approval: "Aprovação do Cliente", scheduled: "Agendado",
   };
 
+  const attentionItems = useMemo(() => {
+    const items: import("@/components/dashboard-v2").AttentionItem[] = [];
+    if (inactiveSevenDays.length > 0) {
+      items.push({
+        id: "inactive-7d",
+        tone: "warning",
+        text: `${inactiveSevenDays.length} cliente${inactiveSevenDays.length !== 1 ? "s" : ""} sem interação há 7+ dias`,
+        actionLabel: "Ver lista",
+        href: "/clients",
+      });
+    }
+    bottlenecks.forEach(([status, data]) => {
+      items.push({
+        id: `bottleneck-${status}`,
+        tone: "danger",
+        text: `1 gargalo: ${bottleneckLabels[status] ?? status} com ${data.count} itens parados`,
+        actionLabel: "Resolver",
+        href: "/social",
+      });
+    });
+    return items;
+  }, [inactiveSevenDays, bottlenecks, bottleneckLabels]);
+
   const dateLabel = new Date().toLocaleDateString("pt-BR", {
     weekday: "long", day: "numeric", month: "short", year: "numeric",
   });
@@ -639,40 +662,6 @@ function AdminDashboard() {
         <KPICard label="Design"      value={designQueued + designInProg} caption={`${designQueued} fila · ${designInProg} prod`} onClick={() => router.push("/design")} />
       </div>
 
-      {/* Gargalos da semana */}
-      {bottlenecks.length > 0 && (
-        <div className="rounded-xl border border-lone-border bg-lone-bg-card p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <LayoutList size={15} className="text-lone-text-tertiary" aria-hidden="true" />
-            <h3 className="text-lone-h2 font-inter font-medium text-lone-text-primary">Gargalos da Semana</h3>
-            <span className="text-lone-caption font-inter text-lone-text-tertiary bg-lone-bg-elevated px-2 py-0.5 rounded-full border border-lone-border">
-              {bottlenecks.length} gargalo{bottlenecks.length > 1 ? "s" : ""}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {bottlenecks.map(([status, data]) => (
-              <Link
-                key={status}
-                href="/social"
-                className="flex items-start gap-3 bg-lone-bg-elevated border border-lone-border rounded-lg p-3 hover:border-lone-brand/30 transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-lone-bg-primary flex items-center justify-center shrink-0">
-                  <span className="text-lone-body font-inter font-bold text-lone-text-secondary">{data.count}</span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-lone-body font-inter font-medium text-lone-text-primary">{bottleneckLabels[status] ?? status}</p>
-                  <p className="text-lone-caption font-inter text-lone-text-tertiary mt-0.5">{data.count} itens parados</p>
-                  <p className="text-lone-caption font-inter text-lone-text-disabled mt-1 truncate">
-                    {data.clients.slice(0, 3).join(", ")}{data.clients.length > 3 ? ` +${data.clients.length - 3}` : ""}
-                  </p>
-                </div>
-                <ChevronRight size={14} className="text-lone-text-disabled group-hover:text-lone-brand shrink-0 mt-1 transition-colors" aria-hidden="true" />
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Equipes */}
       <TeamSection socialTeam={teamProductivity} trafficTeam={trafficProductivity} />
 
@@ -725,8 +714,8 @@ function AdminDashboard() {
         </div>
       </div>
 
-      {/* Clientes sem interação — 7 dias */}
-      <WeeklyAttention clients={inactiveSevenDays} />
+      {/* Atenção esta semana: inativos + gargalos combinados */}
+      <WeeklyAttention items={attentionItems} />
 
       {/* Lista de status dos clientes */}
       <ClientStatusList
