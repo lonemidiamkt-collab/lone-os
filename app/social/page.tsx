@@ -8,6 +8,7 @@ import ContentIdeasModal from "@/components/ContentIdeasModal";
 import Client360Modal from "@/components/Client360Modal";
 import CampaignModal from "@/components/CampaignModal";
 import DriveButton from "@/components/DriveButton";
+import DownloadButton from "@/components/shared/DownloadButton";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import { MarkdownEditor } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
@@ -20,7 +21,7 @@ import {
   Sparkles, Clock, Target, Zap, BarChart2,
   TrendingUp, Hash, Check, Plus, ChevronDown,
   Key, MessageCircle, Send, Eye, EyeOff, Save,
-  Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle, Layers, Trash2, Copy,
+  Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle, Layers, Trash2, Copy, Loader2,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
@@ -1781,15 +1782,15 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                   })()}
                   {/* Art actions */}
                   <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border/60 flex-wrap">
+                    {/* Arte entregue: botão de download funcional (window.open evita bloqueio cross-origin) */}
                     {card.imageUrl && (
-                      <a
-                        href={card.imageUrl}
-                        download
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors flex items-center gap-0.5"
-                      >
-                        <Download size={9} /> Baixar Arte
-                      </a>
+                      <DownloadButton url={card.imageUrl} title={card.title} size="sm" />
+                    )}
+                    {/* Arte pendente: avisa que o designer está trabalhando */}
+                    {!card.imageUrl && card.designRequestId && !card.nonDeliveryReason && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-0.5">
+                        <Loader2 size={9} className="animate-spin" /> Aguardando arte
+                      </span>
                     )}
                     {card.designerDeliveredAt && !card.socialConfirmedAt && (
                       <button

@@ -2,6 +2,7 @@
 
 import Header from "@/components/Header";
 import SignedImage from "@/components/shared/SignedImage";
+import DownloadButton from "@/components/shared/DownloadButton";
 import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -330,44 +331,7 @@ function UploadArtModal({
 
 // ── Download Button with feedback ────────────────────────────────────────────
 
-function DownloadButton({ url, title }: { url: string; title: string }) {
-  const [state, setState] = useState<"idle" | "loading" | "done">("idle");
-
-  const handleDownload = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setState("loading");
-
-    // Convert Google Drive view link to direct download
-    let downloadUrl = url;
-    if (url.includes("drive.google.com/file/d/")) {
-      const fileId = url.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
-      if (fileId) downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-    }
-
-    // Open in new tab (safest cross-browser approach for Drive files)
-    window.open(downloadUrl, "_blank");
-
-    setState("done");
-    setTimeout(() => setState("idle"), 2000);
-  };
-
-  return (
-    <button
-      onClick={handleDownload}
-      className="text-[11px] px-3 py-1.5 rounded-lg bg-white/[0.06] text-zinc-300 font-medium hover:text-white hover:bg-white/[0.1] transition-all flex items-center gap-1.5 border border-white/[0.06]"
-    >
-      {state === "loading" ? (
-        <Loader size={11} className="animate-spin" />
-      ) : state === "done" ? (
-        <CheckCircle size={11} className="text-emerald-400" />
-      ) : (
-        <Download size={11} />
-      )}
-      {state === "done" ? "Aberto!" : "Baixar"}
-    </button>
-  );
-}
+// DownloadButton importado de @/components/shared/DownloadButton
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 
@@ -914,7 +878,7 @@ export default function DesignPage() {
                               {hasArt ? "Trocar Arte" : "Enviar Arte"}
                             </button>
                             {hasArt && (
-                              <DownloadButton url={item.imageUrl!} title={item.title} />
+                              <DownloadButton url={item.imageUrl!} title={item.title} size="md" />
                             )}
                             {(() => {
                               const fc = item._card as ContentCard;
