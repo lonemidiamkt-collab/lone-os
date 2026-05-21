@@ -218,8 +218,8 @@ export async function buildSnapshot(params: {
   // A chamada total solicita ambas as janelas ("1d_click","7d_click") para diagnóstico.
   // Fallback para soma diária 7d_click se a chamada total falhar.
   if (curTotalRow) {
-    console.log(`[buildSnapshot] ${params.clientId} ${period.start}→${period.end} actions sample:`,
-      JSON.stringify(curTotalRow.actions?.slice(0, 3)));
+    console.log(`[buildSnapshot] ${params.clientId} ${period.start}→${period.end} ALL actions:`,
+      JSON.stringify(curTotalRow.actions));
   }
   const curMessages  = curTotalRow != null
     ? countMessagesFromActions(curTotalRow.actions, "1d_click")
