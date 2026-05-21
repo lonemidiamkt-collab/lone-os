@@ -313,25 +313,25 @@ export async function fetchAdAccounts(token: string) {
 
 // ─── Mensagens / WhatsApp / Messenger ────────────────────────────────────────
 // A Meta usa tipos diferentes dependendo do canal e da versão da API.
-// Usamos o PRIMEIRO tipo encontrado (prioridade: alinhada ao que o Gerenciador exibe).
+// Usamos o PRIMEIRO tipo encontrado (prioridade: mais específico primeiro).
 //
-// IMPORTANTE: total_messaging_connection foi movido para baixo porque é um agregado
-// que pode incluir atribuição por visualização (1d_view), inflando os números.
-// O Gerenciador de Anúncios exibe messaging_conversation_started_7d como "Resultados"
-// para campanhas Click-to-WhatsApp com janela 7d_click.
+// NOTA: total_messaging_connection permanece em primeiro porque retorna o menor valor
+// para esta conta quando combinado com action_attribution_windows=["7d_click"].
+// messaging_conversation_started_7d, apesar do nome, retorna mais conversões
+// (inclui todas as janelas de atribuição para conversas iniciadas, não apenas clicks).
 const MESSAGE_ACTION_TYPES = [
-  // WhatsApp Business (Click-to-WhatsApp) — o que o Ads Manager exibe como "Resultados"
+  // Agregado de conexões de mensagem — mais conservador com 7d_click
+  "onsite_conversion.total_messaging_connection",
+  // WhatsApp Business (Click-to-WhatsApp) — formato 7d
   "onsite_conversion.messaging_conversation_started_7d",
-  // WhatsApp — formato alternativo mais novo
-  "onsite_conversion.whatsapp_business_messaging_conversation_started_7d",
   // Messenger e Instagram DM
   "onsite_conversion.messaging_first_conversation_started",
   "onsite_conversion.messaging_first_reply",
   // Formato legado (sem prefixo onsite_conversion)
   "messaging_conversation_started_7d",
-  // Agregado (soma de todos os tipos) — usado como fallback quando os específicos não vêm
-  "onsite_conversion.total_messaging_connection",
-  // Click-to-WhatsApp via objetivo Engajamento (menos preciso)
+  // WhatsApp — formato alternativo mais novo
+  "onsite_conversion.whatsapp_business_messaging_conversation_started_7d",
+  // Click-to-WhatsApp via objetivo Engajamento
   "onsite_conversion.engagement",
 ] as const;
 
