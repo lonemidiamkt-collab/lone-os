@@ -195,8 +195,9 @@ export async function buildSnapshot(params: {
   const [currentInsights, prevInsights, currentTotal, prevTotal, adInsights, demographics] = await Promise.allSettled([
     getInsightsByDateRange(metaAccountId, metaToken, period.start, period.end),
     getInsightsByDateRange(metaAccountId, metaToken, period.previous_start, period.previous_end),
-    getInsightsTotalByDateRange(metaAccountId, metaToken, period.start, period.end),
-    getInsightsTotalByDateRange(metaAccountId, metaToken, period.previous_start, period.previous_end),
+    // Filtra por campanha de Mensagens para o KPI messages — alinha com Gerenciador
+    getInsightsTotalByDateRange(metaAccountId, metaToken, period.start, period.end, "MESSAGES"),
+    getInsightsTotalByDateRange(metaAccountId, metaToken, period.previous_start, period.previous_end, "MESSAGES"),
     getTopAdInsights(metaAccountId, metaToken, period.start, period.end, 10),
     getDemographicBreakdown(metaAccountId, metaToken, period.start, period.end),
   ]);
@@ -218,14 +219,15 @@ export async function buildSnapshot(params: {
   // A chamada total solicita ambas as janelas ("1d_click","7d_click") para diagnóstico.
   // Fallback para soma diária 7d_click se a chamada total falhar.
   if (curTotalRow) {
-    console.log(`[buildSnapshot] ${params.clientId} ${period.start}→${period.end} ALL actions:`,
-      JSON.stringify(curTotalRow.actions));
+    console.log(`[buildSnapshot] ${params.clientId} ${period.start}→${period.end} messages_total_row actions:`,
+      JSON.stringify(curTotalRow.actions?.filter((a) => a.action_type.includes("messag"))));
   }
+  // Usa 7d_click da campanha de Mensagens para corresponder ao Gerenciador
   const curMessages  = curTotalRow != null
-    ? countMessagesFromActions(curTotalRow.actions, "1d_click")
+    ? countMessagesFromActions(curTotalRow.actions, "7d_click")
     : cur.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
   const prevMessages = prevTotalRow != null
-    ? countMessagesFromActions(prevTotalRow.actions, "1d_click")
+    ? countMessagesFromActions(prevTotalRow.actions, "7d_click")
     : prev.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
 
   const curSpend    = sumNum(cur, "spend");

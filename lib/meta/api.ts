@@ -200,26 +200,32 @@ export async function getInsightsByDateRange(
 }
 
 /** Retorna uma única linha agregada para o período (sem time_increment).
- *  Solicita ambas as janelas de atribuição para comparação com o Ads Manager.
- *  O objeto de cada action inclui os campos "1d_click" e "7d_click" além de "value".
+ *  Quando objectiveFilter for passado (ex: "MESSAGES"), filtra somente campanhas
+ *  com esse objetivo — alinha com o que o Gerenciador exibe na coluna Resultados.
+ *  Solicita ["7d_click"] para corresponder à janela padrão do Gerenciador.
  */
 export async function getInsightsTotalByDateRange(
   accountId: string,
   accessToken: string,
   since: string,
   until: string,
+  objectiveFilter?: string,
 ): Promise<MetaInsight | null> {
   const url = getGraphUrl(`/${accountId}/insights`);
-  const params = new URLSearchParams({
+  const paramObj: Record<string, string> = {
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since, until }),
-    action_attribution_windows: '["1d_click","7d_click"]',
+    action_attribution_windows: '["7d_click"]',
     limit: "100",
-  });
+  };
+  if (objectiveFilter) {
+    paramObj.filtering = JSON.stringify([{ field: "campaign.objective", operator: "EQUAL", value: objectiveFilter }]);
+  }
+  const params = new URLSearchParams(paramObj);
   const res = await fetch(`${url}?${params}`);
   const rawText = await res.text();
-  console.log(`[Meta total] ${accountId} ${since}→${until} status=${res.status} body=`, rawText.slice(0, 500));
+  console.log(`[Meta total${objectiveFilter ? ` obj=${objectiveFilter}` : ""}] ${accountId} ${since}→${until} status=${res.status} body=`, rawText.slice(0, 300));
   if (!res.ok) throw new Error(`Meta insights total failed for ${accountId}: ${rawText.slice(0, 200)}`);
   const data = JSON.parse(rawText);
   return data.data?.[0] ?? null;
