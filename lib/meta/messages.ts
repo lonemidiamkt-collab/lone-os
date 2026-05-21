@@ -41,13 +41,17 @@ export const MESSAGE_ACTION_TYPES = [
 export type MessageActionType = typeof MESSAGE_ACTION_TYPES[number];
 
 export function countMessagesFromActions(
-  actions?: { action_type: string; value: string }[],
+  actions?: { action_type: string; value: string; [key: string]: string }[],
+  window?: "1d_click" | "7d_click",
 ): number {
   if (!actions) return 0;
   for (const type of MESSAGE_ACTION_TYPES) {
     const found = actions.find((a) => a.action_type === type);
     if (found) {
-      const v = parseInt(found.value, 10);
+      // Quando a API retorna múltiplas janelas, cada action tem chaves "1d_click" e "7d_click".
+      // Se window for especificado e a chave existir, usa o valor específico.
+      const raw = window && found[window] ? found[window] : found.value;
+      const v = parseInt(raw, 10);
       return Number.isFinite(v) ? v : 0;
     }
   }

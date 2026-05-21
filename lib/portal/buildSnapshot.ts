@@ -213,14 +213,19 @@ export async function buildSnapshot(params: {
   const sumNum = (rows: typeof cur, field: keyof typeof cur[0]) =>
     rows.reduce((acc, r) => acc + (parseFloat(r[field] as string) || 0), 0);
 
-  // Mensagens: usar total agregado (deduplicado pelo Meta) — fallback para soma diária
-  // Nota: curTotalRow != null indica que a chamada retornou uma linha (mesmo se msgs=0).
-  // Só cai no fallback se a chamada falhrou completamente (Promise rejected).
+  // Mensagens: usar total agregado com janela 1d_click para corresponder ao Ads Manager.
+  // O Ads Manager exibe "Resultados" usando 1d_click por padrão para campanhas de Mensagens.
+  // A chamada total solicita ambas as janelas ("1d_click","7d_click") para diagnóstico.
+  // Fallback para soma diária 7d_click se a chamada total falhar.
+  if (curTotalRow) {
+    console.log(`[buildSnapshot] ${params.clientId} ${period.start}→${period.end} actions sample:`,
+      JSON.stringify(curTotalRow.actions?.slice(0, 3)));
+  }
   const curMessages  = curTotalRow != null
-    ? countMessagesFromActions(curTotalRow.actions)
+    ? countMessagesFromActions(curTotalRow.actions, "1d_click")
     : cur.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
   const prevMessages = prevTotalRow != null
-    ? countMessagesFromActions(prevTotalRow.actions)
+    ? countMessagesFromActions(prevTotalRow.actions, "1d_click")
     : prev.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
 
   const curSpend    = sumNum(cur, "spend");

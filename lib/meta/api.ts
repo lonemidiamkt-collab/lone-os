@@ -200,8 +200,8 @@ export async function getInsightsByDateRange(
 }
 
 /** Retorna uma única linha agregada para o período (sem time_increment).
- *  Usar para KPI totals — evita dupla contagem que ocorre ao somar linhas diárias
- *  com janelas de atribuição de 7 dias.
+ *  Solicita ambas as janelas de atribuição para comparação com o Ads Manager.
+ *  O objeto de cada action inclui os campos "1d_click" e "7d_click" além de "value".
  */
 export async function getInsightsTotalByDateRange(
   accountId: string,
@@ -214,7 +214,7 @@ export async function getInsightsTotalByDateRange(
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since, until }),
-    action_attribution_windows: '["7d_click"]',
+    action_attribution_windows: '["1d_click","7d_click"]',
     limit: "1",
   });
   const res = await fetch(`${url}?${params}`);
