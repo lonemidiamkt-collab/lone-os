@@ -215,11 +215,13 @@ export async function getInsightsTotalByDateRange(
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since, until }),
     action_attribution_windows: '["1d_click","7d_click"]',
-    limit: "1",
+    limit: "100",
   });
   const res = await fetch(`${url}?${params}`);
-  if (!res.ok) throw new Error(`Meta insights total failed for ${accountId}`);
-  const data = await res.json();
+  const rawText = await res.text();
+  console.log(`[Meta total] ${accountId} ${since}→${until} status=${res.status} body=`, rawText.slice(0, 500));
+  if (!res.ok) throw new Error(`Meta insights total failed for ${accountId}: ${rawText.slice(0, 200)}`);
+  const data = JSON.parse(rawText);
   return data.data?.[0] ?? null;
 }
 
