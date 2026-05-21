@@ -968,6 +968,7 @@ function RoutineTab({
   clients,
   routineChecks,
   onCheck,
+  onHighlight,
   currentUser,
   effectiveFilter,
   tasks,
