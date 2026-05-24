@@ -11,12 +11,12 @@
  *   - Documentam o comportamento esperado para cada formato de resposta da Meta API
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   getMessageMetricFromInsights,
   countMessagesFromActions,
   MESSAGE_ACTION_TYPES,
-} from "@/lib/meta/messages";
+} from "../lib/meta/messages";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
