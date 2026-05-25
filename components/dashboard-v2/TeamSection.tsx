@@ -73,7 +73,7 @@ const TeamSection = React.forwardRef<HTMLDivElement, TeamSectionProps>(
                 metric={{
                   label: "publicados",
                   value: String(member.published),
-                  tone: member.published >= 10 ? "success" : member.published >= 5 ? "default" : "warning",
+                  tone: member.published >= 5 ? "default" : "warning",
                 }}
                 last={i === socialTeam.length - 1}
               />
