@@ -31,7 +31,7 @@ import {
   WeeklyAttention,
   ClientStatusList,
 } from "@/components/dashboard-v2";
-import { KPICard } from "@/components/lone-ui";
+import { KPICard, PillBadge } from "@/components/lone-ui";
 import TrafficChecklist from "@/components/sector/TrafficChecklist";
 import PostCounter from "@/components/sector/PostCounter";
 import DesignQueue from "@/components/sector/DesignQueue";
@@ -544,10 +544,10 @@ function AdminDashboard() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-        <KPICard label="Clientes Ativos" value={activeClients.length} caption="em operação" tone="default" accent onClick={() => router.push("/clients")} />
-        <KPICard label="Em Risco" value={atRiskClients.length} caption="precisam atenção" tone={atRiskClients.length > 0 ? "danger" : "default"} accent onClick={() => setStatusFilter("at_risk")} />
-        <KPICard label="Onboarding" value={onboardingClients.length} caption="novos clientes" tone={onboardingClients.length > 0 ? "info" : "default"} accent onClick={() => router.push("/clients?filter=onboarding")} />
-        <KPICard label="Tarefas Urgentes" value={urgentTasks.length} caption="prioridade crítica" tone={urgentTasks.length > 0 ? "warning" : "default"} accent onClick={() => router.push("/my-work")} />
+        <KPICard label="Clientes Ativos" value={activeClients.length} caption="em operação" tone="default" accent icon={<Users size={12} />} onClick={() => router.push("/clients")} />
+        <KPICard label="Em Risco" value={atRiskClients.length} caption="precisam atenção" tone={atRiskClients.length > 0 ? "danger" : "default"} accent icon={<AlertTriangle size={12} />} onClick={() => setStatusFilter("at_risk")} />
+        <KPICard label="Onboarding" value={onboardingClients.length} caption="novos clientes" tone={onboardingClients.length > 0 ? "warning" : "default"} accent icon={<UserPlus size={12} />} onClick={() => router.push("/clients?filter=onboarding")} />
+        <KPICard label="Tarefas Urgentes" value={urgentTasks.length} caption="prioridade crítica" tone={urgentTasks.length > 0 ? "success" : "default"} accent icon={<Zap size={12} />} onClick={() => router.push("/my-work")} />
       </div>
 
       {/* Ações rápidas */}
@@ -610,16 +610,16 @@ function AdminDashboard() {
           </p>
           <div className="flex gap-6">
             <div>
-              <p className="text-lone-h1 font-inter text-[var(--lone-success)]">{contractStats.active}</p>
+              <p className="text-lone-h1 font-jetbrains text-[var(--lone-success)]">{contractStats.active}</p>
               <p className="text-lone-caption font-inter text-lone-text-tertiary">Assinados</p>
             </div>
             <div>
-              <p className="text-lone-h1 font-inter text-[var(--lone-warning)]">{contractStats.pending}</p>
+              <p className="text-lone-h1 font-jetbrains text-[var(--lone-warning)]">{contractStats.pending}</p>
               <p className="text-lone-caption font-inter text-lone-text-tertiary">Pendentes</p>
             </div>
             {contractStats.expiring > 0 && (
               <div>
-                <p className="text-lone-h1 font-inter text-[var(--lone-danger)]">{contractStats.expiring}</p>
+                <p className="text-lone-h1 font-jetbrains text-[var(--lone-danger)]">{contractStats.expiring}</p>
                 <p className="text-lone-caption font-inter text-lone-text-tertiary">Vence em 30d</p>
               </div>
             )}
@@ -645,9 +645,9 @@ function AdminDashboard() {
           <div className="flex items-center gap-2 mb-3">
             <LayoutList size={15} className="text-lone-text-tertiary" aria-hidden="true" />
             <h3 className="text-lone-h2 font-inter font-medium text-lone-text-primary">Gargalos da Semana</h3>
-            <span className="text-lone-caption font-inter text-lone-text-tertiary bg-lone-bg-elevated px-2 py-0.5 rounded-full border border-lone-border">
+            <PillBadge tone="default">
               {bottlenecks.length} gargalo{bottlenecks.length > 1 ? "s" : ""}
-            </span>
+            </PillBadge>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {bottlenecks.map(([status, data]) => (
