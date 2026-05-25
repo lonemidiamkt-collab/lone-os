@@ -69,29 +69,14 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
-  // Track if Supabase is reachable (fallback to local auth if not)
   const [supabaseAvailable, setSupabaseAvailable] = useState<boolean | null>(null);
 
-  // Restore session from Supabase or sessionStorage on mount
+  // Restore session from Supabase on mount
   useEffect(() => {
     let mounted = true;
     let subscription: { unsubscribe: () => void } | null = null;
 
     async function restoreSession() {
-      // 1. Check sessionStorage for local (fallback) auth first — instant restore
-      try {
-        const localSession = sessionStorage.getItem("lone_local_session");
-        if (localSession) {
-          const profile = USER_PROFILES.find((p) => p.id === localSession);
-          if (profile && mounted) {
-            setCurrentProfileState(profile);
-            setIsAuthenticated(true);
-            setSupabaseAvailable(false);
-            setHydrated(true);
-            return; // skip Supabase entirely
-          }
-        }
-      } catch { /* sessionStorage not available */ }
 
       // 2. Quick Supabase connectivity check with timeout
       let isReachable = false;
@@ -144,12 +129,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             async (event, session) => {
               if (!mounted) return;
               if (event === "SIGNED_OUT") {
-                // Only reset if was previously authenticated to avoid loops
                 setIsAuthenticated((prev) => {
-                  if (prev) {
-                    setCurrentProfileState(DEFAULT_PROFILE);
-                    try { sessionStorage.removeItem("lone_local_session"); } catch {}
-                  }
+                  if (prev) setCurrentProfileState(DEFAULT_PROFILE);
                   return false;
                 });
               } else if (event === "SIGNED_IN" && session?.user) {
@@ -201,30 +182,10 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     if (found) setCurrentProfileState(found);
   }, []);
 
-  // Per-user passwords for local auth
-  const USER_PASSWORDS: Record<string, string> = {
-    roberto: "2008313",
-    lucas:   "5575433",
-    julio:   "200359",
-    carlos:  "228830",
-    pedro:   "407468",
-    rodrigo: "097953",
-  };
-  const FALLBACK_PASSWORD = "882289"; // legacy fallback
-
-  const isValidPassword = (userId: string, pwd: string): boolean => {
-    // Check per-user password first, then fallback
-    const userPwd = USER_PASSWORDS[userId];
-    if (userPwd && pwd === userPwd) return true;
-    if (pwd === FALLBACK_PASSWORD) return true;
-    return false;
-  };
-
   const login = useCallback(async (userId: string, password: string): Promise<boolean> => {
     const profile = USER_PROFILES.find((p) => p.id === userId);
     if (!profile) return false;
 
-    // Try Supabase auth first — if it fails with network error, fall back to local
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: profile.email,
@@ -232,10 +193,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!error && data.session) {
-        // Supabase auth succeeded
         setSupabaseAvailable(true);
 
-        // Fetch team_member ID
         let teamMemberId: string | undefined;
         try {
           const { data: member } = await supabase
@@ -244,69 +203,27 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             .eq("auth_id", data.user.id)
             .maybeSingle();
           teamMemberId = member?.id ?? undefined;
-        } catch {
-          // DB query failed, continue without teamMemberId
-        }
+        } catch { /* DB query failed, continue without teamMemberId */ }
 
         setCurrentProfileState({ ...profile, teamMemberId });
         setIsAuthenticated(true);
         return true;
       }
 
-      // Determine if this is a network error (Supabase down) or an auth error (wrong password)
-      if (error) {
-        const msg = (error.message ?? "").toLowerCase();
-        // Only treat as "wrong password" if it's clearly an auth error
-        const isAuthError =
-          msg.includes("invalid login") ||
-          msg.includes("invalid password") ||
-          msg.includes("invalid credentials") ||
-          msg.includes("email not confirmed") ||
-          (error as any)?.status === 400;
-
-        if (isAuthError) {
-          // Supabase auth failed — allow fallback with per-user password
-          if (isValidPassword(userId, password)) {
-            setSupabaseAvailable(false);
-            setCurrentProfileState(profile);
-            setIsAuthenticated(true);
-            try { sessionStorage.setItem("lone_local_session", profile.id); } catch {}
-            return true;
-          }
-          setSupabaseAvailable(true);
-          return false;
-        }
-
-        // Everything else (rate limit, service unavailable, network) → fallback
-        const isDefinitelyReachable =
-          (error as any)?.status >= 400 && (error as any)?.status < 500;
-        if (isDefinitelyReachable && !isValidPassword(userId, password)) {
-          setSupabaseAvailable(true);
-          return false;
-        }
-      }
+      setSupabaseAvailable(true);
+      return false;
     } catch {
-      // Network error — Supabase not running
+      // Network error — Supabase unreachable
+      setSupabaseAvailable(false);
+      return false;
     }
-
-    // Fallback: local auth when Supabase is not reachable
-    setSupabaseAvailable(false);
-    if (!isValidPassword(userId, password)) return false;
-
-    setCurrentProfileState(profile);
-    setIsAuthenticated(true);
-    try { sessionStorage.setItem("lone_local_session", profile.id); } catch {}
-    return true;
   }, []);
 
   const logout = useCallback(async () => {
-    if (supabaseAvailable) {
-      try { await supabase.auth.signOut(); } catch { /* ignore */ }
-    }
-    try { sessionStorage.removeItem("lone_local_session"); } catch {}
+    try { await supabase.auth.signOut(); } catch { /* ignore */ }
     setIsAuthenticated(false);
     setCurrentProfileState(DEFAULT_PROFILE);
-  }, [supabaseAvailable]);
+  }, []);
 
   return (
     <RoleContext.Provider
