@@ -2,12 +2,11 @@ import * as Sentry from "@sentry/nextjs";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import {
   getInsightsByDateRange,
-  getInsightsTotalByDateRange,
   getTopAdInsights,
   getAdThumbnail,
   getDemographicBreakdown,
 } from "@/lib/meta/api";
-import { countMessagesFromActions, getMessageMetricFromInsights } from "@/lib/meta/messages";
+import { countMessagesFromActions } from "@/lib/meta/messages";
 import { toBRTDateStr } from "@/lib/meta/timezone";
 import type { PeriodKind, SnapshotData, CreativeItem, DemographicRow } from "./types";
 
@@ -192,52 +191,30 @@ export async function buildSnapshot(params: {
   }
 
   // ── Fetch insights em paralelo (período atual + anterior) ─────────────────
-  // TODOS os fetches filtram por objetivo MESSAGES — garante que mensagens,
-  // spend, reach e CPA venham do mesmo escopo, alinhando com o Gerenciador.
-  // getInsightsByDateRange → daily (time_increment=1) para o gráfico
-  // getInsightsTotalByDateRange → linha única agregada para KPIs (sem dupla contagem 7d_click)
-  // getTopAdInsights → anúncios de MESSAGES campaigns apenas
-  const [currentInsights, prevInsights, currentTotal, prevTotal, adInsights, demographics] = await Promise.allSettled([
-    getInsightsByDateRange(metaAccountId, metaToken, period.start, period.end, "MESSAGES"),
-    getInsightsByDateRange(metaAccountId, metaToken, period.previous_start, period.previous_end, "MESSAGES"),
-    getInsightsTotalByDateRange(metaAccountId, metaToken, period.start, period.end, "MESSAGES"),
-    getInsightsTotalByDateRange(metaAccountId, metaToken, period.previous_start, period.previous_end, "MESSAGES"),
-    getTopAdInsights(metaAccountId, metaToken, period.start, period.end, 10, "MESSAGES"),
+  const [currentInsights, prevInsights, adInsights, demographics] = await Promise.allSettled([
+    getInsightsByDateRange(metaAccountId, metaToken, period.start, period.end),
+    getInsightsByDateRange(metaAccountId, metaToken, period.previous_start, period.previous_end),
+    getTopAdInsights(metaAccountId, metaToken, period.start, period.end, 10),
     getDemographicBreakdown(metaAccountId, metaToken, period.start, period.end),
   ]);
 
   const cur = currentInsights.status === "fulfilled" ? currentInsights.value : [];
   const prev = prevInsights.status === "fulfilled" ? prevInsights.value : [];
-  // Totais agregados (sem time_increment) — evitam dupla contagem com janela 7d_click
-  const curTotalRow  = currentTotal.status === "fulfilled" ? currentTotal.value : null;
-  const prevTotalRow = prevTotal.status === "fulfilled"    ? prevTotal.value    : null;
   const ads = adInsights.status === "fulfilled" ? adInsights.value : [];
   const demo = demographics.status === "fulfilled" ? demographics.value : [];
 
   // ── KPIs período atual ────────────────────────────────────────────────────
-  // getMessageMetricFromInsights extrai mensagens, spend e CPA da MESMA linha
-  // agregada — garante escopo único e emite logs diagnósticos completos.
-  // Fallback para soma das linhas diárias se a chamada total falhar.
-  const periodLabel = `${period.start}→${period.end}`;
-  const prevPeriodLabel = `${period.previous_start}→${period.previous_end}`;
-  const msgCtx = { accountId: metaAccountId, level: "account" as const, objectiveFilter: "MESSAGES", window: "7d_click" as const };
+  const sumNum = (rows: typeof cur, field: keyof typeof cur[0]) =>
+    rows.reduce((acc, r) => acc + (parseFloat(r[field] as string) || 0), 0);
 
-  const curMetric  = getMessageMetricFromInsights(curTotalRow,  { ...msgCtx, period: periodLabel });
-  const prevMetric = getMessageMetricFromInsights(prevTotalRow, { ...msgCtx, period: prevPeriodLabel });
+  const curMessages = cur.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
+  const curSpend    = sumNum(cur, "spend");
+  const curReach    = sumNum(cur, "reach");
+  const curCpa: number | null  = curMessages > 0 ? curSpend / curMessages : null;
 
-  // Se a chamada total falhou, fallback para soma das linhas diárias
-  const curMessages  = curTotalRow  != null ? curMetric.messages  : cur.reduce((acc, r)  => acc + countMessagesFromActions(r.actions),  0);
-  const prevMessages = prevTotalRow != null ? prevMetric.messages : prev.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
-
-  // Spend e reach: mesma fonte das mensagens (curTotalRow) — não somar todas as campanhas
-  const curSpend  = curTotalRow  != null ? curMetric.spend  : cur.reduce((acc, r)  => acc + (parseFloat(r.spend)  || 0), 0);
-  const prevSpend = prevTotalRow != null ? prevMetric.spend : prev.reduce((acc, r) => acc + (parseFloat(r.spend) || 0), 0);
-
-  const curReach  = curTotalRow  != null ? (parseFloat(curTotalRow.reach)  || 0) : cur.reduce((acc, r)  => acc + (parseFloat(r.reach)  || 0), 0);
-  const prevReach = prevTotalRow != null ? (parseFloat(prevTotalRow.reach) || 0) : prev.reduce((acc, r) => acc + (parseFloat(r.reach) || 0), 0);
-
-  // CPA: spend / mensagens — ambos do mesmo escopo (curTotalRow)
-  const curCpa: number | null  = curMessages  > 0 ? curSpend  / curMessages  : null;
+  const prevMessages = prev.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
+  const prevSpend    = sumNum(prev, "spend");
+  const prevReach    = sumNum(prev, "reach");
   const prevCpa: number | null = prevMessages > 0 ? prevSpend / prevMessages : null;
 
   // ── Chart (série diária) ──────────────────────────────────────────────────

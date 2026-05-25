@@ -14,8 +14,7 @@ export type TimelineEntryType =
   | "report"
   | "manual"
   | "onboarding"
-  | "meeting"
-  | "highlight";  // bons resultados de tráfego na semana
+  | "meeting";
 
 export type ToneOfVoice = "formal" | "funny" | "authoritative" | "casual";
 export type MoodType = "happy" | "neutral" | "angry";
@@ -370,7 +369,7 @@ export interface TrafficRoutineCheck {
   clientId: string;
   clientName: string;
   date: string;            // "2026-03-21"
-  type: "support" | "report" | "feedback" | "analysis" | "highlight";
+  type: "support" | "report" | "feedback" | "analysis";
   completedBy: string;
   completedAt: string;
   note?: string;

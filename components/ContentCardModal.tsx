@@ -13,7 +13,6 @@ import { useRole } from "@/lib/context/RoleContext";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import type { ContentCard } from "@/lib/types";
 import SignedImage from "@/components/shared/SignedImage";
-import DownloadButton from "@/components/shared/DownloadButton";
 import {
   Dialog,
   DialogContent,
@@ -223,14 +222,12 @@ export default function ContentCardModal({ card, onClose }: Props) {
         <div className="flex flex-1 overflow-hidden">
           {/* Left: Art preview */}
           <div className="w-72 border-r border-border flex flex-col shrink-0">
-            {/* Preview de arte — imagem completa sem corte */}
-            <div className="flex-1 bg-zinc-950 flex items-center justify-center overflow-hidden min-h-[220px] p-1">
+            <div className="flex-1 relative bg-muted overflow-hidden">
               {imageUrl && !imageUrl.startsWith("blob:") ? (
                 <SignedImage
                   src={imageUrl}
                   alt="Arte do conteúdo"
-                  className="max-w-full max-h-full object-contain block"
-                  style={{ maxHeight: "100%", maxWidth: "100%" }}
+                  className="w-full h-full object-cover"
                 />
               ) : imageUrl ? (
                 <DrivePreviewFallback
@@ -253,15 +250,6 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 onChange={handleFileChange}
                 disabled={uploading}
               />
-              {/* Baixar arte — só aparece quando há imageUrl salvo */}
-              {imageUrl && !imageUrl.startsWith("blob:") && (
-                <DownloadButton
-                  url={imageUrl}
-                  title={card.title}
-                  size="md"
-                  className="w-full justify-center"
-                />
-              )}
               <Button
                 type="button"
                 variant="ghost"

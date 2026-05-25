@@ -3,13 +3,13 @@
 import { META_CONFIG, getGraphUrl } from "./config";
 import { getDateRangeBRT } from "./timezone";
 
-export interface TokenResponse {
+interface TokenResponse {
   access_token: string;
   token_type: string;
   expires_in?: number;
 }
 
-export interface MetaAdAccount {
+interface MetaAdAccount {
   id: string;         // "act_123456789"
   name: string;
   account_id: string;
@@ -17,7 +17,7 @@ export interface MetaAdAccount {
   account_status: number;
 }
 
-export interface MetaCampaign {
+interface MetaCampaign {
   id: string;
   name: string;
   objective: string;
@@ -28,7 +28,7 @@ export interface MetaCampaign {
   stop_time?: string;
 }
 
-export interface MetaInsight {
+interface MetaInsight {
   date_start: string;
   date_stop: string;
   spend: string;
@@ -38,7 +38,7 @@ export interface MetaInsight {
   ctr: string;
   cpc: string;
   cpm: string;
-  actions?: { action_type: string; value: string; [key: string]: string }[];
+  actions?: { action_type: string; value: string }[];
 }
 
 // Exchange auth code for access token
@@ -178,86 +178,36 @@ export interface MetaDemographicRow {
   impressions: string;
 }
 
-/**
- * Retorna insights diários (time_increment=1) para o período especificado.
- * Quando objectiveFilter for passado (ex: "MESSAGES"), filtra somente campanhas
- * com esse objetivo — alinha com o que o Gerenciador exibe na coluna Resultados.
- * Solicita ["7d_click"] para corresponder à janela padrão do Gerenciador.
- */
 export async function getInsightsByDateRange(
   accountId: string,
   accessToken: string,
   since: string,
   until: string,
-  objectiveFilter?: string,
 ): Promise<MetaInsight[]> {
   const url = getGraphUrl(`/${accountId}/insights`);
-  const paramObj: Record<string, string> = {
+  const params = new URLSearchParams({
     access_token: accessToken,
     fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
     time_range: JSON.stringify({ since, until }),
     action_attribution_windows: '["7d_click"]',
     time_increment: "1",
     limit: "100",
-  };
-  if (objectiveFilter) {
-    paramObj.filtering = JSON.stringify([{ field: "campaign.objective", operator: "EQUAL", value: objectiveFilter }]);
-  }
-  const params = new URLSearchParams(paramObj);
+  });
   const res = await fetch(`${url}?${params}`);
   if (!res.ok) throw new Error(`Meta insights failed for ${accountId}`);
   const data = await res.json();
   return data.data ?? [];
 }
 
-/** Retorna uma única linha agregada para o período (sem time_increment).
- *  Quando objectiveFilter for passado (ex: "MESSAGES"), filtra somente campanhas
- *  com esse objetivo — alinha com o que o Gerenciador exibe na coluna Resultados.
- *  Solicita ["7d_click"] para corresponder à janela padrão do Gerenciador.
- */
-export async function getInsightsTotalByDateRange(
-  accountId: string,
-  accessToken: string,
-  since: string,
-  until: string,
-  objectiveFilter?: string,
-): Promise<MetaInsight | null> {
-  const url = getGraphUrl(`/${accountId}/insights`);
-  const paramObj: Record<string, string> = {
-    access_token: accessToken,
-    fields: "date_start,date_stop,spend,impressions,reach,clicks,ctr,cpc,cpm,actions",
-    time_range: JSON.stringify({ since, until }),
-    action_attribution_windows: '["7d_click"]',
-    limit: "100",
-  };
-  if (objectiveFilter) {
-    paramObj.filtering = JSON.stringify([{ field: "campaign.objective", operator: "EQUAL", value: objectiveFilter }]);
-  }
-  const params = new URLSearchParams(paramObj);
-  const res = await fetch(`${url}?${params}`);
-  const rawText = await res.text();
-  console.log(`[Meta total${objectiveFilter ? ` obj=${objectiveFilter}` : ""}] ${accountId} ${since}→${until} status=${res.status} body=`, rawText.slice(0, 300));
-  if (!res.ok) throw new Error(`Meta insights total failed for ${accountId}: ${rawText.slice(0, 200)}`);
-  const data = JSON.parse(rawText);
-  return data.data?.[0] ?? null;
-}
-
-/**
- * Retorna os top N anúncios por spend para o período.
- * Quando objectiveFilter for passado (ex: "MESSAGES"), retorna apenas anúncios
- * de campanhas com esse objetivo — evita misturar anúncios de tráfego ou
- * engajamento na lista de criativos de mensagens.
- */
 export async function getTopAdInsights(
   accountId: string,
   accessToken: string,
   since: string,
   until: string,
   limit = 10,
-  objectiveFilter?: string,
 ): Promise<MetaAdInsight[]> {
   const url = getGraphUrl(`/${accountId}/insights`);
-  const paramObj: Record<string, string> = {
+  const params = new URLSearchParams({
     access_token: accessToken,
     fields: "ad_id,ad_name,spend,impressions,reach,clicks,ctr,frequency,actions",
     time_range: JSON.stringify({ since, until }),
@@ -265,11 +215,7 @@ export async function getTopAdInsights(
     level: "ad",
     sort: "spend_descending",
     limit: String(limit),
-  };
-  if (objectiveFilter) {
-    paramObj.filtering = JSON.stringify([{ field: "campaign.objective", operator: "EQUAL", value: objectiveFilter }]);
-  }
-  const params = new URLSearchParams(paramObj);
+  });
   const res = await fetch(`${url}?${params}`);
   if (!res.ok) return [];
   const data = await res.json();

@@ -116,7 +116,6 @@ export default function TrafficPage() {
   const addTask = useOperationalStore((s) => s.addTask);
   const updateTask = useOperationalStore((s) => s.updateTask);
   const deleteTask = useOperationalStore((s) => s.deleteTask);
-  const addTimelineEntry = useOperationalStore((s) => s.addTimelineEntry);
   const initOps = useOperationalStore((s) => s.init);
   const subOps = useOperationalStore((s) => s.subscribeRealtime);
 
@@ -305,22 +304,6 @@ export default function TrafficPage() {
               clients={filteredClients}
               routineChecks={trafficRoutineChecks}
               onCheck={addTrafficRoutineCheck}
-              onHighlight={(clientIds, note) => {
-                // Cria entrada na timeline de cada cliente destacado
-                clientIds.forEach((clientId) => {
-                  const client = filteredClients.find((c) => c.id === clientId);
-                  if (!client) return;
-                  addTimelineEntry({
-                    clientId,
-                    actor: currentUser,
-                    type: "highlight",
-                    description: note
-                      ? `Bons resultados esta semana — ${note}`
-                      : "Bons resultados esta semana (Tráfego Pago)",
-                    timestamp: new Date().toISOString(),
-                  });
-                });
-              }}
               currentUser={currentUser}
               effectiveFilter={effectiveFilter}
               tasks={trafficTasks}
@@ -968,7 +951,6 @@ function RoutineTab({
   clients,
   routineChecks,
   onCheck,
-  onHighlight,
   currentUser,
   effectiveFilter,
   tasks,
@@ -977,8 +959,7 @@ function RoutineTab({
 }: {
   clients: Client[];
   routineChecks: typeof import("@/lib/mockData").mockTrafficRoutineChecks;
-  onCheck: (check: { clientId: string; clientName: string; date: string; type: "support" | "report" | "feedback" | "analysis" | "highlight"; completedBy: string; note?: string }) => void | Promise<void>;
-  onHighlight?: (clientIds: string[], note: string) => void;
+  onCheck: (check: { clientId: string; clientName: string; date: string; type: "support" | "report" | "feedback" | "analysis"; completedBy: string; note?: string }) => void | Promise<void>;
   currentUser: string;
   effectiveFilter: string;
   tasks: Task[];
@@ -1012,14 +993,9 @@ function RoutineTab({
   const reportsDone = new Set(weekChecks.filter((c) => c.type === "report").map((c) => c.clientId));
   const feedbackDone = new Set(weekChecks.filter((c) => c.type === "feedback").map((c) => c.clientId));
   const analysisDone = new Set(weekChecks.filter((c) => c.type === "analysis").map((c) => c.clientId));
-  const highlightsDone = new Set(weekChecks.filter((c) => c.type === "highlight").map((c) => c.clientId));
 
   const [feedbackNote, setFeedbackNote] = useState<Record<string, string>>({});
-  const [feedbackRating, setFeedbackRating] = useState<Record<string, number>>({});
-  const [feedbackChannel, setFeedbackChannel] = useState<Record<string, string>>({});
   const [analysisNote, setAnalysisNote] = useState<Record<string, string>>({});
-  const [selectedHighlights, setSelectedHighlights] = useState<Set<string>>(new Set());
-  const [highlightNote, setHighlightNote] = useState("");
 
   const handleSupport = (client: Client) => {
     onCheck({ clientId: client.id, clientName: client.name, date: today, type: "support", completedBy: currentUser });
@@ -1035,39 +1011,9 @@ function RoutineTab({
   };
 
   const handleFeedback = (client: Client) => {
-    const rating = feedbackRating[client.id] ?? 3;
-    const channel = feedbackChannel[client.id] ?? "whatsapp";
-    const text = feedbackNote[client.id] ?? "";
-    // Armazena como JSON no campo note — sem nova coluna no banco
-    const note = JSON.stringify({ rating, channel, text });
-    onCheck({ clientId: client.id, clientName: client.name, date: today, type: "feedback", completedBy: currentUser, note });
+    onCheck({ clientId: client.id, clientName: client.name, date: today, type: "feedback", completedBy: currentUser, note: feedbackNote[client.id] || undefined });
     setFeedbackNote((prev) => ({ ...prev, [client.id]: "" }));
-    setFeedbackRating((prev) => ({ ...prev, [client.id]: 3 }));
-    setFeedbackChannel((prev) => ({ ...prev, [client.id]: "whatsapp" }));
   };
-
-  const handleHighlight = () => {
-    if (selectedHighlights.size === 0) return;
-    selectedHighlights.forEach((clientId) => {
-      const client = activeClients.find((c) => c.id === clientId);
-      if (!client) return;
-      onCheck({ clientId, clientName: client.name, date: today, type: "highlight", completedBy: currentUser, note: highlightNote });
-    });
-    onHighlight?.(Array.from(selectedHighlights), highlightNote);
-    setSelectedHighlights(new Set());
-    setHighlightNote("");
-  };
-
-  // Helpers para exibir feedback registrado
-  function parseFeedbackNote(note?: string) {
-    if (!note) return { rating: 0, channel: "", text: note ?? "" };
-    try {
-      const p = JSON.parse(note);
-      return { rating: p.rating ?? 0, channel: p.channel ?? "", text: p.text ?? "" };
-    } catch {
-      return { rating: 0, channel: "", text: note };
-    }
-  }
 
   const supportPct = activeClients.length > 0 ? Math.round((supportCompleted.length / activeClients.length) * 100) : 100;
 
@@ -1339,199 +1285,47 @@ function RoutineTab({
         </div>
       </div>
 
-      {/* Feedback do cliente — coleta de satisfação com rating e canal */}
+      {/* Weekly: Friday Deep Feedback */}
       <div className="card border border-border">
         <div className="flex items-center gap-2 mb-2">
-          <Star size={16} className="text-primary" />
-          <h3 className="font-semibold text-foreground">Feedback dos Clientes</h3>
-          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Sempre que coletar</span>
+          <Star size={16} className={isFriday ? "text-primary" : "text-muted-foreground"} />
+          <h3 className="font-semibold text-foreground">Feedback Semanal Profundo</h3>
+          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Toda sexta-feira</span>
+          {isFriday && <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">HOJE</span>}
         </div>
-        <p className="text-xs text-muted-foreground mb-3">
-          Registre o que o cliente disse — por WhatsApp, ligação ou reunião. Rating + nota rápida.
-        </p>
+        <p className="text-xs text-muted-foreground mb-3">Feedback completo da semana: resultados, problemas encontrados, acoes tomadas e planejamento para proxima semana.</p>
         <div className="space-y-2">
           {activeClients.map((client) => {
             const done = feedbackDone.has(client.id);
-            const parsed = done
-              ? parseFeedbackNote(weekChecks.find((c) => c.clientId === client.id && c.type === "feedback")?.note)
-              : null;
-            const CHANNELS = [
-              { id: "whatsapp", label: "WhatsApp" },
-              { id: "ligacao",  label: "Ligação" },
-              { id: "reuniao",  label: "Reunião" },
-              { id: "email",    label: "E-mail" },
-            ];
             return (
               <div key={client.id} className={`rounded-lg px-3 py-2.5 border ${
                 done ? "bg-primary/5 border-primary/10" : "bg-[#0c0c12] border-[#1e1e2a]"
               }`}>
-                {/* Cabeçalho */}
                 <div className="flex items-center gap-2.5">
-                  {done ? <Check size={14} className="text-primary shrink-0" /> : (
-                    <div className="w-2 h-2 rounded-full bg-zinc-600 shrink-0" />
-                  )}
-                  <span className={`text-sm flex-1 font-medium ${done ? "text-zinc-400" : "text-foreground"}`}>
-                    {client.name}
-                  </span>
-                  {/* Rating exibido quando concluído */}
-                  {done && parsed && parsed.rating > 0 && (
-                    <div className="flex items-center gap-0.5">
-                      {[1, 2, 3, 4, 5].map((s) => (
-                        <span key={s} className={`text-[11px] ${s <= parsed.rating ? "text-amber-400" : "text-zinc-700"}`}>★</span>
-                      ))}
-                    </div>
-                  )}
-                  {done && parsed?.channel && (
-                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded capitalize">
-                      {parsed.channel}
+                  {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleFeedback(client)} className="w-5 h-5 rounded border border-zinc-600 shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
+                  <span className={`text-sm flex-1 ${done ? "text-zinc-400" : "text-foreground"}`}>{client.name}</span>
+                  {done && (
+                    <span className="text-xs text-muted-foreground truncate max-w-[250px]">
+                      {weekChecks.find((c) => c.clientId === client.id && c.type === "feedback")?.note || "Sem nota"}
                     </span>
                   )}
                 </div>
-                {done && parsed?.text && (
-                  <p className="text-xs text-muted-foreground mt-1 ml-5 truncate max-w-[320px]">{parsed.text}</p>
-                )}
-
-                {/* Formulário quando ainda não registrado */}
                 {!done && (
-                  <div className="mt-2.5 ml-1 space-y-2.5">
-                    {/* Rating — estrelas clicáveis */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground w-14 shrink-0">Satisfação</span>
-                      <div className="flex items-center gap-1">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <button
-                            key={s}
-                            onClick={() => setFeedbackRating((p) => ({ ...p, [client.id]: s }))}
-                            className={`text-lg leading-none transition-colors ${
-                              s <= (feedbackRating[client.id] ?? 3) ? "text-amber-400" : "text-zinc-700 hover:text-amber-300"
-                            }`}
-                          >★</button>
-                        ))}
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {["", "Péssimo", "Ruim", "Ok", "Bom", "Excelente"][feedbackRating[client.id] ?? 3]}
-                      </span>
-                    </div>
-
-                    {/* Canal */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground w-14 shrink-0">Via</span>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {CHANNELS.map((ch) => (
-                          <button
-                            key={ch.id}
-                            onClick={() => setFeedbackChannel((p) => ({ ...p, [client.id]: ch.id }))}
-                            className={`text-[10px] px-2 py-1 rounded-lg border transition-colors ${
-                              (feedbackChannel[client.id] ?? "whatsapp") === ch.id
-                                ? "bg-primary/15 text-primary border-primary/30"
-                                : "bg-muted text-muted-foreground border-border hover:border-primary/30"
-                            }`}
-                          >
-                            {ch.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Nota */}
+                  <div className="mt-2 ml-6 space-y-2">
                     <textarea
                       value={feedbackNote[client.id] || ""}
                       onChange={(e) => setFeedbackNote((p) => ({ ...p, [client.id]: e.target.value }))}
-                      placeholder="Ex: Cliente disse que os resultados de maio foram ótimos, pediu mais criativos..."
-                      rows={2}
+                      placeholder="Descreva: resultados da semana, problemas, acoes tomadas, plano para proxima semana..."
+                      rows={3}
                       className="w-full bg-muted rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none resize-none"
                     />
-                    <button
-                      onClick={() => handleFeedback(client)}
-                      className="text-xs btn-primary py-1.5 px-3"
-                    >
-                      Registrar Feedback
-                    </button>
+                    <button onClick={() => handleFeedback(client)} className="text-xs btn-primary py-1.5 px-3">Registrar Feedback</button>
                   </div>
                 )}
               </div>
             );
           })}
         </div>
-      </div>
-
-      {/* Bons Resultados da Semana */}
-      <div className="card border border-[#0d4af5]/20 bg-[#0d4af5]/[0.03]">
-        <div className="flex items-center gap-2 mb-2">
-          <TrendingUp size={16} className="text-primary" />
-          <h3 className="font-semibold text-foreground">Bons Resultados desta Semana</h3>
-          {highlightsDone.size > 0 && (
-            <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium ml-auto">
-              {highlightsDone.size} cliente{highlightsDone.size !== 1 ? "s" : ""} marcado{highlightsDone.size !== 1 ? "s" : ""}
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground mb-3">
-          Quais clientes tiveram bons resultados esta semana? Registre para visibilidade da gestão e histórico do cliente.
-        </p>
-
-        {/* Clientes já destacados esta semana */}
-        {highlightsDone.size > 0 && (
-          <div className="mb-3 flex flex-wrap gap-1.5">
-            {activeClients.filter((c) => highlightsDone.has(c.id)).map((c) => (
-              <span key={c.id} className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full border border-primary/20">
-                <TrendingUp size={9} /> {c.name}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Seleção de clientes */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
-          {activeClients.filter((c) => !highlightsDone.has(c.id)).map((client) => {
-            const sel = selectedHighlights.has(client.id);
-            return (
-              <button
-                key={client.id}
-                onClick={() => {
-                  const next = new Set(selectedHighlights);
-                  if (sel) next.delete(client.id); else next.add(client.id);
-                  setSelectedHighlights(next);
-                }}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-left transition-all ${
-                  sel
-                    ? "bg-primary/10 border-primary/30 text-primary"
-                    : "bg-[#0c0c12] border-[#1e1e2a] text-foreground hover:border-primary/20"
-                }`}
-              >
-                <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
-                  sel ? "bg-primary border-primary" : "border-zinc-600"
-                }`}>
-                  {sel && <Check size={10} className="text-white" />}
-                </div>
-                <span className="text-sm truncate">{client.name}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Nota geral + salvar */}
-        {selectedHighlights.size > 0 && (
-          <div className="space-y-2">
-            <input
-              value={highlightNote}
-              onChange={(e) => setHighlightNote(e.target.value)}
-              placeholder="Ex: ROAS acima de 5x, leads baratos, cliente feliz... (opcional)"
-              className="w-full bg-muted rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none"
-            />
-            <button
-              onClick={handleHighlight}
-              className="btn-primary text-xs py-1.5 px-4 flex items-center gap-1.5"
-            >
-              <TrendingUp size={12} />
-              Salvar Destaque — {selectedHighlights.size} cliente{selectedHighlights.size !== 1 ? "s" : ""}
-            </button>
-          </div>
-        )}
-
-        {activeClients.filter((c) => !highlightsDone.has(c.id)).length === 0 && (
-          <p className="text-xs text-primary text-center py-3">Todos os clientes já foram destacados esta semana 🎉</p>
-        )}
       </div>
     </div>
   );

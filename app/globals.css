@@ -19,27 +19,26 @@
        Inspired by Vercel, Stripe, Linear
        Zero glow. Zero neon. Authority through restraint.
        ═══════════════════════════════════════════════════════════ */
-    /* Alinhado ao Design System v2 — grafite #13141A como base */
-    --background: #13141A;
-    --foreground: #F0F0F4;
+    --background: #09090b;
+    --foreground: #e4e4e7;
 
-    --card: #1A1B23;
-    --card-solid: #1A1B23;
-    --card-foreground: #F0F0F4;
-    --popover: #1A1B23;
-    --popover-foreground: #F0F0F4;
+    --card: #111113;
+    --card-solid: #111113;
+    --card-foreground: #e4e4e7;
+    --popover: #111113;
+    --popover-foreground: #e4e4e7;
 
     --primary: #0d4af5;
     --primary-foreground: #ffffff;
 
-    --secondary: #1A1B23;
-    --secondary-foreground: #9EA1AB;
+    --secondary: #0c0c0e;
+    --secondary-foreground: #a1a1aa;
 
-    --muted: #22242E;
-    --muted-foreground: #7B7E89;
+    --muted: #0c0c0e;
+    --muted-foreground: #52525b;
 
-    --accent: #22242E;
-    --accent-foreground: #F0F0F4;
+    --accent: #0c0c0e;
+    --accent-foreground: #e4e4e7;
 
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
@@ -58,13 +57,13 @@
     --chart-5: #10b981;
 
     /* Sidebar */
-    --sidebar: #0F1016;
-    --sidebar-foreground: #9EA1AB;
+    --sidebar: #09090b;
+    --sidebar-foreground: #a1a1aa;
     --sidebar-primary: #0d4af5;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #1A1B23;
-    --sidebar-accent-foreground: #F0F0F4;
-    --sidebar-border: rgba(255, 255, 255, 0.05);
+    --sidebar-accent: #0c0c0e;
+    --sidebar-accent-foreground: #e4e4e7;
+    --sidebar-border: rgba(255, 255, 255, 0.04);
     --sidebar-ring: #0d4af5;
 
     /* LED system */

@@ -60,7 +60,6 @@ const TIMELINE_ICONS: Record<TimelineEntryType, { icon: React.ElementType; color
   manual:     { icon: PenLine,             color: "text-muted-foreground",    bg: "bg-zinc-600/20" },
   onboarding: { icon: GitCommitHorizontal, color: "text-primary",    bg: "bg-primary/15" },
   meeting:    { icon: User,               color: "text-zinc-400",  bg: "bg-[#111118]" },
-  highlight:  { icon: TrendingUp,         color: "text-emerald-400", bg: "bg-emerald-500/15" },
 };
 
 // Health score: uses shared calcHealthScore from lib/utils.ts

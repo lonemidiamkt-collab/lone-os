@@ -314,13 +314,9 @@ export async function fetchAdAccounts(token: string) {
 // ─── Mensagens / WhatsApp / Messenger ────────────────────────────────────────
 // A Meta usa tipos diferentes dependendo do canal e da versão da API.
 // Usamos o PRIMEIRO tipo encontrado (prioridade: mais específico primeiro).
-//
-// NOTA: total_messaging_connection permanece em primeiro porque retorna o menor valor
-// para esta conta quando combinado com action_attribution_windows=["7d_click"].
-// messaging_conversation_started_7d, apesar do nome, retorna mais conversões
-// (inclui todas as janelas de atribuição para conversas iniciadas, não apenas clicks).
 const MESSAGE_ACTION_TYPES = [
-  // Agregado de conexões de mensagem — mais conservador com 7d_click
+  // Métrica agregada nova da Meta (soma de todos os tipos de conexão de mensagem).
+  // O Gerenciador exibe esse como "Resultados" para campanhas de mensagens.
   "onsite_conversion.total_messaging_connection",
   // WhatsApp Business (Click-to-WhatsApp) — formato 7d
   "onsite_conversion.messaging_conversation_started_7d",
@@ -440,7 +436,6 @@ export async function fetchCampaignInsights(
           access_token: token,
           fields: "date_start,date_stop,spend,impressions,reach,clicks,inline_link_clicks,actions",
           ...(datePreset ? { date_preset: datePreset } : { time_range: timeRangeParam! }),
-          action_attribution_windows: '["7d_click"]',
           time_increment: "1",
           limit: "100",
         });
@@ -449,7 +444,6 @@ export async function fetchCampaignInsights(
           access_token: token,
           fields: "spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions",
           ...(datePreset ? { date_preset: datePreset } : { time_range: timeRangeParam! }),
-          action_attribution_windows: '["7d_click"]',
           limit: "1",
         });
 
@@ -458,7 +452,6 @@ export async function fetchCampaignInsights(
           access_token: token,
           fields: "adset_id,adset_name,effective_status,spend,actions",
           ...(datePreset ? { date_preset: datePreset } : { time_range: timeRangeParam! }),
-          action_attribution_windows: '["7d_click"]',
           level: "adset",
           limit: "50",
         });

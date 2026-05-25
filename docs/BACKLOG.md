@@ -203,36 +203,3 @@ a UI do Supabase diretamente no VPS (ex: query rápida sem SSH).
 
 **Referência:** VPS `/opt/backups/postgres/` — backups em `/opt/backups/postgres/`,
 não em `/opt/loneos/backups/` (path corrigido em 2026-05-19).
-
----
-
-## 8. Proteção contra perda de configuração de deploy
-
-**Incidente:** 2026-05-20 — `git reset --hard origin/main` na VPS apagou
-`docker-compose.prod.yml` (não estava em git). Ao recriar manualmente, o flag
-`--env-file .env` foi omitido do `docker compose build`. O bundle JS foi compilado
-com URLs de localhost em vez de produção. Resultado: app abria mas TODOS os dados
-sumiam do frontend sem nenhum erro visível. Designer perdeu ~1h de trabalho visível.
-Diagnóstico levou ~2h.
-
-**Resolvido em:** `docker-compose.prod.yml` commitado em git. `scripts/deploy.sh`
-criado com o fluxo correto. CLAUDE.md atualizado com proibidos absolutos.
-
-**Itens ainda em aberto (melhorias preventivas):**
-
-1. **Backup do `.env` em local seguro** — o `.env` de produção contém todos os
-   segredos e NÃO está em git. Se a VPS for perdida, o `.env` precisa ser
-   restaurado. Guardar cópia criptografada (ex: 1Password, Bitwarden) com Roberto.
-
-2. **Health check no CI/CD** — após cada deploy, verificar automaticamente se o
-   Supabase URL está correto no bundle (ex: grep por "127.0.0.1" no JS bundle
-   antes de subir o container). Bloquear deploy se encontrar localhost.
-
-3. **Script de validação pré-deploy** — antes de qualquer rebuild, verificar:
-   - `docker-compose.prod.yml` existe ✓
-   - `.env` existe com variáveis mínimas ✓
-   - Nunca usar `git reset --hard` ✓
-   - Sempre usar `--env-file .env` no build ✓
-
-**Quando priorizar:** Alta. O próximo incidente similar pode acontecer em qualquer
-deploy. O backup do `.env` é a ação mais urgente — fazer hoje com Roberto.

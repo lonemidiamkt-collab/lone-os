@@ -21,7 +21,6 @@ export type SignedImageProps = {
   src: string;
   alt: string;
   className?: string;
-  style?: React.CSSProperties;
   fallback?: React.ReactNode;
   width?: number;
   height?: number;
@@ -42,7 +41,6 @@ export default function SignedImage({
   src,
   alt,
   className,
-  style,
   fallback = DEFAULT_FALLBACK,
   width,
   height,
@@ -93,7 +91,7 @@ export default function SignedImage({
         className={className}
         width={width}
         height={height}
-        style={status === "loading" ? { display: "none", ...style } : style}
+        style={status === "loading" ? { display: "none" } : undefined}
         onLoad={() => setStatus("ok")}
         onError={handleError}
       />
