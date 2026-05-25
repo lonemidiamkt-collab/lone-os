@@ -1,0 +1,86 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# iCloud Drive / Next.js cache workaround
+/.next.nosync/
+.next
+.next.old*/
+
+# Pasta sem título (artefatos de sistema)
+"pasta sem t*"
+
+# Claude Code local settings (may contain secrets)
+.claude/
+
+# Supabase self-hosted secrets
+infrastructure/supabase/.env
+
+# Contract DOCX (derivados de *.md — gerados no prebuild via contract-templates/convert.js)
+contract-templates/*.docx
+contract-templates/node_modules
+.env.sentry-build-plugin
+
+# Pastas operacionais (não versionar)
+CLientes lone midia/
+pasta sem título/
+
+# Artefatos gerados pelos scripts de PDF (regeneráveis via generate-pdf.mjs)
+docs/lone-os-system-doc.html
+docs/lone-os-system-doc.pdf
+docs/meta-api-status.html
+docs/meta-api-status.pdf
+
+# Padrão genérico — qualquer html/pdf futuro em docs/ (force-add se quiser versionar)
+docs/*.html
+docs/*.pdf
+
+# --- Proteção adicionada em 2026-05-25 (pos-auditoria drift) ---
+# Backups e dumps
+*.bak
+*.bak.*
+*.dump
+*.dump.gz
+*.sql.gz
+.env.bak*
+
+# Secrets e credenciais (previne arquivos de chave acidentais)
+*.key
+*.secret
+*.credentials
+*.p12
+
+# Artefatos de sistema
+Thumbs.db
