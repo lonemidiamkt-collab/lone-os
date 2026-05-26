@@ -42,6 +42,12 @@ import MetaHealthCard from "@/components/MetaHealthCard";
 import ClientHealthRadar from "@/components/ClientHealthRadar";
 import PlatformUpdatesWidget from "@/components/PlatformUpdatesWidget";
 
+// Fora do componente — objeto estático, nunca muda
+const BOTTLENECK_LABELS: Record<string, string> = {
+  ideas: "Ideias", script: "Roteiro", in_production: "Em Produção",
+  approval: "Aprovação Interna", client_approval: "Aprovação do Cliente", scheduled: "Agendado",
+};
+
 function hoursSince(isoString?: string): number {
   if (!isoString) return 9999;
   return (Date.now() - new Date(isoString).getTime()) / 3600000;
@@ -528,10 +534,28 @@ function AdminDashboard() {
     return Object.entries(counts).filter(([, v]) => v.count >= 2).sort((a, b) => b[1].count - a[1].count);
   }, [contentCards]);
 
-  const bottleneckLabels: Record<string, string> = {
-    ideas: "Ideias", script: "Roteiro", in_production: "Em Produção",
-    approval: "Aprovação Interna", client_approval: "Aprovação do Cliente", scheduled: "Agendado",
-  };
+  const attentionItems = useMemo(() => {
+    const items: import("@/components/dashboard-v2").AttentionItem[] = [];
+    if (inactiveSevenDays.length > 0) {
+      items.push({
+        id: "inactive-7d",
+        tone: "warning",
+        text: `${inactiveSevenDays.length} cliente${inactiveSevenDays.length !== 1 ? "s" : ""} sem interação há 7+ dias`,
+        actionLabel: "Ver lista",
+        href: "/clients",
+      });
+    }
+    bottlenecks.forEach(([status, data]) => {
+      items.push({
+        id: `bottleneck-${status}`,
+        tone: "danger",
+        text: `1 gargalo: ${BOTTLENECK_LABELS[status] ?? status} com ${data.count} itens parados`,
+        actionLabel: "Resolver",
+        href: "/social",
+      });
+    });
+    return items;
+  }, [inactiveSevenDays, bottlenecks]);
 
   const dateLabel = new Date().toLocaleDateString("pt-BR", {
     weekday: "long", day: "numeric", month: "short", year: "numeric",
@@ -539,15 +563,12 @@ function AdminDashboard() {
 
   return (
     <>
-      {/* Barra de contexto: data */}
-      <DashboardHeader subtitle={`Hoje, ${dateLabel}`} />
-
       {/* KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         <KPICard label="Clientes Ativos" value={activeClients.length} caption="em operação" tone="default" accent icon={<Users size={12} />} onClick={() => router.push("/clients")} />
         <KPICard label="Em Risco" value={atRiskClients.length} caption="precisam atenção" tone={atRiskClients.length > 0 ? "danger" : "default"} accent icon={<AlertTriangle size={12} />} onClick={() => setStatusFilter("at_risk")} />
         <KPICard label="Onboarding" value={onboardingClients.length} caption="novos clientes" tone={onboardingClients.length > 0 ? "warning" : "default"} accent icon={<UserPlus size={12} />} onClick={() => router.push("/clients?filter=onboarding")} />
-        <KPICard label="Tarefas Urgentes" value={urgentTasks.length} caption="prioridade crítica" tone={urgentTasks.length > 0 ? "success" : "default"} accent icon={<Zap size={12} />} onClick={() => router.push("/my-work")} />
+        <KPICard label="Tarefas Urgentes" value={urgentTasks.length} caption="prioridade crítica" tone={urgentTasks.length > 0 ? "warning" : "default"} accent icon={<Zap size={12} />} onClick={() => router.push("/my-work")} />
       </div>
 
       {/* Ações rápidas */}
@@ -639,40 +660,6 @@ function AdminDashboard() {
         <KPICard label="Design"      value={designQueued + designInProg} caption={`${designQueued} fila · ${designInProg} prod`} onClick={() => router.push("/design")} />
       </div>
 
-      {/* Gargalos da semana */}
-      {bottlenecks.length > 0 && (
-        <div className="rounded-xl border border-lone-border bg-lone-bg-card p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <LayoutList size={15} className="text-lone-text-tertiary" aria-hidden="true" />
-            <h3 className="text-lone-h2 font-inter font-medium text-lone-text-primary">Gargalos da Semana</h3>
-            <PillBadge tone="default">
-              {bottlenecks.length} gargalo{bottlenecks.length > 1 ? "s" : ""}
-            </PillBadge>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {bottlenecks.map(([status, data]) => (
-              <Link
-                key={status}
-                href="/social"
-                className="flex items-start gap-3 bg-lone-bg-elevated border border-lone-border rounded-lg p-3 hover:border-lone-brand/30 transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-lone-bg-primary flex items-center justify-center shrink-0">
-                  <span className="text-lone-body font-inter font-bold text-lone-text-secondary">{data.count}</span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-lone-body font-inter font-medium text-lone-text-primary">{bottleneckLabels[status] ?? status}</p>
-                  <p className="text-lone-caption font-inter text-lone-text-tertiary mt-0.5">{data.count} itens parados</p>
-                  <p className="text-lone-caption font-inter text-lone-text-disabled mt-1 truncate">
-                    {data.clients.slice(0, 3).join(", ")}{data.clients.length > 3 ? ` +${data.clients.length - 3}` : ""}
-                  </p>
-                </div>
-                <ChevronRight size={14} className="text-lone-text-disabled group-hover:text-lone-brand shrink-0 mt-1 transition-colors" aria-hidden="true" />
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Equipes */}
       <TeamSection socialTeam={teamProductivity} trafficTeam={trafficProductivity} />
 
@@ -725,8 +712,8 @@ function AdminDashboard() {
         </div>
       </div>
 
-      {/* Clientes sem interação — 7 dias */}
-      <WeeklyAttention clients={inactiveSevenDays} />
+      {/* Atenção esta semana: inativos + gargalos combinados */}
+      <WeeklyAttention items={attentionItems} />
 
       {/* Lista de status dos clientes */}
       <ClientStatusList
