@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import type { TrafficMonthlyReport, TrafficRoutineCheck, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
-import * as db from "@/lib/supabase/queries";
 
 export interface AdAccount {
   id: string;
@@ -84,12 +83,12 @@ export const useTrafficStore = create<TrafficState>()(
         if (get().initialized) return;
         const investmentData = loadInvestmentDataFromStorage();
         try {
-          const [adAccountsRes, trafficReports, trafficRoutineChecks] = await Promise.all([
+          const [adAccountsRes, trafficRes] = await Promise.all([
             authedFetch("/api/traffic/ad-accounts"),
-            db.fetchTrafficReports(),
-            db.fetchTrafficRoutineChecks(),
+            authedFetch("/api/data/traffic"),
           ]);
           const adAccounts = adAccountsRes.ok ? ((await adAccountsRes.json()).accounts ?? []) : [];
+          const { trafficReports, trafficRoutineChecks } = trafficRes.ok ? await trafficRes.json() : { trafficReports: [], trafficRoutineChecks: [] };
           set({ adAccounts, trafficReports, trafficRoutineChecks, investmentData, initialized: true }, false, "traffic/init/done");
         } catch {
           set({ investmentData, initialized: true }, false, "traffic/init/done/partial");
@@ -130,10 +129,15 @@ export const useTrafficStore = create<TrafficState>()(
         const optimistic: TrafficMonthlyReport = { ...report, id: tempId, createdAt: new Date().toISOString() } as TrafficMonthlyReport;
         set((s) => ({ trafficReports: [optimistic, ...s.trafficReports] }), false, "traffic/report/add/optimistic");
         try {
-          await db.insertTrafficReport(report);
-          const updated = await db.fetchTrafficReports();
-          set({ trafficReports: updated }, false, "traffic/report/add/confirmed");
-          return updated.find((r) => r.id !== tempId) ?? optimistic;
+          const res = await authedFetch("/api/data/traffic/mutations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "insertTrafficReport", report }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const { trafficReports } = await res.json();
+          set({ trafficReports }, false, "traffic/report/add/confirmed");
+          return trafficReports.find((r: TrafficMonthlyReport) => r.id !== tempId) ?? optimistic;
         } catch (err) {
           set((s) => ({ trafficReports: s.trafficReports.filter((r) => r.id !== tempId) }), false, "traffic/report/add/rollback");
           throw err;
@@ -146,7 +150,12 @@ export const useTrafficStore = create<TrafficState>()(
           trafficReports: s.trafficReports.map((r) => r.id === id ? { ...r, ...updates } : r),
         }), false, "traffic/report/update/optimistic");
         try {
-          await db.updateTrafficReportDb(id, updates);
+          const res = await authedFetch("/api/data/traffic/mutations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "updateTrafficReport", id, updates }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
         } catch (err) {
           if (prev) set((s) => ({ trafficReports: s.trafficReports.map((r) => r.id === id ? prev : r) }), false, "traffic/report/update/rollback");
           throw err;
@@ -158,9 +167,14 @@ export const useTrafficStore = create<TrafficState>()(
         const optimistic: TrafficRoutineCheck = { ...check, id: tempId, completedAt: new Date().toISOString() } as TrafficRoutineCheck;
         set((s) => ({ trafficRoutineChecks: [optimistic, ...s.trafficRoutineChecks] }), false, "traffic/routineCheck/add/optimistic");
         try {
-          await db.insertTrafficRoutineCheck(check);
-          const updated = await db.fetchTrafficRoutineChecks();
-          set({ trafficRoutineChecks: updated }, false, "traffic/routineCheck/add/confirmed");
+          const res = await authedFetch("/api/data/traffic/mutations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "insertTrafficCheck", check }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const { trafficRoutineChecks } = await res.json();
+          set({ trafficRoutineChecks }, false, "traffic/routineCheck/add/confirmed");
         } catch {
           set((s) => ({ trafficRoutineChecks: s.trafficRoutineChecks.filter((c) => c.id !== tempId) }), false, "traffic/routineCheck/add/rollback");
         }

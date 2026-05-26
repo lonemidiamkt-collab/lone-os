@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type { AppNotification, NotificationType } from "@/lib/types";
-import * as db from "@/lib/supabase/queries";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { supabase } from "@/lib/supabase/client";
 
 interface NotificationsState {
@@ -31,7 +31,9 @@ export const useNotificationsStore = create<NotificationsState>()(
       init: async () => {
         if (get().initialized) return;
         try {
-          const notifications = await db.fetchNotifications();
+          const res = await authedFetch("/api/data/notifications");
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const { notifications } = await res.json();
           set({ notifications, initialized: true }, false, "notifs/init/done");
         } catch {}
       },
@@ -83,7 +85,12 @@ export const useNotificationsStore = create<NotificationsState>()(
         };
         set((s) => ({ notifications: [optimistic, ...s.notifications] }), false, "notifs/push/optimistic");
         try {
-          await db.insertNotification({ type, title, body, clientId, read: false });
+          const res = await authedFetch("/api/data/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type, title, body, clientId }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
         } catch {
           set((s) => ({ notifications: s.notifications.filter((n) => n.id !== tempId) }), false, "notifs/push/rollback");
         }
@@ -93,14 +100,22 @@ export const useNotificationsStore = create<NotificationsState>()(
         set((s) => ({
           notifications: s.notifications.map((n) => n.id === id ? { ...n, read: true } : n),
         }), false, "notifs/markRead");
-        await db.markNotificationReadDb(id).catch(() => {});
+        authedFetch("/api/data/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "markRead", id }),
+        }).catch(() => {});
       },
 
       markAllRead: async () => {
         set((s) => ({
           notifications: s.notifications.map((n) => ({ ...n, read: true })),
         }), false, "notifs/markAllRead");
-        await db.markAllNotificationsReadDb().catch(() => {});
+        authedFetch("/api/data/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "markAllRead" }),
+        }).catch(() => {});
       },
     })),
     { name: "NotificationsStore" }

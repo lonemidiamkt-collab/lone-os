@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type { Client, ClientStatus, ChatMessage } from "@/lib/types";
-import * as db from "@/lib/supabase/queries";
 import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 
@@ -54,10 +53,9 @@ export const useClientsStore = create<ClientsState>()(
         if (get().initialized || get().loading) return;
         set({ loading: true }, false, "clients/init/start");
         try {
-          const [clients, clientChats] = await Promise.all([
-            db.fetchClients(),
-            db.fetchClientChats(),
-          ]);
+          const res = await authedFetch("/api/data/clients");
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const { clients, clientChats } = await res.json();
           set({ clients, clientChats, loading: false, initialized: true }, false, "clients/init/done");
         } catch {
           set({ loading: false }, false, "clients/init/error");
@@ -116,7 +114,13 @@ export const useClientsStore = create<ClientsState>()(
         };
         set((s) => ({ clients: [...s.clients, optimistic] }), false, "clients/add/optimistic");
         try {
-          const { id } = await db.insertClient(data as Omit<Client, "id">);
+          const res = await authedFetch("/api/data/clients", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const { id } = await res.json();
           const confirmed: Client = { ...optimistic, id };
           set((s) => ({
             clients: s.clients.map((c) => c.id === tempId ? confirmed : c),
@@ -158,9 +162,16 @@ export const useClientsStore = create<ClientsState>()(
           clients: s.clients.map((c) => c.id === id ? { ...c, status } : c),
         }), false, "clients/status/optimistic");
         try {
-          await db.updateClientDb(id, { status });
-          // Log timeline entry
-          await db.insertTimelineEntry({ clientId: id, type: "status", actor, description: `Status atualizado para ${status}`, timestamp: new Date().toISOString() });
+          await authedFetch("/api/clients/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, status }),
+          });
+          await authedFetch("/api/data/operational/mutations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "insertTimeline", entry: { clientId: id, type: "status", actor, description: `Status atualizado para ${status}`, timestamp: new Date().toISOString() } }),
+          });
         } catch (err) {
           if (prev) {
             set((s) => ({
@@ -185,7 +196,11 @@ export const useClientsStore = create<ClientsState>()(
             [clientId]: [...(s.clientChats[clientId] ?? []), tempMsg],
           },
         }), false, "clients/chat/optimistic");
-        db.insertClientChatMessage(clientId, user, text).catch(() => {
+        authedFetch("/api/data/clients/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientId, text }),
+        }).catch(() => {
           set((s) => ({
             clientChats: {
               ...s.clientChats,

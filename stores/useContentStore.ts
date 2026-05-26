@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type { ContentCard, DesignRequest, ContentApproval, SocialMonthlyReport, CardComment, Role } from "@/lib/types";
-import * as db from "@/lib/supabase/queries";
 import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 
@@ -57,12 +56,10 @@ export const useContentStore = create<ContentState>()(
         if (get().initialized || get().loading) return;
         set({ loading: true }, false, "content/init/start");
         try {
-          const [contentCards, designRequests, contentApprovals, socialReports] = await Promise.all([
-            db.fetchContentCards(filter),
-            db.fetchDesignRequests(),
-            db.fetchContentApprovals(),
-            db.fetchSocialReports(),
-          ]);
+          const params = filter?.socialMedia ? `?socialMedia=${encodeURIComponent(filter.socialMedia)}` : "";
+          const res = await authedFetch(`/api/data/content${params}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const { contentCards, designRequests, contentApprovals, socialReports } = await res.json();
           set({ contentCards, designRequests, contentApprovals, socialReports, loading: false, initialized: true }, false, "content/init/done");
         } catch {
           set({ loading: false }, false, "content/init/error");
@@ -126,7 +123,9 @@ export const useContentStore = create<ContentState>()(
         const optimistic: ContentCard = { ...card, id: tempId };
         set((s) => ({ contentCards: [...s.contentCards, optimistic] }), false, "content/card/add/optimistic");
         try {
-          const { id } = await db.insertContentCard(card);
+          const r = await authedFetch("/api/content-cards/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(card) });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const { id } = await r.json();
           const confirmed = { ...optimistic, id };
           set((s) => ({
             contentCards: s.contentCards.map((c) => c.id === tempId ? confirmed : c),
@@ -190,8 +189,7 @@ export const useContentStore = create<ContentState>()(
             c.id === cardId ? { ...c, status: "scheduled" as const, statusChangedAt: new Date().toISOString() } : c
           ),
         }), false, "content/approve");
-        db.upsertContentApproval({ cardId, status: "approved", reviewedBy: reviewer, reviewedAt: new Date().toISOString() }).catch(() => {});
-        db.updateContentCardDb(cardId, { status: "scheduled" }).catch(() => {});
+        authedFetch("/api/content-cards/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cardId, status: "scheduled", contentApproval: { status: "approved", reviewedBy: reviewer, reviewedAt: new Date().toISOString() } }) }).catch(() => {});
         if (card) {
           import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
             useNotificationsStore.getState().push("content", "Conteúdo aprovado", `"${card.title}" de ${card.clientName} foi aprovado por ${reviewer}. Pronto para agendamento.`, card.clientId);
@@ -215,8 +213,7 @@ export const useContentStore = create<ContentState>()(
             c.id === cardId ? { ...c, status: "in_production" as const, statusChangedAt: new Date().toISOString() } : c
           ),
         }), false, "content/reject");
-        db.upsertContentApproval({ cardId, status: "rejected", reviewedBy: reviewer, reviewedAt: new Date().toISOString(), reason }).catch(() => {});
-        db.updateContentCardDb(cardId, { status: "in_production" }).catch(() => {});
+        authedFetch("/api/content-cards/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cardId, status: "in_production", contentApproval: { status: "rejected", reviewedBy: reviewer, reviewedAt: new Date().toISOString(), reason } }) }).catch(() => {});
         if (card) {
           import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
             useNotificationsStore.getState().push("content", "Conteúdo reprovado", `"${card.title}" de ${card.clientName} foi reprovado: ${reason}`, card.clientId);
@@ -229,10 +226,11 @@ export const useContentStore = create<ContentState>()(
         const optimistic: SocialMonthlyReport = { ...report, id: tempId, createdAt: new Date().toISOString() } as SocialMonthlyReport;
         set((s) => ({ socialReports: [optimistic, ...s.socialReports] }), false, "content/socialReport/add/optimistic");
         try {
-          await db.insertSocialReport(report);
-          const updated = await db.fetchSocialReports();
+          const r = await authedFetch("/api/data/content/mutations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "insertSocialReport", report }) });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const { socialReports: updated } = await r.json();
           set({ socialReports: updated }, false, "content/socialReport/add/confirmed");
-          return updated.find((r) => r.id !== tempId) ?? optimistic;
+          return updated.find((sr: SocialMonthlyReport) => sr.id !== tempId) ?? optimistic;
         } catch (err) {
           set((s) => ({ socialReports: s.socialReports.filter((r) => r.id !== tempId) }), false, "content/socialReport/add/rollback");
           throw err;
@@ -245,7 +243,8 @@ export const useContentStore = create<ContentState>()(
           socialReports: s.socialReports.map((r) => r.id === id ? { ...r, ...updates } : r),
         }), false, "content/socialReport/update/optimistic");
         try {
-          await db.updateSocialReportDb(id, updates);
+          const res = await authedFetch("/api/data/content/mutations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "updateSocialReport", id, updates }) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
         } catch (err) {
           if (prev) set((s) => ({ socialReports: s.socialReports.map((r) => r.id === id ? prev : r) }), false, "content/socialReport/update/rollback");
           throw err;
@@ -257,7 +256,9 @@ export const useContentStore = create<ContentState>()(
         const optimistic: DesignRequest = { ...req, id: tempId } as DesignRequest;
         set((s) => ({ designRequests: [optimistic, ...s.designRequests] }), false, "content/design/add/optimistic");
         try {
-          const { id } = await db.insertDesignRequest(req as Omit<DesignRequest, "id">);
+          const r = await authedFetch("/api/design-requests/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const { id } = await r.json();
           const confirmed = { ...optimistic, id };
           set((s) => ({
             designRequests: s.designRequests.map((r) => r.id === tempId ? confirmed : r),
@@ -275,7 +276,8 @@ export const useContentStore = create<ContentState>()(
           designRequests: s.designRequests.map((r) => r.id === id ? { ...r, ...updates } : r),
         }), false, "content/design/update/optimistic");
         try {
-          await db.updateDesignRequestDb(id, updates);
+          const res = await authedFetch("/api/design-requests/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...updates }) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
         } catch (err) {
           if (prev) set((s) => ({ designRequests: s.designRequests.map((r) => r.id === id ? prev : r) }), false, "content/design/update/rollback");
           throw err;
@@ -295,7 +297,7 @@ export const useContentStore = create<ContentState>()(
             c.id === cardId ? { ...c, comments: [...(c.comments ?? []), comment] } : c
           ),
         }), false, "content/card/comment/add");
-        db.insertCardComment(cardId, author, text).catch(() => {});
+        authedFetch("/api/data/content/mutations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "addCardComment", cardId, author, text }) }).catch(() => {});
         const card = get().contentCards.find((c) => c.id === cardId);
         if (card) {
           import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {

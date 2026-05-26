@@ -15,7 +15,7 @@ import type {
   MoodType,
   ClientAccess,
 } from "@/lib/types";
-import * as db from "@/lib/supabase/queries";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { supabase } from "@/lib/supabase/client";
 
 interface OperationalState {
@@ -97,20 +97,10 @@ export const useOperationalStore = create<OperationalState>()(
       init: async () => {
         if (get().initialized) return;
         try {
-          const [timeline, onboarding, globalChat, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodHistory, clientAccess] = await Promise.all([
-            db.fetchTimeline(),
-            db.fetchOnboardingItems(),
-            db.fetchGlobalChat(),
-            db.fetchTasks(),
-            db.fetchNotices(),
-            db.fetchCreativeAssets(),
-            db.fetchSocialProofs(),
-            db.fetchCrisisNotes(),
-            db.fetchQuinzReports(),
-            db.fetchMoodEntries(),
-            db.fetchClientAccess(),
-          ]);
-          set({ timeline, onboarding, globalChat, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodHistory, clientAccess, initialized: true }, false, "ops/init/done");
+          const res = await authedFetch("/api/data/operational");
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const { timeline, onboardingItems, globalChat, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodEntries, clientAccess } = await res.json();
+          set({ timeline, onboarding: onboardingItems, globalChat, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodHistory: moodEntries, clientAccess, initialized: true }, false, "ops/init/done");
         } catch {}
       },
 
@@ -119,8 +109,7 @@ export const useOperationalStore = create<OperationalState>()(
           .channel("store:operational")
           .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks" }, (p) => {
             if (!p.new) return;
-            const row = p.new as Record<string, unknown>;
-            const task = row as unknown as Task;
+            const task = p.new as unknown as Task;
             set((s) => ({
               tasks: s.tasks.some((t) => t.id === task.id) ? s.tasks : [...s.tasks, task],
             }), false, "ops/rt/task/insert");
@@ -155,9 +144,14 @@ export const useOperationalStore = create<OperationalState>()(
       },
 
       addTimelineEntry: async (entry) => {
-        await db.insertTimelineEntry(entry);
-        const updated = await db.fetchTimeline();
-        set({ timeline: updated }, false, "ops/timeline/add");
+        const res = await authedFetch("/api/data/operational/mutations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "insertTimeline", entry }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { timeline } = await res.json();
+        set({ timeline }, false, "ops/timeline/add");
       },
 
       toggleOnboardingItem: async (clientId, itemId, actor) => {
@@ -174,7 +168,12 @@ export const useOperationalStore = create<OperationalState>()(
           },
         }), false, "ops/onboarding/toggle/optimistic");
         try {
-          await db.updateOnboardingItemDb(itemId, completed, actor);
+          const res = await authedFetch("/api/data/operational/mutations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "updateOnboarding", itemId, completed, actor }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
         } catch {
           set((s) => ({
             onboarding: {
@@ -194,7 +193,11 @@ export const useOperationalStore = create<OperationalState>()(
           timestamp: new Date().toISOString(),
         };
         set((s) => ({ globalChat: [...s.globalChat, tempMsg] }), false, "ops/globalchat/optimistic");
-        db.insertGlobalChatMessage(user, role, text).catch(() => {
+        authedFetch("/api/data/operational/mutations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "insertGlobalChat", user, role, text }),
+        }).catch(() => {
           set((s) => ({
             globalChat: s.globalChat.filter((m) => m.id !== tempMsg.id),
           }), false, "ops/globalchat/rollback");
@@ -215,7 +218,11 @@ export const useOperationalStore = create<OperationalState>()(
             [clientId]: [entry, ...(s.moodHistory[clientId] ?? [])],
           },
         }), false, "ops/mood/add/optimistic");
-        db.insertMoodEntry(clientId, mood, note, actor).catch(() => {});
+        authedFetch("/api/data/operational/mutations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "insertMood", clientId, mood, note, actor }),
+        }).catch(() => {});
       },
 
       updateClientAccess: async (clientId, access, actor) => {
@@ -227,7 +234,12 @@ export const useOperationalStore = create<OperationalState>()(
           },
         }), false, "ops/access/update/optimistic");
         try {
-          await db.upsertClientAccess(clientId, access, actor);
+          const res = await authedFetch("/api/data/operational/mutations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "upsertClientAccess", clientId, access, actor }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
         } catch {
           if (prev !== undefined) {
             set((s) => ({ clientAccess: { ...s.clientAccess, [clientId]: prev } }), false, "ops/access/update/rollback");
@@ -236,22 +248,36 @@ export const useOperationalStore = create<OperationalState>()(
       },
 
       addCreativeAsset: async (asset) => {
-        await db.insertCreativeAsset(asset);
-        const clientId = asset.clientId;
-        const updated = await db.fetchCreativeAssets();
-        set((s) => ({ creativeAssets: { ...s.creativeAssets, [clientId]: updated[clientId] ?? [] } }), false, "ops/creative/add");
+        const res = await authedFetch("/api/data/operational/mutations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "insertCreativeAsset", asset }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { creativeAssets } = await res.json();
+        set({ creativeAssets }, false, "ops/creative/add");
       },
 
       addSocialProof: async (entry) => {
-        await db.insertSocialProof(entry);
-        const updated = await db.fetchSocialProofs();
-        set({ socialProofs: updated }, false, "ops/socialproof/add");
+        const res = await authedFetch("/api/data/operational/mutations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "insertSocialProof", entry }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { socialProofs } = await res.json();
+        set({ socialProofs }, false, "ops/socialproof/add");
       },
 
       addCrisisNote: async (clientId, note, actor) => {
-        await db.insertCrisisNote(clientId, note, actor);
-        const updated = await db.fetchCrisisNotes();
-        set({ crisisNotes: updated }, false, "ops/crisis/add");
+        const res = await authedFetch("/api/data/operational/mutations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "insertCrisisNote", clientId, note, actor }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { crisisNotes } = await res.json();
+        set({ crisisNotes }, false, "ops/crisis/add");
       },
 
       addQuinzReport: async (report) => {
@@ -263,9 +289,14 @@ export const useOperationalStore = create<OperationalState>()(
         } as QuinzReport;
         set((s) => ({ quinzReports: [optimistic, ...s.quinzReports] }), false, "ops/quinz/add/optimistic");
         try {
-          await db.insertQuinzReport(report);
-          const updated = await db.fetchQuinzReports();
-          set({ quinzReports: updated }, false, "ops/quinz/add/confirmed");
+          const res = await authedFetch("/api/data/operational/mutations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "insertQuinzReport", report }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const { quinzReports } = await res.json();
+          set({ quinzReports }, false, "ops/quinz/add/confirmed");
         } catch (err) {
           set((s) => ({ quinzReports: s.quinzReports.filter((r) => r.id !== tempId) }), false, "ops/quinz/add/rollback");
           throw err;
@@ -277,7 +308,6 @@ export const useOperationalStore = create<OperationalState>()(
         const optimistic: Task = { ...task, id: tempId } as Task;
         set((s) => ({ tasks: [...s.tasks, optimistic] }), false, "ops/task/add/optimistic");
         try {
-          const { authedFetch } = await import("@/lib/supabase/authed-fetch");
           const res = await authedFetch("/api/tasks/create", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -302,7 +332,6 @@ export const useOperationalStore = create<OperationalState>()(
           tasks: s.tasks.map((t) => t.id === id ? { ...t, ...updates } : t),
         }), false, "ops/task/update/optimistic");
         try {
-          const { authedFetch } = await import("@/lib/supabase/authed-fetch");
           const res = await authedFetch("/api/tasks/update", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -319,7 +348,6 @@ export const useOperationalStore = create<OperationalState>()(
         const prev = get().tasks.find((t) => t.id === id);
         set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }), false, "ops/task/delete/optimistic");
         try {
-          const { authedFetch } = await import("@/lib/supabase/authed-fetch");
           const res = await authedFetch("/api/tasks/delete", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -336,8 +364,13 @@ export const useOperationalStore = create<OperationalState>()(
       },
 
       addNotice: async (data) => {
-        await db.insertNotice(data);
-        const notices = await db.fetchNotices();
+        const res = await authedFetch("/api/data/operational/mutations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "insertNotice", data }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { notices } = await res.json();
         set({ notices }, false, "ops/notice/add");
       },
 
@@ -345,7 +378,14 @@ export const useOperationalStore = create<OperationalState>()(
         const prev = get().notices.find((n) => n.id === id);
         set((s) => ({ notices: s.notices.filter((n) => n.id !== id) }), false, "ops/notice/delete/optimistic");
         try {
-          await db.deleteNoticeDb(id);
+          const res = await authedFetch("/api/data/operational/mutations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "deleteNotice", id }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const { notices } = await res.json();
+          set({ notices }, false, "ops/notice/delete/confirmed");
         } catch {
           if (prev) set((s) => ({ notices: s.notices.some((n) => n.id === id) ? s.notices : [...s.notices, prev] }), false, "ops/notice/delete/rollback");
         }
