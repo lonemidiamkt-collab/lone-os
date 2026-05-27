@@ -201,6 +201,15 @@ export interface ContentCard {
   totalTimeSpentMs?: number;       // accumulated milliseconds of active work
 }
 
+export interface CardAttachment {
+  id: string;
+  cardId: string;
+  url: string;
+  path: string;
+  position: number;
+  createdAt: string; // ISO
+}
+
 export interface CardComment {
   id: string;
   author: string;

@@ -279,3 +279,18 @@ Arquivos órfãos podem acumular silenciosamente no bucket `"arts"`.
 - Arquivos sem referência são candidatos à remoção (com confirmação humana — não automático)
 
 **Prioridade:** Média. Implementar quando houver primeiro sintoma (bucket inchado, custo de storage subindo).
+
+---
+
+### DÉBITO TÉCNICO — Idempotency em `/api/upload-art` e `/api/cards/[id]/attachments/[attachmentId]`
+
+**Contexto:** Endpoints `POST /api/upload-art` e `DELETE /api/cards/[id]/attachments/[attachmentId]`
+não implementam `Idempotency-Key` no MVP (onda `kanban-multi-art`).
+
+**Mitigação atual:** Frontend usa debounce + disable do botão durante upload/delete em andamento.
+Duplicação de arte é visível ao usuário (diferente de duplicata silenciosa no briefing).
+
+**Resolução:** Quando **BACKLOG #1** (`idempotency_records`) for implementado, adicionar suporte
+a `Idempotency-Key` nestes endpoints junto com as demais rotas BFF.
+
+**Prioridade:** Baixa. Risco real de duplicação é visível ao usuário, não silencioso.
