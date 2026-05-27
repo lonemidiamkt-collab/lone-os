@@ -42,11 +42,6 @@ import MetaHealthCard from "@/components/MetaHealthCard";
 import ClientHealthRadar from "@/components/ClientHealthRadar";
 import PlatformUpdatesWidget from "@/components/PlatformUpdatesWidget";
 
-// Fora do componente — objeto estático, nunca muda
-const BOTTLENECK_LABELS: Record<string, string> = {
-  ideas: "Ideias", script: "Roteiro", in_production: "Em Produção",
-  approval: "Aprovação Interna", client_approval: "Aprovação do Cliente", scheduled: "Agendado",
-};
 
 function hoursSince(isoString?: string): number {
   if (!isoString) return 9999;
@@ -534,28 +529,6 @@ function AdminDashboard() {
     return Object.entries(counts).filter(([, v]) => v.count >= 2).sort((a, b) => b[1].count - a[1].count);
   }, [contentCards]);
 
-  const attentionItems = useMemo(() => {
-    const items: import("@/components/dashboard-v2").AttentionItem[] = [];
-    if (inactiveSevenDays.length > 0) {
-      items.push({
-        id: "inactive-7d",
-        tone: "warning",
-        text: `${inactiveSevenDays.length} cliente${inactiveSevenDays.length !== 1 ? "s" : ""} sem interação há 7+ dias`,
-        actionLabel: "Ver lista",
-        href: "/clients",
-      });
-    }
-    bottlenecks.forEach(([status, data]) => {
-      items.push({
-        id: `bottleneck-${status}`,
-        tone: "danger",
-        text: `1 gargalo: ${BOTTLENECK_LABELS[status] ?? status} com ${data.count} itens parados`,
-        actionLabel: "Resolver",
-        href: "/social",
-      });
-    });
-    return items;
-  }, [inactiveSevenDays, bottlenecks]);
 
   const dateLabel = new Date().toLocaleDateString("pt-BR", {
     weekday: "long", day: "numeric", month: "short", year: "numeric",
@@ -712,8 +685,7 @@ function AdminDashboard() {
         </div>
       </div>
 
-      {/* Atenção esta semana: inativos + gargalos combinados */}
-      <WeeklyAttention items={attentionItems} />
+      <WeeklyAttention clients={inactiveSevenDays} />
 
       {/* Lista de status dos clientes */}
       <ClientStatusList
