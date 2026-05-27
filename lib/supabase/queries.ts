@@ -1,4 +1,5 @@
 import { supabase } from "./client";
+import { supabaseAdmin } from "./server";
 import type {
   Client, Task, ContentCard, DesignRequest, AppNotification,
   TimelineEntry, ChatMessage, GlobalChatMessage, OnboardingItem,
@@ -7,6 +8,11 @@ import type {
   TrafficRoutineCheck, SocialMonthlyReport, ContentApproval,
   Role,
 } from "@/lib/types";
+
+// No servidor (API routes), supabase browser client não tem session → RLS bloqueia tudo.
+// supabaseAdmin usa service_role e bypassa RLS — correto para chamadas server-side.
+// No browser, usa supabase normal com a session do usuário.
+const db = typeof window !== "undefined" ? supabase : supabaseAdmin;
 
 // SENHAS DE PLATAFORMA (facebookPassword, instagramPassword, googleAdsPassword)
 // NÃO viajam mais pelo estado do Client. São lidas server-side via /api/client-vault/reveal
@@ -158,13 +164,13 @@ function clientToSnake(c: Partial<Client>): Record<string, unknown> {
 }
 
 export async function fetchClients(): Promise<Client[]> {
-  const { data, error } = await supabase.from("clients").select("*").is("draft_status", null).order("name");
+  const { data, error } = await db.from("clients").select("*").is("draft_status", null).order("name");
   if (error) { console.error("[DB] fetchClients:", error); return []; }
   return (data ?? []).map(snakeToClient);
 }
 
 export async function fetchDraftClients(): Promise<Client[]> {
-  const { data, error } = await supabase.from("clients").select("*").not("draft_status", "is", null).order("created_at", { ascending: false });
+  const { data, error } = await db.from("clients").select("*").not("draft_status", "is", null).order("created_at", { ascending: false });
   if (error) { console.error("[DB] fetchDraftClients:", error); return []; }
   return (data ?? []).map(snakeToClient);
 }
@@ -172,7 +178,7 @@ export async function fetchDraftClients(): Promise<Client[]> {
 export async function insertClient(client: Omit<Client, "id"> & { id?: string }): Promise<{ id: string }> {
   const row = clientToSnake(client as Partial<Client>);
   row.join_date = client.joinDate ?? new Date().toISOString().slice(0, 10);
-  const { data, error } = await supabase.from("clients").insert(row).select("id").single();
+  const { data, error } = await db.from("clients").insert(row).select("id").single();
   if (error) { console.error("[DB] insertClient:", error); throw error; }
   return { id: data.id as string };
 }
@@ -214,7 +220,7 @@ function snakeToTask(row: Record<string, unknown>): Task {
 }
 
 export async function fetchTasks(): Promise<Task[]> {
-  const { data, error } = await supabase.from("tasks").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db.from("tasks").select("*").order("created_at", { ascending: false });
   if (error) { console.error("[DB] fetchTasks:", error); return []; }
   return (data ?? []).map(snakeToTask);
 }
@@ -283,14 +289,14 @@ export function snakeToContentCard(row: Record<string, unknown>): ContentCard {
 }
 
 export async function fetchContentCards(filter?: { socialMedia?: string }): Promise<ContentCard[]> {
-  let query = supabase.from("content_cards").select("*").order("created_at", { ascending: false });
+  let query = db.from("content_cards").select("*").order("created_at", { ascending: false });
   if (filter?.socialMedia) query = query.eq("social_media", filter.socialMedia);
   const { data, error } = await query;
   if (error) { console.error("[DB] fetchContentCards:", error); return []; }
   // Also load comments for each card
   const cards = (data ?? []).map(snakeToContentCard);
   if (cards.length > 0) {
-    const { data: comments } = await supabase.from("card_comments").select("*").order("created_at");
+    const { data: comments } = await db.from("card_comments").select("*").order("created_at");
     if (comments) {
       const commentMap = new Map<string, Array<{ id: string; author: string; role: Role; text: string; createdAt: string }>>();
       for (const c of comments) {
@@ -366,7 +372,7 @@ export function snakeToDesignRequest(row: Record<string, unknown>): DesignReques
 }
 
 export async function fetchDesignRequests(filter?: { assignedSocialClients?: string[] }): Promise<DesignRequest[]> {
-  let query = supabase.from("design_requests").select("*").order("created_at", { ascending: false });
+  let query = db.from("design_requests").select("*").order("created_at", { ascending: false });
   if (filter?.assignedSocialClients?.length) query = query.in("client_id", filter.assignedSocialClients);
   const { data, error } = await query;
   if (error) { console.error("[DB] fetchDesignRequests:", error); return []; }
@@ -406,7 +412,7 @@ export async function updateDesignRequestDb(id: string, updates: Partial<DesignR
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchNotifications(): Promise<AppNotification[]> {
-  const { data, error } = await supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50);
+  const { data, error } = await db.from("notifications").select("*").order("created_at", { ascending: false }).limit(50);
   if (error) { console.error("[DB] fetchNotifications:", error); return []; }
   return (data ?? []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
@@ -420,7 +426,7 @@ export async function fetchNotifications(): Promise<AppNotification[]> {
 }
 
 export async function insertNotification(n: { type: string; title: string; body?: string; clientId?: string; read?: boolean }): Promise<void> {
-  const { error } = await supabase.from("notifications").insert({
+  const { error } = await db.from("notifications").insert({
     type: n.type, title: n.title, body: n.body,
     client_id: n.clientId, read: false,
   });
@@ -428,12 +434,12 @@ export async function insertNotification(n: { type: string; title: string; body?
 }
 
 export async function markNotificationReadDb(id: string): Promise<void> {
-  const { error } = await supabase.from("notifications").update({ read: true }).eq("id", id);
+  const { error } = await db.from("notifications").update({ read: true }).eq("id", id);
   if (error) console.error("[DB] markNotificationRead:", error);
 }
 
 export async function markAllNotificationsReadDb(): Promise<void> {
-  const { error } = await supabase.from("notifications").update({ read: true }).eq("read", false);
+  const { error } = await db.from("notifications").update({ read: true }).eq("read", false);
   if (error) console.error("[DB] markAllNotificationsRead:", error);
 }
 
@@ -442,7 +448,7 @@ export async function markAllNotificationsReadDb(): Promise<void> {
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchTimeline(): Promise<Record<string, TimelineEntry[]>> {
-  const { data, error } = await supabase.from("timeline_entries").select("*").order("created_at", { ascending: false }).limit(500);
+  const { data, error } = await db.from("timeline_entries").select("*").order("created_at", { ascending: false }).limit(500);
   if (error) { console.error("[DB] fetchTimeline:", error); return {}; }
   const result: Record<string, TimelineEntry[]> = {};
   for (const row of data ?? []) {
@@ -461,7 +467,7 @@ export async function fetchTimeline(): Promise<Record<string, TimelineEntry[]>> 
 }
 
 export async function insertTimelineEntry(entry: Omit<TimelineEntry, "id">): Promise<void> {
-  const { error } = await supabase.from("timeline_entries").insert({
+  const { error } = await db.from("timeline_entries").insert({
     client_id: entry.clientId,
     type: entry.type,
     actor: entry.actor,
@@ -476,7 +482,7 @@ export async function insertTimelineEntry(entry: Omit<TimelineEntry, "id">): Pro
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchClientChats(): Promise<Record<string, ChatMessage[]>> {
-  const { data, error } = await supabase.from("client_chats").select("*").order("created_at");
+  const { data, error } = await db.from("client_chats").select("*").order("created_at");
   if (error) { console.error("[DB] fetchClientChats:", error); return {}; }
   const result: Record<string, ChatMessage[]> = {};
   for (const row of data ?? []) {
@@ -494,7 +500,7 @@ export async function fetchClientChats(): Promise<Record<string, ChatMessage[]>>
 
 export async function insertClientChatMessage(clientId: string, user: string, text: string): Promise<void> {
   const timestamp = new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const { error } = await supabase.from("client_chats").insert({
+  const { error } = await db.from("client_chats").insert({
     client_id: clientId, user, text, timestamp,
   });
   if (error) console.error("[DB] insertClientChat:", error);
@@ -505,7 +511,7 @@ export async function insertClientChatMessage(clientId: string, user: string, te
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchGlobalChat(): Promise<GlobalChatMessage[]> {
-  const { data, error } = await supabase.from("global_chat").select("*").order("created_at");
+  const { data, error } = await db.from("global_chat").select("*").order("created_at");
   if (error) { console.error("[DB] fetchGlobalChat:", error); return []; }
   return (data ?? []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
@@ -518,7 +524,7 @@ export async function fetchGlobalChat(): Promise<GlobalChatMessage[]> {
 
 export async function insertGlobalChatMessage(user: string, role: Role, text: string): Promise<void> {
   const timestamp = new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const { error } = await supabase.from("global_chat").insert({
+  const { error } = await db.from("global_chat").insert({
     user, role, text, timestamp,
   });
   if (error) console.error("[DB] insertGlobalChat:", error);
@@ -529,7 +535,7 @@ export async function insertGlobalChatMessage(user: string, role: Role, text: st
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchOnboardingItems(): Promise<Record<string, OnboardingItem[]>> {
-  const { data, error } = await supabase.from("onboarding_items").select("*").order("sort_order");
+  const { data, error } = await db.from("onboarding_items").select("*").order("sort_order");
   if (error) { console.error("[DB] fetchOnboardingItems:", error); return {}; }
   const result: Record<string, OnboardingItem[]> = {};
   for (const row of data ?? []) {
@@ -554,12 +560,12 @@ export async function insertOnboardingItems(clientId: string, items: Array<{ lab
     sort_order: item.sortOrder,
     department: item.department,
   }));
-  const { error } = await supabase.from("onboarding_items").insert(rows);
+  const { error } = await db.from("onboarding_items").insert(rows);
   if (error) console.error("[DB] insertOnboardingItems:", error);
 }
 
 export async function updateOnboardingItemDb(itemId: string, completed: boolean, actor: string): Promise<void> {
-  const { error } = await supabase.from("onboarding_items").update({
+  const { error } = await db.from("onboarding_items").update({
     completed,
     completed_by: completed ? actor : null,
     completed_at: completed ? new Date().toISOString() : null,
@@ -572,7 +578,7 @@ export async function updateOnboardingItemDb(itemId: string, completed: boolean,
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchMoodEntries(): Promise<Record<string, MoodEntry[]>> {
-  const { data, error } = await supabase.from("mood_entries").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db.from("mood_entries").select("*").order("created_at", { ascending: false });
   if (error) { console.error("[DB] fetchMoodEntries:", error); return {}; }
   const result: Record<string, MoodEntry[]> = {};
   for (const row of data ?? []) {
@@ -590,7 +596,7 @@ export async function fetchMoodEntries(): Promise<Record<string, MoodEntry[]>> {
 }
 
 export async function insertMoodEntry(clientId: string, mood: MoodType, note: string, actor: string): Promise<void> {
-  const { error } = await supabase.from("mood_entries").insert({
+  const { error } = await db.from("mood_entries").insert({
     client_id: clientId,
     mood,
     note: note || null,
@@ -605,7 +611,7 @@ export async function insertMoodEntry(clientId: string, mood: MoodType, note: st
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchCreativeAssets(): Promise<Record<string, CreativeAsset[]>> {
-  const { data, error } = await supabase.from("creative_assets").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db.from("creative_assets").select("*").order("created_at", { ascending: false });
   if (error) { console.error("[DB] fetchCreativeAssets:", error); return {}; }
   const result: Record<string, CreativeAsset[]> = {};
   for (const row of data ?? []) {
@@ -625,7 +631,7 @@ export async function fetchCreativeAssets(): Promise<Record<string, CreativeAsse
 }
 
 export async function insertCreativeAsset(asset: Omit<CreativeAsset, "id">): Promise<void> {
-  const { error } = await supabase.from("creative_assets").insert({
+  const { error } = await db.from("creative_assets").insert({
     client_id: asset.clientId,
     type: asset.type,
     url: asset.url,
@@ -641,7 +647,7 @@ export async function insertCreativeAsset(asset: Omit<CreativeAsset, "id">): Pro
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchSocialProofs(): Promise<Record<string, SocialProofEntry[]>> {
-  const { data, error } = await supabase.from("social_proofs").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db.from("social_proofs").select("*").order("created_at", { ascending: false });
   if (error) { console.error("[DB] fetchSocialProofs:", error); return {}; }
   const result: Record<string, SocialProofEntry[]> = {};
   for (const row of data ?? []) {
@@ -665,7 +671,7 @@ export async function fetchSocialProofs(): Promise<Record<string, SocialProofEnt
 }
 
 export async function insertSocialProof(entry: Omit<SocialProofEntry, "id" | "createdAt">): Promise<void> {
-  const { error } = await supabase.from("social_proofs").insert({
+  const { error } = await db.from("social_proofs").insert({
     client_id: entry.clientId,
     metric1_label: entry.metric1Label,
     metric1_value: entry.metric1Value,
@@ -684,7 +690,7 @@ export async function insertSocialProof(entry: Omit<SocialProofEntry, "id" | "cr
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchCrisisNotes(): Promise<Record<string, CrisisNote[]>> {
-  const { data, error } = await supabase.from("crisis_notes").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db.from("crisis_notes").select("*").order("created_at", { ascending: false });
   if (error) { console.error("[DB] fetchCrisisNotes:", error); return {}; }
   const result: Record<string, CrisisNote[]> = {};
   for (const row of data ?? []) {
@@ -702,7 +708,7 @@ export async function fetchCrisisNotes(): Promise<Record<string, CrisisNote[]>> 
 }
 
 export async function insertCrisisNote(clientId: string, note: string, actor: string): Promise<void> {
-  const { error } = await supabase.from("crisis_notes").insert({
+  const { error } = await db.from("crisis_notes").insert({
     client_id: clientId, note, created_by: actor,
   });
   if (error) console.error("[DB] insertCrisisNote:", error);
@@ -713,7 +719,7 @@ export async function insertCrisisNote(clientId: string, note: string, actor: st
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchNotices(): Promise<Notice[]> {
-  const { data, error } = await supabase.from("notices").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db.from("notices").select("*").order("created_at", { ascending: false });
   if (error) { console.error("[DB] fetchNotices:", error); return []; }
   return (data ?? []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
@@ -728,7 +734,7 @@ export async function fetchNotices(): Promise<Notice[]> {
 }
 
 export async function insertNotice(data: { title: string; body: string; urgent: boolean; createdBy: string; scheduledAt?: string; category?: string }): Promise<void> {
-  const { error } = await supabase.from("notices").insert({
+  const { error } = await db.from("notices").insert({
     title: data.title,
     body: data.body,
     created_by: data.createdBy,
@@ -740,7 +746,7 @@ export async function insertNotice(data: { title: string; body: string; urgent: 
 }
 
 export async function deleteNoticeDb(id: string): Promise<void> {
-  const { error } = await supabase.from("notices").delete().eq("id", id);
+  const { error } = await db.from("notices").delete().eq("id", id);
   if (error) console.error("[DB] deleteNotice:", error);
 }
 
@@ -749,7 +755,7 @@ export async function deleteNoticeDb(id: string): Promise<void> {
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchQuinzReports(): Promise<QuinzReport[]> {
-  const { data, error } = await supabase.from("quinz_reports").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db.from("quinz_reports").select("*").order("created_at", { ascending: false });
   if (error) { console.error("[DB] fetchQuinzReports:", error); return []; }
   return (data ?? []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
@@ -767,7 +773,7 @@ export async function fetchQuinzReports(): Promise<QuinzReport[]> {
 }
 
 export async function insertQuinzReport(report: Omit<QuinzReport, "id" | "createdAt">): Promise<void> {
-  const { error } = await supabase.from("quinz_reports").insert({
+  const { error } = await db.from("quinz_reports").insert({
     client_id: report.clientId,
     client_name: report.clientName,
     period: report.period,
@@ -786,7 +792,7 @@ export async function insertQuinzReport(report: Omit<QuinzReport, "id" | "create
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchClientAccess(): Promise<Record<string, ClientAccess>> {
-  const { data, error } = await supabase.from("client_access").select("*");
+  const { data, error } = await db.from("client_access").select("*");
   if (error) { console.error("[DB] fetchClientAccess:", error); return {}; }
   const result: Record<string, ClientAccess> = {};
   for (const row of data ?? []) {
@@ -833,7 +839,7 @@ export async function upsertClientAccess(clientId: string, access: Partial<Clien
   if (access.driveLink !== undefined) row.drive_link = access.driveLink;
   if (access.otherNotes !== undefined) row.other_notes = access.otherNotes;
 
-  const { error } = await supabase.from("client_access").upsert(row, { onConflict: "client_id" });
+  const { error } = await db.from("client_access").upsert(row, { onConflict: "client_id" });
   if (error) console.error("[DB] upsertClientAccess:", error);
 }
 
@@ -842,7 +848,7 @@ export async function upsertClientAccess(clientId: string, access: Partial<Clien
 // ═══════════════════════════════════════════════════════════
 
 export async function insertCardComment(cardId: string, author: string, text: string): Promise<void> {
-  const { error } = await supabase.from("card_comments").insert({
+  const { error } = await db.from("card_comments").insert({
     card_id: cardId, author, text,
   });
   if (error) console.error("[DB] insertCardComment:", error);
@@ -853,7 +859,7 @@ export async function insertCardComment(cardId: string, author: string, text: st
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchTrafficReports(): Promise<TrafficMonthlyReport[]> {
-  const { data, error } = await supabase.from("traffic_reports").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db.from("traffic_reports").select("*").order("created_at", { ascending: false });
   if (error) { console.error("[DB] fetchTrafficReports:", error); return []; }
   return (data ?? []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
@@ -870,7 +876,7 @@ export async function fetchTrafficReports(): Promise<TrafficMonthlyReport[]> {
 }
 
 export async function insertTrafficReport(report: Omit<TrafficMonthlyReport, "id" | "createdAt">): Promise<void> {
-  const { error } = await supabase.from("traffic_reports").insert({
+  const { error } = await db.from("traffic_reports").insert({
     client_id: report.clientId,
     client_name: report.clientName,
     month: report.month,
@@ -890,7 +896,7 @@ export async function updateTrafficReportDb(id: string, updates: Partial<Traffic
   if (updates.impressions !== undefined) row.impressions = updates.impressions;
   if (updates.observations !== undefined) row.observations = updates.observations;
   if (Object.keys(row).length === 0) return;
-  const { error } = await supabase.from("traffic_reports").update(row).eq("id", id);
+  const { error } = await db.from("traffic_reports").update(row).eq("id", id);
   if (error) console.error("[DB] updateTrafficReport:", error);
 }
 
@@ -899,7 +905,7 @@ export async function updateTrafficReportDb(id: string, updates: Partial<Traffic
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchTrafficRoutineChecks(): Promise<TrafficRoutineCheck[]> {
-  const { data, error } = await supabase.from("traffic_routine_checks").select("*").order("completed_at", { ascending: false });
+  const { data, error } = await db.from("traffic_routine_checks").select("*").order("completed_at", { ascending: false });
   if (error) { console.error("[DB] fetchTrafficRoutineChecks:", error); return []; }
   return (data ?? []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
@@ -914,7 +920,7 @@ export async function fetchTrafficRoutineChecks(): Promise<TrafficRoutineCheck[]
 }
 
 export async function insertTrafficRoutineCheck(check: Omit<TrafficRoutineCheck, "id" | "completedAt">): Promise<void> {
-  const { error } = await supabase.from("traffic_routine_checks").insert({
+  const { error } = await db.from("traffic_routine_checks").insert({
     client_id: check.clientId,
     client_name: check.clientName,
     date: check.date,
@@ -930,7 +936,7 @@ export async function insertTrafficRoutineCheck(check: Omit<TrafficRoutineCheck,
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchSocialReports(): Promise<SocialMonthlyReport[]> {
-  const { data, error } = await supabase.from("social_reports").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db.from("social_reports").select("*").order("created_at", { ascending: false });
   if (error) { console.error("[DB] fetchSocialReports:", error); return []; }
   return (data ?? []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
@@ -955,7 +961,7 @@ export async function fetchSocialReports(): Promise<SocialMonthlyReport[]> {
 }
 
 export async function insertSocialReport(report: Omit<SocialMonthlyReport, "id" | "createdAt">): Promise<void> {
-  const { error } = await supabase.from("social_reports").insert({
+  const { error } = await db.from("social_reports").insert({
     client_id: report.clientId,
     client_name: report.clientName,
     month: report.month,
@@ -991,7 +997,7 @@ export async function updateSocialReportDb(id: string, updates: Partial<SocialMo
   if (updates.topPost !== undefined) row.top_post = updates.topPost;
   if (updates.observations !== undefined) row.observations = updates.observations;
   if (Object.keys(row).length === 0) return;
-  const { error } = await supabase.from("social_reports").update(row).eq("id", id);
+  const { error } = await db.from("social_reports").update(row).eq("id", id);
   if (error) console.error("[DB] updateSocialReport:", error);
 }
 
@@ -1000,7 +1006,7 @@ export async function updateSocialReportDb(id: string, updates: Partial<SocialMo
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchContentApprovals(): Promise<ContentApproval[]> {
-  const { data, error } = await supabase.from("content_approvals").select("*").order("created_at", { ascending: false });
+  const { data, error } = await db.from("content_approvals").select("*").order("created_at", { ascending: false });
   if (error) { console.error("[DB] fetchContentApprovals:", error); return []; }
   return (data ?? []).map((row: Record<string, unknown>) => ({
     id: row.id as string,
@@ -1013,7 +1019,7 @@ export async function fetchContentApprovals(): Promise<ContentApproval[]> {
 }
 
 export async function upsertContentApproval(approval: Omit<ContentApproval, "id">): Promise<void> {
-  const { error } = await supabase.from("content_approvals").insert({
+  const { error } = await db.from("content_approvals").insert({
     card_id: approval.cardId,
     status: approval.status,
     reviewed_by: approval.reviewedBy,
@@ -1028,13 +1034,13 @@ export async function upsertContentApproval(approval: Omit<ContentApproval, "id"
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchTeamMembers() {
-  const { data, error } = await supabase.from("team_members").select("*").eq("is_active", true).order("name");
+  const { data, error } = await db.from("team_members").select("*").eq("is_active", true).order("name");
   if (error) { console.error("[DB] fetchTeamMembers:", error); return []; }
   return data ?? [];
 }
 
 export async function insertTeamMember(member: { name: string; email: string; role: string; initials: string }) {
-  const { error } = await supabase.from("team_members").insert(member);
+  const { error } = await db.from("team_members").insert(member);
   if (error) console.error("[DB] insertTeamMember:", error);
 }
 
@@ -1043,12 +1049,12 @@ export async function insertTeamMember(member: { name: string; email: string; ro
 // ═══════════════════════════════════════════════════════════
 
 export async function insertSnapshot(snapshot: Record<string, unknown>): Promise<void> {
-  const { error } = await supabase.from("snapshots").insert(snapshot);
+  const { error } = await db.from("snapshots").insert(snapshot);
   if (error) console.error("[DB] insertSnapshot:", error);
 }
 
 export async function fetchSnapshots() {
-  const { data, error } = await supabase.from("snapshots").select("*").order("period", { ascending: false }).limit(24);
+  const { data, error } = await db.from("snapshots").select("*").order("period", { ascending: false }).limit(24);
   if (error) { console.error("[DB] fetchSnapshots:", error); return []; }
   return data ?? [];
 }
@@ -1059,7 +1065,7 @@ export async function fetchSnapshots() {
 
 export async function isDbAvailable(): Promise<boolean> {
   try {
-    const { error } = await supabase.from("clients").select("id").limit(1);
+    const { error } = await db.from("clients").select("id").limit(1);
     return !error;
   } catch {
     return false;
