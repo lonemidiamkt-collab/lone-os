@@ -203,3 +203,59 @@ a UI do Supabase diretamente no VPS (ex: query rápida sem SSH).
 
 **Referência:** VPS `/opt/backups/postgres/` — backups em `/opt/backups/postgres/`,
 não em `/opt/loneos/backups/` (path corrigido em 2026-05-19).
+
+---
+
+## INCIDENTES
+
+### INCIDENTE #4 — Git drift (4ª ocorrência)
+
+**Data:** 26/05/2026
+
+**Causa:** Durante sessão de BFF refactor, Claude Code (sessão anterior)
+corrigiu erro de build editando `app/page.tsx` diretamente na VPS e
+commitando lá (`8546e5f`), em vez de seguir fluxo local → push → pull.
+Gerou commit órfão na VPS que não existia no origin. Uma posterior
+`git pull` na VPS criou merge commit automático `842ab3c`, agravando
+a divergência.
+
+**Detecção:** Auditoria pós-correção de segurança (remoção senha-mestra)
+identificou divergência entre VPS e origin ao preparar deploy.
+
+**Resolução:**
+- `8546e5f` trazido para origin via patch + cherry-pick (commit `3f78717`)
+- `842ab3c` (merge automático sem conteúdo próprio) descartado com
+  `git reset --hard origin/main` na VPS
+- Pre-commit hook anti-deleção instalado: local, VPS e versionado em
+  `scripts/git-hooks/pre-commit`
+- Histórico de drift agora completo: 4 ocorrências documentadas
+
+**Lições:**
+- NUNCA editar arquivo diretamente na VPS
+- Toda correção: local → commit → push → pull na VPS
+- Hook bloqueia DELEÇÃO mas não impede commits feitos diretamente na VPS
+- Vigilância de processo continua necessária
+
+---
+
+### INCIDENTE #5 — Senha-mestra exposta no bundle JS
+
+**Data:** 25–26/05/2026
+
+**Causa:** `lib/context/RoleContext.tsx` tinha 6 senhas individuais e
+1 senha-mestra (`882289`) hardcoded em texto puro, compiladas no bundle
+JS e visíveis na aba Sources/Network do DevTools do browser.
+
+**Detecção:** Membro da equipe identificou senhas na aba Network do DevTools.
+
+**Resolução:**
+- 6 usuários criados no Supabase Auth com senhas temporárias
+- Fallback hardcoded removido de `RoleContext.tsx`
+- Sessão por `sessionStorage` removida
+- Senhas antigas queimadas (todos forçados a trocar no próximo login)
+- Autenticação agora 100% via Supabase Auth
+
+**Lições:**
+- Nunca hardcodar credenciais em código que vai para o bundle client-side
+- Toda autenticação deve passar por sistema dedicado (Supabase Auth)
+- Validar bundle JS regularmente por padrões de credenciais (`grep -r "password\|senha\|secret"` nos arquivos compilados)

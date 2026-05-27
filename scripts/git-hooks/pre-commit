@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# pre-commit hook — bloqueia deleção acidental de arquivos de código críticos.
+#
+# Cobre os 4 incidentes de git drift registrados no docs/BACKLOG.md.
+# Para burlar intencionalmente: git commit --no-verify
+# Para instalar em nova máquina: bash scripts/git-hooks/install.sh
+# Documentação completa: docs/GIT_HOOKS.md
+
+set -euo pipefail
+
+PROTECTED_PREFIXES=(
+  "app/"
+  "lib/"
+  "components/"
+  "stores/"
+  "scripts/"
+  "infrastructure/"
+  "hooks/"
+  "contexts/"
+)
+
+PROTECTED_ROOT_FILES=(
+  "package.json"
+  "tsconfig.json"
+  "Dockerfile"
+  "next.config.ts"
+  "next.config.js"
+  "next.config.mjs"
+  "tailwind.config.ts"
+  "tailwind.config.js"
+  "middleware.ts"
+)
+
+# Arquivos deletados no staging area
+deleted_files=$(git diff --cached --name-only --diff-filter=D)
+
+if [[ -z "$deleted_files" ]]; then
+  exit 0
+fi
+
+blocked=()
+
+while IFS= read -r file; do
+  # Verifica arquivos raiz críticos
+  for root_file in "${PROTECTED_ROOT_FILES[@]}"; do
+    if [[ "$file" == "$root_file" ]]; then
+      blocked+=("$file")
+      break
+    fi
+  done
+
+  # Verifica prefixos protegidos
+  for prefix in "${PROTECTED_PREFIXES[@]}"; do
+    if [[ "$file" == "$prefix"* ]]; then
+      blocked+=("$file")
+      break
+    fi
+  done
+done <<< "$deleted_files"
+
+if [[ ${#blocked[@]} -gt 0 ]]; then
+  echo ""
+  echo "╔═══════════════════════════════════════════════════════════╗"
+  echo "║  PRE-COMMIT HOOK — DELEÇÃO BLOQUEADA                      ║"
+  echo "╚═══════════════════════════════════════════════════════════╝"
+  echo ""
+  echo "Os seguintes arquivos críticos estão marcados para deleção:"
+  echo ""
+  for f in "${blocked[@]}"; do
+    echo "  ✗  $f"
+  done
+  echo ""
+  echo "Se a deleção for INTENCIONAL, use:"
+  echo "  git commit --no-verify"
+  echo ""
+  echo "Documentação: docs/GIT_HOOKS.md"
+  echo ""
+  exit 1
+fi
+
+exit 0
