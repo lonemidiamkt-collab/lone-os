@@ -54,8 +54,7 @@ function Thumbnail({ url, path, name }: { url: string | null; path: string | nul
   // Prefere imagem cacheada no nosso Storage (não expira) sobre URL direta da Meta CDN
   const src = (() => {
     if (path) {
-      const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-      return `${base}/storage/v1/object/public/meta-thumbnails/${path}`;
+      return `/supabase/storage/v1/object/public/meta-thumbnails/${path}`;
     }
     return url;
   })();

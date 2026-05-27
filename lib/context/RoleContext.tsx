@@ -64,12 +64,20 @@ const RoleContext = createContext<RoleContextValue>({
   logout: async () => {},
 });
 
+async function fetchTeamMemberId(authId: string): Promise<string | undefined> {
+  try {
+    const res = await fetch(`/api/auth/team-member?auth_id=${authId}`);
+    const data = await res.json();
+    return data?.id ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [currentProfile, setCurrentProfileState] = useState<UserProfile>(DEFAULT_PROFILE);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-
-  const [supabaseAvailable, setSupabaseAvailable] = useState<boolean | null>(null);
 
   // Restore session from Supabase on mount
   useEffect(() => {
@@ -77,53 +85,19 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     let subscription: { unsubscribe: () => void } | null = null;
 
     async function restoreSession() {
-
-      // 2. Quick Supabase connectivity check with timeout
-      let isReachable = false;
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 1200);
-        const baseUrl = typeof window !== "undefined" ? `${window.location.origin}/supabase` : (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://localhost:54321");
-        const res = await fetch(`${baseUrl}/rest/v1/`, {
-          method: "HEAD",
-          signal: controller.signal,
-          headers: {
-            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
-          },
-        });
-        clearTimeout(timeout);
-        isReachable = res.ok || res.status === 401 || res.status === 403;
-      } catch {
-        isReachable = false;
-      }
+        const { data: { session } } = await supabase.auth.getSession();
 
-      if (mounted) setSupabaseAvailable(isReachable);
-
-      if (isReachable) {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user && mounted) {
-            const profile = USER_PROFILES.find(
-              (p) => p.email === session.user.email
-            );
-            if (profile) {
-              let teamMemberId: string | undefined;
-              try {
-                const { data: member } = await supabase
-                  .from("team_members")
-                  .select("id")
-                  .eq("auth_id", session.user.id)
-                  .maybeSingle();
-                teamMemberId = member?.id ?? undefined;
-              } catch { /* DB query failed */ }
-
-              setCurrentProfileState({ ...profile, teamMemberId });
-              setIsAuthenticated(true);
-            }
+        if (session?.user && mounted) {
+          const profile = USER_PROFILES.find((p) => p.email === session.user.email);
+          if (profile) {
+            const teamMemberId = await fetchTeamMemberId(session.user.id);
+            setCurrentProfileState({ ...profile, teamMemberId });
+            setIsAuthenticated(true);
           }
-        } catch { /* session restore failed */ }
+        }
 
-        // Listen for auth state changes only when Supabase is reachable
+        // Listen for auth state changes
         try {
           const { data } = supabase.auth.onAuthStateChange(
             async (event, session) => {
@@ -138,15 +112,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
                   (p) => p.email === session.user.email
                 );
                 if (profile) {
-                  let teamMemberId: string | undefined;
-                  try {
-                    const { data: member } = await supabase
-                      .from("team_members")
-                      .select("id")
-                      .eq("auth_id", session.user.id)
-                      .maybeSingle();
-                    teamMemberId = member?.id ?? undefined;
-                  } catch { /* DB query failed */ }
+                  const teamMemberId = await fetchTeamMemberId(session.user.id);
                   setCurrentProfileState({ ...profile, teamMemberId });
                   setIsAuthenticated(true);
                 }
@@ -155,7 +121,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           );
           subscription = data.subscription;
         } catch { /* onAuthStateChange failed */ }
-      }
+      } catch { /* session restore failed — Supabase unreachable */ }
 
       if (mounted) setHydrated(true);
     }
@@ -193,28 +159,13 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!error && data.session) {
-        setSupabaseAvailable(true);
-
-        let teamMemberId: string | undefined;
-        try {
-          const { data: member } = await supabase
-            .from("team_members")
-            .select("id")
-            .eq("auth_id", data.user.id)
-            .maybeSingle();
-          teamMemberId = member?.id ?? undefined;
-        } catch { /* DB query failed, continue without teamMemberId */ }
-
+        const teamMemberId = await fetchTeamMemberId(data.user.id);
         setCurrentProfileState({ ...profile, teamMemberId });
         setIsAuthenticated(true);
         return true;
       }
-
-      setSupabaseAvailable(true);
       return false;
     } catch {
-      // Network error — Supabase unreachable
-      setSupabaseAvailable(false);
       return false;
     }
   }, []);
