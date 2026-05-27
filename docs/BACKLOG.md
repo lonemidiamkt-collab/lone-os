@@ -259,3 +259,23 @@ JS e visíveis na aba Sources/Network do DevTools do browser.
 - Nunca hardcodar credenciais em código que vai para o bundle client-side
 - Toda autenticação deve passar por sistema dedicado (Supabase Auth)
 - Validar bundle JS regularmente por padrões de credenciais (`grep -r "password\|senha\|secret"` nos arquivos compilados)
+
+---
+
+### DÉBITO TÉCNICO PREVENTIVO — Storage cleanup de attachments
+
+**Contexto:** `ON DELETE CASCADE` em `card_attachments` apaga as linhas no banco quando
+o card é deletado, mas **NÃO remove os arquivos físicos do bucket Supabase Storage**.
+Arquivos órfãos podem acumular silenciosamente no bucket `"arts"`.
+
+**Mitigação obrigatória na Fase 2 (backend — onda kanban-multi-art):**
+- Endpoint de deletar card deve listar attachments e remover do Storage **antes** de deletar o card no banco
+- Endpoint de deletar attachment individual deve remover do Storage **antes** de deletar a linha
+- Em caso de falha no Storage, a transação SQL é revertida (não deleta no banco se não conseguiu deletar no Storage)
+
+**Mitigação futura (onda própria):**
+- Script periódico (cron mensal) que lista arquivos no bucket `arts/` e compara com
+  `card_attachments.path` + `content_cards.image_url`
+- Arquivos sem referência são candidatos à remoção (com confirmação humana — não automático)
+
+**Prioridade:** Média. Implementar quando houver primeiro sintoma (bucket inchado, custo de storage subindo).
