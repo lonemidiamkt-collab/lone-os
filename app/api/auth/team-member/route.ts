@@ -1,17 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const admin = createClient(
-  process.env.SUPABASE_URL ?? "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? ""
-);
+import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase/server";
 
 export async function GET(req: NextRequest) {
   const authId = req.nextUrl.searchParams.get("auth_id");
   if (!authId) return NextResponse.json({ id: null });
 
   try {
-    const { data } = await admin
+    const { data } = await supabaseAdmin
       .from("team_members")
       .select("id")
       .eq("auth_id", authId)
