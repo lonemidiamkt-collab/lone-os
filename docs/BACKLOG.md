@@ -295,3 +295,73 @@ assume esse padrão e mais caro fica refatorar depois. Próximas 2–3 semanas.
 - Hotfix sempre vira permanente se não documentar
 - "Bypassa RLS" nunca é checkmark verde
 - Checkpoint humano é inegociável mesmo em emergência
+
+---
+
+### INCIDENTE #7 — LocalSession bypass (28/Mai/2026)
+
+**Data:** 28/05/2026
+
+**Sintoma:** `getServerUser` aceitava `Authorization: LocalSession <email>` sem
+nenhuma validação de senha ou token. Qualquer pessoa conhecendo o email de um
+membro da equipe tinha acesso administrativo total à API (clientes, CNPJ,
+logins de plataforma, tokens de portal, etc.).
+
+**Causa:** Bloco em `lib/supabase/auth-server.ts` que validava apenas se o email
+estava em whitelist hardcoded. Legado do esquema antigo de autenticação
+client-side (`LocalSession + RoleContext`). Não foi removido durante o
+INCIDENTE #5 (remoção da senha-mestra).
+
+**Detecção:** Durante validação pós-INCIDENTE #6, comando de teste com
+`LocalSession lonemidiamkt@gmail.com` retornou HTTP 200 com 38 clientes
+completos em produção.
+
+**Correção:**
+- Bloco LocalSession removido de `auth-server.ts`
+- `STAFF_EMAILS` removido (era usado apenas pelo bloco removido)
+- `ADMIN_EMAILS` mantido (ainda usado pelo caminho Bearer JWT para flag `isAdmin`)
+- Middleware atualizado: regex aceita apenas `^bearer\s+\S` (antes aceitava `localsession`)
+- Frontend limpo: `authed-fetch.ts`, `BriefingTab.tsx` e `clients/[id]/page.tsx`
+  removidos os resquícios de construção de header `LocalSession`
+- Auth agora aceita exclusivamente: Bearer JWT do Supabase Auth ou cookie `sb-*-auth-token`
+
+**Débito relacionado:** auditar Sentry para ver se houve uso de `LocalSession`
+por IPs externos nos últimos 30 dias (possível incidente de segurança anterior).
+
+**Lições:**
+- Remover senha-mestra do bundle NÃO é suficiente — backend precisa validar de verdade
+- Whitelist de email sem senha é segurança falsa
+- Auditar TODOS os caminhos de auth ao migrar esquema, não só o visível no frontend
+- Comandos de teste devem usar mecanismo de auth REAL, não atalhos legados
+
+---
+
+## TODOs
+
+### TODO UX — OnboardingTour usa lone_local_session (morto após #5)
+
+**Prioridade:** Baixa (cosmético)
+
+Como a chave `sessionStorage.lone_local_session` não é mais escrita após
+INCIDENTE #5, `getTourKey()` em `components/OnboardingTour.tsx` sempre retorna
+`"lone-os-tour-completed-default"`. Todos os usuários compartilham a mesma flag
+de tour — se um usuário dispensou o tour, ele não aparece para nenhum outro.
+
+**Correção futura:** substituir a leitura de `lone_local_session` pelo ID do
+usuário do Supabase Auth (via `useRole()` / `currentUser` já disponível no
+contexto). Arquivo: `components/OnboardingTour.tsx:58-68`.
+
+### TODO Doc — manual-tests/briefings.md usa LocalSession
+
+**Prioridade:** Baixa (documentação, não executa em produção)
+
+`docs/manual-tests/briefings.md` tem ~12 curls usando
+`-H "Authorization: LocalSession lonemidiamkt@gmail.com"`. Esses comandos
+retornarão 401 após o hotfix do INCIDENTE #7. Atualizar para usar Bearer JWT:
+
+```bash
+TOKEN=$(curl -s -X POST 'https://painel.lonemidia.com/supabase/auth/v1/token?grant_type=password' \
+  -H "apikey: <ANON_KEY>" -H "Content-Type: application/json" \
+  -d '{"email":"lonemidiamkt@gmail.com","password":"<senha>"}' | jq -r '.access_token')
+curl -H "Authorization: Bearer $TOKEN" ...
+```
