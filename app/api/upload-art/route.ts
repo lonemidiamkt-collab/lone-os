@@ -93,16 +93,35 @@ function extractStoragePath(imageUrl: string): string {
  *
  * Auth: qualquer usuário autenticado (admin, manager, staff). Sem auth → 401.
  */
+// Teto do content-length: 5 arquivos × 10MB + 1MB de overhead multipart.
+// Primeira camada de defesa — rejeita bodies absurdos antes de gastar parse.
+const CARD_BODY_HARD_LIMIT = MAX_CARD_ATTACHMENTS * MAX_CARD_SIZE + 1024 * 1024;
+
 export async function POST(req: NextRequest) {
   const user = await getServerUser(req);
   if (!user) {
     return NextResponse.json({ error: "Sessão inválida ou ausente" }, { status: 401 });
   }
 
+  // Camada 1: content-length como teto generoso (cobre overhead multipart).
+  const contentLength = parseInt(req.headers.get("content-length") ?? "0");
+  if (contentLength > CARD_BODY_HARD_LIMIT) {
+    return NextResponse.json(
+      { error: `Upload excede o tamanho máximo permitido (${MAX_CARD_ATTACHMENTS} artes × ${MAX_CARD_SIZE / 1024 / 1024}MB)` },
+      { status: 413 },
+    );
+  }
+
   let formData: FormData;
   try {
     formData = await req.formData();
-  } catch {
+  } catch (err) {
+    // Se o body ainda estourar o parser do Next.js (ex: arquivo entre 51MB e content-length válido),
+    // tenta distinguir erro de tamanho pelo message para retornar 413 em vez de 400 genérico.
+    const msg = err instanceof Error ? err.message.toLowerCase() : "";
+    if (msg.includes("size") || msg.includes("limit") || msg.includes("large") || msg.includes("maxbody")) {
+      return NextResponse.json({ error: "Upload excede o tamanho máximo permitido" }, { status: 413 });
+    }
     return NextResponse.json({ error: "Form data inválido" }, { status: 400 });
   }
 
