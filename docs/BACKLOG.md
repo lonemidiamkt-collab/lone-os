@@ -365,3 +365,33 @@ TOKEN=$(curl -s -X POST 'https://painel.lonemidia.com/supabase/auth/v1/token?gra
   -d '{"email":"lonemidiamkt@gmail.com","password":"<senha>"}' | jq -r '.access_token')
 curl -H "Authorization: Bearer $TOKEN" ...
 ```
+
+---
+
+### DÉBITO TÉCNICO PREVENTIVO — Storage cleanup de attachments
+
+**Contexto:** `ON DELETE CASCADE` em `card_attachments` apaga as linhas no banco quando
+o card é deletado, mas **NÃO remove os arquivos físicos do bucket Supabase Storage**.
+Arquivos órfãos podem acumular silenciosamente no bucket `"arts"`.
+
+**Mitigação futura (onda própria):**
+- Script periódico (cron mensal) que lista arquivos no bucket `arts/` e compara com
+  `card_attachments.path` + `content_cards.image_url`
+- Arquivos sem referência são candidatos à remoção (com confirmação humana — não automático)
+
+**Prioridade:** Média. Implementar quando houver primeiro sintoma (bucket inchado, custo de storage subindo).
+
+---
+
+### DÉBITO TÉCNICO — Idempotency em `/api/upload-art` e `/api/cards/[id]/attachments/[attachmentId]`
+
+**Contexto:** Endpoints `POST /api/upload-art` e `DELETE /api/cards/[id]/attachments/[attachmentId]`
+não implementam `Idempotency-Key` no MVP (onda `kanban-multi-art`).
+
+**Mitigação atual:** Frontend usa debounce + disable do botão durante upload/delete em andamento.
+Duplicação de arte é visível ao usuário (diferente de duplicata silenciosa no briefing).
+
+**Resolução:** Quando **BACKLOG #1** (`idempotency_records`) for implementado, adicionar suporte
+a `Idempotency-Key` nestes endpoints junto com as demais rotas BFF.
+
+**Prioridade:** Baixa. Risco real de duplicação é visível ao usuário, não silencioso.

@@ -171,16 +171,62 @@ curl -s -X POST "https://painel.lonemidia.com/api/upload-art" \
 
 ---
 
+## CENÁRIO 7 — Migração silenciosa (card descartável)
+
+**ATENÇÃO:** Este cenário migra `image_url → card_attachments` e zera `image_url`.
+É destrutivo. Usar EXCLUSIVAMENTE card descartável criado só para este teste.
+
+**Criar card descartável via SQL antes do teste:**
+```bash
+# Substitua <TOKEN_SUPABASE_ADMIN> pelo service_role key
+CARD_LEGADO_FAKE=$(ssh -i ~/.ssh/loneos_vps root@72.60.142.252 \
+  "docker exec supabase-db-1 psql -U postgres -d loneos -t -c \
+  \"INSERT INTO content_cards (client_id, title, platform, type, image_url) \
+    VALUES ((SELECT id FROM clients LIMIT 1), 'TEST_MIGRACAO_SILENCIOSA', 'instagram', 'post', \
+    'https://painel.lonemidia.com/storage/v1/object/public/arts/fake/test_migration.png') \
+  RETURNING id;\" | tr -d ' \n'")
+echo "CARD_LEGADO_FAKE: $CARD_LEGADO_FAKE"
+```
+
+**Cenário 7 — Upload em card legado (tem image_url) → migração silenciosa → position 0 migrado + novo em position 1:**
+```bash
+curl -s -X POST "https://painel.lonemidia.com/api/upload-art" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "cardId=$CARD_LEGADO_FAKE" \
+  -F "file=@/tmp/test.png;type=image/png"
+# Esperado:
+# - attachments com 2 itens: position 0 (migrado do image_url) + position 1 (novo upload)
+# - image_url no banco zerado para NULL
+```
+
+**Validação no banco:**
+```bash
+ssh -i ~/.ssh/loneos_vps root@72.60.142.252 \
+  "docker exec supabase-db-1 psql -U postgres -d loneos -c \
+  \"SELECT image_url, (SELECT count(*) FROM card_attachments WHERE card_id = '$CARD_LEGADO_FAKE') as attachments \
+  FROM content_cards WHERE id = '$CARD_LEGADO_FAKE';\""
+# Esperado: image_url = NULL, attachments = 2
+```
+
+**Limpar card descartável após teste:**
+```bash
+ssh -i ~/.ssh/loneos_vps root@72.60.142.252 \
+  "docker exec supabase-db-1 psql -U postgres -d loneos -c \
+  \"DELETE FROM content_cards WHERE id = '$CARD_LEGADO_FAKE';\""
+```
+
+---
+
 ## LIMPEZA PÓS-TESTES
 
-Após todos os testes passarem, limpar o card de teste:
+Após todos os testes passarem, limpar o card de teste `7d2b3653`:
 
 ```bash
 # Listar todos os attachments do card de teste
 curl -s -H "Authorization: Bearer $TOKEN" \
   "https://painel.lonemidia.com/api/cards/$CARD/attachments" | jq '.attachments[].id'
 
-# Deletar cada um com o comando E1
+# Deletar cada um com DELETE /api/cards/$CARD/attachments/<id>
 ```
 
 ---
@@ -203,3 +249,4 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 | E1 | DELETE attachment existente | 200 `{ok:true}` |
 | E2 | DELETE attachment inexistente | 404 |
 | F1 | POST /api/upload-art (misc mode) | 200 `{url,...}` |
+| 7  | POST upload em card com image_url (migração silenciosa) | 200 `{attachments:[2 itens]}`, image_url=NULL |
