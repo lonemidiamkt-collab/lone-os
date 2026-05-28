@@ -5,6 +5,12 @@ const SUPABASE_INTERNAL = process.env.SUPABASE_INTERNAL_URL ?? "http://supabase-
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Permite bodies até 51MB em route handlers (5 artes × 10MB + 1MB overhead multipart).
+  // Sem isso, Next.js 15 trunca bodies >10MB e req.formData() falha com erro opaco.
+  // A validação real por arquivo (10MB card / 25MB misc) é feita em upload-art/route.ts.
+  experimental: {
+    middlewareClientMaxBodySize: "51mb",
+  },
   // Force Next.js build tracer to bundle contract-templates/*.docx into standalone output.
   // `app/api/contracts/download-docx/route.ts` reads these via fs at runtime — without this,
   // the tracer can't detect them (they're loaded from `process.cwd()`) and they'd be missing
