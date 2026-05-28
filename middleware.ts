@@ -17,8 +17,8 @@ export function middleware(request: NextRequest) {
     return res;
   }
 
-  // Auth gate pra /api/*: aceita 3 fontes (sincronizado com lib/supabase/auth-server.ts).
-  // Validação fina (whitelist de email, decodificação de token) é feita no
+  // Auth gate pra /api/*: aceita 2 fontes (sincronizado com lib/supabase/auth-server.ts).
+  // Validação fina (decodificação de token, isAdmin) é feita no
   // route handler via getServerUser — middleware só bloqueia request claramente
   // sem credencial alguma.
   if (pathname.startsWith("/api/")) {
@@ -26,7 +26,7 @@ export function middleware(request: NextRequest) {
       (c) => c.name.startsWith("sb-") && c.name.endsWith("-auth-token")
     );
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization") || "";
-    const hasAuthHeader = /^(bearer|localsession)\s+\S/i.test(authHeader);
+    const hasAuthHeader = /^bearer\s+\S/i.test(authHeader);
 
     if (!hasCookieSession && !hasAuthHeader) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
