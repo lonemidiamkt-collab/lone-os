@@ -1,3 +1,25 @@
+/**
+ * DÉBITO TÉCNICO — Service role bypass via typeof window
+ *
+ * Esta solução é TEMPORÁRIA. queries.ts usa supabaseAdmin (que
+ * bypassa RLS) quando rodando server-side, e supabase (browser
+ * client com session) quando rodando client-side.
+ *
+ * Riscos atuais:
+ * - RLS deixa de ser defesa em profundidade nas 9 API routes que
+ *   usam essas funções
+ * - API routes precisam fazer filtro de role/auth manualmente
+ * - typeof window é frágil em SSR/edge runtimes
+ *
+ * Plano de remoção: refatorar para receber SupabaseClient como
+ * parâmetro explícito em cada função. Ver BACKLOG.
+ *
+ * Histórico:
+ * - Implementado em hotfix/queries-server-context (27/Mai/2026)
+ * - Causa: remoção da senha-mestra expôs que API routes nunca
+ *   passaram contexto de auth pro Supabase. Sistema antigo com
+ *   LocalSession mascarava esse problema.
+ */
 import { supabase } from "./client";
 import { supabaseAdmin } from "./server";
 import type {

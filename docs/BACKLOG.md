@@ -259,3 +259,39 @@ JS e visíveis na aba Sources/Network do DevTools do browser.
 - Nunca hardcodar credenciais em código que vai para o bundle client-side
 - Toda autenticação deve passar por sistema dedicado (Supabase Auth)
 - Validar bundle JS regularmente por padrões de credenciais (`grep -r "password\|senha\|secret"` nos arquivos compilados)
+
+---
+
+### INCIDENTE #6 — RLS bloqueando API routes (27/Mai/2026)
+
+**Data:** 27/05/2026
+
+**Sintoma:** 9 API routes (`/api/data/*`) retornando arrays vazios em
+produção. Equipe sem ver clientes, cards, tasks, notifications.
+
+**Causa:** `queries.ts` usava o cliente browser do Supabase. Em API routes
+(server), sem session de auth, virou role `anon`. RLS bloqueou. Problema
+existia há muito tempo mas só ficou visível após remoção do fallback de
+senha (LocalSession mascarava).
+
+**Correção aplicada (HOTFIX — Opção A):**
+```typescript
+const db = typeof window !== "undefined" ? supabase : supabaseAdmin;
+```
+- Server-side: usa `service_role`, bypassa RLS
+- Client-side: continua usando `supabase` com session
+
+**DÉBITO TÉCNICO PENDENTE — Refator para Opção D:**
+- `queries.ts` deve receber `SupabaseClient` como parâmetro explícito
+- API routes passam `supabaseAdmin`
+- Páginas browser passam `supabase` com session
+- Remove magic `typeof window`
+- Restaura RLS como defesa em profundidade
+
+**Prioridade:** ALTA — quanto mais tempo na Opção A, mais código novo
+assume esse padrão e mais caro fica refatorar depois. Próximas 2–3 semanas.
+
+**Lições:**
+- Hotfix sempre vira permanente se não documentar
+- "Bypassa RLS" nunca é checkmark verde
+- Checkpoint humano é inegociável mesmo em emergência
