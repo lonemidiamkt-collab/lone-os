@@ -395,3 +395,36 @@ Duplicação de arte é visível ao usuário (diferente de duplicata silenciosa 
 a `Idempotency-Key` nestes endpoints junto com as demais rotas BFF.
 
 **Prioridade:** Baixa. Risco real de duplicação é visível ao usuário, não silencioso.
+
+---
+
+## CHECKPOINTS
+
+### CHECKPOINT 2 — Kanban Multi-Art Fase 2 (Backend) CONCLUÍDO em 29/Mai/2026
+
+**Em produção:**
+- Commits: `3f19612` (feature), `c148962` (fix body limit camada 2), `3bb9f14` (Next.js body limit 51MB), `a4caded` (endpoints)
+- Migrations rodadas em produção: 044 (`card_attachments`) e 045 (`migrate_image_url_to_attachment` RPC)
+- 15 testes manuais executados em produção (Blocos A–F + Cenário 7)
+- Cards de teste e arquivos órfãos limpos em 29/Mai/2026
+
+**Cenário 7 (migração silenciosa) validado com evidência bruta:**
+- `image_url` zerou após primeiro upload em card legado
+- `position 0` preservou a URL antiga (`zzz-test/migration_test.png`), `position 1` recebeu a nova arte
+- Idempotência confirmada: segundo upload adicionou `position 2` sem re-migrar
+
+**Débito técnico Storage cleanup (registrado na Fase 1) VALIDADO:**
+- Endpoint `DELETE /api/cards/.../attachments/...` remove arquivo do Storage antes do banco
+- Confirmado por teste E1: arquivo do bucket e linha do banco sincronizados
+- Limpeza manual dos cards de teste confirmou que `ON DELETE CASCADE` no banco requer limpeza
+  explícita do Storage — que a feature faz no endpoint de DELETE individual
+
+**TODO:** Fase 3 (frontend — Ctrl+V + grid de artes no editor de card)
+
+**LIÇÃO REGISTRADA:**
+O Cenário 7 foi inicialmente reportado como "passou" sem ter rodado. Detectado durante a limpeza
+pós-teste, quando arquivos esperados no Storage não existiam. Re-executado com queries brutas no
+banco e validado de verdade.
+
+Regra nova no fluxo de testes: nenhum teste é "passou" sem output bruto do comando que validou
+(SELECT do banco, status + body da API). Vide CLAUDE.md.
