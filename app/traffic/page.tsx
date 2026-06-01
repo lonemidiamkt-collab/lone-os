@@ -16,7 +16,7 @@ import { useNav } from "@/lib/context/NavContext";
 import {
   TrendingUp, AlertTriangle, CheckCircle, Users,
   Calendar, User, Save,
-  Plus, X, Filter,
+  Plus, X, Filter, Search,
   ClipboardCheck, BarChart2,
   MessageCircle, FileText, Star, ArrowUpRight, ArrowDownRight, Minus,
   Check, Megaphone, Eye, MousePointerClick, DollarSign, Target,
@@ -2036,6 +2036,7 @@ function AdAnalyticsTab({
   };
 
   const [selectedClient, setSelectedClient] = useState<string>("all");
+  const [clientSearch, setClientSearch] = useState<string>("");
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("active");
   const [visibleMetrics, setVisibleMetrics] = useState<MetricKey[]>(DEFAULT_VISIBLE_METRICS);
@@ -3025,39 +3026,67 @@ function AdAnalyticsTab({
       {!loadingCampaigns && (
       <>
       {/* ═══ FILTERS BAR ═══ */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Filter size={14} className="text-muted-foreground" />
-          <span className="text-xs text-muted-foreground font-medium">Cliente:</span>
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Bússola — busca rápida de cliente */}
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Buscar cliente..."
+            value={clientSearch}
+            onChange={(e) => setClientSearch(e.target.value)}
+            className="bg-muted border border-border rounded-lg pl-8 pr-7 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 w-[180px]"
+          />
+          {clientSearch && (
+            <button
+              onClick={() => setClientSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X size={11} />
+            </button>
+          )}
         </div>
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5 flex-wrap">
+        {/* Client pills */}
+        <div className="flex items-center gap-1 flex-wrap">
           <button
             onClick={() => setSelectedClient("all")}
-            className={`text-xs px-3 py-1.5 rounded-md transition-colors ${
-              selectedClient === "all" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
+            className={`text-xs px-2.5 py-1 rounded-lg transition-all border ${
+              selectedClient === "all"
+                ? "bg-primary/10 text-primary border-primary/30 font-medium"
+                : "bg-muted text-muted-foreground border-transparent hover:text-foreground"
             }`}
           >
             Todos
           </button>
-          {clients.filter((c) => accounts.some((a) => a.clientId === c.id)).map((c) => (
-            <button
-              key={c.id}
-              onClick={() => {
-                setSelectedClient(c.id);
-                // Auto-select Meta account when using real data
-                if (meta.connected && c.metaAdAccountId) {
-                  const match = metaAccounts.find((a: any) => a.id === c.metaAdAccountId || a.account_id === c.metaAdAccountId);
-                  if (match) handleSelectAccount(match.id);
-                }
-              }}
-              className={`text-xs px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
-                selectedClient === c.id ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {c.metaAdAccountId && <Facebook size={10} className="text-[#3b6ff5]" />}
-              {c.name}
-            </button>
-          ))}
+          {clients
+            .filter((c) => accounts.some((a) => a.clientId === c.id))
+            .filter((c) => !clientSearch || c.name.toLowerCase().includes(clientSearch.toLowerCase()))
+            .map((c) => (
+              <button
+                key={c.id}
+                onClick={() => {
+                  setSelectedClient(c.id);
+                  // Auto-select Meta account when using real data
+                  if (meta.connected && c.metaAdAccountId) {
+                    const match = metaAccounts.find((a: any) => a.id === c.metaAdAccountId || a.account_id === c.metaAdAccountId);
+                    if (match) handleSelectAccount(match.id);
+                  }
+                }}
+                className={`text-xs px-2.5 py-1 rounded-lg transition-all border flex items-center gap-1.5 ${
+                  selectedClient === c.id
+                    ? "bg-primary/10 text-primary border-primary/30 font-medium"
+                    : "bg-muted text-muted-foreground border-transparent hover:text-foreground hover:border-border/50"
+                }`}
+              >
+                {c.metaAdAccountId && (
+                  <Facebook size={9} className={selectedClient === c.id ? "text-primary" : "text-[#3b6ff5] opacity-70"} />
+                )}
+                <span className="max-w-[130px] truncate">{c.name}</span>
+              </button>
+            ))}
+          {clientSearch && clients.filter((c) => accounts.some((a) => a.clientId === c.id) && c.name.toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (
+            <span className="text-xs text-muted-foreground italic px-1">Nenhum cliente encontrado</span>
+          )}
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
           {[{ key: "all", label: "Todas" }, { key: "active", label: "Ativas" }, { key: "paused", label: "Pausadas" }, { key: "completed", label: "Finalizadas" }].map((s) => (
