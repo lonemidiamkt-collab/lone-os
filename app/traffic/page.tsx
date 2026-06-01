@@ -2333,6 +2333,11 @@ function AdAnalyticsTab({
   const localDateStr = (d: Date) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD in browser TZ
   const rangeEndStr = customDateTo || localDateStr(new Date());
   const rangeStartStr = customDateFrom || localDateStr(new Date(Date.now() - dateRange * 86400000));
+  // Quando o usuário usa datas customizadas, periodDays é o intervalo real (não o preset numérico).
+  // Usar T12:00:00 para evitar shift de timezone ao parsear strings YYYY-MM-DD.
+  const actualPeriodDays = customDateFrom && customDateTo
+    ? Math.round((new Date(customDateTo + "T12:00:00").getTime() - new Date(customDateFrom + "T12:00:00").getTime()) / 86400000) + 1
+    : dateRange;
 
   // Aggregate metrics from dailyMetrics within date range (accurate)
   // For real Meta data, the API already filters by date — use campaign totals
@@ -2579,7 +2584,7 @@ function AdAnalyticsTab({
             undefined,
             demoByClient.get(client.id),
             { startStr: rangeStartStr, endStr: rangeEndStr },
-            dateRange,
+            actualPeriodDays,
           );
           reports.push({ clientName: client.name, data: reportData });
         } catch (err) {
@@ -2642,7 +2647,7 @@ function AdAnalyticsTab({
         undefined,
         demographics,
         !isUsingRealData ? { startStr: rangeStartStr, endStr: rangeEndStr } : undefined,
-        dateRange,
+        actualPeriodDays,
       );
       await exportTrafficReportPdf(reportData);
     } finally {
@@ -2667,7 +2672,7 @@ function AdAnalyticsTab({
         undefined,
         demographics,
         !isUsingRealData ? { startStr: rangeStartStr, endStr: rangeEndStr } : undefined,
-        dateRange,
+        actualPeriodDays,
       );
       await exportClientReportPdf(reportData);
     } finally {
