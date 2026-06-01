@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { countMessagesFromActions } from "@/lib/meta/messages";
 
 export class TokenExpiredError extends Error {
   constructor(message: string) {
@@ -311,25 +312,8 @@ export async function fetchAdAccounts(token: string) {
 // ACTION TYPE DEFINITIONS — authoritative source of truth
 // ═══════════════════════════════════════════════════════════
 
-// ─── Mensagens / WhatsApp / Messenger ────────────────────────────────────────
-// A Meta usa tipos diferentes dependendo do canal e da versão da API.
-// Usamos o PRIMEIRO tipo encontrado (prioridade: mais específico primeiro).
-const MESSAGE_ACTION_TYPES = [
-  // Métrica agregada nova da Meta (soma de todos os tipos de conexão de mensagem).
-  // O Gerenciador exibe esse como "Resultados" para campanhas de mensagens.
-  "onsite_conversion.total_messaging_connection",
-  // WhatsApp Business (Click-to-WhatsApp) — formato 7d
-  "onsite_conversion.messaging_conversation_started_7d",
-  // Messenger e Instagram DM
-  "onsite_conversion.messaging_first_conversation_started",
-  "onsite_conversion.messaging_first_reply",
-  // Formato legado (sem prefixo onsite_conversion)
-  "messaging_conversation_started_7d",
-  // WhatsApp — formato alternativo mais novo
-  "onsite_conversion.whatsapp_business_messaging_conversation_started_7d",
-  // Click-to-WhatsApp via objetivo Engajamento
-  "onsite_conversion.engagement",
-] as const;
+// Prioridade de mensagens movida para lib/meta/messages.ts (fonte única de verdade).
+// countMessagesFromActions é importado acima.
 
 // ─── Leads ───────────────────────────────────────────────────────────────────
 const LEAD_ACTION_TYPES = [
@@ -381,12 +365,7 @@ function countActions(
 }
 
 function countMessages(actions: { action_type: string; value: string }[] | undefined): number {
-  if (!actions) return 0;
-  for (const type of MESSAGE_ACTION_TYPES) {
-    const found = actions.find((a) => a.action_type === type);
-    if (found) return safeInt(found.value);
-  }
-  return 0;
+  return countMessagesFromActions(actions);
 }
 
 export async function fetchCampaignInsights(
