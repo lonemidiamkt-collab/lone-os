@@ -3035,6 +3035,21 @@ function AdAnalyticsTab({
             placeholder="Buscar cliente..."
             value={clientSearch}
             onChange={(e) => setClientSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+              const matches = clients
+                .filter((c) => accounts.some((a) => a.clientId === c.id))
+                .filter((c) => !clientSearch || norm(c.name).includes(norm(clientSearch)));
+              if (matches.length !== 1) return;
+              const c = matches[0];
+              setSelectedClient(c.id);
+              setClientSearch("");
+              if (meta.connected && c.metaAdAccountId) {
+                const match = metaAccounts.find((a: any) => a.id === c.metaAdAccountId || a.account_id === c.metaAdAccountId);
+                if (match) handleSelectAccount(match.id);
+              }
+            }}
             className="bg-muted border border-border rounded-lg pl-8 pr-7 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 w-[180px]"
           />
           {clientSearch && (
