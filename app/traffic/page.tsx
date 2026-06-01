@@ -3039,9 +3039,9 @@ function AdAnalyticsTab({
               if (e.key !== "Enter") return;
               const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
               const matches = clients
-                .filter((c) => accounts.some((a) => a.clientId === c.id))
+                .filter((c) => accounts.some((a) => a.clientId === c.id) || !!c.metaAdAccountId)
                 .filter((c) => !clientSearch || norm(c.name).includes(norm(clientSearch)));
-              if (matches.length !== 1) return;
+              if (matches.length === 0) return;
               const c = matches[0];
               setSelectedClient(c.id);
               setClientSearch("");
@@ -3074,7 +3074,7 @@ function AdAnalyticsTab({
             Todos
           </button>
           {clients
-            .filter((c) => accounts.some((a) => a.clientId === c.id))
+            .filter((c) => accounts.some((a) => a.clientId === c.id) || !!c.metaAdAccountId)
             .filter((c) => {
               if (!clientSearch) return true;
               const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -3105,7 +3105,7 @@ function AdAnalyticsTab({
             ))}
           {clientSearch && clients.filter((c) => {
             const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-            return accounts.some((a) => a.clientId === c.id) && norm(c.name).includes(norm(clientSearch));
+            return (accounts.some((a) => a.clientId === c.id) || !!c.metaAdAccountId) && norm(c.name).includes(norm(clientSearch));
           }).length === 0 && (
             <span className="text-xs text-muted-foreground italic px-1">Nenhum cliente encontrado</span>
           )}
