@@ -3060,7 +3060,11 @@ function AdAnalyticsTab({
           </button>
           {clients
             .filter((c) => accounts.some((a) => a.clientId === c.id))
-            .filter((c) => !clientSearch || c.name.toLowerCase().includes(clientSearch.toLowerCase()))
+            .filter((c) => {
+              if (!clientSearch) return true;
+              const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+              return norm(c.name).includes(norm(clientSearch));
+            })
             .map((c) => (
               <button
                 key={c.id}
@@ -3084,7 +3088,10 @@ function AdAnalyticsTab({
                 <span className="max-w-[130px] truncate">{c.name}</span>
               </button>
             ))}
-          {clientSearch && clients.filter((c) => accounts.some((a) => a.clientId === c.id) && c.name.toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (
+          {clientSearch && clients.filter((c) => {
+            const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+            return accounts.some((a) => a.clientId === c.id) && norm(c.name).includes(norm(clientSearch));
+          }).length === 0 && (
             <span className="text-xs text-muted-foreground italic px-1">Nenhum cliente encontrado</span>
           )}
         </div>
