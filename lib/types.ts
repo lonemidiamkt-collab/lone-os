@@ -203,11 +203,11 @@ export interface ContentCard {
 
 export interface CardAttachment {
   id: string;
-  cardId: string;
+  card_id: string;
   url: string;
   path: string;
   position: number;
-  createdAt: string; // ISO
+  created_at: string;
 }
 
 export interface CardComment {
