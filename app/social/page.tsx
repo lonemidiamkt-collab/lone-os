@@ -1716,6 +1716,10 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
           } : undefined}
           renderCard={(card) => {
             const sla = getSlaBadge(card.status, card.columnEnteredAt, card.statusChangedAt);
+            // Multi-arte: capa = 1ª arte; cai pra imageUrl legado se não houver attachment.
+            const arts = card.cardAttachments ?? [];
+            const coverUrl = arts[0]?.url ?? card.imageUrl;
+            const extraArts = arts.length > 1 ? arts.length - 1 : 0;
             return (
               <div
                 className={`bg-card border rounded-lg overflow-hidden hover:border-primary/40 transition-colors cursor-pointer group ${
@@ -1723,10 +1727,15 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                 }`}
                 onClick={() => onCardClick(card)}
               >
-                {card.imageUrl ? (
-                  <div className="aspect-video w-full overflow-hidden bg-muted">
-                    <SignedImage src={card.imageUrl!} alt={card.title}
+                {coverUrl ? (
+                  <div className="relative aspect-video w-full overflow-hidden bg-muted">
+                    <SignedImage src={coverUrl} alt={card.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    {extraArts > 0 && (
+                      <span className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-black/65 text-white">
+                        <ImageIcon size={9} /> +{extraArts}
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <div className="aspect-video w-full flex items-center justify-center bg-muted text-muted-foreground">
@@ -1781,9 +1790,9 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                   })()}
                   {/* Art actions */}
                   <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border/60 flex-wrap">
-                    {card.imageUrl && (
+                    {coverUrl && (
                       <a
-                        href={card.imageUrl}
+                        href={coverUrl}
                         download
                         onClick={(e) => e.stopPropagation()}
                         className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors flex items-center gap-0.5"
