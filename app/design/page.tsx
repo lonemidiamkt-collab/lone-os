@@ -783,12 +783,15 @@ export default function DesignPage() {
                     renderCard={(item) => {
                       const urgency = getDeadlineUrgency(item.dueDate);
                       const badge = urgency && urgency !== "ok" ? URGENCY_BADGE[urgency] : null;
-                      const hasArt = !!item.imageUrl;
-                      const client = clients.find((c) => c.id === (item._card as ContentCard).clientId);
+                      const fullCard = item._card as ContentCard;
+                      // Multi-arte: capa = 1ª arte; fallback pro imageUrl legado.
+                      const arts = fullCard.cardAttachments ?? [];
+                      const coverUrl = arts[0]?.url ?? item.imageUrl;
+                      const extraArts = arts.length > 1 ? arts.length - 1 : 0;
+                      const hasArt = !!coverUrl;
+                      const client = clients.find((c) => c.id === fullCard.clientId);
                       const isAtRisk = client?.status === "at_risk";
                       const budgetTier = (client?.monthlyBudget ?? 0) >= 8000 ? "high" : (client?.monthlyBudget ?? 0) >= 4000 ? "med" : "low";
-
-                      const fullCard = item._card as ContentCard;
                       return (
                         <div
                           onClick={() => setDetailCard(fullCard)}
@@ -825,8 +828,13 @@ export default function DesignPage() {
 
                           {/* Art thumbnail */}
                           {hasArt && (
-                            <div className="w-full h-20 rounded-md overflow-hidden bg-muted">
-                              <SignedImage src={item.imageUrl!} alt="" className="w-full h-full object-cover" />
+                            <div className="relative w-full h-20 rounded-md overflow-hidden bg-muted">
+                              <SignedImage src={coverUrl!} alt="" className="w-full h-full object-cover" />
+                              {extraArts > 0 && (
+                                <span className="absolute bottom-1 right-1 flex items-center gap-0.5 text-[9px] font-medium px-1 py-0.5 rounded bg-black/65 text-white">
+                                  <ImageIcon size={8} /> +{extraArts}
+                                </span>
+                              )}
                             </div>
                           )}
 
@@ -914,7 +922,7 @@ export default function DesignPage() {
                               {hasArt ? "Trocar Arte" : "Enviar Arte"}
                             </button>
                             {hasArt && (
-                              <DownloadButton url={item.imageUrl!} title={item.title} />
+                              <DownloadButton url={coverUrl!} title={item.title} />
                             )}
                             {(() => {
                               const fc = item._card as ContentCard;
@@ -1100,12 +1108,13 @@ export default function DesignPage() {
               .map((card) => {
                 const client = clients.find((cl) => cl.id === card.clientId);
                 const onTime = card.dueDate && card.designerDeliveredAt && card.designerDeliveredAt.slice(0, 10) <= card.dueDate;
+                const coverUrl = card.cardAttachments?.[0]?.url ?? card.imageUrl;
                 return (
                   <div key={card.id} onClick={() => setDetailCard(card)}
                     className="card p-4 flex items-center gap-4 cursor-pointer hover:border-[#0d4af5]/20 transition-all">
-                    {card.imageUrl ? (
+                    {coverUrl ? (
                       <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted shrink-0">
-                        <SignedImage src={card.imageUrl!} alt="" className="w-full h-full object-cover" />
+                        <SignedImage src={coverUrl} alt="" className="w-full h-full object-cover" />
                       </div>
                     ) : (
                       <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">

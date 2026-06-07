@@ -23,7 +23,7 @@
 import { supabase } from "./client";
 import { supabaseAdmin } from "./server";
 import type {
-  Client, Task, ContentCard, DesignRequest, AppNotification,
+  Client, Task, ContentCard, CardAttachment, DesignRequest, AppNotification,
   TimelineEntry, ChatMessage, GlobalChatMessage, OnboardingItem,
   MoodEntry, MoodType, CreativeAsset, SocialProofEntry, CrisisNote,
   Notice, QuinzReport, ClientAccess, TrafficMonthlyReport,
@@ -336,6 +336,27 @@ export async function fetchContentCards(filter?: { socialMedia?: string }): Prom
         if (commentMap.has(card.id)) {
           card.comments = commentMap.get(card.id);
         }
+      }
+    }
+    // Batch: attachments de todos os cards (evita N+1 no Kanban — Opção B da
+    // auditoria Fase 3). Mesmo padrão dos comments: 1 query e agrupa por card_id.
+    const { data: atts } = await db.from("card_attachments").select("*").order("position");
+    if (atts) {
+      const attMap = new Map<string, CardAttachment[]>();
+      for (const a of atts) {
+        const cardId = a.card_id as string;
+        if (!attMap.has(cardId)) attMap.set(cardId, []);
+        attMap.get(cardId)!.push({
+          id: a.id as string,
+          card_id: cardId,
+          url: a.url as string,
+          path: a.path as string,
+          position: a.position as number,
+          created_at: a.created_at as string,
+        });
+      }
+      for (const card of cards) {
+        card.cardAttachments = attMap.get(card.id) ?? [];
       }
     }
   }

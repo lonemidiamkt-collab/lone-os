@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import {
   Upload, Calendar, FileText, User, Tag,
-  Save, ImageIcon, Hash, AlignLeft,
+  Save, Hash, AlignLeft, Loader2,
   Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Palette,
 } from "lucide-react";
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -11,8 +11,9 @@ import { useContentStore } from "@/stores/useContentStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
-import type { ContentCard } from "@/lib/types";
-import SignedImage from "@/components/shared/SignedImage";
+import type { ContentCard, CardAttachment } from "@/lib/types";
+import CardArtAttachments from "@/components/kanban/CardArtAttachments";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
   Dialog,
   DialogContent,
@@ -53,27 +54,6 @@ function timeAgo(iso: string): string {
   return `${Math.floor(diff / 86400)}d`;
 }
 
-function DrivePreviewFallback({ clientId, label }: { clientId: string; label: string }) {
-  const clients = useClientsStore((s) => s.clients);
-  const client = clients.find((c) => c.id === clientId);
-  return (
-    <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-zinc-500 px-4">
-      <ImageIcon size={32} />
-      <p className="text-[10px] text-center">{label}</p>
-      {client?.driveLink && (
-        <a
-          href={client.driveLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[10px] text-[#0d4af5] hover:underline flex items-center gap-1"
-        >
-          <ExternalLink size={9} /> Acesse via Google Drive
-        </a>
-      )}
-    </div>
-  );
-}
-
 interface Props {
   card: ContentCard;
   onClose: () => void;
@@ -98,75 +78,33 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [hashtags, setHashtags] = useState(card.hashtags ?? "");
   const [dueDate, setDueDate] = useState(card.dueDate ?? "");
   const [status, setStatus] = useState(card.status);
-  const [imageUrl, setImageUrl] = useState(card.imageUrl ?? "");
   const [saved, setSaved] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [editingBriefing, setEditingBriefing] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadOk, setUploadOk] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // null = ainda carregando os attachments do card. O CardArtAttachments semeia
+  // o estado interno a partir das props só no mount, então só renderizamos ele
+  // depois que o fetch resolve (evita perder os attachments que chegam async).
+  const [attachments, setAttachments] = useState<CardAttachment[] | null>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
   const comments = card.comments ?? [];
 
-  // Upload real pra bucket "arts" via /api/upload-art (service role bypassa RLS)
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadError(null);
-    setUploadOk(false);
-
-
-    // Validações antes de subir
-    if (file.size === 0) { setUploadError("Arquivo vazio."); return; }
-    if (file.size > 25 * 1024 * 1024) {
-      setUploadError(`Arquivo muito grande (${(file.size / 1024 / 1024).toFixed(1)}MB). Máximo: 25MB`);
-      return;
-    }
-    const allowed = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "application/pdf", "video/mp4", "video/webm"];
-    if (!allowed.includes(file.type)) {
-      setUploadError(`Tipo não suportado (${file.type}). Use PNG, JPEG, WebP, PDF ou MP4.`);
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("cardId", card.id);
-
-      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
-      const res = await authedFetch("/api/upload-art", { method: "POST", body: formData });
-      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-
-      if (!res.ok) {
-        const msg = data.error || `Falha no upload (HTTP ${res.status})`;
-        setUploadError(msg);
-        console.error("[ContentCardModal upload]", { status: res.status, data });
-        return;
+  // Carrega os attachments do card ao abrir (gate de render do CardArtAttachments).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authedFetch(`/api/cards/${card.id}/attachments`);
+        const data = res.ok ? await res.json() : { attachments: [] };
+        if (!cancelled) setAttachments((data.attachments as CardAttachment[]) ?? []);
+      } catch {
+        if (!cancelled) setAttachments([]);
       }
-
-      setImageUrl(data.url);
-      // Persiste imediatamente ao banco — não espera o botão "Salvar"
-      // Garante que outros usuários (ex: Designer) vejam a referência sem depender do save manual
-      updateContentCard(card.id, { imageUrl: data.url }).catch((err) => {
-        console.error("[ContentCardModal] auto-save imageUrl failed:", err);
-      });
-      setUploadOk(true);
-      // Limpa o feedback de sucesso após 3s
-      setTimeout(() => setUploadOk(false), 3000);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro de conexão";
-      console.error("[ContentCardModal upload exception]", err);
-      setUploadError(`Erro: ${msg}`);
-    } finally {
-      setUploading(false);
-      // Limpa o input pra permitir re-upload do mesmo arquivo
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [card.id]);
 
   const handleSave = () => {
     updateContentCard(card.id, {
@@ -176,7 +114,6 @@ export default function ContentCardModal({ card, onClose }: Props) {
       hashtags: hashtags || undefined,
       dueDate: dueDate || undefined,
       status,
-      imageUrl: imageUrl || undefined,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
@@ -220,66 +157,20 @@ export default function ContentCardModal({ card, onClose }: Props) {
 
         {/* Body */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Left: Art preview */}
-          <div className="w-72 border-r border-border flex flex-col shrink-0">
-            <div className="flex-1 relative bg-muted overflow-hidden">
-              {imageUrl && !imageUrl.startsWith("blob:") ? (
-                <SignedImage
-                  src={imageUrl}
-                  alt="Arte do conteúdo"
-                  className="w-full h-full object-cover"
-                />
-              ) : imageUrl ? (
-                <DrivePreviewFallback
-                  clientId={card.clientId}
-                  label="Preview removido para otimizar o sistema."
-                />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
-                  <ImageIcon size={40} />
-                  <p className="text-xs text-center px-4">Nenhuma arte anexada ainda</p>
-                </div>
-              )}
-            </div>
-            <div className="p-3 border-t border-border space-y-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,video/mp4,video/webm"
-                className="hidden"
-                onChange={handleFileChange}
-                disabled={uploading}
+          {/* Left: Art attachments (multi-arte, Ctrl+V, lightbox) */}
+          <div className="w-72 border-r border-border flex flex-col shrink-0 overflow-auto p-3">
+            {attachments === null ? (
+              <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                <Loader2 size={20} className="animate-spin" />
+              </div>
+            ) : (
+              <CardArtAttachments
+                cardId={card.id}
+                existingAttachments={attachments}
+                legacyImageUrl={card.imageUrl}
+                onAttachmentsChange={(next) => setAttachments(next)}
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="w-full flex items-center justify-center gap-2"
-              >
-                {uploading ? (
-                  <><Upload size={13} className="animate-pulse" /> Carregando arte...</>
-                ) : (
-                  <><Upload size={13} /> {imageUrl ? "Trocar arquivo" : "Anexar arte / arquivo"}</>
-                )}
-              </Button>
-              {/* Toast inline — sucesso ou erro */}
-              {uploadOk && (
-                <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2 py-1.5">
-                  <CheckCircle size={11} /> Arte salva — visível para todos da equipe
-                </div>
-              )}
-              {uploadError && (
-                <div className="flex items-start gap-1.5 text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-2 py-1.5">
-                  <XCircle size={11} className="shrink-0 mt-0.5" />
-                  <span className="leading-relaxed">{uploadError}</span>
-                </div>
-              )}
-              <p className="text-[9px] text-muted-foreground text-center">
-                PNG, JPEG, WebP, GIF, PDF, MP4 — até 25MB
-              </p>
-            </div>
+            )}
           </div>
 
           {/* Right: Details */}
