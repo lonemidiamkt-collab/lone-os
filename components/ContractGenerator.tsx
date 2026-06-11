@@ -49,6 +49,8 @@ export default function ContractGenerator({ client, currentUser }: Props) {
   const [generating, setGenerating] = useState(false);
   const [downloadingDocx, setDownloadingDocx] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState("");
+  // Quem assina pela LM em cada contrato (escolhido na hora de baixar o DOCX oficial). Default: ambos.
+  const [signatoryByContract, setSignatoryByContract] = useState<Record<string, "ambos" | "roberto" | "lucas">>({});
   // Nicho preenchido via prompt() quando falta no cadastro — evita perguntar de novo no mesmo ciclo.
   const [nichoOverride, setNichoOverride] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -216,12 +218,12 @@ export default function ContractGenerator({ client, currentUser }: Props) {
     const errs = validateClientData();
     if (errs.length > 0) { setDownloadError(`Dados incompletos: ${errs.join(", ")}`); return; }
     // Pra Tráfego/Lone Growth, nicho é obrigatório. Se o cliente não preencheu, pede inline.
-    const needsNicho = c.serviceType === "assessoria_trafego" || c.serviceType === "lone_growth";
+    const needsNicho = c.serviceType === "assessoria_trafego" || c.serviceType === "lone_growth" || c.serviceType === "trafego_social_site";
     const currentNicho = (nichoOverride ?? client.nicho ?? "").trim();
     if (needsNicho && !currentNicho) {
       const entered = window.prompt("Qual o nicho/ramo da empresa? (aparece na cláusula 1.1 do contrato)\nEx: varejo de moda, odontologia, restaurante");
       if (entered === null) return; // usuário cancelou — não mostra erro
-      if (!entered.trim()) { setDownloadError("Nicho é obrigatório para contratos de Tráfego e Lone Growth."); return; }
+      if (!entered.trim()) { setDownloadError("Nicho é obrigatório para contratos de Tráfego, Lone Growth e Tráfego+Social+Site."); return; }
       const nichoValue = entered.trim();
       await supabase.from("clients").update({ nicho: nichoValue }).eq("id", client.id);
       setNichoOverride(nichoValue); // evita re-prompt no mesmo ciclo; parent vai sincronizar no próximo fetch
@@ -241,6 +243,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
           renewalValue: c.renewalValue ?? null,
           signerEmail: signerEmail || undefined,
           startDate: c.startDate || undefined,
+          signatory: signatoryByContract[c.id] ?? "ambos",
         }),
       });
       if (!res.ok) {
@@ -470,12 +473,23 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                   <button onClick={() => { setShowAddendum(showAddendum === c.id ? null : c.id); if (showAddendum !== c.id) loadAddendums(c.id); }}
                     className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-zinc-600"><PenLine size={11} /> Adendo</button>
 
-                  <button onClick={() => handleDownloadDocx(c)} disabled={isSending}
-                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 border border-emerald-500/20 disabled:opacity-50"
-                    title="Baixa o contrato oficial preenchido (.docx) para você subir manualmente no D4Sign e enviar pra assinatura">
-                    {isSending ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
-                    {isSending ? "Gerando..." : "Baixar DOCX Oficial"}
-                  </button>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <select
+                      value={signatoryByContract[c.id] ?? "ambos"}
+                      onChange={(e) => setSignatoryByContract((prev) => ({ ...prev, [c.id]: e.target.value as "ambos" | "roberto" | "lucas" }))}
+                      title="Quem assina pela LM neste contrato"
+                      className="bg-surface border border-border rounded-lg px-2 py-1.5 text-[11px] text-foreground outline-none focus:border-[#0d4af5]/50">
+                      <option value="ambos">Assina: Lucas e Roberto</option>
+                      <option value="roberto">Assina: só Roberto</option>
+                      <option value="lucas">Assina: só Lucas</option>
+                    </select>
+                    <button onClick={() => handleDownloadDocx(c)} disabled={isSending}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 border border-emerald-500/20 disabled:opacity-50"
+                      title="Baixa o contrato oficial preenchido (.docx) para você subir manualmente no D4Sign e enviar pra assinatura">
+                      {isSending ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                      {isSending ? "Gerando..." : "Baixar DOCX Oficial"}
+                    </button>
+                  </div>
 
                   {/* Upload do PDF assinado (pós D4Sign) OU ver o assinado se já subiu */}
                   {c.signedPdfPath ? (
@@ -590,13 +604,13 @@ export default function ContractGenerator({ client, currentUser }: Props) {
 
               <div className="space-y-1.5">
                 <label className="text-xs text-zinc-400 font-medium">Servico</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {([{ v: "assessoria_trafego", l: "Trafego", i: "🎯" }, { v: "assessoria_social", l: "Social", i: "📱" }, { v: "lone_growth", l: "Growth", i: "🚀" }]).map((o) => (
+                <div className="grid grid-cols-2 gap-2">
+                  {([{ v: "assessoria_trafego", l: "Trafego", i: "🎯" }, { v: "assessoria_social", l: "Social", i: "📱" }, { v: "lone_growth", l: "Growth", i: "🚀" }, { v: "trafego_social_site", l: "Trafego+Social+Site", i: "🌐" }]).map((o) => (
                     <button key={o.v} onClick={() => setServiceType(o.v as typeof serviceType)}
                       className={`p-2.5 rounded-lg border text-xs text-center transition-all ${serviceType === o.v ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-border text-zinc-500"}`}>{o.i} {o.l}</button>
                   ))}
                 </div>
-                {(serviceType === "assessoria_trafego" || serviceType === "lone_growth") && !(nichoOverride ?? client.nicho)?.trim() && (
+                {(serviceType === "assessoria_trafego" || serviceType === "lone_growth" || serviceType === "trafego_social_site") && !(nichoOverride ?? client.nicho)?.trim() && (
                   <p className="text-[10px] text-amber-400 flex items-center gap-1 mt-1">
                     <AlertTriangle size={10} /> Nicho do cliente vazio — sera pedido na hora de baixar o DOCX oficial.
                   </p>

@@ -22,7 +22,7 @@ export interface ContractData {
     responsavel: string;
   };
   contrato: {
-    serviceType: "assessoria_trafego" | "assessoria_social" | "lone_growth";
+    serviceType: "assessoria_trafego" | "assessoria_social" | "lone_growth" | "trafego_social_site";
     valorMensal: number;
     dataInicio: string;
     dataFim: string;
@@ -52,6 +52,7 @@ export const SERVICE_LABELS: Record<string, string> = {
   assessoria_trafego: "Assessoria de Trafego Pago",
   assessoria_social: "Assessoria de Social Media",
   lone_growth: "Lone Growth (Trafego + Social + Design)",
+  trafego_social_site: "Trafego + Social + Site",
 };
 
 export const LONE_MIDIA = {

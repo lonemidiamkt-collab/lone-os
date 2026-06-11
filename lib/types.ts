@@ -21,7 +21,7 @@ export type MoodType = "happy" | "neutral" | "angry";
 
 export type LeadSource = "indicacao" | "trafego" | "organico" | "outros";
 
-export type ServiceType = "lone_growth" | "assessoria_trafego" | "assessoria_social" | "assessoria_design";
+export type ServiceType = "lone_growth" | "assessoria_trafego" | "assessoria_social" | "assessoria_design" | "trafego_social_site";
 export type DraftStatus = "pending_invite" | "awaiting_approval" | null;
 
 export interface Client {

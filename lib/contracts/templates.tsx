@@ -115,7 +115,7 @@ export function ContractPDF({ data }: { data: ContractData }) {
 
         <Text style={s.clauseTitle}>Foro</Text>
         <Text style={s.text}>
-          Fica eleito o foro da comarca do Rio de Janeiro/RJ para dirimir quaisquer controversias oriundas deste contrato.
+          Fica eleito o foro da comarca de Araruama/RJ para dirimir quaisquer controversias oriundas deste contrato.
         </Text>
 
         <Text style={s.value}>

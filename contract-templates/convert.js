@@ -20,6 +20,7 @@ const FILES = [
   "Contrato - Social Media.md",
   "Contrato - Tráfego Pago.md",
   "Contrato - Lone Growth.md",
+  "Contrato - Trafego Social Site.md",
 ];
 
 // Parse **bold** into array of TextRun with bold flag where needed.
@@ -140,7 +141,11 @@ function mdToDocx(md) {
   });
 }
 
-for (const file of FILES) {
+// Sem argumentos → gera todos. Com argumento → gera só o(s) arquivo(s) passado(s),
+// útil pra criar um template novo sem regenerar (e mexer no binário) dos existentes.
+const targets = process.argv.length > 2 ? process.argv.slice(2) : FILES;
+
+for (const file of targets) {
   const mdPath = path.join(__dirname, file);
   const docxPath = path.join(__dirname, file.replace(/\.md$/, ".docx"));
   const md = fs.readFileSync(mdPath, "utf8");

@@ -29,7 +29,9 @@ export async function POST(req: NextRequest) {
     if (!user.isAdmin) return NextResponse.json({ error: "Acesso restrito a administradores" }, { status: 403 });
 
     const body = await req.json();
-    const { clientId, serviceType, valorMensal, duracaoMeses, diaPagamento, version, hasRenewal, renewalValue, signerEmail, startDate } = body;
+    const { clientId, serviceType, valorMensal, duracaoMeses, diaPagamento, version, hasRenewal, renewalValue, signerEmail, startDate, signatory } = body;
+    const VALID_SIGNATORIES = new Set(["ambos", "roberto", "lucas"]);
+    const signatoryChoice = VALID_SIGNATORIES.has(signatory) ? signatory : "ambos";
 
     if (!clientId || !serviceType) {
       return NextResponse.json({ error: "clientId e serviceType são obrigatórios" }, { status: 400 });
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
     if (!c.cpf_cnpj && !c.cpf) missing.push("CPF do representante");
     if (!c.email && !c.email_corporativo) missing.push("E-mail");
     if (!c.endereco_rua && !c.endereco) missing.push("Endereço");
-    if ((serviceType === "assessoria_trafego" || serviceType === "lone_growth") && !c.nicho && !c.segmento) {
+    if ((serviceType === "assessoria_trafego" || serviceType === "lone_growth" || serviceType === "trafego_social_site") && !c.nicho && !c.segmento) {
       missing.push("Nicho/segmento");
     }
     if (missing.length > 0) {
@@ -103,6 +105,7 @@ export async function POST(req: NextRequest) {
 
       startDate: (startDate as string) || undefined,
       service_type: serviceType,
+      signatory: signatoryChoice,
       version: version ? Number(version) : undefined,
       data_assinatura: new Date(),
     };

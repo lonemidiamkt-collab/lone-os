@@ -41,7 +41,7 @@ interface Summary {
 }
 
 type StatusFilter = "all" | "pending" | "signed" | "active" | "expired";
-type ServiceFilter = "all" | "assessoria_trafego" | "assessoria_social" | "lone_growth";
+type ServiceFilter = "all" | "assessoria_trafego" | "assessoria_social" | "lone_growth" | "trafego_social_site";
 
 function formatCurrency(v: number): string {
   return `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
@@ -221,10 +221,10 @@ export default function ContratosGlobalPage() {
           </div>
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-zinc-500">Serviço:</span>
-            {(["all", "assessoria_trafego", "assessoria_social", "lone_growth"] as ServiceFilter[]).map((s) => (
+            {(["all", "assessoria_trafego", "assessoria_social", "lone_growth", "trafego_social_site"] as ServiceFilter[]).map((s) => (
               <button key={s} onClick={() => setServiceFilter(s)}
                 className={`px-2.5 py-1 rounded border text-xs transition-all ${serviceFilter === s ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-[#0d4af5]" : "border-border text-zinc-500 hover:text-foreground"}`}>
-                {s === "all" ? "Tudo" : SERVICE_LABELS[s]?.split(" ")[0] ?? s}
+                {s === "all" ? "Tudo" : s === "trafego_social_site" ? "Site" : SERVICE_LABELS[s]?.split(" ")[0] ?? s}
               </button>
             ))}
           </div>

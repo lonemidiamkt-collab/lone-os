@@ -9,10 +9,32 @@ const TEMPLATE_BY_SERVICE: Record<string, string> = {
   assessoria_social: "Contrato - Social Media.docx",
   assessoria_trafego: "Contrato - Tráfego Pago.docx",
   lone_growth: "Contrato - Lone Growth.docx",
+  trafego_social_site: "Contrato - Trafego Social Site.docx",
 };
 
-// Lucas e Roberto sempre assinam juntos — fica fixo no template preenchido.
-const LM_REPRESENTANTES = "Lucas Bueno Dos Santos e Roberto Lino Machado Neto";
+// Signatários da LM. O admin escolhe quem assina na hora de gerar o DOCX oficial.
+// `nome` vai na linha de assinatura; `qualificacao` vai na abertura (CONTRATADA).
+export type Signatory = "ambos" | "roberto" | "lucas";
+const SIGNATORIES: Record<"lucas" | "roberto", { nome: string; qualificacao: string }> = {
+  lucas: {
+    nome: "Lucas Bueno Dos Santos",
+    qualificacao: "Lucas Bueno Dos Santos, brasileiro, solteiro, nascido em 09/06/2000, empresário, inscrito no cpf nº. 149.208.747-58",
+  },
+  roberto: {
+    nome: "Roberto Lino Machado Neto",
+    qualificacao: "Roberto Lino Machado Neto, brasileiro, solteiro, nascido em 31/08/2002, empresário, inscrito no cpf nº. 184.165.597-08",
+  },
+};
+
+// Resolve nome(s) e qualificação(ões) conforme o signatário escolhido.
+function resolveSignatory(choice: Signatory = "ambos") {
+  if (choice === "lucas") return { nome: SIGNATORIES.lucas.nome, qualificacao: SIGNATORIES.lucas.qualificacao };
+  if (choice === "roberto") return { nome: SIGNATORIES.roberto.nome, qualificacao: SIGNATORIES.roberto.qualificacao };
+  return {
+    nome: `${SIGNATORIES.lucas.nome} e ${SIGNATORIES.roberto.nome}`,
+    qualificacao: `${SIGNATORIES.lucas.qualificacao} e ${SIGNATORIES.roberto.qualificacao}`,
+  };
+}
 
 const MESES_EXTENSO = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -44,7 +66,8 @@ export interface ContractMergeData {
   renewal_value?: number | null;
 
   // Meta
-  service_type: "assessoria_social" | "assessoria_trafego" | "lone_growth";
+  service_type: "assessoria_social" | "assessoria_trafego" | "lone_growth" | "trafego_social_site";
+  signatory?: Signatory; // quem assina pela LM (default = ambos)
   version?: number; // aparece no filename (default = 1)
   data_assinatura?: Date; // default = hoje
 }
@@ -70,6 +93,7 @@ function formatDatePtBR(d: Date): string {
 
 function buildTemplateData(input: ContractMergeData): Record<string, string> {
   const today = input.data_assinatura ?? new Date();
+  const signatario = resolveSignatory(input.signatory);
   const valorFormatado = input.valor_mensal_numero.toLocaleString("pt-BR", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -117,7 +141,8 @@ function buildTemplateData(input: ContractMergeData): Record<string, string> {
     data_mes_extenso: MESES_EXTENSO[today.getMonth()],
     data_ano: String(today.getFullYear()),
 
-    lm_representante_nome: LM_REPRESENTANTES,
+    lm_representante_nome: signatario.nome,
+    lm_qualificacao_representantes: signatario.qualificacao,
     clausula_reajuste: clausulaReajuste,
   };
 }
