@@ -1,7 +1,7 @@
 # Contrato de Prestação de Serviços — Social Media
 ## LM ASSESSORIA E MARKETING LTDA
 
-**CONTRATADA (ou CONTRATADO, indistintamente):** **LM ASSESSORIA E MARKETING LTDA**, pessoa jurídica inscrita no CNPJ sob o nº 62.074.361/0001-30, com sede na AV. Getúlio Vargas, número: 221, sala 403, Centro - Araruama RJ, CEP: 28.979-129. Neste ato representada por Lucas Bueno Dos Santos, brasileiro, solteiro, nascido em 09/06/2000, empresário, inscrito no cpf nº. 149.208.747-58 e Roberto Lino Machado Neto, brasileiro, solteiro, nascido em 31/08/2002, empresário, inscrito no cpf nº. 184.165.597-08. e-mail: lonemidiamkt@gmail.com.
+**CONTRATADA (ou CONTRATADO, indistintamente):** **LM ASSESSORIA E MARKETING LTDA**, pessoa jurídica inscrita no CNPJ sob o nº 62.074.361/0001-30, com sede na AV. Getúlio Vargas, número: 221, sala 403, Centro - Araruama RJ, CEP: 28.979-129. Neste ato representada por {{lm_qualificacao_representantes}}. e-mail: lonemidiamkt@gmail.com.
 
 **CONTRATANTE:** {{cliente_razao_social}}, pessoa jurídica inscrita no CNPJ sob o nº {{cliente_cnpj}}, com sede na: {{cliente_endereco}}, N {{cliente_numero}} - Bairro: {{cliente_bairro}}, Cidade: {{cliente_cidade}} - CEP: {{cliente_cep}}, neste ato representada por {{cliente_representante_nome}}, brasileiro(a), empresário(a), inscrito(a) no CPF nº {{cliente_representante_cpf}}, e-mail: {{cliente_email}}.
 
@@ -273,7 +273,7 @@ Araruama/RJ, {{data_dia}} de {{data_mes_extenso}} de {{data_ano}}.
 \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
 
 **LM ASSESSORIA E MARKETING LTDA**
-Representada por Roberto Lino Machado Neto
+Representada por {{lm_representante_nome}}
 CNPJ n° 62.074.361/0001-30
 
 \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
