@@ -29,7 +29,7 @@
 
 2.6. Após cada ciclo de renovação, as partes poderão revisar valores, escopo ou condições operacionais mediante acordo formal, considerando evolução estratégica das campanhas, aumento de demanda ou ampliação dos serviços prestados.
 
-2.7. O valor mensal de R$ 1.500,00 (mil e quinhentos reais) corresponde a uma condição comercial promocional válida exclusivamente durante o período mínimo inicial de 3 (três) meses. Havendo renovação automática ou continuidade da prestação dos serviços após o período inicial, o valor mensal passará a ser de R$ 2.000,00 (dois mil reais), salvo novo acordo formal entre as partes.
+{{clausula_reajuste}}
 
 ---
 
@@ -150,7 +150,7 @@ Esta restrição permanecerá válida durante toda a vigência contratual e pelo
 
 ---
 
-## CLÁUSULA SÉTIMA - DAS OBRIGAÇÕES DO CONTRATANTE
+## CLÁUSULA SÉTIMA - DAS OBRIGAÇÕES DA CONTRATANTE
 
 A parte CONTRATANTE deve:
 
@@ -182,7 +182,7 @@ Solicitações de alterações realizadas fora do horário comercial ou com praz
 
 O pagamento pelo serviço prestado será feito de forma mensal, na seguinte forma:
 
-8.1. O valor mensal do contrato será de R$ 1.500,00 (mil e quinhentos reais), a ser pago durante o período mínimo inicial de 3 (três) meses, totalizando R$ 4.500,00 (quatro mil e quinhentos reais) durante a vigência contratual inicial. Após o período inicial, em caso de renovação ou continuidade da prestação dos serviços, aplicar-se-á o reajuste previsto na Cláusula 2.7 deste instrumento.
+8.1. O valor mensal do contrato será de **R$ {{valor_mensal_numero}} ({{valor_mensal_extenso}})**, a ser pago durante o período mínimo inicial de **{{duracao_meses_numero}} ({{duracao_meses_extenso}}) meses**, conforme as condições estabelecidas neste instrumento.
 
 8.2. O pagamento deverá ser efetuado até o dia **{{dia_pagamento_numero}} ({{dia_pagamento_extenso}})** de cada mês, durante toda a vigência do contrato.
 
@@ -220,7 +220,7 @@ O pagamento pelo serviço prestado será feito de forma mensal, na seguinte form
 
 10.4. Outros serviços que não estejam expressamente indicados neste contrato deverão ser objeto de novo acordo e contrato entre as partes, não constituindo novação, renúncia ou aceitação tácita, a tolerância de condições para a prestação dos serviços pela CONTRATADA e/ou a prestação de quaisquer serviços não contemplados neste contrato pela mesma;
 
-10.5. Através do presente, o CONTRATANTE permite que a CONTRATADA cite o nome e logotipo do mesmo com a finalidade exclusivamente institucional.
+10.5. Através do presente, a CONTRATANTE permite que a CONTRATADA cite o nome e logotipo do mesmo com a finalidade exclusivamente institucional.
 
 10.6. A CONTRATADA garante o sigilo e tratamento dos dados pessoais da CONTRATANTE de acordo com a Lei n. 13.709/2018, Lei Geral de Proteção de Dados Pessoais (LGPD).
 
@@ -250,7 +250,7 @@ O pagamento pelo serviço prestado será feito de forma mensal, na seguinte form
 
 ## CLÁUSULA DÉCIMA PRIMEIRA – DOS BÔNUS
 
-O CONTRATANTE terá direito aos seguintes serviços adicionais, que serão prestados durante a vigência deste contrato como bônus estratégico, sem acréscimo ao valor mensal contratado, desde que respeitada a disponibilidade operacional da CONTRATADA e os limites previstos neste instrumento.
+A CONTRATANTE terá direito aos seguintes serviços adicionais, que serão prestados durante a vigência deste contrato como bônus estratégico, sem acréscimo ao valor mensal contratado, desde que respeitada a disponibilidade operacional da CONTRATADA e os limites previstos neste instrumento.
 
 11.1. Treinamento Comercial: A CONTRATANTE terá acesso a orientações estratégicas sobre atendimento e conversão de leads, incluindo análise de pontos de melhoria no atendimento e sugestões práticas para aumento da conversão comercial.
 

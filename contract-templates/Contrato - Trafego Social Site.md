@@ -84,7 +84,7 @@ A CONTRATADA se compromete a:
 
 4.4. Configurar o Google Analytics e o Google Tag Manager para garantir a correta coleta e rastreamento de dados, caso a CONTRATANTE utilize um site para a captura dos potenciais clientes;
 
-4.5. Manter o CONTRATANTE informado sobre o progresso e desempenho das campanhas;
+4.5. Manter a CONTRATANTE informada sobre o progresso e desempenho das campanhas;
 
 4.6. Cumprir os prazos operacionais previamente alinhados entre as partes para entregas, análises e ajustes, observada a complexidade de cada solicitação e a dependência de informações, materiais e aprovações da CONTRATANTE;
 
@@ -94,11 +94,11 @@ A CONTRATADA se compromete a:
 
 4.9. Monitorar as métricas e avaliar os resultados que as suas estratégias estão gerando para a CONTRATANTE;
 
-4.10. Qualquer mau funcionamento, erro ou problema decorrente da plataforma de anúncios, ou do sistema relacionado a terceiros, não é de responsabilidade do CONTRATADO;
+4.10. Qualquer mau funcionamento, erro ou problema decorrente da plataforma de anúncios, ou do sistema relacionado a terceiros, não é de responsabilidade da CONTRATADA;
 
-4.11. Incompatibilidade de ferramentas, navegadores de 'websites', plataformas digitais, equipamentos de busca, sites de hospedagem e registro ou qualquer tipo relacionado que possam gerar indisponibilidade ou perda do serviço não é de responsabilidade do CONTRATADO;
+4.11. Incompatibilidade de ferramentas, navegadores de 'websites', plataformas digitais, equipamentos de busca, sites de hospedagem e registro ou qualquer tipo relacionado que possam gerar indisponibilidade ou perda do serviço não é de responsabilidade da CONTRATADA;
 
-4.12. A CONTRATANTE poderá solicitar no e-mail do CONTRATADO ou no grupo de whatsapp a inserção de novas campanhas de anúncio nas plataformas, o que será realizado no prazo de até **02 (Dois) dias úteis**, já em relação a outros serviços, tais como alteração de campanhas, alteração de orçamento e outros, o prazo de conclusão será ajustado de comum acordo entre as partes, conforme a complexidade do serviço solicitado.
+4.12. A CONTRATANTE poderá solicitar no e-mail da CONTRATADA ou no grupo de WhatsApp a inserção de novas campanhas de anúncio nas plataformas, o que será realizado no prazo de até **02 (Dois) dias úteis**, já em relação a outros serviços, tais como alteração de campanhas, alteração de orçamento e outros, o prazo de conclusão será ajustado de comum acordo entre as partes, conforme a complexidade do serviço solicitado.
 
 4.13. Prestar todos os serviços com seriedade, dedicação, ética e respeito sempre respeitando os prazos que foram pré-estabelecidos no documento para que ocorra a prestação de serviços;
 
@@ -114,7 +114,7 @@ A CONTRATADA se compromete a:
 
 4.19. As partes poderão estipular metas a serem perseguidas ao longo da prestação dos serviços, sem que isso caracterize promessa de atingimento, conforme disposto na cláusula 4.15;
 
-4.20. Será pré alinhado entre as partes um período para que haja a renovação dos materiais gráficos dentro das campanhas de marketing.
+4.20. Será pré-alinhado entre as partes um período para que haja a renovação dos materiais gráficos dentro das campanhas de marketing.
 
 ### Gestão de Social Media
 
@@ -158,11 +158,11 @@ A CONTRATADA se compromete a:
 
 ## CLÁUSULA QUINTA - DAS PERMISSÕES
 
-5.1. O CONTRATADO deverá acessar, buscando a plena satisfação da prestação de serviço, objeto deste contrato, a conta do Business Manager, a página do Facebook e Instagram da CONTRATANTE e demais ferramentas e contas indispensáveis para a realização do serviço.
+5.1. A CONTRATADA deverá acessar, buscando a plena satisfação da prestação de serviço, objeto deste contrato, a conta do Business Manager, a página do Facebook e Instagram da CONTRATANTE e demais ferramentas e contas indispensáveis para a realização do serviço.
 
-5.2. Fica reservado ao CONTRATADO o acesso como administrador das plataformas: Business Manager, página do Facebook e Instagram da CONTRATANTE, entre outros, sem o qual a prestação dos serviços fica impossibilitada.
+5.2. Fica reservado à CONTRATADA o acesso como administrador das plataformas: Business Manager, página do Facebook e Instagram da CONTRATANTE, entre outros, sem o qual a prestação dos serviços fica impossibilitada.
 
-5.3. O CONTRATADO não tem exclusividade com a CONTRATANTE, podendo assim, fechar outras parcerias com empresas do mesmo nicho ou nichos diferentes.
+5.3. A CONTRATADA não tem exclusividade com a CONTRATANTE, podendo assim, fechar outras parcerias com empresas do mesmo nicho ou nichos diferentes.
 
 5.4. A CONTRATADA não será responsável por bloqueios, restrições, penalizações, perdas de contas ou limitações decorrentes de políticas das plataformas digitais, ações anteriores da CONTRATANTE, violações de diretrizes das mídias ou decisões automatizadas realizadas por terceiros.
 
@@ -188,13 +188,13 @@ Esta restrição permanecerá válida durante toda a vigência contratual e pelo
 
 ---
 
-## CLÁUSULA SÉTIMA - DAS OBRIGAÇÕES DO CONTRATANTE
+## CLÁUSULA SÉTIMA - DAS OBRIGAÇÕES DA CONTRATANTE
 
 A parte CONTRATANTE deve:
 
-7.1. Fornecer todas as informações que o CONTRATADO requisitar para o bom funcionamento e realização da prestação de serviços;
+7.1. Fornecer todas as informações que a CONTRATADA requisitar para o bom funcionamento e realização da prestação de serviços;
 
-7.2. Nomear um representante legal que possa estar acompanhando e estar frequentemente em contato com o CONTRATADO sempre que for necessário para o melhor funcionamento das campanhas;
+7.2. Nomear um representante legal que possa estar acompanhando e estar frequentemente em contato com a CONTRATADA sempre que for necessário para o melhor funcionamento das campanhas;
 
 7.3. Não divulgar, compartilhar ou repassar qualquer informação que obteve decorrente da prestação de serviço e da relação jurídica que aconteceu entre as partes, mesmo após a extinção do contrato;
 
@@ -256,9 +256,9 @@ O pagamento pelo serviço prestado será feito de forma mensal, na seguinte form
 
 10.2. A CONTRATANTE poderá realizar o pagamento dos anúncios através de: cartão de crédito ou débito, Pix, boleto bancário ou qualquer outra forma que preferir;
 
-10.3. O CONTRATADO **não é responsável por financiar** nenhuma etapa relacionada ao tráfego pago;
+10.3. A CONTRATADA **não é responsável por financiar** nenhuma etapa relacionada ao tráfego pago;
 
-10.4. A realização das campanhas nas plataformas de anúncios demanda o investimento em anúncios, conforme as orientações do CONTRATADO, mediante o orçamento previamente aprovado com a CONTRATANTE, de forma a gerar os resultados esperados, cujo valor poderá ser pago diretamente às plataformas de anúncios. A CONTRATANTE poderá deixar o valor de investimento em conta nas plataformas de anúncio em forma de saldos pré-pagos ou pós pagos pelo cartão de crédito;
+10.4. A realização das campanhas nas plataformas de anúncios demanda o investimento em anúncios, conforme as orientações da CONTRATADA, mediante o orçamento previamente aprovado com a CONTRATANTE, de forma a gerar os resultados esperados, cujo valor poderá ser pago diretamente às plataformas de anúncios. A CONTRATANTE poderá deixar o valor de investimento em conta nas plataformas de anúncio em forma de saldos pré-pagos ou pós-pagos pelo cartão de crédito;
 
 10.5. O atraso no pagamento das quantias devidas referente aos anúncios implicará diretamente nos resultados do programa de marketing por completo.
 
@@ -274,7 +274,7 @@ O pagamento pelo serviço prestado será feito de forma mensal, na seguinte form
 
 11.4. Outros serviços que não estejam expressamente indicados neste contrato deverão ser objeto de novo acordo e contrato entre as partes, não constituindo novação, renúncia ou aceitação tácita, a tolerância de condições para a prestação dos serviços pela CONTRATADA e/ou a prestação de quaisquer serviços não contemplados neste contrato pela mesma;
 
-11.5. Através do presente, o CONTRATANTE permite que a CONTRATADA cite o nome e logotipo do mesmo com a finalidade exclusivamente institucional.
+11.5. Através do presente, a CONTRATANTE permite que a CONTRATADA cite o nome e logotipo do mesmo com a finalidade exclusivamente institucional.
 
 11.6. A CONTRATADA garante o sigilo e tratamento dos dados pessoais da CONTRATANTE de acordo com a Lei n. 13.709/2018, Lei Geral de Proteção de Dados Pessoais (LGPD).
 
@@ -304,19 +304,19 @@ O pagamento pelo serviço prestado será feito de forma mensal, na seguinte form
 
 ## CLÁUSULA DÉCIMA SEGUNDA – DOS BÔNUS
 
-O CONTRATANTE poderá ter direito aos seguintes serviços adicionais, prestados como bônus durante a vigência contratual, ou seja, sem onerar o valor total deste contrato. Tais bônus possuem o intuito de potencializar as campanhas de marketing e tráfego pago, fortalecer a presença digital da marca da CONTRATANTE e apoiar sua estrutura comercial, observados os limites de escopo, disponibilidade operacional e condições estabelecidas entre as partes:
+A CONTRATANTE poderá ter direito aos seguintes serviços adicionais, prestados como bônus durante a vigência contratual, ou seja, sem onerar o valor total deste contrato. Tais bônus possuem o intuito de potencializar as campanhas de marketing e tráfego pago, fortalecer a presença digital da marca da CONTRATANTE e apoiar sua estrutura comercial, observados os limites de escopo, disponibilidade operacional e condições estabelecidas entre as partes:
 
 12.1. **Criação e Edição de até 2 Imagens Mensais para Anúncios:** A CONTRATADA poderá criar e editar até 2 (duas) imagens mensais para utilização em anúncios pagos, conforme necessidade estratégica, não representando aumento automático do volume total contratado.
 
 12.2. **Edição de Vídeos para Anúncios:** A CONTRATADA poderá realizar a edição de vídeos publicitários para anúncios, conforme planejamento, disponibilidade operacional e envio de material bruto pela CONTRATANTE, buscando alinhamento com a estratégia de marketing, qualidade visual, retenção e conversão.
 
-12.3. **Treinamento Comercial:** O CONTRATANTE terá acesso a uma consultoria especializada em atendimento, incluindo:
+12.3. **Treinamento Comercial:** A CONTRATANTE terá acesso a uma consultoria especializada em atendimento, incluindo:
 
 - Uma consultoria ou diagnóstico estratégico sobre o atendimento atualmente realizado pela CONTRATANTE, com identificação de pontos de melhoria e orientações comerciais;
 - Um e-book de atendimento validado, capaz de aumentar a conversão de vendas em atendimentos feitos através do WhatsApp;
 - Acompanhamento estratégico periódico do atendimento, mediante envio de informações, conversas, prints ou materiais pela CONTRATANTE, com sugestões de melhoria e orientações comerciais conforme disponibilidade operacional da CONTRATADA, sem caracterizar obrigação de monitoramento diário, supervisão integral da equipe comercial ou garantia de aumento de vendas;
 
-12.4. **Treinamento de Posicionamento:** O CONTRATANTE receberá uma consultoria de posicionamento no Instagram, incluindo:
+12.4. **Treinamento de Posicionamento:** A CONTRATANTE receberá uma consultoria de posicionamento no Instagram, incluindo:
 
 - Uma consultoria ou diagnóstico estratégico sobre as redes sociais e o posicionamento da CONTRATANTE, com identificação de pontos de melhoria e orientações práticas;
 - Material detalhado sobre boas práticas, desde a escolha da foto de perfil até a organização do feed.
@@ -329,7 +329,7 @@ Os serviços descritos nesta cláusula serão prestados durante o período do co
 
 13.1. Fica eleito o foro da cidade de **Araruama/RJ**, para dirimir quaisquer controvérsias, dúvidas, desentendimentos, litígios resultantes do presente instrumento, estando ambas as partes renunciando a qualquer outro local, por mais privilegiado que o outro seja ou possa ser.
 
-O presente acordo é firmado entre as partes (CONTRATANTE E CONTRATADO).
+O presente acordo é firmado entre as partes (CONTRATANTE E CONTRATADA).
 
 Araruama/RJ, {{data_dia}} de {{data_mes_extenso}} de {{data_ano}}.
 
@@ -338,7 +338,7 @@ Araruama/RJ, {{data_dia}} de {{data_mes_extenso}} de {{data_ano}}.
 \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
 
 **LM ASSESSORIA E MARKETING LTDA**
-Representado por {{lm_representante_nome}}
+Representada por {{lm_representante_nome}}
 CNPJ n° 62.074.361/0001-30
 
 \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
