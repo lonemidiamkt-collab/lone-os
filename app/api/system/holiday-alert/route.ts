@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireCron } from "@/lib/api/cron-guard";
 import { getHolidays, holidaysInMonth, weekdayPtBr } from "@/lib/holidays/brasil-api";
 import { sendEmail, logEmail } from "@/lib/email/emailService";
 import { holidayAlertEmail } from "@/lib/email/templates";
@@ -28,7 +29,10 @@ function monthLabelPtBr(year: number, month: number): string {
   return d.toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "America/Sao_Paulo" });
 }
 
-export async function POST(_req: NextRequest) {
+export async function POST(req: NextRequest) {
+  const denied = requireCron(req);
+  if (denied) return denied;
+
   try {
     const now = new Date();
     const nowSP = new Date(now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));

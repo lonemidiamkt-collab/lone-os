@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 import { computeChurnRiskScore, type HealthSignals } from "@/lib/health/compute";
 
 /**
@@ -111,7 +112,10 @@ async function buildSignalsFor(clientRow: Record<string, unknown>): Promise<Heal
   };
 }
 
-export async function POST(_req: NextRequest) {
+export async function POST(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
+
   try {
     const today = new Date();
     const todaySP = new Date(today.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));

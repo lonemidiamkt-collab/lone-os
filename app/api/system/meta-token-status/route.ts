@@ -6,10 +6,14 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
+
   try {
     const { data } = await supabaseAdmin
       .from("agency_settings")

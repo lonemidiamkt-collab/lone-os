@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
   ShieldAlert, AlertTriangle, CheckCircle, TrendingDown, TrendingUp,
   Loader2, Check, RefreshCcw, ChevronRight, Clock,
@@ -91,7 +92,7 @@ export default function DefesaAtivaPage() {
     setScanning(true);
     setErr("");
     try {
-      const res = await fetch("/api/system/defense-scan", { method: "POST" });
+      const res = await authedFetch("/api/system/defense-scan", { method: "POST" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({ error: "Falha no scan" }));
         setErr(d.error || "Falha no scan");

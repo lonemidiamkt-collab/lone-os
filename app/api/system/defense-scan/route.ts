@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 import { getAccountInsights } from "@/lib/meta/api";
 import { countMessagesFromActions } from "@/lib/meta/messages";
 import { detectAnomalies, type HistoricalMetric, type CurrentMetric, type DetectionContext } from "@/lib/defense/detect";
@@ -42,7 +43,10 @@ function asNumber(v: string | undefined | null): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export async function POST(_req: NextRequest) {
+export async function POST(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
+
   try {
     const token = await getMetaToken();
     if (!token) {

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
   Thermometer, AlertTriangle, Shield, TrendingUp, TrendingDown, Minus,
   Loader2, ChevronRight, Clock, RefreshCcw,
@@ -68,7 +69,7 @@ export default function ChurnRiskPage() {
     setRecomputing(true);
     setErr("");
     try {
-      const res = await fetch("/api/system/compute-health", { method: "POST" });
+      const res = await authedFetch("/api/system/compute-health", { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: "Erro" }));
         setErr(data.error || "Falha ao recalcular");

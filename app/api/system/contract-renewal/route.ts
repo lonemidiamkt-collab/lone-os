@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireCron } from "@/lib/api/cron-guard";
 
 /**
  * POST /api/system/contract-renewal
@@ -33,6 +34,9 @@ function daysBetween(from: string, to: string): number {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = requireCron(req);
+  if (denied) return denied;
+
   try {
     const today = new Date().toISOString().slice(0, 10);
     const cutoffDate = new Date();

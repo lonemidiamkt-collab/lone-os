@@ -1,12 +1,16 @@
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireCron } from "@/lib/api/cron-guard";
 
 const supabaseUrl = process.env.SUPABASE_INTERNAL_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://localhost";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "placeholder";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = requireCron(req);
+  if (denied) return denied;
+
   const supabase = createClient(supabaseUrl, supabaseKey);
   const results: string[] = [];
 
