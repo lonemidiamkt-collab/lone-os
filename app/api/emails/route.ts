@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendEmail, logEmail } from "@/lib/email/emailService";
 import { welcomeEmail, contractSignedEmail, monthlyReportEmail } from "@/lib/email/templates";
+import { getServerUser } from "@/lib/supabase/auth-server";
 
 function getSupabase() {
   const url = process.env.SUPABASE_INTERNAL_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://localhost";
@@ -12,6 +13,11 @@ function getSupabase() {
 }
 
 export async function POST(req: NextRequest) {
+  // Dispara e-mails pros clientes — restrito a usuário logado (o middleware
+  // libera /api/emails publicamente, então a proteção vive aqui).
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
   const body = await req.json();
   const supabase = getSupabase();
 

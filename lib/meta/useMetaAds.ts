@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { countMessagesFromActions } from "@/lib/meta/messages";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 export class TokenExpiredError extends Error {
   constructor(message: string) {
@@ -18,7 +19,7 @@ const SCOPES = "ads_read,ads_management,business_management";
 
 async function loadGlobalToken(): Promise<{ token: string; expiresAt: number | null; tokenType: "short" | "long" } | null> {
   try {
-    const res = await fetch("/api/meta/token");
+    const res = await authedFetch("/api/meta/token");
     if (!res.ok) return null;
     const data = await res.json();
     if (!data.token) return null;
@@ -37,7 +38,7 @@ async function saveGlobalToken(token: string, expiresIn?: number, tokenType: "sh
   if (expiresAt) {
     rows.push({ key: "meta_token_expires_at", value: expiresAt, updated_at: new Date().toISOString() });
   }
-  const res = await fetch("/api/meta/token", {
+  const res = await authedFetch("/api/meta/token", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rows }),
@@ -49,7 +50,7 @@ async function saveGlobalToken(token: string, expiresIn?: number, tokenType: "sh
 }
 
 async function clearGlobalToken() {
-  const res = await fetch("/api/meta/token", { method: "DELETE" });
+  const res = await authedFetch("/api/meta/token", { method: "DELETE" });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     console.error("[Meta] Failed to clear global token:", err);

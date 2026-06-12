@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/auth-server";
 
 const TOKEN_KEYS = ["meta_token", "meta_token_expires_at", "meta_token_type"];
 
-export async function GET() {
+// O token do Meta controla as contas de anúncio (gasta dinheiro) e dados do
+// business. Acesso restrito a admin — o middleware libera /api/meta publicamente,
+// então a proteção tem que viver aqui.
+async function requireAdmin(req: NextRequest) {
+  const user = await getServerUser(req);
+  return user?.isAdmin ? user : null;
+}
+
+const unauthorized = () => NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
+export async function GET(req: NextRequest) {
+  if (!(await requireAdmin(req))) return unauthorized();
+
   const { data, error } = await supabaseAdmin
     .from("agency_settings")
     .select("key, value")
@@ -22,6 +35,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!(await requireAdmin(req))) return unauthorized();
+
   const body = await req.json().catch(() => null);
   if (!Array.isArray(body?.rows)) {
     return NextResponse.json({ error: "rows array required" }, { status: 400 });
@@ -35,7 +50,9 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
+  if (!(await requireAdmin(req))) return unauthorized();
+
   const { error } = await supabaseAdmin
     .from("agency_settings")
     .delete()

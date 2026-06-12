@@ -2,10 +2,16 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/auth-server";
 
 // GET /api/ai/audits?clientId=<uuid>&limit=10
 // Returns AI audit history for a client (newest first).
 export async function GET(req: NextRequest) {
+  // Dados internos (inclui auditorias não-visíveis ao cliente) — exige login.
+  // O middleware libera /api/ai publicamente, então a proteção vive aqui.
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
   const clientId = req.nextUrl.searchParams.get("clientId");
   const limit = Math.min(parseInt(req.nextUrl.searchParams.get("limit") || "10", 10), 50);
 

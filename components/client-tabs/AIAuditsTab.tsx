@@ -5,6 +5,7 @@ import {
   Brain, Sparkles, AlertTriangle, AlertCircle, CheckCircle,
   Loader2, Clock, TrendingUp, RefreshCw,
 } from "lucide-react";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 interface Insight {
   type: "positivo" | "alerta" | "critico" | "sugestao";
@@ -59,7 +60,7 @@ export default function AIAuditsTab({ clientId, isAdmin }: Props) {
   const loadAudits = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/ai/audits?clientId=${clientId}&limit=20`);
+      const res = await authedFetch(`/api/ai/audits?clientId=${clientId}&limit=20`);
       const data = await res.json();
       if (res.ok) {
         const list: Audit[] = data.audits ?? [];
