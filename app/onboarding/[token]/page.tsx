@@ -87,7 +87,7 @@ function InputField({ label, value, onChange, placeholder, required, type = "tex
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-medium text-zinc-400">
+      <label className="text-xs font-medium text-muted-foreground">
         {label} {required && <span className="text-red-400">*</span>}
       </label>
       <input
@@ -95,7 +95,7 @@ function InputField({ label, value, onChange, placeholder, required, type = "tex
         value={value}
         onChange={(e) => onChange(mask ? mask(e.target.value) : e.target.value)}
         placeholder={placeholder}
-        className={`w-full bg-[#111113] border rounded-lg px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-600 outline-none transition-colors ${
+        className={`w-full bg-[#111113] border rounded-lg px-3.5 py-2.5 text-sm text-white placeholder:text-muted-foreground outline-none transition-colors ${
           fieldError ? "border-red-500/50 focus:border-red-500" : "border-[#1e1e2a] focus:border-[#0d4af5]/50"
         }`}
       />
@@ -146,7 +146,7 @@ function FileUpload({ label, docType, clientId, onUploaded, uploaded, previewRou
   return (
     <div className={`rounded-xl border p-4 space-y-3 transition-all ${borderClass}`}>
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-zinc-300">
+        <p className="text-sm font-medium text-foreground">
           {label} {required && <span className="text-red-400">*</span>}
         </p>
         {uploaded && <Check size={16} className="text-emerald-500" />}
@@ -168,7 +168,7 @@ function FileUpload({ label, docType, clientId, onUploaded, uploaded, previewRou
           return (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-[#0a0a0c] border border-[#1e1e2a]">
               <Check size={14} className="text-emerald-500" />
-              <span className="text-xs text-zinc-400">Arquivo privado salvo com seguranca</span>
+              <span className="text-xs text-muted-foreground">Arquivo privado salvo com seguranca</span>
             </div>
           );
         }
@@ -179,7 +179,7 @@ function FileUpload({ label, docType, clientId, onUploaded, uploaded, previewRou
       ) : (
         <div className="flex gap-2">
           <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#0d4af5]/30 text-zinc-400 hover:text-white transition-all text-xs">
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#0d4af5]/30 text-muted-foreground hover:text-white transition-all text-xs">
             {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
             {uploading ? "Enviando..." : "Selecionar Arquivo"}
           </button>
@@ -189,7 +189,7 @@ function FileUpload({ label, docType, clientId, onUploaded, uploaded, previewRou
             input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleFile(f); };
             input.click();
           }}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#0d4af5]/30 text-zinc-400 hover:text-white transition-all text-xs">
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#0d4af5]/30 text-muted-foreground hover:text-white transition-all text-xs">
             <Camera size={14} /> Foto
           </button>
         </div>
@@ -198,7 +198,7 @@ function FileUpload({ label, docType, clientId, onUploaded, uploaded, previewRou
         const f = e.target.files?.[0]; if (f) handleFile(f);
       }} />
       {error && <p className="text-xs text-red-400">{error}</p>}
-      <p className="text-[10px] text-zinc-600">JPG, PNG ou PDF — maximo 10MB</p>
+      <p className="text-[10px] text-muted-foreground">JPG, PNG ou PDF — maximo 10MB</p>
     </div>
   );
 }
@@ -214,7 +214,7 @@ function AccessField({ platform, icon, login, password, status, onLogin, onPassw
       status === "partner_invite" ? "border-[#0d4af5]/20 bg-[#0d4af5]/[0.02]" :
       "border-[#1e1e2a] bg-[#0f0f13]"
     }`}>
-      <p className="text-sm font-medium text-zinc-300 flex items-center gap-2"><span>{icon}</span> {platform}</p>
+      <p className="text-sm font-medium text-foreground flex items-center gap-2"><span>{icon}</span> {platform}</p>
       <div className="flex gap-1.5">
         {([
           { v: "fill_now" as const, label: "Preencher", icon: "📥" },
@@ -223,18 +223,18 @@ function AccessField({ platform, icon, login, password, status, onLogin, onPassw
         ]).map((opt) => (
           <button key={opt.v} type="button" onClick={() => onStatus(opt.v)}
             className={`flex-1 text-xs py-2 rounded-lg border transition-all ${
-              status === opt.v ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-[#1e1e2a] text-zinc-500 hover:text-zinc-300"
+              status === opt.v ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-[#1e1e2a] text-muted-foreground hover:text-foreground"
             }`}>{opt.icon} {opt.label}</button>
         ))}
       </div>
       {status === "fill_now" && (
         <div className="space-y-2">
           <input type="text" value={login} onChange={(e) => onLogin(e.target.value)} placeholder="Login / Email"
-            className="w-full bg-[#0a0a0c] border border-[#1e1e2a] rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-[#0d4af5]/50" />
+            className="w-full bg-[#0a0a0c] border border-[#1e1e2a] rounded-lg px-3 py-2 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-[#0d4af5]/50" />
           <div className="relative">
             <input type={showPw ? "text" : "password"} value={password} onChange={(e) => onPassword(e.target.value)} placeholder="Senha"
-              className="w-full bg-[#0a0a0c] border border-[#1e1e2a] rounded-lg px-3 py-2 pr-10 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-[#0d4af5]/50" />
-            <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400">
+              className="w-full bg-[#0a0a0c] border border-[#1e1e2a] rounded-lg px-3 py-2 pr-10 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-[#0d4af5]/50" />
+            <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground">
               {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           </div>
@@ -539,27 +539,27 @@ export default function ExternalOnboardingPage() {
           <Check size={40} className="text-emerald-500" />
         </div>
         <h1 className="text-2xl font-bold text-white">Tudo certo!</h1>
-        <p className="text-zinc-400">
+        <p className="text-muted-foreground">
           Seus dados foram recebidos com sucesso. A equipe da <span className="text-white font-medium">Lone Midia</span> vai analisar e entrar em contato pelo WhatsApp.
         </p>
         {submittedData && (
           <div className="bg-[#111113] border border-[#1e1e2a] rounded-xl p-4 text-left space-y-2">
-            <p className="text-xs text-zinc-500 font-medium">Dados recebidos:</p>
-            {submittedData.nomeFantasia && <p className="text-xs text-zinc-300">Empresa: <span className="text-white">{submittedData.nomeFantasia}</span></p>}
-            {submittedData.contactName && <p className="text-xs text-zinc-300">Responsavel: <span className="text-white">{submittedData.contactName}</span></p>}
-            {submittedData.cnpj && <p className="text-xs text-zinc-300">CNPJ: <span className="text-white">{submittedData.cnpj}</span></p>}
+            <p className="text-xs text-muted-foreground font-medium">Dados recebidos:</p>
+            {submittedData.nomeFantasia && <p className="text-xs text-foreground">Empresa: <span className="text-white">{submittedData.nomeFantasia}</span></p>}
+            {submittedData.contactName && <p className="text-xs text-foreground">Responsavel: <span className="text-white">{submittedData.contactName}</span></p>}
+            {submittedData.cnpj && <p className="text-xs text-foreground">CNPJ: <span className="text-white">{submittedData.cnpj}</span></p>}
           </div>
         )}
         <div className="bg-[#111113] border border-[#1e1e2a] rounded-xl p-4 text-left">
-          <p className="text-xs text-zinc-500 mb-1">Proximos passos:</p>
-          <ul className="text-xs text-zinc-400 space-y-1">
+          <p className="text-xs text-muted-foreground mb-1">Proximos passos:</p>
+          <ul className="text-xs text-muted-foreground space-y-1">
             <li>1. Analise dos documentos pela equipe</li>
             <li>2. Configuracao das plataformas</li>
             <li>3. Kickoff e inicio das operacoes</li>
           </ul>
         </div>
         <button onClick={() => { setSubmitted(false); setSubmission(null); setError(""); }}
-          className="text-xs text-zinc-500 hover:text-[#0d4af5] transition-colors flex items-center gap-1.5 mx-auto">
+          className="text-xs text-muted-foreground hover:text-[#0d4af5] transition-colors flex items-center gap-1.5 mx-auto">
           <RefreshCw size={12} /> Preciso corrigir algo
         </button>
       </div>
@@ -571,7 +571,7 @@ export default function ExternalOnboardingPage() {
       <div className="max-w-md w-full text-center space-y-4">
         <AlertTriangle size={40} className="text-amber-500 mx-auto" />
         <h1 className="text-xl font-bold text-white">Link invalido</h1>
-        <p className="text-zinc-400 text-sm">{error}</p>
+        <p className="text-muted-foreground text-sm">{error}</p>
       </div>
     </div>
   );
@@ -598,7 +598,7 @@ export default function ExternalOnboardingPage() {
               <span className="font-semibold text-white text-sm">{nomeFantasia || "Lone Midia"}</span>
             </div>
             <div className="flex items-center gap-2">
-              {autoSaving && <span className="text-[10px] text-zinc-600 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Salvando...</span>}
+              {autoSaving && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Salvando...</span>}
               <span className="text-[10px] text-[#0d4af5] font-medium">{fieldProgress}%</span>
             </div>
           </div>
@@ -609,7 +609,7 @@ export default function ExternalOnboardingPage() {
           <div className="flex justify-between mt-2">
             {STEPS.map((s, i) => (
               <button key={s.key} onClick={() => setStep(s.key)}
-                className={`text-[10px] transition-colors ${i <= currentStep ? "text-[#0d4af5]" : "text-zinc-600"}`}>
+                className={`text-[10px] transition-colors ${i <= currentStep ? "text-[#0d4af5]" : "text-muted-foreground"}`}>
                 {s.label}
               </button>
             ))}
@@ -621,7 +621,7 @@ export default function ExternalOnboardingPage() {
       <div className="max-w-lg mx-auto px-6 py-6 space-y-6">
         <div>
           <h1 className="text-lg font-bold text-white">Onboarding — {clientName}</h1>
-          <p className="text-xs text-zinc-500 mt-1">Preencha os dados para iniciarmos seu projeto</p>
+          <p className="text-xs text-muted-foreground mt-1">Preencha os dados para iniciarmos seu projeto</p>
         </div>
 
         {error && (
@@ -632,7 +632,7 @@ export default function ExternalOnboardingPage() {
         {step === "dados" && (
           <div className="space-y-4 animate-fade-in">
             <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
-              <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
                 <Building2 size={10} className="text-[#0d4af5]" /> Dados da Empresa
               </p>
               <InputField label="Nome Fantasia" value={nomeFantasia} onChange={setNomeFantasia} placeholder="Ex: Loja do Joao" required
@@ -668,21 +668,21 @@ export default function ExternalOnboardingPage() {
                       className={`text-[10px] px-2.5 py-1 rounded-full border transition-all ${
                         nicho === opt
                           ? "bg-[#0d4af5]/15 text-[#0d4af5] border-[#0d4af5]/30"
-                          : "bg-[#0a0a0c] text-zinc-500 border-[#1e1e2a] hover:border-[#0d4af5]/20 hover:text-zinc-300"
+                          : "bg-[#0a0a0c] text-muted-foreground border-[#1e1e2a] hover:border-[#0d4af5]/20 hover:text-foreground"
                       }`}
                     >
                       {opt}
                     </button>
                   ))}
                 </div>
-                <p className="text-[10px] text-zinc-600">
+                <p className="text-[10px] text-muted-foreground">
                   Clique numa sugestão ou digite o seu. Usado pra personalizar o objeto do contrato.
                 </p>
               </div>
             </div>
 
             <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
-              <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
                 <User size={10} className="text-[#0d4af5]" /> Responsavel
               </p>
               <InputField label="Nome Completo" value={contactName} onChange={setContactName} placeholder="Ex: Joao da Silva" required
@@ -695,7 +695,7 @@ export default function ExternalOnboardingPage() {
             </div>
 
             <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
-              <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
                 <MapPin size={10} className="text-[#0d4af5]" /> Endereco
               </p>
               <div className="grid grid-cols-2 gap-3">
@@ -718,7 +718,7 @@ export default function ExternalOnboardingPage() {
         {/* ═══ STEP 2: DOCUMENTOS ═══ */}
         {step === "documentos" && submission && (
           <div className="space-y-4 animate-fade-in">
-            <p className="text-xs text-zinc-500">Envie os documentos abaixo. Voce pode selecionar um arquivo ou tirar uma foto.</p>
+            <p className="text-xs text-muted-foreground">Envie os documentos abaixo. Voce pode selecionar um arquivo ou tirar uma foto.</p>
             <FileUpload label="Logo da Empresa" docType="logo" clientId={submission.client_id} onUploaded={setDocLogo} uploaded={docLogo} previewRound
               required missing={showValidation && missingRequired.docLogo} onToast={setUploadToast} />
             <FileUpload label="Contrato Social (PDF ou Foto)" docType="contrato_social" clientId={submission.client_id} onUploaded={setDocContrato} uploaded={docContrato}
@@ -731,7 +731,7 @@ export default function ExternalOnboardingPage() {
         {/* ═══ STEP 3: ACESSOS ═══ */}
         {step === "acessos" && (
           <div className="space-y-4 animate-fade-in">
-            <p className="text-xs text-zinc-500">Informe os acessos das plataformas. Se nao tiver agora, selecione &quot;Nao tenho&quot;.</p>
+            <p className="text-xs text-muted-foreground">Informe os acessos das plataformas. Se nao tiver agora, selecione &quot;Nao tenho&quot;.</p>
             <AccessField platform="Facebook / Meta Ads" icon="📘" login={metaLogin} password={metaPassword} status={metaStatus}
               onLogin={setMetaLogin} onPassword={setMetaPassword} onStatus={setMetaStatus} />
             <AccessField platform="Instagram" icon="📷" login={instaLogin} password={instaPassword} status={instaStatus}
@@ -745,16 +745,16 @@ export default function ExternalOnboardingPage() {
         {step === "review" && (
           <div className="space-y-4 animate-fade-in">
             <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-3">
-              <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Resumo</p>
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Resumo</p>
               <div className="space-y-2 text-sm">
-                {nomeFantasia && <div className="flex justify-between"><span className="text-zinc-500">Nome Fantasia</span><span className="text-white">{nomeFantasia}</span></div>}
-                {razaoSocial && <div className="flex justify-between"><span className="text-zinc-500">Razao Social</span><span className="text-white">{razaoSocial}</span></div>}
-                {cnpj && <div className="flex justify-between"><span className="text-zinc-500">CNPJ</span><span className={`${cnpjError ? "text-red-400" : "text-white"}`}>{cnpj} {cnpjError && "(invalido)"}</span></div>}
-                {nicho && <div className="flex justify-between"><span className="text-zinc-500">Ramo / Nicho</span><span className="text-white">{nicho}</span></div>}
-                <div className="flex justify-between"><span className="text-zinc-500">Responsavel</span><span className="text-white">{contactName || "—"}</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">WhatsApp</span><span className="text-white">{contactWhatsapp || "—"}</span></div>
+                {nomeFantasia && <div className="flex justify-between"><span className="text-muted-foreground">Nome Fantasia</span><span className="text-white">{nomeFantasia}</span></div>}
+                {razaoSocial && <div className="flex justify-between"><span className="text-muted-foreground">Razao Social</span><span className="text-white">{razaoSocial}</span></div>}
+                {cnpj && <div className="flex justify-between"><span className="text-muted-foreground">CNPJ</span><span className={`${cnpjError ? "text-red-400" : "text-white"}`}>{cnpj} {cnpjError && "(invalido)"}</span></div>}
+                {nicho && <div className="flex justify-between"><span className="text-muted-foreground">Ramo / Nicho</span><span className="text-white">{nicho}</span></div>}
+                <div className="flex justify-between"><span className="text-muted-foreground">Responsavel</span><span className="text-white">{contactName || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">WhatsApp</span><span className="text-white">{contactWhatsapp || "—"}</span></div>
                 {(enderecoRua || enderecoCidade) && (
-                  <div className="flex justify-between"><span className="text-zinc-500">Endereco</span>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Endereco</span>
                     <span className="text-white text-right max-w-[60%]">{[enderecoRua, enderecoBairro, enderecoCidade, enderecoEstado, enderecoCep].filter(Boolean).join(", ")}</span>
                   </div>
                 )}
@@ -764,7 +764,7 @@ export default function ExternalOnboardingPage() {
                   { label: "Contrato Social", ok: !!docContrato },
                   { label: "Documento c/ Foto", ok: !!docIdentidade },
                 ].map(({ label, ok }) => (
-                  <div key={label} className="flex justify-between"><span className="text-zinc-500">{label}</span>
+                  <div key={label} className="flex justify-between"><span className="text-muted-foreground">{label}</span>
                     <span className={ok ? "text-emerald-400" : "text-amber-400"}>{ok ? "Enviado" : "Pendente"}</span></div>
                 ))}
                 <div className="border-t border-[#1e1e2a] my-2" />
@@ -773,7 +773,7 @@ export default function ExternalOnboardingPage() {
                   { label: "Instagram", status: instaStatus, login: instaLogin },
                   { label: "Google", status: googleStatus, login: googleLogin },
                 ].map(({ label, status, login }) => (
-                  <div key={label} className="flex justify-between"><span className="text-zinc-500">{label}</span>
+                  <div key={label} className="flex justify-between"><span className="text-muted-foreground">{label}</span>
                     <span className={status === "fill_now" && login ? "text-emerald-400" : "text-amber-400"}>
                       {status === "fill_now" ? (login ? "Preenchido" : "Vazio") : status === "waiting_client" ? "Pendente" : "Partner"}
                     </span></div>
@@ -781,10 +781,10 @@ export default function ExternalOnboardingPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-400">Observacoes (opcional)</label>
+              <label className="text-xs font-medium text-muted-foreground">Observacoes (opcional)</label>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
                 placeholder="Alguma informacao adicional..."
-                className="w-full bg-[#111113] border border-[#1e1e2a] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-[#0d4af5]/50 transition-colors resize-none" />
+                className="w-full bg-[#111113] border border-[#1e1e2a] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-[#0d4af5]/50 transition-colors resize-none" />
             </div>
           </div>
         )}
@@ -792,7 +792,7 @@ export default function ExternalOnboardingPage() {
         {/* Navigation */}
         <div className="flex items-center justify-between pt-4 border-t border-[#1e1e2a]">
           {currentStep > 0 ? (
-            <button onClick={goPrev} className="text-xs text-zinc-400 hover:text-white transition-colors px-4 py-2">Voltar</button>
+            <button onClick={goPrev} className="text-xs text-muted-foreground hover:text-white transition-colors px-4 py-2">Voltar</button>
           ) : <div />}
           {step === "review" ? (
             <div className="flex flex-col items-end gap-2">

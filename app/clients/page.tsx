@@ -208,7 +208,7 @@ export default function ClientsPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground">{draft.name}</p>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] text-zinc-500">{draft.industry}</span>
+                          <span className="text-[10px] text-muted-foreground">{draft.industry}</span>
                           {draft.draftStatus === "pending_invite" && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
                               <Send size={8} /> Link enviado
@@ -220,7 +220,7 @@ export default function ClientsPage() {
                             </span>
                           )}
                           {draft.contactName && (
-                            <span className="text-[10px] text-zinc-500">Contato: {draft.contactName}</span>
+                            <span className="text-[10px] text-muted-foreground">Contato: {draft.contactName}</span>
                           )}
                         </div>
                       </div>
@@ -237,7 +237,7 @@ export default function ClientsPage() {
                         )}
                         <button
                           onClick={() => handleReject(draft.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-zinc-500 text-xs hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-muted-foreground text-xs hover:text-red-400 hover:bg-red-500/10 transition-colors"
                         >
                           <X size={10} /> Rejeitar
                         </button>
@@ -397,7 +397,7 @@ export default function ClientsPage() {
                     </div>
 
                     {client.notes && (
-                      <p className="mt-3 text-xs text-muted-foreground bg-muted rounded-lg px-3 py-2 border-l-2 border-zinc-600">
+                      <p className="mt-3 text-xs text-muted-foreground bg-muted rounded-lg px-3 py-2 border-l-2 border-border">
                         {client.notes}
                       </p>
                     )}

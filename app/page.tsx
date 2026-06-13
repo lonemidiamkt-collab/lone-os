@@ -89,7 +89,7 @@ function NoticeFormBlock() {
     <div className="card">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold text-foreground flex items-center gap-2">
-          <Megaphone size={15} className="text-zinc-400" />
+          <Megaphone size={15} className="text-muted-foreground" />
           Avisos da Empresa
         </h3>
         {(role === "admin" || role === "manager") && (
@@ -404,7 +404,7 @@ function EmployeeDashboard() {
             <h3 className="font-semibold text-foreground text-sm mb-3">Meu Desempenho</h3>
             <div className="relative w-24 h-24 mx-auto mb-3">
               <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="40" fill="none" stroke="var(--muted)" strokeWidth="8" />
+                <circle cx="50" cy="50" r="40" fill="none" stroke="oklch(var(--muted))" strokeWidth="8" />
                 <circle
                   cx="50" cy="50" r="40" fill="none"
                   stroke={performance.rate >= 80 ? "#22c55e" : performance.rate >= 50 ? "#eab308" : "#ef4444"}

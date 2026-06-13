@@ -48,17 +48,17 @@ export default function ClientNPS({ clientId, currentUser }: Props) {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] text-zinc-500">Satisfacao:</span>
+      <span className="text-[10px] text-muted-foreground">Satisfacao:</span>
       <div className="flex gap-0.5">
         {[1, 2, 3, 4, 5].map((v) => (
           <button key={v} onClick={() => rate(v)} onMouseEnter={() => setHover(v)} onMouseLeave={() => setHover(null)}
             disabled={saving}
             className="transition-transform hover:scale-110">
-            <Star size={14} className={`transition-colors ${(hover ?? score ?? 0) >= v ? "text-amber-400 fill-amber-400" : "text-zinc-700"}`} />
+            <Star size={14} className={`transition-colors ${(hover ?? score ?? 0) >= v ? "text-amber-400 fill-amber-400" : "text-muted-foreground"}`} />
           </button>
         ))}
       </div>
-      {saving && <Loader2 size={10} className="text-zinc-500 animate-spin" />}
+      {saving && <Loader2 size={10} className="text-muted-foreground animate-spin" />}
       {saved && <span className="text-[10px] text-emerald-400">Salvo</span>}
     </div>
   );

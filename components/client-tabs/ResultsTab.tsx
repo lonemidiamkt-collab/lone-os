@@ -323,7 +323,7 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
               const ann = annotations.find((a) => a.month === r.month);
               return (
                 <div key={r.id} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-muted/30 transition-colors">
-                  <span className="text-xs text-zinc-500 w-16 shrink-0 font-mono">{r.month}</span>
+                  <span className="text-xs text-muted-foreground w-16 shrink-0 font-mono">{r.month}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-4 text-xs">
                       <span className="text-primary">Inv: {formatCurrency(r.investment)}</span>
@@ -333,7 +333,7 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
                       </span>
                     </div>
                     {(r.strategyNote || ann) && (
-                      <p className="text-[10px] text-zinc-500 mt-0.5 flex items-center gap-1">
+                      <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
                         <PenLine size={8} /> {r.strategyNote || ann?.annotation}
                       </p>
                     )}
@@ -360,17 +360,17 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
           )}
         </div>
         {interactions.length === 0 ? (
-          <p className="text-xs text-zinc-600 text-center py-4">Nenhuma interacao registrada</p>
+          <p className="text-xs text-muted-foreground text-center py-4">Nenhuma interacao registrada</p>
         ) : (
           <div className="space-y-1">
             {interactions.slice(0, 8).map((i) => (
               <div key={i.id} className="flex items-start gap-2 py-1.5 text-xs">
-                <span className="text-zinc-600 shrink-0 w-20 font-mono">{new Date(i.loggedAt).toLocaleDateString("pt-BR")}</span>
+                <span className="text-muted-foreground shrink-0 w-20 font-mono">{new Date(i.loggedAt).toLocaleDateString("pt-BR")}</span>
                 <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] ${
-                  i.type === "alinhamento" ? "bg-primary/10 text-primary" : i.type === "suporte" ? "bg-amber-500/10 text-amber-400" : "bg-zinc-500/10 text-zinc-400"
+                  i.type === "alinhamento" ? "bg-primary/10 text-primary" : i.type === "suporte" ? "bg-amber-500/10 text-amber-400" : "bg-zinc-500/10 text-muted-foreground"
                 }`}>{i.type}</span>
                 <span className="text-foreground">{i.summary}</span>
-                <span className="text-zinc-600 ml-auto shrink-0">{i.loggedBy}</span>
+                <span className="text-muted-foreground ml-auto shrink-0">{i.loggedBy}</span>
               </div>
             ))}
           </div>
@@ -383,22 +383,22 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
           <div className="bg-card border border-border rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-foreground text-sm">Inserir Faturamento Mensal</h3>
-              <button onClick={() => setShowAddRecord(false)} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+              <button onClick={() => setShowAddRecord(false)} className="text-muted-foreground hover:text-white"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400">Mes</label>
+                <label className="text-xs text-muted-foreground">Mes</label>
                 <input type="month" value={form.month} onChange={(e) => setForm((p) => ({ ...p, month: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-400">Investimento (R$)</label>
+                  <label className="text-xs text-muted-foreground">Investimento (R$)</label>
                   <input type="number" value={form.investment} onChange={(e) => setForm((p) => ({ ...p, investment: e.target.value }))}
                     placeholder="0.00" className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-400">Faturamento (R$)</label>
+                  <label className="text-xs text-muted-foreground">Faturamento (R$)</label>
                   <input type="number" value={form.revenue} onChange={(e) => setForm((p) => ({ ...p, revenue: e.target.value }))}
                     placeholder="0.00" className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
                 </div>
@@ -411,7 +411,7 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
                 </div>
               )}
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400">Estrategia / Observacao</label>
+                <label className="text-xs text-muted-foreground">Estrategia / Observacao</label>
                 <textarea value={form.strategyNote} onChange={(e) => setForm((p) => ({ ...p, strategyNote: e.target.value }))}
                   rows={2} placeholder="Ex: Campanha de Black Friday gerou pico de vendas..."
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 resize-none" />
@@ -434,22 +434,22 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
           <div className="bg-card border border-border rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-foreground text-sm">Registrar Interacao</h3>
-              <button onClick={() => setShowAddInteraction(false)} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+              <button onClick={() => setShowAddInteraction(false)} className="text-muted-foreground hover:text-white"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400">Tipo</label>
+                <label className="text-xs text-muted-foreground">Tipo</label>
                 <div className="flex gap-2">
                   {[{ v: "alinhamento", l: "Alinhamento" }, { v: "suporte", l: "Suporte" }, { v: "feedback", l: "Feedback" }].map((o) => (
                     <button key={o.v} onClick={() => setInteractionForm((p) => ({ ...p, type: o.v }))}
                       className={`flex-1 py-2 rounded-lg border text-xs transition-all ${
-                        interactionForm.type === o.v ? "border-primary/50 bg-primary/10 text-white" : "border-border text-zinc-500"
+                        interactionForm.type === o.v ? "border-primary/50 bg-primary/10 text-white" : "border-border text-muted-foreground"
                       }`}>{o.l}</button>
                   ))}
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400">Resumo</label>
+                <label className="text-xs text-muted-foreground">Resumo</label>
                 <textarea value={interactionForm.summary} onChange={(e) => setInteractionForm((p) => ({ ...p, summary: e.target.value }))}
                   rows={3} placeholder="O que foi discutido ou resolvido..."
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 resize-none" />

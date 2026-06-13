@@ -170,7 +170,7 @@ export default function OnboardingTour() {
               </div>
               <button
                 onClick={skip}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-600 hover:text-foreground hover:bg-white/5 transition-all"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all"
               >
                 <X size={16} />
               </button>
@@ -190,7 +190,7 @@ export default function OnboardingTour() {
                       ? "w-6 bg-[#0d4af5]"
                       : i < step
                       ? "w-1.5 bg-[#0d4af5]/40"
-                      : "w-1.5 bg-zinc-800"
+                      : "w-1.5 bg-muted"
                   }`}
                 />
               ))}
@@ -202,7 +202,7 @@ export default function OnboardingTour() {
                 {!isFirst && (
                   <button
                     onClick={prev}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all"
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all"
                   >
                     <ChevronLeft size={14} /> Anterior
                   </button>
@@ -212,7 +212,7 @@ export default function OnboardingTour() {
                 {!isLast && (
                   <button
                     onClick={skip}
-                    className="px-3 py-1.5 rounded-lg text-xs text-zinc-600 hover:text-foreground transition-all"
+                    className="px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground transition-all"
                   >
                     Pular
                   </button>

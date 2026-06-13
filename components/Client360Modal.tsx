@@ -216,8 +216,8 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
                         const statusCfg = dr.status === "done"
                           ? { label: "Pronta", color: "text-primary" }
                           : dr.status === "in_progress"
-                          ? { label: "Produzindo", color: "text-zinc-400" }
-                          : { label: "Na fila", color: "text-zinc-500" };
+                          ? { label: "Produzindo", color: "text-muted-foreground" }
+                          : { label: "Na fila", color: "text-muted-foreground" };
                         return (
                           <div key={dr.id} className="flex items-center gap-2 text-xs">
                             <span className={`w-1.5 h-1.5 rounded-full ${dr.status === "done" ? "bg-primary" : dr.status === "in_progress" ? "bg-zinc-400" : "bg-zinc-600"}`} />

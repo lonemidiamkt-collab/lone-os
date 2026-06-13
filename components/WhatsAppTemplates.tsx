@@ -115,11 +115,11 @@ export default function WhatsAppTemplates({ client }: Props) {
             <div key={t.id} className="rounded-xl border border-border bg-surface p-3 flex items-start gap-3 group hover:border-emerald-500/20 transition-all">
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-foreground mb-1">{t.name}</p>
-                <p className="text-[11px] text-zinc-400 line-clamp-2">{client ? fillTemplate(t.body) : t.body}</p>
+                <p className="text-[11px] text-muted-foreground line-clamp-2">{client ? fillTemplate(t.body) : t.body}</p>
               </div>
               <button onClick={() => handleCopy(t.id, t.body)}
                 className={`shrink-0 p-2 rounded-lg border transition-all ${
-                  copied === t.id ? "bg-emerald-500/15 border-emerald-500/20 text-emerald-400" : "border-border text-zinc-600 hover:text-emerald-400 hover:border-emerald-500/20"
+                  copied === t.id ? "bg-emerald-500/15 border-emerald-500/20 text-emerald-400" : "border-border text-muted-foreground hover:text-emerald-400 hover:border-emerald-500/20"
                 }`}>
                 {copied === t.id ? <Check size={12} /> : <Copy size={12} />}
               </button>

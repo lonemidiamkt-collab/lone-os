@@ -53,13 +53,13 @@ import { exportReportAsPdf } from "@/lib/exportPdf";
 const TIMELINE_ICONS: Record<TimelineEntryType, { icon: React.ElementType; color: string; bg: string }> = {
   chat:       { icon: MessageCircle,       color: "text-primary",  bg: "bg-primary/15" },
   task:       { icon: CheckSquare,         color: "text-primary",   bg: "bg-primary/15" },
-  status:     { icon: Activity,            color: "text-zinc-400",  bg: "bg-[#111118]" },
-  content:    { icon: Instagram,           color: "text-zinc-400",    bg: "bg-[#111118]" },
-  design:     { icon: Star,               color: "text-zinc-400",  bg: "bg-[#111118]" },
+  status:     { icon: Activity,            color: "text-muted-foreground",  bg: "bg-[#111118]" },
+  content:    { icon: Instagram,           color: "text-muted-foreground",    bg: "bg-[#111118]" },
+  design:     { icon: Star,               color: "text-muted-foreground",  bg: "bg-[#111118]" },
   report:     { icon: BarChart2,           color: "text-primary",    bg: "bg-primary/15" },
   manual:     { icon: PenLine,             color: "text-muted-foreground",    bg: "bg-zinc-600/20" },
   onboarding: { icon: GitCommitHorizontal, color: "text-primary",    bg: "bg-primary/15" },
-  meeting:    { icon: User,               color: "text-zinc-400",  bg: "bg-[#111118]" },
+  meeting:    { icon: User,               color: "text-muted-foreground",  bg: "bg-[#111118]" },
 };
 
 // Health score: uses shared calcHealthScore from lib/utils.ts
@@ -71,8 +71,8 @@ const TONE_LABELS: Record<string, string> = {
 
 const ASSET_TYPE_CONFIG: Record<CreativeAsset["type"], { label: string; color: string; icon: React.ElementType }> = {
   reference:  { label: "Referência", color: "text-primary",   icon: ImageIcon },
-  palette:    { label: "Paleta",     color: "text-zinc-400",   icon: Palette },
-  typography: { label: "Tipografia", color: "text-zinc-400", icon: Mic },
+  palette:    { label: "Paleta",     color: "text-muted-foreground",   icon: Palette },
+  typography: { label: "Tipografia", color: "text-muted-foreground", icon: Mic },
   logo:       { label: "Logo",       color: "text-primary",  icon: Star },
 };
 
@@ -405,7 +405,7 @@ export default function ClientDetailPage() {
   }
 
   const health = calcHealth(client);
-  const healthColor = health >= 70 ? "text-primary" : health >= 45 ? "text-zinc-400" : "text-red-500";
+  const healthColor = health >= 70 ? "text-primary" : health >= 45 ? "text-muted-foreground" : "text-red-500";
   const healthBar = health >= 70 ? "bg-primary" : health >= 45 ? "bg-zinc-500" : "bg-red-500";
 
   const daysWithUs = Math.floor((Date.now() - new Date(client.joinDate).getTime()) / 86400000);
@@ -508,7 +508,7 @@ export default function ClientDetailPage() {
           </Link>
           <span className={`badge border ${getStatusColor(client.status)}`}>{getStatusLabel(client.status)}</span>
           {client.serviceType && client.serviceType !== "lone_growth" && (
-            <span className="badge border text-xs text-zinc-400 bg-zinc-800/50 border-zinc-700">
+            <span className="badge border text-xs text-muted-foreground bg-zinc-800/50 border-border">
               {client.serviceType === "assessoria_trafego" ? "Assessoria Trafego" :
                client.serviceType === "assessoria_social" ? "Assessoria Social" :
                client.serviceType === "assessoria_design" ? "Assessoria Design" : "Lone Growth"}
@@ -705,7 +705,7 @@ export default function ClientDetailPage() {
                         </span>
                       )}
                       {client.instagramUser && (
-                        <span className="text-xs bg-[#111118] text-zinc-400 px-2 py-1 rounded-lg font-medium border border-[#1e1e2a]">
+                        <span className="text-xs bg-[#111118] text-muted-foreground px-2 py-1 rounded-lg font-medium border border-[#1e1e2a]">
                           <Instagram size={10} className="inline mr-1" />
                           {client.instagramUser}
                         </span>
@@ -874,7 +874,7 @@ export default function ClientDetailPage() {
                 {client.notes && (
                   <div className="mt-3 pt-3 border-t border-border">
                     <p className="text-xs text-muted-foreground mb-1">Observações</p>
-                    <p className="text-sm text-[#c0c0cc] bg-muted rounded-lg p-3 border-l-2 border-zinc-600">{client.notes}</p>
+                    <p className="text-sm text-[#c0c0cc] bg-muted rounded-lg p-3 border-l-2 border-border">{client.notes}</p>
                   </div>
                 )}
               </div>
@@ -885,7 +885,7 @@ export default function ClientDetailPage() {
                   <div className="space-y-3">
                     {[
                       { role: "Tráfego Pago", name: client.assignedTraffic, color: "text-primary", bg: "bg-primary/15", Icon: TrendingUp },
-                      { role: "Social Media", name: client.assignedSocial, color: "text-zinc-400", bg: "bg-[#111118]", Icon: Instagram },
+                      { role: "Social Media", name: client.assignedSocial, color: "text-muted-foreground", bg: "bg-[#111118]", Icon: Instagram },
                     ].map(({ role: r, name, color, bg, Icon }) => (
                       <div key={r} className="flex items-center gap-3">
                         <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${bg} shrink-0`}>
@@ -1271,7 +1271,7 @@ export default function ClientDetailPage() {
                         <span className={`badge text-xs ${
                           task.status === "done" ? "bg-primary/15 text-primary" :
                           task.status === "in_progress" ? "bg-primary/15 text-primary" :
-                          task.status === "review" ? "bg-[#111118] text-zinc-400" :
+                          task.status === "review" ? "bg-[#111118] text-muted-foreground" :
                           "bg-zinc-600/20 text-muted-foreground"
                         }`}>
                           {task.status === "done" ? "Concluído" : task.status === "in_progress" ? "Em Execução" : task.status === "review" ? "Validação" : "Pendente"}
@@ -1308,7 +1308,7 @@ export default function ClientDetailPage() {
                       <span className={`badge text-xs ${
                         card.status === "published" ? "bg-primary/15 text-primary" :
                         card.status === "scheduled" ? "bg-primary/15 text-primary" :
-                        card.status === "approval" ? "bg-[#111118] text-zinc-400" :
+                        card.status === "approval" ? "bg-[#111118] text-muted-foreground" :
                         card.status === "in_production" ? "bg-primary/15 text-primary" :
                         card.status === "script" ? "bg-primary/15 text-primary" :
                         "bg-zinc-600/20 text-muted-foreground"
@@ -1326,7 +1326,7 @@ export default function ClientDetailPage() {
           {activeTab === "onboarding" && (
             <div className="animate-fade-in space-y-6">
               {obItems.length === 0 ? (
-                <div className="card text-center py-10 text-zinc-500">
+                <div className="card text-center py-10 text-muted-foreground">
                   {client.status === "onboarding"
                     ? "Checklist de onboarding nao iniciado."
                     : "Este cliente ja concluiu o onboarding."}
@@ -1338,11 +1338,11 @@ export default function ClientDetailPage() {
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <h3 className="font-semibold text-foreground text-sm">Setup do Cliente</h3>
-                        <p className="text-[10px] text-zinc-500 mt-0.5">Quartel General — {client.name}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Quartel General — {client.name}</p>
                       </div>
                       <span className="text-lg font-bold text-foreground tabular-nums">{obProgress}%</span>
                     </div>
-                    <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-card rounded-full overflow-hidden">
                       <div className="h-full bg-[#0d4af5] rounded-full transition-all duration-500" style={{ width: `${obProgress}%` }} />
                     </div>
                   </div>
@@ -1364,16 +1364,16 @@ export default function ClientDetailPage() {
                               <span className="text-lg">{block.icon}</span>
                               <div>
                                 <h4 className="text-xs font-semibold text-foreground">{block.title}</h4>
-                                <p className="text-[10px] text-zinc-500">{block.member || "Nao atribuido"}</p>
+                                <p className="text-[10px] text-muted-foreground">{block.member || "Nao atribuido"}</p>
                               </div>
                             </div>
-                            <span className={`text-[10px] font-bold tabular-nums ${deptDone === deptTotal && deptTotal > 0 ? "text-emerald-400" : "text-zinc-400"}`}>
+                            <span className={`text-[10px] font-bold tabular-nums ${deptDone === deptTotal && deptTotal > 0 ? "text-emerald-400" : "text-muted-foreground"}`}>
                               {deptDone}/{deptTotal}
                             </span>
                           </div>
 
                           {/* Mini progress */}
-                          <div className="h-1 bg-zinc-900 rounded-full overflow-hidden">
+                          <div className="h-1 bg-card rounded-full overflow-hidden">
                             <div className={`h-full rounded-full transition-all duration-500 ${deptDone === deptTotal && deptTotal > 0 ? "bg-emerald-500" : "bg-[#0d4af5]"}`}
                               style={{ width: deptTotal > 0 ? `${(deptDone / deptTotal) * 100}%` : "0%" }} />
                           </div>
@@ -1390,11 +1390,11 @@ export default function ClientDetailPage() {
                                   className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
                                     item.completed
                                       ? "bg-[#0d4af5] border-[#0d4af5] text-white"
-                                      : "border-zinc-700 hover:border-[#0d4af5]"
+                                      : "border-border hover:border-[#0d4af5]"
                                   }`}>
                                   {item.completed && <CheckCircle size={10} />}
                                 </button>
-                                <span className={`text-xs flex-1 ${item.completed ? "text-zinc-500 line-through" : "text-foreground"}`}>
+                                <span className={`text-xs flex-1 ${item.completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
                                   {item.label}
                                 </span>
                               </label>
@@ -1722,7 +1722,7 @@ export default function ClientDetailPage() {
                 <p className="text-[10px] text-muted-foreground">Esta acao e irreversivel</p>
               </div>
             </div>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-muted-foreground">
               Todos os dados de <span className="text-white font-medium">{companyName}</span> serao removidos permanentemente. Digite a senha para confirmar.
             </p>
             <input

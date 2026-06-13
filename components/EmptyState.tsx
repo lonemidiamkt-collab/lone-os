@@ -50,8 +50,8 @@ export default function EmptyState({ type = "inbox", title, description, compact
   if (compact) {
     return (
       <div className="flex flex-col items-center justify-center py-6 animate-fade-in">
-        <Icon size={20} strokeWidth={1.2} className="text-zinc-800 mb-2" />
-        <p className="text-xs text-zinc-600">{phrase}</p>
+        <Icon size={20} strokeWidth={1.2} className="text-muted-foreground mb-2" />
+        <p className="text-xs text-muted-foreground">{phrase}</p>
       </div>
     );
   }
@@ -59,12 +59,12 @@ export default function EmptyState({ type = "inbox", title, description, compact
   return (
     <div className="flex flex-col items-center justify-center py-12 animate-fade-in">
       <div className="w-14 h-14 rounded-2xl bg-zinc-900/50 flex items-center justify-center mb-4">
-        <Icon size={24} strokeWidth={1.2} className="text-zinc-700" />
+        <Icon size={24} strokeWidth={1.2} className="text-muted-foreground" />
       </div>
       {title && (
-        <p className="text-sm font-medium text-zinc-500 mb-1">{title}</p>
+        <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
       )}
-      <p className="text-xs text-zinc-600 max-w-[240px] text-center leading-relaxed">{phrase}</p>
+      <p className="text-xs text-muted-foreground max-w-[240px] text-center leading-relaxed">{phrase}</p>
     </div>
   );
 }

@@ -6,10 +6,10 @@ import { useNotificationsStore } from "@/stores/useNotificationsStore";
 
 const TYPE_CONFIG: Record<string, { icon: typeof Bell; color: string; bg: string }> = {
   sla:     { icon: AlertTriangle, color: "text-red-400",   bg: "bg-red-500/[0.08]" },
-  status:  { icon: Activity,      color: "text-[#3b6ff5]", bg: "bg-[#0d4af5]/[0.08]" },
-  content: { icon: FileText,      color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/[0.08]" },
-  checkin: { icon: Clock,         color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/[0.08]" },
-  system:  { icon: Settings,      color: "text-zinc-400",  bg: "bg-white/[0.03]" },
+  status:  { icon: Activity,      color: "text-primary", bg: "bg-primary/[0.08]" },
+  content: { icon: FileText,      color: "text-primary", bg: "bg-primary/[0.08]" },
+  checkin: { icon: Clock,         color: "text-primary", bg: "bg-primary/[0.08]" },
+  system:  { icon: Settings,      color: "text-muted-foreground",  bg: "bg-foreground/[0.03]" },
 };
 
 function timeAgo(iso: string): string {
@@ -35,12 +35,12 @@ export default function NotificationCenter() {
       {/* Bell trigger */}
       <button
         onClick={() => setOpen(!open)}
-        className="relative w-9 h-9 rounded-xl flex items-center justify-center text-zinc-500 hover:text-foreground hover:bg-white/[0.04] transition-all"
+        className="relative w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] transition-all"
         title="Notificacoes"
       >
         <Bell size={17} strokeWidth={1.8} />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-[#0d4af5] text-[9px] font-bold text-white flex items-center justify-center shadow-[0_0_6px_rgba(13,74,245,0.5)] animate-pulse">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-[9px] font-bold text-primary-foreground flex items-center justify-center shadow-[0_0_6px_rgba(13,74,245,0.5)] animate-pulse">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
@@ -62,10 +62,10 @@ export default function NotificationCenter() {
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.04]">
               <div className="flex items-center gap-2.5">
-                <Bell size={15} className="text-[#0d4af5]" />
+                <Bell size={15} className="text-primary" />
                 <h2 className="text-sm font-semibold text-foreground">Notificacoes</h2>
                 {unreadCount > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#0d4af5]/10 text-[#0d4af5] font-bold tabular-nums">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary font-bold tabular-nums">
                     {unreadCount}
                   </span>
                 )}
@@ -73,13 +73,13 @@ export default function NotificationCenter() {
               <div className="flex items-center gap-1">
                 {unreadCount > 0 && (
                   <button onClick={markAllNotificationsRead}
-                    className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg text-zinc-500 hover:text-[#0d4af5] hover:bg-[#0d4af5]/[0.05] transition-all"
+                    className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/[0.05] transition-all"
                     title="Marcar todas como lidas">
                     <CheckCheck size={12} /> Lidas
                   </button>
                 )}
                 <button onClick={() => setOpen(false)}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600 hover:text-foreground hover:bg-white/[0.04] transition-all">
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] transition-all">
                   <X size={14} />
                 </button>
               </div>
@@ -91,8 +91,8 @@ export default function NotificationCenter() {
                 <button key={f} onClick={() => setFilter(f)}
                   className={`text-[11px] px-3 py-1.5 rounded-lg font-medium transition-all ${
                     filter === f
-                      ? "bg-white/[0.06] text-foreground"
-                      : "text-zinc-600 hover:text-zinc-400"
+                      ? "bg-foreground/[0.06] text-foreground"
+                      : "text-muted-foreground hover:text-muted-foreground"
                   }`}>
                   {f === "all" ? "Todas" : `Nao lidas (${unreadCount})`}
                 </button>
@@ -103,13 +103,13 @@ export default function NotificationCenter() {
             <div className="flex-1 overflow-y-auto">
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center px-6">
-                  <div className="w-12 h-12 rounded-2xl bg-white/[0.03] flex items-center justify-center mb-3">
-                    <Bell size={20} strokeWidth={1.2} className="text-zinc-800" />
+                  <div className="w-12 h-12 rounded-2xl bg-foreground/[0.03] flex items-center justify-center mb-3">
+                    <Bell size={20} strokeWidth={1.2} className="text-muted-foreground" />
                   </div>
-                  <p className="text-xs text-zinc-600">
+                  <p className="text-xs text-muted-foreground">
                     {filter === "unread" ? "Nenhuma notificacao nao lida" : "Nenhuma notificacao"}
                   </p>
-                  <p className="text-[10px] text-zinc-700 mt-0.5">Tudo sob controle.</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Tudo sob controle.</p>
                 </div>
               ) : (
                 <div className="py-1">
@@ -120,8 +120,8 @@ export default function NotificationCenter() {
                       <button
                         key={notif.id}
                         onClick={() => { if (!notif.read) markNotificationRead(notif.id); }}
-                        className={`w-full text-left px-5 py-3 transition-all hover:bg-white/[0.02] ${
-                          !notif.read ? "bg-[#0d4af5]/[0.015]" : ""
+                        className={`w-full text-left px-5 py-3 transition-all hover:bg-foreground/[0.02] ${
+                          !notif.read ? "bg-primary/[0.015]" : ""
                         }`}
                       >
                         <div className="flex gap-3">
@@ -130,15 +130,15 @@ export default function NotificationCenter() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
-                              <p className={`text-[12px] font-medium leading-tight truncate ${!notif.read ? "text-foreground" : "text-zinc-500"}`}>
+                              <p className={`text-[12px] font-medium leading-tight truncate ${!notif.read ? "text-foreground" : "text-muted-foreground"}`}>
                                 {notif.title}
                               </p>
                               {!notif.read && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#0d4af5] shrink-0 shadow-[0_0_4px_rgba(13,74,245,0.5)]" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 shadow-[0_0_4px_rgba(13,74,245,0.5)]" />
                               )}
                             </div>
-                            <p className="text-[11px] text-zinc-600 leading-snug line-clamp-2">{notif.body}</p>
-                            <p className="text-[10px] text-zinc-700 mt-1 tabular-nums">{timeAgo(notif.createdAt)}</p>
+                            <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2">{notif.body}</p>
+                            <p className="text-[10px] text-muted-foreground mt-1 tabular-nums">{timeAgo(notif.createdAt)}</p>
                           </div>
                         </div>
                       </button>
@@ -151,7 +151,7 @@ export default function NotificationCenter() {
             {/* Footer */}
             {notifications.length > 0 && (
               <div className="px-5 py-3 border-t border-white/[0.04]">
-                <p className="text-[10px] text-zinc-700 text-center">
+                <p className="text-[10px] text-muted-foreground text-center">
                   {notifications.length} notificacao(es) total
                 </p>
               </div>

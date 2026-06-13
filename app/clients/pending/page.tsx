@@ -278,8 +278,8 @@ export default function PendingClientsPage() {
           {!loading && drafts.length === 0 && (
             <div className="text-center py-10 space-y-2">
               <Check size={28} className="text-emerald-500 mx-auto" />
-              <p className="text-sm text-zinc-400">Nenhum cadastro pendente</p>
-              <p className="text-[10px] text-zinc-600">Todos os cadastros foram revisados</p>
+              <p className="text-sm text-muted-foreground">Nenhum cadastro pendente</p>
+              <p className="text-[10px] text-muted-foreground">Todos os cadastros foram revisados</p>
             </div>
           )}
 
@@ -305,9 +305,9 @@ export default function PendingClientsPage() {
                 }`}
               >
                 <p className="text-sm font-medium text-foreground truncate">{name}</p>
-                {contact && <p className="text-[10px] text-zinc-500 mt-0.5 truncate">Contato: {contact}</p>}
+                {contact && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">Contato: {contact}</p>}
                 <div className="flex items-center gap-2 mt-1.5">
-                  <span className="text-[10px] text-zinc-600">{draft.industry}</span>
+                  <span className="text-[10px] text-muted-foreground">{draft.industry}</span>
                   {draft.draftStatus === "pending_invite" && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
                       <Send size={8} /> Aguardando
@@ -320,7 +320,7 @@ export default function PendingClientsPage() {
                   )}
                   {hoursAgo !== null && (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
-                      slaWarning ? "bg-red-500/10 text-red-400 border border-red-500/20" : "text-zinc-500"
+                      slaWarning ? "bg-red-500/10 text-red-400 border border-red-500/20" : "text-muted-foreground"
                     }`}>
                       <Clock size={8} /> {hoursAgo < 24 ? `${hoursAgo}h` : `${Math.floor(hoursAgo / 24)}d`}
                     </span>
@@ -335,9 +335,9 @@ export default function PendingClientsPage() {
         <div className="flex-1 overflow-auto p-6">
           {!selected ? (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-3">
-              <FileText size={32} className="text-zinc-700" />
+              <FileText size={32} className="text-muted-foreground" />
               <p className="text-muted-foreground text-sm">Selecione um cadastro para revisar</p>
-              <p className="text-[10px] text-zinc-600">Clique em um item da lista ao lado</p>
+              <p className="text-[10px] text-muted-foreground">Clique em um item da lista ao lado</p>
             </div>
           ) : (
             <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
@@ -346,11 +346,11 @@ export default function PendingClientsPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-foreground">{getDisplayName(selected, sub)}</h2>
                   {getContactDisplay(selected, sub) && (
-                    <p className="text-xs text-zinc-500 mt-0.5">Responsavel: {getContactDisplay(selected, sub)}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Responsavel: {getContactDisplay(selected, sub)}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={handleReject} className="btn-ghost text-xs text-zinc-500 hover:text-red-400 flex items-center gap-1 border border-border hover:border-red-500/30">
+                  <button onClick={handleReject} className="btn-ghost text-xs text-muted-foreground hover:text-red-400 flex items-center gap-1 border border-border hover:border-red-500/30">
                     <X size={12} /> Rejeitar
                   </button>
                   <button onClick={handleApprove} disabled={approving}
@@ -364,10 +364,10 @@ export default function PendingClientsPage() {
               {/* ═══ DOCUMENTOS ═══ */}
               <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
                     <FileText size={10} className="text-[#0d4af5]" /> Documentos
                   </p>
-                  <span className="text-[10px] text-zinc-600">Envie arquivos recebidos via WhatsApp</span>
+                  <span className="text-[10px] text-muted-foreground">Envie arquivos recebidos via WhatsApp</span>
                 </div>
                 {uploadError && (
                   <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
@@ -382,7 +382,7 @@ export default function PendingClientsPage() {
                   ]).map(({ label, docType, resolved }) => (
                     <div key={docType} className={`p-3 rounded-lg border bg-[#111113] space-y-2 ${resolved ? "border-[#1e1e2a]" : "border-amber-500/20"}`}>
                       <div className="flex items-center justify-between">
-                        <p className="text-xs text-zinc-400 font-medium">{label}</p>
+                        <p className="text-xs text-muted-foreground font-medium">{label}</p>
                         {resolved
                           ? <Check size={12} className="text-emerald-500" />
                           : <span className="text-[10px] text-amber-400 flex items-center gap-1"><AlertTriangle size={9} /> Pendente</span>
@@ -396,11 +396,11 @@ export default function PendingClientsPage() {
                       {resolved ? (
                         <div className="flex gap-1.5">
                           <button onClick={() => setLightbox(resolved)}
-                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-[#1e1e2a] text-[11px] text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all">
+                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-[#1e1e2a] text-[11px] text-muted-foreground hover:text-white hover:border-[#0d4af5]/30 transition-all">
                             <Eye size={10} /> Visualizar
                           </button>
                           <a href={resolved} download target="_blank" rel="noopener noreferrer"
-                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-[#1e1e2a] text-[11px] text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all">
+                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-[#1e1e2a] text-[11px] text-muted-foreground hover:text-white hover:border-[#0d4af5]/30 transition-all">
                             <Download size={10} /> Baixar
                           </a>
                         </div>
@@ -408,7 +408,7 @@ export default function PendingClientsPage() {
                       {/* Upload recebido via WhatsApp */}
                       <label className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed text-[11px] transition-all cursor-pointer ${
                         resolved
-                          ? "border-zinc-700/40 text-zinc-600 hover:border-zinc-500/50 hover:text-zinc-400"
+                          ? "border-zinc-700/40 text-muted-foreground hover:border-zinc-500/50 hover:text-muted-foreground"
                           : "border-amber-500/30 text-amber-500/70 hover:border-[#0d4af5]/40 hover:text-white bg-amber-500/[0.03]"
                       }`}>
                         {uploadingDoc === docType ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
@@ -423,7 +423,7 @@ export default function PendingClientsPage() {
 
               {/* ═══ DADOS PESSOAIS (editavel) ═══ */}
               <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
-                <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
                   <User size={10} className="text-[#0d4af5]" /> Dados Pessoais (PF)
                 </p>
                 <div className="grid grid-cols-2 gap-3">
@@ -436,7 +436,7 @@ export default function PendingClientsPage() {
 
               {/* ═══ DADOS EMPRESARIAIS (editavel) ═══ */}
               <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
-                <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
                   <Building2 size={10} className="text-[#0d4af5]" /> Dados Empresariais (PJ)
                 </p>
                 <div className="grid grid-cols-2 gap-3">
@@ -456,7 +456,7 @@ export default function PendingClientsPage() {
 
               {/* ═══ SERVICO & EQUIPE (editavel) ═══ */}
               <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
-                <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
                   <Shield size={10} className="text-[#0d4af5]" /> Servico & Equipe
                 </p>
                 <div className="grid grid-cols-2 gap-2">
@@ -468,7 +468,7 @@ export default function PendingClientsPage() {
                   ]).map((opt) => (
                     <button key={opt.value} type="button" onClick={() => setEdit("serviceType", opt.value)}
                       className={`flex items-center gap-2 p-2.5 rounded-lg border text-left transition-all text-xs ${
-                        editForm.serviceType === opt.value ? "border-[#0d4af5]/50 bg-[#0d4af5]/[0.06] text-white" : "border-[#1e1e2a] text-zinc-500 hover:border-zinc-700"
+                        editForm.serviceType === opt.value ? "border-[#0d4af5]/50 bg-[#0d4af5]/[0.06] text-white" : "border-[#1e1e2a] text-muted-foreground hover:border-border"
                       }`}>
                       <span>{opt.icon}</span> {opt.label}
                     </button>
@@ -508,7 +508,7 @@ export default function PendingClientsPage() {
               {/* ═══ ACESSOS (read-only from submission) ═══ */}
               {sub && (
                 <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-3">
-                  <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
                     <Shield size={10} className="text-[#0d4af5]" /> Acessos Informados pelo Cliente
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -518,9 +518,9 @@ export default function PendingClientsPage() {
                       { label: "Google", login: sub.google_login, status: sub.google_status, icon: "🔍" },
                     ].map((acc) => (
                       <div key={acc.label} className="p-3 rounded-lg bg-[#111113] border border-[#1e1e2a] space-y-1">
-                        <p className="text-xs text-zinc-400 font-medium flex items-center gap-1">{acc.icon} {acc.label}</p>
+                        <p className="text-xs text-muted-foreground font-medium flex items-center gap-1">{acc.icon} {acc.label}</p>
                         {acc.login ? (
-                          <p className="text-xs text-zinc-300 truncate">{acc.login}</p>
+                          <p className="text-xs text-foreground truncate">{acc.login}</p>
                         ) : (
                           <p className="text-[10px] text-amber-400">
                             {acc.status === "waiting_client" ? "Cliente nao tem acesso" :
@@ -537,14 +537,14 @@ export default function PendingClientsPage() {
               {/* Observacoes */}
               {sub?.notes && (
                 <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4">
-                  <p className="text-xs text-zinc-500 font-medium mb-2">Observacoes do Cliente</p>
-                  <p className="text-sm text-zinc-300 whitespace-pre-wrap">{sub.notes}</p>
+                  <p className="text-xs text-muted-foreground font-medium mb-2">Observacoes do Cliente</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{sub.notes}</p>
                 </div>
               )}
 
               {/* Review Checklist */}
               <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-3">
-                <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Checklist de Revisao</p>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Checklist de Revisao</p>
                 {([
                   { key: "data" as const, label: "Dados pessoais e empresariais conferidos" },
                   { key: "access" as const, label: "Acessos das plataformas verificados" },
@@ -552,18 +552,18 @@ export default function PendingClientsPage() {
                 ]).map(({ key, label }) => (
                   <label key={key} className="flex items-center gap-3 cursor-pointer group">
                     <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
-                      reviewChecks[key] ? "bg-[#0d4af5] border-[#0d4af5]" : "border-zinc-700 group-hover:border-zinc-500"
+                      reviewChecks[key] ? "bg-[#0d4af5] border-[#0d4af5]" : "border-border group-hover:border-border"
                     }`} onClick={() => setReviewChecks((p) => ({ ...p, [key]: !p[key] }))}>
                       {reviewChecks[key] && <Check size={12} className="text-white" />}
                     </div>
-                    <span className={`text-xs ${reviewChecks[key] ? "text-zinc-300" : "text-zinc-500"}`}>{label}</span>
+                    <span className={`text-xs ${reviewChecks[key] ? "text-foreground" : "text-muted-foreground"}`}>{label}</span>
                   </label>
                 ))}
               </div>
 
               {/* Bottom action bar */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#1e1e2a]">
-                <button onClick={handleReject} className="text-xs text-zinc-500 hover:text-red-400 transition-colors px-3 py-2">
+                <button onClick={handleReject} className="text-xs text-muted-foreground hover:text-red-400 transition-colors px-3 py-2">
                   Rejeitar
                 </button>
                 <button onClick={handleApprove} disabled={approving || !reviewChecks.data || !reviewChecks.access || !reviewChecks.docs}
@@ -582,17 +582,17 @@ export default function PendingClientsPage() {
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
           <div className="max-w-4xl max-h-[90vh] overflow-auto rounded-xl border border-border bg-[#0f0f13] p-3" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3 px-1">
-              <p className="text-xs text-zinc-500">Documento</p>
+              <p className="text-xs text-muted-foreground">Documento</p>
               <div className="flex items-center gap-3">
                 <a href={lightbox} download target="_blank" rel="noopener noreferrer"
                   className="text-xs text-[#0d4af5] hover:text-white transition-colors flex items-center gap-1">
                   <Download size={10} /> Baixar
                 </a>
                 <a href={lightbox} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-zinc-500 hover:text-white transition-colors flex items-center gap-1">
+                  className="text-xs text-muted-foreground hover:text-white transition-colors flex items-center gap-1">
                   <ExternalLink size={10} /> Nova aba
                 </a>
-                <button onClick={() => setLightbox(null)} className="text-zinc-500 hover:text-white transition-colors">
+                <button onClick={() => setLightbox(null)} className="text-muted-foreground hover:text-white transition-colors">
                   <X size={16} />
                 </button>
               </div>

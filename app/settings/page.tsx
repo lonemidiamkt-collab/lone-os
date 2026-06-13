@@ -207,7 +207,7 @@ export default function SettingsPage() {
                     <input
                       value={currentProfile.id}
                       readOnly
-                      className="w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-sm text-zinc-600 font-mono"
+                      className="w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-sm text-muted-foreground font-mono"
                     />
                   </div>
                 </div>
@@ -223,7 +223,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-muted/30">
                     <div className="flex items-center gap-3">
-                      {theme === "dark" ? <Moon size={18} className="text-[#0d4af5]" /> : <Sun size={18} className="text-amber-400" />}
+                      {theme === "dark" ? <Moon size={18} className="text-primary" /> : <Sun size={18} className="text-amber-400" />}
                       <div>
                         <p className="text-sm font-medium text-foreground">Tema</p>
                         <p className="text-xs text-muted-foreground">{theme === "dark" ? "Modo escuro ativo" : "Modo claro ativo"}</p>
@@ -232,10 +232,10 @@ export default function SettingsPage() {
                     <button
                       onClick={toggleTheme}
                       className={`relative w-12 h-6 rounded-full transition-all ${
-                        theme === "dark" ? "bg-[#0d4af5]" : "bg-zinc-600"
+                        theme === "dark" ? "bg-primary" : "bg-muted-foreground/40"
                       }`}
                     >
-                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${
+                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-background shadow transition-all ${
                         theme === "dark" ? "left-[26px]" : "left-0.5"
                       }`} />
                     </button>
@@ -316,7 +316,7 @@ export default function SettingsPage() {
                     <p className="text-xs text-muted-foreground">
                       Logado como <span className="text-foreground font-medium">{currentProfile.name}</span> ({currentProfile.email})
                     </p>
-                    <p className="text-[10px] text-zinc-600 mt-1">
+                    <p className="text-[10px] text-muted-foreground mt-1">
                       Autenticação: client-side (demo mode)
                     </p>
                   </div>
@@ -366,7 +366,7 @@ export default function SettingsPage() {
                     { key: "telefone", label: "Telefone" },
                   ] as { key: keyof typeof agencyForm; label: string }[]).map(({ key, label }) => (
                     <div key={key} className="space-y-1.5">
-                      <label className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</label>
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</label>
                       <input value={agencyForm[key]} onChange={(e) => setAgencyForm((p) => ({ ...p, [key]: e.target.value }))}
                         className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" />
                     </div>
@@ -386,7 +386,7 @@ export default function SettingsPage() {
                     { key: "signatarioEmail", label: "E-mail para Assinatura" },
                   ] as { key: keyof typeof agencyForm; label: string }[]).map(({ key, label }) => (
                     <div key={key} className="space-y-1.5">
-                      <label className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</label>
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</label>
                       <input value={agencyForm[key]} onChange={(e) => setAgencyForm((p) => ({ ...p, [key]: e.target.value }))}
                         className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" />
                     </div>
@@ -408,15 +408,15 @@ export default function SettingsPage() {
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-medium text-foreground">{t.name}</p>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-zinc-500 font-mono">{t.serviceType}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">{t.serviceType}</span>
                           <button onClick={() => setEditingClauses(editingClauses === t.id ? null : t.id)}
-                            className={`text-[10px] px-2 py-0.5 rounded border transition-all ${editingClauses === t.id ? "bg-[#0d4af5]/10 text-[#0d4af5] border-[#0d4af5]/20" : "border-border text-zinc-500 hover:text-white"}`}>
+                            className={`text-[10px] px-2 py-0.5 rounded border transition-all ${editingClauses === t.id ? "bg-[#0d4af5]/10 text-[#0d4af5] border-[#0d4af5]/20" : "border-border text-muted-foreground hover:text-white"}`}>
                             {editingClauses === t.id ? "Fechar" : "Editar Clausulas"}
                           </button>
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] text-zinc-500">Duracao padrao (meses)</label>
+                        <label className="text-[10px] text-muted-foreground">Duracao padrao (meses)</label>
                         <input type="number" value={t.durationMonths} onChange={(e) => {
                           const u = [...templates]; u[idx] = { ...u[idx], durationMonths: Number(e.target.value) || 3 }; setTemplates(u);
                         }} className="w-40 bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50" />
@@ -425,7 +425,7 @@ export default function SettingsPage() {
                       {/* Clause editor */}
                       {editingClauses === t.id && (
                         <div className="space-y-4 pt-3 border-t border-border">
-                          <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Clausulas do Contrato</p>
+                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Clausulas do Contrato</p>
                           {t.clauses.map((clause, ci) => (
                             <div key={clause.id} className="space-y-1.5">
                               <input value={clause.title} onChange={(e) => {
@@ -439,7 +439,7 @@ export default function SettingsPage() {
                             </div>
                           ))}
 
-                          <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider pt-2">Clausulas Condicionais (Opcionais)</p>
+                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider pt-2">Clausulas Condicionais (Opcionais)</p>
                           {t.conditionalClauses.map((cc, cci) => (
                             <div key={cc.id} className={`rounded-lg border p-3 space-y-2 transition-all ${cc.enabled ? "border-[#0d4af5]/30 bg-[#0d4af5]/[0.03]" : "border-border"}`}>
                               <div className="flex items-center justify-between">

@@ -107,7 +107,7 @@ export default function PublicReportCard({ client, onUpdate }: Props) {
       {/* Sem token ainda */}
       {!token && (
         <div className="space-y-2">
-          <p className="text-[11px] text-zinc-500">
+          <p className="text-[11px] text-muted-foreground">
             Nenhum link gerado. Gere um link único para este cliente acessar
             os resultados semanais sem login.
           </p>
@@ -127,21 +127,21 @@ export default function PublicReportCard({ client, onUpdate }: Props) {
         <div className="space-y-2.5">
           {/* URL */}
           <div className="flex items-center gap-2 bg-raised rounded-lg px-3 py-2 border border-border">
-            <span className="text-[11px] text-zinc-400 truncate flex-1 font-mono">{reportUrl}</span>
+            <span className="text-[11px] text-muted-foreground truncate flex-1 font-mono">{reportUrl}</span>
             <button onClick={copyUrl} title="Copiar URL"
-              className="text-zinc-500 hover:text-[#0d4af5] transition-colors flex-shrink-0">
+              className="text-muted-foreground hover:text-[#0d4af5] transition-colors flex-shrink-0">
               {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
             </button>
             {reportUrl && (
               <a href={reportUrl} target="_blank" rel="noopener noreferrer"
-                title="Abrir portal" className="text-zinc-500 hover:text-[#0d4af5] transition-colors flex-shrink-0">
+                title="Abrir portal" className="text-muted-foreground hover:text-[#0d4af5] transition-colors flex-shrink-0">
                 <ExternalLink size={13} />
               </a>
             )}
           </div>
 
           {createdAt && (
-            <p className="text-[10px] text-zinc-600">Link gerado em {createdAt}</p>
+            <p className="text-[10px] text-muted-foreground">Link gerado em {createdAt}</p>
           )}
 
           {/* Ações */}
@@ -153,7 +153,7 @@ export default function PublicReportCard({ client, onUpdate }: Props) {
                 Sim, revogar
               </button>
               <button onClick={() => setState("idle")}
-                className="px-2.5 py-1 rounded-md bg-surface text-zinc-400 text-[11px] hover:bg-muted/20 transition-colors">
+                className="px-2.5 py-1 rounded-md bg-surface text-muted-foreground text-[11px] hover:bg-muted/20 transition-colors">
                 Cancelar
               </button>
             </div>
@@ -165,7 +165,7 @@ export default function PublicReportCard({ client, onUpdate }: Props) {
                 Confirmar
               </button>
               <button onClick={() => setState("idle")}
-                className="px-2.5 py-1 rounded-md bg-surface text-zinc-400 text-[11px] hover:bg-muted/20 transition-colors">
+                className="px-2.5 py-1 rounded-md bg-surface text-muted-foreground text-[11px] hover:bg-muted/20 transition-colors">
                 Cancelar
               </button>
             </div>
@@ -179,7 +179,7 @@ export default function PublicReportCard({ client, onUpdate }: Props) {
                 </a>
               )}
               <button onClick={() => setState("confirm_rotate")} disabled={state === "loading"}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface text-zinc-400 text-[11px] hover:bg-muted/20 border border-border transition-colors disabled:opacity-50">
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface text-muted-foreground text-[11px] hover:bg-muted/20 border border-border transition-colors disabled:opacity-50">
                 <RotateCcw size={11} />
                 Rotacionar token
               </button>
@@ -196,7 +196,7 @@ export default function PublicReportCard({ client, onUpdate }: Props) {
       {/* Token revogado */}
       {revoked && (
         <div className="space-y-2">
-          <p className="text-[11px] text-zinc-500">
+          <p className="text-[11px] text-muted-foreground">
             Portal desativado em {revokedAt}. O link anterior não funciona mais.
           </p>
           <button onClick={() => call("generate-token")} disabled={state === "loading"}

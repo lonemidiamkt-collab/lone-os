@@ -30,15 +30,15 @@ export default function PostCounter({ cards, currentUser }: Props) {
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 text-center">
           <p className="text-lg font-bold text-primary">{todayPosts.length}</p>
-          <p className="text-[10px] text-zinc-500">Hoje</p>
+          <p className="text-[10px] text-muted-foreground">Hoje</p>
         </div>
         <div className="rounded-lg bg-surface border border-border p-3 text-center">
           <p className="text-lg font-bold text-foreground">{thisWeek.length}</p>
-          <p className="text-[10px] text-zinc-500">Esta semana</p>
+          <p className="text-[10px] text-muted-foreground">Esta semana</p>
         </div>
         <div className={`rounded-lg border p-3 text-center ${pendingApproval.length > 0 ? "bg-amber-500/10 border-amber-500/20" : "bg-surface border-border"}`}>
           <p className={`text-lg font-bold ${pendingApproval.length > 0 ? "text-amber-400" : "text-foreground"}`}>{pendingApproval.length}</p>
-          <p className="text-[10px] text-zinc-500">Aprovacao</p>
+          <p className="text-[10px] text-muted-foreground">Aprovacao</p>
         </div>
       </div>
       {todayPosts.length > 0 && (
@@ -47,7 +47,7 @@ export default function PostCounter({ cards, currentUser }: Props) {
             <div key={c.id} className="flex items-center gap-2 text-xs py-1">
               <Clock size={10} className="text-primary shrink-0" />
               <span className="text-foreground truncate">{c.title}</span>
-              <span className="text-zinc-500 ml-auto shrink-0">{c.clientName}</span>
+              <span className="text-muted-foreground ml-auto shrink-0">{c.clientName}</span>
             </div>
           ))}
         </div>

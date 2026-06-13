@@ -59,7 +59,7 @@ function BoolBadge({ label, value }: { label: string; value: boolean | null | un
   if (value === null || value === undefined) return null;
   return (
     <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full mr-2 mb-1 ${
-      value ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-500/10 text-zinc-400"
+      value ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-500/10 text-muted-foreground"
     }`}>
       {value ? "✓" : "✗"} {label}
     </span>
@@ -301,7 +301,7 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
       <p className="text-xs font-medium text-muted-foreground mb-1">{text}</p>
     );
     const hint = (text: string) => (
-      <p className="text-[11px] text-zinc-600 mt-0.5">{text}</p>
+      <p className="text-[11px] text-muted-foreground mt-0.5">{text}</p>
     );
 
     return (
@@ -402,7 +402,7 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
         {/* ── Interno ────────────────────────────────────────── */}
         <div className="card space-y-4">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Interno <span className="text-zinc-600 normal-case font-normal">(só staff, nunca exibido ao cliente)</span>
+            Interno <span className="text-muted-foreground normal-case font-normal">(só staff, nunca exibido ao cliente)</span>
           </h3>
           <div>{label("Observações internas")}{ta("observacoes_internas", 3, "Contexto sensível, histórico de conflitos, acordos informais…")}</div>
         </div>

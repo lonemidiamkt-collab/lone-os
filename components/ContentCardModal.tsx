@@ -57,7 +57,7 @@ function DrivePreviewFallback({ clientId, label }: { clientId: string; label: st
   const clients = useClientsStore((s) => s.clients);
   const client = clients.find((c) => c.id === clientId);
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-zinc-500 px-4">
+    <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground px-4">
       <ImageIcon size={32} />
       <p className="text-[10px] text-center">{label}</p>
       {client?.driveLink && (
@@ -474,7 +474,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
             {/* Activity feed scrollável */}
             <div className="flex-1 overflow-auto px-5 py-4 space-y-3">
               {comments.length === 0 ? (
-                <p className="text-xs text-zinc-600 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   Inicie a discussão sobre este conteúdo. Comentários ficam vinculados ao card e aparecem na timeline do cliente.
                 </p>
               ) : (
@@ -488,9 +488,9 @@ export default function ContentCardModal({ card, onClose }: Props) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-medium text-foreground">{cmt.author}</span>
-                        <span className="text-[10px] text-zinc-600">{timeAgo(cmt.createdAt)}</span>
+                        <span className="text-[10px] text-muted-foreground">{timeAgo(cmt.createdAt)}</span>
                       </div>
-                      <p className="text-xs text-zinc-300 mt-1 leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-wrap">{cmt.text}</p>
+                      <p className="text-xs text-foreground mt-1 leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-wrap">{cmt.text}</p>
                     </div>
                   </div>
                 ))
@@ -549,13 +549,13 @@ export default function ContentCardModal({ card, onClose }: Props) {
                     }
                   }}
                   placeholder="Descreva o motivo da alteração..."
-                  className="w-full bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-600 focus:border-red-500/40 outline-none"
+                  className="w-full bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-red-500/40 outline-none"
                   autoFocus
                 />
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => { setShowRejectInput(false); setRejectReason(""); }}
-                    className="px-3 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-foreground transition-all"
+                    className="px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground transition-all"
                   >
                     Cancelar
                   </button>
@@ -584,7 +584,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[#0d4af5]">Abrir Drive — {cl.name}</p>
-                  <p className="text-[10px] text-zinc-500">Acesse logos, fotos e arquivos em alta resolucao</p>
+                  <p className="text-[10px] text-muted-foreground">Acesse logos, fotos e arquivos em alta resolucao</p>
                 </div>
               </a>
             </div>

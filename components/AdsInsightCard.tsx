@@ -91,7 +91,7 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
             </div>
             <div>
               <h3 className="text-sm font-semibold text-foreground">Consultor IA</h3>
-              <p className="text-[10px] text-zinc-500">{campaigns.length} campanha(s) para analisar</p>
+              <p className="text-[10px] text-muted-foreground">{campaigns.length} campanha(s) para analisar</p>
             </div>
           </div>
           <button
@@ -115,7 +115,7 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
           </div>
           <div>
             <h3 className="text-sm font-semibold text-foreground">Analisando campanhas...</h3>
-            <p className="text-[10px] text-zinc-500">O Lone Ads Specialist esta processando os dados de {clientName}</p>
+            <p className="text-[10px] text-muted-foreground">O Lone Ads Specialist esta processando os dados de {clientName}</p>
           </div>
         </div>
       </div>
@@ -137,7 +137,7 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
             </div>
           </div>
           <button onClick={analyze}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-foreground border border-white/[0.06] hover:border-white/[0.1] transition-all">
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground border border-white/[0.06] hover:border-white/[0.1] transition-all">
             <RefreshCw size={11} /> Tentar novamente
           </button>
         </div>
@@ -164,29 +164,29 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
                 {statusCfg.label} · {result.score}/100
               </span>
             </h3>
-            <p className="text-[10px] text-zinc-500">{clientName} · {campaigns.length} campanha(s)</p>
+            <p className="text-[10px] text-muted-foreground">{clientName} · {campaigns.length} campanha(s)</p>
           </div>
         </div>
         <button onClick={analyze} disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-foreground border border-white/[0.06] hover:border-[#0d4af5]/30 transition-all disabled:opacity-30">
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground border border-white/[0.06] hover:border-[#0d4af5]/30 transition-all disabled:opacity-30">
           <RefreshCw size={11} className={loading ? "animate-spin" : ""} /> Nova Analise
         </button>
       </div>
 
       {/* Summary */}
-      <p className="text-xs text-zinc-400 leading-relaxed">{result.summary}</p>
+      <p className="text-xs text-muted-foreground leading-relaxed">{result.summary}</p>
 
       {/* Insights */}
       <div className="space-y-2">
         {result.insights.map((insight, i) => {
           const Icon = INSIGHT_ICONS[insight.type] ?? Sparkles;
-          const color = INSIGHT_COLORS[insight.type] ?? "text-zinc-400";
+          const color = INSIGHT_COLORS[insight.type] ?? "text-muted-foreground";
           return (
             <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
               <Icon size={14} className={`${color} mt-0.5 shrink-0`} />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-foreground">{insight.title}</p>
-                <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">{insight.body}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{insight.body}</p>
                 {insight.action && (
                   <p className="text-[10px] text-[#0d4af5] mt-1 font-medium flex items-center gap-1">
                     <TrendingUp size={9} /> {insight.action}
@@ -200,7 +200,7 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
 
       {/* Footer */}
       {result.tokens && (
-        <p className="text-[9px] text-zinc-700 text-right">
+        <p className="text-[9px] text-muted-foreground text-right">
           {result.tokens} tokens · gpt-4o-mini
         </p>
       )}

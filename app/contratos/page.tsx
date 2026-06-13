@@ -201,7 +201,7 @@ export default function ContratosGlobalPage() {
         {/* Filters */}
         <div className="rounded-xl border border-border bg-card p-4 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -210,20 +210,20 @@ export default function ContratosGlobalPage() {
             />
           </div>
           <div className="flex items-center gap-1.5 text-xs">
-            <Filter size={12} className="text-zinc-500" />
-            <span className="text-zinc-500">Status:</span>
+            <Filter size={12} className="text-muted-foreground" />
+            <span className="text-muted-foreground">Status:</span>
             {(["all", "pending", "signed", "active", "expired"] as StatusFilter[]).map((s) => (
               <button key={s} onClick={() => setStatusFilter(s)}
-                className={`px-2.5 py-1 rounded border text-xs transition-all ${statusFilter === s ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-[#0d4af5]" : "border-border text-zinc-500 hover:text-foreground"}`}>
+                className={`px-2.5 py-1 rounded border text-xs transition-all ${statusFilter === s ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-[#0d4af5]" : "border-border text-muted-foreground hover:text-foreground"}`}>
                 {s === "all" ? "Tudo" : s === "pending" ? "Pendentes" : s === "signed" ? "Assinados" : s === "active" ? "Ativos" : "Vencidos"}
               </button>
             ))}
           </div>
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-zinc-500">Serviço:</span>
+            <span className="text-muted-foreground">Serviço:</span>
             {(["all", "assessoria_trafego", "assessoria_social", "lone_growth", "trafego_social_site"] as ServiceFilter[]).map((s) => (
               <button key={s} onClick={() => setServiceFilter(s)}
-                className={`px-2.5 py-1 rounded border text-xs transition-all ${serviceFilter === s ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-[#0d4af5]" : "border-border text-zinc-500 hover:text-foreground"}`}>
+                className={`px-2.5 py-1 rounded border text-xs transition-all ${serviceFilter === s ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-[#0d4af5]" : "border-border text-muted-foreground hover:text-foreground"}`}>
                 {s === "all" ? "Tudo" : s === "trafego_social_site" ? "Site" : SERVICE_LABELS[s]?.split(" ")[0] ?? s}
               </button>
             ))}
@@ -243,7 +243,7 @@ export default function ContratosGlobalPage() {
           <div className="flex justify-center py-16"><Loader2 size={20} className="text-[#0d4af5] animate-spin" /></div>
         ) : filteredContracts.length === 0 ? (
           <div className="text-center py-16 space-y-2">
-            <FileText size={32} className="text-zinc-700 mx-auto" />
+            <FileText size={32} className="text-muted-foreground mx-auto" />
             <p className="text-sm text-muted-foreground">Nenhum contrato encontrado com esses filtros.</p>
           </div>
         ) : (
@@ -251,7 +251,7 @@ export default function ContratosGlobalPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/30">
-                  <tr className="text-left text-[10px] uppercase tracking-wider text-zinc-500">
+                  <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                     <th className="px-4 py-3 font-medium">Cliente</th>
                     <th className="px-4 py-3 font-medium">Serviço</th>
                     <th className="px-4 py-3 font-medium">Valor/mês</th>
@@ -272,15 +272,15 @@ export default function ContratosGlobalPage() {
                             {clientName}
                             <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                           </Link>
-                          <p className="text-[10px] text-zinc-500 mt-0.5">V{c.version} · {c.clients?.cnpj || "sem CNPJ"}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">V{c.version} · {c.clients?.cnpj || "sem CNPJ"}</p>
                         </td>
-                        <td className="px-4 py-3 text-xs text-zinc-400">{SERVICE_LABELS[c.service_type] ?? c.service_type}</td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">{SERVICE_LABELS[c.service_type] ?? c.service_type}</td>
                         <td className="px-4 py-3 text-[#0d4af5] font-semibold text-xs">
-                          {Number(c.monthly_value) > 0 ? formatCurrency(Number(c.monthly_value)) : <span className="text-zinc-600 font-normal">— ver PDF</span>}
+                          {Number(c.monthly_value) > 0 ? formatCurrency(Number(c.monthly_value)) : <span className="text-muted-foreground font-normal">— ver PDF</span>}
                         </td>
-                        <td className="px-4 py-3 text-[10px] text-zinc-400">
+                        <td className="px-4 py-3 text-[10px] text-muted-foreground">
                           <div>{formatDate(c.start_date)} → {formatDate(c.end_date)}</div>
-                          <div className="text-zinc-600">{c.duration_months}m · pgto dia {c.payment_day ?? 10}</div>
+                          <div className="text-muted-foreground">{c.duration_months}m · pgto dia {c.payment_day ?? 10}</div>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border ${badge.cls}`}>
@@ -288,14 +288,14 @@ export default function ContratosGlobalPage() {
                             {badge.label}
                           </span>
                           {c.signed_at && (
-                            <p className="text-[10px] text-zinc-600 mt-0.5">em {formatDate(c.signed_at)}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">em {formatDate(c.signed_at)}</p>
                           )}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5 justify-end">
                             {c.pdf_url && (
                               <a href={c.pdf_url} target="_blank" rel="noopener noreferrer"
-                                className="p-1.5 rounded hover:bg-muted text-zinc-500 hover:text-foreground" title="Ver PDF preliminar">
+                                className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Ver PDF preliminar">
                                 <Download size={13} />
                               </a>
                             )}
@@ -311,7 +311,7 @@ export default function ContratosGlobalPage() {
                                 {uploadingId === c.id ? "Enviando" : "Upload"}
                               </button>
                             )}
-                            <Link href={`/clients/${c.client_id}?tab=contratos`} className="p-1.5 rounded hover:bg-muted text-zinc-500 hover:text-foreground" title="Abrir aba de contratos do cliente">
+                            <Link href={`/clients/${c.client_id}?tab=contratos`} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Abrir aba de contratos do cliente">
                               <ExternalLink size={12} />
                             </Link>
                           </div>
@@ -335,7 +335,7 @@ export default function ContratosGlobalPage() {
 function SummaryCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">{label}</p>
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</p>
       <p className={`${color} font-bold mt-1 text-2xl`}>{value}</p>
     </div>
   );

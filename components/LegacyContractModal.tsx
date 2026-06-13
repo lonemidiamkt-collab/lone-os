@@ -132,7 +132,7 @@ export default function LegacyContractModal({ clientId, clientName, open, onClos
         {/* Body */}
         <div className="p-5 space-y-4">
           <div className="rounded-lg bg-[#0d4af5]/5 border border-[#0d4af5]/20 p-3">
-            <p className="text-[11px] text-zinc-300 leading-relaxed">
+            <p className="text-[11px] text-foreground leading-relaxed">
               Use isso pra contratos <strong>já assinados fora do sistema</strong> (papel, D4Sign feito antes, herdado de outra agência).
               O sistema não vai gerar PDF — você anexa o que já tem. Vai entrar como contrato <strong>ativo</strong> imediatamente.
             </p>
@@ -205,7 +205,7 @@ export default function LegacyContractModal({ clientId, clientName, open, onClos
               type="file"
               accept="application/pdf,.pdf"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="w-full text-xs text-zinc-400 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border file:border-border file:bg-muted file:text-foreground file:text-xs file:cursor-pointer hover:file:bg-muted/80"
+              className="w-full text-xs text-muted-foreground file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border file:border-border file:bg-muted file:text-foreground file:text-xs file:cursor-pointer hover:file:bg-muted/80"
             />
             {file && <p className="text-[11px] text-emerald-400 mt-1">{file.name} ({(file.size / 1024).toFixed(0)} KB)</p>}
           </Field>
@@ -247,7 +247,7 @@ export default function LegacyContractModal({ clientId, clientName, open, onClos
 function Field({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
-      <label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-zinc-500 font-medium mb-1.5">
+      <label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5">
         {icon}
         {label}
       </label>

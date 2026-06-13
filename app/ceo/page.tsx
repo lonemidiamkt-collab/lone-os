@@ -303,9 +303,9 @@ export default function CEOPage() {
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="max-w-xs w-full text-center space-y-8">
             <div>
-              <Lock size={20} className="text-zinc-600 mx-auto mb-3" />
+              <Lock size={20} className="text-muted-foreground mx-auto mb-3" />
               <h2 className="text-lg font-semibold text-foreground">Cofre Executivo</h2>
-              <p className="text-xs text-zinc-500 mt-1">PIN de 4 digitos</p>
+              <p className="text-xs text-muted-foreground mt-1">PIN de 4 digitos</p>
             </div>
 
             {/* 4 real OTP inputs */}
@@ -327,7 +327,7 @@ export default function CEOPage() {
                       ? "border border-red-500/60"
                       : pinDigits[i]
                       ? "border border-[#0d4af5]/50"
-                      : "border border-zinc-700 focus:border-[#0d4af5] focus:ring-1 focus:ring-[#0d4af5]/30"
+                      : "border border-border focus:border-[#0d4af5] focus:ring-1 focus:ring-[#0d4af5]/30"
                   }`}
                 />
               ))}
@@ -337,7 +337,7 @@ export default function CEOPage() {
               <p className="text-xs text-red-400">PIN incorreto</p>
             )}
 
-            <div className="flex items-center justify-center gap-2 text-zinc-700 text-[10px]">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground text-[10px]">
               <Shield size={10} />
               <span>Acesso monitorado</span>
             </div>
@@ -867,10 +867,10 @@ export default function CEOPage() {
                         <div className="relative shrink-0">
                           <div className="w-16 h-16 relative">
                             <svg className="w-16 h-16 -rotate-90" viewBox="0 0 100 100">
-                              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--muted)" strokeWidth="6" />
+                              <circle cx="50" cy="50" r="42" fill="none" stroke="oklch(var(--muted))" strokeWidth="6" />
                               <circle
                                 cx="50" cy="50" r="42" fill="none"
-                                stroke={levelConfig.bg === "bg-[#0d4af5]" ? "#0d4af5" : levelConfig.bg === "bg-primary" ? "var(--primary)" : levelConfig.bg === "bg-[#3b6ff5]" ? "#3b6ff5" : "#ef4444"}
+                                stroke={levelConfig.bg === "bg-[#0d4af5]" ? "#0d4af5" : levelConfig.bg === "bg-primary" ? "oklch(var(--primary))" : levelConfig.bg === "bg-[#3b6ff5]" ? "#3b6ff5" : "#ef4444"}
                                 strokeWidth="6"
                                 strokeLinecap="round"
                                 strokeDasharray={`${member.overallScore * 2.64} 264`}
@@ -1146,7 +1146,7 @@ export default function CEOPage() {
                                   }`}
                                 >
                                   <MedievalAvatar type={opt.type} size={36} />
-                                  <span className="text-[9px] text-zinc-500">{opt.label}</span>
+                                  <span className="text-[9px] text-muted-foreground">{opt.label}</span>
                                 </button>
                               ))}
                             </div>
@@ -1739,7 +1739,7 @@ function TimesheetTab({
               <div key={format} className="p-3 rounded-xl border border-border bg-muted/30">
                 <p className="text-xs text-muted-foreground">{format}</p>
                 <p className="text-lg font-bold text-foreground mt-1">{formatTimeSpent(avgMs)}</p>
-                <p className="text-[10px] text-zinc-600">média · {count} {count === 1 ? "card" : "cards"}</p>
+                <p className="text-[10px] text-muted-foreground">média · {count} {count === 1 ? "card" : "cards"}</p>
               </div>
             ))}
           </div>

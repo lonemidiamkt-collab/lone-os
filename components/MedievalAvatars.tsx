@@ -76,7 +76,7 @@ export default function MedievalAvatar({ type, size = 40, className, glow = fals
         />
       ) : (
         // Fallback: sober emoji on dark bg
-        <div className="w-full h-full flex items-center justify-center bg-zinc-900">
+        <div className="w-full h-full flex items-center justify-center bg-card">
           <span style={{ fontSize: size * 0.4 }}>
             {AVATAR_FALLBACK[type]?.emoji ?? "LM"}
           </span>

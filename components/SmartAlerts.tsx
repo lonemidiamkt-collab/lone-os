@@ -144,7 +144,7 @@ export default function SmartAlerts() {
                 alert.type === "danger" ? "border-l-2 border-red-500" : alert.type === "warning" ? "border-l-2 border-amber-500" : ""
               }`}>
               <Icon size={13} className={`mt-0.5 shrink-0 ${
-                alert.type === "danger" ? "text-red-400" : alert.type === "warning" ? "text-amber-400" : "text-zinc-400"
+                alert.type === "danger" ? "text-red-400" : alert.type === "warning" ? "text-amber-400" : "text-muted-foreground"
               }`} />
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-foreground">{alert.title}</p>
@@ -156,7 +156,7 @@ export default function SmartAlerts() {
       </div>
 
       {alerts.length > 6 && (
-        <p className="text-[10px] text-zinc-600 text-center">+{alerts.length - 6} alertas</p>
+        <p className="text-[10px] text-muted-foreground text-center">+{alerts.length - 6} alertas</p>
       )}
     </div>
   );

@@ -32,7 +32,7 @@ export default function BudgetAlert({ clients }: Props) {
       </p>
       {alerts.map(({ client: c }) => (
         <Link key={c.id} href={`/clients/${c.id}`} className="flex items-center justify-between py-1 hover:bg-amber-500/5 rounded px-1 transition-colors">
-          <p className="text-xs text-zinc-300">{c.nomeFantasia || c.name}</p>
+          <p className="text-xs text-foreground">{c.nomeFantasia || c.name}</p>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-amber-400">
               R$ {c.monthlyBudget.toLocaleString("pt-BR")} — dia {today}/{daysInMonth}

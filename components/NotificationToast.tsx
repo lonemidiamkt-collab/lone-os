@@ -10,7 +10,7 @@ const TYPE_CONFIG: Record<string, { icon: typeof Bell; color: string; accent: st
   status:  { icon: Activity,      color: "text-[#3b6ff5]",  accent: "border-l-[#0d4af5]" },
   content: { icon: FileText,      color: "text-[#0d4af5]",  accent: "border-l-[#0d4af5]" },
   checkin: { icon: Bell,          color: "text-[#0d4af5]",  accent: "border-l-[#0d4af5]" },
-  system:  { icon: Settings,      color: "text-zinc-400",   accent: "border-l-zinc-600" },
+  system:  { icon: Settings,      color: "text-muted-foreground",   accent: "border-l-zinc-600" },
 };
 
 const CRITICAL_TYPES = new Set(["sla"]);
@@ -186,16 +186,16 @@ export default function NotificationToast() {
               <p className="text-[12px] font-semibold text-foreground leading-tight">
                 {toast.title}
                 {toast.count > 1 && (
-                  <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] text-zinc-400 font-medium">
+                  <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] text-muted-foreground font-medium">
                     {toast.count}x
                   </span>
                 )}
               </p>
-              <p className="text-[11px] text-zinc-500 mt-0.5 leading-snug line-clamp-2">{toast.body}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">{toast.body}</p>
             </div>
             <button
               onClick={() => dismiss(toast.id)}
-              className="text-zinc-700 hover:text-foreground transition-colors p-0.5 shrink-0"
+              className="text-muted-foreground hover:text-foreground transition-colors p-0.5 shrink-0"
             >
               <X size={12} />
             </button>

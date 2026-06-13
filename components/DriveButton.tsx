@@ -38,13 +38,13 @@ export default function DriveButton({ driveLink, clientName, size = "sm", classN
             "transition-all",
             isValid
               ? "text-[#0d4af5] drop-shadow-[0_0_4px_rgba(10,52,245,0.6)] group-hover:drop-shadow-[0_0_8px_rgba(10,52,245,0.8)]"
-              : "text-zinc-600"
+              : "text-muted-foreground"
           )} />
         </div>
         <div className="text-left">
           <p className={cn(
             "text-[11px] font-medium leading-tight",
-            isValid ? "text-foreground" : "text-zinc-600"
+            isValid ? "text-foreground" : "text-muted-foreground"
           )}>
             Pasta Drive
           </p>
@@ -74,7 +74,7 @@ export default function DriveButton({ driveLink, clientName, size = "sm", classN
         "transition-all",
         isValid
           ? "text-[#0d4af5] drop-shadow-[0_0_4px_rgba(10,52,245,0.6)] group-hover:drop-shadow-[0_0_8px_rgba(10,52,245,0.8)]"
-          : "text-zinc-600"
+          : "text-muted-foreground"
       )} />
     </button>
   );

@@ -24,7 +24,7 @@ interface Props {
 const CATEGORIES = [
   { value: "feature",      label: "Feature",        color: "bg-[#0d4af5]/10 text-[#3b6ff5] border-[#0d4af5]/30" },
   { value: "fix",          label: "Fix",            color: "bg-amber-500/10 text-amber-400 border-amber-500/30" },
-  { value: "announcement", label: "Anúncio",        color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/30" },
+  { value: "announcement", label: "Anúncio",        color: "bg-zinc-500/10 text-muted-foreground border-zinc-500/30" },
   { value: "breaking",     label: "Breaking change", color: "bg-red-500/10 text-red-400 border-red-500/30" },
 ];
 

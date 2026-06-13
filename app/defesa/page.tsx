@@ -163,7 +163,7 @@ export default function DefesaAtivaPage() {
         <div className="flex items-center gap-2 flex-wrap">
           {(["unack", "ack", "all"] as FilterStatus[]).map((f) => (
             <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-lg border text-xs transition-colors ${filter === f ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-[#0d4af5]" : "border-border text-zinc-400 hover:text-foreground"}`}>
+              className={`px-3 py-1.5 rounded-lg border text-xs transition-colors ${filter === f ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-[#0d4af5]" : "border-border text-muted-foreground hover:text-foreground"}`}>
               {f === "unack" ? "Ativos" : f === "ack" ? "Resolvidos" : "Todos"}
             </button>
           ))}
@@ -181,7 +181,7 @@ export default function DefesaAtivaPage() {
           <div className="text-center py-16 space-y-2">
             <CheckCircle size={32} className="text-emerald-500/60 mx-auto" />
             <p className="text-sm text-foreground">Nenhum alerta {filter === "unack" ? "ativo" : filter === "ack" ? "resolvido" : ""}.</p>
-            <p className="text-xs text-zinc-500">Todas as contas estão dentro do esperado.</p>
+            <p className="text-xs text-muted-foreground">Todas as contas estão dentro do esperado.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -201,7 +201,7 @@ export default function DefesaAtivaPage() {
                         <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border ${cfg.border} ${cfg.color}`}>
                           {cfg.label}
                         </span>
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-500/10 text-muted-foreground border border-zinc-500/20">
                           {metricLabel(a.metric)}
                         </span>
                         <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded ${trendDown ? "bg-red-500/10 text-red-400" : "bg-orange-500/10 text-orange-400"} border ${trendDown ? "border-red-500/20" : "border-orange-500/20"}`}>
@@ -210,7 +210,7 @@ export default function DefesaAtivaPage() {
                         </span>
                       </div>
                       <p className="text-sm text-foreground mt-2">{a.description}</p>
-                      <div className="flex items-center gap-4 mt-2 text-[11px] text-zinc-500 flex-wrap">
+                      <div className="flex items-center gap-4 mt-2 text-[11px] text-muted-foreground flex-wrap">
                         <span>Atual: <strong className="text-foreground">{formatValue(a.metric, a.current_value)}</strong></span>
                         <span>Baseline 7d: <strong className="text-foreground">{formatValue(a.metric, a.baseline_value)}</strong></span>
                         <span className="flex items-center gap-1"><Clock size={10} /> {formatDate(a.detected_at)}</span>
@@ -223,7 +223,7 @@ export default function DefesaAtivaPage() {
                     </div>
                     <div className="flex flex-col items-end gap-2 shrink-0">
                       <Link href={`/clients/${a.client_id}`}
-                        className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-foreground">
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
                         Ver cliente <ChevronRight size={12} />
                       </Link>
                       {!a.acknowledged_at && (
@@ -248,7 +248,7 @@ export default function DefesaAtivaPage() {
 function SumCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">{label}</p>
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</p>
       <p className={`${color} font-bold mt-1 text-2xl`}>{value}</p>
     </div>
   );

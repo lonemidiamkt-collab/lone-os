@@ -35,7 +35,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             </div>
             <div>
               <h3 className="text-sm font-semibold text-white">Algo deu errado</h3>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {this.state.error?.message ?? "Erro inesperado. Tente recarregar."}
               </p>
             </div>

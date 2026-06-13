@@ -79,14 +79,14 @@ function getSlaBadge(status: string, columnEnteredAt?: Record<string, string>, s
 }
 
 const SLA_STYLES = {
-  warning: "text-zinc-400 bg-[#111118] border-[#1e1e2a]",
+  warning: "text-muted-foreground bg-[#111118] border-[#1e1e2a]",
   critical: "text-red-500 bg-red-500/10 border-red-500/20",
 };
 
 const DEADLINE_BADGE: Record<string, { label: string; color: string }> = {
   overdue:  { label: "Vencido",  color: "bg-red-500/10 text-red-500 border-red-500/20" },
-  today:    { label: "Hoje",     color: "bg-[#111118] text-zinc-400 border-[#1e1e2a]" },
-  tomorrow: { label: "Amanhã",   color: "bg-[#111118] text-zinc-400 border-[#1e1e2a]" },
+  today:    { label: "Hoje",     color: "bg-[#111118] text-muted-foreground border-[#1e1e2a]" },
+  tomorrow: { label: "Amanhã",   color: "bg-[#111118] text-muted-foreground border-[#1e1e2a]" },
   soon:     { label: "Em breve", color: "bg-primary/15 text-primary border-primary/20" },
 };
 
@@ -94,14 +94,14 @@ const DEADLINE_BADGE: Record<string, { label: string; color: string }> = {
 
 const HEALTH_CONFIG: Record<string, { label: string; led: string; color: string; bg: string; border: string }> = {
   good:       { label: "On Fire",    led: "led led-healthy",  color: "text-primary",       bg: "bg-primary/5",    border: "border-primary/20" },
-  average:    { label: "Atenção",    led: "led led-attention", color: "text-zinc-400",      bg: "bg-[#0a0a10]",     border: "border-[#1a1a22]" },
+  average:    { label: "Atenção",    led: "led led-attention", color: "text-muted-foreground",      bg: "bg-[#0a0a10]",     border: "border-[#1a1a22]" },
   at_risk:    { label: "Crítico",    led: "led led-critical",  color: "text-red-500",       bg: "bg-red-500/5",    border: "border-red-500/20" },
   onboarding: { label: "Onboarding", led: "led led-healthy",  color: "text-primary",       bg: "bg-primary/5",    border: "border-primary/20" },
 };
 
 const MOOD_CONFIG = {
   happy:   { emoji: "😄", label: "Satisfeito", color: "text-primary" },
-  neutral: { emoji: "😐", label: "Neutro",     color: "text-zinc-400" },
+  neutral: { emoji: "😐", label: "Neutro",     color: "text-muted-foreground" },
   angry:   { emoji: "😠", label: "Irritado",   color: "text-red-500" },
 };
 
@@ -432,12 +432,12 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
           ) : dueSoon.length > 0 ? (
             <div>
               <p className="text-xl font-bold text-primary tracking-tight">{dueSoon.length}</p>
-              <p className="text-[10px] text-zinc-500">até amanhã</p>
+              <p className="text-[10px] text-muted-foreground">até amanhã</p>
             </div>
           ) : (
             <div>
-              <p className="text-xl font-bold text-zinc-600 tracking-tight">0</p>
-              <p className="text-[10px] text-zinc-600">tudo em dia</p>
+              <p className="text-xl font-bold text-muted-foreground tracking-tight">0</p>
+              <p className="text-[10px] text-muted-foreground">tudo em dia</p>
             </div>
           )}
         </div>
@@ -447,13 +447,13 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
           slaAlerts.length > 0 ? "bg-[#0a0a10] border-[#1e1e2a]" : "bg-card border-border"
         }`}>
           <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle size={13} className={slaAlerts.length > 0 ? "text-zinc-400" : "text-zinc-600"} />
+            <AlertTriangle size={13} className={slaAlerts.length > 0 ? "text-muted-foreground" : "text-muted-foreground"} />
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Gargalos</span>
           </div>
-          <p className={`text-xl font-bold tracking-tight ${slaAlerts.length > 0 ? "text-[#c0c0cc]" : "text-zinc-600"}`}>
+          <p className={`text-xl font-bold tracking-tight ${slaAlerts.length > 0 ? "text-[#c0c0cc]" : "text-muted-foreground"}`}>
             {slaAlerts.length}
           </p>
-          <p className="text-[10px] text-zinc-500">card(s) parado(s) 24h+</p>
+          <p className="text-[10px] text-muted-foreground">card(s) parado(s) 24h+</p>
         </div>
 
         {/* Check-in needed */}
@@ -461,13 +461,13 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
           noCheckin.length > 0 ? "bg-primary/5 border-primary/20" : "bg-card border-border"
         }`}>
           <div className="flex items-center gap-2 mb-2">
-            <Smile size={13} className={noCheckin.length > 0 ? "text-primary" : "text-zinc-600"} />
+            <Smile size={13} className={noCheckin.length > 0 ? "text-primary" : "text-muted-foreground"} />
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Check-in</span>
           </div>
-          <p className={`text-xl font-bold tracking-tight ${noCheckin.length > 0 ? "text-primary" : "text-zinc-600"}`}>
+          <p className={`text-xl font-bold tracking-tight ${noCheckin.length > 0 ? "text-primary" : "text-muted-foreground"}`}>
             {noCheckin.length}
           </p>
-          <p className="text-[10px] text-zinc-500">sem check-in 3+ dias</p>
+          <p className="text-[10px] text-muted-foreground">sem check-in 3+ dias</p>
         </div>
       </div>
 
@@ -482,8 +482,8 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
                 <div key={card.id} className="flex items-center gap-3 text-xs">
                   <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOverdue ? "bg-red-500" : "bg-primary"}`} />
                   <span className="text-foreground truncate flex-1">{card.title}</span>
-                  <span className="text-zinc-600 shrink-0">{card.clientName}</span>
-                  <span className={`shrink-0 font-medium ${isOverdue ? "text-red-500" : "text-zinc-400"}`}>
+                  <span className="text-muted-foreground shrink-0">{card.clientName}</span>
+                  <span className={`shrink-0 font-medium ${isOverdue ? "text-red-500" : "text-muted-foreground"}`}>
                     {card.dueDate}
                   </span>
                 </div>
@@ -550,8 +550,8 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
             <span>{client.industry}</span>
             {client.instagramUser && (
               <>
-                <span className="text-zinc-700">·</span>
-                <span className="text-zinc-500">{client.instagramUser}</span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-muted-foreground">{client.instagramUser}</span>
               </>
             )}
           </div>
@@ -567,7 +567,7 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Posts</span>
-            <span className="text-[10px] text-zinc-400 font-medium">{postsNow}/{postsGoal}</span>
+            <span className="text-[10px] text-muted-foreground font-medium">{postsNow}/{postsGoal}</span>
           </div>
           <div className="h-1 bg-[#111118] rounded-full overflow-hidden">
             <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${postsPct}%` }} />
@@ -578,16 +578,16 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
         <div className="text-center">
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Humor</span>
           {mood ? (
-            <span className="text-xs text-zinc-400 mt-1 block">{mood.emoji} {mood.label}</span>
+            <span className="text-xs text-muted-foreground mt-1 block">{mood.emoji} {mood.label}</span>
           ) : (
-            <span className="text-xs text-zinc-600 mt-1 block">—</span>
+            <span className="text-xs text-muted-foreground mt-1 block">—</span>
           )}
         </div>
 
         {/* Activity */}
         <div className="text-right">
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Atividade</span>
-          <span className={`text-xs mt-1 block ${inactivity === "urgent" ? "text-red-500" : inactivity === "warning" ? "text-zinc-400" : "text-primary"}`}>
+          <span className={`text-xs mt-1 block ${inactivity === "urgent" ? "text-red-500" : inactivity === "warning" ? "text-muted-foreground" : "text-primary"}`}>
             {activityLabel}
           </span>
         </div>
@@ -603,7 +603,7 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
           <div className="h-1 bg-primary/10 rounded-full overflow-hidden">
             <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${obPct}%` }} />
           </div>
-          <p className="text-[10px] text-zinc-500 mt-1.5">{obDone} de {obItems.length} etapas</p>
+          <p className="text-[10px] text-muted-foreground mt-1.5">{obDone} de {obItems.length} etapas</p>
         </div>
       )}
 
@@ -612,14 +612,14 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
         <div className="flex items-center gap-1">
           <button
             onClick={(e) => { e.stopPropagation(); onIdeas(client); }}
-            className="p-1.5 rounded-lg hover:bg-primary/10 text-zinc-600 hover:text-primary transition-colors"
+            className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
             title="Gerar ideias"
           >
             <Sparkles size={14} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onMood(client.id); }}
-            className="p-1.5 rounded-lg hover:bg-primary/10 text-zinc-600 hover:text-primary transition-colors"
+            className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
             title="Check-in de humor"
           >
             <Smile size={14} />
@@ -627,14 +627,14 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
           <Link
             href={`/clients/${client.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="p-1.5 rounded-lg hover:bg-primary/10 text-zinc-600 hover:text-primary transition-colors"
+            className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
             title="Ver perfil"
           >
             <ExternalLink size={14} />
           </Link>
         </div>
         {client.toneOfVoice && (
-          <span className="text-[10px] text-zinc-600 uppercase tracking-wider">
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
             {TONE_LABELS[client.toneOfVoice] ?? client.toneOfVoice}
           </span>
         )}
@@ -889,7 +889,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
                   <CheckCircle size={12} className="text-[#0d4af5] shrink-0" />
                   <p className="text-[10px] text-[#0d4af5] font-medium">Link do Drive recuperado do cadastro</p>
                   <a href={selectedClient.driveLink} target="_blank" rel="noopener noreferrer"
-                    className="text-[10px] text-zinc-400 hover:text-[#0d4af5] ml-auto flex items-center gap-1">
+                    className="text-[10px] text-muted-foreground hover:text-[#0d4af5] ml-auto flex items-center gap-1">
                     Abrir <ExternalLink size={9} />
                   </a>
                 </div>
@@ -995,7 +995,7 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl mx-4 bg-black border border-white/[0.06] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-2xl mx-4 bg-background border border-white/[0.06] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
         <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/20 to-transparent shrink-0" />
 
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
@@ -1063,7 +1063,7 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
                   value={row.title}
                   onChange={(e) => updateRow(row.id, "title", e.target.value)}
                   placeholder={`Card ${i + 1}...`}
-                  className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none"
+                  className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-[#0d4af5]/50 outline-none"
                 />
                 <select
                   value={row.format}
@@ -1086,13 +1086,13 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
                   onClick={() => removeRow(row.id)}
                   disabled={rows.length <= 1}
                   title={rows.length <= 1 ? "Mínimo de 1 linha" : "Remover linha"}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:text-zinc-700 disabled:hover:bg-transparent">
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:text-muted-foreground disabled:hover:bg-transparent">
                   <Trash2 size={12} />
                 </button>
               </div>
             ))}
             <button onClick={addRow}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-zinc-500 hover:text-foreground hover:bg-white/[0.03] transition-all w-full justify-center border border-dashed border-white/[0.06]">
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-white/[0.03] transition-all w-full justify-center border border-dashed border-white/[0.06]">
               <Plus size={12} /> Adicionar linha
             </button>
           </div>
@@ -1110,7 +1110,7 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-white/[0.04] shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
             Cancelar
           </button>
           <button onClick={handleSubmit} disabled={filledRows.length === 0}
@@ -1443,13 +1443,13 @@ function AccessTab({ clients, clientAccess, onSave, isAdmin }: AccessTabProps) {
                   );
                 })}
                 {access?.updatedBy && (
-                  <p className="text-[10px] text-zinc-600 col-span-full mt-1">
+                  <p className="text-[10px] text-muted-foreground col-span-full mt-1">
                     Atualizado por {access.updatedBy} {access.updatedAt ? `· ${new Date(access.updatedAt).toLocaleDateString("pt-BR")}` : ""}
                   </p>
                 )}
               </div>
             ) : (
-              <p className="text-xs text-zinc-600 text-center py-3 border border-dashed border-[#1a1a22] rounded-lg">
+              <p className="text-xs text-muted-foreground text-center py-3 border border-dashed border-[#1a1a22] rounded-lg">
                 Nenhum acesso cadastrado ainda. Clique em "Preencher Acessos" para adicionar.
               </p>
             )}
@@ -1521,13 +1521,13 @@ function InternalChatTab({ clients, clientChats, onSend }: InternalChatTabProps)
                         {client.name}
                       </p>
                       {lastMsg ? (
-                        <p className="text-[10px] text-zinc-600 truncate mt-0.5">{lastMsg.user}: {lastMsg.text}</p>
+                        <p className="text-[10px] text-muted-foreground truncate mt-0.5">{lastMsg.user}: {lastMsg.text}</p>
                       ) : (
-                        <p className="text-[10px] text-zinc-700 mt-0.5">Sem mensagens</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Sem mensagens</p>
                       )}
                     </div>
                     {chatMsgs.length > 0 && (
-                      <span className="text-[9px] text-zinc-600 shrink-0">{chatMsgs.length}</span>
+                      <span className="text-[9px] text-muted-foreground shrink-0">{chatMsgs.length}</span>
                     )}
                   </div>
                 </button>
@@ -1556,7 +1556,7 @@ function InternalChatTab({ clients, clientChats, onSend }: InternalChatTabProps)
               <div className="flex-1 overflow-auto p-4 space-y-3">
                 {messages.length === 0 && (
                   <div className="flex items-center justify-center h-full">
-                    <p className="text-xs text-zinc-600">Nenhuma mensagem ainda. Inicie a conversa sobre este cliente.</p>
+                    <p className="text-xs text-muted-foreground">Nenhuma mensagem ainda. Inicie a conversa sobre este cliente.</p>
                   </div>
                 )}
                 {messages.map((msg) => (
@@ -1569,9 +1569,9 @@ function InternalChatTab({ clients, clientChats, onSend }: InternalChatTabProps)
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-medium text-foreground">{msg.user}</span>
-                        <span className="text-[10px] text-zinc-600">{msg.timestamp}</span>
+                        <span className="text-[10px] text-muted-foreground">{msg.timestamp}</span>
                       </div>
-                      <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">{msg.text}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{msg.text}</p>
                     </div>
                   </div>
                 ))}
@@ -1652,7 +1652,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all shrink-0 ${
                 isActive
                   ? "bg-primary/10 border-primary/30 text-primary"
-                  : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-zinc-600"
+                  : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-border"
               }`}
             >
               <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
@@ -1769,7 +1769,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                         <span className="flex items-center gap-1 text-xs text-muted-foreground">
                           <Calendar size={10} />
                           {card.dueDate}
-                          {card.dueTime && <span className="text-zinc-500 ml-1">{card.dueTime}</span>}
+                          {card.dueTime && <span className="text-muted-foreground ml-1">{card.dueTime}</span>}
                         </span>
                         {badge && (
                           <span className={`text-xs px-1.5 py-0.5 rounded-full border font-medium ${badge.color}`}>
@@ -1823,7 +1823,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                     if (timeMs <= 0) return null;
                     const isOvertime = timeMs >= OVERTIME_THRESHOLD_MS;
                     return (
-                      <div className={`flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/40 text-[10px] ${isOvertime ? "text-amber-400" : "text-zinc-600"}`}>
+                      <div className={`flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/40 text-[10px] ${isOvertime ? "text-amber-400" : "text-muted-foreground"}`}>
                         <span>{isOvertime ? "⚠️" : "⏱️"}</span>
                         <span className={isOvertime ? "font-bold" : ""}>{formatTimeSpent(timeMs)}</span>
                         {isOvertime && <span className="text-[9px] ml-auto font-medium">OVER-TIME</span>}
@@ -2202,7 +2202,7 @@ export default function SocialPage() {
                   <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 transition-all ${
                     verifyChecks[item.key]
                       ? "bg-primary text-white"
-                      : "border border-zinc-600 bg-transparent"
+                      : "border border-border bg-transparent"
                   }`}>
                     {verifyChecks[item.key] && <Check size={12} />}
                   </div>
@@ -2283,24 +2283,24 @@ export default function SocialPage() {
         <div className="flex items-center justify-between gap-3">
           {canSelectWorkspace ? (
             <div className="flex items-center gap-3">
-              <span className="text-xs text-zinc-500 uppercase tracking-wider">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">
                 {isDesigner ? "Visualizando quadro de:" : "Monitorando Workspace de:"}
               </span>
               <div className="relative">
                 <select
                   value={adminWorkspace}
                   onChange={(e) => setAdminWorkspace(e.target.value)}
-                  className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5] appearance-none cursor-pointer pr-8"
+                  className="bg-card border border-border rounded-lg px-4 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5] appearance-none cursor-pointer pr-8"
                 >
                   <option value="Todos">Visao Geral</option>
                   {workspaceOptions.map((name) => (
                     <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
-                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
+                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               </div>
               {isDesigner && activeWorkspace !== "Todos" && (
-                <span className="text-[10px] text-zinc-500 border border-zinc-800 px-2 py-1 rounded">
+                <span className="text-[10px] text-muted-foreground border border-border px-2 py-1 rounded">
                   Modo leitura
                 </span>
               )}
@@ -2327,10 +2327,10 @@ export default function SocialPage() {
         {/* Tabs */}
         {/* Designer context banner */}
         {isDesigner && activeWorkspace !== "Todos" && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-900/50 border border-zinc-800 text-xs text-zinc-400 mb-2">
-            <Eye size={12} className="text-zinc-500 shrink-0" />
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-900/50 border border-border text-xs text-muted-foreground mb-2">
+            <Eye size={12} className="text-muted-foreground shrink-0" />
             Visualizando fluxo de trabalho de <span className="text-foreground font-medium">{activeWorkspace}</span>
-            <span className="text-zinc-600 ml-auto">Somente leitura</span>
+            <span className="text-muted-foreground ml-auto">Somente leitura</span>
           </div>
         )}
 
@@ -2395,15 +2395,15 @@ export default function SocialPage() {
                 {churnRisks.length > 0 && (
                   <div className="flex items-center gap-3 bg-red-500/5 border border-red-500/15 rounded-lg px-4 py-2.5">
                     <div className="led led-critical" />
-                    <p className="text-xs text-zinc-400">
+                    <p className="text-xs text-muted-foreground">
                       <span className="text-red-500 font-semibold">Radar de Churn</span> — {churnRisks.map((c) => c.name).join(", ")}
                     </p>
                   </div>
                 )}
                 {urgentClients.length > 0 && (
                   <div className="flex items-center gap-3 bg-[#0a0a10] border border-[#1a1a22] rounded-lg px-4 py-2.5">
-                    <AlertTriangle size={13} className="text-zinc-500 shrink-0" />
-                    <p className="text-xs text-zinc-400">
+                    <AlertTriangle size={13} className="text-muted-foreground shrink-0" />
+                    <p className="text-xs text-muted-foreground">
                       <span className="text-[#c0c0cc] font-medium">{urgentClients.length} cliente(s)</span> sem movimentação há +48h
                     </p>
                   </div>
@@ -2446,7 +2446,7 @@ export default function SocialPage() {
                 <span className="text-xs text-primary font-medium">{HEALTH_CONFIG[healthFilter]?.label}</span>
                 <button
                   onClick={() => setHealthFilter("all")}
-                  className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors ml-1"
+                  className="text-xs text-muted-foreground hover:text-muted-foreground transition-colors ml-1"
                 >
                   <X size={12} />
                 </button>
@@ -2548,7 +2548,7 @@ export default function SocialPage() {
               <QuickTaskBar clients={filteredClients} />
               <button
                 onClick={() => setShowBatchCreate(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-white/[0.06] text-zinc-400 hover:text-foreground hover:border-[#0d4af5]/30 transition-all shrink-0"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-white/[0.06] text-muted-foreground hover:text-foreground hover:border-[#0d4af5]/30 transition-all shrink-0"
               >
                 <Layers size={13} /> Batch ({">"}5 cards)
               </button>
@@ -2669,7 +2669,7 @@ export default function SocialPage() {
                                 </span>
                               </div>
                               <span className="text-[11px] text-muted-foreground">{item.completedBy}</span>
-                              {item.completedAt && <span className="text-[10px] text-zinc-600">· {item.completedAt}</span>}
+                              {item.completedAt && <span className="text-[10px] text-muted-foreground">· {item.completedAt}</span>}
                             </div>
                           )}
                         </div>
@@ -2774,8 +2774,8 @@ export default function SocialPage() {
                 return [
                   { label: "Em andamento", value: active.length, color: "text-primary" },
                   { label: "Publicados", value: published.length, color: "text-primary" },
-                  { label: "Gargalos (SLA)", value: slaIssues.length, color: slaIssues.length > 0 ? "text-red-500" : "text-zinc-600" },
-                  { label: "Vencidos", value: overdue.length, color: overdue.length > 0 ? "text-red-500" : "text-zinc-600" },
+                  { label: "Gargalos (SLA)", value: slaIssues.length, color: slaIssues.length > 0 ? "text-red-500" : "text-muted-foreground" },
+                  { label: "Vencidos", value: overdue.length, color: overdue.length > 0 ? "text-red-500" : "text-muted-foreground" },
                 ].map((kpi) => (
                   <div key={kpi.label} className="bg-card border border-border rounded-xl p-4">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{kpi.label}</p>
@@ -2828,7 +2828,7 @@ export default function SocialPage() {
                       <div key={client.id}>
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className="text-foreground font-medium">{client.name}</span>
-                          <span className={pct >= 80 ? "text-primary" : "text-zinc-400"}>{postsNow}/{goal}</span>
+                          <span className={pct >= 80 ? "text-primary" : "text-muted-foreground"}>{postsNow}/{goal}</span>
                         </div>
                         <div className="h-1.5 bg-[#111118] rounded-full overflow-hidden">
                           <div className="h-full rounded-full transition-all bg-primary" style={{ width: `${pct}%` }} />
@@ -2859,7 +2859,7 @@ export default function SocialPage() {
                       return 0;
                     });
                   if (slaCards.length === 0) {
-                    return <p className="text-xs text-zinc-600">Nenhum gargalo no momento.</p>;
+                    return <p className="text-xs text-muted-foreground">Nenhum gargalo no momento.</p>;
                   }
                   return (
                     <div className="space-y-2">
@@ -2874,7 +2874,7 @@ export default function SocialPage() {
                           </span>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-foreground truncate">{card.title}</p>
-                            <p className="text-[10px] text-zinc-500">{card.clientName}</p>
+                            <p className="text-[10px] text-muted-foreground">{card.clientName}</p>
                           </div>
                         </div>
                       ))}
@@ -2900,7 +2900,7 @@ export default function SocialPage() {
                       <div key={fmt} className="bg-muted/50 rounded-xl p-3 border border-border/50">
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{fmt}</p>
                         <p className="text-xl font-bold text-foreground tracking-tight">{count}</p>
-                        <p className="text-[10px] text-zinc-600">{pct}%</p>
+                        <p className="text-[10px] text-muted-foreground">{pct}%</p>
                       </div>
                     );
                   });
@@ -2923,18 +2923,18 @@ export default function SocialPage() {
                     <div className="p-3 bg-red-500/5 border border-red-500/15 rounded-lg">
                       <p className="text-xs font-semibold text-red-500 mb-2">Vencidos ({overdue.length})</p>
                       {overdue.map((c) => (
-                        <button key={c.id} onClick={() => setSelectedCard(c)} className="block text-xs text-zinc-400 hover:text-foreground text-left mb-1">
-                          · {c.title} <span className="text-zinc-600">({c.clientName})</span>
+                        <button key={c.id} onClick={() => setSelectedCard(c)} className="block text-xs text-muted-foreground hover:text-foreground text-left mb-1">
+                          · {c.title} <span className="text-muted-foreground">({c.clientName})</span>
                         </button>
                       ))}
                     </div>
                   )}
                   {dueToday.length > 0 && (
                     <div className="p-3 bg-[#0a0a10] border border-[#1a1a22] rounded-lg">
-                      <p className="text-xs font-semibold text-zinc-400 mb-2">Vencem hoje ({dueToday.length})</p>
+                      <p className="text-xs font-semibold text-muted-foreground mb-2">Vencem hoje ({dueToday.length})</p>
                       {dueToday.map((c) => (
-                        <button key={c.id} onClick={() => setSelectedCard(c)} className="block text-xs text-zinc-400 hover:text-foreground text-left mb-1">
-                          · {c.title} <span className="text-zinc-600">({c.clientName})</span>
+                        <button key={c.id} onClick={() => setSelectedCard(c)} className="block text-xs text-muted-foreground hover:text-foreground text-left mb-1">
+                          · {c.title} <span className="text-muted-foreground">({c.clientName})</span>
                         </button>
                       ))}
                     </div>
@@ -2994,7 +2994,7 @@ function SocialChg({ value, invert }: { value: number; invert?: boolean }) {
   const isPositive = value > 0;
   const isNeutral = Math.abs(value) < 1;
   const isGood = invert ? !isPositive : isPositive;
-  if (isNeutral) return <span className="text-xs text-zinc-500">0%</span>;
+  if (isNeutral) return <span className="text-xs text-muted-foreground">0%</span>;
   return (
     <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isGood ? "text-[#0d4af5]" : "text-red-500"}`}>
       {isPositive ? "+" : ""}{value.toFixed(1)}%
@@ -3276,12 +3276,12 @@ function SocialReportsTab({
                     <td className="py-3 px-3 font-medium text-foreground">{socialFormatMonth(report.month)}</td>
                     <td className="py-3 px-3 text-right text-foreground">{report.postsPublished}/{report.postsGoal}</td>
                     <td className="py-3 px-3 text-right text-foreground">{socialFmtNum(report.reach)}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.reach} /> : <span className="text-xs text-zinc-600">—</span>}</td>
+                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.reach} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-3 text-right text-foreground">{socialFmtNum(report.engagement)}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.engagement} /> : <span className="text-xs text-zinc-600">—</span>}</td>
+                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.engagement} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-3 text-right text-primary font-medium">{report.engagementRate.toFixed(1)}%</td>
                     <td className="py-3 px-3 text-right text-foreground">+{report.followersGained}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.followersGained} /> : <span className="text-xs text-zinc-600">—</span>}</td>
+                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.followersGained} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-3 text-center"><button onClick={() => setEditingReport(report)} className="text-xs text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-all">Editar</button></td>
                   </tr>
                 ))}
@@ -3375,7 +3375,7 @@ function SocialEditReportForm({ report, onSave, onCancel }: {
         followersGained: +f.fg, followersLost: +f.fl, topPost: f.tp || undefined, observations: f.ob || undefined,
       }); }} className="space-y-4">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div><label className="text-xs text-muted-foreground font-medium">Mês</label><div className="w-full mt-1 bg-muted/50 rounded-lg p-2.5 text-sm text-zinc-400">{socialFormatMonth(report.month)}</div></div>
+          <div><label className="text-xs text-muted-foreground font-medium">Mês</label><div className="w-full mt-1 bg-muted/50 rounded-lg p-2.5 text-sm text-muted-foreground">{socialFormatMonth(report.month)}</div></div>
           {inp("pp", "Posts")}{inp("pg", "Meta")}{inp("rc", "Reels")}
           {inp("sc", "Stories")}{inp("re", "Alcance")}{inp("im", "Impressões")}{inp("en", "Engajamento")}
         </div>

@@ -17,8 +17,8 @@ const ROLE_COLORS: Record<string, string> = {
   admin: "text-primary bg-primary/15",
   manager: "text-primary bg-primary/15",
   traffic: "text-primary bg-primary/15",
-  social: "text-zinc-400 bg-[#111118]",
-  designer: "text-zinc-400 bg-[#111118]",
+  social: "text-muted-foreground bg-[#111118]",
+  designer: "text-muted-foreground bg-[#111118]",
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -231,7 +231,7 @@ export default function CommunicationsPage() {
             <button
               onClick={() => { setShowMessageSearch(!showMessageSearch); setMessageSearch(""); }}
               className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                showMessageSearch ? "bg-[#0d4af5]/10 text-[#0d4af5]" : "text-zinc-600 hover:text-foreground hover:bg-white/5"
+                showMessageSearch ? "bg-[#0d4af5]/10 text-[#0d4af5]" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
               }`}
               title="Buscar mensagens"
             >
@@ -253,7 +253,7 @@ export default function CommunicationsPage() {
               {messageSearch && (
                 <span className="text-[10px] text-muted-foreground">{displayMessages.length} resultado(s)</span>
               )}
-              <button onClick={() => { setShowMessageSearch(false); setMessageSearch(""); }} className="text-zinc-600 hover:text-foreground">
+              <button onClick={() => { setShowMessageSearch(false); setMessageSearch(""); }} className="text-muted-foreground hover:text-foreground">
                 <X size={12} />
               </button>
             </div>
@@ -312,16 +312,16 @@ export default function CommunicationsPage() {
                         {isPinned && <Pin size={9} className="text-[#0d4af5]" />}
                         {/* Actions */}
                         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => togglePin(msg.id)} title={isPinned ? "Desafixar" : "Fixar"} className="w-5 h-5 rounded flex items-center justify-center text-zinc-700 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all">
+                          <button onClick={() => togglePin(msg.id)} title={isPinned ? "Desafixar" : "Fixar"} className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all">
                             <Pin size={9} />
                           </button>
-                          <button onClick={() => setReplyTo({ id: msg.id, user: msg.user, text: msg.text })} title="Responder" className="w-5 h-5 rounded flex items-center justify-center text-zinc-700 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all">
+                          <button onClick={() => setReplyTo({ id: msg.id, user: msg.user, text: msg.text })} title="Responder" className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all">
                             <Reply size={9} />
                           </button>
                         </div>
                       </div>
                       {replyPart && (
-                        <div className={`text-[10px] text-zinc-600 mb-0.5 px-3 py-1 rounded-lg bg-white/[0.02] border-l-2 border-[#0d4af5]/30 ${isMe ? "mr-1" : "ml-1"}`}>
+                        <div className={`text-[10px] text-muted-foreground mb-0.5 px-3 py-1 rounded-lg bg-white/[0.02] border-l-2 border-[#0d4af5]/30 ${isMe ? "mr-1" : "ml-1"}`}>
                           {replyPart.replace("↩️ ", "")}
                         </div>
                       )}
@@ -348,16 +348,16 @@ export default function CommunicationsPage() {
                         <span className="text-xs text-muted-foreground/50">{msg.timestamp}</span>
                         {isPinned && <Pin size={9} className="text-[#0d4af5]" />}
                         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => togglePin(msg.id)} title={isPinned ? "Desafixar" : "Fixar"} className="w-5 h-5 rounded flex items-center justify-center text-zinc-700 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all">
+                          <button onClick={() => togglePin(msg.id)} title={isPinned ? "Desafixar" : "Fixar"} className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all">
                             <Pin size={9} />
                           </button>
-                          <button onClick={() => setReplyTo({ id: msg.id, user: msg.user, text: msg.text })} title="Responder" className="w-5 h-5 rounded flex items-center justify-center text-zinc-700 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all">
+                          <button onClick={() => setReplyTo({ id: msg.id, user: msg.user, text: msg.text })} title="Responder" className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all">
                             <Reply size={9} />
                           </button>
                         </div>
                       </div>
                       {replyPart && (
-                        <div className={`text-[10px] text-zinc-600 mb-0.5 px-3 py-1 rounded-lg bg-white/[0.02] border-l-2 border-[#0d4af5]/30 ${isMe ? "mr-1" : "ml-1"}`}>
+                        <div className={`text-[10px] text-muted-foreground mb-0.5 px-3 py-1 rounded-lg bg-white/[0.02] border-l-2 border-[#0d4af5]/30 ${isMe ? "mr-1" : "ml-1"}`}>
                           {replyPart.replace("↩️ ", "")}
                         </div>
                       )}
@@ -382,7 +382,7 @@ export default function CommunicationsPage() {
                 <span className="text-[10px] text-[#0d4af5] font-medium">Respondendo a {replyTo.user}</span>
                 <p className="text-[10px] text-muted-foreground truncate">{replyTo.text}</p>
               </div>
-              <button onClick={() => setReplyTo(null)} className="text-zinc-600 hover:text-foreground shrink-0">
+              <button onClick={() => setReplyTo(null)} className="text-muted-foreground hover:text-foreground shrink-0">
                 <X size={12} />
               </button>
             </div>

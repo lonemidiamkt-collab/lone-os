@@ -397,13 +397,13 @@ export default function TrafficPage() {
                         className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5 transition-all ${
                           task.status === "done"
                             ? "bg-[#0d4af5] border-[#0d4af5] text-white"
-                            : "border-zinc-600 hover:border-[#0d4af5]"
+                            : "border-border hover:border-[#0d4af5]"
                         }`}
                         title={task.status === "done" ? "Reabrir tarefa" : "Marcar como concluida"}
                       >
                         {task.status === "done" && <Check size={10} />}
                       </button>
-                      <p className={`font-medium text-foreground text-sm leading-tight flex-1 ${task.status === "done" ? "line-through text-zinc-500" : ""}`}>{task.title}</p>
+                      <p className={`font-medium text-foreground text-sm leading-tight flex-1 ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
                       <span className={`badge border text-xs shrink-0 ${getPriorityColor(task.priority)}`}>
                         {getPriorityLabel(task.priority)}
                       </span>
@@ -438,7 +438,7 @@ export default function TrafficPage() {
                         if (timeMs <= 0) return null;
                         const isOvertime = timeMs >= OVERTIME_THRESHOLD_MS;
                         return (
-                          <span className={`ml-auto text-[10px] flex items-center gap-1 ${isOvertime ? "text-amber-400 font-bold" : "text-zinc-600"}`}>
+                          <span className={`ml-auto text-[10px] flex items-center gap-1 ${isOvertime ? "text-amber-400 font-bold" : "text-muted-foreground"}`}>
                             {isOvertime ? "⚠️" : "⏱️"} {formatTimeSpent(timeMs)}
                           </span>
                         );
@@ -807,7 +807,7 @@ function CreativeRequestModal({
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-xl mx-4 bg-black border border-[#1a1a1a] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-xl mx-4 bg-background border border-[#1a1a1a] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
         <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/30 to-transparent shrink-0" />
 
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
@@ -866,11 +866,11 @@ function CreativeRequestModal({
                     }`}>
                     <div className="flex items-center gap-2">
                       <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                        active ? "bg-[#0d4af5] text-white" : "bg-zinc-900 text-zinc-500"
+                        active ? "bg-[#0d4af5] text-white" : "bg-card text-muted-foreground"
                       }`}>{i + 1}</span>
                       <div>
-                        <p className={`text-xs font-medium ${active ? "text-foreground" : "text-zinc-400"}`}>{s.format}</p>
-                        <p className="text-[10px] text-zinc-600 mt-0.5">{s.description}</p>
+                        <p className={`text-xs font-medium ${active ? "text-foreground" : "text-muted-foreground"}`}>{s.format}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{s.description}</p>
                       </div>
                     </div>
                   </button>
@@ -900,7 +900,7 @@ function CreativeRequestModal({
               ]).map((p) => (
                 <button key={p.value} onClick={() => setPriority(p.value)}
                   className={`flex-1 py-2 rounded-xl border text-xs font-medium transition-all ${
-                    priority === p.value ? p.color : "border-[#1a1a1a] text-zinc-600"
+                    priority === p.value ? p.color : "border-[#1a1a1a] text-muted-foreground"
                   }`}>
                   {p.label}
                 </button>
@@ -913,24 +913,24 @@ function CreativeRequestModal({
             <textarea value={observations} onChange={(e) => setObservations(e.target.value)}
               placeholder="Ex: CPA alto, precisamos de video mais agressivo com CTA direto..."
               rows={3}
-              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none resize-none" />
+              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-[#0d4af5]/50 outline-none resize-none" />
           </div>
 
           {/* Preview */}
           <div className="p-3 rounded-xl bg-zinc-900/30 border border-zinc-800/30">
-            <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">Preview no board do Designer</p>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Preview no board do Designer</p>
             <div className="flex items-center gap-2">
               <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20 font-bold">TRAFEGO</span>
               <span className="text-xs text-foreground font-medium">Criativo — {campaign.name}</span>
             </div>
-            <p className="text-[10px] text-zinc-500 mt-1">
+            <p className="text-[10px] text-muted-foreground mt-1">
               {client.name} · {selectedSuggestion !== null ? suggestions[selectedSuggestion].format : customFormat} · {priority === "critical" ? "Critica" : "Alta"}
             </p>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[#1a1a1a] shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
             Cancelar
           </button>
           <button onClick={handleSubmit}
@@ -1176,7 +1176,7 @@ function RoutineTab({
         {/* Pending */}
         {supportPending.length > 0 && (
           <div className="space-y-2 mb-4">
-            <p className="text-xs font-medium text-zinc-400">Pendentes ({supportPending.length})</p>
+            <p className="text-xs font-medium text-muted-foreground">Pendentes ({supportPending.length})</p>
             {supportPending.map((client) => (
               <div key={client.id} className="flex items-center gap-3 bg-[#0c0c12] border border-[#1e1e2a] rounded-lg px-3 py-2.5">
                 <div className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold ${
@@ -1207,7 +1207,7 @@ function RoutineTab({
             {supportCompleted.map((client) => (
               <div key={client.id} className="flex items-center gap-3 bg-primary/5 border border-primary/10 rounded-lg px-3 py-2">
                 <Check size={14} className="text-primary shrink-0" />
-                <span className="text-sm text-zinc-400">{client.name}</span>
+                <span className="text-sm text-muted-foreground">{client.name}</span>
                 <span className="text-xs text-muted-foreground ml-auto">
                   {todayChecks.find((c) => c.clientId === client.id && c.type === "support")?.completedBy}
                 </span>
@@ -1232,8 +1232,8 @@ function RoutineTab({
               <div key={client.id} className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 border ${
                 done ? "bg-primary/5 border-primary/10" : "bg-[#0c0c12] border-[#1e1e2a]"
               }`}>
-                {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleReport(client)} className="w-5 h-5 rounded border border-zinc-600 shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
-                <span className={`text-sm flex-1 ${done ? "text-zinc-400" : "text-foreground"}`}>{client.name}</span>
+                {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleReport(client)} className="w-5 h-5 rounded border border-border shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
+                <span className={`text-sm flex-1 ${done ? "text-muted-foreground" : "text-foreground"}`}>{client.name}</span>
                 {!done && (
                   <button onClick={() => handleReport(client)} className="text-xs text-primary hover:underline">Entregar</button>
                 )}
@@ -1260,8 +1260,8 @@ function RoutineTab({
                 done ? "bg-primary/5 border-primary/10" : "bg-[#0c0c12] border-[#1e1e2a]"
               }`}>
                 <div className="flex items-center gap-2.5">
-                  {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleAnalysis(client)} className="w-5 h-5 rounded border border-zinc-600 shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
-                  <span className={`text-sm flex-1 ${done ? "text-zinc-400" : "text-foreground"}`}>{client.name}</span>
+                  {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleAnalysis(client)} className="w-5 h-5 rounded border border-border shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
+                  <span className={`text-sm flex-1 ${done ? "text-muted-foreground" : "text-foreground"}`}>{client.name}</span>
                   {done && (
                     <span className="text-xs text-muted-foreground truncate max-w-[200px]">
                       {weekChecks.find((c) => c.clientId === client.id && c.type === "analysis")?.note || "Sem nota"}
@@ -1302,8 +1302,8 @@ function RoutineTab({
                 done ? "bg-primary/5 border-primary/10" : "bg-[#0c0c12] border-[#1e1e2a]"
               }`}>
                 <div className="flex items-center gap-2.5">
-                  {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleFeedback(client)} className="w-5 h-5 rounded border border-zinc-600 shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
-                  <span className={`text-sm flex-1 ${done ? "text-zinc-400" : "text-foreground"}`}>{client.name}</span>
+                  {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleFeedback(client)} className="w-5 h-5 rounded border border-border shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
+                  <span className={`text-sm flex-1 ${done ? "text-muted-foreground" : "text-foreground"}`}>{client.name}</span>
                   {done && (
                     <span className="text-xs text-muted-foreground truncate max-w-[250px]">
                       {weekChecks.find((c) => c.clientId === client.id && c.type === "feedback")?.note || "Sem nota"}
@@ -1476,7 +1476,7 @@ function MonthlyReportsTab({
                     const trend = latest.changes.messages;
                     if (trend > 5) return <span className="flex items-center gap-1 text-xs font-medium text-[#0d4af5]"><ArrowUpRight size={14} /> Crescendo</span>;
                     if (trend < -5) return <span className="flex items-center gap-1 text-xs font-medium text-red-500"><ArrowDownRight size={14} /> Caindo</span>;
-                    return <span className="flex items-center gap-1 text-xs font-medium text-zinc-400"><Minus size={14} /> Estavel</span>;
+                    return <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><Minus size={14} /> Estavel</span>;
                   })()}
                 </div>
               )}
@@ -1546,11 +1546,11 @@ function MonthlyReportsTab({
                   <tr key={report.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
                     <td className="py-3 px-3 font-medium text-foreground">{formatMonthLabel(report.month)}</td>
                     <td className="py-3 px-3 text-right text-foreground">{report.messages}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.messages} /> : <span className="text-xs text-zinc-600">—</span>}</td>
+                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.messages} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-3 text-right text-foreground">R$ {report.messageCost.toFixed(2)}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.messageCost} invert /> : <span className="text-xs text-zinc-600">—</span>}</td>
+                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.messageCost} invert /> : <span className="text-xs text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-3 text-right text-foreground">{formatNumber(report.impressions)}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.impressions} /> : <span className="text-xs text-zinc-600">—</span>}</td>
+                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.impressions} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-3 text-center">
                       <button
                         onClick={() => handleEdit(report)}
@@ -1596,7 +1596,7 @@ function ChangeChip({ value, invert }: { value: number; invert?: boolean }) {
   // For cost metrics, positive = bad (invert colors)
   const isGood = invert ? !isPositive : isPositive;
 
-  if (isNeutral) return <span className="text-xs text-zinc-500">0%</span>;
+  if (isNeutral) return <span className="text-xs text-muted-foreground">0%</span>;
 
   return (
     <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isGood ? "text-[#0d4af5]" : "text-red-500"}`}>
@@ -1730,7 +1730,7 @@ function EditReportForm({
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <label className="text-xs text-muted-foreground font-medium">Mes</label>
-            <div className="w-full mt-1 bg-muted/50 rounded-lg p-2.5 text-sm text-zinc-400">{formatMonthLabel(report.month)}</div>
+            <div className="w-full mt-1 bg-muted/50 rounded-lg p-2.5 text-sm text-muted-foreground">{formatMonthLabel(report.month)}</div>
           </div>
           <div>
             <label className="text-xs text-muted-foreground font-medium">Mensagens/Leads *</label>
@@ -2031,7 +2031,7 @@ function AdAnalyticsTab({
   const STATUS_LABELS: Record<string, { label: string; cls: string; icon: typeof CheckCircle }> = {
     active: { label: "Ativa", cls: "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20", icon: CheckCircle },
     paused: { label: "Pausada", cls: "text-[#3b6ff5] bg-[#0d4af5]/10 border-[#0d4af5]/15", icon: Pause },
-    completed: { label: "Finalizada", cls: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20", icon: Check },
+    completed: { label: "Finalizada", cls: "text-muted-foreground bg-zinc-500/10 border-zinc-500/20", icon: Check },
     error: { label: "Erro", cls: "text-red-500 bg-red-500/10 border-red-500/20", icon: AlertCircle },
   };
 
@@ -3325,7 +3325,7 @@ function AdAnalyticsTab({
                   <div className="bg-card/60 border border-border rounded-xl p-3">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Tendência Gasto</p>
                     <div className="flex items-center gap-1.5 mt-1">
-                      {aiAnalysis.spendTrend === "up" ? <ArrowUpRight size={16} className="text-red-400" /> : aiAnalysis.spendTrend === "down" ? <ArrowDownRight size={16} className="text-[#0d4af5]" /> : <Minus size={16} className="text-zinc-500" />}
+                      {aiAnalysis.spendTrend === "up" ? <ArrowUpRight size={16} className="text-red-400" /> : aiAnalysis.spendTrend === "down" ? <ArrowDownRight size={16} className="text-[#0d4af5]" /> : <Minus size={16} className="text-muted-foreground" />}
                       <span className={`text-lg font-black tabular-nums ${aiAnalysis.spendTrend === "up" ? "text-red-400" : aiAnalysis.spendTrend === "down" ? "text-[#0d4af5]" : "text-foreground"}`}>
                         {aiAnalysis.spendTrend === "up" ? "Alta" : aiAnalysis.spendTrend === "down" ? "Queda" : "Estável"}
                       </span>
@@ -3334,7 +3334,7 @@ function AdAnalyticsTab({
                   <div className="bg-card/60 border border-border rounded-xl p-3">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Performance</p>
                     <div className="flex items-center gap-1.5 mt-1">
-                      {aiAnalysis.performanceTrend === "improving" ? <TrendingUp size={16} className="text-[#0d4af5]" /> : aiAnalysis.performanceTrend === "declining" ? <TrendingDown size={16} className="text-red-400" /> : <Activity size={16} className="text-zinc-500" />}
+                      {aiAnalysis.performanceTrend === "improving" ? <TrendingUp size={16} className="text-[#0d4af5]" /> : aiAnalysis.performanceTrend === "declining" ? <TrendingDown size={16} className="text-red-400" /> : <Activity size={16} className="text-muted-foreground" />}
                       <span className={`text-lg font-black tabular-nums ${aiAnalysis.performanceTrend === "improving" ? "text-[#0d4af5]" : aiAnalysis.performanceTrend === "declining" ? "text-red-400" : "text-foreground"}`}>
                         {aiAnalysis.performanceTrend === "improving" ? "Melhorando" : aiAnalysis.performanceTrend === "declining" ? "Em Queda" : "Estável"}
                       </span>
@@ -3416,7 +3416,7 @@ function AdAnalyticsTab({
                         insight.priority === "critical" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
                         insight.priority === "high" ? "bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20" :
                         insight.priority === "medium" ? "bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/15" :
-                        "bg-[#111118] text-zinc-500 border border-[#1e1e2a]"
+                        "bg-[#111118] text-muted-foreground border border-[#1e1e2a]"
                       }`}>
                         {insight.priority === "critical" ? "Crítico" : insight.priority === "high" ? "Alta" : insight.priority === "medium" ? "Média" : "Baixa"}
                       </span>
@@ -3720,7 +3720,7 @@ function AdAnalyticsTab({
                       <p className="text-sm font-semibold text-foreground truncate">{camp.name}</p>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${statusInfo?.cls}`}>{statusInfo?.label}</span>
                       {!isUsingRealData && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold uppercase tracking-wider">Simulado</span>}
-                      {isUsingRealData && camp.hasData === false && <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 font-bold uppercase tracking-wider">Sem dados</span>}
+                      {isUsingRealData && camp.hasData === false && <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-500/10 text-muted-foreground border border-zinc-500/20 font-bold uppercase tracking-wider">Sem dados</span>}
                       {budgetPct > 90 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 font-semibold">Verba {budgetPct.toFixed(0)}%</span>}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">

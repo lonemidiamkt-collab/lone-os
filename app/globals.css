@@ -13,100 +13,184 @@
 }
 
 @layer base {
+  /* ═══════════════════════════════════════════════════════════
+     LONE OS — Tokens semânticos (oklch)
+     Convenção next-themes: :root = LIGHT, .dark = DARK.
+     Mesmos nomes nos dois modos.
+
+     Cores que aceitam modificador de opacidade (bg-primary/15 etc.)
+     são guardadas como CANAIS "L C H" e embrulhadas com
+     oklch(var(--x) / <alpha-value>) no tailwind.config.ts.
+     Cores com alpha embutido (border/input/glow) ficam como valor
+     completo e são usadas sem modificador.
+     ═══════════════════════════════════════════════════════════ */
   :root {
-    /* ═══════════════════════════════════════════════════════════
-       LONE OS — Sober Premium / Executive Clean
-       Inspired by Vercel, Stripe, Linear
-       Zero glow. Zero neon. Authority through restraint.
-       ═══════════════════════════════════════════════════════════ */
-    --background: #09090b;
-    --foreground: #e4e4e7;
+    /* ── Light (padrão) — canais L C H ──────────────────────── */
+    --background: 0.985 0 0;
+    --foreground: 0.21 0.006 285.885;
 
-    --card: #111113;
-    --card-solid: #111113;
-    --card-foreground: #e4e4e7;
-    --popover: #111113;
-    --popover-foreground: #e4e4e7;
+    --card: 1 0 0;
+    --card-foreground: 0.21 0.006 285.885;
+    --popover: 1 0 0;
+    --popover-foreground: 0.21 0.006 285.885;
 
-    --primary: #0d4af5;
-    --primary-foreground: #ffffff;
+    --primary: 0.507 0.258 263.8;
+    --primary-foreground: 1 0 0;
 
-    --secondary: #0c0c0e;
-    --secondary-foreground: #a1a1aa;
+    --secondary: 0.967 0.001 286.375;
+    --secondary-foreground: 0.442 0.017 285.786;
 
-    --muted: #0c0c0e;
-    --muted-foreground: #52525b;
+    --muted: 0.967 0.001 286.375;
+    --muted-foreground: 0.552 0.016 285.938;
 
-    --accent: #0c0c0e;
-    --accent-foreground: #e4e4e7;
+    --accent: 0.967 0.001 286.375;
+    --accent-foreground: 0.21 0.006 285.885;
 
-    --destructive: #ef4444;
-    --destructive-foreground: #ffffff;
+    --destructive: 0.637 0.237 25.331;
+    --destructive-foreground: 1 0 0;
 
-    --border: rgba(255, 255, 255, 0.06);
-    --border-glow: rgba(255, 255, 255, 0.1);
-    --input: rgba(255, 255, 255, 0.06);
-    --ring: #0d4af5;
+    /* Sidebar (canais) */
+    --sidebar: 1 0 0;
+    --sidebar-foreground: 0.442 0.017 285.786;
+    --sidebar-primary: 0.507 0.258 263.8;
+    --sidebar-primary-foreground: 1 0 0;
+    --sidebar-accent: 0.967 0.001 286.375;
+    --sidebar-accent-foreground: 0.21 0.006 285.885;
+
+    /* ── Valores completos (alpha embutido / sem modificador) ── */
+    --card-solid: oklch(1 0 0);
+    --border: oklch(0 0 0 / 0.08);
+    --border-glow: oklch(0 0 0 / 0.12);
+    --input: oklch(0 0 0 / 0.06);
+    --ring: oklch(0.507 0.258 263.8);
+    --sidebar-border: oklch(0 0 0 / 0.06);
+    --sidebar-ring: oklch(0.507 0.258 263.8);
     --radius: 0.75rem;
 
-    /* Charts */
-    --chart-1: #0d4af5;
-    --chart-2: #3b82f6;
-    --chart-3: #06b6d4;
-    --chart-4: #8b5cf6;
-    --chart-5: #10b981;
+    /* Charts — cores de dados, iguais nos dois modos */
+    --chart-1: oklch(0.507 0.258 263.8);
+    --chart-2: oklch(0.623 0.214 259.815);
+    --chart-3: oklch(0.715 0.143 215.221);
+    --chart-4: oklch(0.606 0.25 292.717);
+    --chart-5: oklch(0.696 0.17 162.48);
 
-    /* Sidebar */
-    --sidebar: #09090b;
-    --sidebar-foreground: #a1a1aa;
-    --sidebar-primary: #0d4af5;
-    --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #0c0c0e;
-    --sidebar-accent-foreground: #e4e4e7;
-    --sidebar-border: rgba(255, 255, 255, 0.04);
-    --sidebar-ring: #0d4af5;
+    /* LED system — status, iguais nos dois modos */
+    --led-healthy: oklch(0.507 0.258 263.8);
+    --led-attention: oklch(0.769 0.188 70.08);
+    --led-critical: oklch(0.637 0.237 25.331);
 
-    /* LED system */
-    --led-healthy: #0d4af5;
-    --led-attention: #f59e0b;
-    --led-critical: #ef4444;
+    /* Glow — light (minimal) */
+    --glow-primary: oklch(0.507 0.258 263.8 / 0.04);
+    --glow-primary-strong: oklch(0.507 0.258 263.8 / 0.08);
 
-    /* Glow — minimal */
-    --glow-primary: rgba(13, 74, 245, 0.06);
-    --glow-primary-strong: rgba(13, 74, 245, 0.1);
+    /* ── Design System v2 — tokens lone-* (LIGHT) ─────────────── */
+    --lone-bg-primary:  #f7f8fa;
+    --lone-bg-card:     #ffffff;
+    --lone-bg-elevated: #ffffff;
 
-    /* ── Design System v2 — tokens lone-* ──────────────────────
-       Prefixo lone- garante coexistência com tokens existentes.
-       Telas antigas continuam usando vars acima; novas usam lone-*.
-       ─────────────────────────────────────────────────────────── */
+    --lone-border-default: rgba(0, 0, 0, 0.10);
+    --lone-border-strong:  rgba(0, 0, 0, 0.18);
 
-    /* Fundos */
-    --lone-bg-primary:  #13141A;
-    --lone-bg-card:     #1A1B23;
-    --lone-bg-elevated: #22242E;
+    --lone-text-primary:   #16181d;
+    --lone-text-secondary: #565b66;
+    --lone-text-tertiary:  #787d88;
+    --lone-text-disabled:  #a0a4ad;
 
-    /* Bordas */
-    --lone-border-default: #2A2C36;
-    --lone-border-strong:  #3A3D48;
+    --lone-brand-primary:  #2b3cff;
+    --lone-brand-soft:     #4254e8;
+    --lone-brand-bg-soft:  rgba(43, 60, 255, 0.10);
 
-    /* Texto */
-    --lone-text-primary:   #FFFFFF;
-    --lone-text-secondary: #9EA1AB;
-    --lone-text-tertiary:  #7B7E89;
-    --lone-text-disabled:  #6B6E78;
+    --lone-danger:  #dc2626;
+    --lone-warning: #c2700a;
+    --lone-success: #16a34a;
+    --lone-info:    #2b3cff;
 
-    /* Marca */
-    --lone-brand-primary:  #2B3CFF;
-    --lone-brand-soft:     #8DA4FF;
+    --lone-danger-bg:  rgba(220, 38, 38, 0.08);
+    --lone-warning-bg: rgba(194, 112, 10, 0.08);
+    --lone-success-bg: rgba(22, 163, 74, 0.08);
+    --lone-info-bg:    rgba(43, 60, 255, 0.08);
+
+    --lone-danger-border:  rgba(220, 38, 38, 0.25);
+    --lone-warning-border: rgba(194, 112, 10, 0.25);
+    --lone-success-border: rgba(22, 163, 74, 0.25);
+    --lone-info-border:    rgba(43, 60, 255, 0.25);
+
+    --lone-danger-icon-bg:  rgba(220, 38, 38, 0.12);
+    --lone-warning-icon-bg: rgba(194, 112, 10, 0.12);
+    --lone-success-icon-bg: rgba(22, 163, 74, 0.12);
+    --lone-info-icon-bg:    rgba(43, 60, 255, 0.12);
+  }
+
+  /* ─── Dark theme ─────────────────────────────────────────────
+     Sober Premium / Executive Clean (Vercel, Stripe, Linear).
+     ──────────────────────────────────────────────────────────── */
+  .dark {
+    --background: 0.141 0.005 285.823;
+    --foreground: 0.92 0.004 286.32;
+
+    --card: 0.178 0.004 285.8;
+    --card-foreground: 0.92 0.004 286.32;
+    --popover: 0.178 0.004 285.8;
+    --popover-foreground: 0.92 0.004 286.32;
+
+    --primary: 0.507 0.258 263.8;
+    --primary-foreground: 1 0 0;
+
+    --secondary: 0.151 0.004 285.8;
+    --secondary-foreground: 0.705 0.015 286.067;
+
+    --muted: 0.151 0.004 285.8;
+    --muted-foreground: 0.442 0.017 285.786;
+
+    --accent: 0.151 0.004 285.8;
+    --accent-foreground: 0.92 0.004 286.32;
+
+    --destructive: 0.637 0.237 25.331;
+    --destructive-foreground: 1 0 0;
+
+    /* Sidebar (canais) */
+    --sidebar: 0.141 0.005 285.823;
+    --sidebar-foreground: 0.705 0.015 286.067;
+    --sidebar-primary: 0.507 0.258 263.8;
+    --sidebar-primary-foreground: 1 0 0;
+    --sidebar-accent: 0.151 0.004 285.8;
+    --sidebar-accent-foreground: 0.92 0.004 286.32;
+
+    /* Valores completos */
+    --card-solid: oklch(0.178 0.004 285.8);
+    --border: oklch(1 0 0 / 0.06);
+    --border-glow: oklch(1 0 0 / 0.1);
+    --input: oklch(1 0 0 / 0.06);
+    --ring: oklch(0.507 0.258 263.8);
+    --sidebar-border: oklch(1 0 0 / 0.04);
+    --sidebar-ring: oklch(0.507 0.258 263.8);
+
+    /* Glow — dark (minimal) */
+    --glow-primary: oklch(0.507 0.258 263.8 / 0.06);
+    --glow-primary-strong: oklch(0.507 0.258 263.8 / 0.1);
+
+    /* ── Design System v2 — tokens lone-* (DARK) ──────────────── */
+    --lone-bg-primary:  #13141a;
+    --lone-bg-card:     #1a1b23;
+    --lone-bg-elevated: #22242e;
+
+    --lone-border-default: #2a2c36;
+    --lone-border-strong:  #3a3d48;
+
+    --lone-text-primary:   #ffffff;
+    --lone-text-secondary: #9ea1ab;
+    --lone-text-tertiary:  #7b7e89;
+    --lone-text-disabled:  #6b6e78;
+
+    --lone-brand-primary:  #2b3cff;
+    --lone-brand-soft:     #8da4ff;
     --lone-brand-bg-soft:  rgba(43, 60, 255, 0.20);
 
-    /* Semântico */
-    --lone-danger:  #F87171;
-    --lone-warning: #FBB13C;
-    --lone-success: #4ADE80;
-    --lone-info:    #8DA4FF;
+    --lone-danger:  #f87171;
+    --lone-warning: #fbb13c;
+    --lone-success: #4ade80;
+    --lone-info:    #8da4ff;
 
-    /* Semântico com opacidade — para fundos de badge/banner */
     --lone-danger-bg:  rgba(248, 113, 113, 0.08);
     --lone-warning-bg: rgba(251, 177, 60,  0.08);
     --lone-success-bg: rgba(74,  222, 128, 0.08);
@@ -123,74 +207,41 @@
     --lone-info-icon-bg:    rgba(141, 164, 255, 0.15);
   }
 
-  /* ─── Light theme ────────────────────────────────────────── */
-  .theme-light {
-    --background: #fafafa;
-    --foreground: #18181b;
-    --card: #ffffff;
-    --card-solid: #ffffff;
-    --card-foreground: #18181b;
-    --popover: #ffffff;
-    --popover-foreground: #18181b;
-    --primary: #0d4af5;
-    --primary-foreground: #ffffff;
-    --secondary: #f4f4f5;
-    --secondary-foreground: #52525b;
-    --muted: #f4f4f5;
-    --muted-foreground: #71717a;
-    --accent: #f4f4f5;
-    --accent-foreground: #18181b;
-    --destructive: #ef4444;
-    --destructive-foreground: #ffffff;
-    --border: rgba(0, 0, 0, 0.08);
-    --border-glow: rgba(0, 0, 0, 0.12);
-    --input: rgba(0, 0, 0, 0.06);
-    --ring: #0d4af5;
-    --sidebar: #ffffff;
-    --sidebar-foreground: #52525b;
-    --sidebar-primary: #0d4af5;
-    --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #f4f4f5;
-    --sidebar-accent-foreground: #18181b;
-    --sidebar-border: rgba(0, 0, 0, 0.06);
-    --sidebar-ring: #0d4af5;
-    --led-healthy: #0d4af5;
-    --led-attention: #f59e0b;
-    --led-critical: #ef4444;
-    --glow-primary: rgba(13, 74, 245, 0.04);
-    --glow-primary-strong: rgba(13, 74, 245, 0.08);
-  }
-
   * {
     border-color: var(--border);
     scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,0.06) transparent;
+    scrollbar-color: #d4d4d8 transparent;
   }
-  .theme-light * { scrollbar-color: #d4d4d8 #fafafa; }
+  .dark * { scrollbar-color: rgba(255, 255, 255, 0.06) transparent; }
 
-  /* ─── Light-mode overrides ─── */
-  .theme-light .bg-black { background-color: var(--background) !important; }
-  .theme-light .bg-black\/50 { background-color: rgba(0,0,0,0.1) !important; }
-  .theme-light .bg-black\/60 { background-color: rgba(0,0,0,0.12) !important; }
-  .theme-light .bg-black\/70 { background-color: rgba(0,0,0,0.18) !important; }
-  .theme-light .bg-black\/80 { background-color: rgba(0,0,0,0.22) !important; }
-  .theme-light .bg-zinc-950 { background-color: var(--background) !important; }
-  .theme-light .bg-zinc-900 { background-color: var(--secondary) !important; }
-  .theme-light .bg-zinc-900\/80,.theme-light .bg-zinc-900\/50,.theme-light .bg-zinc-900\/30 { background-color: rgba(244,244,245,0.5) !important; }
-  .theme-light .bg-zinc-800 { background-color: var(--muted) !important; }
-  .theme-light .bg-zinc-800\/30,.theme-light .bg-zinc-800\/50 { background-color: rgba(0,0,0,0.03) !important; }
-  .theme-light .bg-zinc-700 { background-color: #d4d4d8 !important; }
-  .theme-light .text-zinc-300 { color: #3f3f46 !important; }
-  .theme-light .text-zinc-400 { color: #52525b !important; }
-  .theme-light .text-zinc-500 { color: #71717a !important; }
-  .theme-light .text-zinc-600 { color: #a1a1aa !important; }
-  .theme-light .text-zinc-700 { color: #d4d4d8 !important; }
-  .theme-light .border-zinc-600,.theme-light .border-zinc-700,.theme-light .border-zinc-800,.theme-light .border-zinc-900 { border-color: var(--border) !important; }
-  .theme-light .hover\:bg-zinc-800:hover,.theme-light .hover\:bg-zinc-900:hover { background-color: var(--muted) !important; }
-  .theme-light .hover\:text-zinc-300:hover,.theme-light .hover\:text-zinc-400:hover { color: #3f3f46 !important; }
-  .theme-light .divide-zinc-800 > * + *,.theme-light .divide-zinc-700 > * + * { border-color: var(--border) !important; }
-  .theme-light .ring-zinc-800,.theme-light .ring-zinc-700 { --tw-ring-color: var(--border) !important; }
-  .theme-light .placeholder\:text-zinc-600::placeholder,.theme-light .placeholder\:text-zinc-500::placeholder { color: #a1a1aa !important; }
+  /* ─── Rede de segurança (transição) ──────────────────────────
+     Telas ainda não convertidas usam a paleta zinc escura (custom).
+     No LIGHT mode (html sem .dark) remapeamos backgrounds/bordas
+     literais que sobraram para os tokens, evitando blocos escuros.
+     `text-white` fica de fora (quebraria texto sobre botão colorido).
+     ──────────────────────────────────────────────────────────── */
+  html:not(.dark) .bg-black { background-color: oklch(var(--background)) !important; }
+  html:not(.dark) .bg-black\/50 { background-color: rgba(0,0,0,0.1) !important; }
+  html:not(.dark) .bg-black\/60 { background-color: rgba(0,0,0,0.12) !important; }
+  html:not(.dark) .bg-black\/70 { background-color: rgba(0,0,0,0.18) !important; }
+  html:not(.dark) .bg-black\/80 { background-color: rgba(0,0,0,0.22) !important; }
+  html:not(.dark) .bg-zinc-950 { background-color: oklch(var(--background)) !important; }
+  html:not(.dark) .bg-zinc-900 { background-color: oklch(var(--secondary)) !important; }
+  html:not(.dark) .bg-zinc-900\/80,html:not(.dark) .bg-zinc-900\/50,html:not(.dark) .bg-zinc-900\/30 { background-color: rgba(244,244,245,0.5) !important; }
+  html:not(.dark) .bg-zinc-800 { background-color: oklch(var(--muted)) !important; }
+  html:not(.dark) .bg-zinc-800\/30,html:not(.dark) .bg-zinc-800\/50 { background-color: rgba(0,0,0,0.03) !important; }
+  html:not(.dark) .bg-zinc-700 { background-color: #d4d4d8 !important; }
+  html:not(.dark) .text-zinc-300 { color: #3f3f46 !important; }
+  html:not(.dark) .text-zinc-400 { color: #52525b !important; }
+  html:not(.dark) .text-zinc-500 { color: #71717a !important; }
+  html:not(.dark) .text-zinc-600 { color: #a1a1aa !important; }
+  html:not(.dark) .text-zinc-700 { color: #d4d4d8 !important; }
+  html:not(.dark) .border-zinc-600,html:not(.dark) .border-zinc-700,html:not(.dark) .border-zinc-800,html:not(.dark) .border-zinc-900 { border-color: var(--border) !important; }
+  html:not(.dark) .hover\:bg-zinc-800:hover,html:not(.dark) .hover\:bg-zinc-900:hover { background-color: oklch(var(--muted)) !important; }
+  html:not(.dark) .hover\:text-zinc-300:hover,html:not(.dark) .hover\:text-zinc-400:hover { color: #3f3f46 !important; }
+  html:not(.dark) .divide-zinc-800 > * + *,html:not(.dark) .divide-zinc-700 > * + * { border-color: var(--border) !important; }
+  html:not(.dark) .ring-zinc-800,html:not(.dark) .ring-zinc-700 { --tw-ring-color: var(--border) !important; }
+  html:not(.dark) .placeholder\:text-zinc-600::placeholder,html:not(.dark) .placeholder\:text-zinc-500::placeholder { color: #a1a1aa !important; }
 
   body {
     @apply bg-background text-foreground antialiased;
@@ -206,6 +257,7 @@
 
 /* ═══════════════════════════════════════════════════════════
    COMPONENTS — Sober Premium (Zero Glow)
+   Todas as cores via tokens semânticos → theme-aware.
    ═══════════════════════════════════════════════════════════ */
 
 @layer components {
@@ -213,31 +265,26 @@
   /* ─── CARD — Solid, no blur, no glow ─────────────────────── */
   .card {
     @apply rounded-xl p-3 sm:p-4 lg:p-5;
-    background: var(--card);
-    border: 0.5px solid rgba(255, 255, 255, 0.06);
+    background: oklch(var(--card));
+    border: 0.5px solid var(--border);
     transition: border-color 0.2s ease;
   }
   .card:hover {
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-  .theme-light .card {
-    background: var(--card);
-    border-color: var(--border);
+    border-color: var(--border-glow);
   }
 
   /* ─── CARD GLOW — subtle top accent line only ────────────── */
   .card-glow {
     @apply rounded-xl p-5 relative overflow-hidden;
-    background: var(--card);
-    border: 0.5px solid rgba(255, 255, 255, 0.06);
+    background: oklch(var(--card));
+    border: 0.5px solid var(--border);
   }
   .card-glow::before {
     content: ""; position: absolute;
     top: 0; left: 20%; right: 20%; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+    background: linear-gradient(90deg, transparent, rgba(0,0,0,0.04), transparent);
   }
-  .theme-light .card-glow { background: var(--card); border-color: var(--border); }
-  .theme-light .card-glow::before { background: linear-gradient(90deg, transparent, rgba(0,0,0,0.04), transparent); }
+  .dark .card-glow::before { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent); }
 
   /* ─── CARD ACTIVE — subtle border only ──────────────────── */
   .card-active { border-color: rgba(13, 74, 245, 0.3) !important; }
@@ -261,29 +308,29 @@
     @apply px-4 py-2 rounded-xl text-sm font-medium text-muted-foreground;
     border: none; transition: all 0.15s ease;
   }
-  .btn-ghost:hover { background: rgba(255,255,255,0.04); color: var(--foreground); }
+  .btn-ghost:hover { background: oklch(var(--accent)); color: oklch(var(--foreground)); }
 
   .btn-outline {
     @apply px-4 py-2 rounded-xl text-sm font-medium;
-    background: transparent; color: var(--foreground);
-    border: 0.5px solid rgba(255, 255, 255, 0.1);
+    background: transparent; color: oklch(var(--foreground));
+    border: 0.5px solid var(--border-glow);
     transition: all 0.15s ease;
   }
-  .btn-outline:hover { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.15); }
+  .btn-outline:hover { background: oklch(var(--accent)); border-color: var(--border-glow); }
 
   /* ─── TAGS ──────────────────────────────────────────────── */
   .tag-premium { @apply text-[#3b82f6] bg-[#0d4af5]/[0.08] border-[#0d4af5]/[0.12]; }
   .tag-risk    { @apply text-red-400 bg-red-500/[0.08] border-red-500/[0.12]; }
-  .tag-matcon  { @apply text-zinc-400 bg-zinc-500/[0.08] border-zinc-500/[0.12]; }
+  .tag-matcon  { @apply text-muted-foreground border-border; background-color: oklch(var(--muted)); }
 
   /* ─── LED STATUS — smaller, no heavy glow ───────────────── */
   .led { @apply w-2 h-2 rounded-full shrink-0; }
-  .led-healthy { background: #0d4af5; }
-  .led-attention { background: #f59e0b; }
-  .led-critical { background: #ef4444; animation: pulse 2s ease-in-out infinite; }
+  .led-healthy { background: var(--led-healthy); }
+  .led-attention { background: var(--led-attention); }
+  .led-critical { background: var(--led-critical); animation: pulse 2s ease-in-out infinite; }
 
   /* ─── ATTENTION LEVELS ─────────────────────────────────── */
-  .level-low      { @apply text-zinc-400 bg-zinc-500/[0.08] border-zinc-500/[0.12]; }
+  .level-low      { @apply text-muted-foreground border-border; background-color: oklch(var(--muted)); }
   .level-medium   { @apply text-amber-400 bg-amber-500/[0.08] border-amber-500/[0.12]; }
   .level-high     { @apply text-[#3b6ff5] bg-[#0d4af5]/[0.08] border-[#0d4af5]/[0.12]; }
   .level-critical { @apply text-red-400 bg-red-500/[0.08] border-red-500/[0.12]; }
@@ -291,29 +338,28 @@
   /* ─── INPUT — solid background, no blur ─────────────────── */
   .input-glass {
     @apply w-full rounded-xl px-4 py-3 text-sm outline-none;
-    background: var(--muted);
-    border: 0.5px solid rgba(255, 255, 255, 0.06);
-    color: var(--foreground);
+    background: oklch(var(--muted));
+    border: 0.5px solid var(--border);
+    color: oklch(var(--foreground));
     transition: border-color 0.15s ease;
   }
-  .input-glass::placeholder { color: var(--muted-foreground); }
-  .input-glass:hover { border-color: rgba(255,255,255,0.1); }
+  .input-glass::placeholder { color: oklch(var(--muted-foreground)); }
+  .input-glass:hover { border-color: var(--border-glow); }
   .input-glass:focus { border-color: #0d4af5; }
   .input-glass:disabled { opacity: 0.3; cursor: not-allowed; }
 
   /* ─── METRIC CARD — subtle top line ─────────────────────── */
   .metric-card {
     @apply rounded-xl p-5 relative overflow-hidden;
-    background: var(--card);
-    border: 0.5px solid rgba(255, 255, 255, 0.06);
+    background: oklch(var(--card));
+    border: 0.5px solid var(--border);
   }
   .metric-card::after {
     content: ""; position: absolute;
     top: -1px; left: 25%; right: 25%; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+    background: linear-gradient(90deg, transparent, rgba(0,0,0,0.03), transparent);
   }
-  .theme-light .metric-card { background: var(--card); border-color: var(--border); }
-  .theme-light .metric-card::after { background: linear-gradient(90deg, transparent, rgba(0,0,0,0.03), transparent); }
+  .dark .metric-card::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent); }
 
   /* ─── KPI STATES — border color only, no shadow ─────────── */
   .kpi-good { border-color: rgba(13, 74, 245, 0.2); }
@@ -322,10 +368,10 @@
 
   /* ─── HOVER — border only ───────────────────────────────── */
   .glow-hover { transition: border-color 0.15s ease; }
-  .glow-hover:hover { border-color: rgba(255, 255, 255, 0.1); }
+  .glow-hover:hover { border-color: var(--border-glow); }
 
   /* ─── GLASS — solid, no blur ────────────────────────────── */
-  .glass { background: var(--card); border: 0.5px solid rgba(255, 255, 255, 0.06); }
+  .glass { background: oklch(var(--card)); border: 0.5px solid var(--border); }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -359,14 +405,14 @@
 
   .bg-grid {
     background-image:
-      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
-    background-size: 56px 56px;
-  }
-  .theme-light .bg-grid {
-    background-image:
       linear-gradient(rgba(0,0,0,0.025) 1px, transparent 1px),
       linear-gradient(90deg, rgba(0,0,0,0.025) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+  .dark .bg-grid {
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
     background-size: 56px 56px;
   }
 
@@ -378,10 +424,10 @@
    ═══════════════════════════════════════════════════════════ */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
-.theme-light ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); }
-.theme-light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.18); }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.18); }
+.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
 
 /* Utility: ocultar scrollbar mantendo scroll funcional (portal tabs) */
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

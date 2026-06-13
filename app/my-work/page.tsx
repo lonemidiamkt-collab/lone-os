@@ -168,7 +168,7 @@ export default function MyWorkPage() {
                       <p className="text-[10px] text-muted-foreground">{req.clientName} · {req.format}</p>
                     </div>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
-                      req.status === "queued" ? "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" :
+                      req.status === "queued" ? "text-muted-foreground bg-zinc-500/10 border-zinc-500/20" :
                       req.status === "in_progress" ? "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" :
                       "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
                     }`}>
@@ -264,7 +264,7 @@ export default function MyWorkPage() {
 function TaskRow({ task }: { task: Task }) {
   const updateTask = useOperationalStore((s) => s.updateTask);
   const statusConfig: Record<string, { label: string; color: string }> = {
-    pending: { label: "Aguardando", color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
+    pending: { label: "Aguardando", color: "text-muted-foreground bg-zinc-500/10 border-zinc-500/20" },
     in_progress: { label: "Em Execucao", color: "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" },
     review: { label: "Validacao", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
     done: { label: "Entregue", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
@@ -279,14 +279,14 @@ function TaskRow({ task }: { task: Task }) {
       <button
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); updateTask(task.id, { status: isDone ? "pending" : "done" }); }}
         className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
-          isDone ? "bg-[#0d4af5] border-[#0d4af5] text-white" : "border-zinc-600 hover:border-[#0d4af5]"
+          isDone ? "bg-[#0d4af5] border-[#0d4af5] text-white" : "border-border hover:border-[#0d4af5]"
         }`}
         title={isDone ? "Reabrir" : "Concluir"}
       >
         {isDone && <Check size={10} />}
       </button>
       <div className="flex-1 min-w-0">
-        <p className={`text-xs font-medium text-foreground truncate ${isDone ? "line-through text-zinc-500" : ""}`}>{task.title}</p>
+        <p className={`text-xs font-medium text-foreground truncate ${isDone ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[10px] text-muted-foreground">{task.clientName}</span>
           {task.dueDate && (
@@ -295,7 +295,7 @@ function TaskRow({ task }: { task: Task }) {
             </span>
           )}
           {timeMs > 0 && (
-            <span className="text-[10px] text-zinc-600">{formatTimeSpent(timeMs)}</span>
+            <span className="text-[10px] text-muted-foreground">{formatTimeSpent(timeMs)}</span>
           )}
         </div>
       </div>
@@ -305,7 +305,7 @@ function TaskRow({ task }: { task: Task }) {
       <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium shrink-0 ${getPriorityColor(task.priority)}`}>
         {getPriorityLabel(task.priority)}
       </span>
-      <ChevronRight size={12} className="text-zinc-700 shrink-0" />
+      <ChevronRight size={12} className="text-muted-foreground shrink-0" />
     </Link>
   );
 }
@@ -350,7 +350,7 @@ function CardRow({ card, isApproval }: { card: ContentCard; isApproval?: boolean
       }`}>
         {STATUS_LABELS[card.status] ?? card.status}
       </span>
-      <ChevronRight size={12} className="text-zinc-700 shrink-0" />
+      <ChevronRight size={12} className="text-muted-foreground shrink-0" />
     </Link>
   );
 }

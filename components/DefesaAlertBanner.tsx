@@ -46,7 +46,7 @@ export default function DefesaAlertBanner() {
           <p className={`${textClass} font-semibold text-sm`}>
             Defesa Ativa: {summary.unack_total} {summary.unack_total === 1 ? "alerta ativo" : "alertas ativos"}
           </p>
-          <p className="text-[11px] text-zinc-400 mt-0.5">
+          <p className="text-[11px] text-muted-foreground mt-0.5">
             {summary.unack_critical > 0 && <span className="text-red-400">{summary.unack_critical} crítico{summary.unack_critical > 1 ? "s" : ""}</span>}
             {summary.unack_critical > 0 && summary.unack_high > 0 && " · "}
             {summary.unack_high > 0 && <span className="text-orange-400">{summary.unack_high} alto{summary.unack_high > 1 ? "s" : ""}</span>}

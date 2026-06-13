@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { RoleProvider, useRole } from "@/lib/context/RoleContext";
 import { AppStateProvider } from "@/lib/context/AppStateContext";
-import { ThemeProvider } from "@/lib/context/ThemeContext";
 import { NavProvider, useNav } from "@/lib/context/NavContext";
 import Sidebar from "@/components/Sidebar";
 import LoginScreen from "@/components/LoginScreen";
@@ -28,8 +27,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (!hydrated) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-10 h-10 rounded-xl bg-black flex items-center justify-center animate-pulse shadow-[0_0_30px_rgba(10,52,245,0.4)] overflow-hidden">
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-10 h-10 rounded-xl bg-background flex items-center justify-center animate-pulse shadow-[0_0_30px_rgba(10,52,245,0.4)] overflow-hidden">
           <Logo className="w-6 h-6" priority />
         </div>
       </div>
@@ -60,11 +59,11 @@ function MainLayout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile hamburger */}
       <button
-        className="lg:hidden fixed top-4 left-4 z-30 w-10 h-10 rounded-xl bg-[#0d4af5] flex items-center justify-center"
+        className="lg:hidden fixed top-4 left-4 z-30 w-10 h-10 rounded-xl bg-primary flex items-center justify-center"
         aria-label="Abrir menu"
         onClick={() => setMobileOpen(!mobileOpen)}
       >
-        <Menu size={18} className="text-white" />
+        <Menu size={18} className="text-primary-foreground" />
       </button>
 
       {/* Double Sidebar */}
@@ -93,23 +92,21 @@ function MainLayout({ children }: { children: React.ReactNode }) {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider>
-      <RoleProvider>
-        <AuthGate>
-          <AppStateProvider>
-            <NavProvider>
-              <MainLayout>{children}</MainLayout>
-              <NotificationToast />
-              <RealtimeToast />
-              <ScheduledNoticePopup />
-              <GlobalSearch />
-              <KeyboardShortcuts />
-              <OnboardingTour />
-              <SessionTimeout />
-            </NavProvider>
-          </AppStateProvider>
-        </AuthGate>
-      </RoleProvider>
-    </ThemeProvider>
+    <RoleProvider>
+      <AuthGate>
+        <AppStateProvider>
+          <NavProvider>
+            <MainLayout>{children}</MainLayout>
+            <NotificationToast />
+            <RealtimeToast />
+            <ScheduledNoticePopup />
+            <GlobalSearch />
+            <KeyboardShortcuts />
+            <OnboardingTour />
+            <SessionTimeout />
+          </NavProvider>
+        </AppStateProvider>
+      </AuthGate>
+    </RoleProvider>
   );
 }

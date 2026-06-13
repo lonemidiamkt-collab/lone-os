@@ -395,10 +395,10 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
             !latestContract ? "bg-zinc-500/10" : latestContract.status === "active" ? "bg-emerald-500/15" : latestContract.status === "expired" ? "bg-red-500/10" : "bg-zinc-500/10"
           }`}>
-            {!latestContract ? <FileText size={18} className="text-zinc-500" /> :
+            {!latestContract ? <FileText size={18} className="text-muted-foreground" /> :
              latestContract.status === "active" ? <CheckCircle size={18} className="text-emerald-500" /> :
              latestContract.status === "expired" ? <Clock size={18} className="text-red-400" /> :
-             <FileText size={18} className="text-zinc-400" />}
+             <FileText size={18} className="text-muted-foreground" />}
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Status Juridico</p>
@@ -449,12 +449,12 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             { key: "enderecoCidade", label: "Cidade" }, { key: "enderecoEstado", label: "Estado (UF)" },
           ]).map(({ key, label }) => (
             <div key={key} className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
               {editing ? (
                 <input value={form[key] || ""} onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50 transition-colors" />
               ) : (
-                <p className="text-sm text-foreground">{form[key] || <span className="text-zinc-600 italic">Nao informado</span>}</p>
+                <p className="text-sm text-foreground">{form[key] || <span className="text-muted-foreground italic">Nao informado</span>}</p>
               )}
             </div>
           ))}
@@ -466,7 +466,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
             <Shield size={11} className="text-[#0d4af5]" /> Cofre de Acessos
-            {!isAdmin && <span className="text-[10px] text-zinc-600 normal-case font-normal ml-2">Mostrando apenas plataformas do seu departamento</span>}
+            {!isAdmin && <span className="text-[10px] text-muted-foreground normal-case font-normal ml-2">Mostrando apenas plataformas do seu departamento</span>}
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {accessCards.map(({ platform, icon, loginKey, pwKey, testUrl }) => {
@@ -488,19 +488,19 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                   </div>
                   <div className="space-y-2">
                     <div className="space-y-1">
-                      <p className="text-[10px] text-zinc-500 uppercase">Login</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">Login</p>
                       {editing ? (
                         <input value={form[loginKey] || ""} onChange={(e) => setForm((p) => ({ ...p, [loginKey]: e.target.value }))}
                           className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" placeholder="Login / Email" />
                       ) : (
                         <div className="flex items-center gap-2">
-                          <p className="text-sm text-foreground flex-1">{form[loginKey] || <span className="text-zinc-600 italic">Nao informado</span>}</p>
-                          {hasLogin && <button type="button" onClick={() => copyToClip(form[loginKey])} className="text-zinc-600 hover:text-[#0d4af5] transition-colors" title="Copiar"><LinkIcon size={11} /></button>}
+                          <p className="text-sm text-foreground flex-1">{form[loginKey] || <span className="text-muted-foreground italic">Nao informado</span>}</p>
+                          {hasLogin && <button type="button" onClick={() => copyToClip(form[loginKey])} className="text-muted-foreground hover:text-[#0d4af5] transition-colors" title="Copiar"><LinkIcon size={11} /></button>}
                         </div>
                       )}
                     </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] text-zinc-500 uppercase flex items-center gap-1">
+                      <p className="text-[10px] text-muted-foreground uppercase flex items-center gap-1">
                         Senha <Shield size={9} className="text-[#0d4af5]" />
                       </p>
                       {editing ? (
@@ -509,7 +509,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                             onChange={(e) => setForm((p) => ({ ...p, [pwKey]: e.target.value }))}
                             className="w-full bg-card border border-border rounded-lg px-3 py-2 pr-9 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
                             placeholder="Deixe em branco pra manter a senha atual" />
-                          <button type="button" onClick={() => setShowPw((p) => ({ ...p, [pwKey]: !p[pwKey] }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+                          <button type="button" onClick={() => setShowPw((p) => ({ ...p, [pwKey]: !p[pwKey] }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                             {showPw[pwKey] ? <EyeOff size={13} /> : <Eye size={13} />}
                           </button>
                         </div>
@@ -519,21 +519,21 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                             {form[pwKey] ? (
                               showPw[pwKey] ? form[pwKey] : "••••••••"
                             ) : (
-                              <span className="text-zinc-600 italic font-sans text-[11px]">
+                              <span className="text-muted-foreground italic font-sans text-[11px]">
                                 {revealingPw === pwKey ? "Descriptografando..." : "🔒 Armazenada (clique pra revelar)"}
                               </span>
                             )}
                           </p>
                           {form[pwKey] ? (
                             <>
-                              <button type="button" onClick={() => setShowPw((p) => ({ ...p, [pwKey]: !p[pwKey] }))} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                              <button type="button" onClick={() => setShowPw((p) => ({ ...p, [pwKey]: !p[pwKey] }))} className="text-muted-foreground hover:text-foreground transition-colors">
                                 {showPw[pwKey] ? <EyeOff size={12} /> : <Eye size={12} />}
                               </button>
-                              <button type="button" onClick={() => copyToClip(form[pwKey])} className="text-zinc-600 hover:text-[#0d4af5] transition-colors" title="Copiar"><LinkIcon size={11} /></button>
+                              <button type="button" onClick={() => copyToClip(form[pwKey])} className="text-muted-foreground hover:text-[#0d4af5] transition-colors" title="Copiar"><LinkIcon size={11} /></button>
                             </>
                           ) : (
                             <button type="button" onClick={() => revealPassword(pwKey)} disabled={revealingPw === pwKey}
-                              className="text-zinc-500 hover:text-[#0d4af5] transition-colors disabled:opacity-50" title="Revelar senha">
+                              className="text-muted-foreground hover:text-[#0d4af5] transition-colors disabled:opacity-50" title="Revelar senha">
                               <Eye size={12} />
                             </button>
                           )}
@@ -584,28 +584,28 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                     {isPrivateRef(url) && (
                       <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border">
                         <Shield size={16} className="text-amber-400" />
-                        <span className="text-xs text-zinc-400">Arquivo privado — gere link para visualizar</span>
+                        <span className="text-xs text-muted-foreground">Arquivo privado — gere link para visualizar</span>
                       </div>
                     )}
                     {!isPrivateRef(url) && url.match(/\.pdf$/i) && (
                       <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border">
-                        <FileText size={18} className="text-[#0d4af5]" /><span className="text-xs text-zinc-400">PDF</span>
+                        <FileText size={18} className="text-[#0d4af5]" /><span className="text-xs text-muted-foreground">PDF</span>
                       </div>
                     )}
                     <div className="flex gap-1.5">
                       <button onClick={() => handleSecureOpen(url, docType, false)}
                         disabled={opening === `${docType}-view`}
-                        className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-border text-xs text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all disabled:opacity-50">
+                        className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-border text-xs text-muted-foreground hover:text-white hover:border-[#0d4af5]/30 transition-all disabled:opacity-50">
                         {opening === `${docType}-view` ? <Loader2 size={10} className="animate-spin" /> : <Eye size={10} />} Visualizar
                       </button>
                       <button onClick={() => handleSecureOpen(url, docType, true)}
                         disabled={opening === `${docType}-dl`}
-                        className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-border text-xs text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all disabled:opacity-50">
+                        className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-border text-xs text-muted-foreground hover:text-white hover:border-[#0d4af5]/30 transition-all disabled:opacity-50">
                         {opening === `${docType}-dl` ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />} Baixar
                       </button>
                     </div>
                     {/* Substituir — admin pode enviar versão recebida via WhatsApp */}
-                    <label className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-zinc-700/50 text-[10px] text-zinc-600 hover:text-zinc-300 hover:border-zinc-500/50 transition-all cursor-pointer">
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-zinc-700/50 text-[10px] text-muted-foreground hover:text-foreground hover:border-zinc-500/50 transition-all cursor-pointer">
                       {uploading === docType ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
                       {uploading === docType ? "Substituindo..." : "Substituir arquivo"}
                       <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => {
@@ -618,7 +618,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                     <div className="flex items-center gap-2 p-4 rounded-lg border border-dashed border-border bg-card">
                       <AlertTriangle size={14} className="text-amber-500" /><span className="text-xs text-amber-400">Pendente</span>
                     </div>
-                    <label className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-border text-xs text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all cursor-pointer">
+                    <label className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:text-white hover:border-[#0d4af5]/30 transition-all cursor-pointer">
                       {uploading === docType ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
                       {uploading === docType ? "Enviando..." : "Enviar arquivo do WhatsApp"}
                       <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => {
@@ -641,7 +641,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           </p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3">
             <div className="space-y-1 col-span-2">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Tipo de Servico</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tipo de Servico</p>
               {editing ? (
                 <select value={form.serviceType || ""} onChange={(e) => setForm((p) => ({ ...p, serviceType: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50">
@@ -657,12 +657,12 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                    form.serviceType === "assessoria_trafego" ? "Assessoria de Trafego" :
                    form.serviceType === "assessoria_social" ? "Assessoria de Social" :
                    form.serviceType === "assessoria_design" ? "Assessoria de Design" :
-                   <span className="text-zinc-600 italic">Nao definido</span>}
+                   <span className="text-muted-foreground italic">Nao definido</span>}
                 </p>
               )}
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Responsavel Trafego</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Responsavel Trafego</p>
               {editing ? (
                 <select value={form.assignedTraffic || ""} onChange={(e) => setForm((p) => ({ ...p, assignedTraffic: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50">
@@ -670,11 +670,11 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                   {team.forField("assignedTraffic").map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
               ) : (
-                <p className="text-sm text-foreground">{form.assignedTraffic || <span className="text-zinc-600 italic">Nao atribuido</span>}</p>
+                <p className="text-sm text-foreground">{form.assignedTraffic || <span className="text-muted-foreground italic">Nao atribuido</span>}</p>
               )}
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Responsavel Social</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Responsavel Social</p>
               {editing ? (
                 <select value={form.assignedSocial || ""} onChange={(e) => setForm((p) => ({ ...p, assignedSocial: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50">
@@ -682,11 +682,11 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                   {team.forField("assignedSocial").map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
               ) : (
-                <p className="text-sm text-foreground">{form.assignedSocial || <span className="text-zinc-600 italic">Nao atribuido</span>}</p>
+                <p className="text-sm text-foreground">{form.assignedSocial || <span className="text-muted-foreground italic">Nao atribuido</span>}</p>
               )}
             </div>
             <div className="space-y-1 col-span-2">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Designer Responsavel</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Designer Responsavel</p>
               {editing ? (
                 <select value={form.assignedDesigner || ""} onChange={(e) => setForm((p) => ({ ...p, assignedDesigner: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50">
@@ -694,7 +694,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                   {team.forField("assignedDesigner").map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
               ) : (
-                <p className="text-sm text-foreground">{form.assignedDesigner || <span className="text-zinc-600 italic">Nao atribuido</span>}</p>
+                <p className="text-sm text-foreground">{form.assignedDesigner || <span className="text-muted-foreground italic">Nao atribuido</span>}</p>
               )}
             </div>
           </div>
@@ -716,7 +716,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             {emailStatus === "sent" && <span className="text-xs text-emerald-400 flex items-center gap-1"><Check size={12} /> Enviado</span>}
             {emailStatus === "error" && <span className="text-xs text-red-400 flex items-center gap-1"><AlertTriangle size={12} /> Erro no envio</span>}
           </div>
-          <p className="text-[10px] text-zinc-600">Envia o e-mail de boas-vindas para {form.emailCorporativo || form.phone || "(sem e-mail)"}</p>
+          <p className="text-[10px] text-muted-foreground">Envia o e-mail de boas-vindas para {form.emailCorporativo || form.phone || "(sem e-mail)"}</p>
         </div>
       )}
 

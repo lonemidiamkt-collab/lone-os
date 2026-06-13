@@ -21,7 +21,7 @@ export default function SocialAuthModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
       <div className="w-full max-w-sm mx-4">
         {/* Logo */}
         <div className="flex flex-col items-center mb-10">

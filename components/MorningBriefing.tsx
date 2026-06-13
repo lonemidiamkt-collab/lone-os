@@ -133,7 +133,7 @@ export default function MorningBriefing({ clients }: Props) {
                 </span>
               )}
             </h3>
-            <span className="text-[10px] text-zinc-600 ml-auto">{alertCount} alerta(s) · 0 tokens</span>
+            <span className="text-[10px] text-muted-foreground ml-auto">{alertCount} alerta(s) · 0 tokens</span>
           </div>
           <div className="space-y-1.5">
             {alerts.alerts.slice(0, 5).map((alert) => (
@@ -148,11 +148,11 @@ export default function MorningBriefing({ clients }: Props) {
                 }`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-zinc-500">{alert.client}</span>
-                    <span className="text-[10px] text-zinc-700">·</span>
+                    <span className="text-[10px] text-muted-foreground">{alert.client}</span>
+                    <span className="text-[10px] text-muted-foreground">·</span>
                     <span className="text-[11px] font-medium text-foreground">{alert.title}</span>
                   </div>
-                  <p className="text-[10px] text-zinc-500 mt-0.5">{alert.detail}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{alert.detail}</p>
                   <a href="/traffic" className="text-[10px] text-[#0d4af5] mt-0.5 font-medium flex items-center gap-1 hover:underline cursor-pointer">
                     <Zap size={8} /> {alert.action} →
                   </a>
@@ -175,7 +175,7 @@ export default function MorningBriefing({ clients }: Props) {
                 <Sun size={12} className="text-amber-400" />
                 Briefing do Dia
               </h3>
-              <p className="text-[10px] text-zinc-500">
+              <p className="text-[10px] text-muted-foreground">
                 {briefing ? "Gerado pela IA" : `${clients.length} cliente(s) para analisar`}
               </p>
             </div>
@@ -183,14 +183,14 @@ export default function MorningBriefing({ clients }: Props) {
           <div className="flex items-center gap-1.5">
             {briefing && (
               <button onClick={() => setExpanded(!expanded)}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600 hover:text-foreground hover:bg-white/[0.04] transition-all">
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-all">
                 {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
             )}
             <button onClick={fetchBriefing} disabled={loading}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 briefing
-                  ? "text-zinc-400 border border-white/[0.06] hover:text-foreground hover:border-[#0d4af5]/30"
+                  ? "text-muted-foreground border border-white/[0.06] hover:text-foreground hover:border-[#0d4af5]/30"
                   : "bg-[#0d4af5] text-white hover:bg-[#0d4af5]/80"
               } disabled:opacity-30`}>
               {loading ? <Loader2 size={11} className="animate-spin" /> : briefing ? <RefreshCw size={11} /> : <Zap size={11} />}
@@ -206,7 +206,7 @@ export default function MorningBriefing({ clients }: Props) {
         {briefing && expanded && (
           <div className="mt-4 space-y-4 animate-fade-in">
             {/* Greeting */}
-            <p className="text-xs text-zinc-300 font-medium">{briefing.greeting}</p>
+            <p className="text-xs text-foreground font-medium">{briefing.greeting}</p>
 
             {/* Urgent */}
             {briefing.urgent.length > 0 && (
@@ -222,10 +222,10 @@ export default function MorningBriefing({ clients }: Props) {
                     }`} />
                     <div className="flex-1">
                       <p className="text-[11px] font-semibold text-foreground">
-                        <span className="text-zinc-500 font-normal">{item.client} — </span>
+                        <span className="text-muted-foreground font-normal">{item.client} — </span>
                         {item.title}
                       </p>
-                      <p className="text-[10px] text-zinc-500 mt-0.5">{item.detail}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{item.detail}</p>
                       <a href="/traffic" className="text-[10px] text-[#0d4af5] mt-1 font-medium flex items-center gap-1 hover:underline cursor-pointer">
                         <Zap size={8} /> {item.action} →
                       </a>
@@ -249,7 +249,7 @@ export default function MorningBriefing({ clients }: Props) {
                         {item.client}
                         <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold">{item.metric}</span>
                       </p>
-                      <p className="text-[10px] text-zinc-500 mt-0.5">{item.suggestion}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{item.suggestion}</p>
                     </div>
                   </div>
                 ))}
@@ -259,10 +259,10 @@ export default function MorningBriefing({ clients }: Props) {
             {/* Stable */}
             {briefing.stable.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
-                <CheckCircle size={10} className="text-zinc-600" />
-                <span className="text-[10px] text-zinc-600">Estavel:</span>
+                <CheckCircle size={10} className="text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">Estavel:</span>
                 {briefing.stable.map((name, i) => (
-                  <span key={i} className="text-[10px] px-2 py-0.5 rounded-md bg-white/[0.03] text-zinc-500 border border-white/[0.04]">
+                  <span key={i} className="text-[10px] px-2 py-0.5 rounded-md bg-white/[0.03] text-muted-foreground border border-white/[0.04]">
                     {name}
                   </span>
                 ))}
@@ -270,12 +270,12 @@ export default function MorningBriefing({ clients }: Props) {
             )}
 
             {/* Summary */}
-            <p className="text-[11px] text-zinc-400 italic border-t border-white/[0.04] pt-3">
+            <p className="text-[11px] text-muted-foreground italic border-t border-white/[0.04] pt-3">
               {briefing.summary}
             </p>
 
             {briefing.tokens && (
-              <p className="text-[9px] text-zinc-700 text-right">{briefing.tokens} tokens · gpt-4o-mini</p>
+              <p className="text-[9px] text-muted-foreground text-right">{briefing.tokens} tokens · gpt-4o-mini</p>
             )}
           </div>
         )}

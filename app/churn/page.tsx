@@ -137,9 +137,9 @@ export default function ChurnRiskPage() {
           <div className="flex justify-center py-16"><Loader2 size={20} className="text-[#0d4af5] animate-spin" /></div>
         ) : clients.length === 0 ? (
           <div className="text-center py-16 space-y-2">
-            <Shield size={32} className="text-zinc-700 mx-auto" />
+            <Shield size={32} className="text-muted-foreground mx-auto" />
             <p className="text-sm text-muted-foreground">Nenhum score calculado ainda.</p>
-            <p className="text-xs text-zinc-600">Clique em &quot;Recalcular agora&quot; pra rodar o cron manualmente.</p>
+            <p className="text-xs text-muted-foreground">Clique em &quot;Recalcular agora&quot; pra rodar o cron manualmente.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -154,7 +154,7 @@ export default function ChurnRiskPage() {
 function SummaryCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">{label}</p>
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</p>
       <p className={`${color} font-bold mt-1 text-2xl`}>{value}</p>
     </div>
   );
@@ -211,31 +211,31 @@ function ClientHealthCard({ client: c }: { client: Row }) {
               </span>
             )}
             {trend === "flat" && c.sparkline.length >= 2 && (
-              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-zinc-500/10 text-muted-foreground border border-zinc-500/20">
                 <Minus size={10} /> Estável
               </span>
             )}
           </div>
-          <p className="text-[10px] text-zinc-500 mt-1 flex items-center gap-1">
+          <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
             <Clock size={9} /> Atualizado {formatDate(c.computed_at)}
           </p>
         </div>
 
         {c.sparkline.length >= 2 && <Sparkline points={c.sparkline} />}
-        <ChevronRight size={16} className={`text-zinc-500 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        <ChevronRight size={16} className={`text-muted-foreground shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
       </button>
 
       {expanded && (
         <div className="border-t border-border p-4 bg-muted/20 space-y-3">
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium mb-2">Sinais que compõem o score</p>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Sinais que compõem o score</p>
             {Object.keys(c.breakdown).length === 0 ? (
-              <p className="text-xs text-zinc-500">Nenhum sinal de risco ativo.</p>
+              <p className="text-xs text-muted-foreground">Nenhum sinal de risco ativo.</p>
             ) : (
               <div className="space-y-1.5">
                 {Object.entries(c.breakdown).sort(([, a], [, b]) => b - a).map(([key, weight]) => (
                   <div key={key} className="flex items-center justify-between text-xs">
-                    <span className="text-zinc-300">{signalLabel(key)}</span>
+                    <span className="text-foreground">{signalLabel(key)}</span>
                     <span className={cfg.color}>+{weight}</span>
                   </div>
                 ))}

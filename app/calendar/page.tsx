@@ -99,7 +99,7 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 };
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
-  pending: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20",
+  pending: "text-muted-foreground bg-zinc-500/10 border-zinc-500/20",
   in_progress: "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20",
   review: "text-amber-400 bg-amber-500/10 border-amber-500/20",
   done: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
@@ -113,7 +113,7 @@ const PRIORITY_LABELS: Record<Priority, string> = {
 };
 
 const PRIORITY_COLORS: Record<Priority, string> = {
-  low: "text-zinc-400",
+  low: "text-muted-foreground",
   medium: "text-[#3b6ff5]",
   high: "text-amber-400",
   critical: "text-red-400",
@@ -800,7 +800,7 @@ export default function CalendarPage() {
                         {/* Quick create + icon */}
                         <button
                           onClick={(e) => { e.stopPropagation(); openQuickCreate(day); }}
-                          className="w-4 h-4 rounded flex items-center justify-center text-zinc-700 opacity-0 group-hover:opacity-100 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all"
+                          className="w-4 h-4 rounded flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all"
                           title="Criar evento"
                         >
                           <Plus size={10} />
@@ -884,7 +884,7 @@ export default function CalendarPage() {
                                   ? "bg-red-500/15 text-[#ff2d55] font-bold drop-shadow-[0_0_4px_rgba(255,45,85,0.5)]"
                                   : e.type === "content" ? "bg-primary/15 text-primary" :
                                     e.type === "task" ? "bg-[#3b6ff5]/15 text-[#3b6ff5]" :
-                                    "bg-zinc-500/15 text-zinc-400"
+                                    "bg-zinc-500/15 text-muted-foreground"
                               } hover:brightness-125`}
                               title={`${e.clientName}: ${e.title}`}
                             >
@@ -1312,7 +1312,7 @@ function QuickCreateModal({
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-black border border-[#1a1a1a] rounded-2xl shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in overflow-hidden">
+      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-background border border-[#1a1a1a] rounded-2xl shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in overflow-hidden">
         {/* Top glow bar */}
         <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/40 to-transparent" />
 
@@ -1348,9 +1348,9 @@ function QuickCreateModal({
                       : "border-[#1a1a1a] bg-[#0a0a0a] hover:border-[#2a2a2a]"
                   }`}
                 >
-                  <Icon size={16} className={active ? "text-[#0d4af5]" : "text-zinc-600"} />
-                  <p className={`text-xs font-medium mt-1.5 ${active ? "text-foreground" : "text-zinc-500"}`}>{ct.label}</p>
-                  <p className="text-[9px] text-zinc-700 mt-0.5">{ct.desc}</p>
+                  <Icon size={16} className={active ? "text-[#0d4af5]" : "text-muted-foreground"} />
+                  <p className={`text-xs font-medium mt-1.5 ${active ? "text-foreground" : "text-muted-foreground"}`}>{ct.label}</p>
+                  <p className="text-[9px] text-muted-foreground mt-0.5">{ct.desc}</p>
                 </button>
               );
             })}
@@ -1367,7 +1367,7 @@ function QuickCreateModal({
                 createType === "social" ? "Ex: Reel: 5 dicas de investimento" :
                 "Ex: Revisar campanhas Google Ads"
               }
-              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
+              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#0d4af5]/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
               autoFocus
             />
           </div>
@@ -1406,7 +1406,7 @@ function QuickCreateModal({
                           className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-lg border text-[9px] transition-all ${
                             active
                               ? "border-[#0d4af5]/40 bg-[#0d4af5]/10 text-[#0d4af5]"
-                              : "border-[#1a1a1a] text-zinc-600 hover:border-[#2a2a2a]"
+                              : "border-[#1a1a1a] text-muted-foreground hover:border-[#2a2a2a]"
                           }`}
                         >
                           <Icon size={12} />
@@ -1504,7 +1504,7 @@ function QuickCreateModal({
                 placeholder={"Use markdown — **negrito**, listas, links\nReferências, tom de voz, CTAs, hashtags..."}
                 minHeight={140}
               />
-              <p className="text-[9px] text-zinc-700">
+              <p className="text-[9px] text-muted-foreground">
                 Markdown puro. Designer vê formatado.
               </p>
             </div>
@@ -1519,7 +1519,7 @@ function QuickCreateModal({
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Detalhes adicionais sobre a tarefa..."
                 rows={3}
-                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none resize-none leading-relaxed min-h-[80px] overflow-hidden"
+                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#0d4af5]/50 outline-none resize-none leading-relaxed min-h-[80px] overflow-hidden"
               />
             </div>
           )}
@@ -1539,7 +1539,7 @@ function QuickCreateModal({
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1a1a1a]">
-            <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all">
+            <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
               Cancelar
             </button>
             {createType === "task" && (

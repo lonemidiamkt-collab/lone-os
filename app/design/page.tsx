@@ -193,7 +193,7 @@ function UploadArtModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-black border border-[#1a1a1a] rounded-2xl w-full max-w-md mx-4 shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-background border border-[#1a1a1a] rounded-2xl w-full max-w-md mx-4 shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in" onClick={(e) => e.stopPropagation()}>
         <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/40 to-transparent" />
         <div className="flex items-center justify-between p-5 border-b border-[#1a1a1a]">
           <div>
@@ -251,7 +251,7 @@ function UploadArtModal({
 
           <div className="flex items-center gap-2">
             <div className="flex-1 h-px bg-[#1a1a1a]" />
-            <span className="text-[9px] text-zinc-700 uppercase tracking-wider">ou</span>
+            <span className="text-[9px] text-muted-foreground uppercase tracking-wider">ou</span>
             <div className="flex-1 h-px bg-[#1a1a1a]" />
           </div>
 
@@ -262,7 +262,7 @@ function UploadArtModal({
               value={artLink}
               onChange={(e) => { setArtLink(e.target.value); setError(""); }}
               placeholder="https://drive.google.com/file/d/..."
-              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
+              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-[#0d4af5]/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
               autoFocus
             />
             {error && <p className="text-[10px] text-red-400">{error}</p>}
@@ -307,7 +307,7 @@ function UploadArtModal({
         </div>
 
         <div className="p-5 border-t border-[#1a1a1a] flex gap-2">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all">Cancelar</button>
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">Cancelar</button>
           <button
             type="button"
             onClick={handleSave}
@@ -355,7 +355,7 @@ function DownloadButton({ url, title }: { url: string; title: string }) {
   return (
     <button
       onClick={handleDownload}
-      className="text-[11px] px-3 py-1.5 rounded-lg bg-white/[0.06] text-zinc-300 font-medium hover:text-white hover:bg-white/[0.1] transition-all flex items-center gap-1.5 border border-white/[0.06]"
+      className="text-[11px] px-3 py-1.5 rounded-lg bg-white/[0.06] text-foreground font-medium hover:text-white hover:bg-white/[0.1] transition-all flex items-center gap-1.5 border border-white/[0.06]"
     >
       {state === "loading" ? (
         <Loader size={11} className="animate-spin" />
@@ -614,7 +614,7 @@ export default function DesignPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="card flex items-center gap-4">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${needsArt > 0 ? "bg-[#3b6ff5]/15" : "bg-[#111118]"}`}>
-              <ImageIcon size={18} className={needsArt > 0 ? "text-[#3b6ff5]" : "text-zinc-400"} />
+              <ImageIcon size={18} className={needsArt > 0 ? "text-[#3b6ff5]" : "text-muted-foreground"} />
             </div>
             <div>
               <p className={`text-2xl font-bold ${needsArt > 0 ? "text-[#3b6ff5]" : "text-foreground"}`}>{needsArt}</p>
@@ -641,7 +641,7 @@ export default function DesignPage() {
           </div>
           <div className="card flex items-center gap-4">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${urgentCards > 0 ? "bg-red-500/15" : "bg-[#111118]"}`}>
-              <AlertTriangle size={18} className={urgentCards > 0 ? "text-red-500" : "text-zinc-500"} />
+              <AlertTriangle size={18} className={urgentCards > 0 ? "text-red-500" : "text-muted-foreground"} />
             </div>
             <div>
               <p className={`text-2xl font-bold ${urgentCards > 0 ? "text-red-500" : "text-foreground"}`}>{urgentCards}</p>
@@ -873,7 +873,7 @@ export default function DesignPage() {
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.06] text-[10px] text-zinc-400 hover:text-[#0d4af5] hover:border-[#0d4af5]/30 transition-all w-full"
+                              className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.06] text-[10px] text-muted-foreground hover:text-[#0d4af5] hover:border-[#0d4af5]/30 transition-all w-full"
                             >
                               <FolderOpen size={10} className="shrink-0" />
                               <span className="truncate">Abrir Drive — {item.clientName}</span>
@@ -1092,7 +1092,7 @@ export default function DesignPage() {
       {/* ═══ HISTORY TAB ═══ */}
       {tab === "history" && (
         <div className="space-y-4 animate-fade-in">
-          <p className="text-xs text-zinc-400">Cards entregues e aprovados — historico completo de producao.</p>
+          <p className="text-xs text-muted-foreground">Cards entregues e aprovados — historico completo de producao.</p>
           <div className="space-y-2">
             {myContentCards
               .filter((c) => c.designerDeliveredAt || c.status === "published" || c.status === "scheduled")
@@ -1109,19 +1109,19 @@ export default function DesignPage() {
                       </div>
                     ) : (
                       <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                        <ImageIcon size={16} className="text-zinc-600" />
+                        <ImageIcon size={16} className="text-muted-foreground" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{card.title}</p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-zinc-400">{card.clientName}</span>
-                        <span className="text-[10px] text-zinc-600">·</span>
-                        <span className="text-[10px] text-zinc-400">{card.format}</span>
+                        <span className="text-[10px] text-muted-foreground">{card.clientName}</span>
+                        <span className="text-[10px] text-muted-foreground">·</span>
+                        <span className="text-[10px] text-muted-foreground">{card.format}</span>
                         {card.designerDeliveredAt && (
                           <>
-                            <span className="text-[10px] text-zinc-600">·</span>
-                            <span className="text-[10px] text-zinc-500">Entregue {card.designerDeliveredAt.slice(0, 10)}</span>
+                            <span className="text-[10px] text-muted-foreground">·</span>
+                            <span className="text-[10px] text-muted-foreground">Entregue {card.designerDeliveredAt.slice(0, 10)}</span>
                           </>
                         )}
                       </div>
@@ -1129,8 +1129,8 @@ export default function DesignPage() {
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
                         card.status === "published" ? "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" :
-                        card.status === "scheduled" ? "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" :
-                        "text-zinc-400 bg-zinc-500/10 border-zinc-500/20"
+                        card.status === "scheduled" ? "text-muted-foreground bg-zinc-500/10 border-zinc-500/20" :
+                        "text-muted-foreground bg-zinc-500/10 border-zinc-500/20"
                       }`}>
                         {card.status === "published" ? "Publicado" : card.status === "scheduled" ? "Agendado" : "Entregue"}
                       </span>
@@ -1147,8 +1147,8 @@ export default function DesignPage() {
               })}
             {myContentCards.filter((c) => c.designerDeliveredAt || c.status === "published").length === 0 && (
               <div className="text-center py-12">
-                <Clock size={24} className="text-zinc-800 mx-auto mb-3" />
-                <p className="text-xs text-zinc-600">Nenhuma entrega no historico ainda.</p>
+                <Clock size={24} className="text-muted-foreground mx-auto mb-3" />
+                <p className="text-xs text-muted-foreground">Nenhuma entrega no historico ainda.</p>
               </div>
             )}
           </div>
@@ -1198,7 +1198,7 @@ export default function DesignPage() {
               <h3 className="font-semibold text-red-400 text-sm flex items-center gap-2">
                 <AlertTriangle size={15} /> Devolver Card — Motivo do Bloqueio
               </h3>
-              <p className="text-xs text-zinc-400 mt-1">{blockingCard.title} — {blockingCard.clientName}</p>
+              <p className="text-xs text-muted-foreground mt-1">{blockingCard.title} — {blockingCard.clientName}</p>
             </div>
             <div className="p-5 space-y-2">
               {BLOCK_REASONS.map((reason) => (
@@ -1208,7 +1208,7 @@ export default function DesignPage() {
                   className={`w-full text-left px-3 py-2.5 rounded-lg text-xs transition-all ${
                     blockReason === reason
                       ? "bg-red-500/10 text-red-400 border border-red-500/30"
-                      : "bg-white/[0.02] text-zinc-400 border border-transparent hover:bg-white/[0.04]"
+                      : "bg-white/[0.02] text-muted-foreground border border-transparent hover:bg-white/[0.04]"
                   }`}
                 >
                   {reason}
@@ -1278,7 +1278,7 @@ export default function DesignPage() {
                     className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all ${
                       nonDeliveryReason === reason
                         ? "bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/30"
-                        : "bg-muted/50 text-zinc-400 border border-transparent hover:bg-muted"
+                        : "bg-muted/50 text-muted-foreground border border-transparent hover:bg-muted"
                     }`}
                   >
                     {reason}
@@ -1355,7 +1355,7 @@ export default function DesignPage() {
                 return (
                   <div className={`p-3 rounded-lg border ${score >= 75 ? "bg-emerald-500/[0.04] border-emerald-500/[0.1]" : score >= 50 ? "bg-amber-500/[0.04] border-amber-500/[0.1]" : "bg-red-500/[0.04] border-red-500/[0.1]"}`}>
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] uppercase tracking-wider font-semibold text-zinc-400">Saude do Briefing</p>
+                      <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Saude do Briefing</p>
                       <span className={`text-xs font-bold ${score >= 75 ? "text-emerald-400" : score >= 50 ? "text-amber-400" : "text-red-400"}`}>{score}%</span>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -1395,7 +1395,7 @@ export default function DesignPage() {
                     )}
                     {client?.driveLink && (
                       <a href={client.driveLink} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:border-[#0d4af5]/30 transition-all text-xs text-zinc-400 hover:text-[#0d4af5]">
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:border-[#0d4af5]/30 transition-all text-xs text-muted-foreground hover:text-[#0d4af5]">
                         <FolderOpen size={13} /> Abrir pasta Drive do cliente →
                       </a>
                     )}
@@ -1423,7 +1423,7 @@ export default function DesignPage() {
                 <span className={`badge border text-xs ${
                   briefingReq.status === "done" ? "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" :
                   briefingReq.status === "in_progress" ? "text-primary bg-primary/10 border-primary/20" :
-                  "text-zinc-400 bg-[#0e0e14] border-[#1e1e2a]"
+                  "text-muted-foreground bg-[#0e0e14] border-[#1e1e2a]"
                 }`}>
                   {briefingReq.status === "queued" ? "Na Fila" : briefingReq.status === "in_progress" ? "Em Produção" : "Concluído"}
                 </span>
@@ -1748,7 +1748,7 @@ function RequestsView({
                     </div>
                     {req.briefing && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{markdownPlainText(req.briefing)}</p>}
                     {linked && (
-                      <span className="text-[10px] text-zinc-400 bg-[#111118] border border-[#1e1e2a] px-2 py-0.5 rounded-full mt-1.5 inline-block">
+                      <span className="text-[10px] text-muted-foreground bg-[#111118] border border-[#1e1e2a] px-2 py-0.5 rounded-full mt-1.5 inline-block">
                         Card: {linked.title}
                       </span>
                     )}
@@ -1758,7 +1758,7 @@ function RequestsView({
                     <span className={`badge border text-xs ${
                       req.status === "done" ? "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" :
                       req.status === "in_progress" ? "text-primary bg-primary/10 border-primary/20" :
-                      "text-zinc-400 bg-[#0e0e14] border-[#1e1e2a]"
+                      "text-muted-foreground bg-[#0e0e14] border-[#1e1e2a]"
                     }`}>
                       {req.status === "queued" ? "Na Fila" : req.status === "in_progress" ? "Em Produção" : "Concluído"}
                     </span>

@@ -386,7 +386,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
           <p className="text-xs font-medium text-amber-400 flex items-center gap-1.5"><AlertTriangle size={12} /> Contratos proximos do vencimento</p>
           {expiringContracts.map((c) => (
             <div key={c.id} className="flex items-center justify-between">
-              <p className="text-xs text-zinc-300">V{c.version} — vence em <span className="text-amber-400 font-medium">{daysUntil(c.endDate)} dias</span> ({c.endDate})</p>
+              <p className="text-xs text-foreground">V{c.version} — vence em <span className="text-amber-400 font-medium">{daysUntil(c.endDate)} dias</span> ({c.endDate})</p>
               <button onClick={() => openForm(c)} className="text-[10px] px-2.5 py-1 rounded-lg bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 flex items-center gap-1">
                 <RefreshCw size={10} /> Renovar
               </button>
@@ -400,7 +400,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
           <p className="text-xs font-medium text-red-400 flex items-center gap-1.5"><AlertTriangle size={12} /> Contratos vencidos</p>
           {expiredContracts.map((c) => (
             <div key={c.id} className="flex items-center justify-between">
-              <p className="text-xs text-zinc-300">V{c.version} — venceu em {c.endDate}</p>
+              <p className="text-xs text-foreground">V{c.version} — venceu em {c.endDate}</p>
               <button onClick={() => openForm(c)} className="text-[10px] px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 flex items-center gap-1">
                 <RefreshCw size={10} /> Renovar
               </button>
@@ -420,7 +420,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
       {/* Contract list */}
       {loading ? <div className="flex justify-center py-10"><Loader2 size={20} className="text-[#0d4af5] animate-spin" /></div> : contracts.length === 0 ? (
         <div className="text-center py-16 space-y-3">
-          <FileText size={32} className="text-zinc-700 mx-auto" />
+          <FileText size={32} className="text-muted-foreground mx-auto" />
           <p className="text-sm text-muted-foreground">Nenhum contrato gerado</p>
         </div>
       ) : (
@@ -433,7 +433,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
               ? { label: "Ativo", cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" }
               : c.status === "expired"
                 ? { label: "Vencido", cls: "bg-red-500/10 text-red-400 border-red-500/20" }
-                : { label: "Rascunho", cls: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20" };
+                : { label: "Rascunho", cls: "bg-zinc-500/10 text-muted-foreground border-zinc-500/20" };
 
             return (
               <div key={c.id} className="rounded-xl border border-border bg-card p-4 space-y-3 transition-all">
@@ -445,7 +445,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                     <div>
                       <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
                         Contrato V{c.version} — {SERVICE_LABELS[c.serviceType] || c.serviceType}
-                        {prevContract && <span className="text-[10px] text-zinc-500 flex items-center gap-0.5"><ArrowRight size={8} /> Renovacao V{prevContract.version}</span>}
+                        {prevContract && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><ArrowRight size={8} /> Renovacao V{prevContract.version}</span>}
                       </p>
                       <p className="text-[10px] text-muted-foreground">
                         {c.monthlyValue > 0 ? `${formatCurrency(c.monthlyValue)}/mes` : "Valor no PDF"} x {c.durationMonths}m | {c.startDate} a {c.endDate} | Pgto dia {c.paymentDay || 10}
@@ -469,9 +469,9 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                     </>
                   )}
                   <button onClick={() => { setShowAudit(showAudit === c.id ? null : c.id); if (showAudit !== c.id) loadAudit(c.id); }}
-                    className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-zinc-600"><History size={11} /> Historico</button>
+                    className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-border"><History size={11} /> Historico</button>
                   <button onClick={() => { setShowAddendum(showAddendum === c.id ? null : c.id); if (showAddendum !== c.id) loadAddendums(c.id); }}
-                    className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-zinc-600"><PenLine size={11} /> Adendo</button>
+                    className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-border"><PenLine size={11} /> Adendo</button>
 
                   <div className="ml-auto flex items-center gap-1.5">
                     <select
@@ -517,11 +517,11 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                 {/* Audit log */}
                 {showAudit === c.id && (
                   <div className="border-t border-border pt-3 space-y-2">
-                    <p className="text-[10px] text-zinc-500 font-medium uppercase">Historico de Acoes</p>
-                    {auditEntries.length === 0 ? <p className="text-[10px] text-zinc-600">Nenhum registro</p> : auditEntries.map((a) => (
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase">Historico de Acoes</p>
+                    {auditEntries.length === 0 ? <p className="text-[10px] text-muted-foreground">Nenhum registro</p> : auditEntries.map((a) => (
                       <div key={a.id} className="flex items-start gap-2 text-[10px]">
-                        <span className="text-zinc-600 shrink-0">{new Date(a.createdAt).toLocaleDateString("pt-BR")}</span>
-                        <span className="text-zinc-400">{a.actor}</span>
+                        <span className="text-muted-foreground shrink-0">{new Date(a.createdAt).toLocaleDateString("pt-BR")}</span>
+                        <span className="text-muted-foreground">{a.actor}</span>
                         <span className="text-foreground">{a.details}</span>
                       </div>
                     ))}
@@ -531,22 +531,22 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                 {/* Addendum section */}
                 {showAddendum === c.id && (
                   <div className="border-t border-border pt-3 space-y-3">
-                    <p className="text-[10px] text-zinc-500 font-medium uppercase">Adendos Contratuais</p>
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase">Adendos Contratuais</p>
                     {addendums.map((a) => (
                       <div key={a.id} className="rounded-lg border border-border bg-surface p-3 space-y-1">
                         <div className="flex justify-between">
                           <p className="text-xs font-medium text-foreground">{a.changeType === "valor" ? "Alteracao de Valor" : a.changeType === "servico" ? "Inclusao de Servico" : "Outro"}</p>
-                          <span className="text-[10px] text-zinc-500">{new Date(a.createdAt).toLocaleDateString("pt-BR")} por {a.generatedBy}</span>
+                          <span className="text-[10px] text-muted-foreground">{new Date(a.createdAt).toLocaleDateString("pt-BR")} por {a.generatedBy}</span>
                         </div>
-                        <p className="text-[11px] text-zinc-300">{a.description}</p>
+                        <p className="text-[11px] text-foreground">{a.description}</p>
                         {(a.oldValue || a.newValue) && (
-                          <p className="text-[10px] text-zinc-500"><span className="line-through text-red-400">{a.oldValue}</span> <ArrowRight size={8} className="inline" /> <span className="text-emerald-400">{a.newValue}</span></p>
+                          <p className="text-[10px] text-muted-foreground"><span className="line-through text-red-400">{a.oldValue}</span> <ArrowRight size={8} className="inline" /> <span className="text-emerald-400">{a.newValue}</span></p>
                         )}
                       </div>
                     ))}
                     {/* New addendum form */}
                     <div className="rounded-lg border border-border bg-surface p-3 space-y-2">
-                      <p className="text-[10px] text-zinc-500">Novo Adendo</p>
+                      <p className="text-[10px] text-muted-foreground">Novo Adendo</p>
                       <select value={addendumForm.changeType} onChange={(e) => setAddendumForm((p) => ({ ...p, changeType: e.target.value }))}
                         className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none">
                         <option value="valor">Alteracao de Valor</option>
@@ -584,7 +584,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
           <div className="bg-card border border-border rounded-xl max-w-lg w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-foreground text-sm">{renewFrom ? `Renovar Contrato V${renewFrom.version}` : "Gerar Contrato"}</h3>
-              <button onClick={() => { setShowForm(false); setPreviewUrl(null); setRenewFrom(null); }} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+              <button onClick={() => { setShowForm(false); setPreviewUrl(null); setRenewFrom(null); }} className="text-muted-foreground hover:text-white"><X size={16} /></button>
             </div>
 
             <div className="p-5 space-y-4">
@@ -603,11 +603,11 @@ export default function ContractGenerator({ client, currentUser }: Props) {
               )}
 
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400 font-medium">Servico</label>
+                <label className="text-xs text-muted-foreground font-medium">Servico</label>
                 <div className="grid grid-cols-2 gap-2">
                   {([{ v: "assessoria_trafego", l: "Trafego", i: "🎯" }, { v: "assessoria_social", l: "Social", i: "📱" }, { v: "lone_growth", l: "Growth", i: "🚀" }, { v: "trafego_social_site", l: "Trafego+Social+Site", i: "🌐" }]).map((o) => (
                     <button key={o.v} onClick={() => setServiceType(o.v as typeof serviceType)}
-                      className={`p-2.5 rounded-lg border text-xs text-center transition-all ${serviceType === o.v ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-border text-zinc-500"}`}>{o.i} {o.l}</button>
+                      className={`p-2.5 rounded-lg border text-xs text-center transition-all ${serviceType === o.v ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-border text-muted-foreground"}`}>{o.i} {o.l}</button>
                   ))}
                 </div>
                 {(serviceType === "assessoria_trafego" || serviceType === "lone_growth" || serviceType === "trafego_social_site") && !(nichoOverride ?? client.nicho)?.trim() && (
@@ -619,38 +619,38 @@ export default function ContractGenerator({ client, currentUser }: Props) {
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-400 font-medium flex items-center gap-1"><DollarSign size={10} /> Valor (R$)</label>
+                  <label className="text-xs text-muted-foreground font-medium flex items-center gap-1"><DollarSign size={10} /> Valor (R$)</label>
                   <input type="number" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="0.00"
                     className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-400 font-medium flex items-center gap-1"><Calendar size={10} /> Inicio</label>
+                  <label className="text-xs text-muted-foreground font-medium flex items-center gap-1"><Calendar size={10} /> Inicio</label>
                   <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)}
                     className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-400 font-medium">Dia Pgto</label>
+                  <label className="text-xs text-muted-foreground font-medium">Dia Pgto</label>
                   <input type="number" min={1} max={31} value={paymentDay} onChange={(e) => setPaymentDay(Number(e.target.value) || 10)}
                     className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400 font-medium flex items-center gap-1"><Clock size={10} /> Duracao</label>
+                <label className="text-xs text-muted-foreground font-medium flex items-center gap-1"><Clock size={10} /> Duracao</label>
                 <div className="flex gap-2">
                   {[3, 6, 12].map((m) => (
-                    <button key={m} onClick={() => setDuracao(m)} className={`flex-1 py-2 rounded-lg border text-xs transition-all ${duracao === m ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-border text-zinc-500"}`}>{m}m</button>
+                    <button key={m} onClick={() => setDuracao(m)} className={`flex-1 py-2 rounded-lg border text-xs transition-all ${duracao === m ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-border text-muted-foreground"}`}>{m}m</button>
                   ))}
                   <button
                     onClick={() => { if ([3, 6, 12].includes(duracao)) setDuracao(5); }}
-                    className={`flex-1 py-2 rounded-lg border text-xs transition-all ${![3, 6, 12].includes(duracao) ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-border text-zinc-500"}`}
+                    className={`flex-1 py-2 rounded-lg border text-xs transition-all ${![3, 6, 12].includes(duracao) ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-border text-muted-foreground"}`}
                   >
                     Personalizado
                   </button>
                 </div>
                 {![3, 6, 12].includes(duracao) && (
                   <div className="pt-2">
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">Meses (1 a 36)</label>
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Meses (1 a 36)</label>
                     <input
                       type="number"
                       min={1}
@@ -683,7 +683,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                 </label>
                 {hasRenewal ? (
                   <div className="space-y-1.5 pl-6">
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">Novo valor mensal (pos-reajuste)</label>
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Novo valor mensal (pos-reajuste)</label>
                     <input
                       type="number"
                       value={renewalValue}
@@ -703,7 +703,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400 font-medium flex items-center gap-1"><Mail size={10} /> E-mail Signatario</label>
+                <label className="text-xs text-muted-foreground font-medium flex items-center gap-1"><Mail size={10} /> E-mail Signatario</label>
                 <input type="email" value={signerEmail} onChange={(e) => setSignerEmail(e.target.value)} placeholder="email@cliente.com"
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" />
               </div>
@@ -712,7 +712,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
                 <div className="rounded-xl border border-[#0d4af5]/20 bg-[#0d4af5]/[0.03] p-4 space-y-1">
                   <p className="text-sm text-foreground"><span className="font-medium">{client.nomeFantasia || client.name}</span></p>
                   <p className="text-sm text-[#0d4af5] font-semibold">{formatCurrency(Number(valor))}/mes x {duracao}m = {formatCurrency(Number(valor) * duracao)}</p>
-                  <p className="text-[10px] text-zinc-500">{dataInicio} a {addMonths(dataInicio, duracao)} | Pagamento dia {paymentDay}</p>
+                  <p className="text-[10px] text-muted-foreground">{dataInicio} a {addMonths(dataInicio, duracao)} | Pagamento dia {paymentDay}</p>
                 </div>
               )}
 

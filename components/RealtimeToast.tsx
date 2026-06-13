@@ -81,7 +81,7 @@ export default function RealtimeToast() {
                 </Link>
               )}
             </div>
-            <button onClick={() => dismissToast(toast.id)} className="text-zinc-600 hover:text-zinc-400 shrink-0">
+            <button onClick={() => dismissToast(toast.id)} className="text-muted-foreground hover:text-muted-foreground shrink-0">
               <X size={14} />
             </button>
           </div>

@@ -398,7 +398,7 @@ export default function GoalsPage() {
       ref={pageRef}
       className={`animate-fade-in ${
         presentationMode
-          ? "fixed inset-0 z-[9999] bg-black overflow-auto p-8"
+          ? "fixed inset-0 z-[9999] bg-background overflow-auto p-8"
           : "p-6"
       }`}
     >
@@ -439,7 +439,7 @@ export default function GoalsPage() {
             {isAdmin && (
               <button onClick={() => setShowOKRManager(!showOKRManager)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                  showOKRManager ? "bg-[#0d4af5]/10 text-[#0d4af5] border-[#0d4af5]/20" : "border-border text-zinc-400 hover:text-white"
+                  showOKRManager ? "bg-[#0d4af5]/10 text-[#0d4af5] border-[#0d4af5]/20" : "border-border text-muted-foreground hover:text-white"
                 }`}>
                 <Settings size={12} /> Gerenciar Metas
               </button>
@@ -456,7 +456,7 @@ export default function GoalsPage() {
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
                       active
                         ? "bg-[#0d4af5] text-white shadow-[0_2px_8px_rgba(10,52,245,0.25)]"
-                        : "text-zinc-500 hover:text-zinc-300"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     <Icon size={12} />
@@ -471,13 +471,13 @@ export default function GoalsPage() {
               <div className="relative">
                 <button
                   onClick={() => setShowMonthPicker(!showMonthPicker)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-900/50 border border-zinc-800/50 text-foreground hover:border-zinc-700 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-900/50 border border-zinc-800/50 text-foreground hover:border-border transition-all"
                 >
                   {MONTHS[selectedMonth]}
-                  <ChevronDown size={12} className="text-zinc-500" />
+                  <ChevronDown size={12} className="text-muted-foreground" />
                 </button>
                 {showMonthPicker && (
-                  <div className="absolute top-full right-0 mt-1 bg-[#111118] border border-zinc-800 rounded-xl p-2 z-50 grid grid-cols-3 gap-1 animate-fade-in shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+                  <div className="absolute top-full right-0 mt-1 bg-[#111118] border border-border rounded-xl p-2 z-50 grid grid-cols-3 gap-1 animate-fade-in shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
                     {MONTHS.map((m, i) => (
                       <button
                         key={m}
@@ -485,7 +485,7 @@ export default function GoalsPage() {
                         className={`px-3 py-1.5 rounded-lg text-xs transition-all ${
                           i === selectedMonth
                             ? "bg-[#0d4af5] text-white"
-                            : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                            : "text-muted-foreground hover:text-white hover:bg-muted"
                         }`}
                       >
                         {m}
@@ -505,7 +505,7 @@ export default function GoalsPage() {
                     className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                       q === selectedQuarter
                         ? "bg-[#0d4af5] text-white shadow-[0_2px_8px_rgba(10,52,245,0.25)]"
-                        : "text-zinc-500 hover:text-zinc-300"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     Q{q + 1}
@@ -515,30 +515,30 @@ export default function GoalsPage() {
             )}
 
             {/* Divider */}
-            <div className="w-px h-6 bg-zinc-800 mx-1" />
+            <div className="w-px h-6 bg-muted mx-1" />
 
             {/* Export / Presentation */}
             <div className="relative">
               <button
                 onClick={() => setShowExportMenu(!showExportMenu)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-zinc-800 text-zinc-400 hover:text-foreground hover:border-[#0d4af5]/30 transition-all"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-[#0d4af5]/30 transition-all"
               >
                 <Download size={13} />
                 Relatorio
               </button>
               {showExportMenu && (
-                <div className="absolute top-full right-0 mt-1 bg-[#111118] border border-zinc-800 rounded-xl p-1.5 z-50 w-52 animate-fade-in shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+                <div className="absolute top-full right-0 mt-1 bg-[#111118] border border-border rounded-xl p-1.5 z-50 w-52 animate-fade-in shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
                   <button
                     onClick={handleExportPDF}
                     disabled={exporting}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-40"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-foreground hover:bg-muted hover:text-white transition-all disabled:opacity-40"
                   >
                     <Download size={13} className="text-[#0d4af5]" />
                     {exporting ? "Gerando..." : "Exportar PDF"}
                   </button>
                   <button
                     onClick={togglePresentation}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-foreground hover:bg-muted hover:text-white transition-all"
                   >
                     <Monitor size={13} className="text-[#0d4af5]" />
                     Modo Apresentacao
@@ -570,7 +570,7 @@ export default function GoalsPage() {
               </h2>
               <span className="text-2xl font-bold text-[#0d4af5] tabular-nums">{overallProgress}%</span>
             </div>
-            <div className="w-full h-3 rounded-full bg-zinc-900 overflow-hidden">
+            <div className="w-full h-3 rounded-full bg-card overflow-hidden">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-[#0d4af5] to-[#3b6ff5] transition-all duration-700"
                 style={{ width: `${overallProgress}%` }}
@@ -606,7 +606,7 @@ export default function GoalsPage() {
                     {okr.error && (
                       <p className="text-[10px] text-amber-400/70 mb-1">{okr.error}</p>
                     )}
-                    <div className="w-full h-2 rounded-full bg-zinc-900 overflow-hidden">
+                    <div className="w-full h-2 rounded-full bg-card overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
                           progress >= 80 ? "bg-emerald-500" : progress >= 60 ? "bg-amber-500" : "bg-red-500"
@@ -656,7 +656,7 @@ export default function GoalsPage() {
                               <span className={`text-[9px] ${cfg.color.split(" ")[0]}`}>{cfg.label}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="flex-1 h-1.5 rounded-full bg-zinc-900 overflow-hidden">
+                              <div className="flex-1 h-1.5 rounded-full bg-card overflow-hidden">
                                 <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, backgroundColor: team.color }} />
                               </div>
                               <span className="text-[10px] text-muted-foreground w-8 text-right tabular-nums">{progress}%</span>
@@ -735,7 +735,7 @@ export default function GoalsPage() {
                       </div>
                       <p className="text-[11px] text-muted-foreground mb-2">{person.goal}</p>
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 rounded-full bg-zinc-900 overflow-hidden">
+                        <div className="flex-1 h-1.5 rounded-full bg-card overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all duration-500 ${
                               person.progress >= 80 ? "bg-emerald-500" : person.progress >= 60 ? "bg-amber-500" : "bg-red-500"
@@ -769,7 +769,7 @@ export default function GoalsPage() {
                       className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
                         activeLayer === tab.key
                           ? "bg-[#0d4af5] text-white shadow-[0_2px_8px_rgba(13,74,245,0.25)]"
-                          : "text-zinc-500 hover:text-zinc-300"
+                          : "text-muted-foreground hover:text-foreground"
                       }`}>
                       <Icon size={12} /> {tab.label}
                     </button>
@@ -778,12 +778,12 @@ export default function GoalsPage() {
               </div>
               <div className="h-5 w-px bg-white/[0.06]" />
               <button onClick={saveCurrentSnapshot}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium text-zinc-500 hover:text-foreground border border-white/[0.06] hover:border-white/[0.1] transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium text-muted-foreground hover:text-foreground border border-white/[0.06] hover:border-white/[0.1] transition-all"
                 title="Salvar snapshot do periodo atual">
                 <Download size={11} /> Salvar Snapshot
               </button>
               {previousSnapshot && (
-                <span className="text-[10px] text-zinc-600">
+                <span className="text-[10px] text-muted-foreground">
                   Comparando com {previousSnapshot.period}
                 </span>
               )}
@@ -806,7 +806,7 @@ export default function GoalsPage() {
                       Score: {feedback.score}/100
                     </span>
                   </div>
-                  <p className="text-xs text-zinc-400 leading-relaxed mb-3">{feedback.summary}</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed mb-3">{feedback.summary}</p>
 
                   {/* Highlights + Bottlenecks */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -816,7 +816,7 @@ export default function GoalsPage() {
                           <CheckCircle size={10} /> Destaques
                         </p>
                         {feedback.highlights.map((h, i) => (
-                          <p key={i} className="text-[11px] text-zinc-400 pl-4">+ {h}</p>
+                          <p key={i} className="text-[11px] text-muted-foreground pl-4">+ {h}</p>
                         ))}
                       </div>
                     )}
@@ -826,7 +826,7 @@ export default function GoalsPage() {
                           <AlertTriangle size={10} /> Gargalos
                         </p>
                         {feedback.bottlenecks.map((b, i) => (
-                          <p key={i} className="text-[11px] text-zinc-400 pl-4">- {b}</p>
+                          <p key={i} className="text-[11px] text-muted-foreground pl-4">- {b}</p>
                         ))}
                       </div>
                     )}
@@ -837,7 +837,7 @@ export default function GoalsPage() {
                     <p className="text-[10px] text-[#3b6ff5] uppercase tracking-wider font-semibold mb-1 flex items-center gap-1">
                       <Zap size={10} /> Recomendacao
                     </p>
-                    <p className="text-xs text-zinc-300">{feedback.suggestion}</p>
+                    <p className="text-xs text-foreground">{feedback.suggestion}</p>
                   </div>
                 </div>
               </div>
@@ -868,7 +868,7 @@ export default function GoalsPage() {
                           {alert.label}
                         </span>
                       </div>
-                      <p className="text-[11px] text-zinc-400">{alert.message}</p>
+                      <p className="text-[11px] text-muted-foreground">{alert.message}</p>
                     </div>
                   ))}
                 </div>
@@ -885,7 +885,7 @@ export default function GoalsPage() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {deltas.map((d) => (
                     <div key={d.metric} className="card p-4">
-                      <p className="text-[10px] text-zinc-500 mb-1">{d.label}</p>
+                      <p className="text-[10px] text-muted-foreground mb-1">{d.label}</p>
                       <div className="flex items-end gap-2">
                         <span className="text-lg font-bold text-foreground tabular-nums">
                           {d.current}{d.unit !== "pts" ? d.unit : ""}
@@ -899,10 +899,10 @@ export default function GoalsPage() {
                           </span>
                         )}
                         {d.direction === "stable" && (
-                          <span className="text-[11px] text-zinc-600 mb-0.5">estavel</span>
+                          <span className="text-[11px] text-muted-foreground mb-0.5">estavel</span>
                         )}
                       </div>
-                      <div className="mt-2 h-1 rounded-full bg-zinc-900 overflow-hidden">
+                      <div className="mt-2 h-1 rounded-full bg-card overflow-hidden">
                         <div className={`h-full rounded-full transition-all duration-700 ${
                           d.isGood ? "bg-emerald-500" : d.severity === "critical" ? "bg-red-500" : "bg-amber-500"
                         }`} style={{ width: `${Math.min(100, Math.max(5, 50 + d.delta))}%` }} />
@@ -928,16 +928,16 @@ export default function GoalsPage() {
                     <div key={kpi.label} className={`card p-5 ${!isGood ? "border-amber-500/[0.15]" : ""}`}>
                       <div className="flex items-center gap-2 mb-3">
                         <Icon size={14} className={isGood ? "text-[#0d4af5]" : "text-amber-400"} />
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider">{kpi.label}</span>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{kpi.label}</span>
                       </div>
                       <div className="flex items-end gap-1.5">
                         <span className={`text-2xl font-bold tabular-nums ${isGood ? "text-foreground" : "text-amber-400"}`}>
                           {kpi.value}
                         </span>
-                        <span className="text-xs text-zinc-600 mb-0.5">{kpi.unit}</span>
+                        <span className="text-xs text-muted-foreground mb-0.5">{kpi.unit}</span>
                       </div>
                       {kpi.label !== "Tasks Vencidas" && (
-                        <div className="mt-3 h-1.5 rounded-full bg-zinc-900 overflow-hidden">
+                        <div className="mt-3 h-1.5 rounded-full bg-card overflow-hidden">
                           <div className={`h-full rounded-full transition-all duration-700 ${
                             isGood ? "bg-[#0d4af5]" : "bg-amber-500"
                           }`} style={{ width: `${Math.min(100, (kpi.value / kpi.target) * 100)}%` }} />
@@ -977,7 +977,7 @@ export default function GoalsPage() {
                   <option value="2026-Q3">2026 Q3</option>
                   <option value="2026-Q4">2026 Q4</option>
                 </select>
-                <button onClick={() => setShowOKRManager(false)} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+                <button onClick={() => setShowOKRManager(false)} className="text-muted-foreground hover:text-white"><X size={16} /></button>
               </div>
             </div>
 
@@ -993,10 +993,10 @@ export default function GoalsPage() {
                         <div className="flex items-center justify-between">
                           <p className="text-xs font-medium text-foreground flex-1">{okr.title}</p>
                           <button onClick={async () => { await okrData.deleteOKR(okr.id); }}
-                            className="text-zinc-700 hover:text-red-400 transition-colors p-1"><Trash2 size={10} /></button>
+                            className="text-muted-foreground hover:text-red-400 transition-colors p-1"><Trash2 size={10} /></button>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-zinc-500">Meta:</span>
+                          <span className="text-[10px] text-muted-foreground">Meta:</span>
                           {editingTarget?.id === okr.id ? (
                             <div className="flex items-center gap-1">
                               <input type="number" value={editingTarget.value}
@@ -1006,29 +1006,29 @@ export default function GoalsPage() {
                                   if (e.key === "Enter") { okrData.updateTarget(okr.id, Number(editingTarget.value)); setEditingTarget(null); }
                                   if (e.key === "Escape") setEditingTarget(null);
                                 }} />
-                              <span className="text-[10px] text-zinc-500">{okr.unit}</span>
+                              <span className="text-[10px] text-muted-foreground">{okr.unit}</span>
                               <button onClick={() => { okrData.updateTarget(okr.id, Number(editingTarget.value)); setEditingTarget(null); }}
                                 className="text-emerald-400 hover:text-emerald-300"><Save size={10} /></button>
                             </div>
                           ) : (
                             <button onClick={() => setEditingTarget({ id: okr.id, value: String(okr.target) })}
                               className="text-xs text-foreground hover:text-[#0d4af5] flex items-center gap-1 transition-colors">
-                              {okr.target} {okr.unit} <Pencil size={8} className="text-zinc-600" />
+                              {okr.target} {okr.unit} <Pencil size={8} className="text-muted-foreground" />
                             </button>
                           )}
-                          <span className="text-[10px] text-zinc-600 ml-auto">
+                          <span className="text-[10px] text-muted-foreground ml-auto">
                             Atual: <span className={`font-medium ${okr.status === "on_track" ? "text-emerald-400" : okr.status === "at_risk" ? "text-amber-400" : "text-red-400"}`}>
                               {okr.currentValue} {okr.unit}
                             </span>
                           </span>
                         </div>
                         {/* Progress bar */}
-                        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                           <div className={`h-full rounded-full transition-all ${
                             okr.status === "on_track" ? "bg-emerald-500" : okr.status === "at_risk" ? "bg-amber-500" : "bg-red-500"
                           }`} style={{ width: `${Math.min(100, okr.target > 0 ? (okr.currentValue / okr.target) * 100 : 0)}%` }} />
                         </div>
-                        {okr.autoCalculated && <p className="text-[9px] text-zinc-600">Auto-calculado do sistema</p>}
+                        {okr.autoCalculated && <p className="text-[9px] text-muted-foreground">Auto-calculado do sistema</p>}
                       </div>
                     ))}
                   </div>

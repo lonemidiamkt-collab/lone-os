@@ -39,7 +39,7 @@ function CustomTooltip({ active, payload, label }: any) {
           <div key={p.dataKey} className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full ring-2 ring-white/10" style={{ backgroundColor: p.color }} />
-              <span className="text-zinc-400">{CHART_LABELS[p.dataKey] ?? p.dataKey}</span>
+              <span className="text-muted-foreground">{CHART_LABELS[p.dataKey] ?? p.dataKey}</span>
             </div>
             <span className="text-white font-bold tabular-nums">
               {p.dataKey === "spend" ? `R$ ${p.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : p.value.toLocaleString("pt-BR")}

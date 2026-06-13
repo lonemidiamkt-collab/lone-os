@@ -69,14 +69,14 @@ function DocUpload({ label, onUploaded, uploaded }: { label: string; onUploaded:
     <div className="space-y-1">
       <div className="flex gap-1.5">
         <button type="button" onClick={() => ref.current?.click()} disabled={uploading}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#0d4af5]/30 text-zinc-500 hover:text-white transition-all text-[11px]">
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#0d4af5]/30 text-muted-foreground hover:text-white transition-all text-[11px]">
           {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
           {uploading ? "Enviando..." : label}
         </button>
         <button type="button" disabled={uploading} onClick={() => {
           const input = document.createElement("input"); input.type = "file"; input.accept = "image/*"; input.capture = "environment";
           input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleFile(f); }; input.click();
-        }} className="px-3 py-2 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#0d4af5]/30 text-zinc-500 hover:text-white transition-all text-[11px]">
+        }} className="px-3 py-2 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#0d4af5]/30 text-muted-foreground hover:text-white transition-all text-[11px]">
           <Camera size={12} />
         </button>
       </div>
@@ -246,7 +246,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
             <h2 className="text-lg font-semibold text-foreground">Link gerado!</h2>
             <p className="text-sm text-muted-foreground text-center">Envie para o cliente preencher dados e documentos.</p>
             <div className="w-full bg-[#111113] border border-[#1e1e2a] rounded-lg px-4 py-3 flex items-center gap-2">
-              <input type="text" value={linkGenerated} readOnly className="flex-1 bg-transparent text-xs text-zinc-300 outline-none truncate" onClick={(e) => (e.target as HTMLInputElement).select()} />
+              <input type="text" value={linkGenerated} readOnly className="flex-1 bg-transparent text-xs text-foreground outline-none truncate" onClick={(e) => (e.target as HTMLInputElement).select()} />
               <button onClick={() => navigator.clipboard.writeText(linkGenerated)} className="text-xs text-[#0d4af5] hover:text-white transition-colors shrink-0 font-medium">Copiar</button>
             </div>
             <div className="flex gap-2 w-full mt-2">
@@ -293,10 +293,10 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
         <div className="flex items-center gap-2">
           {PHASES.map((p, i) => (
             <div key={p.key} className="flex items-center gap-2 flex-1">
-              <button onClick={() => setPhase(p.key)} className={`flex items-center gap-1.5 text-[11px] font-medium transition-all ${currentIdx > i ? "text-emerald-400" : currentIdx === i ? "text-foreground" : "text-zinc-600"}`}>
+              <button onClick={() => setPhase(p.key)} className={`flex items-center gap-1.5 text-[11px] font-medium transition-all ${currentIdx > i ? "text-emerald-400" : currentIdx === i ? "text-foreground" : "text-muted-foreground"}`}>
                 <p.icon size={12} /> {p.label}
               </button>
-              {i < PHASES.length - 1 && <div className={`flex-1 h-px ${currentIdx > i ? "bg-emerald-500/30" : "bg-zinc-800"}`} />}
+              {i < PHASES.length - 1 && <div className={`flex-1 h-px ${currentIdx > i ? "bg-emerald-500/30" : "bg-muted"}`} />}
             </div>
           ))}
         </div>
@@ -307,7 +307,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           {/* ═══ FASE 1: PESSOA FISICA ═══ */}
           {phase === "pf" && (
             <div className="space-y-4 animate-fade-in">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1.5"><Shield size={10} className="text-[#0d4af5]" /> Dados do Responsavel (PF)</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><Shield size={10} className="text-[#0d4af5]" /> Dados do Responsavel (PF)</p>
 
               <div className="space-y-1.5">
                 <Label>Nome da Empresa <span className="text-muted-foreground font-normal">(para o link)</span></Label>
@@ -324,7 +324,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
                   </div>
                   <div className="flex-1">
                     <p className="text-xs text-[#3b6ff5] font-medium group-hover:text-white transition-colors">Gerar Link para Cliente Preencher</p>
-                    <p className="text-[9px] text-zinc-600">Cria rascunho + link de onboarding externo</p>
+                    <p className="text-[9px] text-muted-foreground">Cria rascunho + link de onboarding externo</p>
                   </div>
                 </button>
               )}
@@ -355,7 +355,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           {/* ═══ FASE 2: EMPRESA (PJ) ═══ */}
           {phase === "pj" && (
             <div className="space-y-4 animate-fade-in">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1.5"><Building2 size={10} className="text-[#0d4af5]" /> Dados Empresariais (PJ)</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><Building2 size={10} className="text-[#0d4af5]" /> Dados Empresariais (PJ)</p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Razao Social</Label>
@@ -404,7 +404,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
 
               {/* Document upload */}
               <div className="pt-2 border-t border-white/[0.04] space-y-2">
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Documentos (opcional)</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Documentos (opcional)</p>
                 <div className="grid grid-cols-2 gap-2">
                   <DocUpload label="Contrato Social" onUploaded={(url) => set("docContratoSocial", url)} uploaded={form.docContratoSocial} />
                   <DocUpload label="RG ou CNH" onUploaded={(url) => set("docIdentidade", url)} uploaded={form.docIdentidade} />
@@ -421,7 +421,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           {/* ═══ FASE 3: SERVICO & EQUIPE ═══ */}
           {phase === "servico" && (
             <div className="space-y-4 animate-fade-in">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1.5"><Briefcase size={10} className="text-[#0d4af5]" /> Servico Contratado & Equipe</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><Briefcase size={10} className="text-[#0d4af5]" /> Servico Contratado & Equipe</p>
 
               <div className="grid grid-cols-2 gap-2">
                 {SERVICE_OPTIONS.map((opt) => (
@@ -431,8 +431,8 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
                     }`}>
                     <span className="text-base">{opt.icon}</span>
                     <div className="min-w-0">
-                      <p className={`text-xs font-medium ${form.serviceType === opt.value ? "text-white" : "text-zinc-400"}`}>{opt.label}</p>
-                      <p className="text-[9px] text-zinc-600 truncate">{opt.desc}</p>
+                      <p className={`text-xs font-medium ${form.serviceType === opt.value ? "text-white" : "text-muted-foreground"}`}>{opt.label}</p>
+                      <p className="text-[9px] text-muted-foreground truncate">{opt.desc}</p>
                     </div>
                   </button>
                 ))}
@@ -453,7 +453,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
                 </div>
               </div>
 
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider pt-2">Equipe Responsavel</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider pt-2">Equipe Responsavel</p>
               <div className="space-y-3">
                 {([
                   { key: "assignedTraffic" as const, label: "Gestor de Trafego", members: team.forField("assignedTraffic"), show: needsTraffic },

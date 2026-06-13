@@ -17,7 +17,7 @@ export default function LoadingSpinner({ message, size = "md" }: Props) {
         className="text-[#0d4af5] animate-spin"
       />
       {message && (
-        <p className="text-xs text-zinc-500">{message}</p>
+        <p className="text-xs text-muted-foreground">{message}</p>
       )}
     </div>
   );

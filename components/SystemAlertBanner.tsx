@@ -32,7 +32,7 @@ export default function SystemAlertBanner() {
       <KeyRound size={15} className="text-red-400 shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-red-400">Token Meta Ads expirando</p>
-        <p className="text-[11px] text-zinc-400 mt-0.5">
+        <p className="text-[11px] text-muted-foreground mt-0.5">
           As sincronizações de saldo e relatórios de tráfego vão parar.
         </p>
       </div>
@@ -45,7 +45,7 @@ export default function SystemAlertBanner() {
       </Link>
       <button
         onClick={() => setDismissed(true)}
-        className="text-zinc-500 hover:text-zinc-300 transition-colors ml-1"
+        className="text-muted-foreground hover:text-foreground transition-colors ml-1"
         title="Dispensar"
       >
         <X size={14} />

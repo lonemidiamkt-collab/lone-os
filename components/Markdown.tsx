@@ -195,7 +195,7 @@ export function MarkdownEditor({ value, onChange, placeholder, minHeight = 120, 
         }}
         placeholder={placeholder}
         autoFocus={autoFocus}
-        className="w-full bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-zinc-700 outline-none resize-none leading-relaxed font-mono"
+        className="w-full bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none resize-none leading-relaxed font-mono"
         style={{ minHeight: `${minHeight}px`, overflow: "hidden" }}
       />
     </div>

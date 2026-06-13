@@ -1,45 +1,20 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { useTheme as useNextTheme } from "next-themes";
 
 type Theme = "dark" | "light";
 
-interface ThemeContextValue {
-  theme: Theme;
-  toggleTheme: () => void;
-}
-
-const ThemeContext = createContext<ThemeContextValue>({
-  theme: "dark",
-  toggleTheme: () => {},
-});
-
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("lone_theme") as Theme) ?? "dark";
-    }
-    return "dark";
-  });
-
-  useEffect(() => {
-    if (theme === "light") {
-      document.documentElement.classList.add("theme-light");
-    } else {
-      document.documentElement.classList.remove("theme-light");
-    }
-    localStorage.setItem("lone_theme", theme);
-  }, [theme]);
-
-  const toggleTheme = () => setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
-}
-
-export function useTheme() {
-  return useContext(ThemeContext);
+/**
+ * Wrapper fino sobre next-themes para manter a API antiga `{ theme, toggleTheme }`
+ * usada por Sidebar e settings. O provider real é o <ThemeProvider> global em
+ * app/layout.tsx — não há mais provider próprio aqui.
+ *
+ * `theme` reflete o tema resolvido (resolvedTheme), então "system" já vem como
+ * "dark"/"light" concreto.
+ */
+export function useTheme(): { theme: Theme; toggleTheme: () => void } {
+  const { resolvedTheme, setTheme } = useNextTheme();
+  const theme: Theme = resolvedTheme === "light" ? "light" : "dark";
+  const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
+  return { theme, toggleTheme };
 }

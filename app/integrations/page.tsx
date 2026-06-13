@@ -407,9 +407,9 @@ export default function IntegrationsPage() {
 
   const STATUS_CONFIG = {
     connected:    { label: "Conectado",    color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20", icon: CheckCircle },
-    disconnected: { label: "Desconectado", color: "text-zinc-500 bg-zinc-500/10 border-zinc-500/20", icon: XCircle },
+    disconnected: { label: "Desconectado", color: "text-muted-foreground bg-zinc-500/10 border-zinc-500/20", icon: XCircle },
     expired:      { label: "Expirado",     color: "text-amber-400 bg-amber-500/10 border-amber-500/20", icon: AlertTriangle },
-    coming_soon:  { label: "Em breve",     color: "text-zinc-700 bg-zinc-800/50 border-zinc-800", icon: Clock },
+    coming_soon:  { label: "Em breve",     color: "text-muted-foreground bg-zinc-800/50 border-border", icon: Clock },
   };
 
   return (
@@ -432,8 +432,8 @@ export default function IntegrationsPage() {
           <span className="text-xs text-emerald-400 font-medium">{connectedCount} ativa(s)</span>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-500/10 border border-zinc-500/20">
-          <Plug size={12} className="text-zinc-500" />
-          <span className="text-xs text-zinc-500 font-medium">{INTEGRATIONS.length} disponíveis</span>
+          <Plug size={12} className="text-muted-foreground" />
+          <span className="text-xs text-muted-foreground font-medium">{INTEGRATIONS.length} disponíveis</span>
         </div>
       </div>
 
@@ -485,7 +485,7 @@ export default function IntegrationsPage() {
               className={`card border transition-all ${
                 status === "connected"
                   ? "border-[#0d4af5]/20 hover:border-[#0d4af5]/40 hover:shadow-[0_0_20px_rgba(10,52,245,0.08)]"
-                  : "border-border hover:border-zinc-600"
+                  : "border-border hover:border-border"
               }`}
             >
               <div className="flex items-start gap-4">
@@ -703,7 +703,7 @@ export default function IntegrationsPage() {
                 <ul className="space-y-1.5">
                   {connectModal.permissions.map((perm, idx) => (
                     <li key={idx} className="flex items-start gap-2 text-xs text-muted-foreground">
-                      <Eye size={11} className="mt-0.5 shrink-0 text-zinc-600" />
+                      <Eye size={11} className="mt-0.5 shrink-0 text-muted-foreground" />
                       {perm}
                     </li>
                   ))}

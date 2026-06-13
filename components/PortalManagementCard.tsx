@@ -177,7 +177,7 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
       {/* ── Sem token ─────────────────────────────────────────────────────── */}
       {!token && (
         <div className="space-y-3">
-          <p className="text-xs text-zinc-400 leading-relaxed">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             Gere um link exclusivo para que o cliente acesse seus resultados de anúncios em
             tempo real — sem login, sem senhas.
           </p>
@@ -199,18 +199,18 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
           {/* URL + QR code */}
           <div className="flex gap-4 items-start">
             <div className="flex-1 space-y-2 min-w-0">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">
                 Link exclusivo
               </p>
               <div className="flex items-center gap-2">
                 <input
                   readOnly
                   value={portalUrl ?? ""}
-                  className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-3 py-1.5 text-xs text-zinc-300 font-mono truncate focus:outline-none"
+                  className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-3 py-1.5 text-xs text-foreground font-mono truncate focus:outline-none"
                 />
                 <button
                   onClick={copyUrl}
-                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface border border-border text-zinc-400 text-[11px] hover:text-foreground hover:border-primary/40 transition-colors"
+                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface border border-border text-muted-foreground text-[11px] hover:text-foreground hover:border-primary/40 transition-colors"
                 >
                   {copied
                     ? <Check size={12} className="text-emerald-400" />
@@ -231,30 +231,30 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
           </div>
 
           {/* Mini-stats */}
-          <div className="flex items-center gap-4 text-xs text-zinc-500">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <Eye size={11} className="text-zinc-600" />
-              <strong className="text-zinc-300">{stats?.total_accesses ?? "—"}</strong>
+              <Eye size={11} className="text-muted-foreground" />
+              <strong className="text-foreground">{stats?.total_accesses ?? "—"}</strong>
               {" "}acesso{stats?.total_accesses !== 1 ? "s" : ""}
             </span>
             {lastAccess ? (
               <span className="flex items-center gap-1.5">
-                <Clock size={11} className="text-zinc-600" />
+                <Clock size={11} className="text-muted-foreground" />
                 Último: {lastAccess}
               </span>
             ) : stats !== null ? (
-              <span className="text-zinc-600">Nenhum acesso ainda</span>
+              <span className="text-muted-foreground">Nenhum acesso ainda</span>
             ) : null}
           </div>
 
           {/* Configurações */}
           <div className="space-y-3 pt-3 border-t border-border">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">
               Configurações do portal
             </p>
 
             <div className="space-y-1">
-              <label className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+              <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <Phone size={11} /> Telefone WhatsApp da equipe
               </label>
               <input
@@ -262,19 +262,19 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
                 placeholder="5521999999999"
                 value={whatsapp}
                 onChange={(e) => setWhatsapp(e.target.value)}
-                className="w-full bg-surface border border-border rounded-lg px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-primary/50"
+                className="w-full bg-surface border border-border rounded-lg px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
               />
-              <p className="text-[10px] text-zinc-600">
+              <p className="text-[10px] text-muted-foreground">
                 Formato internacional sem + (ex: 5521999999999)
               </p>
             </div>
 
             <div className="space-y-1">
-              <label className="flex items-center justify-between text-[11px] text-zinc-400">
+              <label className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <MessageSquare size={11} /> Mensagem de boas-vindas
                 </span>
-                <span className={welcomeMsg.length > 250 ? "text-red-400" : "text-zinc-600"}>
+                <span className={welcomeMsg.length > 250 ? "text-red-400" : "text-muted-foreground"}>
                   {welcomeMsg.length}/280
                 </span>
               </label>
@@ -284,7 +284,7 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
                 maxLength={280}
                 rows={3}
                 onChange={(e) => setWelcomeMsg(e.target.value)}
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-primary/50 resize-none"
+                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 resize-none"
               />
             </div>
 
@@ -325,7 +325,7 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
                 </button>
                 <button
                   onClick={() => setUiState("idle")}
-                  className="px-2.5 py-1 rounded-md bg-surface text-zinc-400 text-[11px] hover:bg-muted/20 transition-colors"
+                  className="px-2.5 py-1 rounded-md bg-surface text-muted-foreground text-[11px] hover:bg-muted/20 transition-colors"
                 >
                   Cancelar
                 </button>
@@ -343,7 +343,7 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
                 </button>
                 <button
                   onClick={() => setUiState("idle")}
-                  className="px-2.5 py-1 rounded-md bg-surface text-zinc-400 text-[11px] hover:bg-muted/20 transition-colors"
+                  className="px-2.5 py-1 rounded-md bg-surface text-muted-foreground text-[11px] hover:bg-muted/20 transition-colors"
                 >
                   Cancelar
                 </button>
@@ -353,7 +353,7 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
                 <button
                   onClick={() => setUiState("confirm_rotate")}
                   disabled={uiState === "loading"}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface text-zinc-400 text-[11px] hover:bg-muted/20 border border-border transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface text-muted-foreground text-[11px] hover:bg-muted/20 border border-border transition-colors disabled:opacity-50"
                 >
                   <RotateCcw size={11} /> Rotacionar token
                 </button>
@@ -373,7 +373,7 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
       {/* ── Revogado ──────────────────────────────────────────────────────── */}
       {revoked && (
         <div className="space-y-3">
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             Portal desativado em {revokedAt}. O link anterior não funciona mais.
           </p>
           <button
