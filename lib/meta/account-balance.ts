@@ -2,6 +2,11 @@
 // Funções puras de cálculo de saldo + fetch batch da Meta API
 
 import { META_CONFIG } from "./config";
+import {
+  evaluateAccount,
+  DEFAULT_ALERT_CONFIG,
+  type AlertConfig,
+} from "@/lib/budgets/alert-engine";
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -135,21 +140,23 @@ export function formatDaysRemaining(days: number | null): string {
 
 export type BalanceSeverity = "critical" | "warning" | "ok" | "disabled" | "error";
 
+// Delega ao motor único de alerta (lib/budgets/alert-engine). Mantém a
+// assinatura legada e adiciona `monthlyBudget` (base do % de verba) e `config`.
+// monthlyBudget é opcional para não quebrar chamadas antigas; quando ausente,
+// vale só o paraquedas universal (saldo <= 0, dias <= 1/3) + thresholds manuais.
 export function getBalanceSeverity(
   available: number | null,
   daysRemaining: number | null,
   accountStatus: number,
   warningThreshold: number | null,
   criticalThreshold: number | null,
+  monthlyBudget: number | null = null,
+  config: AlertConfig = DEFAULT_ALERT_CONFIG,
 ): BalanceSeverity {
-  if (accountStatus !== 1) return "disabled";
-  if (available === null) return "ok"; // pós-pago sem cap: não há alerta de saldo
-  if (available < 0) return "critical";
-  if (criticalThreshold !== null && available <= criticalThreshold) return "critical";
-  if (daysRemaining !== null && daysRemaining <= 1) return "critical";
-  if (warningThreshold !== null && available <= warningThreshold) return "warning";
-  if (daysRemaining !== null && daysRemaining <= 3) return "warning";
-  return "ok";
+  return evaluateAccount(
+    { available, monthlyBudget, daysRemaining, accountStatus, warningThreshold, criticalThreshold },
+    config,
+  ).severity;
 }
 
 // ── Fetch batch da Meta API — saldos ─────────────────────────
