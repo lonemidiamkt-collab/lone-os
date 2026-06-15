@@ -23,6 +23,11 @@ import {
   type AlertConfig,
   type DigestAccount,
 } from "@/lib/budgets/alert-engine";
+import {
+  detectClientAlerts,
+  DEFAULT_CLIENT_ALERT_CONFIG,
+  type ClientAlertConfig,
+} from "@/lib/budgets/operational-alerts";
 import { sendGroupText } from "@/lib/whatsapp/evolution";
 
 // ── Config de alerta (agency_settings) ───────────────────────
@@ -99,8 +104,30 @@ type AccountRow = {
   spend_cap: number | null;
   monthly_budget: number | null;
   billing_type_source: string | null;
-  clients: { name: string; nome_fantasia: string | null; client_pix_key: string | null } | null;
+  clients: { id: string; name: string; nome_fantasia: string | null; client_pix_key: string | null } | null;
 };
+
+// Carrega a config de alertas por cliente (client_alert_config). Resiliente:
+// se a tabela não existir ou der erro, retorna vazio (→ defaults globais).
+export async function getClientAlertConfigs(): Promise<Map<string, ClientAlertConfig>> {
+  const map = new Map<string, ClientAlertConfig>();
+  const { data, error } = await supabaseAdmin.from("client_alert_config").select("*");
+  if (error || !data) return map;
+  for (const r of data as Array<Record<string, unknown>>) {
+    map.set(r.client_id as string, {
+      verbaMinima: r.verba_minima != null ? Number(r.verba_minima) : null,
+      destino: r.destino === "cliente" ? "cliente" : "interno",
+      alertVerbaBaixa: r.alert_verba_baixa !== false,
+      alertVerbaZerada: r.alert_verba_zerada !== false,
+      alertErroConta: r.alert_erro_conta !== false,
+      alertSemGasto: r.alert_sem_gasto !== false,
+      alertCampanhaParada: r.alert_campanha_parada === true,
+      alertMetaErro: r.alert_meta_erro !== false,
+      semGastoDias: typeof r.sem_gasto_dias === "number" ? r.sem_gasto_dias : 3,
+    });
+  }
+  return map;
+}
 
 export async function runBalanceSync(opts?: {
   targetAccountIds?: string[] | null;
@@ -122,7 +149,7 @@ export async function runBalanceSync(opts?: {
     .from("ad_accounts")
     .select(`
       id, meta_account_id, account_name, is_prepaid, spend_cap, monthly_budget, billing_type_source,
-      clients!inner ( name, nome_fantasia, client_pix_key )
+      clients!inner ( id, name, nome_fantasia, client_pix_key )
     `);
   if (targetAccountIds && targetAccountIds.length > 0) {
     query = query.in("meta_account_id", targetAccountIds) as typeof query;
@@ -144,8 +171,11 @@ export async function runBalanceSync(opts?: {
   let synced = 0;
   let errors = 0;
   const snapshots: DigestAccount[] = [];
+  const alertConfigs = await getClientAlertConfigs();
 
   for (const account of accounts) {
+    const clientId = account.clients?.id;
+    const acfg: ClientAlertConfig = (clientId && alertConfigs.get(clientId)) || DEFAULT_CLIENT_ALERT_CONFIG;
     const raw = metaData.get(account.meta_account_id);
     const clientName =
       account.clients?.nome_fantasia || account.clients?.name || account.account_name || account.meta_account_id;
@@ -163,6 +193,7 @@ export async function runBalanceSync(opts?: {
         clientName, metaAccountId: account.meta_account_id, isPrepaid: account.is_prepaid,
         available: null, daysRemaining: null, avgDailySpend: null, currency: "BRL", pixKey,
         alert: { severity: "error", reason: errRaw?.error ?? "Erro de sync", pctRemaining: null },
+        clientId,
       });
       continue;
     }
@@ -207,8 +238,23 @@ export async function runBalanceSync(opts?: {
         monthlyBudget: account.monthly_budget,
         daysRemaining,
         accountStatus: meta.account_status,
+        // Verba mínima em R$ definida por cliente vence o % global.
+        warningThreshold: acfg.alertVerbaBaixa ? acfg.verbaMinima : null,
       },
       settings,
+    );
+
+    // Alertas operacionais (sem gasto, etc.) p/ o grupo interno, conforme config do cliente.
+    const opAlerts = detectClientAlerts(
+      {
+        available: effectiveAvailable,
+        monthlyBudget: account.monthly_budget,
+        avgDailySpend: avg3dSpend,
+        accountStatus: meta.account_status,
+        syncError: null,
+      },
+      acfg,
+      settings.warningPct,
     );
 
     const updatePayload: Record<string, unknown> = {
@@ -236,7 +282,7 @@ export async function runBalanceSync(opts?: {
       clientName, metaAccountId: account.meta_account_id, isPrepaid,
       available: effectiveAvailable, daysRemaining, avgDailySpend: avg3dSpend,
       currency: meta.currency ?? "BRL", pixKey, alert,
-      adAccountId: account.id, // usado no anti-spam em tempo real
+      adAccountId: account.id, clientId, opAlerts, // anti-spam + config por cliente
     });
 
     synced++;
