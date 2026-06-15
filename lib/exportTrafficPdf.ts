@@ -1,5 +1,16 @@
 import type { AdCampaign } from "@/lib/types";
 
+// Base URL do logo no PDF. No browser usa a origem atual; no servidor (geração
+// agendada do PDF) usa o domínio público, já que não há `window`.
+function reportBaseUrl(): string {
+  if (typeof window !== "undefined") return window.location.origin;
+  return (
+    process.env.NEXT_PUBLIC_PORTAL_DOMAIN ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    "https://painel.lonemidia.com"
+  );
+}
+
 export interface TrafficReportData {
   clientName: string;
   period: string;
@@ -132,7 +143,7 @@ function buildDailyChart(daily: { date: string; messages: number }[], periodDays
 }
 
 export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = false): string {
-  const logoUrl = `${window.location.origin}/logo.png`;
+  const logoUrl = `${reportBaseUrl()}/logo.png`;
   const isCompact = (data.periodDays ?? 30) <= 7;
 
   const hasBestAdset = !!(data.bestAdsetCpa && data.bestAdsetCpa > 0);
@@ -555,7 +566,7 @@ function buildClientDemographicsSection(demographics: TrafficReportData["demogra
 }
 
 export function buildClientReportHtml(data: TrafficReportData, autoPrint = false): string {
-  const logoUrl = `${window.location.origin}/logo.png`;
+  const logoUrl = `${reportBaseUrl()}/logo.png`;
   const daily = data.dailyMessages ?? [];
   const hasChart = daily.length >= 2;
   const periodDays = data.periodDays ?? 30;
