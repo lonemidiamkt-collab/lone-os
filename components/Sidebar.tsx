@@ -86,8 +86,9 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
       {
         title: "Relatórios",
         items: [
-          { label: "Relatórios Mensais", icon: BarChart2, tab: "relatorios" },
-          { label: "Análise AI",         icon: Brain,     tab: "report" },
+          { label: "Relatórios Mensais",  icon: BarChart2,     tab: "relatorios" },
+          { label: "Análise AI",          icon: Brain,         tab: "report" },
+          { label: "Grupos dos Clientes", icon: MessageCircle, href: "/settings/grupos" },
         ],
       },
     ],
