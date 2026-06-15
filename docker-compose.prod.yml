@@ -35,6 +35,9 @@ services:
       EVOLUTION_API_URL: ${EVOLUTION_API_URL}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE}
+      # browserless (headless chrome) p/ renderizar o PDF do relatório semanal
+      BROWSERLESS_TOKEN: ${BROWSERLESS_TOKEN}
+      BROWSERLESS_URL: http://chromium:3000
       SENTRY_DSN: ${SENTRY_DSN}
       NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
       SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN}
@@ -43,6 +46,19 @@ services:
     networks:
       - default
       - supabase_default
+
+  # Headless chrome isolado — renderiza o PDF do relatório semanal.
+  # Sem porta pública; o app alcança via http://chromium:3000 na rede interna.
+  chromium:
+    image: ghcr.io/browserless/chromium:latest
+    restart: always
+    environment:
+      TOKEN: ${BROWSERLESS_TOKEN}
+      CONCURRENT: "1"
+      TIMEOUT: "60000"
+    mem_limit: 1500m
+    networks:
+      - default
 
 networks:
   default:

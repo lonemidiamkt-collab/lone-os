@@ -105,6 +105,34 @@ export async function sendGroupText(groupJid: string, text: string): Promise<Evo
   return sendText(groupJid, text);
 }
 
+/**
+ * Envia um documento (ex.: PDF) para um número ou JID de grupo.
+ * `base64` = conteúdo do arquivo em base64 (sem prefixo data:).
+ */
+export async function sendMediaDocument(
+  to: string,
+  base64: string,
+  fileName: string,
+  caption?: string,
+  mimetype = "application/pdf",
+): Promise<EvoResult> {
+  const cfg = getEvolutionConfig();
+  if (!cfg) return { ok: false, error: "Evolution não configurada (env ausente)" };
+  if (!to) return { ok: false, error: "destino (número/JID) vazio" };
+  if (!base64) return { ok: false, error: "documento vazio" };
+  return evoFetch(`/message/sendMedia/${encodeURIComponent(cfg.instance)}`, {
+    method: "POST",
+    body: JSON.stringify({
+      number: to,
+      mediatype: "document",
+      mimetype,
+      media: base64,
+      fileName,
+      ...(caption ? { caption } : {}),
+    }),
+  }, cfg, { retries: 1, timeoutMs: 60_000 });
+}
+
 /** Estado da conexão da instância. `connected=true` quando state==="open". */
 export async function checkInstance(): Promise<EvoResult<{ state: string; connected: boolean }>> {
   const cfg = getEvolutionConfig();
