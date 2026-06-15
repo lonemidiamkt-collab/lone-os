@@ -19,41 +19,17 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/emailService";
 import { requireCron } from "@/lib/api/cron-guard";
 import { getMetaToken, getAlertSettings } from "@/lib/traffic/sync-core";
-import { fetchCampaignInsights, fetchAccountDemographics } from "@/lib/meta/insights-server";
-import { buildTrafficReportData, buildClientReportHtml } from "@/lib/exportTrafficPdf";
-import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { sendMediaDocument } from "@/lib/whatsapp/evolution";
-import type { AdCampaign } from "@/lib/types";
+import {
+  buildClientPdf, selectActiveMetaClients, periodLabel7d, slug,
+} from "@/lib/traffic/weekly-report";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
 const REPORTS_BUCKET = "reports";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-interface ClientRow {
-  id: string;
-  name: string;
-  nome_fantasia: string | null;
-  meta_ad_account_id: string;
-}
-
 function todayKeyBRT(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
-}
-
-function periodLabel7d(): string {
-  const now = new Date();
-  const since = new Date(now);
-  since.setDate(since.getDate() - 7);
-  return `${since.toLocaleDateString("pt-BR")} – ${now.toLocaleDateString("pt-BR")}`;
-}
-
-function slug(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-zA-Z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .toLowerCase();
 }
 
 async function notifyAdminFailure(subject: string, detail: string) {
@@ -67,28 +43,6 @@ async function notifyAdminFailure(subject: string, detail: string) {
   } catch (e) {
     console.error("[weekly-reports] fallback e-mail falhou:", e);
   }
-}
-
-/** Gera o PDF (Buffer) do relatório de 7 dias de UM cliente. */
-async function buildClientPdf(token: string, client: ClientRow): Promise<{ ok: boolean; buffer?: Buffer; error?: string }> {
-  const accountId = client.meta_ad_account_id;
-  const clientName = client.nome_fantasia || client.name;
-
-  const raw = await fetchCampaignInsights(token, accountId, 7);
-  const campaigns = (raw as Array<{ error?: boolean }>).filter((c) => !c.error) as unknown as AdCampaign[];
-  if (campaigns.length === 0) return { ok: false, error: "sem campanhas no período" };
-
-  let demographics: ReturnType<typeof buildTrafficReportData>["demographics"] | undefined;
-  try {
-    const demo = await fetchAccountDemographics(token, accountId, 7);
-    demographics = demo ?? undefined;
-  } catch { /* demografia é opcional */ }
-
-  const reportData = buildTrafficReportData(clientName, campaigns, periodLabel7d(), undefined, demographics, undefined, 7);
-  const html = buildClientReportHtml(reportData);
-  const pdf = await htmlToPdf(html);
-  if (!pdf.ok || !pdf.buffer) return { ok: false, error: pdf.error ?? "falha no render" };
-  return { ok: true, buffer: pdf.buffer };
 }
 
 // ── POST ─────────────────────────────────────────────────────
@@ -111,18 +65,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Clientes ativos com Meta vinculada
-    let q = supabaseAdmin
-      .from("clients")
-      .select("id, name, nome_fantasia, meta_ad_account_id, status, draft_status")
-      .not("meta_ad_account_id", "is", null)
-      .in("status", ["good", "average", "onboarding"])
-      .is("draft_status", null)
-      .order("nome_fantasia");
-    if (onlyClientId) q = q.eq("id", onlyClientId);
-
-    const { data: clientsRaw, error: qErr } = await q;
-    if (qErr) throw new Error(qErr.message);
-    const clients = (clientsRaw ?? []) as ClientRow[];
+    const clients = await selectActiveMetaClients(onlyClientId);
 
     if (clients.length === 0) {
       return NextResponse.json({ ok: true, status: "skipped", message: "Nenhum cliente ativo com Meta" });
