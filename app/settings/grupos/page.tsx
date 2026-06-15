@@ -14,6 +14,8 @@ interface Row {
   currentJid: string | null;
   currentName: string | null;
   suggestion: Suggestion;
+  verbaMinima: number | null;
+  destino: string;
 }
 
 const CONF_STYLE: Record<string, string> = {
@@ -30,6 +32,8 @@ export default function GruposPage() {
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [sel, setSel] = useState<Record<string, string>>({}); // clientId -> groupJid
+  const [verba, setVerba] = useState<Record<string, string>>({}); // clientId -> verba mínima (R$)
+  const [dest, setDest] = useState<Record<string, string>>({});   // clientId -> 'interno' | 'cliente'
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,6 +52,12 @@ export default function GruposPage() {
         } else initial[r.clientId] = "";
       }
       setSel(initial);
+      const v: Record<string, string> = {}, dd: Record<string, string> = {};
+      for (const r of data.clients as Row[]) {
+        v[r.clientId] = r.verbaMinima != null ? String(r.verbaMinima) : "";
+        dd[r.clientId] = r.destino || "interno";
+      }
+      setVerba(v); setDest(dd);
     } finally { setLoading(false); }
   }, []);
 
@@ -59,7 +69,13 @@ export default function GruposPage() {
       const mappings = rows.map((r) => {
         const jid = sel[r.clientId] || null;
         const g = groups.find((x) => x.id === jid);
-        return { clientId: r.clientId, groupJid: jid, groupName: g?.subject ?? null };
+        const vraw = (verba[r.clientId] ?? "").replace(",", ".").trim();
+        const vnum = vraw === "" ? null : Number(vraw);
+        return {
+          clientId: r.clientId, groupJid: jid, groupName: g?.subject ?? null,
+          verbaMinima: vnum != null && Number.isFinite(vnum) ? vnum : null,
+          destino: dest[r.clientId] || "interno",
+        };
       });
       const res = await authedFetch("/api/clients/group-mapping", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -99,8 +115,8 @@ export default function GruposPage() {
       </div>
 
       <div className="rounded-xl border border-border overflow-hidden">
-        <div className="grid grid-cols-[1fr_140px_1fr_90px] gap-3 px-4 py-2.5 bg-[#0c0c0f] border-b border-border">
-          {["Cliente", "Conta Meta", "Grupo WhatsApp", "Confiança"].map((h) => (
+        <div className="grid grid-cols-[1.2fr_110px_1.4fr_110px_110px_80px] gap-3 px-4 py-2.5 bg-[#0c0c0f] border-b border-border">
+          {["Cliente", "Conta Meta", "Grupo WhatsApp", "Verba mín (R$)", "Destino", "Confiança"].map((h) => (
             <p key={h} className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">{h}</p>
           ))}
         </div>
@@ -108,7 +124,7 @@ export default function GruposPage() {
           const conf = r.suggestion.confidence;
           const needsReview = !sel[r.clientId] || conf === "low" || conf === "none";
           return (
-            <div key={r.clientId} className={`grid grid-cols-[1fr_140px_1fr_90px] gap-3 px-4 py-2.5 border-b border-border last:border-0 items-center ${needsReview ? "bg-amber-500/[0.03]" : ""}`}>
+            <div key={r.clientId} className={`grid grid-cols-[1.2fr_110px_1.4fr_110px_110px_80px] gap-3 px-4 py-2.5 border-b border-border last:border-0 items-center ${needsReview ? "bg-amber-500/[0.03]" : ""}`}>
               <p className="text-sm text-foreground truncate">{r.clientName}</p>
               <p className="text-[10px] text-muted-foreground font-mono truncate">{r.metaAccountId}</p>
               <select
@@ -118,6 +134,22 @@ export default function GruposPage() {
               >
                 <option value="">— selecionar grupo —</option>
                 {groups.map((g) => <option key={g.id} value={g.id}>{g.subject}</option>)}
+              </select>
+              <input
+                type="text" inputMode="decimal" placeholder="% global"
+                value={verba[r.clientId] ?? ""}
+                onChange={(e) => setVerba((s) => ({ ...s, [r.clientId]: e.target.value }))}
+                title="Verba mínima em R$ para alerta de saldo baixo. Vazio = usa o % global."
+                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50"
+              />
+              <select
+                value={dest[r.clientId] ?? "interno"}
+                onChange={(e) => setDest((s) => ({ ...s, [r.clientId]: e.target.value }))}
+                title="Para qual grupo os alertas operacionais deste cliente vão."
+                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50"
+              >
+                <option value="interno">Interno</option>
+                <option value="cliente">Cliente</option>
               </select>
               <span className={`text-[10px] px-2 py-0.5 rounded-full border text-center ${CONF_STYLE[conf]}`}>
                 {needsReview && conf !== "high" ? <AlertTriangle size={9} className="inline mr-0.5" /> : <CheckCircle size={9} className="inline mr-0.5" />}
