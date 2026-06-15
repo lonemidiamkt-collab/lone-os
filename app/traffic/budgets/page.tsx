@@ -128,6 +128,7 @@ function enrichAccount(a: AdAccountRow): EnrichedAccount {
     a.account_status ?? 0,
     warningThreshold,
     criticalThreshold,
+    a.monthly_budget,
   );
 
   const enriched = { ...a, clientName, availableBalance: available, balanceLabel, daysRemaining, avgDailySpend, severity, warningThreshold, criticalThreshold, currency: cur };
