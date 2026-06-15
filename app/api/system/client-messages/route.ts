@@ -1,11 +1,13 @@
 // app/api/system/client-messages/route.ts
 //
-// Mensagens nos GRUPOS DOS CLIENTES (seg/qua/sex 08:50 BRT):
-//   ?kind=support  → só a mensagem de suporte (qua/sex, e parte da segunda)
-//   ?kind=monday   → suporte + PDF de 7 dias (segunda)
-// Crontab (VPS) via scripts/client-messages.sh:
-//   50 11 * * 1   client-messages.sh monday
-//   50 11 * * 3,5 client-messages.sh support
+// Mensagens nos GRUPOS DOS CLIENTES (seg/qua/sex 08:00 BRT):
+//   ?kind=monday → PDF de 7 dias com mensagem personalizada na legenda (sem suporte separado)
+//   ?kind=wed    → mensagem de suporte de quarta (meio de semana)
+//   ?kind=fri    → mensagem de suporte de sexta (fechamento da semana)
+// Crontab (08:00 BRT = 11:00 UTC), via scripts/client-messages.sh:
+//   0 11 * * 1 client-messages.sh monday
+//   0 11 * * 3 client-messages.sh wed
+//   0 11 * * 5 client-messages.sh fri
 //
 // Segurança: só envia para clientes COM whatsapp_group_jid confirmado; pula e
 // reporta os sem grupo. Trava global traffic_client_msgs_enabled (default false).
@@ -23,10 +25,10 @@ import { sendEmail } from "@/lib/email/emailService";
 import { requireCron } from "@/lib/api/cron-guard";
 import { getMetaToken } from "@/lib/traffic/sync-core";
 import {
-  buildClientPdf, selectActiveMetaClients, periodLabel7d, slug, clientDisplayName,
+  buildClientPdf, selectActiveMetaClients, slug, clientDisplayName,
   type ReportClientRow,
 } from "@/lib/traffic/weekly-report";
-import { SUPPORT_MESSAGE, reportCaption } from "@/lib/traffic/support-message";
+import { MONDAY_REPORT_MESSAGE, supportMessageFor, type ClientMsgKind } from "@/lib/traffic/support-message";
 import { sendGroupText, sendMediaDocument } from "@/lib/whatsapp/evolution";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
@@ -69,7 +71,8 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
 
   const url = new URL(req.url);
-  const kind = url.searchParams.get("kind") === "monday" ? "monday" : "support";
+  const kp = url.searchParams.get("kind");
+  const kind: ClientMsgKind = kp === "wed" ? "wed" : kp === "fri" ? "fri" : "monday";
   const withReport = kind === "monday";
   const dryRun = url.searchParams.get("dryRun") === "1";
   const force = url.searchParams.get("force") === "1";
@@ -104,7 +107,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, status: "failed", error: "Token Meta ausente/expirado" }, { status: 200 });
     }
 
-    const period = periodLabel7d();
     let supportSent = 0, supportFail = 0, reportSent = 0, reportFail = 0;
     const errors: string[] = [];
 
@@ -113,24 +115,26 @@ export async function POST(req: NextRequest) {
       const name = clientDisplayName(c);
       const jid = c.whatsapp_group_jid!;
 
-      // 1) Suporte (sempre) — segunda manda suporte ANTES do relatório
-      if (force || !(await alreadySent(c.id, dateKey, "support"))) {
-        const res = await sendGroupText(jid, SUPPORT_MESSAGE);
-        if (res.ok) { supportSent++; await logMsg(c.id, dateKey, "support", "sent"); }
-        else { supportFail++; errors.push(`${name} (suporte): ${res.error}`); await logMsg(c.id, dateKey, "support", "failed", res.error); }
-      }
-
-      // 2) Relatório (só segunda)
-      if (withReport && (force || !(await alreadySent(c.id, dateKey, "report")))) {
-        await sleep(1500);
-        const pdf = await buildClientPdf(token!, c);
-        if (!pdf.ok || !pdf.buffer) {
-          reportFail++; errors.push(`${name} (relatório): ${pdf.error}`); await logMsg(c.id, dateKey, "report", "failed", pdf.error);
-        } else {
-          const fileName = `relatorio-${slug(name)}-${dateKey}.pdf`;
-          const res = await sendMediaDocument(jid, pdf.buffer.toString("base64"), fileName, reportCaption(name, period));
-          if (res.ok) { reportSent++; await logMsg(c.id, dateKey, "report", "sent"); }
-          else { reportFail++; errors.push(`${name} (relatório): ${res.error}`); await logMsg(c.id, dateKey, "report", "failed", res.error); }
+      if (withReport) {
+        // Segunda: PDF de 7 dias com a mensagem personalizada como legenda
+        // (sem mensagem de suporte separada).
+        if (force || !(await alreadySent(c.id, dateKey, "report"))) {
+          const pdf = await buildClientPdf(token!, c);
+          if (!pdf.ok || !pdf.buffer) {
+            reportFail++; errors.push(`${name} (relatório): ${pdf.error}`); await logMsg(c.id, dateKey, "report", "failed", pdf.error);
+          } else {
+            const fileName = `relatorio-${slug(name)}-${dateKey}.pdf`;
+            const res = await sendMediaDocument(jid, pdf.buffer.toString("base64"), fileName, MONDAY_REPORT_MESSAGE);
+            if (res.ok) { reportSent++; await logMsg(c.id, dateKey, "report", "sent"); }
+            else { reportFail++; errors.push(`${name} (relatório): ${res.error}`); await logMsg(c.id, dateKey, "report", "failed", res.error); }
+          }
+        }
+      } else {
+        // Quarta/Sexta: só a mensagem de suporte do dia.
+        if (force || !(await alreadySent(c.id, dateKey, "support"))) {
+          const res = await sendGroupText(jid, supportMessageFor(kind));
+          if (res.ok) { supportSent++; await logMsg(c.id, dateKey, "support", "sent"); }
+          else { supportFail++; errors.push(`${name} (suporte): ${res.error}`); await logMsg(c.id, dateKey, "support", "failed", res.error); }
         }
       }
 
