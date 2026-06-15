@@ -16,16 +16,12 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/emailService";
+import { requireCron } from "@/lib/api/cron-guard";
 import { runBalanceSync, getAlertSettings } from "@/lib/traffic/sync-core";
 import { buildDigestMessage, countBySeverity } from "@/lib/budgets/alert-engine";
 import { isEvolutionConfigured, checkInstance, sendGroupText } from "@/lib/whatsapp/evolution";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
-
-function authorized(req: NextRequest): boolean {
-  const secret = req.headers.get("authorization")?.replace("Bearer ", "");
-  return !!process.env.CRON_SECRET && secret === process.env.CRON_SECRET;
-}
 
 function todayKeyBRT(): string {
   // en-CA => "YYYY-MM-DD"
@@ -48,9 +44,8 @@ async function notifyAdminFailure(subject: string, detail: string) {
 // ── POST: monta e envia o digest ─────────────────────────────
 
 export async function POST(req: NextRequest) {
-  if (!authorized(req)) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  }
+  const denied = requireCron(req);
+  if (denied) return denied;
 
   const url = new URL(req.url);
   const dryRun = url.searchParams.get("dryRun") === "1";
@@ -142,9 +137,8 @@ export async function POST(req: NextRequest) {
 // ── GET: health/status (verificar esses erros num lugar só) ──
 
 export async function GET(req: NextRequest) {
-  if (!authorized(req)) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  }
+  const denied = requireCron(req);
+  if (denied) return denied;
 
   const settings = await getAlertSettings();
 
