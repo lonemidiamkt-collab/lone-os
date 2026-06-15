@@ -18,10 +18,15 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/emailService";
 import { requireCron } from "@/lib/api/cron-guard";
 import { runBalanceSync, getAlertSettings } from "@/lib/traffic/sync-core";
-import { buildDigestMessage, countBySeverity } from "@/lib/budgets/alert-engine";
+import {
+  buildDigestMessage, countBySeverity, buildRunHeader, buildAccountMessage, sortBySeverity,
+} from "@/lib/budgets/alert-engine";
 import { isEvolutionConfigured, checkInstance, sendGroupText } from "@/lib/whatsapp/evolution";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Intervalo entre mensagens no modo conta-a-conta (evita flood/rate-limit).
+const PER_ACCOUNT_DELAY_MS = 1200;
 
 function todayKeyBRT(): string {
   // en-CA => "YYYY-MM-DD"
@@ -85,44 +90,67 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, status: "failed", error: "Token Meta ausente/expirado" }, { status: 200 });
     }
 
-    const message = buildDigestMessage(sync.accounts);
     const counts = countBySeverity(sync.accounts);
+
+    // Modo de entrega: ?mode= sobrescreve o setting (útil p/ preview/dry-run).
+    const modeParam = url.searchParams.get("mode");
+    const mode = modeParam === "per_account" || modeParam === "digest" ? modeParam : settings.mode;
+
+    // Lista de mensagens a enviar:
+    //   digest      → 1 mensagem consolidada
+    //   per_account → cabeçalho + 1 mensagem por conta (crítico primeiro)
+    const messages = mode === "per_account"
+      ? [buildRunHeader(sync.accounts), ...sortBySeverity(sync.accounts).map(buildAccountMessage)]
+      : [buildDigestMessage(sync.accounts)];
 
     if (dryRun) {
       await supabaseAdmin.from("budget_digest_log").insert({
-        date_key: dateKey, status: "dry_run", severity_counts: counts, message,
+        date_key: dateKey, status: "dry_run", severity_counts: counts,
+        message: `[${mode}] ${messages.length} mensagem(ns)`,
       });
-      return NextResponse.json({ ok: true, status: "dry_run", counts, message });
+      return NextResponse.json({ ok: true, status: "dry_run", mode, counts, messageCount: messages.length, messages });
     }
 
     if (!settings.groupJid) {
       await supabaseAdmin.from("budget_digest_log").insert({
-        date_key: dateKey, status: "failed", severity_counts: counts, message,
-        error: "Grupo (traffic_alert_group_jid) não configurado",
+        date_key: dateKey, status: "failed", severity_counts: counts,
+        message: `[${mode}]`, error: "Grupo (traffic_alert_group_jid) não configurado",
       });
       await notifyAdminFailure("Digest de saldos não enviado", "traffic_alert_group_jid vazio em agency_settings.");
-      return NextResponse.json({ ok: false, status: "failed", error: "Grupo não configurado", counts, message }, { status: 200 });
+      return NextResponse.json({ ok: false, status: "failed", error: "Grupo não configurado", counts }, { status: 200 });
     }
 
-    const send = await sendGroupText(settings.groupJid, message);
+    // Envia 1 (digest) ou N (per_account) mensagens, com delay entre elas.
+    let sent = 0;
+    let failed = 0;
+    let firstError: string | null = null;
+    for (let i = 0; i < messages.length; i++) {
+      const res = await sendGroupText(settings.groupJid, messages[i]);
+      if (res.ok) sent++;
+      else { failed++; firstError ??= res.error ?? "erro desconhecido"; }
+      if (i < messages.length - 1) await sleep(PER_ACCOUNT_DELAY_MS);
+    }
 
-    if (!send.ok) {
+    if (sent === 0) {
       await supabaseAdmin.from("budget_digest_log").insert({
-        date_key: dateKey, status: "failed", severity_counts: counts, message,
-        error: send.error ?? "Falha no envio Evolution",
+        date_key: dateKey, status: "failed", severity_counts: counts,
+        message: `[${mode}] 0/${messages.length} enviadas`,
+        error: firstError ?? "Falha no envio Evolution",
       });
       await notifyAdminFailure(
         "Digest de saldos falhou no envio",
-        `Evolution retornou erro: ${send.error ?? "desconhecido"}\n\nMensagem:\n${message}`,
+        `Evolution retornou erro: ${firstError ?? "desconhecido"} (modo ${mode}).`,
       );
-      return NextResponse.json({ ok: false, status: "failed", error: send.error, counts }, { status: 200 });
+      return NextResponse.json({ ok: false, status: "failed", mode, error: firstError, counts }, { status: 200 });
     }
 
     await supabaseAdmin.from("budget_digest_log").insert({
-      date_key: dateKey, status: "sent", severity_counts: counts, message,
+      date_key: dateKey, status: "sent", severity_counts: counts,
+      message: `[${mode}] enviadas ${sent}/${messages.length}`,
+      error: failed > 0 ? `${failed} falharam (${firstError})` : null,
     });
 
-    return NextResponse.json({ ok: true, status: "sent", counts, accounts: sync.accounts.length });
+    return NextResponse.json({ ok: true, status: "sent", mode, counts, sent, failed, total: messages.length });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[budget-digest] erro:", msg);
