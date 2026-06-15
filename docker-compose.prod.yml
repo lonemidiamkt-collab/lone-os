@@ -31,6 +31,10 @@ services:
       # Gere uma e guarde BACKUP — perder essa chave = perder acesso às senhas armazenadas.
       VAULT_KEY: ${VAULT_KEY}
       CRON_SECRET: ${CRON_SECRET}
+      # Evolution API (WhatsApp) — alertas de saldo p/ grupo do gestor de tráfego
+      EVOLUTION_API_URL: ${EVOLUTION_API_URL}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE}
       SENTRY_DSN: ${SENTRY_DSN}
       NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
       SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN}
