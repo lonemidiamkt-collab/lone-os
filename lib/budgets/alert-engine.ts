@@ -11,6 +11,8 @@
 //        critical = saldo <= 0  |  dias <= 1
 //        warning  = dias <= 3
 
+import type { OpAlertHit } from "@/lib/budgets/operational-alerts";
+
 export type AlertSeverity = "critical" | "warning" | "ok" | "disabled" | "error";
 
 export interface AlertConfig {
@@ -127,6 +129,10 @@ export interface DigestAccount {
   alert: AccountAlertResult;
   /** UUID interno da ad_account — usado no anti-spam do alerta em tempo real. Ignorado nas mensagens. */
   adAccountId?: string;
+  /** UUID do cliente — usado p/ buscar a config de alertas. */
+  clientId?: string;
+  /** Alertas operacionais detectados (sem gasto, campanha parada, etc.) p/ o grupo interno. */
+  opAlerts?: OpAlertHit[];
 }
 
 const SEVERITY_RANK: Record<AlertSeverity, number> = {
@@ -271,33 +277,43 @@ export function buildAccountMessage(a: DigestAccount): string {
   const dias = a.daysRemaining !== null ? fmtDays(a.daysRemaining) : null;
   const pix = a.pixKey ? `\nPix: ${a.pixKey}` : "";
 
+  let base: string;
   switch (a.alert.severity) {
     case "critical": {
       const zerado = (a.available ?? 0) <= 0 ? " (zerado)" : "";
       const extra = [gasto && `Gasto ${gasto}`, dias && `acaba em ${dias}`].filter(Boolean).join(" · ");
-      return (
+      base =
         `🔴 *ATENÇÃO — ${a.clientName}*\n` +
         `Saldo da conta Meta Ads: ${saldo}${zerado}${pct}\n` +
         (extra ? extra + "\n" : "") +
-        `Reabasteça (Pix/boleto) imediatamente pra não pausar as campanhas.${pix}`
-      );
+        `Reabasteça (Pix/boleto) imediatamente pra não pausar as campanhas.${pix}`;
+      break;
     }
     case "warning": {
       const extra = [gasto && `gasto ${gasto}`, dias && `acaba em ${dias}`].filter(Boolean).join(" · ");
-      return (
+      base =
         `🟡 *${a.clientName} — saldo baixo*\n` +
         `Saldo: ${saldo}${pct}\n` +
         (extra ? extra + "\n" : "") +
-        `Reabasteça em breve.${pix}`
-      );
+        `Reabasteça em breve.${pix}`;
+      break;
     }
     case "error":
-      return `⚠️ *${a.clientName}* — sem sincronizar (erro no Meta).`;
+      base = `⚠️ *${a.clientName}* — sem sincronizar (erro no Meta).`;
+      break;
     case "disabled":
-      return `⚪ *${a.clientName}* — conta desativada / fora de operação.`;
+      base = `⚪ *${a.clientName}* — conta desativada / fora de operação.`;
+      break;
     default: {
       const parts = [saldo + pct, dias, gasto].filter(Boolean).join(" · ");
-      return `🟢 *${a.clientName}* — ${parts}`;
+      base = `🟢 *${a.clientName}* — ${parts}`;
     }
   }
+
+  // Anexa alertas operacionais que não estão refletidos na severidade de saldo.
+  const opExtra = (a.opAlerts ?? []).filter((h) => h.type === "sem_gasto" || h.type === "campanha_parada");
+  if (opExtra.length > 0) {
+    base += "\n" + opExtra.map((h) => `⚠️ ${h.reason}`).join("\n");
+  }
+  return base;
 }
