@@ -27,9 +27,13 @@ import { sendGroupText } from "@/lib/whatsapp/evolution";
 
 // ── Config de alerta (agency_settings) ───────────────────────
 
+export type AlertMode = "digest" | "per_account";
+
 export interface AlertSettings extends AlertConfig {
   enabled: boolean;
   groupJid: string | null;
+  /** "digest" = um resumo consolidado; "per_account" = uma mensagem por conta. */
+  mode: AlertMode;
 }
 
 function numOr(v: string | undefined, fallback: number): number {
@@ -46,6 +50,7 @@ export async function getAlertSettings(): Promise<AlertSettings> {
       "traffic_alert_group_jid",
       "traffic_alert_warning_pct",
       "traffic_alert_critical_pct",
+      "traffic_alert_mode",
     ]);
   const map = new Map((data ?? []).map((r: { key: string; value: string }) => [r.key, r.value]));
   return {
@@ -53,6 +58,7 @@ export async function getAlertSettings(): Promise<AlertSettings> {
     groupJid: map.get("traffic_alert_group_jid")?.trim() || null,
     warningPct: numOr(map.get("traffic_alert_warning_pct"), DEFAULT_ALERT_CONFIG.warningPct),
     criticalPct: numOr(map.get("traffic_alert_critical_pct"), DEFAULT_ALERT_CONFIG.criticalPct),
+    mode: map.get("traffic_alert_mode") === "per_account" ? "per_account" : "digest",
   };
 }
 

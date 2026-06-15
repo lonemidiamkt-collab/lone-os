@@ -238,3 +238,66 @@ export function countBySeverity(accounts: DigestAccount[]): Record<AlertSeverity
   for (const a of accounts) counts[a.alert.severity]++;
   return counts;
 }
+
+// ── Modo conta-a-conta (uma mensagem por conta) ──────────────
+
+/** Ordena por severidade (crítico no topo), depois dias restantes, depois nome. */
+export function sortBySeverity(accounts: DigestAccount[]): DigestAccount[] {
+  return [...accounts].sort((a, b) => {
+    const r = SEVERITY_RANK[a.alert.severity] - SEVERITY_RANK[b.alert.severity];
+    if (r !== 0) return r;
+    const da = a.daysRemaining ?? Infinity;
+    const db = b.daysRemaining ?? Infinity;
+    if (da !== db) return da - db;
+    return a.clientName.localeCompare(b.clientName);
+  });
+}
+
+/** Cabeçalho curto enviado antes das mensagens individuais. */
+export function buildRunHeader(accounts: DigestAccount[], now: Date = new Date()): string {
+  const c = countBySeverity(accounts);
+  return (
+    `📊 *Saldos Meta Ads* — ${todayLabelBRT(now)}\n` +
+    `🔴 ${c.critical} críticas · 🟡 ${c.warning} em atenção · 🟢 ${c.ok} ok\n` +
+    `_(uma mensagem por conta a seguir)_`
+  );
+}
+
+/** Mensagem individual de UMA conta; o formato varia conforme a severidade. */
+export function buildAccountMessage(a: DigestAccount): string {
+  const saldo = fmtBRL(a.available, a.currency);
+  const pct = a.alert.pctRemaining !== null ? ` (${a.alert.pctRemaining.toFixed(0)}% da verba)` : "";
+  const gasto = a.avgDailySpend !== null ? `${fmtBRL(a.avgDailySpend, a.currency)}/dia` : null;
+  const dias = a.daysRemaining !== null ? fmtDays(a.daysRemaining) : null;
+  const pix = a.pixKey ? `\nPix: ${a.pixKey}` : "";
+
+  switch (a.alert.severity) {
+    case "critical": {
+      const zerado = (a.available ?? 0) <= 0 ? " (zerado)" : "";
+      const extra = [gasto && `Gasto ${gasto}`, dias && `acaba em ${dias}`].filter(Boolean).join(" · ");
+      return (
+        `🔴 *ATENÇÃO — ${a.clientName}*\n` +
+        `Saldo da conta Meta Ads: ${saldo}${zerado}${pct}\n` +
+        (extra ? extra + "\n" : "") +
+        `Reabasteça (Pix/boleto) imediatamente pra não pausar as campanhas.${pix}`
+      );
+    }
+    case "warning": {
+      const extra = [gasto && `gasto ${gasto}`, dias && `acaba em ${dias}`].filter(Boolean).join(" · ");
+      return (
+        `🟡 *${a.clientName} — saldo baixo*\n` +
+        `Saldo: ${saldo}${pct}\n` +
+        (extra ? extra + "\n" : "") +
+        `Reabasteça em breve.${pix}`
+      );
+    }
+    case "error":
+      return `⚠️ *${a.clientName}* — sem sincronizar (erro no Meta).`;
+    case "disabled":
+      return `⚪ *${a.clientName}* — conta desativada / fora de operação.`;
+    default: {
+      const parts = [saldo + pct, dias, gasto].filter(Boolean).join(" · ");
+      return `🟢 *${a.clientName}* — ${parts}`;
+    }
+  }
+}

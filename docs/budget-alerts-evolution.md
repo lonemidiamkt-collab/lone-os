@@ -51,6 +51,17 @@ Semeadas pela migration `047_budget_digest.sql`:
 | `traffic_alert_group_jid`    | `''`    | **JID do grupo** (ex: `12036...@g.us`)      |
 | `traffic_alert_warning_pct`  | `20`    | % da verba p/ atenção                        |
 | `traffic_alert_critical_pct` | `5`     | % da verba p/ crítico                        |
+| `traffic_alert_mode`         | `digest`| `digest` (1 resumo) ou `per_account` (1 msg/conta) |
+
+### Modo de entrega (`traffic_alert_mode`)
+
+- `digest` — um único resumo consolidado por envio.
+- `per_account` — cabeçalho + **uma mensagem por conta** (crítico primeiro), com cores por
+  severidade. Há um delay de ~1,2s entre mensagens (evita flood/rate-limit).
+
+Preview sem trocar o setting (override por query): `POST /api/system/budget-digest?dryRun=1&mode=per_account`
+retorna o array `messages` sem enviar. Para ativar de fato:
+`update agency_settings set value='per_account' where key='traffic_alert_mode';`
 
 Setar o JID do grupo:
 

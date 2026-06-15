@@ -9,6 +9,9 @@ import {
   evaluateAccount,
   buildDigestMessage,
   buildUrgentMessage,
+  buildAccountMessage,
+  buildRunHeader,
+  sortBySeverity,
   countBySeverity,
   DEFAULT_ALERT_CONFIG,
   type DigestAccount,
@@ -144,5 +147,43 @@ describe("buildUrgentMessage", () => {
     expect(msg).toMatch(/CR[IÍ]TICO/i);
     expect(msg).toContain("Imperio dos Pisos");
     expect(msg).toContain("Pix: 12345");
+  });
+});
+
+describe("modo conta-a-conta", () => {
+  it("crítico vira ATENÇÃO com pix e 'zerado'", () => {
+    const m = buildAccountMessage(acc({
+      clientName: "Iron Fox", available: 0, daysRemaining: null, pixKey: "229",
+      alert: { severity: "critical", reason: "Saldo zerado", pctRemaining: null },
+    }));
+    expect(m).toMatch(/ATEN[ÇC][ÃA]O/);
+    expect(m).toContain("Iron Fox");
+    expect(m).toContain("zerado");
+    expect(m).toContain("Pix: 229");
+  });
+
+  it("ok é uma linha enxuta com 🟢", () => {
+    const m = buildAccountMessage(acc({ clientName: "Imperio", available: 2473.74 }));
+    expect(m).toContain("🟢");
+    expect(m).toContain("Imperio");
+    expect(m).not.toMatch(/ATEN[ÇC][ÃA]O/);
+  });
+
+  it("disabled e error têm formato próprio", () => {
+    expect(buildAccountMessage(acc({ clientName: "Z", alert: { severity: "disabled", reason: "", pctRemaining: null } })))
+      .toMatch(/desativada/);
+    expect(buildAccountMessage(acc({ clientName: "Z", alert: { severity: "error", reason: "", pctRemaining: null } })))
+      .toMatch(/sem sincronizar/);
+  });
+
+  it("sortBySeverity põe crítico no topo e header conta certo", () => {
+    const list = [
+      acc({ clientName: "ok1" }),
+      acc({ clientName: "crit", alert: { severity: "critical", reason: "", pctRemaining: null } }),
+      acc({ clientName: "warn", alert: { severity: "warning", reason: "", pctRemaining: null } }),
+    ];
+    const sorted = sortBySeverity(list);
+    expect(sorted[0].alert.severity).toBe("critical");
+    expect(buildRunHeader(list)).toMatch(/🔴 1 críticas · 🟡 1 em atenção · 🟢 1 ok/);
   });
 });
