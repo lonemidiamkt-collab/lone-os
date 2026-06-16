@@ -20,6 +20,7 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { runBalanceSync, getAlertSettings } from "@/lib/traffic/sync-core";
 import {
   buildDigestMessage, countBySeverity, buildRunHeader, buildAccountMessage, sortBySeverity,
+  buildGreensSummary,
 } from "@/lib/budgets/alert-engine";
 import { isEvolutionConfigured, checkInstance, sendGroupText } from "@/lib/whatsapp/evolution";
 
@@ -96,12 +97,25 @@ export async function POST(req: NextRequest) {
     const modeParam = url.searchParams.get("mode");
     const mode = modeParam === "per_account" || modeParam === "digest" ? modeParam : settings.mode;
 
+    // Verdes (ok): só vão na SEXTA (ou ?greens=summary), num resumo consolidado.
+    // Seg/qua → só contas que precisam de ação (crítico/atenção/erro de sync).
+    const weekday = new Date().toLocaleDateString("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" });
+    const greensParam = url.searchParams.get("greens");
+    const includeGreens = greensParam === "summary" ? true : greensParam === "none" ? false : weekday === "Fri";
+
     // Lista de mensagens a enviar:
     //   digest      → 1 mensagem consolidada
-    //   per_account → cabeçalho + 1 mensagem por conta (crítico primeiro)
-    const messages = mode === "per_account"
-      ? [buildRunHeader(sync.accounts), ...sortBySeverity(sync.accounts).map(buildAccountMessage)]
-      : [buildDigestMessage(sync.accounts)];
+    //   per_account → cabeçalho + 1 msg por conta com problema (+ resumo verde na sexta)
+    let messages: string[];
+    if (mode === "per_account") {
+      const sorted = sortBySeverity(sync.accounts);
+      const alertas = sorted.filter((a) => ["critical", "warning", "error"].includes(a.alert.severity));
+      const greens = sorted.filter((a) => a.alert.severity === "ok");
+      messages = [buildRunHeader(sync.accounts), ...alertas.map(buildAccountMessage)];
+      if (includeGreens && greens.length > 0) messages.push(buildGreensSummary(greens));
+    } else {
+      messages = [buildDigestMessage(sync.accounts)];
+    }
 
     if (dryRun) {
       await supabaseAdmin.from("budget_digest_log").insert({

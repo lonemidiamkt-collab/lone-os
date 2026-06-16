@@ -265,8 +265,21 @@ export function buildRunHeader(accounts: DigestAccount[], now: Date = new Date()
   return (
     `📊 *Saldos Meta Ads* — ${todayLabelBRT(now)}\n` +
     `🔴 ${c.critical} críticas · 🟡 ${c.warning} em atenção · 🟢 ${c.ok} ok\n` +
-    `_(uma mensagem por conta a seguir)_`
+    `_(detalhes das que precisam de ação abaixo)_`
   );
+}
+
+/** Resumo consolidado das contas saudáveis (verdes) num único texto organizado. */
+export function buildGreensSummary(accounts: DigestAccount[]): string {
+  const sorted = [...accounts].sort((a, b) =>
+    (a.daysRemaining ?? Infinity) - (b.daysRemaining ?? Infinity) || a.clientName.localeCompare(b.clientName),
+  );
+  const lines = sorted.map((a) => {
+    const saldo = fmtBRL(a.available, a.currency);
+    const dias = a.daysRemaining !== null ? ` · ${fmtDays(a.daysRemaining)}` : "";
+    return `🟢 ${a.clientName} — ${saldo}${dias}`;
+  });
+  return `*Contas saudáveis (${accounts.length})*\n` + lines.join("\n");
 }
 
 /** Mensagem individual de UMA conta; o formato varia conforme a severidade. */
