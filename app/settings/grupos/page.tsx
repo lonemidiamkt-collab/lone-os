@@ -58,6 +58,9 @@ export default function GruposPage() {
       if (!res.ok) { toast.error(data.error ?? "Erro ao carregar"); return; }
       setGroups(data.groups ?? []);
       setRows(data.clients ?? []);
+      if (data.groupsError) {
+        toast.warning("Lista de grupos da Evolution indisponível agora — os clientes aparecem, mas o seletor de grupo pode estar limitado. Tente Recarregar.");
+      }
       // pré-seleção: já salvo > sugestão (só se confiança >= média)
       const initial: Record<string, string> = {};
       for (const r of data.clients as Row[]) {
@@ -149,6 +152,9 @@ export default function GruposPage() {
                 className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50"
               >
                 <option value="">— selecionar grupo —</option>
+                {sel[r.clientId] && !groups.some((g) => g.id === sel[r.clientId]) && (
+                  <option value={sel[r.clientId]}>{r.currentName ?? sel[r.clientId]}</option>
+                )}
                 {groups.map((g) => <option key={g.id} value={g.id}>{g.subject}</option>)}
               </select>
               <input

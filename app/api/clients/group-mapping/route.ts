@@ -19,11 +19,11 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
   if (!user.isAdmin) return NextResponse.json({ error: "Acesso restrito a administradores" }, { status: 403 });
 
+  // Grupos são best-effort: se a Evolution estiver lenta/offline, a tela ainda
+  // mostra os clientes (com o grupo já salvo) — só o dropdown fica limitado.
   const groupsRes = await listGroups();
-  if (!groupsRes.ok) {
-    return NextResponse.json({ error: `Evolution: ${groupsRes.error}` }, { status: 502 });
-  }
-  const groups: GroupOption[] = (groupsRes.data ?? []).map((g) => ({ id: g.id, subject: g.subject }));
+  const groups: GroupOption[] = groupsRes.ok ? (groupsRes.data ?? []).map((g) => ({ id: g.id, subject: g.subject })) : [];
+  const groupsError = groupsRes.ok ? null : groupsRes.error;
 
   const clients = await selectActiveMetaClients();
   const configs = await getClientAlertConfigs();
@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     groups: groups.sort((a, b) => a.subject.localeCompare(b.subject)),
+    groupsError,
     clients: rows,
     mapped: rows.filter((r) => r.currentJid).length,
     total: rows.length,
