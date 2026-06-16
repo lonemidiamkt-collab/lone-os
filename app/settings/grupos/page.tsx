@@ -7,6 +7,10 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 interface GroupOption { id: string; subject: string }
 interface Suggestion { groupId: string | null; groupName: string | null; score: number; confidence: "high" | "medium" | "low" | "none" }
+interface RowAlerts {
+  verbaBaixa: boolean; verbaZerada: boolean; erroConta: boolean;
+  semGasto: boolean; campanhaParada: boolean; metaErro: boolean;
+}
 interface Row {
   clientId: string;
   clientName: string;
@@ -16,7 +20,17 @@ interface Row {
   suggestion: Suggestion;
   verbaMinima: number | null;
   destino: string;
+  alerts: RowAlerts;
 }
+
+const ALERT_CHIPS: { key: keyof RowAlerts; label: string }[] = [
+  { key: "verbaBaixa", label: "Baixa" },
+  { key: "verbaZerada", label: "Zerada" },
+  { key: "erroConta", label: "Conta" },
+  { key: "semGasto", label: "S/gasto" },
+  { key: "campanhaParada", label: "Parada" },
+  { key: "metaErro", label: "Meta" },
+];
 
 const CONF_STYLE: Record<string, string> = {
   high: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -34,6 +48,7 @@ export default function GruposPage() {
   const [sel, setSel] = useState<Record<string, string>>({}); // clientId -> groupJid
   const [verba, setVerba] = useState<Record<string, string>>({}); // clientId -> verba mínima (R$)
   const [dest, setDest] = useState<Record<string, string>>({});   // clientId -> 'interno' | 'cliente'
+  const [tog, setTog] = useState<Record<string, RowAlerts>>({});  // clientId -> toggles
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,12 +67,13 @@ export default function GruposPage() {
         } else initial[r.clientId] = "";
       }
       setSel(initial);
-      const v: Record<string, string> = {}, dd: Record<string, string> = {};
+      const v: Record<string, string> = {}, dd: Record<string, string> = {}, tg: Record<string, RowAlerts> = {};
       for (const r of data.clients as Row[]) {
         v[r.clientId] = r.verbaMinima != null ? String(r.verbaMinima) : "";
         dd[r.clientId] = r.destino || "interno";
+        tg[r.clientId] = r.alerts;
       }
-      setVerba(v); setDest(dd);
+      setVerba(v); setDest(dd); setTog(tg);
     } finally { setLoading(false); }
   }, []);
 
@@ -75,6 +91,7 @@ export default function GruposPage() {
           clientId: r.clientId, groupJid: jid, groupName: g?.subject ?? null,
           verbaMinima: vnum != null && Number.isFinite(vnum) ? vnum : null,
           destino: dest[r.clientId] || "interno",
+          alerts: tog[r.clientId] ?? r.alerts,
         };
       });
       const res = await authedFetch("/api/clients/group-mapping", {
@@ -115,8 +132,8 @@ export default function GruposPage() {
       </div>
 
       <div className="rounded-xl border border-border overflow-hidden">
-        <div className="grid grid-cols-[1.2fr_110px_1.4fr_110px_110px_80px] gap-3 px-4 py-2.5 bg-[#0c0c0f] border-b border-border">
-          {["Cliente", "Conta Meta", "Grupo WhatsApp", "Verba mín (R$)", "Destino", "Confiança"].map((h) => (
+        <div className="grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 bg-[#0c0c0f] border-b border-border">
+          {["Cliente", "Grupo WhatsApp", "Verba mín (R$)", "Destino", "Alertas", "Confiança"].map((h) => (
             <p key={h} className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">{h}</p>
           ))}
         </div>
@@ -124,9 +141,8 @@ export default function GruposPage() {
           const conf = r.suggestion.confidence;
           const needsReview = !sel[r.clientId] || conf === "low" || conf === "none";
           return (
-            <div key={r.clientId} className={`grid grid-cols-[1.2fr_110px_1.4fr_110px_110px_80px] gap-3 px-4 py-2.5 border-b border-border last:border-0 items-center ${needsReview ? "bg-amber-500/[0.03]" : ""}`}>
-              <p className="text-sm text-foreground truncate">{r.clientName}</p>
-              <p className="text-[10px] text-muted-foreground font-mono truncate">{r.metaAccountId}</p>
+            <div key={r.clientId} className={`grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 border-b border-border last:border-0 items-center ${needsReview ? "bg-amber-500/[0.03]" : ""}`}>
+              <p className="text-sm text-foreground truncate" title={r.metaAccountId}>{r.clientName}</p>
               <select
                 value={sel[r.clientId] ?? ""}
                 onChange={(e) => setSel((s) => ({ ...s, [r.clientId]: e.target.value }))}
@@ -151,6 +167,22 @@ export default function GruposPage() {
                 <option value="interno">Interno</option>
                 <option value="cliente">Cliente</option>
               </select>
+              <div className="flex flex-wrap gap-1">
+                {ALERT_CHIPS.map(({ key, label }) => {
+                  const on = tog[r.clientId]?.[key] ?? r.alerts[key];
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      title={`${label} — clique pra ligar/desligar`}
+                      onClick={() => setTog((s) => ({ ...s, [r.clientId]: { ...(s[r.clientId] ?? r.alerts), [key]: !on } }))}
+                      className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${on ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "bg-surface text-muted-foreground border-border"}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
               <span className={`text-[10px] px-2 py-0.5 rounded-full border text-center ${CONF_STYLE[conf]}`}>
                 {needsReview && conf !== "high" ? <AlertTriangle size={9} className="inline mr-0.5" /> : <CheckCircle size={9} className="inline mr-0.5" />}
                 {CONF_LABEL[conf]}

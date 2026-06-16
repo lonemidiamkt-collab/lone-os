@@ -12,6 +12,7 @@ import { listGroups } from "@/lib/whatsapp/evolution";
 import { matchGroupForClient, type GroupOption } from "@/lib/whatsapp/group-match";
 import { selectActiveMetaClients, clientDisplayName } from "@/lib/traffic/weekly-report";
 import { getClientAlertConfigs } from "@/lib/traffic/sync-core";
+import { DEFAULT_CLIENT_ALERT_CONFIG } from "@/lib/budgets/operational-alerts";
 
 export async function GET(req: NextRequest) {
   const user = await getServerUser(req);
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
   const rows = clients.map((c) => {
     const name = clientDisplayName(c);
     const suggestion = matchGroupForClient(name, groups);
-    const cfg = configs.get(c.id);
+    const cfg = configs.get(c.id) ?? DEFAULT_CLIENT_ALERT_CONFIG;
     return {
       clientId: c.id,
       clientName: name,
@@ -37,8 +38,16 @@ export async function GET(req: NextRequest) {
       currentJid: c.whatsapp_group_jid ?? null,
       currentName: c.whatsapp_group_name ?? null,
       suggestion,
-      verbaMinima: cfg?.verbaMinima ?? null,
-      destino: cfg?.destino ?? "interno",
+      verbaMinima: cfg.verbaMinima ?? null,
+      destino: cfg.destino,
+      alerts: {
+        verbaBaixa: cfg.alertVerbaBaixa,
+        verbaZerada: cfg.alertVerbaZerada,
+        erroConta: cfg.alertErroConta,
+        semGasto: cfg.alertSemGasto,
+        campanhaParada: cfg.alertCampanhaParada,
+        metaErro: cfg.alertMetaErro,
+      },
     };
   });
 
@@ -59,6 +68,10 @@ export async function POST(req: NextRequest) {
     mappings?: Array<{
       clientId: string; groupJid: string | null; groupName?: string | null;
       verbaMinima?: number | null; destino?: string;
+      alerts?: {
+        verbaBaixa?: boolean; verbaZerada?: boolean; erroConta?: boolean;
+        semGasto?: boolean; campanhaParada?: boolean; metaErro?: boolean;
+      };
     }>;
   };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "JSON inválido" }, { status: 400 }); }
@@ -80,10 +93,19 @@ export async function POST(req: NextRequest) {
 
     // Config de alerta (verba mínima R$ + destino). Upsert preserva os toggles.
     const verba = m.verbaMinima != null && Number.isFinite(m.verbaMinima) ? m.verbaMinima : null;
+    const a = m.alerts;
     const { error: cErr } = await supabaseAdmin.from("client_alert_config").upsert({
       client_id: m.clientId,
       verba_minima: verba,
       destino: m.destino === "cliente" ? "cliente" : "interno",
+      ...(a ? {
+        alert_verba_baixa: a.verbaBaixa !== false,
+        alert_verba_zerada: a.verbaZerada !== false,
+        alert_erro_conta: a.erroConta !== false,
+        alert_sem_gasto: a.semGasto !== false,
+        alert_campanha_parada: a.campanhaParada === true,
+        alert_meta_erro: a.metaErro !== false,
+      } : {}),
       updated_at: new Date().toISOString(),
     }, { onConflict: "client_id" });
     if (cErr) errors.push(`${m.clientId} (config): ${cErr.message}`);

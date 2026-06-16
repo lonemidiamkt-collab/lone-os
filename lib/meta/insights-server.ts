@@ -67,6 +67,23 @@ function countMessages(actions: { action_type: string; value: string }[] | undef
   return countMessagesFromActions(actions);
 }
 
+/** Conta campanhas ativas x total de uma conta (p/ alerta "campanha parada"). */
+export async function fetchActiveCampaignCount(
+  token: string,
+  accountId: string,
+): Promise<{ active: number; total: number } | null> {
+  try {
+    const params = new URLSearchParams({ access_token: token, fields: "effective_status", limit: "200" });
+    const res = await fetch(`https://graph.facebook.com/v21.0/${accountId}/campaigns?${params}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const camps = (data.data ?? []) as Array<{ effective_status?: string }>;
+    return { total: camps.length, active: camps.filter((c) => c.effective_status === "ACTIVE").length };
+  } catch {
+    return null;
+  }
+}
+
 // ── Funções abaixo copiadas verbatim de useMetaAds.ts (via sed) ──────────────
 
 export async function fetchCampaignInsights(
