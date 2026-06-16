@@ -28,6 +28,7 @@ import {
   DEFAULT_CLIENT_ALERT_CONFIG,
   type ClientAlertConfig,
 } from "@/lib/budgets/operational-alerts";
+import { fetchActiveCampaignCount } from "@/lib/meta/insights-server";
 import { sendGroupText } from "@/lib/whatsapp/evolution";
 
 // ── Config de alerta (agency_settings) ───────────────────────
@@ -244,6 +245,14 @@ export async function runBalanceSync(opts?: {
       settings,
     );
 
+    // Campanha parada: só busca campanhas p/ quem ligou o alerta (custo extra).
+    let campaignsActive: number | null = null;
+    let campaignsTotal: number | null = null;
+    if (acfg.alertCampanhaParada && meta.account_status === 1) {
+      const cc = await fetchActiveCampaignCount(token, account.meta_account_id);
+      if (cc) { campaignsActive = cc.active; campaignsTotal = cc.total; }
+    }
+
     // Alertas operacionais (sem gasto, etc.) p/ o grupo interno, conforme config do cliente.
     const opAlerts = detectClientAlerts(
       {
@@ -252,6 +261,8 @@ export async function runBalanceSync(opts?: {
         avgDailySpend: avg3dSpend,
         accountStatus: meta.account_status,
         syncError: null,
+        campaignsActive,
+        campaignsTotal,
       },
       acfg,
       settings.warningPct,
