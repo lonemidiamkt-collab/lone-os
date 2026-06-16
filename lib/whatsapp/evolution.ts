@@ -150,18 +150,34 @@ export async function checkInstance(): Promise<EvoResult<{ state: string; connec
 
 export interface EvoGroup { id: string; subject: string }
 
-/** Lista os grupos da instância — para descobrir o JID do grupo do gestor. */
-export async function listGroups(): Promise<EvoResult<EvoGroup[]>> {
+// Cache em memória dos grupos (fetchAllGroups é lento ~25s). TTL 10 min.
+let groupsCache: { at: number; data: EvoGroup[] } | null = null;
+const GROUPS_TTL_MS = 10 * 60_000;
+
+/**
+ * Lista os grupos da instância. Usa cache (10 min); se a Evolution falhar mas
+ * houver cache antigo, devolve o cache (degrada em vez de falhar).
+ */
+export async function listGroups(force = false): Promise<EvoResult<EvoGroup[]>> {
   const cfg = getEvolutionConfig();
   if (!cfg) return { ok: false, error: "Evolution não configurada (env ausente)" };
+
+  if (!force && groupsCache && Date.now() - groupsCache.at < GROUPS_TTL_MS) {
+    return { ok: true, data: groupsCache.data };
+  }
+
   const res = await evoFetch<Array<{ id: string; subject: string }> | { groups?: Array<{ id: string; subject: string }> }>(
     `/group/fetchAllGroups/${encodeURIComponent(cfg.instance)}?getParticipants=false`,
     { method: "GET" },
     cfg,
-    { retries: 0, timeoutMs: 20_000 },
+    { retries: 0, timeoutMs: 40_000 },
   );
-  if (!res.ok) return { ok: false, error: res.error, status: res.status };
+  if (!res.ok) {
+    if (groupsCache) return { ok: true, data: groupsCache.data }; // usa cache velho
+    return { ok: false, error: res.error, status: res.status };
+  }
   const raw = Array.isArray(res.data) ? res.data : (res.data?.groups ?? []);
   const groups = raw.map((g) => ({ id: g.id, subject: g.subject })).filter((g) => g.id);
+  groupsCache = { at: Date.now(), data: groups };
   return { ok: true, data: groups };
 }
