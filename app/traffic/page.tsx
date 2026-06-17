@@ -1176,11 +1176,11 @@ function RoutineTab({
         {/* Pending */}
         {supportPending.length > 0 && (
           <div className="space-y-2 mb-4">
-            <p className="text-xs font-medium text-zinc-400">Pendentes ({supportPending.length})</p>
+            <p className="text-xs font-medium text-muted-foreground">Pendentes ({supportPending.length})</p>
             {supportPending.map((client) => (
-              <div key={client.id} className="flex items-center gap-3 bg-[#0c0c12] border border-[#1e1e2a] rounded-lg px-3 py-2.5">
+              <div key={client.id} className="flex items-center gap-3 bg-card border border-border rounded-lg px-3 py-2.5">
                 <div className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold ${
-                  client.status === "at_risk" ? "bg-red-500/20 text-red-500" : "bg-primary/20 text-primary"
+                  client.status === "at_risk" ? "bg-lone-danger-bg text-destructive" : "bg-lone-brand-bg-soft text-primary"
                 }`}>
                   {client.name[0]}
                 </div>
@@ -1205,9 +1205,9 @@ function RoutineTab({
           <div className="space-y-1.5">
             <p className="text-xs font-medium text-primary">Concluidos ({supportCompleted.length})</p>
             {supportCompleted.map((client) => (
-              <div key={client.id} className="flex items-center gap-3 bg-primary/5 border border-primary/10 rounded-lg px-3 py-2">
+              <div key={client.id} className="flex items-center gap-3 bg-lone-brand-bg-soft border border-border rounded-lg px-3 py-2">
                 <Check size={14} className="text-primary shrink-0" />
-                <span className="text-sm text-zinc-400">{client.name}</span>
+                <span className="text-sm text-muted-foreground">{client.name}</span>
                 <span className="text-xs text-muted-foreground ml-auto">
                   {todayChecks.find((c) => c.clientId === client.id && c.type === "support")?.completedBy}
                 </span>
@@ -1223,17 +1223,17 @@ function RoutineTab({
           <FileText size={16} className={isMonday ? "text-primary" : "text-muted-foreground"} />
           <h3 className="font-semibold text-foreground">Relatorios Semanais</h3>
           <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Toda segunda-feira</span>
-          {isMonday && <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">HOJE</span>}
+          {isMonday && <span className="text-xs bg-lone-brand-bg-soft text-primary px-2 py-0.5 rounded-full font-medium">HOJE</span>}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {activeClients.map((client) => {
             const done = reportsDone.has(client.id);
             return (
               <div key={client.id} className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 border ${
-                done ? "bg-primary/5 border-primary/10" : "bg-[#0c0c12] border-[#1e1e2a]"
+                done ? "bg-lone-brand-bg-soft border-border" : "bg-card border-border"
               }`}>
-                {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleReport(client)} className="w-5 h-5 rounded border border-zinc-600 shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
-                <span className={`text-sm flex-1 ${done ? "text-zinc-400" : "text-foreground"}`}>{client.name}</span>
+                {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleReport(client)} className="w-5 h-5 rounded border border-border shrink-0 hover:border-primary transition-all flex items-center justify-center" />}
+                <span className={`text-sm flex-1 ${done ? "text-muted-foreground" : "text-foreground"}`}>{client.name}</span>
                 {!done && (
                   <button onClick={() => handleReport(client)} className="text-xs text-primary hover:underline">Entregar</button>
                 )}

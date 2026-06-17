@@ -294,11 +294,11 @@ export default function Sidebar() {
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         {/* Right-edge — ultra subtle gradient border */}
-        <div className="absolute top-0 right-0 bottom-0 w-px bg-gradient-to-b from-transparent via-white/[0.04] to-transparent pointer-events-none" />
+        <div className="absolute top-0 right-0 bottom-0 w-px bg-gradient-to-b from-transparent via-border to-transparent pointer-events-none" />
 
         {/* Logo */}
         <Link href="/" className="group shrink-0">
-          <div className="w-10 h-10 rounded-2xl bg-black flex items-center justify-center group-hover:scale-[1.02] transition-all duration-300 overflow-hidden">
+          <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center group-hover:scale-[1.02] transition-all duration-300 overflow-hidden">
             <Logo className="w-6 h-6" priority />
           </div>
         </Link>
@@ -306,7 +306,7 @@ export default function Sidebar() {
         {/* Expand/Collapse toggle */}
         <button
           onClick={() => setExpanded(!expanded)}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-700 hover:text-zinc-300 hover:bg-white/[0.04] transition-all mt-2 mb-1 shrink-0"
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-all mt-2 mb-1 shrink-0"
           title={expanded ? "Recolher menu" : "Expandir menu"}
         >
           {expanded ? <PanelLeftClose size={14} /> : <PanelLeft size={14} />}
@@ -327,27 +327,27 @@ export default function Sidebar() {
                   "relative rounded-xl flex items-center transition-all duration-200 ease-out group",
                   expanded ? "w-full gap-3 px-3 h-10" : "w-10 h-10 justify-center",
                   isPage
-                    ? "text-white"
+                    ? "text-primary bg-lone-brand-bg-soft border border-primary"
                     : isSection
-                    ? "text-[#3b6ff5] bg-[#0d4af5]/8"
-                    : "text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.04]"
+                    ? "text-primary bg-lone-brand-bg-soft"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
                 )}
               >
                 <Icon size={17} strokeWidth={isPage ? 2.3 : 1.7} className="shrink-0" />
                 {expanded && (
-                  <span className={`text-xs font-medium truncate ${isPage ? "text-white" : "text-zinc-400"}`}>
+                  <span className={`text-xs font-medium truncate ${isPage ? "text-primary" : "text-muted-foreground"}`}>
                     {item.label}
                   </span>
                 )}
 
                 {/* Active page: blue pill on right edge */}
                 {isPage && (
-                  <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-[#0d4af5]  -mr-px" />
+                  <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-primary -mr-px" />
                 )}
 
                 {/* Pulse dot for Design when there are queued requests */}
                 {item.href === "/design" && designQueued > 0 && !isPage && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#0d4af5]  animate-pulse" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
                 )}
               </button>
             );
@@ -358,7 +358,7 @@ export default function Sidebar() {
         <div className="flex flex-col items-center gap-1 shrink-0">
           <button
             onClick={toggleTheme}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-zinc-700 hover:text-zinc-300 hover:bg-white/[0.04] transition-all"
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
             title={theme === "dark" ? "Modo claro" : "Modo escuro"}
           >
             {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
@@ -369,8 +369,8 @@ export default function Sidebar() {
             className={cn(
               "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
               pathname === "/settings"
-                ? "text-[#0d4af5] bg-[#0d4af5]/10"
-                : "text-zinc-700 hover:text-zinc-300 hover:bg-white/[0.04]"
+                ? "text-primary bg-lone-brand-bg-soft"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent"
             )}
             title="Configurações"
           >
@@ -379,7 +379,7 @@ export default function Sidebar() {
 
           <button
             onClick={logout}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-zinc-700 hover:text-red-400 hover:bg-red-500/5 transition-all"
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-lone-danger-bg transition-all"
             title="Sair"
           >
             <LogOut size={15} />
@@ -395,7 +395,7 @@ export default function Sidebar() {
       ═══════════════════════════════════════════════════════════ */}
       <aside
         className={cn(
-          "fixed left-[72px] top-0 bottom-0 z-40 w-[240px] bg-[#050508] border-r border-white/[0.03] flex flex-col",
+          "fixed left-[72px] top-0 bottom-0 z-40 w-[240px] bg-sidebar border-r border-sidebar-border flex flex-col",
           "transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform",
           secondaryOpen && secondaryConfig
             ? "translate-x-0 opacity-100"
@@ -404,18 +404,18 @@ export default function Sidebar() {
         )}
       >
         {/* Top micro-glow */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/[0.04] to-transparent pointer-events-none" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-border to-transparent pointer-events-none" />
 
         {secondaryConfig && (
           <>
             {/* Secondary header */}
             <div className="flex items-center justify-between px-4 pt-6 pb-4">
-              <span className="text-[11px] font-semibold text-zinc-400 tracking-tight">
+              <span className="text-[11px] font-semibold text-foreground tracking-tight">
                 {secondaryConfig.title}
               </span>
               <button
                 onClick={() => setSecondaryOpen(false)}
-                className="w-6 h-6 rounded-md flex items-center justify-center text-zinc-700 hover:text-zinc-300 hover:bg-white/5 transition-all"
+                className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
                 title="Fechar painel"
               >
                 <ChevronLeft size={13} />
@@ -423,14 +423,14 @@ export default function Sidebar() {
             </div>
 
             {/* Separator */}
-            <div className="h-px bg-white/[0.04] mx-3 mb-3" />
+            <div className="h-px bg-border mx-3 mb-3" />
 
             {/* Sections */}
             <nav className="flex-1 overflow-y-auto px-2 pb-4 space-y-0.5">
               {secondaryConfig.sections.map((section, si) => (
                 <div key={si} className={si > 0 ? "pt-4" : ""}>
                   {section.title && (
-                    <p className="text-[11px] font-semibold text-zinc-600 uppercase tracking-[0.08em] px-2 pb-2">
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em] px-2 pb-2">
                       {section.title}
                     </p>
                   )}
@@ -451,13 +451,13 @@ export default function Sidebar() {
                         className={cn(
                           "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all duration-150 ease-out group",
                           isActive
-                            ? "bg-white/[0.06] text-white"
-                            : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.03]"
+                            ? "bg-accent text-foreground"
+                            : "text-muted-foreground hover:text-foreground hover:bg-accent"
                         )}
                       >
                         {/* Active left accent */}
                         {isActive && (
-                          <span className="absolute left-2 w-[2.5px] h-4 rounded-full bg-[#0d4af5] " />
+                          <span className="absolute left-2 w-[2.5px] h-4 rounded-full bg-primary" />
                         )}
 
                         <Icon
@@ -465,7 +465,7 @@ export default function Sidebar() {
                           strokeWidth={1.8}
                           className={cn(
                             "shrink-0 transition-colors",
-                            isActive ? "text-[#3b6ff5]" : "text-zinc-700 group-hover:text-zinc-400"
+                            isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
                           )}
                         />
 
@@ -478,8 +478,8 @@ export default function Sidebar() {
                             className={cn(
                               "text-[10px] font-semibold rounded-md px-1.5 py-0.5 min-w-[20px] text-center tabular-nums shrink-0",
                               isActive
-                                ? "bg-[#0d4af5]/20 text-[#3b6ff5]"
-                                : "bg-[#1a1a1a] text-zinc-600"
+                                ? "bg-lone-brand-bg-soft text-primary"
+                                : "bg-muted text-muted-foreground"
                             )}
                           >
                             {badge}
@@ -493,12 +493,12 @@ export default function Sidebar() {
             </nav>
 
             {/* Footer — user info */}
-            <div className="px-3 py-3 border-t border-white/[0.04]">
-              <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/[0.03] transition-colors cursor-default">
+            <div className="px-3 py-3 border-t border-border">
+              <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-accent transition-colors cursor-default">
                 <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={28} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-semibold text-zinc-300 truncate leading-none">{currentProfile.name}</p>
-                  <p className="text-[10px] text-zinc-700 uppercase tracking-wide mt-0.5">{roleLabel}</p>
+                  <p className="text-[11px] font-semibold text-foreground truncate leading-none">{currentProfile.name}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">{roleLabel}</p>
                 </div>
               </div>
             </div>
@@ -506,7 +506,7 @@ export default function Sidebar() {
         )}
 
         {/* Right micro-glow */}
-        <div className="absolute top-0 right-0 bottom-0 w-px bg-gradient-to-b from-transparent via-[#0d4af5]/8 to-transparent pointer-events-none" />
+        <div className="absolute top-0 right-0 bottom-0 w-px bg-gradient-to-b from-transparent via-border to-transparent pointer-events-none" />
       </aside>
     </>
   );

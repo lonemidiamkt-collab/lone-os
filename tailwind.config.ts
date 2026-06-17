@@ -85,9 +85,17 @@ const config: Config = {
             "bg-soft": "var(--lone-brand-bg-soft)",
           },
           danger:  "var(--lone-danger)",
+          "danger-bg":     "var(--lone-danger-bg)",
+          "danger-border": "var(--lone-danger-border)",
           warning: "var(--lone-warning)",
+          "warning-bg":     "var(--lone-warning-bg)",
+          "warning-border": "var(--lone-warning-border)",
           success: "var(--lone-success)",
+          "success-bg":     "var(--lone-success-bg)",
+          "success-border": "var(--lone-success-border)",
           info:    "var(--lone-info)",
+          "info-bg":     "var(--lone-info-bg)",
+          "info-border": "var(--lone-info-border)",
         },
 
         sidebar: {
