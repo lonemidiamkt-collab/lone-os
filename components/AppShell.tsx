@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { RoleProvider, useRole } from "@/lib/context/RoleContext";
 import { AppStateProvider } from "@/lib/context/AppStateContext";
-import { ThemeProvider } from "@/lib/context/ThemeContext";
 import { NavProvider, useNav } from "@/lib/context/NavContext";
 import Sidebar from "@/components/Sidebar";
 import LoginScreen from "@/components/LoginScreen";
@@ -93,23 +92,21 @@ function MainLayout({ children }: { children: React.ReactNode }) {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider>
-      <RoleProvider>
-        <AuthGate>
-          <AppStateProvider>
-            <NavProvider>
-              <MainLayout>{children}</MainLayout>
-              <NotificationToast />
-              <RealtimeToast />
-              <ScheduledNoticePopup />
-              <GlobalSearch />
-              <KeyboardShortcuts />
-              <OnboardingTour />
-              <SessionTimeout />
-            </NavProvider>
-          </AppStateProvider>
-        </AuthGate>
-      </RoleProvider>
-    </ThemeProvider>
+    <RoleProvider>
+      <AuthGate>
+        <AppStateProvider>
+          <NavProvider>
+            <MainLayout>{children}</MainLayout>
+            <NotificationToast />
+            <RealtimeToast />
+            <ScheduledNoticePopup />
+            <GlobalSearch />
+            <KeyboardShortcuts />
+            <OnboardingTour />
+            <SessionTimeout />
+          </NavProvider>
+        </AppStateProvider>
+      </AuthGate>
+    </RoleProvider>
   );
 }

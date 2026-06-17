@@ -1,45 +1,33 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { ThemeProvider as NextThemesProvider, useTheme as useNextTheme } from "next-themes";
 
-type Theme = "dark" | "light";
-
-interface ThemeContextValue {
-  theme: Theme;
-  toggleTheme: () => void;
-}
-
-const ThemeContext = createContext<ThemeContextValue>({
-  theme: "dark",
-  toggleTheme: () => {},
-});
-
+/**
+ * Wrapper fino do next-themes.
+ * - attribute="class": liga/desliga a classe .dark / .light no <html>.
+ * - defaultTheme="dark" + enableSystem: default escuro, mas com opção "system".
+ * - O script do next-themes seta a classe ANTES do paint → sem flash de hidratação.
+ *
+ * A API pública (`useTheme` -> { theme, toggleTheme }) é mantida igual à anterior
+ * pra não quebrar Sidebar/settings.
+ */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("lone_theme") as Theme) ?? "dark";
-    }
-    return "dark";
-  });
-
-  useEffect(() => {
-    if (theme === "light") {
-      document.documentElement.classList.add("theme-light");
-    } else {
-      document.documentElement.classList.remove("theme-light");
-    }
-    localStorage.setItem("lone_theme", theme);
-  }, [theme]);
-
-  const toggleTheme = () => setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <NextThemesProvider
+      attribute="class"
+      defaultTheme="dark"
+      enableSystem
+      themes={["light", "dark"]}
+      disableTransitionOnChange
+    >
       {children}
-    </ThemeContext.Provider>
+    </NextThemesProvider>
   );
 }
 
 export function useTheme() {
-  return useContext(ThemeContext);
+  const { resolvedTheme, setTheme } = useNextTheme();
+  const theme: "dark" | "light" = resolvedTheme === "light" ? "light" : "dark";
+  const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
+  return { theme, toggleTheme };
 }

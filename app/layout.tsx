@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Montserrat, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import ConditionalAppShell from "@/components/ConditionalAppShell";
+import { ThemeProvider } from "@/lib/context/ThemeContext";
 import { Toaster } from "sonner";
 
 // Sistema existente — intacto
@@ -35,7 +36,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -43,8 +44,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className={`${montserrat.className} ${inter.variable} ${jetbrainsMono.variable} bg-background text-foreground`}>
-        <ConditionalAppShell>{children}</ConditionalAppShell>
-        <Toaster theme="dark" position="bottom-right" richColors />
+        <ThemeProvider>
+          <ConditionalAppShell>{children}</ConditionalAppShell>
+          <Toaster position="bottom-right" richColors />
+        </ThemeProvider>
         <script dangerouslySetInnerHTML={{ __html: `if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{})}` }} />
       </body>
     </html>
