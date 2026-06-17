@@ -43,7 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body className={`${montserrat.className} ${inter.variable} ${jetbrainsMono.variable} bg-background text-foreground`}>
+      <body className={`${inter.variable} ${montserrat.variable} ${jetbrainsMono.variable} font-sans bg-background text-foreground`}>
         <ThemeProvider>
           <ConditionalAppShell>{children}</ConditionalAppShell>
           <Toaster position="bottom-right" richColors />

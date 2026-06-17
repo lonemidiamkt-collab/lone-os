@@ -68,13 +68,13 @@ export default function Header({ title, subtitle }: HeaderProps) {
       {/* Breadcrumb + Welcome */}
       <div className="flex-1 flex items-center gap-2">
         <div>
-          <p className="text-[10px] text-zinc-600 leading-none mb-1">Olá, {currentProfile.name}</p>
+          <p className="text-[10px] text-muted-foreground leading-none mb-1">Olá, {currentProfile.name}</p>
           <div className="flex items-center gap-2">
             <h2 className="font-semibold text-foreground text-sm leading-none tracking-tight">{title}</h2>
             {subtitle && (
               <>
-                <ChevronRight size={12} className="text-zinc-700" />
-                <p className="text-zinc-500 text-xs">{subtitle}</p>
+                <ChevronRight size={12} className="text-muted-foreground" />
+                <p className="text-muted-foreground text-xs">{subtitle}</p>
               </>
             )}
           </div>
@@ -83,16 +83,16 @@ export default function Header({ title, subtitle }: HeaderProps) {
 
       {/* Search */}
       <div className="relative">
-        <div className="flex items-center gap-2 bg-[#0e0e0e] rounded-xl px-3 py-2 w-52 border border-[#1a1a1a] focus-within:border-[#0d4af5]/50 focus-within:shadow-[0_0_20px_rgba(10,52,245,0.1)] transition-all">
-          <Search size={13} className="text-zinc-700 shrink-0" />
+        <div className="flex items-center gap-2 bg-card rounded-xl px-3 py-2 w-52 border border-border focus-within:border-primary transition-all">
+          <Search size={13} className="text-muted-foreground shrink-0" />
           <input
-            className="bg-transparent text-sm text-foreground placeholder:text-zinc-700 outline-none w-full"
+            className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full"
             placeholder="Buscar cliente..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="text-zinc-600 hover:text-foreground">
+            <button onClick={() => setSearchQuery("")} className="text-muted-foreground hover:text-foreground">
               <X size={12} />
             </button>
           )}
@@ -149,10 +149,10 @@ export default function Header({ title, subtitle }: HeaderProps) {
       <div className="relative" ref={quickRef}>
         <button
           onClick={() => { setShowQuick(!showQuick); setShowNotif(false); }}
-          className="w-8 h-8 rounded-xl bg-[#0e0e0e] border border-zinc-800 flex items-center justify-center hover:border-zinc-600 transition-all group"
+          className="w-8 h-8 rounded-xl bg-card border border-border flex items-center justify-center hover:border-lone-border-strong transition-all group"
           title="Ações rápidas"
         >
-          <Plus size={15} className="text-zinc-600 group-hover:text-[#0d4af5] transition-colors" />
+          <Plus size={15} className="text-muted-foreground group-hover:text-primary transition-colors" />
         </button>
 
         {showQuick && (
@@ -188,10 +188,10 @@ export default function Header({ title, subtitle }: HeaderProps) {
       <div className="relative">
         <button
           onClick={() => setShowMenu(!showMenu)}
-          className="flex items-center gap-2 bg-[#0e0e0e] border border-[#1a1a1a] rounded-xl px-2.5 py-1.5 hover:border-zinc-600 transition-all"
+          className="flex items-center gap-2 bg-card border border-border rounded-xl px-2.5 py-1.5 hover:border-lone-border-strong transition-all"
         >
           <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={28} />
-          <ChevronDown size={12} className="text-zinc-700" />
+          <ChevronDown size={12} className="text-muted-foreground" />
         </button>
 
         {showMenu && (

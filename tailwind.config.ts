@@ -110,8 +110,9 @@ const config: Config = {
         "3xl": "1.5rem",
       },
       fontFamily: {
-        // Sistema existente — intacto
-        sans: ["Montserrat", "Inter", "ui-sans-serif", "sans-serif"],
+        // UI/corpo = Inter (Sober Premium). Montserrat só na marca via `font-brand`.
+        sans: ["var(--font-inter)", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        brand: ["var(--font-montserrat)", "Montserrat", "ui-sans-serif", "sans-serif"],
         // Design System v2
         inter:      ["var(--font-inter)", "ui-sans-serif", "sans-serif"],
         mono:       ["var(--font-jetbrains-mono)", "ui-monospace", "monospace"],
