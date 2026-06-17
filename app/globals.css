@@ -49,6 +49,15 @@
     --ring: #0d4af5;
     --radius: 0.75rem;
 
+    /* Canais RGB p/ opacidade (bg-primary/15 etc.) — companheiros dos hex acima */
+    --background-rgb: 9 9 11;
+    --foreground-rgb: 228 228 231;
+    --card-rgb: 17 17 19;
+    --primary-rgb: 13 74 245;
+    --secondary-rgb: 12 12 14;
+    --muted-rgb: 12 12 14;
+    --destructive-rgb: 239 68 68;
+
     /* Charts */
     --chart-1: #0d4af5;
     --chart-2: #3b82f6;
@@ -129,6 +138,15 @@
     --foreground: #18181b;
     --card: #ffffff;
     --card-solid: #ffffff;
+
+    /* Canais RGB p/ opacidade — companheiros dos hex acima */
+    --background-rgb: 250 250 250;
+    --foreground-rgb: 24 24 27;
+    --card-rgb: 255 255 255;
+    --primary-rgb: 13 74 245;
+    --secondary-rgb: 244 244 245;
+    --muted-rgb: 244 244 245;
+    --destructive-rgb: 239 68 68;
     --card-foreground: #18181b;
     --popover: #ffffff;
     --popover-foreground: #18181b;

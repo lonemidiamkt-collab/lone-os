@@ -48,7 +48,7 @@ Tudo abaixo é regra de aplicação, não sugestão.
 - Marca: `text-lone-brand` `bg-lone-brand-bg-soft`
 - Status: `text-lone-danger|warning|success|info` + fundos tintados prontos `bg-lone-danger-bg` (idem warning/success/info) e bordas `border-lone-danger-border` etc.
 
-**Opacidade (gotcha real):** hoje os tokens são hex, então `bg-primary/15` **não gera CSS** de forma confiável. Para fundo tintado/translúcido use os tokens `*-bg` já prontos (`bg-lone-danger-bg`), **não** `bg-primary/15`. (Quando channelizarmos pra oklch, os modificadores passam a funcionar — ver `tailwind.config.ts`.)
+**Opacidade:** os tokens **`primary, foreground, background, card, muted, secondary, destructive`** são channelizados (canais RGB `--*-rgb` + `rgb(var(--x-rgb) / <alpha-value>)` no `tailwind.config.ts`), então **`bg-primary/15`, `bg-muted/30`, `text-foreground/50` etc. funcionam**. Os demais (accent, popover, sidebar, os `-foreground`, e os `lone-*`) **NÃO** são channelizados — pra fundo tintado deles use os tokens `*-bg` prontos (`bg-lone-danger-bg`), não `bg-accent/15`. Ao precisar de opacidade num token novo, channelize-o do mesmo jeito (hex→RGB no `--x-rgb` dos dois temas).
 
 ## 4. Tipografia — Inter
 

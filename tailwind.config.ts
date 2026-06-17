@@ -25,10 +25,10 @@ const config: Config = {
           900: "#0a0a10",
           950: "#050508",
         },
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        background: "rgb(var(--background-rgb) / <alpha-value>)",
+        foreground: "rgb(var(--foreground-rgb) / <alpha-value>)",
         card: {
-          DEFAULT: "var(--card)",
+          DEFAULT: "rgb(var(--card-rgb) / <alpha-value>)",
           foreground: "var(--card-foreground)",
         },
         popover: {
@@ -36,15 +36,15 @@ const config: Config = {
           foreground: "var(--popover-foreground)",
         },
         primary: {
-          DEFAULT: "var(--primary)",
+          DEFAULT: "rgb(var(--primary-rgb) / <alpha-value>)",
           foreground: "var(--primary-foreground)",
         },
         secondary: {
-          DEFAULT: "var(--secondary)",
+          DEFAULT: "rgb(var(--secondary-rgb) / <alpha-value>)",
           foreground: "var(--secondary-foreground)",
         },
         muted: {
-          DEFAULT: "var(--muted)",
+          DEFAULT: "rgb(var(--muted-rgb) / <alpha-value>)",
           foreground: "var(--muted-foreground)",
         },
         accent: {
@@ -52,7 +52,7 @@ const config: Config = {
           foreground: "var(--accent-foreground)",
         },
         destructive: {
-          DEFAULT: "var(--destructive)",
+          DEFAULT: "rgb(var(--destructive-rgb) / <alpha-value>)",
           foreground: "var(--destructive-foreground)",
         },
         border: "var(--border)",
