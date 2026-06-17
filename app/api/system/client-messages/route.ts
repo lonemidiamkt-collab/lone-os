@@ -25,7 +25,7 @@ import { sendEmail } from "@/lib/email/emailService";
 import { requireCron } from "@/lib/api/cron-guard";
 import { getMetaToken } from "@/lib/traffic/sync-core";
 import {
-  buildClientPdf, selectActiveMetaClients, slug, clientDisplayName,
+  buildClientPdf, selectActiveMetaClients, selectActiveClientsWithGroup, slug, clientDisplayName,
   type ReportClientRow,
 } from "@/lib/traffic/weekly-report";
 import { MONDAY_REPORT_MESSAGE, supportMessageFor, type ClientMsgKind } from "@/lib/traffic/support-message";
@@ -85,7 +85,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, status: "disabled", message: "traffic_client_msgs_enabled=false" });
     }
 
-    const clients = await selectActiveMetaClients(onlyClientId);
+    // Segunda (relatório) exige conta Meta vinculada; quarta/sexta (suporte) vai
+    // pra qualquer cliente ativo com grupo, mesmo sem conta de anúncio (só-suporte).
+    const clients = withReport
+      ? await selectActiveMetaClients(onlyClientId)
+      : await selectActiveClientsWithGroup(onlyClientId);
     const withGroup = clients.filter((c) => c.whatsapp_group_jid);
     const withoutGroup = clients.filter((c) => !c.whatsapp_group_jid).map(clientDisplayName);
 

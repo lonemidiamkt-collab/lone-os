@@ -12,7 +12,7 @@ export interface ReportClientRow {
   id: string;
   name: string;
   nome_fantasia: string | null;
-  meta_ad_account_id: string;
+  meta_ad_account_id: string | null;
   whatsapp_group_jid?: string | null;
   whatsapp_group_name?: string | null;
 }
@@ -52,6 +52,25 @@ export async function selectActiveMetaClients(onlyClientId?: string | null): Pro
   return (data ?? []) as ReportClientRow[];
 }
 
+/**
+ * Clientes ativos COM grupo de WhatsApp confirmado — independente de ter conta Meta.
+ * Usado pelas mensagens de suporte (qua/sex), que vão pra clientes só-suporte
+ * (ex.: CIIL/Portuga, sem conta de anúncio vinculada).
+ */
+export async function selectActiveClientsWithGroup(onlyClientId?: string | null): Promise<ReportClientRow[]> {
+  let q = supabaseAdmin
+    .from("clients")
+    .select("id, name, nome_fantasia, meta_ad_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
+    .not("whatsapp_group_jid", "is", null)
+    .in("status", ["good", "average", "onboarding"])
+    .is("draft_status", null)
+    .order("nome_fantasia");
+  if (onlyClientId) q = q.eq("id", onlyClientId);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ReportClientRow[];
+}
+
 /** Gera o PDF (Buffer) do relatório de 7 dias de UM cliente. Nunca lança. */
 export async function buildClientPdf(
   token: string,
@@ -59,6 +78,8 @@ export async function buildClientPdf(
 ): Promise<{ ok: boolean; buffer?: Buffer; error?: string }> {
   const accountId = client.meta_ad_account_id;
   const clientName = clientDisplayName(client);
+
+  if (!accountId) return { ok: false, error: "cliente sem conta de anúncio" };
 
   const raw = await fetchCampaignInsights(token, accountId, 7);
   const campaigns = (raw as Array<{ error?: boolean }>).filter((c) => !c.error) as unknown as AdCampaign[];
