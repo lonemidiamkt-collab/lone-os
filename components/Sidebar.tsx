@@ -298,7 +298,7 @@ export default function Sidebar() {
 
         {/* Logo */}
         <Link href="/" className="group shrink-0">
-          <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center group-hover:scale-[1.02] transition-all duration-300 overflow-hidden">
+          <div className="w-10 h-10 rounded-2xl bg-card border border-border flex items-center justify-center group-hover:scale-[1.02] transition-all duration-300 overflow-hidden">
             <Logo className="w-6 h-6" priority />
           </div>
         </Link>
