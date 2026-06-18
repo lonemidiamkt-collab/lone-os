@@ -48,9 +48,9 @@ interface PeriodSnapshot {
 type TimeView = "atual" | "mensal" | "trimestral" | "ytd";
 
 const STATUS_CONFIG = {
-  on_track: { label: "No ritmo", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20", icon: ArrowUp },
-  at_risk: { label: "Em risco", color: "text-amber-400 bg-amber-500/10 border-amber-500/20", icon: Minus },
-  off_track: { label: "Atrasado", color: "text-red-400 bg-red-500/10 border-red-500/20", icon: ArrowDown },
+  on_track: { label: "No ritmo", color: "text-lone-success bg-lone-success-bg border-lone-success-border", icon: ArrowUp },
+  at_risk: { label: "Em risco", color: "text-lone-warning bg-lone-warning-bg border-lone-warning-border", icon: Minus },
+  off_track: { label: "Atrasado", color: "text-destructive bg-destructive/10 border-destructive/20", icon: ArrowDown },
 };
 
 const MONTHS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -67,17 +67,17 @@ const ROLE_GOALS: Record<string, string> = {
 };
 
 const TEAM_OKRS_CURRENT: TeamOKRs[] = [
-  { team: "Trafego Pago", icon: TrendingUp, color: "#0d4af5", okrs: [
+  { team: "Trafego Pago", icon: TrendingUp, color: "var(--primary)", okrs: [
     { id: "tr-1", title: "ROAS medio > 4.0", target: 4.0, current: 3.7, unit: "x", status: "at_risk" },
     { id: "tr-2", title: "Investimento executado > 95%", target: 95, current: 88, unit: "%", status: "at_risk" },
     { id: "tr-3", title: "Novos leads/mes > 500", target: 500, current: 420, unit: "leads", status: "at_risk" },
   ]},
-  { team: "Social Media", icon: Instagram, color: "#3b6ff5", okrs: [
+  { team: "Social Media", icon: Instagram, color: "var(--primary)", okrs: [
     { id: "so-1", title: "Posts entregues/mes > 96", target: 96, current: 78, unit: "posts", status: "off_track" },
     { id: "so-2", title: "Engajamento medio > 3.5%", target: 3.5, current: 3.1, unit: "%", status: "at_risk" },
     { id: "so-3", title: "SLA de entrega < 48h", target: 48, current: 42, unit: "horas", status: "on_track" },
   ]},
-  { team: "Design", icon: Palette, color: "#8b5cf6", okrs: [
+  { team: "Design", icon: Palette, color: "var(--chart-4)", okrs: [
     { id: "de-1", title: "Pedidos no prazo > 90%", target: 90, current: 85, unit: "%", status: "at_risk" },
     { id: "de-2", title: "Tempo medio < 3 dias", target: 3, current: 2.8, unit: "dias", status: "on_track" },
     { id: "de-3", title: "Satisfacao > 4.5/5", target: 4.5, current: 4.2, unit: "/5", status: "on_track" },
@@ -93,17 +93,17 @@ function generateSnapshot(month: number, variance: number, teamMembersList: Arra
   };
 
   const teamOkrs: TeamOKRs[] = [
-    { team: "Trafego Pago", icon: TrendingUp, color: "#0d4af5", okrs: [
+    { team: "Trafego Pago", icon: TrendingUp, color: "var(--primary)", okrs: [
       { id: "tr-1", title: "ROAS medio > 4.0", target: 4.0, current: +(3.2 + v * 0.5).toFixed(1), unit: "x", status: status(3.2 + v * 0.5, 4.0) },
       { id: "tr-2", title: "Investimento executado > 95%", target: 95, current: Math.round(78 + v * 10), unit: "%", status: status(78 + v * 10, 95) },
       { id: "tr-3", title: "Novos leads/mes > 500", target: 500, current: Math.round(320 + v * 100), unit: "leads", status: status(320 + v * 100, 500) },
     ]},
-    { team: "Social Media", icon: Instagram, color: "#3b6ff5", okrs: [
+    { team: "Social Media", icon: Instagram, color: "var(--primary)", okrs: [
       { id: "so-1", title: "Posts entregues/mes > 96", target: 96, current: Math.round(60 + v * 18), unit: "posts", status: status(60 + v * 18, 96) },
       { id: "so-2", title: "Engajamento medio > 3.5%", target: 3.5, current: +(2.6 + v * 0.5).toFixed(1), unit: "%", status: status(2.6 + v * 0.5, 3.5) },
       { id: "so-3", title: "SLA de entrega < 48h", target: 48, current: Math.round(55 - v * 13), unit: "horas", status: status(55 - v * 13, 48, true) },
     ]},
-    { team: "Design", icon: Palette, color: "#8b5cf6", okrs: [
+    { team: "Design", icon: Palette, color: "var(--chart-4)", okrs: [
       { id: "de-1", title: "Pedidos no prazo > 90%", target: 90, current: Math.round(75 + v * 10), unit: "%", status: status(75 + v * 10, 90) },
       { id: "de-2", title: "Tempo medio < 3 dias", target: 3, current: +(3.5 - v * 0.7).toFixed(1), unit: "dias", status: status(3.5 - v * 0.7, 3, true) },
       { id: "de-3", title: "Satisfacao > 4.5/5", target: 4.5, current: +(3.8 + v * 0.4).toFixed(1), unit: "/5", status: status(3.8 + v * 0.4, 4.5) },
@@ -163,7 +163,7 @@ function SimTag({ isReal, source }: { isReal?: boolean; source?: string }) {
   if (isReal !== false) return null;
   return (
     <span
-      className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400/80 border border-amber-500/15 ml-1.5 cursor-help"
+      className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border ml-1.5 cursor-help"
       title={source ? `Fonte: ${source}` : "Dado simulado"}
     >
       Simulado
@@ -249,17 +249,17 @@ export default function GoalsPage() {
 
   // Real team OKRs for "atual" view
   const realTeamOkrs = useMemo<TeamOKRs[]>(() => [
-    { team: "Trafego Pago", icon: TrendingUp, color: "#0d4af5", okrs: [
+    { team: "Trafego Pago", icon: TrendingUp, color: "var(--primary)", okrs: [
       kpiToOkr("tr-1", "ROAS medio > 4.0", metrics.traffic.roas),
       kpiToOkr("tr-2", "Investimento executado > 95%", metrics.traffic.investmentExecuted),
       kpiToOkr("tr-3", "Novos leads/mes > 500", metrics.traffic.leadsPerMonth),
     ]},
-    { team: "Social Media", icon: Instagram, color: "#3b6ff5", okrs: [
+    { team: "Social Media", icon: Instagram, color: "var(--primary)", okrs: [
       kpiToOkr("so-1", "Posts entregues/mes > 96", metrics.social.postsDelivered),
       kpiToOkr("so-2", "Engajamento medio > 3.5%", metrics.social.engagementRate),
       kpiToOkr("so-3", "SLA de entrega < 48h", metrics.social.deliverySLA, true),
     ]},
-    { team: "Design", icon: Palette, color: "#8b5cf6", okrs: [
+    { team: "Design", icon: Palette, color: "var(--chart-4)", okrs: [
       kpiToOkr("de-1", "Pedidos no prazo > 90%", metrics.design.onTimeDelivery),
       kpiToOkr("de-2", "Tempo medio < 3 dias", metrics.design.avgDeliveryTime, true),
       kpiToOkr("de-3", "Satisfacao > 4.5/5", metrics.design.satisfaction),
@@ -409,9 +409,9 @@ export default function GoalsPage() {
           const simCount = allOkrs.filter((o) => o.isReal === false).length;
           if (simCount === 0) return null;
           return (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/8 border border-amber-500/20 text-amber-400/80 text-xs">
-              <span className="text-amber-400">⚠</span>
-              <span><strong>{simCount}</strong> {simCount === 1 ? "métrica usa dado simulado" : "métricas usam dados simulados"} — as demais são calculadas em tempo real. Passe o mouse sobre <span className="bg-amber-500/15 px-1 rounded">Simulado</span> para ver a fonte.</span>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-lone-warning-bg border border-lone-warning-border text-lone-warning text-xs">
+              <span className="text-lone-warning">⚠</span>
+              <span><strong>{simCount}</strong> {simCount === 1 ? "métrica usa dado simulado" : "métricas usam dados simulados"} — as demais são calculadas em tempo real. Passe o mouse sobre <span className="bg-lone-warning-bg px-1 rounded">Simulado</span> para ver a fonte.</span>
             </div>
           );
         })()}
@@ -420,8 +420,8 @@ export default function GoalsPage() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             {!presentationMode && (
-              <div className="w-10 h-10 rounded-xl bg-[#0d4af5]/10 flex items-center justify-center">
-                <Target size={20} className="text-[#0d4af5]" />
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Target size={20} className="text-primary" />
               </div>
             )}
             <div>
@@ -439,13 +439,13 @@ export default function GoalsPage() {
             {isAdmin && (
               <button onClick={() => setShowOKRManager(!showOKRManager)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                  showOKRManager ? "bg-[#0d4af5]/10 text-[#0d4af5] border-[#0d4af5]/20" : "border-border text-zinc-400 hover:text-white"
+                  showOKRManager ? "bg-primary/10 text-primary border-primary/20" : "border-border text-muted-foreground hover:text-foreground"
                 }`}>
                 <Settings size={12} /> Gerenciar Metas
               </button>
             )}
             {/* Time View Selector */}
-            <div className="flex items-center bg-zinc-900/50 rounded-xl p-0.5 border border-zinc-800/50">
+            <div className="flex items-center bg-card rounded-xl p-0.5 border border-border">
               {TIME_VIEWS.map((tv) => {
                 const Icon = tv.icon;
                 const active = timeView === tv.key;
@@ -455,8 +455,8 @@ export default function GoalsPage() {
                     onClick={() => switchPeriod(tv.key)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
                       active
-                        ? "bg-[#0d4af5] text-white shadow-[0_2px_8px_rgba(10,52,245,0.25)]"
-                        : "text-zinc-500 hover:text-zinc-300"
+                        ? "bg-primary text-primary-foreground shadow-[0_2px_8px_rgba(10,52,245,0.25)]"
+                        : "text-muted-foreground hover:text-muted-foreground"
                     }`}
                   >
                     <Icon size={12} />
@@ -471,21 +471,21 @@ export default function GoalsPage() {
               <div className="relative">
                 <button
                   onClick={() => setShowMonthPicker(!showMonthPicker)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-900/50 border border-zinc-800/50 text-foreground hover:border-zinc-700 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-card border border-border text-foreground hover:border-border transition-all"
                 >
                   {MONTHS[selectedMonth]}
-                  <ChevronDown size={12} className="text-zinc-500" />
+                  <ChevronDown size={12} className="text-muted-foreground" />
                 </button>
                 {showMonthPicker && (
-                  <div className="absolute top-full right-0 mt-1 bg-[#111118] border border-zinc-800 rounded-xl p-2 z-50 grid grid-cols-3 gap-1 animate-fade-in shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+                  <div className="absolute top-full right-0 mt-1 bg-card border border-border rounded-xl p-2 z-50 grid grid-cols-3 gap-1 animate-fade-in shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
                     {MONTHS.map((m, i) => (
                       <button
                         key={m}
                         onClick={() => switchPeriod("mensal", i)}
                         className={`px-3 py-1.5 rounded-lg text-xs transition-all ${
                           i === selectedMonth
-                            ? "bg-[#0d4af5] text-white"
-                            : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted"
                         }`}
                       >
                         {m}
@@ -504,8 +504,8 @@ export default function GoalsPage() {
                     onClick={() => switchPeriod("trimestral", undefined, q)}
                     className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                       q === selectedQuarter
-                        ? "bg-[#0d4af5] text-white shadow-[0_2px_8px_rgba(10,52,245,0.25)]"
-                        : "text-zinc-500 hover:text-zinc-300"
+                        ? "bg-primary text-primary-foreground shadow-[0_2px_8px_rgba(10,52,245,0.25)]"
+                        : "text-muted-foreground hover:text-muted-foreground"
                     }`}
                   >
                     Q{q + 1}
@@ -515,32 +515,32 @@ export default function GoalsPage() {
             )}
 
             {/* Divider */}
-            <div className="w-px h-6 bg-zinc-800 mx-1" />
+            <div className="w-px h-6 bg-muted mx-1" />
 
             {/* Export / Presentation */}
             <div className="relative">
               <button
                 onClick={() => setShowExportMenu(!showExportMenu)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-zinc-800 text-zinc-400 hover:text-foreground hover:border-[#0d4af5]/30 transition-all"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
               >
                 <Download size={13} />
                 Relatorio
               </button>
               {showExportMenu && (
-                <div className="absolute top-full right-0 mt-1 bg-[#111118] border border-zinc-800 rounded-xl p-1.5 z-50 w-52 animate-fade-in shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+                <div className="absolute top-full right-0 mt-1 bg-card border border-border rounded-xl p-1.5 z-50 w-52 animate-fade-in shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
                   <button
                     onClick={handleExportPDF}
                     disabled={exporting}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-40"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-all disabled:opacity-40"
                   >
-                    <Download size={13} className="text-[#0d4af5]" />
+                    <Download size={13} className="text-primary" />
                     {exporting ? "Gerando..." : "Exportar PDF"}
                   </button>
                   <button
                     onClick={togglePresentation}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
                   >
-                    <Monitor size={13} className="text-[#0d4af5]" />
+                    <Monitor size={13} className="text-primary" />
                     Modo Apresentacao
                   </button>
                 </div>
@@ -551,7 +551,7 @@ export default function GoalsPage() {
             {presentationMode && (
               <button
                 onClick={togglePresentation}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 transition-all"
               >
                 <Minimize2 size={13} />
                 Sair
@@ -568,11 +568,11 @@ export default function GoalsPage() {
               <h2 className="text-sm font-semibold text-foreground">
                 Progresso Geral — {periodLabel}
               </h2>
-              <span className="text-2xl font-bold text-[#0d4af5] tabular-nums">{overallProgress}%</span>
+              <span className="text-2xl font-bold text-primary tabular-nums">{overallProgress}%</span>
             </div>
-            <div className="w-full h-3 rounded-full bg-zinc-900 overflow-hidden">
+            <div className="w-full h-3 rounded-full bg-card overflow-hidden">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#0d4af5] to-[#3b6ff5] transition-all duration-700"
+                className="h-full rounded-full bg-gradient-to-r from-primary to-primary transition-all duration-700"
                 style={{ width: `${overallProgress}%` }}
               />
             </div>
@@ -581,7 +581,7 @@ export default function GoalsPage() {
           {/* Company OKRs */}
           <div className="space-y-3">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <BarChart2 size={14} className="text-[#0d4af5]" />
+              <BarChart2 size={14} className="text-primary" />
               OKRs da Empresa
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -604,12 +604,12 @@ export default function GoalsPage() {
                       <SimTag isReal={okr.isReal} source={okr.source} />
                     </div>
                     {okr.error && (
-                      <p className="text-[10px] text-amber-400/70 mb-1">{okr.error}</p>
+                      <p className="text-[10px] text-lone-warning mb-1">{okr.error}</p>
                     )}
-                    <div className="w-full h-2 rounded-full bg-zinc-900 overflow-hidden">
+                    <div className="w-full h-2 rounded-full bg-card overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
-                          progress >= 80 ? "bg-emerald-500" : progress >= 60 ? "bg-amber-500" : "bg-red-500"
+                          progress >= 80 ? "bg-lone-success-bg" : progress >= 60 ? "bg-lone-warning-bg" : "bg-destructive"
                         }`}
                         style={{ width: `${progress}%` }}
                       />
@@ -624,7 +624,7 @@ export default function GoalsPage() {
           {/* Team OKRs */}
           <div className="space-y-3">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Users size={14} className="text-[#0d4af5]" />
+              <Users size={14} className="text-primary" />
               OKRs por Equipe
             </h2>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -656,7 +656,7 @@ export default function GoalsPage() {
                               <span className={`text-[9px] ${cfg.color.split(" ")[0]}`}>{cfg.label}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="flex-1 h-1.5 rounded-full bg-zinc-900 overflow-hidden">
+                              <div className="flex-1 h-1.5 rounded-full bg-card overflow-hidden">
                                 <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, backgroundColor: team.color }} />
                               </div>
                               <span className="text-[10px] text-muted-foreground w-8 text-right tabular-nums">{progress}%</span>
@@ -679,30 +679,30 @@ export default function GoalsPage() {
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-6">
             <div className="card p-4">
               <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-                <TrendingUp size={14} className="text-[#0d4af5]" />
+                <TrendingUp size={14} className="text-primary" />
                 Evolucao de OKRs (%) — {periodLabel}
               </h3>
               <div className={presentationMode ? "h-[350px]" : "h-[250px]"}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={snapshot.trendData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1a1a1a" />
-                    <XAxis dataKey="label" tick={{ fill: "#71717a", fontSize: 11 }} axisLine={false} />
-                    <YAxis tick={{ fill: "#71717a", fontSize: 11 }} axisLine={false} domain={[40, 100]} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} />
+                    <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} domain={[40, 100]} />
                     <Tooltip
-                      contentStyle={{ backgroundColor: "#111118", border: "1px solid #1e1e1e", borderRadius: "12px", fontSize: "12px" }}
-                      labelStyle={{ color: "#e8e8ec" }}
+                      contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: "12px", fontSize: "12px" }}
+                      labelStyle={{ color: "var(--foreground)" }}
                     />
-                    <Line type="monotone" dataKey="trafego" stroke="#0d4af5" strokeWidth={2} dot={{ r: 3 }} name="Trafego" />
-                    <Line type="monotone" dataKey="social" stroke="#3b6ff5" strokeWidth={2} dot={{ r: 3 }} name="Social" />
-                    <Line type="monotone" dataKey="design" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} name="Design" />
+                    <Line type="monotone" dataKey="trafego" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3 }} name="Trafego" />
+                    <Line type="monotone" dataKey="social" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3 }} name="Social" />
+                    <Line type="monotone" dataKey="design" stroke="var(--chart-4)" strokeWidth={2} dot={{ r: 3 }} name="Design" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
               <div className="flex items-center justify-center gap-6 mt-2">
                 {[
-                  { key: "trafego", color: "#0d4af5", label: "Trafego" },
-                  { key: "social", color: "#3b6ff5", label: "Social" },
-                  { key: "design", color: "#8b5cf6", label: "Design" },
+                  { key: "trafego", color: "var(--primary)", label: "Trafego" },
+                  { key: "social", color: "var(--primary)", label: "Social" },
+                  { key: "design", color: "var(--chart-4)", label: "Design" },
                 ].map((l) => (
                   <div key={l.key} className="flex items-center gap-1.5">
                     <span className="w-3 h-0.5 rounded" style={{ backgroundColor: l.color }} />
@@ -714,7 +714,7 @@ export default function GoalsPage() {
 
             <div className="card p-4">
               <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Users size={14} className="text-[#0d4af5]" />
+                <Users size={14} className="text-primary" />
                 Metas Individuais
               </h3>
               <div className="space-y-3">
@@ -722,7 +722,7 @@ export default function GoalsPage() {
                   const cfg = STATUS_CONFIG[person.status];
                   const StatusIcon = cfg.icon;
                   return (
-                    <div key={person.name} className="p-3 rounded-xl bg-zinc-900/30 border border-zinc-800/30">
+                    <div key={person.name} className="p-3 rounded-xl bg-card border border-border">
                       <div className="flex items-center justify-between mb-1.5">
                         <div>
                           <span className="text-xs font-semibold text-foreground">{person.name}</span>
@@ -735,10 +735,10 @@ export default function GoalsPage() {
                       </div>
                       <p className="text-[11px] text-muted-foreground mb-2">{person.goal}</p>
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 rounded-full bg-zinc-900 overflow-hidden">
+                        <div className="flex-1 h-1.5 rounded-full bg-card overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all duration-500 ${
-                              person.progress >= 80 ? "bg-emerald-500" : person.progress >= 60 ? "bg-amber-500" : "bg-red-500"
+                              person.progress >= 80 ? "bg-lone-success-bg" : person.progress >= 60 ? "bg-lone-warning-bg" : "bg-destructive"
                             }`}
                             style={{ width: `${person.progress}%` }}
                           />
@@ -758,7 +758,7 @@ export default function GoalsPage() {
           <div className="space-y-6 animate-fade-in">
             {/* Layer switcher */}
             <div className="flex items-center gap-3">
-              <div className="flex items-center bg-zinc-900/30 rounded-xl p-0.5 border border-white/[0.04]">
+              <div className="flex items-center bg-card rounded-xl p-0.5 border border-border">
                 {([
                   { key: "strategy" as const, label: "Cockpit Estrategico", icon: Target },
                   { key: "operations" as const, label: "Chao de Fabrica", icon: Activity },
@@ -768,22 +768,22 @@ export default function GoalsPage() {
                     <button key={tab.key} onClick={() => setActiveLayer(tab.key)}
                       className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
                         activeLayer === tab.key
-                          ? "bg-[#0d4af5] text-white shadow-[0_2px_8px_rgba(13,74,245,0.25)]"
-                          : "text-zinc-500 hover:text-zinc-300"
+                          ? "bg-primary text-primary-foreground shadow-[0_2px_8px_rgba(13,74,245,0.25)]"
+                          : "text-muted-foreground hover:text-muted-foreground"
                       }`}>
                       <Icon size={12} /> {tab.label}
                     </button>
                   );
                 })}
               </div>
-              <div className="h-5 w-px bg-white/[0.06]" />
+              <div className="h-5 w-px bg-card/[0.06]" />
               <button onClick={saveCurrentSnapshot}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium text-zinc-500 hover:text-foreground border border-white/[0.06] hover:border-white/[0.1] transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium text-muted-foreground hover:text-foreground border border-border hover:border-border transition-all"
                 title="Salvar snapshot do periodo atual">
                 <Download size={11} /> Salvar Snapshot
               </button>
               {previousSnapshot && (
-                <span className="text-[10px] text-zinc-600">
+                <span className="text-[10px] text-muted-foreground">
                   Comparando com {previousSnapshot.period}
                 </span>
               )}
@@ -792,52 +792,52 @@ export default function GoalsPage() {
             {/* AI Feedback Card */}
             <div className="card-glow p-6">
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-xl bg-[#0d4af5]/10 flex items-center justify-center shrink-0">
-                  <Brain size={18} className="text-[#0d4af5]" />
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Brain size={18} className="text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
                     <h3 className="text-sm font-semibold text-foreground">Analista Virtual</h3>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium tabular-nums ${
-                      feedback.score >= 80 ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" :
-                      feedback.score >= 60 ? "text-amber-400 bg-amber-500/10 border-amber-500/20" :
-                      "text-red-400 bg-red-500/10 border-red-500/20"
+                      feedback.score >= 80 ? "text-lone-success bg-lone-success-bg border-lone-success-border" :
+                      feedback.score >= 60 ? "text-lone-warning bg-lone-warning-bg border-lone-warning-border" :
+                      "text-destructive bg-destructive/10 border-destructive/20"
                     }`}>
                       Score: {feedback.score}/100
                     </span>
                   </div>
-                  <p className="text-xs text-zinc-400 leading-relaxed mb-3">{feedback.summary}</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed mb-3">{feedback.summary}</p>
 
                   {/* Highlights + Bottlenecks */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {feedback.highlights.length > 0 && (
                       <div className="space-y-1.5">
-                        <p className="text-[10px] text-emerald-400/70 uppercase tracking-wider font-semibold flex items-center gap-1">
+                        <p className="text-[10px] text-lone-success uppercase tracking-wider font-semibold flex items-center gap-1">
                           <CheckCircle size={10} /> Destaques
                         </p>
                         {feedback.highlights.map((h, i) => (
-                          <p key={i} className="text-[11px] text-zinc-400 pl-4">+ {h}</p>
+                          <p key={i} className="text-[11px] text-muted-foreground pl-4">+ {h}</p>
                         ))}
                       </div>
                     )}
                     {feedback.bottlenecks.length > 0 && (
                       <div className="space-y-1.5">
-                        <p className="text-[10px] text-red-400/70 uppercase tracking-wider font-semibold flex items-center gap-1">
+                        <p className="text-[10px] text-destructive/70 uppercase tracking-wider font-semibold flex items-center gap-1">
                           <AlertTriangle size={10} /> Gargalos
                         </p>
                         {feedback.bottlenecks.map((b, i) => (
-                          <p key={i} className="text-[11px] text-zinc-400 pl-4">- {b}</p>
+                          <p key={i} className="text-[11px] text-muted-foreground pl-4">- {b}</p>
                         ))}
                       </div>
                     )}
                   </div>
 
                   {/* Suggestion */}
-                  <div className="mt-3 p-3 rounded-xl bg-[#0d4af5]/[0.04] border border-[#0d4af5]/[0.08]">
-                    <p className="text-[10px] text-[#3b6ff5] uppercase tracking-wider font-semibold mb-1 flex items-center gap-1">
+                  <div className="mt-3 p-3 rounded-xl bg-primary/[0.04] border border-primary/[0.08]">
+                    <p className="text-[10px] text-primary uppercase tracking-wider font-semibold mb-1 flex items-center gap-1">
                       <Zap size={10} /> Recomendacao
                     </p>
-                    <p className="text-xs text-zinc-300">{feedback.suggestion}</p>
+                    <p className="text-xs text-muted-foreground">{feedback.suggestion}</p>
                   </div>
                 </div>
               </div>
@@ -847,7 +847,7 @@ export default function GoalsPage() {
             {churnAlerts.length > 0 && (
               <div className="space-y-2">
                 <h3 className="text-xs font-semibold text-foreground flex items-center gap-2">
-                  <Shield size={12} className="text-red-400" />
+                  <Shield size={12} className="text-destructive" />
                   Alertas Preditivos de Churn
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -855,20 +855,20 @@ export default function GoalsPage() {
                     <div key={alert.metric}
                       className={`p-3 rounded-xl border ${
                         alert.severity === "critical"
-                          ? "bg-red-500/[0.04] border-red-500/[0.12]"
-                          : "bg-amber-500/[0.04] border-amber-500/[0.12]"
+                          ? "bg-destructive/[0.04] border-destructive/[0.12]"
+                          : "bg-lone-warning-bg/[0.04] border-lone-warning-border/[0.12]"
                       }`}>
                       <div className="flex items-center gap-2 mb-1">
                         <span className={`w-1.5 h-1.5 rounded-full ${
-                          alert.severity === "critical" ? "bg-red-400" : "bg-amber-400"
+                          alert.severity === "critical" ? "bg-destructive" : "bg-lone-warning-bg"
                         }`} />
                         <span className={`text-[10px] font-semibold ${
-                          alert.severity === "critical" ? "text-red-400" : "text-amber-400"
+                          alert.severity === "critical" ? "text-destructive" : "text-lone-warning"
                         }`}>
                           {alert.label}
                         </span>
                       </div>
-                      <p className="text-[11px] text-zinc-400">{alert.message}</p>
+                      <p className="text-[11px] text-muted-foreground">{alert.message}</p>
                     </div>
                   ))}
                 </div>
@@ -879,32 +879,32 @@ export default function GoalsPage() {
             {deltas.length > 0 && (
               <div className="space-y-3">
                 <h3 className="text-xs font-semibold text-foreground flex items-center gap-2">
-                  <TrendingUp size={12} className="text-[#0d4af5]" />
+                  <TrendingUp size={12} className="text-primary" />
                   Evolucao vs Periodo Anterior ({previousSnapshot?.period ?? "—"})
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {deltas.map((d) => (
                     <div key={d.metric} className="card p-4">
-                      <p className="text-[10px] text-zinc-500 mb-1">{d.label}</p>
+                      <p className="text-[10px] text-muted-foreground mb-1">{d.label}</p>
                       <div className="flex items-end gap-2">
                         <span className="text-lg font-bold text-foreground tabular-nums">
                           {d.current}{d.unit !== "pts" ? d.unit : ""}
                         </span>
                         {d.direction !== "stable" && (
                           <span className={`flex items-center gap-0.5 text-[11px] font-medium mb-0.5 ${
-                            d.isGood ? "text-emerald-400" : d.severity === "critical" ? "text-red-400" : "text-amber-400"
+                            d.isGood ? "text-lone-success" : d.severity === "critical" ? "text-destructive" : "text-lone-warning"
                           }`}>
                             {d.direction === "up" ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
                             {Math.abs(d.delta).toFixed(1)}%
                           </span>
                         )}
                         {d.direction === "stable" && (
-                          <span className="text-[11px] text-zinc-600 mb-0.5">estavel</span>
+                          <span className="text-[11px] text-muted-foreground mb-0.5">estavel</span>
                         )}
                       </div>
-                      <div className="mt-2 h-1 rounded-full bg-zinc-900 overflow-hidden">
+                      <div className="mt-2 h-1 rounded-full bg-card overflow-hidden">
                         <div className={`h-full rounded-full transition-all duration-700 ${
-                          d.isGood ? "bg-emerald-500" : d.severity === "critical" ? "bg-red-500" : "bg-amber-500"
+                          d.isGood ? "bg-lone-success-bg" : d.severity === "critical" ? "bg-destructive" : "bg-lone-warning-bg"
                         }`} style={{ width: `${Math.min(100, Math.max(5, 50 + d.delta))}%` }} />
                       </div>
                     </div>
@@ -925,21 +925,21 @@ export default function GoalsPage() {
                   const Icon = kpi.icon;
                   const isGood = kpi.label === "Tasks Vencidas" ? kpi.value <= kpi.target : kpi.value >= kpi.target;
                   return (
-                    <div key={kpi.label} className={`card p-5 ${!isGood ? "border-amber-500/[0.15]" : ""}`}>
+                    <div key={kpi.label} className={`card p-5 ${!isGood ? "border-lone-warning-border/[0.15]" : ""}`}>
                       <div className="flex items-center gap-2 mb-3">
-                        <Icon size={14} className={isGood ? "text-[#0d4af5]" : "text-amber-400"} />
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider">{kpi.label}</span>
+                        <Icon size={14} className={isGood ? "text-primary" : "text-lone-warning"} />
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{kpi.label}</span>
                       </div>
                       <div className="flex items-end gap-1.5">
-                        <span className={`text-2xl font-bold tabular-nums ${isGood ? "text-foreground" : "text-amber-400"}`}>
+                        <span className={`text-2xl font-bold tabular-nums ${isGood ? "text-foreground" : "text-lone-warning"}`}>
                           {kpi.value}
                         </span>
-                        <span className="text-xs text-zinc-600 mb-0.5">{kpi.unit}</span>
+                        <span className="text-xs text-muted-foreground mb-0.5">{kpi.unit}</span>
                       </div>
                       {kpi.label !== "Tasks Vencidas" && (
-                        <div className="mt-3 h-1.5 rounded-full bg-zinc-900 overflow-hidden">
+                        <div className="mt-3 h-1.5 rounded-full bg-card overflow-hidden">
                           <div className={`h-full rounded-full transition-all duration-700 ${
-                            isGood ? "bg-[#0d4af5]" : "bg-amber-500"
+                            isGood ? "bg-primary" : "bg-lone-warning-bg"
                           }`} style={{ width: `${Math.min(100, (kpi.value / kpi.target) * 100)}%` }} />
                         </div>
                       )}
@@ -977,7 +977,7 @@ export default function GoalsPage() {
                   <option value="2026-Q3">2026 Q3</option>
                   <option value="2026-Q4">2026 Q4</option>
                 </select>
-                <button onClick={() => setShowOKRManager(false)} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+                <button onClick={() => setShowOKRManager(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
               </div>
             </div>
 
@@ -993,42 +993,42 @@ export default function GoalsPage() {
                         <div className="flex items-center justify-between">
                           <p className="text-xs font-medium text-foreground flex-1">{okr.title}</p>
                           <button onClick={async () => { await okrData.deleteOKR(okr.id); }}
-                            className="text-zinc-700 hover:text-red-400 transition-colors p-1"><Trash2 size={10} /></button>
+                            className="text-muted-foreground hover:text-destructive transition-colors p-1"><Trash2 size={10} /></button>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-zinc-500">Meta:</span>
+                          <span className="text-[10px] text-muted-foreground">Meta:</span>
                           {editingTarget?.id === okr.id ? (
                             <div className="flex items-center gap-1">
                               <input type="number" value={editingTarget.value}
                                 onChange={(e) => setEditingTarget({ ...editingTarget, value: e.target.value })}
-                                className="w-20 bg-card border border-border rounded px-2 py-0.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50"
+                                className="w-20 bg-card border border-border rounded px-2 py-0.5 text-xs text-foreground outline-none focus:border-primary/50"
                                 autoFocus onKeyDown={(e) => {
                                   if (e.key === "Enter") { okrData.updateTarget(okr.id, Number(editingTarget.value)); setEditingTarget(null); }
                                   if (e.key === "Escape") setEditingTarget(null);
                                 }} />
-                              <span className="text-[10px] text-zinc-500">{okr.unit}</span>
+                              <span className="text-[10px] text-muted-foreground">{okr.unit}</span>
                               <button onClick={() => { okrData.updateTarget(okr.id, Number(editingTarget.value)); setEditingTarget(null); }}
-                                className="text-emerald-400 hover:text-emerald-300"><Save size={10} /></button>
+                                className="text-lone-success hover:text-lone-success"><Save size={10} /></button>
                             </div>
                           ) : (
                             <button onClick={() => setEditingTarget({ id: okr.id, value: String(okr.target) })}
-                              className="text-xs text-foreground hover:text-[#0d4af5] flex items-center gap-1 transition-colors">
-                              {okr.target} {okr.unit} <Pencil size={8} className="text-zinc-600" />
+                              className="text-xs text-foreground hover:text-primary flex items-center gap-1 transition-colors">
+                              {okr.target} {okr.unit} <Pencil size={8} className="text-muted-foreground" />
                             </button>
                           )}
-                          <span className="text-[10px] text-zinc-600 ml-auto">
-                            Atual: <span className={`font-medium ${okr.status === "on_track" ? "text-emerald-400" : okr.status === "at_risk" ? "text-amber-400" : "text-red-400"}`}>
+                          <span className="text-[10px] text-muted-foreground ml-auto">
+                            Atual: <span className={`font-medium ${okr.status === "on_track" ? "text-lone-success" : okr.status === "at_risk" ? "text-lone-warning" : "text-destructive"}`}>
                               {okr.currentValue} {okr.unit}
                             </span>
                           </span>
                         </div>
                         {/* Progress bar */}
-                        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                           <div className={`h-full rounded-full transition-all ${
-                            okr.status === "on_track" ? "bg-emerald-500" : okr.status === "at_risk" ? "bg-amber-500" : "bg-red-500"
+                            okr.status === "on_track" ? "bg-lone-success-bg" : okr.status === "at_risk" ? "bg-lone-warning-bg" : "bg-destructive"
                           }`} style={{ width: `${Math.min(100, okr.target > 0 ? (okr.currentValue / okr.target) * 100 : 0)}%` }} />
                         </div>
-                        {okr.autoCalculated && <p className="text-[9px] text-zinc-600">Auto-calculado do sistema</p>}
+                        {okr.autoCalculated && <p className="text-[9px] text-muted-foreground">Auto-calculado do sistema</p>}
                       </div>
                     ))}
                   </div>

@@ -104,7 +104,7 @@ export default function SettingsPage() {
     <div className="p-6 space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-3">
-          <Settings size={24} className="text-[#0d4af5]" />
+          <Settings size={24} className="text-primary" />
           Configurações
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -124,7 +124,7 @@ export default function SettingsPage() {
                 onClick={() => setActiveSection(s.key)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
                   active
-                    ? "bg-[#0d4af5]/10 text-[#0d4af5]"
+                    ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
@@ -137,7 +137,7 @@ export default function SettingsPage() {
           <div className="border-t border-border my-2" />
           <button
             onClick={logout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium text-red-400 hover:bg-red-500/10 transition-all"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium text-destructive hover:bg-destructive/10 transition-all"
           >
             <LogOut size={14} />
             Sair da conta
@@ -154,18 +154,18 @@ export default function SettingsPage() {
 
                 {/* Staff lockdown warning */}
                 {role !== "admin" && (
-                  <div className="mb-4 px-4 py-3 rounded-xl bg-amber-500/[0.05] border border-amber-500/[0.12] text-[11px] text-amber-400">
+                  <div className="mb-4 px-4 py-3 rounded-xl bg-lone-warning-bg/[0.05] border border-lone-warning-border/[0.12] text-[11px] text-lone-warning">
                     Alteracoes de perfil sao gerenciadas exclusivamente pela Diretoria (Admins).
                   </div>
                 )}
 
                 <div className="flex items-center gap-5 mb-6">
-                  <div className="w-16 h-16 rounded-2xl bg-[#0d4af5]/15 flex items-center justify-center shadow-[0_0_20px_rgba(10,52,245,0.2)]">
-                    <span className="text-xl font-bold text-[#0d4af5]">{currentProfile.initials}</span>
+                  <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center shadow-[0_0_20px_rgba(10,52,245,0.2)]">
+                    <span className="text-xl font-bold text-primary">{currentProfile.initials}</span>
                   </div>
                   <div>
                     <p className="text-lg font-bold text-foreground">{currentProfile.name}</p>
-                    <p className="text-sm text-[#0d4af5]">{ROLE_LABELS[role] ?? role}</p>
+                    <p className="text-sm text-primary">{ROLE_LABELS[role] ?? role}</p>
                   </div>
                 </div>
 
@@ -207,7 +207,7 @@ export default function SettingsPage() {
                     <input
                       value={currentProfile.id}
                       readOnly
-                      className="w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-sm text-zinc-600 font-mono"
+                      className="w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-sm text-muted-foreground font-mono"
                     />
                   </div>
                 </div>
@@ -223,7 +223,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-muted/30">
                     <div className="flex items-center gap-3">
-                      {theme === "dark" ? <Moon size={18} className="text-[#0d4af5]" /> : <Sun size={18} className="text-amber-400" />}
+                      {theme === "dark" ? <Moon size={18} className="text-primary" /> : <Sun size={18} className="text-lone-warning" />}
                       <div>
                         <p className="text-sm font-medium text-foreground">Tema</p>
                         <p className="text-xs text-muted-foreground">{theme === "dark" ? "Modo escuro ativo" : "Modo claro ativo"}</p>
@@ -232,10 +232,10 @@ export default function SettingsPage() {
                     <button
                       onClick={toggleTheme}
                       className={`relative w-12 h-6 rounded-full transition-all ${
-                        theme === "dark" ? "bg-[#0d4af5]" : "bg-zinc-600"
+                        theme === "dark" ? "bg-primary" : "bg-muted"
                       }`}
                     >
-                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${
+                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-card shadow transition-all ${
                         theme === "dark" ? "left-[26px]" : "left-0.5"
                       }`} />
                     </button>
@@ -243,11 +243,11 @@ export default function SettingsPage() {
 
                   <div className="p-4 rounded-xl border border-border bg-muted/30">
                     <p className="text-sm font-medium text-foreground mb-1">Cor de Destaque</p>
-                    <p className="text-xs text-muted-foreground mb-3">Azul #0d4af5 — padrao do Lone OS</p>
+                    <p className="text-xs text-muted-foreground mb-3">Azul var(--primary) — padrao do Lone OS</p>
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-[#0d4af5] shadow-[0_0_12px_rgba(10,52,245,0.4)]" />
-                      <div className="w-8 h-8 rounded-lg bg-[#3b6ff5]" />
-                      <div className="w-8 h-8 rounded-lg bg-[#0d4af5]/50" />
+                      <div className="w-8 h-8 rounded-lg bg-primary shadow-[0_0_12px_rgba(10,52,245,0.4)]" />
+                      <div className="w-8 h-8 rounded-lg bg-primary" />
+                      <div className="w-8 h-8 rounded-lg bg-primary/50" />
                       <span className="text-[10px] text-muted-foreground ml-2">Palette fixa</span>
                     </div>
                   </div>
@@ -258,7 +258,7 @@ export default function SettingsPage() {
                         <p className="text-sm font-medium text-foreground">Tour do Sistema</p>
                         <p className="text-xs text-muted-foreground">Refaca o tour interativo para conhecer o Lone OS</p>
                       </div>
-                      <RestartTourButton className="px-3 py-1.5 rounded-lg text-xs text-[#0d4af5] bg-[#0d4af5]/10 border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 transition-all" />
+                      <RestartTourButton className="px-3 py-1.5 rounded-lg text-xs text-primary bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all" />
                     </div>
                   </div>
                 </div>
@@ -288,10 +288,10 @@ export default function SettingsPage() {
                       <button
                         onClick={() => togglePref(key)}
                         className={`relative w-10 h-5 rounded-full transition-all ${
-                          notifPrefs[key] ? "bg-[#0d4af5]" : "bg-zinc-700"
+                          notifPrefs[key] ? "bg-primary" : "bg-muted"
                         }`}
                       >
-                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-card shadow transition-all ${
                           notifPrefs[key] ? "left-[22px]" : "left-0.5"
                         }`} />
                       </button>
@@ -310,21 +310,21 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <div className="p-4 rounded-xl border border-border bg-muted/30">
                     <div className="flex items-center gap-3 mb-2">
-                      <Key size={16} className="text-[#0d4af5]" />
+                      <Key size={16} className="text-primary" />
                       <p className="text-sm font-medium text-foreground">Sessão Ativa</p>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Logado como <span className="text-foreground font-medium">{currentProfile.name}</span> ({currentProfile.email})
                     </p>
-                    <p className="text-[10px] text-zinc-600 mt-1">
+                    <p className="text-[10px] text-muted-foreground mt-1">
                       Autenticação: client-side (demo mode)
                     </p>
                   </div>
 
-                  <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                  <div className="p-4 rounded-xl border border-lone-warning-border bg-lone-warning-bg">
                     <div className="flex items-center gap-2 mb-1">
-                      <Shield size={14} className="text-amber-400" />
-                      <p className="text-xs font-medium text-amber-400">Ambiente de Demonstração</p>
+                      <Shield size={14} className="text-lone-warning" />
+                      <p className="text-xs font-medium text-lone-warning">Ambiente de Demonstração</p>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
                       Este sistema está em modo demo com autenticação client-side. Em produção, será usado Supabase Auth com row-level security.
@@ -333,7 +333,7 @@ export default function SettingsPage() {
 
                   <button
                     onClick={logout}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 text-red-400 text-sm font-medium border border-red-500/20 hover:bg-red-500/20 transition-all"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-destructive/10 text-destructive text-sm font-medium border border-destructive/20 hover:bg-destructive/20 transition-all"
                   >
                     <LogOut size={16} /> Encerrar sessão
                   </button>
@@ -348,10 +348,10 @@ export default function SettingsPage() {
               <div className="card">
                 <div className="flex items-center justify-between mb-5">
                   <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
-                    <Building2 size={14} className="text-[#0d4af5]" /> Dados da Agencia
+                    <Building2 size={14} className="text-primary" /> Dados da Agencia
                   </h3>
                   <button onClick={handleAgencySave} disabled={agencySaving}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white text-xs font-medium transition-colors disabled:opacity-50">
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground text-xs font-medium transition-colors disabled:opacity-50">
                     {agencySaving ? <Loader2 size={12} className="animate-spin" /> : agencySaved ? <Check size={12} /> : <Save size={12} />}
                     {agencySaved ? "Salvo!" : "Salvar Tudo"}
                   </button>
@@ -366,9 +366,9 @@ export default function SettingsPage() {
                     { key: "telefone", label: "Telefone" },
                   ] as { key: keyof typeof agencyForm; label: string }[]).map(({ key, label }) => (
                     <div key={key} className="space-y-1.5">
-                      <label className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</label>
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</label>
                       <input value={agencyForm[key]} onChange={(e) => setAgencyForm((p) => ({ ...p, [key]: e.target.value }))}
-                        className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" />
+                        className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" />
                     </div>
                   ))}
                 </div>
@@ -377,7 +377,7 @@ export default function SettingsPage() {
               {/* Signatario */}
               <div className="card">
                 <h3 className="font-semibold text-foreground text-sm mb-5 flex items-center gap-2">
-                  <User size={14} className="text-[#0d4af5]" /> Signatario (Contratada)
+                  <User size={14} className="text-primary" /> Signatario (Contratada)
                 </h3>
                 <div className="grid grid-cols-3 gap-4">
                   {([
@@ -386,9 +386,9 @@ export default function SettingsPage() {
                     { key: "signatarioEmail", label: "E-mail para Assinatura" },
                   ] as { key: keyof typeof agencyForm; label: string }[]).map(({ key, label }) => (
                     <div key={key} className="space-y-1.5">
-                      <label className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</label>
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</label>
                       <input value={agencyForm[key]} onChange={(e) => setAgencyForm((p) => ({ ...p, [key]: e.target.value }))}
-                        className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" />
+                        className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" />
                     </div>
                   ))}
                 </div>
@@ -397,10 +397,10 @@ export default function SettingsPage() {
               {/* Templates & Clausulas */}
               <div className="card">
                 <h3 className="font-semibold text-foreground text-sm mb-2 flex items-center gap-2">
-                  <FileText size={14} className="text-[#0d4af5]" /> Templates de Contrato
+                  <FileText size={14} className="text-primary" /> Templates de Contrato
                 </h3>
                 <p className="text-[10px] text-muted-foreground mb-5">
-                  Duracao padrao e clausulas por tipo de servico. O DOCX oficial preenchido esta em <code className="text-[#0d4af5]">contract-templates/*.docx</code>.
+                  Duracao padrao e clausulas por tipo de servico. O DOCX oficial preenchido esta em <code className="text-primary">contract-templates/*.docx</code>.
                 </p>
                 <div className="space-y-4">
                   {templates.map((t, idx) => (
@@ -408,40 +408,40 @@ export default function SettingsPage() {
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-medium text-foreground">{t.name}</p>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-zinc-500 font-mono">{t.serviceType}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">{t.serviceType}</span>
                           <button onClick={() => setEditingClauses(editingClauses === t.id ? null : t.id)}
-                            className={`text-[10px] px-2 py-0.5 rounded border transition-all ${editingClauses === t.id ? "bg-[#0d4af5]/10 text-[#0d4af5] border-[#0d4af5]/20" : "border-border text-zinc-500 hover:text-white"}`}>
+                            className={`text-[10px] px-2 py-0.5 rounded border transition-all ${editingClauses === t.id ? "bg-primary/10 text-primary border-primary/20" : "border-border text-muted-foreground hover:text-foreground"}`}>
                             {editingClauses === t.id ? "Fechar" : "Editar Clausulas"}
                           </button>
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] text-zinc-500">Duracao padrao (meses)</label>
+                        <label className="text-[10px] text-muted-foreground">Duracao padrao (meses)</label>
                         <input type="number" value={t.durationMonths} onChange={(e) => {
                           const u = [...templates]; u[idx] = { ...u[idx], durationMonths: Number(e.target.value) || 3 }; setTemplates(u);
-                        }} className="w-40 bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50" />
+                        }} className="w-40 bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/50" />
                       </div>
 
                       {/* Clause editor */}
                       {editingClauses === t.id && (
                         <div className="space-y-4 pt-3 border-t border-border">
-                          <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Clausulas do Contrato</p>
+                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Clausulas do Contrato</p>
                           {t.clauses.map((clause, ci) => (
                             <div key={clause.id} className="space-y-1.5">
                               <input value={clause.title} onChange={(e) => {
                                 const u = [...templates]; const c = [...u[idx].clauses]; c[ci] = { ...c[ci], title: e.target.value };
                                 u[idx] = { ...u[idx], clauses: c }; setTemplates(u);
-                              }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-medium outline-none focus:border-[#0d4af5]/50" />
+                              }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground font-medium outline-none focus:border-primary/50" />
                               <textarea value={clause.body} rows={4} onChange={(e) => {
                                 const u = [...templates]; const c = [...u[idx].clauses]; c[ci] = { ...c[ci], body: e.target.value };
                                 u[idx] = { ...u[idx], clauses: c }; setTemplates(u);
-                              }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50 resize-none" />
+                              }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/50 resize-none" />
                             </div>
                           ))}
 
-                          <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider pt-2">Clausulas Condicionais (Opcionais)</p>
+                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider pt-2">Clausulas Condicionais (Opcionais)</p>
                           {t.conditionalClauses.map((cc, cci) => (
-                            <div key={cc.id} className={`rounded-lg border p-3 space-y-2 transition-all ${cc.enabled ? "border-[#0d4af5]/30 bg-[#0d4af5]/[0.03]" : "border-border"}`}>
+                            <div key={cc.id} className={`rounded-lg border p-3 space-y-2 transition-all ${cc.enabled ? "border-primary/30 bg-primary/[0.03]" : "border-border"}`}>
                               <div className="flex items-center justify-between">
                                 <input value={cc.title} onChange={(e) => {
                                   const u = [...templates]; const c = [...u[idx].conditionalClauses]; c[cci] = { ...c[cci], title: e.target.value };
@@ -450,14 +450,14 @@ export default function SettingsPage() {
                                 <button onClick={() => {
                                   const u = [...templates]; const c = [...u[idx].conditionalClauses]; c[cci] = { ...c[cci], enabled: !c[cci].enabled };
                                   u[idx] = { ...u[idx], conditionalClauses: c }; setTemplates(u);
-                                }} className={`relative w-9 h-5 rounded-full transition-all ${cc.enabled ? "bg-[#0d4af5]" : "bg-zinc-700"}`}>
-                                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${cc.enabled ? "left-[18px]" : "left-0.5"}`} />
+                                }} className={`relative w-9 h-5 rounded-full transition-all ${cc.enabled ? "bg-primary" : "bg-muted"}`}>
+                                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-card shadow transition-all ${cc.enabled ? "left-[18px]" : "left-0.5"}`} />
                                 </button>
                               </div>
                               <textarea value={cc.body} rows={2} onChange={(e) => {
                                 const u = [...templates]; const c = [...u[idx].conditionalClauses]; c[cci] = { ...c[cci], body: e.target.value };
                                 u[idx] = { ...u[idx], conditionalClauses: c }; setTemplates(u);
-                              }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-[11px] text-foreground outline-none focus:border-[#0d4af5]/50 resize-none" />
+                              }} className="w-full bg-card border border-border rounded-lg px-2.5 py-1.5 text-[11px] text-foreground outline-none focus:border-primary/50 resize-none" />
                             </div>
                           ))}
                         </div>

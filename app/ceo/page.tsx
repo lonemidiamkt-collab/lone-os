@@ -303,9 +303,9 @@ export default function CEOPage() {
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="max-w-xs w-full text-center space-y-8">
             <div>
-              <Lock size={20} className="text-zinc-600 mx-auto mb-3" />
+              <Lock size={20} className="text-muted-foreground mx-auto mb-3" />
               <h2 className="text-lg font-semibold text-foreground">Cofre Executivo</h2>
-              <p className="text-xs text-zinc-500 mt-1">PIN de 4 digitos</p>
+              <p className="text-xs text-muted-foreground mt-1">PIN de 4 digitos</p>
             </div>
 
             {/* 4 real OTP inputs */}
@@ -322,22 +322,22 @@ export default function CEOPage() {
                   onKeyDown={(e) => handleKeyDown(i, e)}
                   onFocus={(e) => e.target.select()}
                   autoFocus={i === 0}
-                  className={`w-12 h-14 rounded-lg bg-transparent text-center text-xl font-bold text-white outline-none transition-all ${
+                  className={`w-12 h-14 rounded-lg bg-transparent text-center text-xl font-bold text-foreground outline-none transition-all ${
                     pinError
-                      ? "border border-red-500/60"
+                      ? "border border-destructive/60"
                       : pinDigits[i]
-                      ? "border border-[#0d4af5]/50"
-                      : "border border-zinc-700 focus:border-[#0d4af5] focus:ring-1 focus:ring-[#0d4af5]/30"
+                      ? "border border-primary/50"
+                      : "border border-border focus:border-primary focus:ring-1 focus:ring-primary/30"
                   }`}
                 />
               ))}
             </div>
 
             {pinError && (
-              <p className="text-xs text-red-400">PIN incorreto</p>
+              <p className="text-xs text-destructive">PIN incorreto</p>
             )}
 
-            <div className="flex items-center justify-center gap-2 text-zinc-700 text-[10px]">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground text-[10px]">
               <Shield size={10} />
               <span>Acesso monitorado</span>
             </div>
@@ -348,10 +348,10 @@ export default function CEOPage() {
   }
 
   const LEVEL_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-    excellent: { color: "text-[#0d4af5]", bg: "bg-[#0d4af5]", label: "Excelente" },
+    excellent: { color: "text-primary", bg: "bg-primary", label: "Excelente" },
     good:      { color: "text-primary",     bg: "bg-primary",     label: "Bom" },
-    warning:   { color: "text-[#3b6ff5]",  bg: "bg-[#3b6ff5]",  label: "Atenção" },
-    critical:  { color: "text-red-500",     bg: "bg-red-500",     label: "Crítico" },
+    warning:   { color: "text-primary",  bg: "bg-primary",  label: "Atenção" },
+    critical:  { color: "text-destructive",     bg: "bg-destructive",     label: "Crítico" },
   };
 
   const ROLE_ICON: Record<string, typeof Users> = {
@@ -397,7 +397,7 @@ export default function CEOPage() {
           </div>
           <div className="card">
             <p className="text-xs text-muted-foreground">Risco de Churn</p>
-            <p className="text-2xl font-bold text-red-500 mt-1">
+            <p className="text-2xl font-bold text-destructive mt-1">
               {clients.filter((c) => c.status === "at_risk").length} clientes
             </p>
             <p className="text-xs text-muted-foreground mt-1">precisam de atenção</p>
@@ -429,22 +429,22 @@ export default function CEOPage() {
             <div className="space-y-4 animate-fade-in">
               {/* Ad Rejection Alert */}
               {mockAdCampaigns.filter((c) => c.status === "error").length > 0 && (
-                <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 kpi-danger animate-fade-in">
+                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 kpi-danger animate-fade-in">
                   <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-red-500/15 flex items-center justify-center shrink-0">
-                      <AlertCircle size={18} className="text-red-400" />
+                    <div className="w-9 h-9 rounded-lg bg-destructive/15 flex items-center justify-center shrink-0">
+                      <AlertCircle size={18} className="text-destructive" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h4 className="text-sm font-bold text-red-400">Anúncios com Erro / Rejeitados</h4>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/20 font-bold">
+                        <h4 className="text-sm font-bold text-destructive">Anúncios com Erro / Rejeitados</h4>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/20 font-bold">
                           {mockAdCampaigns.filter((c) => c.status === "error").length}
                         </span>
                       </div>
                       <div className="space-y-1.5">
                         {mockAdCampaigns.filter((c) => c.status === "error").map((camp) => (
                           <div key={camp.id} className="flex items-center gap-2 text-xs">
-                            <ZapOff size={12} className="text-red-400 shrink-0" />
+                            <ZapOff size={12} className="text-destructive shrink-0" />
                             <span className="text-foreground font-medium">{camp.name}</span>
                             <span className="text-muted-foreground">·</span>
                             <span className="text-muted-foreground">{camp.clientName}</span>
@@ -549,18 +549,18 @@ export default function CEOPage() {
                             <div className="flex-1 h-5 bg-muted rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all ${
-                                  stage.key === bottleneck?.key ? "bg-red-500" : stage.key === "published" ? "bg-[#0d4af5]" : "bg-primary"
+                                  stage.key === bottleneck?.key ? "bg-destructive" : stage.key === "published" ? "bg-primary" : "bg-primary"
                                 }`}
                                 style={{ width: `${(stage.count / maxCount) * 100}%` }}
                               />
                             </div>
-                            <span className={`text-xs font-bold w-8 ${stage.key === bottleneck?.key ? "text-red-500" : "text-foreground"}`}>
+                            <span className={`text-xs font-bold w-8 ${stage.key === bottleneck?.key ? "text-destructive" : "text-foreground"}`}>
                               {stage.count}
                             </span>
                           </div>
                         ))}
                         {bottleneck && bottleneck.count > 0 && (
-                          <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mt-2">
+                          <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2 mt-2">
                             Gargalo: <strong>{bottleneck.count} cards</strong> acumulados em &ldquo;{bottleneck.label}&rdquo;
                           </p>
                         )}
@@ -575,15 +575,15 @@ export default function CEOPage() {
                             <p className="text-[10px] text-muted-foreground">Designs pendentes</p>
                           </div>
                           <div className="bg-muted rounded-lg p-3 text-center">
-                            <p className="text-2xl font-bold text-[#0d4af5]">{designDone}</p>
+                            <p className="text-2xl font-bold text-primary">{designDone}</p>
                             <p className="text-[10px] text-muted-foreground">Designs concluídos</p>
                           </div>
                           <div className="bg-muted rounded-lg p-3 text-center">
-                            <p className="text-2xl font-bold text-[#3b6ff5]">{cardsWithoutArt}</p>
+                            <p className="text-2xl font-bold text-primary">{cardsWithoutArt}</p>
                             <p className="text-[10px] text-muted-foreground">Cards sem arte</p>
                           </div>
                           <div className="bg-muted rounded-lg p-3 text-center">
-                            <p className={`text-2xl font-bold ${stuckCards.length > 0 ? "text-red-500" : "text-foreground"}`}>{stuckCards.length}</p>
+                            <p className={`text-2xl font-bold ${stuckCards.length > 0 ? "text-destructive" : "text-foreground"}`}>{stuckCards.length}</p>
                             <p className="text-[10px] text-muted-foreground">Cards parados +3 dias</p>
                           </div>
                         </div>
@@ -598,12 +598,12 @@ export default function CEOPage() {
                             const isIdle = w.active === 0;
                             return (
                               <div key={w.person} className={`bg-muted rounded-lg p-3 border ${
-                                isOverloaded ? "border-red-500/30" : isIdle ? "border-[#3b6ff5]/30" : "border-border"
+                                isOverloaded ? "border-destructive/30" : isIdle ? "border-primary/30" : "border-border"
                               }`}>
                                 <div className="flex items-center justify-between">
                                   <span className="text-sm font-medium text-foreground">{w.person}</span>
-                                  {isOverloaded && <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded">Sobrecarregado</span>}
-                                  {isIdle && <span className="text-[10px] text-[#3b6ff5] bg-[#0d4af5]/10 px-2 py-0.5 rounded">Ocioso</span>}
+                                  {isOverloaded && <span className="text-[10px] text-destructive bg-destructive/10 px-2 py-0.5 rounded">Sobrecarregado</span>}
+                                  {isIdle && <span className="text-[10px] text-primary bg-primary/10 px-2 py-0.5 rounded">Ocioso</span>}
                                 </div>
                                 <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                                   <span>{w.active} ativos</span>
@@ -676,15 +676,15 @@ export default function CEOPage() {
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 <div className="bg-muted rounded-lg p-3 text-center">
-                                  <p className="text-2xl font-bold text-[#0d4af5]">{verifiedCount}</p>
+                                  <p className="text-2xl font-bold text-primary">{verifiedCount}</p>
                                   <p className="text-[10px] text-muted-foreground">Verificados ✓</p>
                                 </div>
-                                <div className={`bg-muted rounded-lg p-3 text-center ${publishedWithoutVerify > 0 ? "border border-amber-500/30" : ""}`}>
-                                  <p className={`text-2xl font-bold ${publishedWithoutVerify > 0 ? "text-amber-400" : "text-foreground"}`}>{publishedWithoutVerify}</p>
+                                <div className={`bg-muted rounded-lg p-3 text-center ${publishedWithoutVerify > 0 ? "border border-lone-warning-border" : ""}`}>
+                                  <p className={`text-2xl font-bold ${publishedWithoutVerify > 0 ? "text-lone-warning" : "text-foreground"}`}>{publishedWithoutVerify}</p>
                                   <p className="text-[10px] text-muted-foreground">Sem verificação</p>
                                 </div>
-                                <div className={`bg-muted rounded-lg p-3 text-center ${unverifiedScheduled.length > 0 ? "border border-red-500/30" : ""}`}>
-                                  <p className={`text-2xl font-bold ${unverifiedScheduled.length > 0 ? "text-red-400" : "text-foreground"}`}>{unverifiedScheduled.length}</p>
+                                <div className={`bg-muted rounded-lg p-3 text-center ${unverifiedScheduled.length > 0 ? "border border-destructive/30" : ""}`}>
+                                  <p className={`text-2xl font-bold ${unverifiedScheduled.length > 0 ? "text-destructive" : "text-foreground"}`}>{unverifiedScheduled.length}</p>
                                   <p className="text-[10px] text-muted-foreground">Agendados pendentes</p>
                                 </div>
                                 <div className="bg-muted rounded-lg p-3 text-center">
@@ -709,9 +709,9 @@ export default function CEOPage() {
                                         <div key={name} className="flex items-center gap-3 bg-muted/50 rounded-lg p-2.5">
                                           <span className="text-xs font-medium text-foreground w-32 shrink-0">{name}</span>
                                           <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                            <div className={`h-full rounded-full ${rate >= 80 ? "bg-[#0d4af5]" : rate >= 50 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${rate}%` }} />
+                                            <div className={`h-full rounded-full ${rate >= 80 ? "bg-primary" : rate >= 50 ? "bg-lone-warning-bg" : "bg-destructive"}`} style={{ width: `${rate}%` }} />
                                           </div>
-                                          <span className={`text-xs font-bold w-10 text-right ${rate >= 80 ? "text-[#0d4af5]" : rate >= 50 ? "text-amber-400" : "text-red-400"}`}>{rate}%</span>
+                                          <span className={`text-xs font-bold w-10 text-right ${rate >= 80 ? "text-primary" : rate >= 50 ? "text-lone-warning" : "text-destructive"}`}>{rate}%</span>
                                           <span className="text-[10px] text-muted-foreground w-20 text-right">{pub} pub · {sched} pend</span>
                                         </div>
                                       );
@@ -738,8 +738,8 @@ export default function CEOPage() {
                                       <div className="flex items-center justify-between mb-1.5">
                                         <span className="text-xs font-medium text-foreground">{client.name}</span>
                                         <div className="flex items-center gap-2">
-                                          <span className="text-[10px] text-[#0d4af5] font-semibold">{daysWithPost}d com post</span>
-                                          <span className="text-[10px] text-red-400 font-semibold">{daysWithout}d sem post</span>
+                                          <span className="text-[10px] text-primary font-semibold">{daysWithPost}d com post</span>
+                                          <span className="text-[10px] text-destructive font-semibold">{daysWithout}d sem post</span>
                                         </div>
                                       </div>
                                       {/* Compact: no week header needed */}
@@ -758,8 +758,8 @@ export default function CEOPage() {
                                                 isFuture
                                                   ? "bg-muted/30 text-muted-foreground/30"
                                                   : hasPost
-                                                    ? "bg-[#0d4af5]/25 text-[#0d4af5]"
-                                                    : "bg-red-500/15 text-red-400"
+                                                    ? "bg-primary/25 text-primary"
+                                                    : "bg-destructive/15 text-destructive"
                                               } ${isToday ? "ring-1 ring-foreground/40" : ""}`}
                                             >
                                               {day}
@@ -774,11 +774,11 @@ export default function CEOPage() {
                               {/* Legend */}
                               <div className="flex items-center gap-4 pt-2 border-t border-border">
                                 <div className="flex items-center gap-1.5">
-                                  <div className="w-3 h-3 rounded-sm bg-[#0d4af5]/20 border border-[#0d4af5]/30" />
+                                  <div className="w-3 h-3 rounded-sm bg-primary/20 border border-primary/30" />
                                   <span className="text-[10px] text-muted-foreground">Com post</span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                  <div className="w-3 h-3 rounded-sm bg-red-500/10 border border-red-500/20" />
+                                  <div className="w-3 h-3 rounded-sm bg-destructive/10 border border-destructive/20" />
                                   <span className="text-[10px] text-muted-foreground">Sem post</span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
@@ -794,19 +794,19 @@ export default function CEOPage() {
                       {/* Stuck cards detail */}
                       {stuckCards.length > 0 && (
                         <div className="card space-y-3 lg:col-span-2">
-                          <p className="text-xs text-red-400 font-medium uppercase tracking-wider">Cards Parados (+3 dias no mesmo status)</p>
+                          <p className="text-xs text-destructive font-medium uppercase tracking-wider">Cards Parados (+3 dias no mesmo status)</p>
                           <div className="space-y-2">
                             {stuckCards.slice(0, 8).map((card) => {
                               const enteredAt = card.columnEnteredAt?.[card.status] ?? card.statusChangedAt!;
                               const days = Math.round((Date.now() - new Date(enteredAt).getTime()) / 86400000);
                               return (
                                 <div key={card.id} className="flex items-center gap-3 bg-muted rounded-lg p-2.5">
-                                  <div className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                                  <div className="w-2 h-2 rounded-full bg-destructive shrink-0" />
                                   <div className="flex-1 min-w-0">
                                     <p className="text-xs font-medium text-foreground truncate">{card.title}</p>
                                     <p className="text-[10px] text-muted-foreground">{card.clientName} · {card.socialMedia}</p>
                                   </div>
-                                  <span className="text-xs text-red-400 font-medium shrink-0">{days}d em &ldquo;{card.status}&rdquo;</span>
+                                  <span className="text-xs text-destructive font-medium shrink-0">{days}d em &ldquo;{card.status}&rdquo;</span>
                                 </div>
                               );
                             })}
@@ -870,7 +870,7 @@ export default function CEOPage() {
                               <circle cx="50" cy="50" r="42" fill="none" stroke="var(--muted)" strokeWidth="6" />
                               <circle
                                 cx="50" cy="50" r="42" fill="none"
-                                stroke={levelConfig.bg === "bg-[#0d4af5]" ? "#0d4af5" : levelConfig.bg === "bg-primary" ? "var(--primary)" : levelConfig.bg === "bg-[#3b6ff5]" ? "#3b6ff5" : "#ef4444"}
+                                stroke={levelConfig.bg === "bg-primary" ? "var(--primary)" : levelConfig.bg === "bg-primary" ? "var(--primary)" : levelConfig.bg === "bg-primary" ? "var(--primary)" : "var(--destructive)"}
                                 strokeWidth="6"
                                 strokeLinecap="round"
                                 strokeDasharray={`${member.overallScore * 2.64} 264`}
@@ -911,7 +911,7 @@ export default function CEOPage() {
                               <div className="h-2 bg-muted rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all ${
-                                    member.taskRate >= 80 ? "bg-[#0d4af5]" : member.taskRate >= 50 ? "bg-[#3b6ff5]" : "bg-red-500"
+                                    member.taskRate >= 80 ? "bg-primary" : member.taskRate >= 50 ? "bg-primary" : "bg-destructive"
                                   }`}
                                   style={{ width: `${member.taskRate}%` }}
                                 />
@@ -936,7 +936,7 @@ export default function CEOPage() {
                                 </div>
                                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                                   <div
-                                    className="h-full rounded-full bg-[#0d4af5] transition-all"
+                                    className="h-full rounded-full bg-primary transition-all"
                                     style={{ width: `${member.totalCards > 0 ? Math.round((member.published / member.totalCards) * 100) : 0}%` }}
                                   />
                                 </div>
@@ -957,7 +957,7 @@ export default function CEOPage() {
                                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                                   <div
                                     className={`h-full rounded-full transition-all ${
-                                      member.supportDone >= member.supportTotal ? "bg-[#0d4af5]" : "bg-[#3b6ff5]"
+                                      member.supportDone >= member.supportTotal ? "bg-primary" : "bg-primary"
                                     }`}
                                     style={{ width: `${member.supportTotal > 0 ? Math.round((member.supportDone / member.supportTotal) * 100) : 0}%` }}
                                   />
@@ -978,7 +978,7 @@ export default function CEOPage() {
                                 </div>
                                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                                   <div
-                                    className="h-full rounded-full bg-[#3b6ff5] transition-all"
+                                    className="h-full rounded-full bg-primary transition-all"
                                     style={{ width: `${member.designTotal > 0 ? Math.round((member.designDone / member.designTotal) * 100) : 0}%` }}
                                   />
                                 </div>
@@ -1141,12 +1141,12 @@ export default function CEOPage() {
                                   onClick={() => setEditAvatar(opt.type)}
                                   className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${
                                     editAvatar === opt.type
-                                      ? "border-[#0d4af5]/50 bg-[#0d4af5]/[0.06]"
-                                      : "border-transparent hover:bg-white/[0.03]"
+                                      ? "border-primary/50 bg-primary/[0.06]"
+                                      : "border-transparent hover:bg-card/[0.03]"
                                   }`}
                                 >
                                   <MedievalAvatar type={opt.type} size={36} />
-                                  <span className="text-[9px] text-zinc-500">{opt.label}</span>
+                                  <span className="text-[9px] text-muted-foreground">{opt.label}</span>
                                 </button>
                               ))}
                             </div>
@@ -1207,7 +1207,7 @@ export default function CEOPage() {
                         <div className="flex items-center gap-2">
                           <p className="font-semibold text-foreground text-sm">{member.name}</p>
                           {!member.active && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 font-bold uppercase">Desativado</span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-bold uppercase">Desativado</span>
                           )}
                         </div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
@@ -1230,7 +1230,7 @@ export default function CEOPage() {
                           onClick={() => handleToggleActive(member.id)}
                           className={`p-2 rounded-lg transition-colors ${
                             member.active
-                              ? "text-muted-foreground hover:text-[#3b6ff5] hover:bg-[#0d4af5]/10"
+                              ? "text-muted-foreground hover:text-primary hover:bg-primary/10"
                               : "text-primary hover:bg-primary/10"
                           }`}
                           title={member.active ? "Desativar acesso" : "Reativar acesso"}
@@ -1240,10 +1240,10 @@ export default function CEOPage() {
 
                         {isConfirmingDelete ? (
                           <div className="flex items-center gap-1 animate-fade-in">
-                            <span className="text-xs text-red-400 mr-1">Confirmar?</span>
+                            <span className="text-xs text-destructive mr-1">Confirmar?</span>
                             <button
                               onClick={() => handleDeleteMember(member.id)}
-                              className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors text-xs font-medium"
+                              className="p-1.5 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors text-xs font-medium"
                             >
                               Sim
                             </button>
@@ -1257,7 +1257,7 @@ export default function CEOPage() {
                         ) : (
                           <button
                             onClick={() => setConfirmDeleteId(member.id)}
-                            className="p-2 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                             title="Remover"
                           >
                             <Trash2 size={14} />
@@ -1270,7 +1270,7 @@ export default function CEOPage() {
               </div>
 
               {/* Info note */}
-              <div className="flex items-start gap-3 bg-[#0d4af5]/5 border border-[#0d4af5]/15 rounded-xl px-4 py-3">
+              <div className="flex items-start gap-3 bg-primary/5 border border-primary/15 rounded-xl px-4 py-3">
                 <Shield size={16} className="text-primary mt-0.5 shrink-0" />
                 <div className="text-xs text-muted-foreground space-y-1">
                   <p><strong className="text-foreground">Nota sobre persistência:</strong> Alterações feitas aqui são salvas na sessão atual. Com Supabase ativo, os dados persistem no banco de dados.</p>
@@ -1287,7 +1287,7 @@ export default function CEOPage() {
                 const isGood = report.communicationHealth >= 4;
                 const isBad = report.communicationHealth <= 2;
                 return (
-                  <div key={report.id} className={`card border ${isBad ? "border-red-500/20" : isGood ? "border-primary/20" : "border-border"}`}>
+                  <div key={report.id} className={`card border ${isBad ? "border-destructive/20" : isGood ? "border-primary/20" : "border-border"}`}>
                     <div className="flex items-start justify-between gap-4 mb-4">
                       <div>
                         <h4 className="font-semibold text-foreground">{report.clientName}</h4>
@@ -1320,7 +1320,7 @@ export default function CEOPage() {
                         <div>
                           <div className="flex gap-1 justify-center">
                             {[1,2,3,4,5].map((s) => (
-                              <span key={s} className={`w-4 h-4 rounded-sm ${s <= report.communicationHealth ? (isBad ? "bg-red-500" : isGood ? "bg-primary" : "bg-zinc-500") : "bg-muted"}`} />
+                              <span key={s} className={`w-4 h-4 rounded-sm ${s <= report.communicationHealth ? (isBad ? "bg-destructive" : isGood ? "bg-primary" : "bg-muted") : "bg-muted"}`} />
                             ))}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">Saúde da Comunicação</p>
@@ -1339,15 +1339,15 @@ export default function CEOPage() {
                     <div className="grid grid-cols-3 gap-4 text-sm">
                       <div>
                         <p className="text-xs text-primary font-medium mb-1">Destaques</p>
-                        <p className="text-[#c0c0cc] leading-relaxed">{report.highlights}</p>
+                        <p className="text-muted-foreground leading-relaxed">{report.highlights}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-red-500 font-medium mb-1">Desafios</p>
-                        <p className="text-[#c0c0cc] leading-relaxed">{report.challenges}</p>
+                        <p className="text-xs text-destructive font-medium mb-1">Desafios</p>
+                        <p className="text-muted-foreground leading-relaxed">{report.challenges}</p>
                       </div>
                       <div>
                         <p className="text-xs text-primary font-medium mb-1">Próximos Passos</p>
-                        <p className="text-[#c0c0cc] leading-relaxed">{report.nextSteps}</p>
+                        <p className="text-muted-foreground leading-relaxed">{report.nextSteps}</p>
                       </div>
                     </div>
                   </div>
@@ -1384,10 +1384,10 @@ export default function CEOPage() {
                       ])];
 
                       return (
-                        <div key={name} className={`card border ${isOverloaded ? "border-red-500/30" : isHigh ? "border-amber-500/20" : "border-border"}`}>
+                        <div key={name} className={`card border ${isOverloaded ? "border-destructive/30" : isHigh ? "border-lone-warning-border" : "border-border"}`}>
                           <div className="flex items-center gap-4 mb-3">
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${
-                              isOverloaded ? "bg-red-500/15 text-red-400" : isHigh ? "bg-amber-500/15 text-amber-400" : "bg-[#0d4af5]/15 text-[#0d4af5]"
+                              isOverloaded ? "bg-destructive/15 text-destructive" : isHigh ? "bg-lone-warning-bg text-lone-warning" : "bg-primary/15 text-primary"
                             }`}>
                               {name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
                             </div>
@@ -1396,7 +1396,7 @@ export default function CEOPage() {
                               <p className="text-[10px] text-muted-foreground">{memberClients.slice(0, 3).join(", ")}{memberClients.length > 3 ? ` +${memberClients.length - 3}` : ""}</p>
                             </div>
                             <div className="text-right">
-                              <p className={`text-lg font-bold ${isOverloaded ? "text-red-400" : isHigh ? "text-amber-400" : "text-foreground"}`}>
+                              <p className={`text-lg font-bold ${isOverloaded ? "text-destructive" : isHigh ? "text-lone-warning" : "text-foreground"}`}>
                                 {utilPct}%
                               </p>
                               <p className="text-[10px] text-muted-foreground">{totalActive}/{CAPACITY_PER_WEEK} itens</p>
@@ -1407,7 +1407,7 @@ export default function CEOPage() {
                           <div className="h-2.5 bg-muted rounded-full overflow-hidden mb-3">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${
-                                isOverloaded ? "bg-red-500" : isHigh ? "bg-amber-500" : "bg-[#0d4af5]"
+                                isOverloaded ? "bg-destructive" : isHigh ? "bg-lone-warning-bg" : "bg-primary"
                               }`}
                               style={{ width: `${Math.min(utilPct, 100)}%` }}
                             />
@@ -1430,9 +1430,9 @@ export default function CEOPage() {
                           </div>
 
                           {isOverloaded && (
-                            <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                              <AlertTriangle size={12} className="text-red-400 shrink-0" />
-                              <span className="text-[10px] text-red-400 font-medium">Sobrecarregado — considere redistribuir tarefas</span>
+                            <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/20">
+                              <AlertTriangle size={12} className="text-destructive shrink-0" />
+                              <span className="text-[10px] text-destructive font-medium">Sobrecarregado — considere redistribuir tarefas</span>
                             </div>
                           )}
                         </div>
@@ -1473,9 +1473,9 @@ export default function CEOPage() {
 
                   const riskLevel = score >= 60 ? "critical" : score >= 35 ? "warning" : "safe";
                   const riskConfig = {
-                    critical: { label: "Alto Risco", color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/30", bar: "bg-red-500" },
-                    warning: { label: "Atenção", color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", bar: "bg-amber-500" },
-                    safe: { label: "Estável", color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/10", border: "border-[#0d4af5]/20", bar: "bg-[#0d4af5]" },
+                    critical: { label: "Alto Risco", color: "text-destructive", bg: "bg-destructive/10", border: "border-destructive/30", bar: "bg-destructive" },
+                    warning: { label: "Atenção", color: "text-lone-warning", bg: "bg-lone-warning-bg", border: "border-lone-warning-border", bar: "bg-lone-warning-bg" },
+                    safe: { label: "Estável", color: "text-primary", bg: "bg-primary/10", border: "border-primary/20", bar: "bg-primary" },
                   }[riskLevel];
 
                   const signals: string[] = [];
@@ -1549,14 +1549,14 @@ export default function CEOPage() {
                       <div key={client.id} className="card">
                         <div className="flex items-center gap-4 mb-3">
                           <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
-                            client.status === "at_risk" ? "bg-red-500/20 text-red-500" : "bg-primary/20 text-primary"
+                            client.status === "at_risk" ? "bg-destructive/20 text-destructive" : "bg-primary/20 text-primary"
                           }`}>
                             {client.name[0]}
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center justify-between">
                               <span className="font-medium text-foreground">{client.name}</span>
-                              <span className={`text-xs font-medium ${client.status === "at_risk" ? "text-red-500" : "text-primary"}`}>
+                              <span className={`text-xs font-medium ${client.status === "at_risk" ? "text-destructive" : "text-primary"}`}>
                                 {getStatusLabel(client.status)}
                               </span>
                             </div>
@@ -1570,7 +1570,7 @@ export default function CEOPage() {
                         <div className="h-2 bg-muted rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${
-                              client.status === "at_risk" ? "bg-red-500" : "bg-primary"
+                              client.status === "at_risk" ? "bg-destructive" : "bg-primary"
                             }`}
                             style={{ width: `${barPct}%` }}
                           />
@@ -1676,15 +1676,15 @@ function TimesheetTab({
 
       {/* Over-time alerts */}
       {overtimeItems.length > 0 && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+        <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg p-4">
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-amber-400">⚠️</span>
+            <span className="text-lone-warning">⚠️</span>
             <h3 className="text-sm font-bold text-foreground">Alertas de Over-Time ({overtimeItems.length})</h3>
           </div>
           <div className="space-y-2">
             {overtimeItems.map((item, i) => (
               <div key={i} className="flex items-center gap-3 text-xs">
-                <span className="text-amber-400 font-bold w-16 text-right">{formatTimeSpent(item.ms)}</span>
+                <span className="text-lone-warning font-bold w-16 text-right">{formatTimeSpent(item.ms)}</span>
                 <span className="text-foreground font-medium flex-1 truncate">{item.title}</span>
                 <span className="text-muted-foreground">{item.clientName}</span>
                 <span className="text-muted-foreground">· {item.assignedTo}</span>
@@ -1697,7 +1697,7 @@ function TimesheetTab({
       {/* Hours by client */}
       <div className="card">
         <h3 className="font-semibold text-foreground text-sm mb-4 flex items-center gap-2">
-          <BarChart2 size={14} className="text-[#0d4af5]" />
+          <BarChart2 size={14} className="text-primary" />
           Alocação por Cliente (horas)
         </h3>
         {hoursByClient.length === 0 ? (
@@ -1710,11 +1710,11 @@ function TimesheetTab({
                 <div key={entry.name}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs text-foreground font-medium">{entry.name}</span>
-                    <span className="text-xs text-[#0d4af5] font-bold">{formatTimeSpent(entry.ms)}</span>
+                    <span className="text-xs text-primary font-bold">{formatTimeSpent(entry.ms)}</span>
                   </div>
                   <div className="h-3 bg-muted rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-[#0d4af5] rounded-full transition-all duration-500"
+                      className="h-full bg-primary rounded-full transition-all duration-500"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -1728,7 +1728,7 @@ function TimesheetTab({
       {/* Average by format */}
       <div className="card">
         <h3 className="font-semibold text-foreground text-sm mb-4 flex items-center gap-2">
-          <Clock size={14} className="text-[#0d4af5]" />
+          <Clock size={14} className="text-primary" />
           Tempo Médio por Formato de Conteúdo
         </h3>
         {avgByFormat.length === 0 ? (
@@ -1739,7 +1739,7 @@ function TimesheetTab({
               <div key={format} className="p-3 rounded-xl border border-border bg-muted/30">
                 <p className="text-xs text-muted-foreground">{format}</p>
                 <p className="text-lg font-bold text-foreground mt-1">{formatTimeSpent(avgMs)}</p>
-                <p className="text-[10px] text-zinc-600">média · {count} {count === 1 ? "card" : "cards"}</p>
+                <p className="text-[10px] text-muted-foreground">média · {count} {count === 1 ? "card" : "cards"}</p>
               </div>
             ))}
           </div>
@@ -1749,7 +1749,7 @@ function TimesheetTab({
       {/* Team ranking */}
       <div className="card">
         <h3 className="font-semibold text-foreground text-sm mb-4 flex items-center gap-2">
-          <Users size={14} className="text-[#0d4af5]" />
+          <Users size={14} className="text-primary" />
           Ranking de Dedicação
         </h3>
         {teamRanking.length === 0 ? (
@@ -1759,7 +1759,7 @@ function TimesheetTab({
             {teamRanking.map((member, i) => (
               <div key={member.name} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
                 <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                  i === 0 ? "bg-[#0d4af5]/20 text-[#0d4af5]" : "bg-muted text-muted-foreground"
+                  i === 0 ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
                 }`}>
                   {i + 1}
                 </span>
@@ -1770,7 +1770,7 @@ function TimesheetTab({
                 <div className="text-right">
                   <p className="text-sm font-bold text-foreground">{formatTimeSpent(member.totalMs)}</p>
                   {member.highPriorityMs > 0 && (
-                    <p className="text-[10px] text-amber-400">{formatTimeSpent(member.highPriorityMs)} em alta prioridade</p>
+                    <p className="text-[10px] text-lone-warning">{formatTimeSpent(member.highPriorityMs)} em alta prioridade</p>
                   )}
                 </div>
               </div>

@@ -72,9 +72,9 @@ interface TaskBar {
 
 const TYPE_COLORS: Record<EventType, string> = {
   content: "bg-primary",
-  task: "bg-[#3b6ff5]",
-  routine: "bg-zinc-500",
-  reminder: "bg-[#0d4af5]",
+  task: "bg-primary",
+  routine: "bg-muted",
+  reminder: "bg-primary",
 };
 
 const TYPE_LABELS: Record<EventType, string> = {
@@ -99,10 +99,10 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 };
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
-  pending: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20",
-  in_progress: "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20",
-  review: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  done: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+  pending: "text-muted-foreground bg-muted border-border",
+  in_progress: "text-primary bg-primary/10 border-primary/20",
+  review: "text-lone-warning bg-lone-warning-bg border-lone-warning-border",
+  done: "text-lone-success bg-lone-success-bg border-lone-success-border",
 };
 
 const PRIORITY_LABELS: Record<Priority, string> = {
@@ -113,10 +113,10 @@ const PRIORITY_LABELS: Record<Priority, string> = {
 };
 
 const PRIORITY_COLORS: Record<Priority, string> = {
-  low: "text-zinc-400",
-  medium: "text-[#3b6ff5]",
-  high: "text-amber-400",
-  critical: "text-red-400",
+  low: "text-muted-foreground",
+  medium: "text-primary",
+  high: "text-lone-warning",
+  critical: "text-destructive",
 };
 
 type CreateType = "task" | "social" | "reminder";
@@ -312,7 +312,7 @@ export default function CalendarPage() {
         clientName: card.clientName,
         date: card.dueDate,
         dueDate: card.dueDate,
-        color: card.designerDeliveredAt ? "bg-[#0d4af5]" : card.designRequestId ? "bg-[#3b6ff5]" : TYPE_COLORS.content,
+        color: card.designerDeliveredAt ? "bg-primary" : card.designRequestId ? "bg-primary" : TYPE_COLORS.content,
         detail: `${card.format} · ${card.status.replace(/_/g, " ")}${designTag ? ` · ${designTag}` : ""}`,
         raw: card,
       });
@@ -532,7 +532,7 @@ export default function CalendarPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-3">
-            <Calendar size={24} className="text-[#0d4af5]" />
+            <Calendar size={24} className="text-primary" />
             Calendário Unificado
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -546,7 +546,7 @@ export default function CalendarPage() {
               setCreateDate(todayStr);
               setShowCreate(true);
             }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all shadow-[0_0_20px_rgba(10,52,245,0.3)]"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all shadow-[0_0_20px_rgba(10,52,245,0.3)]"
           >
             <Plus size={14} /> Criar
           </button>
@@ -568,7 +568,7 @@ export default function CalendarPage() {
               onClick={() => toggleType(t)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
                 active
-                  ? "bg-white/5 border-white/10 text-foreground"
+                  ? "bg-card/5 border-border text-foreground"
                   : "border-transparent text-muted-foreground/50 line-through"
               }`}
             >
@@ -642,15 +642,15 @@ export default function CalendarPage() {
 
           {/* Banner de feriados nacionais do mês */}
           {monthHolidays.length > 0 && (
-            <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] p-3">
+            <div className="mb-3 rounded-xl border border-lone-warning-border bg-lone-warning-bg/[0.05] p-3">
               <div className="flex items-start gap-2 flex-wrap">
-                <Flag size={12} className="text-amber-400 mt-0.5 shrink-0" />
-                <p className="text-[11px] text-amber-400 font-semibold uppercase tracking-wider">
+                <Flag size={12} className="text-lone-warning mt-0.5 shrink-0" />
+                <p className="text-[11px] text-lone-warning font-semibold uppercase tracking-wider">
                   {monthHolidays.length} feriado{monthHolidays.length > 1 ? "s" : ""} nacional{monthHolidays.length > 1 ? "is" : ""}
                 </p>
                 <div className="flex flex-wrap gap-1.5 ml-1">
                   {monthHolidays.map((h) => (
-                    <span key={h.day} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                    <span key={h.day} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border">
                       <strong className="font-bold">{String(h.day).padStart(2, "0")}</strong>
                       <span>{h.name}</span>
                     </span>
@@ -662,15 +662,15 @@ export default function CalendarPage() {
 
           {/* Banner de feriados estaduais do mês */}
           {monthStateHolidays.length > 0 && (
-            <div className="mb-3 rounded-xl border border-orange-500/20 bg-orange-500/[0.05] p-3">
+            <div className="mb-3 rounded-xl border border-lone-warning-border bg-lone-warning-bg/[0.05] p-3">
               <div className="flex items-start gap-2 flex-wrap">
-                <Flag size={12} className="text-orange-400 mt-0.5 shrink-0" />
-                <p className="text-[11px] text-orange-400 font-semibold uppercase tracking-wider">
+                <Flag size={12} className="text-lone-warning mt-0.5 shrink-0" />
+                <p className="text-[11px] text-lone-warning font-semibold uppercase tracking-wider">
                   {monthStateHolidays.length} feriado{monthStateHolidays.length > 1 ? "s" : ""} estadua{monthStateHolidays.length > 1 ? "is" : "l"}
                 </p>
                 <div className="flex flex-wrap gap-1.5 ml-1">
                   {monthStateHolidays.map((h) => (
-                    <span key={`${h.day}-${h.name}`} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-orange-500/10 text-orange-300 border border-orange-500/20">
+                    <span key={`${h.day}-${h.name}`} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border">
                       <strong className="font-bold">{String(h.day).padStart(2, "0")}</strong>
                       <span>{h.name}{h.uf ? ` · ${h.uf}` : ""}</span>
                     </span>
@@ -746,11 +746,11 @@ export default function CalendarPage() {
                   onDrop={day ? (e) => handleDrop(e, day) : undefined}
                   className={`group min-h-[48px] sm:min-h-[70px] rounded-lg p-1 sm:p-1.5 flex flex-col transition-all border relative ${
                     dragOverDay === day
-                      ? "bg-[#0d4af5]/15 border-[#0d4af5]/50 ring-1 ring-[#0d4af5]/30"
+                      ? "bg-primary/15 border-primary/50 ring-1 ring-primary/30"
                       : todayFlag
-                      ? "bg-[#0d4af5]/10 border-[#0d4af5]/30"
+                      ? "bg-primary/10 border-primary/30"
                       : selected
-                      ? "bg-white/5 border-white/10"
+                      ? "bg-card/5 border-border"
                       : day
                       ? "border-transparent hover:bg-muted/50 cursor-pointer"
                       : "border-transparent"
@@ -769,24 +769,24 @@ export default function CalendarPage() {
                           const titleAttr = obs ? obs.allInDay.map((x) => x.name).join(" • ") : undefined;
                           // Cores por escopo de feriado: nacional=âmbar, estadual=laranja, municipal=lima
                           const dayColor = hasDeadline
-                            ? "text-[#ff2d55] font-bold drop-shadow-[0_0_6px_rgba(255,45,85,0.6)]"
+                            ? "text-destructive font-bold drop-shadow-[0_0_6px_rgba(255,45,85,0.6)]"
                             : todayFlag
-                            ? "text-[#0d4af5] font-bold"
+                            ? "text-primary font-bold"
                             : isNational
-                            ? "text-amber-400 font-bold"
+                            ? "text-lone-warning font-bold"
                             : isState
-                            ? "text-orange-400 font-bold"
+                            ? "text-lone-warning font-bold"
                             : isMunicipal
                             ? "text-lime-400 font-bold"
                             : isCommemorative
                             ? "text-pink-300 font-medium"
                             : "text-foreground";
-                          const flagColor = isNational ? "text-amber-400" : isState ? "text-orange-400" : isMunicipal ? "text-lime-400" : "";
+                          const flagColor = isNational ? "text-lone-warning" : isState ? "text-lone-warning" : isMunicipal ? "text-lime-400" : "";
                           return (
                             <span className={`text-xs font-medium flex items-center gap-1 ${dayColor}`} title={titleAttr}>
                               {day}
                               {hasDeadline && (
-                                <AlertTriangle size={10} className="text-[#ff2d55] drop-shadow-[0_0_4px_rgba(255,45,85,0.8)]" />
+                                <AlertTriangle size={10} className="text-destructive drop-shadow-[0_0_4px_rgba(255,45,85,0.8)]" />
                               )}
                               {!hasDeadline && isFeriado && (
                                 <Flag size={9} className={flagColor} aria-label={obs!.name} />
@@ -800,7 +800,7 @@ export default function CalendarPage() {
                         {/* Quick create + icon */}
                         <button
                           onClick={(e) => { e.stopPropagation(); openQuickCreate(day); }}
-                          className="w-4 h-4 rounded flex items-center justify-center text-zinc-700 opacity-0 group-hover:opacity-100 hover:text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all"
+                          className="w-4 h-4 rounded flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-all"
                           title="Criar evento"
                         >
                           <Plus size={10} />
@@ -822,14 +822,14 @@ export default function CalendarPage() {
                               title={`${rem.done ? "✓ " : ""}${rem.title}${rem.time ? ` às ${rem.time}` : ""} — arraste para reagendar`}
                               className={`w-[18px] h-[18px] rounded-md flex items-center justify-center transition-all cursor-grab active:cursor-grabbing ${
                                 rem.done
-                                  ? "bg-emerald-500/15 border border-emerald-500/30"
-                                  : "bg-[#0d4af5]/10 border border-[#0d4af5]/25 shadow-[0_0_6px_rgba(10,52,245,0.3)] hover:shadow-[0_0_10px_rgba(10,52,245,0.5)]"
+                                  ? "bg-lone-success-bg border border-lone-success-border"
+                                  : "bg-primary/10 border border-primary/25 shadow-[0_0_6px_rgba(10,52,245,0.3)] hover:shadow-[0_0_10px_rgba(10,52,245,0.5)]"
                               }`}
                             >
                               {rem.done ? (
-                                <Check size={8} className="text-emerald-400" />
+                                <Check size={8} className="text-lone-success" />
                               ) : (
-                                <Bell size={8} className="text-[#0d4af5] drop-shadow-[0_0_3px_rgba(10,52,245,0.8)]" />
+                                <Bell size={8} className="text-primary drop-shadow-[0_0_3px_rgba(10,52,245,0.8)]" />
                               )}
                             </button>
                             );
@@ -851,8 +851,8 @@ export default function CalendarPage() {
                               <button
                                 key={bar.taskId}
                                 onClick={(e) => { e.stopPropagation(); handleBarClick(bar); }}
-                                className={`h-[14px] flex items-center text-[9px] font-medium text-white truncate transition-all hover:brightness-125 ${
-                                  isDone ? "bg-emerald-600/60" : "bg-[#0d4af5]"
+                                className={`h-[14px] flex items-center text-[9px] font-medium text-foreground truncate transition-all hover:brightness-125 ${
+                                  isDone ? "bg-lone-success-bg" : "bg-primary"
                                 } ${isStart ? "rounded-l-sm pl-1" : "pl-0.5"} ${isEnd ? "rounded-r-sm pr-1" : "pr-0"}`}
                                 title={`${bar.title} — ${bar.clientName} (${bar.assignedTo})`}
                               >
@@ -881,15 +881,15 @@ export default function CalendarPage() {
                               onClick={(ev) => { ev.stopPropagation(); handleEventClick(e); }}
                               className={`flex items-center gap-1 px-1 py-0.5 rounded text-[10px] truncate text-left transition-all ${isDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${
                                 isTaskDeadline
-                                  ? "bg-red-500/15 text-[#ff2d55] font-bold drop-shadow-[0_0_4px_rgba(255,45,85,0.5)]"
+                                  ? "bg-destructive/15 text-destructive font-bold drop-shadow-[0_0_4px_rgba(255,45,85,0.5)]"
                                   : e.type === "content" ? "bg-primary/15 text-primary" :
-                                    e.type === "task" ? "bg-[#3b6ff5]/15 text-[#3b6ff5]" :
-                                    "bg-zinc-500/15 text-zinc-400"
+                                    e.type === "task" ? "bg-primary/15 text-primary" :
+                                    "bg-muted text-muted-foreground"
                               } hover:brightness-125`}
                               title={`${e.clientName}: ${e.title}`}
                             >
                               {isTaskDeadline && <span className="shrink-0">⚠️</span>}
-                              <span className={`w-1 h-1 rounded-full shrink-0 ${isTaskDeadline ? "bg-[#ff2d55]" : e.color}`} />
+                              <span className={`w-1 h-1 rounded-full shrink-0 ${isTaskDeadline ? "bg-destructive" : e.color}`} />
                               <span className="truncate">{e.title}</span>
                             </button>
                           );
@@ -918,7 +918,7 @@ export default function CalendarPage() {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => openQuickCreate(selectedDay)}
-                    className="w-6 h-6 rounded-md flex items-center justify-center text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all"
+                    className="w-6 h-6 rounded-md flex items-center justify-center text-primary hover:bg-primary/10 transition-all"
                     title="Criar evento neste dia"
                   >
                     <Plus size={14} />
@@ -933,7 +933,7 @@ export default function CalendarPage() {
                   <p className="text-xs text-muted-foreground mb-2">Nenhum evento neste dia.</p>
                   <button
                     onClick={() => openQuickCreate(selectedDay)}
-                    className="text-xs text-[#0d4af5] hover:underline flex items-center gap-1 mx-auto"
+                    className="text-xs text-primary hover:underline flex items-center gap-1 mx-auto"
                   >
                     <Plus size={12} /> Criar evento
                   </button>
@@ -951,24 +951,24 @@ export default function CalendarPage() {
                         onClick={() => handleEventClick(e)}
                         className={`w-full text-left p-3 rounded-lg border transition-all ${
                           isTaskDeadline
-                            ? "bg-red-500/5 border-red-500/20 hover:border-red-500/40"
+                            ? "bg-destructive/5 border-destructive/20 hover:border-destructive/40"
                             : isReminder
-                            ? (rem?.done ? "bg-emerald-500/5 border-emerald-500/20" : "bg-[#0d4af5]/5 border-[#0d4af5]/20 hover:border-[#0d4af5]/40")
+                            ? (rem?.done ? "bg-lone-success-bg border-lone-success-border" : "bg-primary/5 border-primary/20 hover:border-primary/40")
                             : "bg-muted/50 border-border/50 hover:border-border"
                         } ${e.type === "task" || isReminder ? "cursor-pointer hover:bg-muted/80" : ""}`}
                       >
                         <div className="flex items-center gap-2 mb-1">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${
-                            isReminder && rem?.done ? "bg-emerald-500" :
-                            isTaskDeadline ? "bg-[#ff2d55] shadow-[0_0_6px_rgba(255,45,85,0.8)]" : e.color
+                            isReminder && rem?.done ? "bg-lone-success-bg" :
+                            isTaskDeadline ? "bg-destructive shadow-[0_0_6px_rgba(255,45,85,0.8)]" : e.color
                           }`} />
                           <Icon size={12} className={
-                            isReminder ? (rem?.done ? "text-emerald-400" : "text-[#0d4af5]") :
-                            isTaskDeadline ? "text-[#ff2d55]" : "text-muted-foreground"
+                            isReminder ? (rem?.done ? "text-lone-success" : "text-primary") :
+                            isTaskDeadline ? "text-destructive" : "text-muted-foreground"
                           } />
                           <span className={`text-xs font-medium truncate ${
-                            isReminder && rem?.done ? "text-emerald-400 line-through" :
-                            isTaskDeadline ? "text-[#ff2d55] font-bold" : "text-foreground"
+                            isReminder && rem?.done ? "text-lone-success line-through" :
+                            isTaskDeadline ? "text-destructive font-bold" : "text-foreground"
                           }`}>
                             {isTaskDeadline && "⚠️ "}{e.title}
                           </span>
@@ -980,7 +980,7 @@ export default function CalendarPage() {
                         </div>
                         {isTaskDeadline && (
                           <div className="ml-[18px] mt-1">
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-[#ff2d55] font-bold border border-red-500/20">
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-bold border border-destructive/20">
                               PRAZO FINAL
                             </span>
                           </div>
@@ -1002,7 +1002,7 @@ export default function CalendarPage() {
           {upcomingDeadlines.length > 0 && (
             <div className="card animate-fade-in">
               <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
-                <AlertTriangle size={14} className="text-[#ff2d55]" />
+                <AlertTriangle size={14} className="text-destructive" />
                 Prazos Próximos
               </h3>
               <div className="space-y-2">
@@ -1021,15 +1021,15 @@ export default function CalendarPage() {
                       className="w-full text-left flex items-center gap-2 py-1.5 hover:bg-muted/50 rounded-md px-1 transition-all"
                     >
                       <span className={`text-[10px] w-10 shrink-0 text-right font-medium ${
-                        isTaskToday ? "text-[#ff2d55] font-bold" : isTomorrow ? "text-amber-400" : "text-muted-foreground"
+                        isTaskToday ? "text-destructive font-bold" : isTomorrow ? "text-lone-warning" : "text-muted-foreground"
                       }`}>
                         {isTaskToday ? "HOJE" : isTomorrow ? "Amanhã" : `${d} ${MONTHS_SHORT[m - 1]}`}
                       </span>
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        isTaskToday ? "bg-[#ff2d55] shadow-[0_0_6px_rgba(255,45,85,0.8)]" : "bg-[#3b6ff5]"
+                        isTaskToday ? "bg-destructive shadow-[0_0_6px_rgba(255,45,85,0.8)]" : "bg-primary"
                       }`} />
                       <div className="flex-1 min-w-0">
-                        <span className={`text-xs truncate block ${isTaskToday ? "text-[#ff2d55] font-bold" : "text-foreground"}`}>
+                        <span className={`text-xs truncate block ${isTaskToday ? "text-destructive font-bold" : "text-foreground"}`}>
                           {task.title}
                         </span>
                         <span className="text-[10px] text-muted-foreground">{task.clientName} · {task.assignedTo}</span>
@@ -1044,7 +1044,7 @@ export default function CalendarPage() {
           {/* Upcoming 7 days */}
           <div className="card">
             <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
-              <Calendar size={14} className="text-[#0d4af5]" />
+              <Calendar size={14} className="text-primary" />
               Próximos 7 dias
             </h3>
             {upcomingEvents.length === 0 ? (
@@ -1079,7 +1079,7 @@ export default function CalendarPage() {
           {/* Próximas datas (60 dias) — feriados oficiais + comemorativas */}
           <div className="card">
             <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
-              <Calendar size={14} className="text-[#0d4af5]" />
+              <Calendar size={14} className="text-primary" />
               Próximas datas
             </h3>
             {upcomingObservances.length === 0 ? (
@@ -1093,11 +1093,11 @@ export default function CalendarPage() {
                   const Icon = isOfficial ? Flag : Sparkles;
                   return (
                     <div key={`${o.date}-${idx}`} className="flex items-center gap-2 py-1.5 px-1">
-                      <span className={`text-[10px] w-10 shrink-0 text-right font-medium ${isOfficial ? "text-amber-400" : "text-pink-300"}`}>
+                      <span className={`text-[10px] w-10 shrink-0 text-right font-medium ${isOfficial ? "text-lone-warning" : "text-pink-300"}`}>
                         {d} {MONTHS_SHORT[m - 1]}
                       </span>
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOfficial ? "bg-amber-400" : "bg-pink-300"}`} />
-                      <Icon size={11} className={`shrink-0 ${isOfficial ? "text-amber-400/70" : "text-pink-300/70"}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOfficial ? "bg-lone-warning-bg" : "bg-pink-300"}`} />
+                      <Icon size={11} className={`shrink-0 ${isOfficial ? "text-lone-warning" : "text-pink-300/70"}`} />
                       <div className="flex-1 min-w-0">
                         <span className="text-xs text-foreground truncate block">{o.name}</span>
                         <span className="text-[10px] text-muted-foreground">{weekday}</span>
@@ -1124,13 +1124,13 @@ export default function CalendarPage() {
                 );
               })}
               <div className="flex items-center gap-2 pt-1 border-t border-border/50 mt-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#0d4af5]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-primary" />
                 <span className="text-[10px] text-muted-foreground">Barra = duração da tarefa</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#ff2d55] shadow-[0_0_4px_rgba(255,45,85,0.6)]" />
-                <AlertTriangle size={10} className="text-[#ff2d55]" />
-                <span className="text-[10px] text-[#ff2d55] font-medium">Prazo final</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-destructive shadow-[0_0_4px_rgba(255,45,85,0.6)]" />
+                <AlertTriangle size={10} className="text-destructive" />
+                <span className="text-[10px] text-destructive font-medium">Prazo final</span>
               </div>
               <div className="flex items-center gap-2 pt-1 border-t border-border/50 mt-1">
                 <GripVertical size={12} className="text-muted-foreground" />
@@ -1312,23 +1312,23 @@ function QuickCreateModal({
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-black border border-[#1a1a1a] rounded-2xl shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in overflow-hidden">
+      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-black border border-border rounded-2xl shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in overflow-hidden">
         {/* Top glow bar */}
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/40 to-transparent" />
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
 
         <div className="p-6 space-y-5 overflow-y-auto">
           {/* Header */}
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                <Plus size={18} className="text-[#0d4af5]" />
+                <Plus size={18} className="text-primary" />
                 Criação Rápida
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                 <Calendar size={11} /> {dateLabel}
               </p>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+            <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all">
               <X size={16} />
             </button>
           </div>
@@ -1344,13 +1344,13 @@ function QuickCreateModal({
                   onClick={() => setCreateType(ct.key)}
                   className={`p-3 rounded-xl border text-left transition-all ${
                     active
-                      ? "border-[#0d4af5]/50 bg-[#0d4af5]/[0.06] shadow-[0_0_15px_rgba(10,52,245,0.1)]"
-                      : "border-[#1a1a1a] bg-[#0a0a0a] hover:border-[#2a2a2a]"
+                      ? "border-primary/50 bg-primary/[0.06] shadow-[0_0_15px_rgba(10,52,245,0.1)]"
+                      : "border-border bg-card hover:border-border"
                   }`}
                 >
-                  <Icon size={16} className={active ? "text-[#0d4af5]" : "text-zinc-600"} />
-                  <p className={`text-xs font-medium mt-1.5 ${active ? "text-foreground" : "text-zinc-500"}`}>{ct.label}</p>
-                  <p className="text-[9px] text-zinc-700 mt-0.5">{ct.desc}</p>
+                  <Icon size={16} className={active ? "text-primary" : "text-muted-foreground"} />
+                  <p className={`text-xs font-medium mt-1.5 ${active ? "text-foreground" : "text-muted-foreground"}`}>{ct.label}</p>
+                  <p className="text-[9px] text-muted-foreground mt-0.5">{ct.desc}</p>
                 </button>
               );
             })}
@@ -1367,7 +1367,7 @@ function QuickCreateModal({
                 createType === "social" ? "Ex: Reel: 5 dicas de investimento" :
                 "Ex: Revisar campanhas Google Ads"
               }
-              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
+              className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
               autoFocus
             />
           </div>
@@ -1380,7 +1380,7 @@ function QuickCreateModal({
                 <select
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
+                  className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
                 >
                   {visibleClients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
@@ -1405,8 +1405,8 @@ function QuickCreateModal({
                           onClick={() => setSector(s.key)}
                           className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-lg border text-[9px] transition-all ${
                             active
-                              ? "border-[#0d4af5]/40 bg-[#0d4af5]/10 text-[#0d4af5]"
-                              : "border-[#1a1a1a] text-zinc-600 hover:border-[#2a2a2a]"
+                              ? "border-primary/40 bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground hover:border-border"
                           }`}
                         >
                           <Icon size={12} />
@@ -1424,7 +1424,7 @@ function QuickCreateModal({
                   <select
                     value={format}
                     onChange={(e) => setFormat(e.target.value)}
-                    className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
+                    className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
                   >
                     <option>Post Feed (1:1)</option>
                     <option>Reel (9:16)</option>
@@ -1445,7 +1445,7 @@ function QuickCreateModal({
                 <select
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
+                  className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
                 >
                   <option value="">Nenhum</option>
                   {visibleClients.map((c) => (
@@ -1461,7 +1461,7 @@ function QuickCreateModal({
                   type="time"
                   value={time}
                   onChange={(e) => setTime(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
+                  className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
                 />
               </div>
             </div>
@@ -1475,7 +1475,7 @@ function QuickCreateModal({
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as Priority)}
-                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
+                  className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
                 >
                   {(Object.entries(PRIORITY_LABELS) as [Priority, string][]).map(([k, v]) => (
                     <option key={k} value={k}>{v}</option>
@@ -1488,7 +1488,7 @@ function QuickCreateModal({
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
+                  className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
                 />
               </div>
             </div>
@@ -1504,7 +1504,7 @@ function QuickCreateModal({
                 placeholder={"Use markdown — **negrito**, listas, links\nReferências, tom de voz, CTAs, hashtags..."}
                 minHeight={140}
               />
-              <p className="text-[9px] text-zinc-700">
+              <p className="text-[9px] text-muted-foreground">
                 Markdown puro. Designer vê formatado.
               </p>
             </div>
@@ -1519,15 +1519,15 @@ function QuickCreateModal({
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Detalhes adicionais sobre a tarefa..."
                 rows={3}
-                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none resize-none leading-relaxed min-h-[80px] overflow-hidden"
+                className="w-full bg-card border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 outline-none resize-none leading-relaxed min-h-[80px] overflow-hidden"
               />
             </div>
           )}
 
           {/* Routing info */}
           {createType !== "reminder" && selectedClient && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0d4af5]/[0.03] border border-[#0d4af5]/10">
-              <User size={12} className="text-[#0d4af5] shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/[0.03] border border-primary/10">
+              <User size={12} className="text-primary shrink-0" />
               <span className="text-[10px] text-muted-foreground">
                 {createType === "social"
                   ? `Será enviado para o board de ${selectedClient.assignedSocial}`
@@ -1538,15 +1538,15 @@ function QuickCreateModal({
           )}
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1a1a1a]">
-            <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all">
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+            <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all">
               Cancelar
             </button>
             {createType === "task" && (
               <button
                 onClick={() => handleSave(true)}
                 disabled={!title.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs text-foreground bg-white/5 border border-white/10 hover:bg-white/10 transition-all disabled:opacity-30"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs text-foreground bg-card/5 border border-border hover:bg-card/10 transition-all disabled:opacity-30"
               >
                 <ExternalLink size={12} /> Salvar e Abrir Detalhes
               </button>
@@ -1554,7 +1554,7 @@ function QuickCreateModal({
             <button
               onClick={() => handleSave(false)}
               disabled={!title.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] disabled:opacity-30 disabled:shadow-none"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] disabled:opacity-30 disabled:shadow-none"
             >
               <Save size={12} /> Salvar
             </button>
@@ -1599,7 +1599,7 @@ function TaskDetailModal({
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg mx-4 bg-card border border-border rounded-2xl shadow-2xl animate-fade-in overflow-hidden">
-        <div className={`h-1 w-full ${task.status === "done" ? "bg-emerald-500" : isDeadlinePassed ? "bg-[#ff2d55]" : "bg-[#0d4af5]"}`} />
+        <div className={`h-1 w-full ${task.status === "done" ? "bg-lone-success-bg" : isDeadlinePassed ? "bg-destructive" : "bg-primary"}`} />
 
         <div className="p-6 space-y-5">
           <div className="flex items-start justify-between gap-4">
@@ -1616,9 +1616,9 @@ function TaskDetailModal({
           </div>
 
           {isDeadlinePassed && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
-              <AlertTriangle size={14} className="text-[#ff2d55] shrink-0" />
-              <span className="text-xs text-[#ff2d55] font-bold">Prazo vencido — entrega era {task.dueDate}</span>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/20">
+              <AlertTriangle size={14} className="text-destructive shrink-0" />
+              <span className="text-xs text-destructive font-bold">Prazo vencido — entrega era {task.dueDate}</span>
             </div>
           )}
 
@@ -1689,7 +1689,7 @@ function TaskDetailModal({
                   <span className="text-muted-foreground">{task.startDate.split("-").reverse().join("/")} → </span>
                 )}
                 {task.dueDate ? (
-                  <span className={isDeadlinePassed ? "text-[#ff2d55] font-bold" : ""}>
+                  <span className={isDeadlinePassed ? "text-destructive font-bold" : ""}>
                     {task.dueDate.split("-").reverse().join("/")}
                   </span>
                 ) : (
@@ -1721,7 +1721,7 @@ function TaskDetailModal({
               {task.status === "pending" && (
                 <button
                   onClick={() => onUpdate(task.id, { status: "in_progress" })}
-                  className="text-[11px] px-3 py-1 rounded-lg bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 transition-all font-medium"
+                  className="text-[11px] px-3 py-1 rounded-lg bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all font-medium"
                 >
                   Iniciar
                 </button>
@@ -1729,7 +1729,7 @@ function TaskDetailModal({
               {task.status === "in_progress" && (
                 <button
                   onClick={() => onUpdate(task.id, { status: "review" })}
-                  className="text-[11px] px-3 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all font-medium"
+                  className="text-[11px] px-3 py-1 rounded-lg bg-lone-warning-bg text-lone-warning border border-lone-warning-border hover:bg-lone-warning-bg transition-all font-medium"
                 >
                   Enviar p/ Revisão
                 </button>
@@ -1737,7 +1737,7 @@ function TaskDetailModal({
               {task.status === "review" && (
                 <button
                   onClick={() => onUpdate(task.id, { status: "done" })}
-                  className="text-[11px] px-3 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all font-medium"
+                  className="text-[11px] px-3 py-1 rounded-lg bg-lone-success-bg text-lone-success border border-lone-success-border hover:bg-lone-success-bg transition-all font-medium"
                 >
                   Concluir
                 </button>
@@ -1749,12 +1749,12 @@ function TaskDetailModal({
             {editing ? (
               <>
                 <button onClick={() => setEditing(false)} className="btn-ghost text-xs">Cancelar</button>
-                <button onClick={handleSave} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all">
+                <button onClick={handleSave} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all">
                   <Save size={12} /> Salvar
                 </button>
               </>
             ) : (
-              <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-foreground hover:bg-white/10 transition-all">
+              <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/5 border border-border text-xs text-foreground hover:bg-card/10 transition-all">
                 <Edit3 size={12} /> Editar
               </button>
             )}

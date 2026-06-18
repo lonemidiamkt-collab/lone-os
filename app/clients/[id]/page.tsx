@@ -53,13 +53,13 @@ import { exportReportAsPdf } from "@/lib/exportPdf";
 const TIMELINE_ICONS: Record<TimelineEntryType, { icon: React.ElementType; color: string; bg: string }> = {
   chat:       { icon: MessageCircle,       color: "text-primary",  bg: "bg-primary/15" },
   task:       { icon: CheckSquare,         color: "text-primary",   bg: "bg-primary/15" },
-  status:     { icon: Activity,            color: "text-zinc-400",  bg: "bg-[#111118]" },
-  content:    { icon: Instagram,           color: "text-zinc-400",    bg: "bg-[#111118]" },
-  design:     { icon: Star,               color: "text-zinc-400",  bg: "bg-[#111118]" },
+  status:     { icon: Activity,            color: "text-muted-foreground",  bg: "bg-card" },
+  content:    { icon: Instagram,           color: "text-muted-foreground",    bg: "bg-card" },
+  design:     { icon: Star,               color: "text-muted-foreground",  bg: "bg-card" },
   report:     { icon: BarChart2,           color: "text-primary",    bg: "bg-primary/15" },
-  manual:     { icon: PenLine,             color: "text-muted-foreground",    bg: "bg-zinc-600/20" },
+  manual:     { icon: PenLine,             color: "text-muted-foreground",    bg: "bg-muted" },
   onboarding: { icon: GitCommitHorizontal, color: "text-primary",    bg: "bg-primary/15" },
-  meeting:    { icon: User,               color: "text-zinc-400",  bg: "bg-[#111118]" },
+  meeting:    { icon: User,               color: "text-muted-foreground",  bg: "bg-card" },
 };
 
 // Health score: uses shared calcHealthScore from lib/utils.ts
@@ -71,8 +71,8 @@ const TONE_LABELS: Record<string, string> = {
 
 const ASSET_TYPE_CONFIG: Record<CreativeAsset["type"], { label: string; color: string; icon: React.ElementType }> = {
   reference:  { label: "Referência", color: "text-primary",   icon: ImageIcon },
-  palette:    { label: "Paleta",     color: "text-zinc-400",   icon: Palette },
-  typography: { label: "Tipografia", color: "text-zinc-400", icon: Mic },
+  palette:    { label: "Paleta",     color: "text-muted-foreground",   icon: Palette },
+  typography: { label: "Tipografia", color: "text-muted-foreground", icon: Mic },
   logo:       { label: "Logo",       color: "text-primary",  icon: Star },
 };
 
@@ -368,21 +368,21 @@ export default function ClientDetailPage() {
         <Header title="Carregando..." subtitle="Preparando dados do cliente" />
         <div className="p-6 space-y-5 animate-fade-in">
           <div className="flex items-center gap-3">
-            <div className="h-4 w-24 bg-white/[0.06] rounded animate-pulse" />
-            <div className="h-5 w-20 bg-white/[0.06] rounded-full animate-pulse" />
+            <div className="h-4 w-24 bg-card/[0.06] rounded animate-pulse" />
+            <div className="h-5 w-20 bg-card/[0.06] rounded-full animate-pulse" />
           </div>
           <div className="grid grid-cols-3 gap-4">
             {[1,2,3].map((i) => (
               <div key={i} className="card border border-border p-4 space-y-3">
-                <div className="h-3 w-28 bg-white/[0.06] rounded animate-pulse" />
-                <div className="h-6 w-16 bg-white/[0.06] rounded animate-pulse" />
-                <div className="h-2 w-full bg-white/[0.06] rounded animate-pulse" />
+                <div className="h-3 w-28 bg-card/[0.06] rounded animate-pulse" />
+                <div className="h-6 w-16 bg-card/[0.06] rounded animate-pulse" />
+                <div className="h-2 w-full bg-card/[0.06] rounded animate-pulse" />
               </div>
             ))}
           </div>
           <div className="card border border-border p-6 space-y-3">
             {[1,2,3,4].map((i) => (
-              <div key={i} className="h-3 bg-white/[0.06] rounded animate-pulse" style={{ width: `${70 + i * 7}%` }} />
+              <div key={i} className="h-3 bg-card/[0.06] rounded animate-pulse" style={{ width: `${70 + i * 7}%` }} />
             ))}
           </div>
         </div>
@@ -405,8 +405,8 @@ export default function ClientDetailPage() {
   }
 
   const health = calcHealth(client);
-  const healthColor = health >= 70 ? "text-primary" : health >= 45 ? "text-zinc-400" : "text-red-500";
-  const healthBar = health >= 70 ? "bg-primary" : health >= 45 ? "bg-zinc-500" : "bg-red-500";
+  const healthColor = health >= 70 ? "text-primary" : health >= 45 ? "text-muted-foreground" : "text-destructive";
+  const healthBar = health >= 70 ? "bg-primary" : health >= 45 ? "bg-muted" : "bg-destructive";
 
   const daysWithUs = Math.floor((Date.now() - new Date(client.joinDate).getTime()) / 86400000);
 
@@ -484,8 +484,8 @@ export default function ClientDetailPage() {
       {/* Corporate Header */}
       <div className="border-b border-border bg-surface px-6 py-5">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-[#0d4af5]/15 border border-[#0d4af5]/20 flex items-center justify-center shrink-0">
-            <span className="text-xl font-bold text-[#0d4af5]">{companyInitial}</span>
+          <div className="w-12 h-12 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
+            <span className="text-xl font-bold text-primary">{companyInitial}</span>
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold text-foreground truncate">{companyName}</h1>
@@ -508,7 +508,7 @@ export default function ClientDetailPage() {
           </Link>
           <span className={`badge border ${getStatusColor(client.status)}`}>{getStatusLabel(client.status)}</span>
           {client.serviceType && client.serviceType !== "lone_growth" && (
-            <span className="badge border text-xs text-zinc-400 bg-zinc-800/50 border-zinc-700">
+            <span className="badge border text-xs text-muted-foreground bg-muted border-border">
               {client.serviceType === "assessoria_trafego" ? "Assessoria Trafego" :
                client.serviceType === "assessoria_social" ? "Assessoria Social" :
                client.serviceType === "assessoria_design" ? "Assessoria Design" : "Lone Growth"}
@@ -527,15 +527,15 @@ export default function ClientDetailPage() {
             {(role === "admin" || role === "manager") && (
               <>
                 {onboardingLink ? (
-                  <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-1.5">
-                    <Check size={12} className="text-emerald-500" />
-                    <span className="text-xs text-emerald-400">Link copiado!</span>
+                  <div className="flex items-center gap-1.5 bg-lone-success-bg border border-lone-success-border rounded-lg px-3 py-1.5">
+                    <Check size={12} className="text-lone-success" />
+                    <span className="text-xs text-lone-success">Link copiado!</span>
                   </div>
                 ) : (
                   <button
                     onClick={generateOnboardingLink}
                     disabled={generatingLink}
-                    className="btn-ghost text-xs flex items-center gap-1.5 border border-[#0d4af5]/20 text-[#0d4af5] hover:bg-[#0d4af5]/10"
+                    className="btn-ghost text-xs flex items-center gap-1.5 border border-primary/20 text-primary hover:bg-primary/10"
                   >
                     {generatingLink ? <Loader2 size={12} className="animate-spin" /> : <ExternalLink size={12} />}
                     Link de Onboarding
@@ -550,14 +550,14 @@ export default function ClientDetailPage() {
                 </button>
                 <button
                   onClick={() => { setShowDeleteModal(true); setDeletePassword(""); setDeleteError(""); }}
-                  className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-red-500/30 hover:text-red-400"
+                  className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-destructive/30 hover:text-destructive"
                 >
                   <Trash2 size={12} />
                 </button>
                 <select
                   value={client.status}
                   onChange={(e) => updateClientStatus(clientId, e.target.value as ClientStatus, currentUser)}
-                  className="bg-card border border-border text-xs text-[#c0c0cc] rounded-lg px-2 py-1.5 outline-none focus:border-primary"
+                  className="bg-card border border-border text-xs text-muted-foreground rounded-lg px-2 py-1.5 outline-none focus:border-primary"
                 >
                   {statusOptions.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
@@ -580,14 +580,14 @@ export default function ClientDetailPage() {
             </div>
           </div>
           <div className="card flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${client.status === "at_risk" ? "bg-red-500/10" : "bg-primary/15"}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${client.status === "at_risk" ? "bg-destructive/10" : "bg-primary/15"}`}>
               {client.status === "at_risk"
-                ? <AlertTriangle size={18} className="text-red-500" />
+                ? <AlertTriangle size={18} className="text-destructive" />
                 : <CheckCircle size={18} className="text-primary" />}
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Último post</p>
-              <p className={`text-lg font-bold ${client.lastPostDate && daysSince(client.lastPostDate) > 7 ? "text-red-500" : "text-primary"}`}>
+              <p className={`text-lg font-bold ${client.lastPostDate && daysSince(client.lastPostDate) > 7 ? "text-destructive" : "text-primary"}`}>
                 {client.lastPostDate ? `${daysSince(client.lastPostDate)}d atrás` : "—"}
               </p>
             </div>
@@ -696,16 +696,16 @@ export default function ClientDetailPage() {
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Dossiê da Marca</p>
                     <div className="flex flex-wrap gap-2">
-                      <span className="text-xs bg-muted text-[#c0c0cc] px-2 py-1 rounded-lg font-medium">
+                      <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-lg font-medium">
                         📌 Nicho: {client.industry}
                       </span>
                       {client.toneOfVoice && (
-                        <span className="text-xs bg-muted text-[#c0c0cc] px-2 py-1 rounded-lg font-medium">
+                        <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-lg font-medium">
                           🗣 Tom: {TONE_LABELS[client.toneOfVoice]}
                         </span>
                       )}
                       {client.instagramUser && (
-                        <span className="text-xs bg-[#111118] text-zinc-400 px-2 py-1 rounded-lg font-medium border border-[#1e1e2a]">
+                        <span className="text-xs bg-card text-muted-foreground px-2 py-1 rounded-lg font-medium border border-border">
                           <Instagram size={10} className="inline mr-1" />
                           {client.instagramUser}
                         </span>
@@ -760,7 +760,7 @@ export default function ClientDetailPage() {
                   <div className="flex items-center gap-2">
                     {client.metaAdAccountName ? (
                       <span className="text-sm text-foreground font-medium flex items-center gap-1.5">
-                        <Link2 size={12} className="text-[#0d4af5]" />
+                        <Link2 size={12} className="text-primary" />
                         {client.metaAdAccountName}
                       </span>
                     ) : (
@@ -792,7 +792,7 @@ export default function ClientDetailPage() {
                                 setShowMetaPicker(false);
                                 setMetaSearch("");
                               }}
-                              className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors"
+                              className="text-[10px] text-destructive hover:text-destructive flex items-center gap-1 transition-colors"
                             >
                               <Unlink size={10} />
                               Desvincular
@@ -874,7 +874,7 @@ export default function ClientDetailPage() {
                 {client.notes && (
                   <div className="mt-3 pt-3 border-t border-border">
                     <p className="text-xs text-muted-foreground mb-1">Observações</p>
-                    <p className="text-sm text-[#c0c0cc] bg-muted rounded-lg p-3 border-l-2 border-zinc-600">{client.notes}</p>
+                    <p className="text-sm text-muted-foreground bg-muted rounded-lg p-3 border-l-2 border-border">{client.notes}</p>
                   </div>
                 )}
               </div>
@@ -885,7 +885,7 @@ export default function ClientDetailPage() {
                   <div className="space-y-3">
                     {[
                       { role: "Tráfego Pago", name: client.assignedTraffic, color: "text-primary", bg: "bg-primary/15", Icon: TrendingUp },
-                      { role: "Social Media", name: client.assignedSocial, color: "text-zinc-400", bg: "bg-[#111118]", Icon: Instagram },
+                      { role: "Social Media", name: client.assignedSocial, color: "text-muted-foreground", bg: "bg-card", Icon: Instagram },
                     ].map(({ role: r, name, color, bg, Icon }) => (
                       <div key={r} className="flex items-center gap-3">
                         <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${bg} shrink-0`}>
@@ -922,7 +922,7 @@ export default function ClientDetailPage() {
               {/* Metas / OKRs */}
               <div className="card">
                 <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                  <Target size={14} className="text-[#0d4af5]" />
+                  <Target size={14} className="text-primary" />
                   Metas do Mês
                 </h3>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -937,10 +937,10 @@ export default function ClientDetailPage() {
                     const taskPct = totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0;
 
                     return [
-                      { label: "Posts Publicados", value: `${postsPublished}/${postsGoal}`, pct: postsPct, color: postsPct >= 80 ? "bg-[#0d4af5]" : postsPct >= 50 ? "bg-amber-500" : "bg-red-500" },
-                      { label: "Pipeline Ativo", value: `${cardsInPipeline}`, pct: Math.min(100, cardsInPipeline * 10), color: "bg-[#3b6ff5]" },
-                      { label: "Tarefas Concluídas", value: `${tasksCompleted}/${totalTasks}`, pct: taskPct, color: taskPct >= 80 ? "bg-[#0d4af5]" : "bg-amber-500" },
-                      { label: "Engajamento", value: client.postsThisMonth ? `${client.postsThisMonth} posts` : "—", pct: Math.min(100, (client.postsThisMonth ?? 0) * 8), color: "bg-[#0d4af5]" },
+                      { label: "Posts Publicados", value: `${postsPublished}/${postsGoal}`, pct: postsPct, color: postsPct >= 80 ? "bg-primary" : postsPct >= 50 ? "bg-lone-warning-bg" : "bg-destructive" },
+                      { label: "Pipeline Ativo", value: `${cardsInPipeline}`, pct: Math.min(100, cardsInPipeline * 10), color: "bg-primary" },
+                      { label: "Tarefas Concluídas", value: `${tasksCompleted}/${totalTasks}`, pct: taskPct, color: taskPct >= 80 ? "bg-primary" : "bg-lone-warning-bg" },
+                      { label: "Engajamento", value: client.postsThisMonth ? `${client.postsThisMonth} posts` : "—", pct: Math.min(100, (client.postsThisMonth ?? 0) * 8), color: "bg-primary" },
                     ].map(({ label, value, pct, color }) => (
                       <div key={label} className="p-3 rounded-xl bg-muted/30 border border-border/50">
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
@@ -956,17 +956,17 @@ export default function ClientDetailPage() {
 
               {/* Observação de Crise — only for at_risk clients */}
               {client.status === "at_risk" && (
-                <div className="card border border-red-500/20">
+                <div className="card border border-destructive/20">
                   <div className="flex items-center gap-2 mb-3">
-                    <ShieldAlert size={16} className="text-red-500" />
+                    <ShieldAlert size={16} className="text-destructive" />
                     <h3 className="font-semibold text-foreground text-sm">Observação de Crise</h3>
-                    <span className="text-xs text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">Obrigatório</span>
+                    <span className="text-xs text-destructive bg-destructive/10 px-2 py-0.5 rounded-full border border-destructive/20">Obrigatório</span>
                   </div>
                   <p className="text-xs text-muted-foreground mb-3">Por que este cliente está em status crítico? Registre para ter histórico antes de reuniões de retenção.</p>
                   {(crisisNotes[clientId] ?? []).length > 0 && (
                     <div className="space-y-2 mb-3 max-h-40 overflow-auto">
                       {(crisisNotes[clientId] ?? []).map((cn) => (
-                        <div key={cn.id} className="bg-red-500/5 border border-red-500/10 rounded-lg p-3">
+                        <div key={cn.id} className="bg-destructive/5 border border-destructive/10 rounded-lg p-3">
                           <p className="text-sm text-foreground">{cn.note}</p>
                           <p className="text-xs text-muted-foreground mt-1">por {cn.createdBy} · {cn.createdAt}</p>
                         </div>
@@ -984,7 +984,7 @@ export default function ClientDetailPage() {
                         }
                       }}
                       placeholder="Ex: Cliente insatisfeito com resultados do último mês..."
-                      className="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-red-500/50"
+                      className="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-destructive/50"
                     />
                     <button
                       onClick={() => {
@@ -992,7 +992,7 @@ export default function ClientDetailPage() {
                         addCrisisNote(clientId, crisisInput.trim(), currentUser);
                         setCrisisInput("");
                       }}
-                      className="px-4 py-2 bg-red-500/10 text-red-500 rounded-lg text-sm font-medium hover:bg-red-500/30 transition-colors"
+                      className="px-4 py-2 bg-destructive/10 text-destructive rounded-lg text-sm font-medium hover:bg-destructive/30 transition-colors"
                     >
                       Registrar
                     </button>
@@ -1259,9 +1259,9 @@ export default function ClientDetailPage() {
               {clientTasks.map((task) => (
                 <div key={task.id} className="card flex items-start gap-4">
                   <div className={`w-1 self-stretch rounded-full shrink-0 ${
-                    task.priority === "critical" ? "bg-red-500" :
-                    task.priority === "high" ? "bg-zinc-500" :
-                    task.priority === "medium" ? "bg-primary" : "bg-zinc-600"
+                    task.priority === "critical" ? "bg-destructive" :
+                    task.priority === "high" ? "bg-muted" :
+                    task.priority === "medium" ? "bg-primary" : "bg-muted"
                   }`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-3">
@@ -1271,8 +1271,8 @@ export default function ClientDetailPage() {
                         <span className={`badge text-xs ${
                           task.status === "done" ? "bg-primary/15 text-primary" :
                           task.status === "in_progress" ? "bg-primary/15 text-primary" :
-                          task.status === "review" ? "bg-[#111118] text-zinc-400" :
-                          "bg-zinc-600/20 text-muted-foreground"
+                          task.status === "review" ? "bg-card text-muted-foreground" :
+                          "bg-muted text-muted-foreground"
                         }`}>
                           {task.status === "done" ? "Concluído" : task.status === "in_progress" ? "Em Execução" : task.status === "review" ? "Validação" : "Pendente"}
                         </span>
@@ -1308,10 +1308,10 @@ export default function ClientDetailPage() {
                       <span className={`badge text-xs ${
                         card.status === "published" ? "bg-primary/15 text-primary" :
                         card.status === "scheduled" ? "bg-primary/15 text-primary" :
-                        card.status === "approval" ? "bg-[#111118] text-zinc-400" :
+                        card.status === "approval" ? "bg-card text-muted-foreground" :
                         card.status === "in_production" ? "bg-primary/15 text-primary" :
                         card.status === "script" ? "bg-primary/15 text-primary" :
-                        "bg-zinc-600/20 text-muted-foreground"
+                        "bg-muted text-muted-foreground"
                       }`}>
                         {card.status === "published" ? "Publicado" : card.status === "scheduled" ? "Agendado" : card.status === "approval" ? "Aprovação" : card.status === "in_production" ? "Em Produção" : card.status === "script" ? "Roteiro" : "Ideia"}
                       </span>
@@ -1326,7 +1326,7 @@ export default function ClientDetailPage() {
           {activeTab === "onboarding" && (
             <div className="animate-fade-in space-y-6">
               {obItems.length === 0 ? (
-                <div className="card text-center py-10 text-zinc-500">
+                <div className="card text-center py-10 text-muted-foreground">
                   {client.status === "onboarding"
                     ? "Checklist de onboarding nao iniciado."
                     : "Este cliente ja concluiu o onboarding."}
@@ -1338,12 +1338,12 @@ export default function ClientDetailPage() {
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <h3 className="font-semibold text-foreground text-sm">Setup do Cliente</h3>
-                        <p className="text-[10px] text-zinc-500 mt-0.5">Quartel General — {client.name}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Quartel General — {client.name}</p>
                       </div>
                       <span className="text-lg font-bold text-foreground tabular-nums">{obProgress}%</span>
                     </div>
-                    <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#0d4af5] rounded-full transition-all duration-500" style={{ width: `${obProgress}%` }} />
+                    <div className="h-1.5 bg-card rounded-full overflow-hidden">
+                      <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${obProgress}%` }} />
                     </div>
                   </div>
 
@@ -1364,17 +1364,17 @@ export default function ClientDetailPage() {
                               <span className="text-lg">{block.icon}</span>
                               <div>
                                 <h4 className="text-xs font-semibold text-foreground">{block.title}</h4>
-                                <p className="text-[10px] text-zinc-500">{block.member || "Nao atribuido"}</p>
+                                <p className="text-[10px] text-muted-foreground">{block.member || "Nao atribuido"}</p>
                               </div>
                             </div>
-                            <span className={`text-[10px] font-bold tabular-nums ${deptDone === deptTotal && deptTotal > 0 ? "text-emerald-400" : "text-zinc-400"}`}>
+                            <span className={`text-[10px] font-bold tabular-nums ${deptDone === deptTotal && deptTotal > 0 ? "text-lone-success" : "text-muted-foreground"}`}>
                               {deptDone}/{deptTotal}
                             </span>
                           </div>
 
                           {/* Mini progress */}
-                          <div className="h-1 bg-zinc-900 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full transition-all duration-500 ${deptDone === deptTotal && deptTotal > 0 ? "bg-emerald-500" : "bg-[#0d4af5]"}`}
+                          <div className="h-1 bg-card rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all duration-500 ${deptDone === deptTotal && deptTotal > 0 ? "bg-lone-success-bg" : "bg-primary"}`}
                               style={{ width: deptTotal > 0 ? `${(deptDone / deptTotal) * 100}%` : "0%" }} />
                           </div>
 
@@ -1383,18 +1383,18 @@ export default function ClientDetailPage() {
                             {deptItems.map((item) => (
                               <label key={item.id}
                                 className={`flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-all ${
-                                  item.completed ? "bg-zinc-900/50" : "hover:bg-zinc-900/30"
+                                  item.completed ? "bg-card" : "hover:bg-card"
                                 }`}>
                                 <button
                                   onClick={() => toggleOnboardingItem(clientId, item.id, currentUser)}
                                   className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
                                     item.completed
-                                      ? "bg-[#0d4af5] border-[#0d4af5] text-white"
-                                      : "border-zinc-700 hover:border-[#0d4af5]"
+                                      ? "bg-primary border-primary text-primary-foreground"
+                                      : "border-border hover:border-primary"
                                   }`}>
                                   {item.completed && <CheckCircle size={10} />}
                                 </button>
-                                <span className={`text-xs flex-1 ${item.completed ? "text-zinc-500 line-through" : "text-foreground"}`}>
+                                <span className={`text-xs flex-1 ${item.completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
                                   {item.label}
                                 </span>
                               </label>
@@ -1440,7 +1440,7 @@ export default function ClientDetailPage() {
 
               {clientAssets.length === 0 && (
                 <div className="card text-center py-16 text-muted-foreground/50 border-2 border-dashed border-border">
-                  <ImageIcon size={32} className="mx-auto mb-3 text-gray-700" />
+                  <ImageIcon size={32} className="mx-auto mb-3 text-muted-foreground" />
                   <p className="text-sm">Nenhuma referência visual adicionada ainda.</p>
                   <p className="text-xs mt-1">Use os botões acima para fazer upload de imagens de inspiração, paletas e tipografias.</p>
                 </div>
@@ -1467,7 +1467,7 @@ export default function ClientDetailPage() {
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                           </div>
                           <div className="p-2.5">
-                            <p className="text-xs text-[#c0c0cc] font-medium truncate">{asset.label ?? cfg.label}</p>
+                            <p className="text-xs text-muted-foreground font-medium truncate">{asset.label ?? cfg.label}</p>
                             <p className="text-xs text-muted-foreground/50 mt-0.5">{asset.uploadedBy} · {asset.uploadedAt}</p>
                           </div>
                         </div>
@@ -1492,7 +1492,7 @@ export default function ClientDetailPage() {
                 const isGood = report.communicationHealth >= 4;
                 const isBad = report.communicationHealth <= 2;
                 return (
-                  <div key={report.id} className={`card border ${isBad ? "border-red-500/20" : isGood ? "border-primary/20" : "border-border"}`}>
+                  <div key={report.id} className={`card border ${isBad ? "border-destructive/20" : isGood ? "border-primary/20" : "border-border"}`}>
                     <div className="flex items-start justify-between gap-4 mb-4">
                       <div>
                         <p className="font-semibold text-foreground">Período: {report.period}</p>
@@ -1528,7 +1528,7 @@ export default function ClientDetailPage() {
                           <div key={label}>
                             <div className="flex gap-1 justify-center">
                               {[1,2,3,4,5].map((s) => (
-                                <span key={s} className={`w-4 h-4 rounded-sm ${s <= value ? (isBad ? "bg-red-500" : isGood ? "bg-primary" : "bg-zinc-500") : "bg-muted"}`} />
+                                <span key={s} className={`w-4 h-4 rounded-sm ${s <= value ? (isBad ? "bg-destructive" : isGood ? "bg-primary" : "bg-muted") : "bg-muted"}`} />
                               ))}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">{label}</p>
@@ -1539,15 +1539,15 @@ export default function ClientDetailPage() {
                     <div className="grid grid-cols-3 gap-4 text-sm">
                       <div>
                         <p className="text-xs text-primary font-medium mb-1">Destaques</p>
-                        <p className="text-[#c0c0cc] leading-relaxed">{report.highlights}</p>
+                        <p className="text-muted-foreground leading-relaxed">{report.highlights}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-red-500 font-medium mb-1">Desafios</p>
-                        <p className="text-[#c0c0cc] leading-relaxed">{report.challenges}</p>
+                        <p className="text-xs text-destructive font-medium mb-1">Desafios</p>
+                        <p className="text-muted-foreground leading-relaxed">{report.challenges}</p>
                       </div>
                       <div>
                         <p className="text-xs text-primary font-medium mb-1">Próximos Passos</p>
-                        <p className="text-[#c0c0cc] leading-relaxed">{report.nextSteps}</p>
+                        <p className="text-muted-foreground leading-relaxed">{report.nextSteps}</p>
                       </div>
                     </div>
                   </div>
@@ -1714,31 +1714,31 @@ export default function ClientDetailPage() {
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setShowDeleteModal(false)}>
           <div className="bg-card border border-border rounded-xl p-6 max-w-sm w-full space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center">
-                <Trash2 size={18} className="text-red-500" />
+              <div className="w-10 h-10 rounded-xl bg-destructive/15 flex items-center justify-center">
+                <Trash2 size={18} className="text-destructive" />
               </div>
               <div>
                 <h3 className="font-semibold text-foreground text-sm">Excluir Cliente</h3>
                 <p className="text-[10px] text-muted-foreground">Esta acao e irreversivel</p>
               </div>
             </div>
-            <p className="text-xs text-zinc-400">
-              Todos os dados de <span className="text-white font-medium">{companyName}</span> serao removidos permanentemente. Digite a senha para confirmar.
+            <p className="text-xs text-muted-foreground">
+              Todos os dados de <span className="text-foreground font-medium">{companyName}</span> serao removidos permanentemente. Digite a senha para confirmar.
             </p>
             <input
               type="password"
               value={deletePassword}
               onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(""); }}
               placeholder="Senha de confirmacao"
-              className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-red-500/50"
+              className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-destructive/50"
               autoFocus
               onKeyDown={(e) => { if (e.key === "Enter") handleDeleteClient(); }}
             />
-            {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}
+            {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
             <div className="flex gap-2">
               <button onClick={() => setShowDeleteModal(false)} className="btn-ghost flex-1 text-sm border border-border">Cancelar</button>
               <button onClick={handleDeleteClient} disabled={deleting || !deletePassword}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-red-500/15 text-red-400 text-sm font-medium hover:bg-red-500/25 transition-colors border border-red-500/20 disabled:opacity-50">
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-destructive/15 text-destructive text-sm font-medium hover:bg-destructive/25 transition-colors border border-destructive/20 disabled:opacity-50">
                 {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 Excluir
               </button>
