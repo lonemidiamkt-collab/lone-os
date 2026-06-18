@@ -160,7 +160,7 @@ export default function SettingsPage() {
                 )}
 
                 <div className="flex items-center gap-5 mb-6">
-                  <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center shadow-[0_0_20px_rgba(10,52,245,0.2)]">
+                  <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center">
                     <span className="text-xl font-bold text-primary">{currentProfile.initials}</span>
                   </div>
                   <div>
@@ -245,7 +245,7 @@ export default function SettingsPage() {
                     <p className="text-sm font-medium text-foreground mb-1">Cor de Destaque</p>
                     <p className="text-xs text-muted-foreground mb-3">Azul var(--primary) — padrao do Lone OS</p>
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-primary shadow-[0_0_12px_rgba(10,52,245,0.4)]" />
+                      <div className="w-8 h-8 rounded-lg bg-primary" />
                       <div className="w-8 h-8 rounded-lg bg-primary" />
                       <div className="w-8 h-8 rounded-lg bg-primary/50" />
                       <span className="text-[10px] text-muted-foreground ml-2">Palette fixa</span>

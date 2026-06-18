@@ -126,7 +126,7 @@ export default function LoginScreen() {
       <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[200px] pointer-events-none" />
         <div className="text-center animate-fade-in space-y-6 relative z-10">
-          <div className="w-20 h-20 rounded-2xl bg-black flex items-center justify-center mx-auto shadow-[0_0_50px_rgba(10,52,245,0.5),0_0_100px_rgba(10,52,245,0.15)]">
+          <div className="w-20 h-20 rounded-2xl bg-black flex items-center justify-center mx-auto">
             <Logo className="w-12 h-12" priority />
           </div>
           <div className="space-y-3">
@@ -139,7 +139,7 @@ export default function LoginScreen() {
           </div>
           <div className="flex justify-center">
             <div className="h-0.5 w-32 bg-border rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full animate-[progress_2.5s_ease-in-out] shadow-[0_0_10px_rgba(10,52,245,0.5)]" />
+              <div className="h-full bg-primary rounded-full animate-[progress_2.5s_ease-in-out]" />
             </div>
           </div>
         </div>
@@ -164,7 +164,7 @@ export default function LoginScreen() {
 
         {/* Logo + Brand */}
         <div className="text-center mb-10">
-          <div className="w-14 h-14 rounded-xl bg-black flex items-center justify-center mx-auto mb-5 shadow-[0_0_40px_rgba(10,52,245,0.35),0_0_80px_rgba(10,52,245,0.1)]">
+          <div className="w-14 h-14 rounded-xl bg-black flex items-center justify-center mx-auto mb-5">
             <Logo className="w-8 h-8" priority />
           </div>
           <h1 className="text-lg font-black text-foreground tracking-tight">LONE MÍDIA</h1>
@@ -172,7 +172,7 @@ export default function LoginScreen() {
         </div>
 
         {/* Form container */}
-        <div className="rounded-2xl border border-border bg-card p-8 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)]">
+        <div className="rounded-2xl border border-border bg-card p-8 shadow-lg">
 
           {/* Step 1: Select user */}
           {step === "select" && (
@@ -191,7 +191,7 @@ export default function LoginScreen() {
                     onKeyDown={handleKeyDown}
                     className={`w-full bg-card border rounded-xl px-4 py-3.5 text-sm text-left outline-none transition-all flex items-center justify-between ${
                       showDropdown
-                        ? "border-primary shadow-[0_0_0_3px_rgba(10,52,245,0.1)]"
+                        ? "border-primary"
                         : "border-border hover:border-border"
                     }`}
                   >
@@ -213,7 +213,7 @@ export default function LoginScreen() {
 
                   {/* Dropdown list */}
                   {showDropdown && (
-                    <div className="absolute top-full mt-2 left-0 right-0 bg-card border border-border rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.8)] z-50 py-1 animate-fade-in max-h-64 overflow-y-auto">
+                    <div className="absolute top-full mt-2 left-0 right-0 bg-card border border-border rounded-xl shadow-lg z-50 py-1 animate-fade-in max-h-64 overflow-y-auto">
                       {USER_PROFILES.map((profile) => (
                         <button
                           key={profile.id}
@@ -253,7 +253,7 @@ export default function LoginScreen() {
               <button
                 onClick={handleContinue}
                 disabled={!selectedUser}
-                className="w-full bg-primary text-primary-foreground rounded-xl py-3.5 text-sm font-semibold transition-all disabled:opacity-20 disabled:cursor-not-allowed hover:bg-primary active:scale-[0.99] shadow-[0_0_20px_rgba(10,52,245,0.25),0_4px_14px_rgba(10,52,245,0.2)] flex items-center justify-center gap-2"
+                className="w-full bg-primary text-primary-foreground rounded-xl py-3.5 text-sm font-semibold transition-all disabled:opacity-20 disabled:cursor-not-allowed hover:bg-primary active:scale-[0.99] flex items-center justify-center gap-2"
               >
                 Continuar
                 <ArrowRight size={15} />
@@ -292,8 +292,8 @@ export default function LoginScreen() {
                     autoComplete="off"
                     className={`w-full bg-card border rounded-xl px-4 py-3.5 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground ${
                       error
-                        ? "border-destructive/50 shadow-[0_0_0_3px_rgba(239,68,68,0.06)]"
-                        : "border-border focus:border-primary focus:shadow-[0_0_0_3px_rgba(10,52,245,0.1)]"
+                        ? "border-destructive/50"
+                        : "border-border focus:border-primary"
                     }`}
                   />
                   <button
@@ -312,7 +312,7 @@ export default function LoginScreen() {
               <button
                 onClick={handleLogin}
                 disabled={!password || loading}
-                className="w-full bg-primary text-primary-foreground rounded-xl py-3.5 text-sm font-semibold transition-all disabled:opacity-20 disabled:cursor-not-allowed hover:bg-primary active:scale-[0.99] shadow-[0_0_20px_rgba(10,52,245,0.25),0_4px_14px_rgba(10,52,245,0.2)] flex items-center justify-center gap-2"
+                className="w-full bg-primary text-primary-foreground rounded-xl py-3.5 text-sm font-semibold transition-all disabled:opacity-20 disabled:cursor-not-allowed hover:bg-primary active:scale-[0.99] flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>

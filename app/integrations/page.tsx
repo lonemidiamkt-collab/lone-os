@@ -484,7 +484,7 @@ export default function IntegrationsPage() {
               key={integration.id}
               className={`card border transition-all ${
                 status === "connected"
-                  ? "border-[#0d4af5]/20 hover:border-[#0d4af5]/40 hover:shadow-[0_0_20px_rgba(10,52,245,0.08)]"
+                  ? "border-[#0d4af5]/20 hover:border-[#0d4af5]/40"
                   : "border-border hover:border-zinc-600"
               }`}
             >

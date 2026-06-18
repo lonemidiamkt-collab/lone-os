@@ -995,7 +995,7 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl mx-4 bg-black border border-border rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-2xl mx-4 bg-black border border-border rounded-2xl shadow-lg animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
         <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/20 to-transparent shrink-0" />
 
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
@@ -1833,7 +1833,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                 </div>
                 <div className={`h-0.5 w-full ${STATUS_DOT[card.status]} ${(() => {
                   const t = getLiveTimeSpentMs(card.workStartedAt, card.totalTimeSpentMs);
-                  return t >= OVERTIME_THRESHOLD_MS ? "!bg-lone-warning-bg shadow-[0_0_8px_rgba(245,158,11,0.6)]" : "";
+                  return t >= OVERTIME_THRESHOLD_MS ? "!bg-lone-warning-bg" : "";
                 })()}`} />
               </div>
             );
@@ -2317,7 +2317,7 @@ export default function SocialPage() {
           {!isReadOnly && (
             <button
               onClick={() => setNewCardDate(new Date().toISOString().slice(0, 10))}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-sm font-medium transition-all shrink-0 shadow-[0_0_20px_rgba(13,74,245,0.15)]"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-sm font-medium transition-all shrink-0"
             >
               <Plus size={14} /> Novo Conteúdo
             </button>
@@ -2364,7 +2364,7 @@ export default function SocialPage() {
                 {badge !== undefined && badge > 0 && (
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold tabular-nums ${
                     isApprovalTab
-                      ? "bg-primary/20 text-primary shadow-[0_0_8px_rgba(10,52,245,0.3)]"
+                      ? "bg-primary/20 text-primary"
                       : "bg-muted text-muted-foreground"
                   }`}>
                     {badge}

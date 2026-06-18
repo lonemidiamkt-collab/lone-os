@@ -103,7 +103,7 @@ export default function MyWorkPage() {
               onClick={() => setFilter(f.key)}
               className={`p-3 rounded-xl border transition-all text-left ${
                 active
-                  ? "border-primary/30 bg-primary/[0.05] shadow-[0_0_15px_rgba(10,52,245,0.08)]"
+                  ? "border-primary/30 bg-primary/[0.05]"
                   : "border-border bg-card hover:border-primary/20"
               }`}
             >

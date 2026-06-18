@@ -526,7 +526,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { approveContent(card.id, currentUser); onClose(); }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] hover:shadow-[0_0_25px_rgba(10,52,245,0.5)]"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all"
                 >
                   <CheckCircle size={14} /> Aprovar Arte
                 </button>

@@ -546,7 +546,7 @@ export default function CalendarPage() {
               setCreateDate(todayStr);
               setShowCreate(true);
             }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all shadow-[0_0_20px_rgba(10,52,245,0.3)]"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all"
           >
             <Plus size={14} /> Criar
           </button>
@@ -769,7 +769,7 @@ export default function CalendarPage() {
                           const titleAttr = obs ? obs.allInDay.map((x) => x.name).join(" • ") : undefined;
                           // Cores por escopo de feriado: nacional=âmbar, estadual=laranja, municipal=lima
                           const dayColor = hasDeadline
-                            ? "text-destructive font-bold drop-shadow-[0_0_6px_rgba(255,45,85,0.6)]"
+                            ? "text-destructive font-bold drop-"
                             : todayFlag
                             ? "text-primary font-bold"
                             : isNational
@@ -786,7 +786,7 @@ export default function CalendarPage() {
                             <span className={`text-xs font-medium flex items-center gap-1 ${dayColor}`} title={titleAttr}>
                               {day}
                               {hasDeadline && (
-                                <AlertTriangle size={10} className="text-destructive drop-shadow-[0_0_4px_rgba(255,45,85,0.8)]" />
+                                <AlertTriangle size={10} className="text-destructive drop-" />
                               )}
                               {!hasDeadline && isFeriado && (
                                 <Flag size={9} className={flagColor} aria-label={obs!.name} />
@@ -823,13 +823,13 @@ export default function CalendarPage() {
                               className={`w-[18px] h-[18px] rounded-md flex items-center justify-center transition-all cursor-grab active:cursor-grabbing ${
                                 rem.done
                                   ? "bg-lone-success-bg border border-lone-success-border"
-                                  : "bg-primary/10 border border-primary/25 shadow-[0_0_6px_rgba(10,52,245,0.3)] hover:shadow-[0_0_10px_rgba(10,52,245,0.5)]"
+                                  : "bg-primary/10 border border-primary/25"
                               }`}
                             >
                               {rem.done ? (
                                 <Check size={8} className="text-lone-success" />
                               ) : (
-                                <Bell size={8} className="text-primary drop-shadow-[0_0_3px_rgba(10,52,245,0.8)]" />
+                                <Bell size={8} className="text-primary drop-" />
                               )}
                             </button>
                             );
@@ -881,7 +881,7 @@ export default function CalendarPage() {
                               onClick={(ev) => { ev.stopPropagation(); handleEventClick(e); }}
                               className={`flex items-center gap-1 px-1 py-0.5 rounded text-[10px] truncate text-left transition-all ${isDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${
                                 isTaskDeadline
-                                  ? "bg-destructive/15 text-destructive font-bold drop-shadow-[0_0_4px_rgba(255,45,85,0.5)]"
+                                  ? "bg-destructive/15 text-destructive font-bold drop-"
                                   : e.type === "content" ? "bg-primary/15 text-primary" :
                                     e.type === "task" ? "bg-primary/15 text-primary" :
                                     "bg-muted text-muted-foreground"
@@ -960,7 +960,7 @@ export default function CalendarPage() {
                         <div className="flex items-center gap-2 mb-1">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${
                             isReminder && rem?.done ? "bg-lone-success-bg" :
-                            isTaskDeadline ? "bg-destructive shadow-[0_0_6px_rgba(255,45,85,0.8)]" : e.color
+                            isTaskDeadline ? "bg-destructive" : e.color
                           }`} />
                           <Icon size={12} className={
                             isReminder ? (rem?.done ? "text-lone-success" : "text-primary") :
@@ -1026,7 +1026,7 @@ export default function CalendarPage() {
                         {isTaskToday ? "HOJE" : isTomorrow ? "Amanhã" : `${d} ${MONTHS_SHORT[m - 1]}`}
                       </span>
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        isTaskToday ? "bg-destructive shadow-[0_0_6px_rgba(255,45,85,0.8)]" : "bg-primary"
+                        isTaskToday ? "bg-destructive" : "bg-primary"
                       }`} />
                       <div className="flex-1 min-w-0">
                         <span className={`text-xs truncate block ${isTaskToday ? "text-destructive font-bold" : "text-foreground"}`}>
@@ -1128,7 +1128,7 @@ export default function CalendarPage() {
                 <span className="text-[10px] text-muted-foreground">Barra = duração da tarefa</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-destructive shadow-[0_0_4px_rgba(255,45,85,0.6)]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-destructive" />
                 <AlertTriangle size={10} className="text-destructive" />
                 <span className="text-[10px] text-destructive font-medium">Prazo final</span>
               </div>
@@ -1312,7 +1312,7 @@ function QuickCreateModal({
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-black border border-border rounded-2xl shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in overflow-hidden">
+      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-black border border-border rounded-2xl animate-fade-in overflow-hidden">
         {/* Top glow bar */}
         <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
 
@@ -1344,7 +1344,7 @@ function QuickCreateModal({
                   onClick={() => setCreateType(ct.key)}
                   className={`p-3 rounded-xl border text-left transition-all ${
                     active
-                      ? "border-primary/50 bg-primary/[0.06] shadow-[0_0_15px_rgba(10,52,245,0.1)]"
+                      ? "border-primary/50 bg-primary/[0.06]"
                       : "border-border bg-card hover:border-border"
                   }`}
                 >
@@ -1367,7 +1367,7 @@ function QuickCreateModal({
                 createType === "social" ? "Ex: Reel: 5 dicas de investimento" :
                 "Ex: Revisar campanhas Google Ads"
               }
-              className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
+              className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 outline-none transition-all"
               autoFocus
             />
           </div>
@@ -1554,7 +1554,7 @@ function QuickCreateModal({
             <button
               onClick={() => handleSave(false)}
               disabled={!title.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] disabled:opacity-30 disabled:shadow-none"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all disabled:opacity-30 disabled:shadow-none"
             >
               <Save size={12} /> Salvar
             </button>

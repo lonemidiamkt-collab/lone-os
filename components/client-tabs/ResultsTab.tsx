@@ -252,7 +252,7 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
       {/* Aha! Moment button */}
       {waitingTTV && isAdmin && (
         <button onClick={handleAhaMoment} disabled={ahaSaving}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-primary to-primary text-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 shadow-[0_4px_20px_rgba(10,52,245,0.3)]">
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-primary to-primary text-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 shadow-lg">
           {ahaSaving ? <Loader2 size={16} className="animate-spin" /> : <Star size={16} />}
           {ahaSaving ? "Registrando..." : `Aha! Momento — Marcar Primeiro Resultado (${daysSinceJoin} dias)`}
         </button>

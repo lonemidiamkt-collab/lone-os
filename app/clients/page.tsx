@@ -310,8 +310,8 @@ export default function ClientsPage() {
                     className={`card cursor-pointer transition-all select-none hover:border-primary/40 hover:bg-zinc-800/50 hover:shadow-lg ${
                       selectedClient?.id === client.id ? "border-primary/60 bg-primary/5" : ""
                     } ${client.status === "at_risk" ? "border-red-500/20" : ""} ${
-                      hasMetaLinked ? "ring-1 ring-[#0d4af5]/30 shadow-[0_0_12px_rgba(10,52,245,0.12)]" : ""
-                    } ${hasAdError ? "ring-1 ring-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.15)]" : ""}`}
+                      hasMetaLinked ? "ring-1 ring-[#0d4af5]/30" : ""
+                    } ${hasAdError ? "ring-1 ring-red-500/40" : ""}`}
                     onClick={() => {
                       if (client.status === "onboarding") {
                         router.push(`/clients/${client.id}?tab=onboarding`);

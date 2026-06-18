@@ -9,7 +9,7 @@ export default function NotFound() {
         <p className="text-zinc-500 text-sm">Página não encontrada</p>
         <Link
           href="/"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0d4af5] text-white text-sm font-semibold hover:bg-[#0c3cff] transition-all shadow-[0_0_20px_rgba(10,52,245,0.25)]"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0d4af5] text-white text-sm font-semibold hover:bg-[#0c3cff] transition-all"
         >
           Voltar ao Dashboard
         </Link>

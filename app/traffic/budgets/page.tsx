@@ -175,8 +175,8 @@ function timeSince(iso: string | null): string {
 
 function SeverityDot({ severity }: { severity: DisplaySeverity }) {
   const styles: Record<DisplaySeverity, string> = {
-    critical: "bg-destructive shadow-[0_0_0_4px_rgba(226,75,74,0.15)]",
-    warning:  "bg-lone-warning shadow-[0_0_0_4px_rgba(186,117,23,0.12)]",
+    critical: "bg-destructive",
+    warning:  "bg-lone-warning",
     review:   "bg-lone-warning-bg",
     ok:       "bg-lone-success-bg",
     paused:   "bg-muted",

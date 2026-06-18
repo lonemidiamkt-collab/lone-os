@@ -807,7 +807,7 @@ function CreativeRequestModal({
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-xl mx-4 bg-black border border-border rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-xl mx-4 bg-black border border-border rounded-2xl shadow-lg animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
         <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/30 to-transparent shrink-0" />
 
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
@@ -2700,7 +2700,7 @@ function AdAnalyticsTab({
       {meta.connected ? (
         <div className="space-y-3">
           {/* Status bar */}
-          <div className="bg-card border border-primary/20 rounded-xl p-4 flex items-center gap-4 shadow-[0_0_20px_rgba(10,52,245,0.05)]">
+          <div className="bg-card border border-primary/20 rounded-xl p-4 flex items-center gap-4">
             {/* Status indicator */}
             <div className="relative shrink-0">
               <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
@@ -2797,7 +2797,7 @@ function AdAnalyticsTab({
 
           {/* ── Portfolio Summary ──────────────────────────────────────────── */}
           {portfolioCampaigns.size > 0 && (
-            <div className="card border border-primary/15 shadow-[0_0_30px_rgba(10,52,245,0.04)]">
+            <div className="card border border-primary/15">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -3134,7 +3134,7 @@ function AdAnalyticsTab({
                   onClick={() => handleSelectAccount(acc.id)}
                   className={`text-xs px-3 py-1.5 rounded-md transition-all ${
                     selectedMetaAccount === acc.id
-                      ? "bg-primary text-primary-foreground shadow-[0_0_12px_rgba(10,52,245,0.3)]"
+                      ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
@@ -3489,7 +3489,7 @@ function AdAnalyticsTab({
             return "";
           })();
           return (
-            <div key={m.key} className={`rounded-xl border border-border bg-card p-4 text-center transition-all ${kpiClass || "hover:border-primary/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)]"}`}>
+            <div key={m.key} className={`rounded-xl border border-border bg-card p-4 text-center transition-all ${kpiClass || "hover:border-primary/30"}`}>
               <div className={`w-9 h-9 mx-auto rounded-lg flex items-center justify-center mb-2 ${
                 kpiClass === "kpi-danger" ? "bg-destructive/10 border border-destructive/20" :
                 kpiClass === "kpi-warning" ? "bg-lone-warning-bg border border-lone-warning-border" :
@@ -4289,8 +4289,7 @@ function InvestmentControlTab({
                     className="absolute top-0 bottom-0 w-0.5 rounded-full z-10"
                     style={{
                       left: `${timePctBar}%`,
-                      backgroundColor: "rgba(255,255,255,0.8)",
-                      boxShadow: "0 0 4px rgba(255,255,255,0.5)",
+                      backgroundColor: "var(--foreground)",
                     }}
                     title={`Dia ${currentDay} de ${daysInMonth} (${timePctBar.toFixed(0)}% do mês)`}
                   />

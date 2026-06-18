@@ -121,7 +121,7 @@ export default function KanbanBoard<T extends { id: string }>({
                     {menuOpen === item.id && (
                       <>
                         <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(null)} />
-                        <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-[0_8px_30px_rgba(0,0,0,0.5)] z-30 py-1 min-w-[120px] animate-fade-in">
+                        <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-30 py-1 min-w-[120px] animate-fade-in">
                           {onEdit && (
                             <button
                               onClick={(e) => { e.stopPropagation(); onEdit(item); setMenuOpen(null); }}

@@ -455,7 +455,7 @@ export default function GoalsPage() {
                     onClick={() => switchPeriod(tv.key)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
                       active
-                        ? "bg-primary text-primary-foreground shadow-[0_2px_8px_rgba(10,52,245,0.25)]"
+                        ? "bg-primary text-primary-foreground shadow-lg"
                         : "text-muted-foreground hover:text-muted-foreground"
                     }`}
                   >
@@ -477,7 +477,7 @@ export default function GoalsPage() {
                   <ChevronDown size={12} className="text-muted-foreground" />
                 </button>
                 {showMonthPicker && (
-                  <div className="absolute top-full right-0 mt-1 bg-card border border-border rounded-xl p-2 z-50 grid grid-cols-3 gap-1 animate-fade-in shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+                  <div className="absolute top-full right-0 mt-1 bg-card border border-border rounded-xl p-2 z-50 grid grid-cols-3 gap-1 animate-fade-in shadow-lg">
                     {MONTHS.map((m, i) => (
                       <button
                         key={m}
@@ -504,7 +504,7 @@ export default function GoalsPage() {
                     onClick={() => switchPeriod("trimestral", undefined, q)}
                     className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                       q === selectedQuarter
-                        ? "bg-primary text-primary-foreground shadow-[0_2px_8px_rgba(10,52,245,0.25)]"
+                        ? "bg-primary text-primary-foreground shadow-lg"
                         : "text-muted-foreground hover:text-muted-foreground"
                     }`}
                   >
@@ -527,7 +527,7 @@ export default function GoalsPage() {
                 Relatorio
               </button>
               {showExportMenu && (
-                <div className="absolute top-full right-0 mt-1 bg-card border border-border rounded-xl p-1.5 z-50 w-52 animate-fade-in shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+                <div className="absolute top-full right-0 mt-1 bg-card border border-border rounded-xl p-1.5 z-50 w-52 animate-fade-in shadow-lg">
                   <button
                     onClick={handleExportPDF}
                     disabled={exporting}
@@ -768,7 +768,7 @@ export default function GoalsPage() {
                     <button key={tab.key} onClick={() => setActiveLayer(tab.key)}
                       className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
                         activeLayer === tab.key
-                          ? "bg-primary text-primary-foreground shadow-[0_2px_8px_rgba(13,74,245,0.25)]"
+                          ? "bg-primary text-primary-foreground shadow-lg"
                           : "text-muted-foreground hover:text-muted-foreground"
                       }`}>
                       <Icon size={12} /> {tab.label}

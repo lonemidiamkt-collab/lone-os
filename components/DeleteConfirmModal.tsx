@@ -51,7 +51,7 @@ export default function DeleteConfirmModal({
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-md bg-card border border-destructive/30 rounded-2xl shadow-[0_0_60px_rgba(239,68,68,0.15)] overflow-hidden"
+        className="relative w-full max-w-md bg-card border border-destructive/30 rounded-2xl overflow-hidden"
       >
         <div className="h-px w-full bg-gradient-to-r from-transparent via-destructive/40 to-transparent" />
 

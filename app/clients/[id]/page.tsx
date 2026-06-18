@@ -779,7 +779,7 @@ export default function ClientDetailPage() {
                   {showMetaPicker && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => { setShowMetaPicker(false); setMetaSearch(""); }} />
-                      <div className="absolute right-0 top-full mt-1 w-72 bg-card border border-border rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.6)] z-50 animate-fade-in overflow-hidden">
+                      <div className="absolute right-0 top-full mt-1 w-72 bg-card border border-border rounded-xl shadow-lg z-50 animate-fade-in overflow-hidden">
                         <div className="px-3 py-2.5 border-b border-border flex items-center justify-between">
                           <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                             {linkingAccount && <Loader2 size={10} className="animate-spin" />}

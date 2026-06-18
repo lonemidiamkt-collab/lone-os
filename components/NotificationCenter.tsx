@@ -40,7 +40,7 @@ export default function NotificationCenter() {
       >
         <Bell size={17} strokeWidth={1.8} />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-[9px] font-bold text-foreground flex items-center justify-center shadow-[0_0_6px_rgba(13,74,245,0.5)] animate-pulse">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-[9px] font-bold text-foreground flex items-center justify-center animate-pulse">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
@@ -134,7 +134,7 @@ export default function NotificationCenter() {
                                 {notif.title}
                               </p>
                               {!notif.read && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 shadow-[0_0_4px_rgba(13,74,245,0.5)]" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                               )}
                             </div>
                             <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2">{notif.body}</p>

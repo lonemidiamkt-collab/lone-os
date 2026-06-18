@@ -158,7 +158,7 @@ export default function OnboardingTour() {
 
       {/* Tooltip */}
       <div className={`absolute ${getTooltipPosition()} w-full max-w-md mx-4`}>
-        <div className="bg-card border border-border rounded-2xl shadow-[0_0_60px_rgba(10,52,245,0.15)] overflow-hidden animate-fade-in">
+        <div className="bg-card border border-border rounded-2xl overflow-hidden animate-fade-in">
           {/* Top glow */}
           <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
 
@@ -219,7 +219,7 @@ export default function OnboardingTour() {
                 )}
                 <button
                   onClick={next}
-                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)]"
+                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all"
                 >
                   {isLast ? "Comecar!" : "Proximo"} <ChevronRight size={14} />
                 </button>

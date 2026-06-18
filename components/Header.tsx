@@ -98,7 +98,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
           )}
         </div>
         {hasResults && (
-          <div className="absolute top-full mt-1 left-0 w-72 bg-card border border-border rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.8)] z-[200] py-1 animate-fade-in max-h-80 overflow-y-auto">
+          <div className="absolute top-full mt-1 left-0 w-72 bg-card border border-border rounded-2xl shadow-lg z-[200] py-1 animate-fade-in max-h-80 overflow-y-auto">
             {clientResults.length > 0 && (
               <>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium">Clientes</p>
@@ -158,7 +158,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
         {showQuick && (
           <>
           <div className="fixed inset-0 z-[199]" onClick={() => setShowQuick(false)} />
-          <div className="absolute right-0 top-full mt-2 w-52 bg-card border border-border rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.6)] z-[200] py-2 animate-fade-in">
+          <div className="absolute right-0 top-full mt-2 w-52 bg-card border border-border rounded-xl shadow-lg z-[200] py-2 animate-fade-in">
             <p className="text-[10px] text-muted-foreground uppercase tracking-[0.15em] px-3 pb-2 mb-1 border-b border-border font-medium">
               Ações Rápidas
             </p>
@@ -197,7 +197,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
         {showMenu && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-            <div className="absolute right-0 top-full mt-2 w-52 bg-card border border-border rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.8)] z-[200] py-2 animate-fade-in">
+            <div className="absolute right-0 top-full mt-2 w-52 bg-card border border-border rounded-2xl shadow-lg z-[200] py-2 animate-fade-in">
               <div className="flex items-center gap-2.5 px-3 py-2 border-b border-border mb-1">
                 <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={32} glow />
                 <div>
@@ -272,7 +272,7 @@ function NotifFilterTabs({ notifications }: { notifications: AppNotification[] }
                 }`}
               >
                 <div className="mt-1.5">
-                  <div className={`w-1.5 h-1.5 rounded-full ${!notif.read ? "bg-primary shadow-[0_0_6px_rgba(10,52,245,0.5)]" : "bg-muted"}`} />
+                  <div className={`w-1.5 h-1.5 rounded-full ${!notif.read ? "bg-primary" : "bg-muted"}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">

@@ -359,7 +359,7 @@ export default function AutomationsPage() {
       {showCreate && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setShowCreate(false); setEditingRule(null); }} />
-          <div className="relative w-full max-w-lg mx-4 bg-black border border-border rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="relative w-full max-w-lg mx-4 bg-black border border-border rounded-2xl shadow-lg animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
             <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/30 to-transparent shrink-0" />
 
             <div className="p-6 space-y-5 overflow-y-auto flex-1">
