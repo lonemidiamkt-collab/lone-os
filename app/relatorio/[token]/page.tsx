@@ -103,9 +103,9 @@ function smoothPath(pts: [number, number][]): string {
 }
 
 function deltaColor(direction: KpiEntry["direction"]): string {
-  if (direction === "positive") return "#22C55E";
-  if (direction === "negative") return "#EF4444";
-  return "#6B7280";
+  if (direction === "positive") return "var(--lone-success)";
+  if (direction === "negative") return "var(--destructive)";
+  return "var(--muted-foreground)";
 }
 
 function deltaArrow(pct: number): string {
@@ -113,9 +113,9 @@ function deltaArrow(pct: number): string {
 }
 
 function perfColor(p: ReportData["winning_set"]["performance"]): string {
-  if (p === "good") return "#22C55E";
-  if (p === "warn") return "#EAB308";
-  return "#EF4444";
+  if (p === "good") return "var(--lone-success)";
+  if (p === "warn") return "var(--lone-warning)";
+  return "var(--destructive)";
 }
 
 // ─── Componentes ──────────────────────────────────────────────────────────────
@@ -138,37 +138,37 @@ function Chart({ chart }: { chart: ReportData["chart"] }) {
     >
       <defs>
         <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="#2B3CFF" stopOpacity="0.55" />
-          <stop offset="100%" stopColor="#2B3CFF" stopOpacity="0" />
+          <stop offset="0%"   stopColor="var(--primary)" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
         </linearGradient>
       </defs>
 
       {/* Grade */}
       {[40, 100, 160, 220].map((y) => (
         <line key={y} x1="84" y1={y} x2="790" y2={y}
-              stroke="#1A1F33" strokeWidth="1" strokeDasharray="3,5" />
+              stroke="var(--card)" strokeWidth="1" strokeDasharray="3,5" />
       ))}
 
       {/* Rótulos Y */}
       {[["30", 43], ["20", 103], ["10", 163]].map(([lbl, y]) => (
-        <text key={lbl} x="76" y={y} fill="#6B7280" fontSize="11"
+        <text key={lbl} x="76" y={y} fill="var(--muted-foreground)" fontSize="11"
               textAnchor="end" dominantBaseline="middle">{lbl}</text>
       ))}
 
       {/* Área + curva */}
       <path d={area} fill="url(#ag)" stroke="none" />
-      <path d={line} fill="none" stroke="#2B3CFF"
+      <path d={line} fill="none" stroke="var(--primary)"
             strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
       {/* Pontos */}
       {pts.map(([x, y], i) =>
         i === chart.peak_index
-          ? <circle key={i} cx={x} cy={y} r="6" fill="white" stroke="#2B3CFF" strokeWidth="3" />
-          : <circle key={i} cx={x} cy={y} r="4" fill="#2B3CFF" />
+          ? <circle key={i} cx={x} cy={y} r="6" fill="white" stroke="var(--primary)" strokeWidth="3" />
+          : <circle key={i} cx={x} cy={y} r="4" fill="var(--primary)" />
       )}
 
       {/* Tooltip do pico */}
-      <rect x={px - 30} y={py - 36} width="60" height="22" rx="11" fill="#2B3CFF" />
+      <rect x={px - 30} y={py - 36} width="60" height="22" rx="11" fill="var(--primary)" />
       <text x={px} y={py - 21} fill="white" fontSize="11" fontWeight="700"
             textAnchor="middle" dominantBaseline="middle">
         {chart.values[chart.peak_index]} msgs
@@ -177,7 +177,7 @@ function Chart({ chart }: { chart: ReportData["chart"] }) {
       {/* Labels X */}
       {chart.days.map((day, i) => (
         <text key={i} x={XS[i]} y="252"
-              fill={i === chart.peak_index ? "#2B3CFF" : "#8b91a1"}
+              fill={i === chart.peak_index ? "var(--primary)" : "var(--muted-foreground)"}
               fontSize="12"
               fontWeight={i === chart.peak_index ? "700" : "400"}
               textAnchor="middle">
@@ -198,20 +198,20 @@ function Donut({ female_pct, male_pct }: ReportData["gender"]) {
       <svg width="120" height="120" viewBox="0 0 140 140"
            role="img" aria-label="Distribuição por gênero">
         <title>Distribuição por gênero</title>
-        <circle cx="70" cy="70" r={R} fill="none" stroke="#2D3445" strokeWidth="22" />
-        <circle cx="70" cy="70" r={R} fill="none" stroke="#2B3CFF" strokeWidth="22"
+        <circle cx="70" cy="70" r={R} fill="none" stroke="var(--border)" strokeWidth="22" />
+        <circle cx="70" cy="70" r={R} fill="none" stroke="var(--primary)" strokeWidth="22"
                 transform="rotate(-90 70 70)"
                 strokeDasharray={`${arc.toFixed(1)} ${circ.toFixed(1)}`} />
       </svg>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {[
-          { color: "#2B3CFF", label: "Mulheres", pct: female_pct },
-          { color: "#2D3445", label: "Homens",   pct: male_pct   },
+          { color: "var(--primary)", label: "Mulheres", pct: female_pct },
+          { color: "var(--border)", label: "Homens",   pct: male_pct   },
         ].map(({ color, label, pct }) => (
           <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
             <span style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} aria-hidden="true" />
-            <span style={{ color: "#6B7280", flex: 1 }}>{label}</span>
-            <span style={{ fontWeight: 700, color: "#0B0E1E" }}>{pct}%</span>
+            <span style={{ color: "var(--muted-foreground)", flex: 1 }}>{label}</span>
+            <span style={{ fontWeight: 700, color: "var(--background)" }}>{pct}%</span>
           </div>
         ))}
       </div>
@@ -227,11 +227,11 @@ function AgeBars({ ranges }: { ranges: ReportData["age_ranges"] }) {
         const w = ((pct / maxPct) * 96).toFixed(1);
         return (
           <div key={label} style={{ display: "grid", gridTemplateColumns: "56px 1fr 44px", alignItems: "center", gap: 10, fontSize: 12 }}>
-            <span style={{ color: "#6B7280" }}>{label}</span>
-            <div style={{ background: "#EDEFF3", height: 8, borderRadius: 6, overflow: "hidden" }} aria-hidden="true">
-              <div style={{ width: `${w}%`, height: "100%", borderRadius: 6, background: "#2B3CFF" }} />
+            <span style={{ color: "var(--muted-foreground)" }}>{label}</span>
+            <div style={{ background: "var(--muted)", height: 8, borderRadius: 6, overflow: "hidden" }} aria-hidden="true">
+              <div style={{ width: `${w}%`, height: "100%", borderRadius: 6, background: "var(--primary)" }} />
             </div>
-            <span style={{ fontWeight: 700, textAlign: "right", color: "#0B0E1E" }}>{pct}%</span>
+            <span style={{ fontWeight: 700, textAlign: "right", color: "var(--background)" }}>{pct}%</span>
           </div>
         );
       })}
@@ -267,7 +267,7 @@ export default async function RelatorioPub({ params }: { params: Promise<{ token
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         .rp-root {
           height: 100vh; overflow: hidden;
-          background: #060814; color: #fff;
+          background: var(--background); color: #fff;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
           font-size: 14px; line-height: 1.4;
           display: flex; flex-direction: column;
@@ -276,46 +276,46 @@ export default async function RelatorioPub({ params }: { params: Promise<{ token
         .rp-header {
           display: flex; align-items: center; justify-content: space-between;
           padding: 0 28px; height: 60px; flex-shrink: 0;
-          border-bottom: 1px solid #1A1F33;
+          border-bottom: 1px solid var(--card);
         }
         .rp-logo { display: flex; align-items: center; gap: 10px; }
         .rp-logo-icon {
-          width: 42px; height: 42px; background: #2B3CFF; border-radius: 8px;
+          width: 42px; height: 42px; background: var(--primary); border-radius: 8px;
           display: flex; align-items: center; justify-content: center;
           font-size: 22px; font-weight: 900; font-style: italic; color: #fff; flex-shrink: 0;
         }
         .rp-logo-name { font-size: 14px; font-weight: 800; letter-spacing: 2.5px; }
         .rp-hdr-client { text-align: right; }
         .rp-hdr-name   { font-size: 13px; font-weight: 700; }
-        .rp-hdr-period { font-size: 11px; color: #6B7280; margin-top: 2px; }
+        .rp-hdr-period { font-size: 11px; color: var(--muted-foreground); margin-top: 2px; }
         /* ── Hero ── */
         .rp-hero {
           display: flex; align-items: center; justify-content: space-between;
-          padding: 13px 28px; border-bottom: 1px solid #1A1F33;
+          padding: 13px 28px; border-bottom: 1px solid var(--card);
           flex-shrink: 0; gap: 24px;
         }
         .rp-label-blue {
           font-size: 11px; font-weight: 700; letter-spacing: 2px;
-          color: #2B3CFF; text-transform: uppercase; margin-bottom: 3px;
+          color: var(--primary); text-transform: uppercase; margin-bottom: 3px;
         }
         .rp-hero-title {
           font-size: 36px; font-weight: 800; letter-spacing: -1px;
           line-height: 1.1; margin-bottom: 3px;
         }
-        .rp-hero-sub  { font-size: 13px; color: #8b91a1; }
-        .rp-hero-msg  { font-size: 13px; color: #8b91a1; font-style: italic; margin-top: 4px; }
+        .rp-hero-sub  { font-size: 13px; color: var(--muted-foreground); }
+        .rp-hero-msg  { font-size: 13px; color: var(--muted-foreground); font-style: italic; margin-top: 4px; }
         /* ── KPIs ── */
         .rp-kpi-row { display: flex; gap: 10px; flex-shrink: 0; }
         .rp-kpi {
-          background: #0B0E1E; border: 1px solid #1A1F33;
+          background: var(--background); border: 1px solid var(--card);
           border-radius: 9px; padding: 11px 15px; min-width: 142px;
         }
-        .rp-kpi.first { border-left: 3px solid #2B3CFF; }
-        .rp-kpi-lbl   { font-size: 10px; color: #8b91a1; margin-bottom: 3px; }
+        .rp-kpi.first { border-left: 3px solid var(--primary); }
+        .rp-kpi-lbl   { font-size: 10px; color: var(--muted-foreground); margin-bottom: 3px; }
         .rp-kpi-val   { font-size: 21px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; }
         .rp-kpi-delta { font-size: 10px; margin-top: 3px; display: flex; align-items: center; gap: 3px; }
         .rp-kpi-num   { font-weight: 700; }
-        .rp-kpi-aux   { color: #6B7280; }
+        .rp-kpi-aux   { color: var(--muted-foreground); }
         /* ── Grid ── */
         .rp-grid {
           display: grid; grid-template-columns: 1.55fr 1fr;
@@ -337,25 +337,25 @@ export default async function RelatorioPub({ params }: { params: Promise<{ token
         }
         .rp-sec-title { font-size: 17px; font-weight: 700; margin-top: 2px; }
         .rp-pill {
-          background: #0B0E1E; border: 1px solid #1A1F33;
+          background: var(--background); border: 1px solid var(--card);
           border-radius: 999px; padding: 5px 13px;
-          font-size: 11px; color: #8b91a1;
+          font-size: 11px; color: var(--muted-foreground);
           display: flex; align-items: center; gap: 6px; white-space: nowrap; flex-shrink: 0;
         }
         .rp-pill-dot {
           width: 8px; height: 8px; border-radius: 50%;
-          background: #2B3CFF; flex-shrink: 0;
+          background: var(--primary); flex-shrink: 0;
         }
         /* ── Chart card ── */
         .rp-chart-card {
-          background: #0B0E1E; border: 1px solid #1A1F33;
+          background: var(--background); border: 1px solid var(--card);
           border-radius: 12px; padding: 16px 20px;
           flex: 1; min-height: 0; overflow: hidden;
           display: flex; align-items: stretch;
         }
         /* ── Bottom cards ── */
         .rp-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex-shrink: 0; }
-        .rp-card   { background: #0B0E1E; border: 1px solid #1A1F33; border-radius: 10px; padding: 13px 15px; }
+        .rp-card   { background: var(--background); border: 1px solid var(--card); border-radius: 10px; padding: 13px 15px; }
         .rp-winner-top { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 9px; }
         .rp-winner-icon {
           width: 28px; height: 28px; background: rgba(43,60,255,.12);
@@ -364,55 +364,55 @@ export default async function RelatorioPub({ params }: { params: Promise<{ token
         }
         .rp-winner-tag {
           font-size: 9.5px; font-weight: 700; letter-spacing: 2px;
-          color: #2B3CFF; text-transform: uppercase; line-height: 1.35;
+          color: var(--primary); text-transform: uppercase; line-height: 1.35;
         }
         .rp-winner-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
-        .rp-winner-cpa  { font-size: 12px; color: #8b91a1; display: flex; align-items: center; gap: 6px; }
+        .rp-winner-cpa  { font-size: 12px; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; }
         .rp-perf-dot    { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
         .rp-sum-lbl     { margin-bottom: 6px; }
         .rp-sum-item {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 6px 0; border-bottom: 1px solid #1A1F33; font-size: 12px;
+          padding: 6px 0; border-bottom: 1px solid var(--card); font-size: 12px;
           list-style: none;
         }
         .rp-sum-item:last-child { border-bottom: none; padding-bottom: 0; }
-        .rp-sum-item-lbl { color: #8b91a1; }
+        .rp-sum-item-lbl { color: var(--muted-foreground); }
         .rp-sum-item-val { font-weight: 700; }
         /* ── Demo card ── */
         .rp-demo {
-          background: #fff; color: #0B0E1E;
+          background: #fff; color: var(--background);
           border-radius: 12px; padding: 18px 20px;
           flex: 1; min-height: 0; overflow: hidden;
           display: flex; flex-direction: column; gap: 14px;
         }
         .rp-demo-lbl {
           font-size: 10px; font-weight: 700; letter-spacing: 2px;
-          color: #8b91a1; text-transform: uppercase; margin-bottom: 8px;
+          color: var(--muted-foreground); text-transform: uppercase; margin-bottom: 8px;
         }
         /* ── Footer ── */
         .rp-footer {
-          border-top: 1px solid #1A1F33; padding: 10px 28px; flex-shrink: 0;
+          border-top: 1px solid var(--card); padding: 10px 28px; flex-shrink: 0;
           display: grid; grid-template-columns: 1fr auto 1fr;
           align-items: center; gap: 16px;
         }
-        .rp-f-meta    { font-size: 11px; color: #6B7280; }
-        .rp-f-meta-sm { font-size: 10px; color: #6B7280; }
+        .rp-f-meta    { font-size: 11px; color: var(--muted-foreground); }
+        .rp-f-meta-sm { font-size: 10px; color: var(--muted-foreground); }
         .rp-f-center  { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
         .rp-f-logo    {
-          width: 24px; height: 24px; background: #2B3CFF; border-radius: 5px;
+          width: 24px; height: 24px; background: var(--primary); border-radius: 5px;
           display: flex; align-items: center; justify-content: center;
           font-size: 13px; font-weight: 900; font-style: italic; color: #fff; flex-shrink: 0;
         }
         .rp-f-logo-name { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; }
         .rp-f-right  { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-        .rp-f-client { font-size: 11px; color: #6B7280; }
+        .rp-f-client { font-size: 11px; color: var(--muted-foreground); }
         .rp-btn-wa {
           display: flex; align-items: center; gap: 6px;
-          padding: 7px 15px; background: #0B0E1E; border: 1px solid #1A1F33;
+          padding: 7px 15px; background: var(--background); border: 1px solid var(--card);
           border-radius: 999px; font-size: 11px; font-weight: 600; color: #fff;
           text-decoration: none;
         }
-        .rp-wa-dot { width: 8px; height: 8px; border-radius: 50%; background: #22C55E; flex-shrink: 0; }
+        .rp-wa-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--lone-success); flex-shrink: 0; }
         /* ── Mobile ── */
         @media (max-width: 768px) {
           .rp-root    { height: auto; overflow: auto; font-size: 12px; }

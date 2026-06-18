@@ -132,8 +132,10 @@
     --lone-info-icon-bg:    rgba(141, 164, 255, 0.15);
   }
 
-  /* ─── Light theme = base / :root (next-themes injeta .dark no html) ─── */
-  :root {
+  /* ─── Light theme = base / :root (next-themes injeta .dark no html) ───
+     .theme-force-light: força os tokens claros num subtree mesmo sob html.dark
+     (usado nas páginas que o cliente vê: relatório/portal/onboarding). ─── */
+  :root, .theme-force-light {
     --background: #fafafa;
     --foreground: #18181b;
     --card: #ffffff;
