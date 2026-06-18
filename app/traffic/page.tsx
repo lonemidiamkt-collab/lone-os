@@ -28,6 +28,7 @@ import {
 import { getAttentionColor, getAttentionLabel, getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
 import type { Client, Task, TrafficMonthlyReport, AdCampaign, AdAccount, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
 import { mockAdAccounts, mockAdCampaigns } from "@/lib/mockData";
+import { fetchClientGroupMessageLog, type ClientGroupMessageLogRow } from "@/lib/supabase/queries";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useMetaConnection, fetchAdAccounts, fetchCampaignInsights, fetchAccountDemographics, TokenExpiredError } from "@/lib/meta/useMetaAds";
 import { useState, useMemo, useEffect, useCallback } from "react";
@@ -140,6 +141,15 @@ export default function TrafficPage() {
     const u3 = subOps();
     return () => { u1(); u2(); u3(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Status REAL da automação de mensagens (suporte/relatório) nos grupos.
+  // Lido do client_group_message_log p/ não precisar marcar à mão o que já foi enviado.
+  const [messageLog, setMessageLog] = useState<ClientGroupMessageLogRow[]>([]);
+  useEffect(() => {
+    const ws = new Date();
+    ws.setDate(ws.getDate() - ws.getDay() + 1); // segunda desta semana
+    fetchClientGroupMessageLog(ws.toISOString().slice(0, 10)).then(setMessageLog);
+  }, []);
 
   // Creative request modal state
   const [creativeModal, setCreativeModal] = useState<{
@@ -309,6 +319,7 @@ export default function TrafficPage() {
               tasks={trafficTasks}
               adCampaigns={sharedIsUsingRealData ? sharedRealCampaigns : mockAdCampaigns}
               isUsingRealData={sharedIsUsingRealData}
+              messageLog={messageLog}
             />
           )}
 
@@ -956,6 +967,7 @@ function RoutineTab({
   tasks,
   adCampaigns,
   isUsingRealData = false,
+  messageLog = [],
 }: {
   clients: Client[];
   routineChecks: typeof import("@/lib/mockData").mockTrafficRoutineChecks;
@@ -965,6 +977,7 @@ function RoutineTab({
   tasks: Task[];
   adCampaigns: AdCampaign[];
   isUsingRealData?: boolean;
+  messageLog?: { clientId: string; dateKey: string; kind: "report" | "support"; status: string }[];
 }) {
   const today = getTodayStr();
   const dayOfWeek = getDayOfWeek();
@@ -974,9 +987,13 @@ function RoutineTab({
     (c) => c.date === today && (effectiveFilter === "all" || c.completedBy === effectiveFilter)
   );
 
-  const supportDone = new Set(todayChecks.filter((c) => c.type === "support").map((c) => c.clientId));
+  // Automação: "sent" no log conta como feito; "failed" vira alerta de ação manual.
+  const supportSentAuto = (messageLog ?? []).filter((l) => l.kind === "support" && l.status === "sent" && l.dateKey === today).map((l) => l.clientId);
+  const supportFailedIds = (messageLog ?? []).filter((l) => l.kind === "support" && l.status === "failed" && l.dateKey === today).map((l) => l.clientId);
+  const supportDone = new Set<string>([...todayChecks.filter((c) => c.type === "support").map((c) => c.clientId), ...supportSentAuto]);
   const supportPending = activeClients.filter((c) => !supportDone.has(c.id));
   const supportCompleted = activeClients.filter((c) => supportDone.has(c.id));
+  const supportFailed = activeClients.filter((c) => supportFailedIds.includes(c.id) && !supportDone.has(c.id));
 
   // Weekly checks
   const weekStart = new Date();
@@ -990,7 +1007,8 @@ function RoutineTab({
   const isWednesday = dayOfWeek === 3;
   const isFriday = dayOfWeek === 5;
 
-  const reportsDone = new Set(weekChecks.filter((c) => c.type === "report").map((c) => c.clientId));
+  const reportSentAuto = (messageLog ?? []).filter((l) => l.kind === "report" && l.status === "sent" && l.dateKey >= weekStartStr).map((l) => l.clientId);
+  const reportsDone = new Set<string>([...weekChecks.filter((c) => c.type === "report").map((c) => c.clientId), ...reportSentAuto]);
   const feedbackDone = new Set(weekChecks.filter((c) => c.type === "feedback").map((c) => c.clientId));
   const analysisDone = new Set(weekChecks.filter((c) => c.type === "analysis").map((c) => c.clientId));
 
@@ -1156,7 +1174,7 @@ function RoutineTab({
               <ClipboardCheck size={16} className="text-primary" />
               Suporte Diario nos Grupos
             </h3>
-            <p className="text-xs text-muted-foreground mt-1">Marque conforme enviar suporte no grupo de cada cliente hoje.</p>
+            <p className="text-xs text-muted-foreground mt-1">A automação envia e marca sozinha; aja só nos que falharam.</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
@@ -1172,6 +1190,17 @@ function RoutineTab({
             </div>
           </div>
         </div>
+
+        {/* Falhas da automação hoje — ação manual necessária */}
+        {supportFailed.length > 0 && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5">
+            <AlertTriangle size={14} className="text-destructive shrink-0 mt-0.5" />
+            <p className="text-xs text-foreground">
+              <span className="font-semibold text-destructive">Automação falhou para {supportFailed.length} cliente(s) hoje.</span>{" "}
+              Envie o suporte na mão e marque abaixo: {supportFailed.map((c) => c.name).join(", ")}.
+            </p>
+          </div>
+        )}
 
         {/* Pending */}
         {supportPending.length > 0 && (

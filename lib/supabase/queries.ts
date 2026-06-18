@@ -953,6 +953,28 @@ export async function insertTrafficRoutineCheck(check: Omit<TrafficRoutineCheck,
   if (error) console.error("[DB] insertTrafficRoutineCheck:", error);
 }
 
+export interface ClientGroupMessageLogRow {
+  clientId: string;
+  dateKey: string;
+  kind: "report" | "support";
+  status: "sent" | "failed" | "skipped";
+}
+
+/** Log de envios da automação de mensagens nos grupos (date_key >= sinceDateKey). RLS: leitura autenticada. */
+export async function fetchClientGroupMessageLog(sinceDateKey: string): Promise<ClientGroupMessageLogRow[]> {
+  const { data, error } = await db
+    .from("client_group_message_log")
+    .select("client_id, date_key, kind, status")
+    .gte("date_key", sinceDateKey);
+  if (error) { console.error("[DB] fetchClientGroupMessageLog:", error); return []; }
+  return (data ?? []).map((row: Record<string, unknown>) => ({
+    clientId: row.client_id as string,
+    dateKey: row.date_key as string,
+    kind: row.kind as "report" | "support",
+    status: row.status as "sent" | "failed" | "skipped",
+  }));
+}
+
 // ═══════════════════════════════════════════════════════════
 // SOCIAL REPORTS
 // ═══════════════════════════════════════════════════════════
