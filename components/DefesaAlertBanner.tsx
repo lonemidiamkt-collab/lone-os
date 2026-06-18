@@ -32,8 +32,8 @@ export default function DefesaAlertBanner() {
   if (!summary || summary.unack_total === 0) return null;
 
   const hasCritical = summary.unack_critical > 0;
-  const bgClass = hasCritical ? "bg-red-500/10 border-red-500/30" : "bg-orange-500/10 border-orange-500/30";
-  const textClass = hasCritical ? "text-red-400" : "text-orange-400";
+  const bgClass = hasCritical ? "bg-destructive/10 border-destructive/30" : "bg-lone-warning-bg border-lone-warning-border";
+  const textClass = hasCritical ? "text-destructive" : "text-lone-warning";
 
   return (
     <Link
@@ -46,10 +46,10 @@ export default function DefesaAlertBanner() {
           <p className={`${textClass} font-semibold text-sm`}>
             Defesa Ativa: {summary.unack_total} {summary.unack_total === 1 ? "alerta ativo" : "alertas ativos"}
           </p>
-          <p className="text-[11px] text-zinc-400 mt-0.5">
-            {summary.unack_critical > 0 && <span className="text-red-400">{summary.unack_critical} crítico{summary.unack_critical > 1 ? "s" : ""}</span>}
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            {summary.unack_critical > 0 && <span className="text-destructive">{summary.unack_critical} crítico{summary.unack_critical > 1 ? "s" : ""}</span>}
             {summary.unack_critical > 0 && summary.unack_high > 0 && " · "}
-            {summary.unack_high > 0 && <span className="text-orange-400">{summary.unack_high} alto{summary.unack_high > 1 ? "s" : ""}</span>}
+            {summary.unack_high > 0 && <span className="text-lone-warning">{summary.unack_high} alto{summary.unack_high > 1 ? "s" : ""}</span>}
           </p>
         </div>
         <ChevronRight size={16} className={textClass} />

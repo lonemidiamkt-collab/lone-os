@@ -126,12 +126,12 @@ export default function SmartAlerts() {
     <div className="rounded-xl border border-border bg-card p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <AlertTriangle size={14} className="text-amber-400" />
+          <AlertTriangle size={14} className="text-lone-warning" />
           Alertas Inteligentes
         </h3>
         <div className="flex items-center gap-2">
-          {dangerCount > 0 && <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">{dangerCount} criticos</span>}
-          {warningCount > 0 && <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">{warningCount} avisos</span>}
+          {dangerCount > 0 && <span className="text-[10px] px-2 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20">{dangerCount} criticos</span>}
+          {warningCount > 0 && <span className="text-[10px] px-2 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border">{warningCount} avisos</span>}
         </div>
       </div>
 
@@ -141,10 +141,10 @@ export default function SmartAlerts() {
           return (
             <Link key={alert.id} href={alert.href}
               className={`flex items-start gap-3 p-2.5 rounded-lg transition-colors hover:bg-muted/30 ${
-                alert.type === "danger" ? "border-l-2 border-red-500" : alert.type === "warning" ? "border-l-2 border-amber-500" : ""
+                alert.type === "danger" ? "border-l-2 border-destructive" : alert.type === "warning" ? "border-l-2 border-lone-warning-border" : ""
               }`}>
               <Icon size={13} className={`mt-0.5 shrink-0 ${
-                alert.type === "danger" ? "text-red-400" : alert.type === "warning" ? "text-amber-400" : "text-zinc-400"
+                alert.type === "danger" ? "text-destructive" : alert.type === "warning" ? "text-lone-warning" : "text-muted-foreground"
               }`} />
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-foreground">{alert.title}</p>
@@ -156,7 +156,7 @@ export default function SmartAlerts() {
       </div>
 
       {alerts.length > 6 && (
-        <p className="text-[10px] text-zinc-600 text-center">+{alerts.length - 6} alertas</p>
+        <p className="text-[10px] text-muted-foreground text-center">+{alerts.length - 6} alertas</p>
       )}
     </div>
   );

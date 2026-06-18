@@ -55,16 +55,16 @@ export default function PlatformUpdatesWidget() {
   if (loading || dismissed || unread.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-[#0d4af5]/30 bg-gradient-to-br from-[#0d4af5]/[0.08] via-[#0d4af5]/[0.04] to-transparent p-5 animate-fade-in">
+    <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/[0.08] via-primary/[0.04] to-transparent p-5 animate-fade-in">
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#0d4af5]/15 flex items-center justify-center">
-            <Sparkles size={18} className="text-[#0d4af5]" />
+          <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center">
+            <Sparkles size={18} className="text-primary" />
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground flex items-center gap-2">
               Novidades do Lone OS
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#0d4af5]/15 text-[#3b6ff5] border border-[#0d4af5]/20 font-medium">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/20 font-medium">
                 {unread.length} {unread.length === 1 ? "nova" : "novas"}
               </span>
             </p>
@@ -105,7 +105,7 @@ export default function PlatformUpdatesWidget() {
           </button>
           <Link
             href="/sobre#changelog"
-            className="flex items-center gap-1 text-[11px] text-[#0d4af5] hover:text-[#3b6ff5] font-medium transition-colors"
+            className="flex items-center gap-1 text-[11px] text-primary hover:text-primary font-medium transition-colors"
           >
             <GitBranch size={10} /> Ver todas <ArrowRight size={10} />
           </Link>

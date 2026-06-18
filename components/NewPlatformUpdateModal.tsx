@@ -22,10 +22,10 @@ interface Props {
 }
 
 const CATEGORIES = [
-  { value: "feature",      label: "Feature",        color: "bg-[#0d4af5]/10 text-[#3b6ff5] border-[#0d4af5]/30" },
-  { value: "fix",          label: "Fix",            color: "bg-amber-500/10 text-amber-400 border-amber-500/30" },
-  { value: "announcement", label: "Anúncio",        color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/30" },
-  { value: "breaking",     label: "Breaking change", color: "bg-red-500/10 text-red-400 border-red-500/30" },
+  { value: "feature",      label: "Feature",        color: "bg-primary/10 text-primary border-primary/30" },
+  { value: "fix",          label: "Fix",            color: "bg-lone-warning-bg text-lone-warning border-lone-warning-border" },
+  { value: "announcement", label: "Anúncio",        color: "bg-muted text-muted-foreground border-border" },
+  { value: "breaking",     label: "Breaking change", color: "bg-destructive/10 text-destructive border-destructive/30" },
 ];
 
 const SUGGESTED_ICONS = ["📦", "🚀", "✨", "🐛", "⚠️", "🤖", "📧", "💰", "🎨", "📝", "📊", "🔒", "⚡", "🎯", "📅"];
@@ -151,7 +151,7 @@ export default function NewPlatformUpdateModal({ onClose, onCreated }: Props) {
                     type="button"
                     onClick={() => setIcon(i)}
                     className={`w-8 h-8 rounded-md flex items-center justify-center transition-all ${
-                      icon === i ? "bg-[#0d4af5]/15 ring-1 ring-[#0d4af5]/40" : "bg-muted hover:bg-muted/70"
+                      icon === i ? "bg-primary/15 ring-1 ring-primary/40" : "bg-muted hover:bg-muted/70"
                     }`}
                   >
                     {i}
@@ -165,16 +165,16 @@ export default function NewPlatformUpdateModal({ onClose, onCreated }: Props) {
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Preview</label>
             <div className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/40">
-              <div className="w-9 h-9 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center shrink-0 text-lg">
+              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 text-lg">
                 {icon || "📦"}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-semibold text-foreground">{title || "Título da atualização"}</p>
                   <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium border ${
-                    category === "feature" ? "bg-[#0d4af5]/10 text-[#3b6ff5] border-[#0d4af5]/20" :
-                    category === "fix" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
-                    category === "breaking" ? "bg-red-500/10 text-red-400 border-red-500/20" :
+                    category === "feature" ? "bg-primary/10 text-primary border-primary/20" :
+                    category === "fix" ? "bg-lone-warning-bg text-lone-warning border-lone-warning-border" :
+                    category === "breaking" ? "bg-destructive/10 text-destructive border-destructive/20" :
                     "bg-muted text-muted-foreground border-border"
                   }`}>{category}</span>
                 </div>
@@ -184,7 +184,7 @@ export default function NewPlatformUpdateModal({ onClose, onCreated }: Props) {
           </div>
 
           {error && (
-            <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+            <div className="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
               {error}
             </div>
           )}
@@ -204,7 +204,7 @@ export default function NewPlatformUpdateModal({ onClose, onCreated }: Props) {
             type="button"
             onClick={handleSubmit}
             disabled={!valid || submitting}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
             {submitting ? "Publicando..." : "Publicar atualização"}

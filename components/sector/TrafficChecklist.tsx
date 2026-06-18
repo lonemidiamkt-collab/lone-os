@@ -81,7 +81,7 @@ export default function TrafficChecklist({ clients, currentUser }: Props) {
       </div>
 
       {doneChecks === totalChecks && totalChecks > 0 && (
-        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs text-emerald-400 flex items-center gap-1.5">
+        <div className="rounded-lg bg-lone-success-bg border border-lone-success-border px-3 py-2 text-xs text-lone-success flex items-center gap-1.5">
           <Check size={12} /> Todos os clientes verificados hoje
         </div>
       )}
@@ -96,13 +96,13 @@ export default function TrafficChecklist({ clients, currentUser }: Props) {
                 {checks.map((c, i) => (
                   <button key={c} onClick={() => toggleCheck(item.clientId, c)} title={labels[i]}
                     className={`w-6 h-6 rounded-md border flex items-center justify-center transition-all text-[10px] ${
-                      item[c as keyof ChecklistItem] ? "bg-primary/20 border-primary/30 text-primary" : "border-border text-zinc-600 hover:border-zinc-500"
+                      item[c as keyof ChecklistItem] ? "bg-primary/20 border-primary/30 text-primary" : "border-border text-muted-foreground hover:border-border"
                     }`}>
                     {item[c as keyof ChecklistItem] ? <Check size={10} /> : labels[i][0]}
                   </button>
                 ))}
               </div>
-              {done < 4 && <AlertTriangle size={10} className="text-amber-400 shrink-0" />}
+              {done < 4 && <AlertTriangle size={10} className="text-lone-warning shrink-0" />}
             </div>
           );
         })}

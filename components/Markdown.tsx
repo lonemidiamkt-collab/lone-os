@@ -74,9 +74,9 @@ export function MarkdownView({ source, className }: { source: string | undefined
         prose-strong:text-foreground prose-strong:font-semibold
         prose-em:text-foreground/90
         prose-p:text-foreground/85 prose-li:text-foreground/85
-        prose-a:text-[#3b6ff5] prose-a:no-underline hover:prose-a:underline
-        prose-code:text-[#3b6ff5] prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:before:content-none prose-code:after:content-none
-        prose-blockquote:border-l-[#0d4af5] prose-blockquote:text-foreground/70
+        prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+        prose-code:text-primary prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:before:content-none prose-code:after:content-none
+        prose-blockquote:border-l-primary prose-blockquote:text-foreground/70
         prose-hr:border-border
         ${className ?? ""}`}>
       <ReactMarkdown
@@ -84,7 +84,7 @@ export function MarkdownView({ source, className }: { source: string | undefined
         components={{
           // Links abrem em nova aba por segurança
           a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer" className="text-[#3b6ff5] hover:underline">
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
               {children}
             </a>
           ),
@@ -174,7 +174,7 @@ export function MarkdownEditor({ value, onChange, placeholder, minHeight = 120, 
   };
 
   return (
-    <div className={`rounded-lg border border-border overflow-hidden ${className ?? "bg-[#0a0a0a]"}`}>
+    <div className={`rounded-lg border border-border overflow-hidden ${className ?? "bg-card"}`}>
       <div className="flex items-center gap-1 bg-muted px-2 py-1.5 border-b border-border">
         <ToolbarBtn icon={Heading} title="Título (## )" onClick={() => insertLine("## ")} />
         <ToolbarBtn icon={Bold} title="Negrito (Cmd+B)" onClick={() => wrap("**")} />
@@ -195,7 +195,7 @@ export function MarkdownEditor({ value, onChange, placeholder, minHeight = 120, 
         }}
         placeholder={placeholder}
         autoFocus={autoFocus}
-        className="w-full bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-zinc-700 outline-none resize-none leading-relaxed font-mono"
+        className="w-full bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none resize-none leading-relaxed font-mono"
         style={{ minHeight: `${minHeight}px`, overflow: "hidden" }}
       />
     </div>

@@ -30,18 +30,18 @@ export default class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex items-center justify-center min-h-[300px] p-8">
           <div className="text-center space-y-4 max-w-sm">
-            <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto">
-              <AlertTriangle size={20} className="text-red-400" />
+            <div className="w-12 h-12 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center mx-auto">
+              <AlertTriangle size={20} className="text-destructive" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-white">Algo deu errado</h3>
-              <p className="text-xs text-zinc-500 mt-1">
+              <h3 className="text-sm font-semibold text-foreground">Algo deu errado</h3>
+              <p className="text-xs text-muted-foreground mt-1">
                 {this.state.error?.message ?? "Erro inesperado. Tente recarregar."}
               </p>
             </div>
             <button
               onClick={() => this.setState({ hasError: false, error: undefined })}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0c3cff] transition-colors shadow-[0_0_15px_rgba(10,52,245,0.2)]"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary transition-colors shadow-[0_0_15px_rgba(10,52,245,0.2)]"
             >
               <RefreshCw size={12} />
               Tentar novamente

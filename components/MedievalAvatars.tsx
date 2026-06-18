@@ -28,17 +28,17 @@ const AVATAR_IMAGES: Record<AvatarType, string> = {
 };
 
 const AVATAR_FALLBACK: Record<AvatarType, { emoji: string; color: string }> = {
-  knight: { emoji: "⚔️", color: "#71717a" },
-  archer: { emoji: "🏹", color: "#71717a" },
-  mage: { emoji: "🧙", color: "#71717a" },
-  king: { emoji: "👑", color: "#a1a1aa" },
-  queen: { emoji: "👑", color: "#a1a1aa" },
-  shield: { emoji: "LM", color: "#0d4af5" },
-  dragon: { emoji: "🐉", color: "#71717a" },
-  orc: { emoji: "👹", color: "#71717a" },
-  rogue: { emoji: "🗡️", color: "#71717a" },
-  smith: { emoji: "⚒️", color: "#71717a" },
-  golem: { emoji: "🪨", color: "#71717a" },
+  knight: { emoji: "⚔️", color: "var(--muted-foreground)" },
+  archer: { emoji: "🏹", color: "var(--muted-foreground)" },
+  mage: { emoji: "🧙", color: "var(--muted-foreground)" },
+  king: { emoji: "👑", color: "var(--muted-foreground)" },
+  queen: { emoji: "👑", color: "var(--muted-foreground)" },
+  shield: { emoji: "LM", color: "var(--primary)" },
+  dragon: { emoji: "🐉", color: "var(--muted-foreground)" },
+  orc: { emoji: "👹", color: "var(--muted-foreground)" },
+  rogue: { emoji: "🗡️", color: "var(--muted-foreground)" },
+  smith: { emoji: "⚒️", color: "var(--muted-foreground)" },
+  golem: { emoji: "🪨", color: "var(--muted-foreground)" },
 };
 
 export const AVATAR_OPTIONS: { type: AvatarType; label: string; adminOnly?: boolean }[] = [
@@ -62,7 +62,7 @@ export default function MedievalAvatar({ type, size = 40, className, glow = fals
   return (
     <div
       className={`relative rounded-xl overflow-hidden flex items-center justify-center transition-all ${className ?? ""}`}
-      style={{ width: size, height: size, background: "#0a0a0e" }}
+      style={{ width: size, height: size, background: "var(--card)" }}
     >
       {!imgError ? (
         <img
@@ -76,7 +76,7 @@ export default function MedievalAvatar({ type, size = 40, className, glow = fals
         />
       ) : (
         // Fallback: sober emoji on dark bg
-        <div className="w-full h-full flex items-center justify-center bg-zinc-900">
+        <div className="w-full h-full flex items-center justify-center bg-card">
           <span style={{ fontSize: size * 0.4 }}>
             {AVATAR_FALLBACK[type]?.emoji ?? "LM"}
           </span>
@@ -84,7 +84,7 @@ export default function MedievalAvatar({ type, size = 40, className, glow = fals
       )}
 
       {/* Subtle border */}
-      <div className="absolute inset-0 rounded-xl border border-white/[0.06] pointer-events-none" />
+      <div className="absolute inset-0 rounded-xl border border-border pointer-events-none" />
     </div>
   );
 }

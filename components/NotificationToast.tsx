@@ -6,11 +6,11 @@ import { X, Bell, AlertTriangle, FileText, Activity, Settings, CheckCircle, Zap 
 import type { AppNotification } from "@/lib/types";
 
 const TYPE_CONFIG: Record<string, { icon: typeof Bell; color: string; accent: string }> = {
-  sla:     { icon: AlertTriangle, color: "text-red-400",    accent: "border-l-red-500" },
-  status:  { icon: Activity,      color: "text-[#3b6ff5]",  accent: "border-l-[#0d4af5]" },
-  content: { icon: FileText,      color: "text-[#0d4af5]",  accent: "border-l-[#0d4af5]" },
-  checkin: { icon: Bell,          color: "text-[#0d4af5]",  accent: "border-l-[#0d4af5]" },
-  system:  { icon: Settings,      color: "text-zinc-400",   accent: "border-l-zinc-600" },
+  sla:     { icon: AlertTriangle, color: "text-destructive",    accent: "border-l-destructive" },
+  status:  { icon: Activity,      color: "text-primary",  accent: "border-l-primary" },
+  content: { icon: FileText,      color: "text-primary",  accent: "border-l-primary" },
+  checkin: { icon: Bell,          color: "text-primary",  accent: "border-l-primary" },
+  system:  { icon: Settings,      color: "text-muted-foreground",   accent: "border-l-border" },
 };
 
 const CRITICAL_TYPES = new Set(["sla"]);
@@ -178,24 +178,24 @@ export default function NotificationToast() {
             }}
           >
             <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-              toast.isCritical ? "bg-red-500/10" : "bg-white/[0.04]"
+              toast.isCritical ? "bg-destructive/10" : "bg-card/[0.04]"
             }`}>
-              <Icon size={14} className={toast.isCritical ? "text-red-400" : config.color} />
+              <Icon size={14} className={toast.isCritical ? "text-destructive" : config.color} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[12px] font-semibold text-foreground leading-tight">
                 {toast.title}
                 {toast.count > 1 && (
-                  <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] text-zinc-400 font-medium">
+                  <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-card/[0.06] text-muted-foreground font-medium">
                     {toast.count}x
                   </span>
                 )}
               </p>
-              <p className="text-[11px] text-zinc-500 mt-0.5 leading-snug line-clamp-2">{toast.body}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">{toast.body}</p>
             </div>
             <button
               onClick={() => dismiss(toast.id)}
-              className="text-zinc-700 hover:text-foreground transition-colors p-0.5 shrink-0"
+              className="text-muted-foreground hover:text-foreground transition-colors p-0.5 shrink-0"
             >
               <X size={12} />
             </button>

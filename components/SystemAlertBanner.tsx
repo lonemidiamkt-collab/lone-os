@@ -28,24 +28,24 @@ export default function SystemAlertBanner() {
   if (!critical || dismissed) return null;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 bg-red-500/10 border border-red-500/30 rounded-xl">
-      <KeyRound size={15} className="text-red-400 shrink-0" />
+    <div className="flex items-center gap-3 px-4 py-2.5 bg-destructive/10 border border-destructive/30 rounded-xl">
+      <KeyRound size={15} className="text-destructive shrink-0" />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-red-400">Token Meta Ads expirando</p>
-        <p className="text-[11px] text-zinc-400 mt-0.5">
+        <p className="text-sm font-semibold text-destructive">Token Meta Ads expirando</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
           As sincronizações de saldo e relatórios de tráfego vão parar.
         </p>
       </div>
       <Link
         href="/integrations"
-        className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 font-medium shrink-0 transition-colors"
+        className="flex items-center gap-1 text-xs text-destructive hover:text-destructive font-medium shrink-0 transition-colors"
       >
         Renovar token
         <ChevronRight size={13} />
       </Link>
       <button
         onClick={() => setDismissed(true)}
-        className="text-zinc-500 hover:text-zinc-300 transition-colors ml-1"
+        className="text-muted-foreground hover:text-muted-foreground transition-colors ml-1"
         title="Dispensar"
       >
         <X size={14} />

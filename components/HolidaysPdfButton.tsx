@@ -122,8 +122,8 @@ export default function HolidaysPdfButton({ month, year, nichos, uf, city, regio
 
   const baseClass = "inline-flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-md transition-all";
   const variantClass = variant === "primary"
-    ? "bg-[#0d4af5] text-white hover:bg-[#0d4af5]/90"
-    : "bg-white/5 text-foreground border border-white/10 hover:bg-white/10";
+    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+    : "bg-card/5 text-foreground border border-border hover:bg-card/10";
 
   return (
     <div className="inline-flex flex-col items-start gap-1">
@@ -136,7 +136,7 @@ export default function HolidaysPdfButton({ month, year, nichos, uf, city, regio
         {loading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
         {loading ? "Gerando PDF..." : label}
       </button>
-      {error && <span className="text-[10px] text-red-400">{error}</span>}
+      {error && <span className="text-[10px] text-destructive">{error}</span>}
     </div>
   );
 }

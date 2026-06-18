@@ -98,16 +98,16 @@ export default function Header({ title, subtitle }: HeaderProps) {
           )}
         </div>
         {hasResults && (
-          <div className="absolute top-full mt-1 left-0 w-72 bg-[#0a0a0e] border border-white/[0.08] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.8)] z-[200] py-1 animate-fade-in max-h-80 overflow-y-auto">
+          <div className="absolute top-full mt-1 left-0 w-72 bg-card border border-border rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.8)] z-[200] py-1 animate-fade-in max-h-80 overflow-y-auto">
             {clientResults.length > 0 && (
               <>
-                <p className="text-[10px] text-zinc-600 uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium">Clientes</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium">Clientes</p>
                 {clientResults.map((c) => (
-                  <Link key={c.id} href={`/clients/${c.id}`} onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#0d4af5]/5 transition-colors">
-                    <div className="w-6 h-6 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center text-[10px] font-bold text-[#0d4af5]">{c.name[0]}</div>
+                  <Link key={c.id} href={`/clients/${c.id}`} onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-primary/5 transition-colors">
+                    <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">{c.name[0]}</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{c.name}</p>
-                      <p className="text-[10px] text-zinc-600">{c.industry}</p>
+                      <p className="text-[10px] text-muted-foreground">{c.industry}</p>
                     </div>
                   </Link>
                 ))}
@@ -115,13 +115,13 @@ export default function Header({ title, subtitle }: HeaderProps) {
             )}
             {cardResults.length > 0 && (
               <>
-                <p className="text-[10px] text-zinc-600 uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium border-t border-[#1a1a1a] mt-1">Conteudos</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium border-t border-border mt-1">Conteudos</p>
                 {cardResults.map((c) => (
-                  <Link key={c.id} href="/social" onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#0d4af5]/5 transition-colors">
-                    <div className="w-6 h-6 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center text-[10px] font-bold text-[#0d4af5]">C</div>
+                  <Link key={c.id} href="/social" onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-primary/5 transition-colors">
+                    <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">C</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{c.title}</p>
-                      <p className="text-[10px] text-zinc-600">{c.clientName} · {c.status}</p>
+                      <p className="text-[10px] text-muted-foreground">{c.clientName} · {c.status}</p>
                     </div>
                   </Link>
                 ))}
@@ -129,13 +129,13 @@ export default function Header({ title, subtitle }: HeaderProps) {
             )}
             {taskResults.length > 0 && (
               <>
-                <p className="text-[10px] text-zinc-600 uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium border-t border-[#1a1a1a] mt-1">Tarefas</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium border-t border-border mt-1">Tarefas</p>
                 {taskResults.map((t) => (
-                  <Link key={t.id} href={t.role === "social" ? "/social" : t.role === "designer" ? "/design" : "/traffic"} onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-[#0d4af5]/5 transition-colors">
-                    <div className="w-6 h-6 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center text-[10px] font-bold text-[#0d4af5]">T</div>
+                  <Link key={t.id} href={t.role === "social" ? "/social" : t.role === "designer" ? "/design" : "/traffic"} onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-primary/5 transition-colors">
+                    <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">T</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{t.title}</p>
-                      <p className="text-[10px] text-zinc-600">{t.clientName} · {t.status}</p>
+                      <p className="text-[10px] text-muted-foreground">{t.clientName} · {t.status}</p>
                     </div>
                   </Link>
                 ))}
@@ -158,18 +158,18 @@ export default function Header({ title, subtitle }: HeaderProps) {
         {showQuick && (
           <>
           <div className="fixed inset-0 z-[199]" onClick={() => setShowQuick(false)} />
-          <div className="absolute right-0 top-full mt-2 w-52 bg-[#111113] border border-white/[0.08] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.6)] z-[200] py-2 animate-fade-in">
-            <p className="text-[10px] text-zinc-600 uppercase tracking-[0.15em] px-3 pb-2 mb-1 border-b border-[#1a1a1a] font-medium">
+          <div className="absolute right-0 top-full mt-2 w-52 bg-card border border-border rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.6)] z-[200] py-2 animate-fade-in">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-[0.15em] px-3 pb-2 mb-1 border-b border-border font-medium">
               Ações Rápidas
             </p>
-            <Link href="/clients" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0d4af5]/5 transition-colors text-sm text-foreground">
-              <UserPlus size={14} className="text-[#0d4af5]" />Novo Cliente
+            <Link href="/clients" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-primary/5 transition-colors text-sm text-foreground">
+              <UserPlus size={14} className="text-primary" />Novo Cliente
             </Link>
-            <Link href="/social?action=new-content" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0d4af5]/5 transition-colors text-sm text-foreground">
-              <FileText size={14} className="text-[#0d4af5]" />Novo Conteúdo
+            <Link href="/social?action=new-content" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-primary/5 transition-colors text-sm text-foreground">
+              <FileText size={14} className="text-primary" />Novo Conteúdo
             </Link>
-            <Link href="/communications" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0d4af5]/5 transition-colors text-sm text-foreground">
-              <Smile size={14} className="text-[#0d4af5]" />Chat da Equipe
+            <Link href="/communications" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-primary/5 transition-colors text-sm text-foreground">
+              <Smile size={14} className="text-primary" />Chat da Equipe
             </Link>
           </div>
           </>
@@ -179,7 +179,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
       {/* Notifications */}
       {/* Notification bell — badge only, opens NotificationCenter drawer via AppShell */}
       <div className="relative">
-        <span className="text-[9px] text-zinc-700 tabular-nums">
+        <span className="text-[9px] text-muted-foreground tabular-nums">
           {unreadCount > 0 && `${unreadCount} novo(s)`}
         </span>
       </div>
@@ -197,12 +197,12 @@ export default function Header({ title, subtitle }: HeaderProps) {
         {showMenu && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-            <div className="absolute right-0 top-full mt-2 w-52 bg-[#0a0a0e] border border-white/[0.08] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.8)] z-[200] py-2 animate-fade-in">
-              <div className="flex items-center gap-2.5 px-3 py-2 border-b border-[#1a1a1a] mb-1">
+            <div className="absolute right-0 top-full mt-2 w-52 bg-card border border-border rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.8)] z-[200] py-2 animate-fade-in">
+              <div className="flex items-center gap-2.5 px-3 py-2 border-b border-border mb-1">
                 <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={32} glow />
                 <div>
                   <p className="text-sm font-medium text-foreground leading-none">{currentProfile.name}</p>
-                  <p className="text-[10px] text-[#0d4af5] mt-0.5 uppercase tracking-wider font-medium">{roleLabel}</p>
+                  <p className="text-[10px] text-primary mt-0.5 uppercase tracking-wider font-medium">{roleLabel}</p>
                 </div>
               </div>
               <button
@@ -212,7 +212,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
                     setShowMenu(false);
                   }
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-600 hover:text-red-400 hover:bg-red-500/5 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-colors"
               >
                 <LogIn size={14} className="rotate-180" />
                 Sair da conta
@@ -228,11 +228,11 @@ export default function Header({ title, subtitle }: HeaderProps) {
 // ── Notification Center with filters and action links ──────────────────────
 
 const NOTIF_TYPE_CONFIG: Record<string, { label: string; color: string; route?: string }> = {
-  sla: { label: "SLA", color: "text-red-400", route: "/social" },
-  status: { label: "Status", color: "text-[#3b6ff5]", route: "/clients" },
+  sla: { label: "SLA", color: "text-destructive", route: "/social" },
+  status: { label: "Status", color: "text-primary", route: "/clients" },
   content: { label: "Conteúdo", color: "text-primary", route: "/social" },
-  checkin: { label: "Check-in", color: "text-zinc-400" },
-  system: { label: "Sistema", color: "text-zinc-500" },
+  checkin: { label: "Check-in", color: "text-muted-foreground" },
+  system: { label: "Sistema", color: "text-muted-foreground" },
 };
 
 function NotifFilterTabs({ notifications }: { notifications: AppNotification[] }) {
@@ -242,7 +242,7 @@ function NotifFilterTabs({ notifications }: { notifications: AppNotification[] }
 
   return (
     <>
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-[#1a1a1a] overflow-x-auto">
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-border overflow-x-auto">
         {types.map((t) => {
           const count = t === "all" ? notifications.length : notifications.filter((n) => n.type === t).length;
           return (
@@ -250,7 +250,7 @@ function NotifFilterTabs({ notifications }: { notifications: AppNotification[] }
               key={t}
               onClick={() => setFilter(t)}
               className={`text-[10px] px-2.5 py-1 rounded-md whitespace-nowrap transition-colors ${
-                filter === t ? "bg-[#0d4af5]/15 text-[#0d4af5]" : "text-zinc-600 hover:text-zinc-400"
+                filter === t ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-muted-foreground"
               }`}
             >
               {t === "all" ? "Todas" : NOTIF_TYPE_CONFIG[t]?.label ?? t} ({count})
@@ -260,39 +260,39 @@ function NotifFilterTabs({ notifications }: { notifications: AppNotification[] }
       </div>
       <div className="max-h-96 overflow-y-auto">
         {filtered.length === 0 ? (
-          <p className="text-sm text-zinc-700 text-center py-8">Nenhuma notificação</p>
+          <p className="text-sm text-muted-foreground text-center py-8">Nenhuma notificação</p>
         ) : (
           filtered.slice(0, 30).map((notif) => {
             const cfg = NOTIF_TYPE_CONFIG[notif.type] ?? NOTIF_TYPE_CONFIG.system;
             return (
               <div
                 key={notif.id}
-                className={`flex items-start gap-3 px-4 py-3 border-b border-[#1a1a1a]/50 transition-colors hover:bg-[#0d4af5]/5 ${
-                  !notif.read ? "bg-[#0d4af5]/[0.03]" : ""
+                className={`flex items-start gap-3 px-4 py-3 border-b border-border/50 transition-colors hover:bg-primary/5 ${
+                  !notif.read ? "bg-primary/[0.03]" : ""
                 }`}
               >
                 <div className="mt-1.5">
-                  <div className={`w-1.5 h-1.5 rounded-full ${!notif.read ? "bg-[#0d4af5] shadow-[0_0_6px_rgba(10,52,245,0.5)]" : "bg-zinc-800"}`} />
+                  <div className={`w-1.5 h-1.5 rounded-full ${!notif.read ? "bg-primary shadow-[0_0_6px_rgba(10,52,245,0.5)]" : "bg-muted"}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={`text-[9px] font-medium uppercase tracking-wider ${cfg.color}`}>{cfg.label}</span>
-                    <span className="text-[10px] text-zinc-700">{timeAgo(notif.createdAt)}</span>
+                    <span className="text-[10px] text-muted-foreground">{timeAgo(notif.createdAt)}</span>
                   </div>
-                  <p className={`text-xs font-medium leading-tight mt-0.5 ${!notif.read ? "text-foreground" : "text-zinc-500"}`}>
+                  <p className={`text-xs font-medium leading-tight mt-0.5 ${!notif.read ? "text-foreground" : "text-muted-foreground"}`}>
                     {notif.title}
                   </p>
-                  <p className="text-[11px] text-zinc-600 mt-0.5 leading-snug">{notif.body}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{notif.body}</p>
                   {/* Action link */}
                   {(notif.clientId || cfg.route) && (
                     <div className="flex items-center gap-2 mt-1.5">
                       {notif.clientId && (
-                        <Link href={`/clients/${notif.clientId}`} className="text-[10px] text-[#0d4af5] hover:underline flex items-center gap-0.5">
+                        <Link href={`/clients/${notif.clientId}`} className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
                           <ChevronRight size={10} /> Ver cliente
                         </Link>
                       )}
                       {cfg.route && (
-                        <Link href={cfg.route} className="text-[10px] text-zinc-500 hover:text-zinc-300 flex items-center gap-0.5">
+                        <Link href={cfg.route} className="text-[10px] text-muted-foreground hover:text-muted-foreground flex items-center gap-0.5">
                           <ChevronRight size={10} /> Ir para {cfg.label}
                         </Link>
                       )}

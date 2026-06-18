@@ -58,9 +58,9 @@ function DocUpload({ label, onUploaded, uploaded }: { label: string; onUploaded:
 
   if (uploaded) {
     return (
-      <div className="flex items-center gap-2 p-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.03]">
-        <Check size={12} className="text-emerald-500 shrink-0" />
-        <span className="text-xs text-emerald-400 truncate">{label} enviado</span>
+      <div className="flex items-center gap-2 p-2.5 rounded-lg border border-lone-success-border bg-lone-success-bg/[0.03]">
+        <Check size={12} className="text-lone-success shrink-0" />
+        <span className="text-xs text-lone-success truncate">{label} enviado</span>
       </div>
     );
   }
@@ -69,19 +69,19 @@ function DocUpload({ label, onUploaded, uploaded }: { label: string; onUploaded:
     <div className="space-y-1">
       <div className="flex gap-1.5">
         <button type="button" onClick={() => ref.current?.click()} disabled={uploading}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#0d4af5]/30 text-zinc-500 hover:text-white transition-all text-[11px]">
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-border bg-card hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all text-[11px]">
           {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
           {uploading ? "Enviando..." : label}
         </button>
         <button type="button" disabled={uploading} onClick={() => {
           const input = document.createElement("input"); input.type = "file"; input.accept = "image/*"; input.capture = "environment";
           input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleFile(f); }; input.click();
-        }} className="px-3 py-2 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#0d4af5]/30 text-zinc-500 hover:text-white transition-all text-[11px]">
+        }} className="px-3 py-2 rounded-lg border border-dashed border-border bg-card hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all text-[11px]">
           <Camera size={12} />
         </button>
       </div>
       <input ref={ref} type="file" accept="image/*,.pdf,.heic,.heif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-      {error && <p className="text-[10px] text-red-400">{error}</p>}
+      {error && <p className="text-[10px] text-destructive">{error}</p>}
     </div>
   );
 }
@@ -240,14 +240,14 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
       <Dialog open onOpenChange={() => { setLinkGenerated(null); onClose(); }}>
         <DialogContent className="max-w-md">
           <div className="flex flex-col items-center justify-center py-10 gap-4 animate-fade-in">
-            <div className="w-16 h-16 rounded-full bg-[#0d4af5]/15 flex items-center justify-center">
-              <ExternalLink size={28} className="text-[#0d4af5]" />
+            <div className="w-16 h-16 rounded-full bg-primary/15 flex items-center justify-center">
+              <ExternalLink size={28} className="text-primary" />
             </div>
             <h2 className="text-lg font-semibold text-foreground">Link gerado!</h2>
             <p className="text-sm text-muted-foreground text-center">Envie para o cliente preencher dados e documentos.</p>
-            <div className="w-full bg-[#111113] border border-[#1e1e2a] rounded-lg px-4 py-3 flex items-center gap-2">
-              <input type="text" value={linkGenerated} readOnly className="flex-1 bg-transparent text-xs text-zinc-300 outline-none truncate" onClick={(e) => (e.target as HTMLInputElement).select()} />
-              <button onClick={() => navigator.clipboard.writeText(linkGenerated)} className="text-xs text-[#0d4af5] hover:text-white transition-colors shrink-0 font-medium">Copiar</button>
+            <div className="w-full bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-2">
+              <input type="text" value={linkGenerated} readOnly className="flex-1 bg-transparent text-xs text-muted-foreground outline-none truncate" onClick={(e) => (e.target as HTMLInputElement).select()} />
+              <button onClick={() => navigator.clipboard.writeText(linkGenerated)} className="text-xs text-primary hover:text-foreground transition-colors shrink-0 font-medium">Copiar</button>
             </div>
             <div className="flex gap-2 w-full mt-2">
               <Button variant="ghost" onClick={() => { setLinkGenerated(null); onClose(); }} className="flex-1">Fechar</Button>
@@ -265,10 +265,10 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
       <Dialog open onOpenChange={() => {}}>
         <DialogContent className="max-w-md">
           <div className="flex flex-col items-center justify-center py-12 gap-4 animate-fade-in">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/15 flex items-center justify-center"><Check size={32} className="text-emerald-500" /></div>
+            <div className="w-16 h-16 rounded-full bg-lone-success-bg flex items-center justify-center"><Check size={32} className="text-lone-success" /></div>
             <h2 className="text-lg font-semibold text-foreground">Cliente cadastrado!</h2>
             <p className="text-sm text-muted-foreground text-center">Preparando workspace e checklist de onboarding...</p>
-            <div className="flex items-center gap-2 mt-2"><Loader2 size={14} className="text-[#0d4af5] animate-spin" /><span className="text-xs text-muted-foreground">Redirecionando...</span></div>
+            <div className="flex items-center gap-2 mt-2"><Loader2 size={14} className="text-primary animate-spin" /><span className="text-xs text-muted-foreground">Redirecionando...</span></div>
           </div>
         </DialogContent>
       </Dialog>
@@ -281,7 +281,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#0d4af5]/15 flex items-center justify-center"><UserPlus size={18} className="text-[#0d4af5]" /></div>
+            <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center"><UserPlus size={18} className="text-primary" /></div>
             <div>
               <DialogTitle>Novo Cliente</DialogTitle>
               <DialogDescription>Cadastro em 3 fases + onboarding automatico</DialogDescription>
@@ -293,10 +293,10 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
         <div className="flex items-center gap-2">
           {PHASES.map((p, i) => (
             <div key={p.key} className="flex items-center gap-2 flex-1">
-              <button onClick={() => setPhase(p.key)} className={`flex items-center gap-1.5 text-[11px] font-medium transition-all ${currentIdx > i ? "text-emerald-400" : currentIdx === i ? "text-foreground" : "text-zinc-600"}`}>
+              <button onClick={() => setPhase(p.key)} className={`flex items-center gap-1.5 text-[11px] font-medium transition-all ${currentIdx > i ? "text-lone-success" : currentIdx === i ? "text-foreground" : "text-muted-foreground"}`}>
                 <p.icon size={12} /> {p.label}
               </button>
-              {i < PHASES.length - 1 && <div className={`flex-1 h-px ${currentIdx > i ? "bg-emerald-500/30" : "bg-zinc-800"}`} />}
+              {i < PHASES.length - 1 && <div className={`flex-1 h-px ${currentIdx > i ? "bg-lone-success-bg" : "bg-muted"}`} />}
             </div>
           ))}
         </div>
@@ -307,7 +307,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           {/* ═══ FASE 1: PESSOA FISICA ═══ */}
           {phase === "pf" && (
             <div className="space-y-4 animate-fade-in">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1.5"><Shield size={10} className="text-[#0d4af5]" /> Dados do Responsavel (PF)</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><Shield size={10} className="text-primary" /> Dados do Responsavel (PF)</p>
 
               <div className="space-y-1.5">
                 <Label>Nome da Empresa <span className="text-muted-foreground font-normal">(para o link)</span></Label>
@@ -318,13 +318,13 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
               {/* Quick Link button */}
               {(form.nomeFantasia.trim().length >= 2 || form.contactName.trim().length >= 2) && (
                 <button type="button" onClick={handleGenerateLink} disabled={generatingLink}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-dashed border-[#0d4af5]/20 bg-[#0d4af5]/[0.03] hover:bg-[#0d4af5]/[0.06] hover:border-[#0d4af5]/40 transition-all text-left group">
-                  <div className="w-8 h-8 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center shrink-0">
-                    {generatingLink ? <Loader2 size={14} className="text-[#0d4af5] animate-spin" /> : <ExternalLink size={14} className="text-[#0d4af5]" />}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-dashed border-primary/20 bg-primary/[0.03] hover:bg-primary/[0.06] hover:border-primary/40 transition-all text-left group">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    {generatingLink ? <Loader2 size={14} className="text-primary animate-spin" /> : <ExternalLink size={14} className="text-primary" />}
                   </div>
                   <div className="flex-1">
-                    <p className="text-xs text-[#3b6ff5] font-medium group-hover:text-white transition-colors">Gerar Link para Cliente Preencher</p>
-                    <p className="text-[9px] text-zinc-600">Cria rascunho + link de onboarding externo</p>
+                    <p className="text-xs text-primary font-medium group-hover:text-foreground transition-colors">Gerar Link para Cliente Preencher</p>
+                    <p className="text-[9px] text-muted-foreground">Cria rascunho + link de onboarding externo</p>
                   </div>
                 </button>
               )}
@@ -355,7 +355,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           {/* ═══ FASE 2: EMPRESA (PJ) ═══ */}
           {phase === "pj" && (
             <div className="space-y-4 animate-fade-in">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1.5"><Building2 size={10} className="text-[#0d4af5]" /> Dados Empresariais (PJ)</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><Building2 size={10} className="text-primary" /> Dados Empresariais (PJ)</p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Razao Social</Label>
@@ -403,8 +403,8 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
               </div>
 
               {/* Document upload */}
-              <div className="pt-2 border-t border-white/[0.04] space-y-2">
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Documentos (opcional)</p>
+              <div className="pt-2 border-t border-border space-y-2">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Documentos (opcional)</p>
                 <div className="grid grid-cols-2 gap-2">
                   <DocUpload label="Contrato Social" onUploaded={(url) => set("docContratoSocial", url)} uploaded={form.docContratoSocial} />
                   <DocUpload label="RG ou CNH" onUploaded={(url) => set("docIdentidade", url)} uploaded={form.docIdentidade} />
@@ -421,18 +421,18 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           {/* ═══ FASE 3: SERVICO & EQUIPE ═══ */}
           {phase === "servico" && (
             <div className="space-y-4 animate-fade-in">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1.5"><Briefcase size={10} className="text-[#0d4af5]" /> Servico Contratado & Equipe</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><Briefcase size={10} className="text-primary" /> Servico Contratado & Equipe</p>
 
               <div className="grid grid-cols-2 gap-2">
                 {SERVICE_OPTIONS.map((opt) => (
                   <button key={opt.value} type="button" onClick={() => set("serviceType", opt.value)}
                     className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
-                      form.serviceType === opt.value ? "border-[#0d4af5]/50 bg-[#0d4af5]/[0.06]" : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12]"
+                      form.serviceType === opt.value ? "border-primary/50 bg-primary/[0.06]" : "border-border bg-card/[0.02] hover:border-border"
                     }`}>
                     <span className="text-base">{opt.icon}</span>
                     <div className="min-w-0">
-                      <p className={`text-xs font-medium ${form.serviceType === opt.value ? "text-white" : "text-zinc-400"}`}>{opt.label}</p>
-                      <p className="text-[9px] text-zinc-600 truncate">{opt.desc}</p>
+                      <p className={`text-xs font-medium ${form.serviceType === opt.value ? "text-foreground" : "text-muted-foreground"}`}>{opt.label}</p>
+                      <p className="text-[9px] text-muted-foreground truncate">{opt.desc}</p>
                     </div>
                   </button>
                 ))}
@@ -453,7 +453,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
                 </div>
               </div>
 
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider pt-2">Equipe Responsavel</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider pt-2">Equipe Responsavel</p>
               <div className="space-y-3">
                 {([
                   { key: "assignedTraffic" as const, label: "Gestor de Trafego", members: team.forField("assignedTraffic"), show: needsTraffic },

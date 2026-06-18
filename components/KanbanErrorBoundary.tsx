@@ -44,8 +44,8 @@ export default class KanbanErrorBoundary extends React.Component<Props, State> {
     if (!this.state.error) return this.props.children;
     if (this.props.fallback) return this.props.fallback(this.state.error, this.reset);
     return (
-      <div className="rounded-xl border border-red-500/20 bg-red-500/[0.04] p-6 m-3 flex items-start gap-3 animate-fade-in">
-        <AlertTriangle size={18} className="text-red-400 shrink-0 mt-0.5" />
+      <div className="rounded-xl border border-destructive/20 bg-destructive/[0.04] p-6 m-3 flex items-start gap-3 animate-fade-in">
+        <AlertTriangle size={18} className="text-destructive shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-foreground">Erro ao carregar este componente</h3>
           <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
@@ -53,14 +53,14 @@ export default class KanbanErrorBoundary extends React.Component<Props, State> {
             Algo deu errado ao renderizar. O resto do app continua funcionando.
           </p>
           {process.env.NODE_ENV !== "production" && (
-            <pre className="text-[10px] text-red-300/70 mt-2 overflow-auto max-h-32 bg-black/40 rounded p-2 whitespace-pre-wrap break-all">
+            <pre className="text-[10px] text-destructive/70 mt-2 overflow-auto max-h-32 bg-black/40 rounded p-2 whitespace-pre-wrap break-all">
               {this.state.error.message}
             </pre>
           )}
           <button
             type="button"
             onClick={this.reset}
-            className="mt-3 text-xs px-3 py-1.5 rounded-md bg-[#0d4af5] hover:bg-[#1a56ff] text-white font-medium transition-colors"
+            className="mt-3 text-xs px-3 py-1.5 rounded-md bg-primary hover:bg-primary text-primary-foreground font-medium transition-colors"
           >
             Tentar novamente
           </button>

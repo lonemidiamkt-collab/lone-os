@@ -113,7 +113,7 @@ export default function KanbanBoard<T extends { id: string }>({
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                     <button
                       onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === item.id ? null : item.id); }}
-                      className="w-6 h-6 rounded-md flex items-center justify-center bg-black/60 backdrop-blur-sm text-zinc-400 hover:text-white transition-all"
+                      className="w-6 h-6 rounded-md flex items-center justify-center bg-black/60 backdrop-blur-sm text-muted-foreground hover:text-foreground transition-all"
                     >
                       <MoreHorizontal size={12} />
                     </button>
@@ -121,11 +121,11 @@ export default function KanbanBoard<T extends { id: string }>({
                     {menuOpen === item.id && (
                       <>
                         <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(null)} />
-                        <div className="absolute right-0 top-full mt-1 bg-[#0a0a0e] border border-white/[0.08] rounded-lg shadow-[0_8px_30px_rgba(0,0,0,0.5)] z-30 py-1 min-w-[120px] animate-fade-in">
+                        <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-[0_8px_30px_rgba(0,0,0,0.5)] z-30 py-1 min-w-[120px] animate-fade-in">
                           {onEdit && (
                             <button
                               onClick={(e) => { e.stopPropagation(); onEdit(item); setMenuOpen(null); }}
-                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-300 hover:bg-white/[0.04] hover:text-white transition-all"
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-card/[0.04] hover:text-foreground transition-all"
                             >
                               <Edit3 size={11} /> Editar
                             </button>
@@ -133,7 +133,7 @@ export default function KanbanBoard<T extends { id: string }>({
                           {onDelete && (
                             <button
                               onClick={(e) => { e.stopPropagation(); onDelete(item.id); setMenuOpen(null); }}
-                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/[0.06] transition-all"
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/[0.06] transition-all"
                             >
                               <Trash2 size={11} /> Excluir
                             </button>

@@ -74,10 +74,10 @@ export default function WhatsAppTemplates({ client }: Props) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
-          <MessageCircle size={14} className="text-emerald-500" /> Templates WhatsApp
+          <MessageCircle size={14} className="text-lone-success" /> Templates WhatsApp
         </h3>
         <button onClick={() => setShowAdd(!showAdd)}
-          className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-emerald-500/30 hover:text-emerald-400">
+          className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-lone-success-border hover:text-lone-success">
           <Plus size={10} /> Novo Template
         </button>
       </div>
@@ -101,7 +101,7 @@ export default function WhatsAppTemplates({ client }: Props) {
           <div className="flex gap-2">
             <button onClick={() => setShowAdd(false)} className="btn-ghost flex-1 text-xs border border-border">Cancelar</button>
             <button onClick={handleAdd} disabled={saving || !newForm.name || !newForm.body}
-              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs border border-emerald-500/20 disabled:opacity-50">
+              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-lone-success-bg text-lone-success text-xs border border-lone-success-border disabled:opacity-50">
               {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Salvar
             </button>
           </div>
@@ -112,14 +112,14 @@ export default function WhatsAppTemplates({ client }: Props) {
         <div key={cat} className="space-y-2">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{cat}</p>
           {templates.filter((t) => t.category === cat).map((t) => (
-            <div key={t.id} className="rounded-xl border border-border bg-surface p-3 flex items-start gap-3 group hover:border-emerald-500/20 transition-all">
+            <div key={t.id} className="rounded-xl border border-border bg-surface p-3 flex items-start gap-3 group hover:border-lone-success-border transition-all">
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-foreground mb-1">{t.name}</p>
-                <p className="text-[11px] text-zinc-400 line-clamp-2">{client ? fillTemplate(t.body) : t.body}</p>
+                <p className="text-[11px] text-muted-foreground line-clamp-2">{client ? fillTemplate(t.body) : t.body}</p>
               </div>
               <button onClick={() => handleCopy(t.id, t.body)}
                 className={`shrink-0 p-2 rounded-lg border transition-all ${
-                  copied === t.id ? "bg-emerald-500/15 border-emerald-500/20 text-emerald-400" : "border-border text-zinc-600 hover:text-emerald-400 hover:border-emerald-500/20"
+                  copied === t.id ? "bg-lone-success-bg border-lone-success-border text-lone-success" : "border-border text-muted-foreground hover:text-lone-success hover:border-lone-success-border"
                 }`}>
                 {copied === t.id ? <Check size={12} /> : <Copy size={12} />}
               </button>
@@ -130,7 +130,7 @@ export default function WhatsAppTemplates({ client }: Props) {
 
       {client?.phone && (
         <a href={`https://wa.me/55${client.phone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 text-xs font-medium border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors">
+          className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-lone-success-bg text-lone-success text-xs font-medium border border-lone-success-border hover:bg-lone-success-bg transition-colors">
           <MessageCircle size={13} /> Abrir WhatsApp de {client.contactName || client.name}
         </a>
       )}

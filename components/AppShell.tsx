@@ -59,11 +59,11 @@ function MainLayout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile hamburger */}
       <button
-        className="lg:hidden fixed top-4 left-4 z-30 w-10 h-10 rounded-xl bg-[#0d4af5] flex items-center justify-center"
+        className="lg:hidden fixed top-4 left-4 z-30 w-10 h-10 rounded-xl bg-primary flex items-center justify-center"
         aria-label="Abrir menu"
         onClick={() => setMobileOpen(!mobileOpen)}
       >
-        <Menu size={18} className="text-white" />
+        <Menu size={18} className="text-primary-foreground" />
       </button>
 
       {/* Double Sidebar */}

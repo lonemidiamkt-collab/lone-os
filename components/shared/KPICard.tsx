@@ -8,16 +8,16 @@ type StatusColor = "success" | "warning" | "danger" | "info" | "neutral";
 type TrendColor  = "positive" | "negative" | "neutral";
 
 const STATUS_DOT: Record<StatusColor, string> = {
-  success: "bg-[#22C55E]",
-  warning: "bg-[#F59E0B]",
-  danger:  "bg-[#EF4444]",
-  info:    "bg-[#3B82F6]",
+  success: "bg-lone-success",
+  warning: "bg-[var(--lone-warning)]",
+  danger:  "bg-[var(--destructive)]",
+  info:    "bg-primary",
   neutral: "bg-muted-foreground",
 };
 
 const TREND_COLOR: Record<TrendColor, string> = {
-  positive: "text-[#22C55E]",
-  negative: "text-[#EF4444]",
+  positive: "text-lone-success",
+  negative: "text-[var(--destructive)]",
   neutral:  "text-muted-foreground",
 };
 

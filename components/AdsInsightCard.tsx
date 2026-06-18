@@ -23,10 +23,10 @@ interface AnalysisResult {
 }
 
 const STATUS_CONFIG = {
-  otimo:   { color: "text-emerald-400", bg: "bg-emerald-500/[0.08]", border: "border-emerald-500/[0.15]", label: "Otimo" },
-  bom:     { color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/[0.08]", border: "border-[#0d4af5]/[0.15]", label: "Bom" },
-  atencao: { color: "text-amber-400", bg: "bg-amber-500/[0.08]", border: "border-amber-500/[0.15]", label: "Atencao" },
-  critico: { color: "text-red-400", bg: "bg-red-500/[0.08]", border: "border-red-500/[0.15]", label: "Critico" },
+  otimo:   { color: "text-lone-success", bg: "bg-lone-success-bg/[0.08]", border: "border-lone-success-border/[0.15]", label: "Otimo" },
+  bom:     { color: "text-primary", bg: "bg-primary/[0.08]", border: "border-primary/[0.15]", label: "Bom" },
+  atencao: { color: "text-lone-warning", bg: "bg-lone-warning-bg/[0.08]", border: "border-lone-warning-border/[0.15]", label: "Atencao" },
+  critico: { color: "text-destructive", bg: "bg-destructive/[0.08]", border: "border-destructive/[0.15]", label: "Critico" },
 };
 
 const INSIGHT_ICONS = {
@@ -37,10 +37,10 @@ const INSIGHT_ICONS = {
 };
 
 const INSIGHT_COLORS = {
-  positivo: "text-emerald-400",
-  alerta: "text-amber-400",
-  critico: "text-red-400",
-  sugestao: "text-[#0d4af5]",
+  positivo: "text-lone-success",
+  alerta: "text-lone-warning",
+  critico: "text-destructive",
+  sugestao: "text-primary",
 };
 
 interface Props {
@@ -86,17 +86,17 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
       <div className="card-glow p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#0d4af5]/10 flex items-center justify-center">
-              <Brain size={18} className="text-[#0d4af5]" />
+            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Brain size={18} className="text-primary" />
             </div>
             <div>
               <h3 className="text-sm font-semibold text-foreground">Consultor IA</h3>
-              <p className="text-[10px] text-zinc-500">{campaigns.length} campanha(s) para analisar</p>
+              <p className="text-[10px] text-muted-foreground">{campaigns.length} campanha(s) para analisar</p>
             </div>
           </div>
           <button
             onClick={analyze}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0d4af5] text-white text-xs font-semibold hover:bg-[#0d4af5]/80 transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/80 transition-all"
           >
             <Zap size={12} /> Analisar
           </button>
@@ -110,12 +110,12 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
     return (
       <div className="card-glow p-5">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#0d4af5]/10 flex items-center justify-center">
-            <Loader2 size={18} className="text-[#0d4af5] animate-spin" />
+          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Loader2 size={18} className="text-primary animate-spin" />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-foreground">Analisando campanhas...</h3>
-            <p className="text-[10px] text-zinc-500">O Lone Ads Specialist esta processando os dados de {clientName}</p>
+            <p className="text-[10px] text-muted-foreground">O Lone Ads Specialist esta processando os dados de {clientName}</p>
           </div>
         </div>
       </div>
@@ -128,16 +128,16 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
       <div className="card p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center">
-              <AlertCircle size={18} className="text-red-400" />
+            <div className="w-9 h-9 rounded-xl bg-destructive/10 flex items-center justify-center">
+              <AlertCircle size={18} className="text-destructive" />
             </div>
             <div>
               <h3 className="text-sm font-semibold text-foreground">Erro na analise</h3>
-              <p className="text-[10px] text-red-400">{error}</p>
+              <p className="text-[10px] text-destructive">{error}</p>
             </div>
           </div>
           <button onClick={analyze}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-foreground border border-white/[0.06] hover:border-white/[0.1] transition-all">
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground border border-border hover:border-border transition-all">
             <RefreshCw size={11} /> Tentar novamente
           </button>
         </div>
@@ -154,8 +154,8 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#0d4af5]/10 flex items-center justify-center">
-            <Brain size={18} className="text-[#0d4af5]" />
+          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Brain size={18} className="text-primary" />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -164,31 +164,31 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
                 {statusCfg.label} · {result.score}/100
               </span>
             </h3>
-            <p className="text-[10px] text-zinc-500">{clientName} · {campaigns.length} campanha(s)</p>
+            <p className="text-[10px] text-muted-foreground">{clientName} · {campaigns.length} campanha(s)</p>
           </div>
         </div>
         <button onClick={analyze} disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-foreground border border-white/[0.06] hover:border-[#0d4af5]/30 transition-all disabled:opacity-30">
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground border border-border hover:border-primary/30 transition-all disabled:opacity-30">
           <RefreshCw size={11} className={loading ? "animate-spin" : ""} /> Nova Analise
         </button>
       </div>
 
       {/* Summary */}
-      <p className="text-xs text-zinc-400 leading-relaxed">{result.summary}</p>
+      <p className="text-xs text-muted-foreground leading-relaxed">{result.summary}</p>
 
       {/* Insights */}
       <div className="space-y-2">
         {result.insights.map((insight, i) => {
           const Icon = INSIGHT_ICONS[insight.type] ?? Sparkles;
-          const color = INSIGHT_COLORS[insight.type] ?? "text-zinc-400";
+          const color = INSIGHT_COLORS[insight.type] ?? "text-muted-foreground";
           return (
-            <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+            <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-card/[0.02] border border-border">
               <Icon size={14} className={`${color} mt-0.5 shrink-0`} />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-foreground">{insight.title}</p>
-                <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">{insight.body}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{insight.body}</p>
                 {insight.action && (
-                  <p className="text-[10px] text-[#0d4af5] mt-1 font-medium flex items-center gap-1">
+                  <p className="text-[10px] text-primary mt-1 font-medium flex items-center gap-1">
                     <TrendingUp size={9} /> {insight.action}
                   </p>
                 )}
@@ -200,7 +200,7 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
 
       {/* Footer */}
       {result.tokens && (
-        <p className="text-[9px] text-zinc-700 text-right">
+        <p className="text-[9px] text-muted-foreground text-right">
           {result.tokens} tokens · gpt-4o-mini
         </p>
       )}

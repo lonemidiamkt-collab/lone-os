@@ -16,10 +16,10 @@ export interface DailyChartPoint {
 }
 
 const CHART_COLORS: Record<string, string> = {
-  spend: "#0d4af5",
-  impressions: "#3b6ff5",
-  clicks: "#5a8fff",
-  conversions: "#7aacff",
+  spend: "var(--primary)",
+  impressions: "var(--primary)",
+  clicks: "var(--primary)",
+  conversions: "var(--primary)",
 };
 
 const CHART_LABELS: Record<string, string> = {
@@ -32,16 +32,16 @@ const CHART_LABELS: Record<string, string> = {
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-[#0e0e14] border border-[#1e1e2a] rounded-xl p-3.5 shadow-2xl text-xs backdrop-blur-sm">
-      <p className="font-semibold text-white mb-2 text-[13px]">{label}</p>
+    <div className="bg-card border border-border rounded-xl p-3.5 shadow-2xl text-xs backdrop-blur-sm">
+      <p className="font-semibold text-foreground mb-2 text-[13px]">{label}</p>
       <div className="space-y-1.5">
         {payload.map((p: any) => (
           <div key={p.dataKey} className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full ring-2 ring-white/10" style={{ backgroundColor: p.color }} />
-              <span className="text-zinc-400">{CHART_LABELS[p.dataKey] ?? p.dataKey}</span>
+              <span className="text-muted-foreground">{CHART_LABELS[p.dataKey] ?? p.dataKey}</span>
             </div>
-            <span className="text-white font-bold tabular-nums">
+            <span className="text-foreground font-bold tabular-nums">
               {p.dataKey === "spend" ? `R$ ${p.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : p.value.toLocaleString("pt-BR")}
             </span>
           </div>
@@ -62,17 +62,17 @@ export function SpendAreaChart({ data, visibleMetrics }: { data: DailyChartPoint
         <defs>
           {visibleMetrics.map((key) => (
             <linearGradient key={key} id={`grad-${key}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={CHART_COLORS[key] ?? "#0d4af5"} stopOpacity={0.35} />
-              <stop offset="100%" stopColor={CHART_COLORS[key] ?? "#0d4af5"} stopOpacity={0.02} />
+              <stop offset="0%" stopColor={CHART_COLORS[key] ?? "var(--primary)"} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={CHART_COLORS[key] ?? "var(--primary)"} stopOpacity={0.02} />
             </linearGradient>
           ))}
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2a" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#52525b" }} axisLine={false} tickLine={false} dy={8} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} dy={8} />
         {hasSpend && (
           <YAxis
             yAxisId="spend"
-            tick={{ fontSize: 10, fill: "#52525b" }}
+            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
             axisLine={false}
             tickLine={false}
             tickFormatter={(v) => `R$${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
@@ -83,17 +83,17 @@ export function SpendAreaChart({ data, visibleMetrics }: { data: DailyChartPoint
           <YAxis
             yAxisId="volume"
             orientation={hasSpend ? "right" : "left"}
-            tick={{ fontSize: 10, fill: "#52525b" }}
+            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
             axisLine={false}
             tickLine={false}
             tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
             width={45}
           />
         )}
-        <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#0d4af5", strokeWidth: 1, strokeDasharray: "4 4" }} />
+        <Tooltip content={<CustomTooltip />} cursor={{ stroke: "var(--primary)", strokeWidth: 1, strokeDasharray: "4 4" }} />
         <Legend
           wrapperStyle={{ fontSize: 11, paddingTop: 12 }}
-          formatter={(value: string) => <span style={{ color: "#a1a1aa" }}>{CHART_LABELS[value] ?? value}</span>}
+          formatter={(value: string) => <span style={{ color: "var(--muted-foreground)" }}>{CHART_LABELS[value] ?? value}</span>}
         />
         {visibleMetrics.map((key) => (
           <Area
@@ -101,11 +101,11 @@ export function SpendAreaChart({ data, visibleMetrics }: { data: DailyChartPoint
             yAxisId={key === "spend" ? "spend" : "volume"}
             type="monotone"
             dataKey={key}
-            stroke={CHART_COLORS[key] ?? "#0d4af5"}
+            stroke={CHART_COLORS[key] ?? "var(--primary)"}
             fill={`url(#grad-${key})`}
             strokeWidth={2.5}
             dot={false}
-            activeDot={{ r: 5, fill: CHART_COLORS[key] ?? "#0d4af5", stroke: "#fff", strokeWidth: 2 }}
+            activeDot={{ r: 5, fill: CHART_COLORS[key] ?? "var(--primary)", stroke: "#fff", strokeWidth: 2 }}
           />
         ))}
       </AreaChart>
@@ -120,21 +120,21 @@ export function ClientSpendBar({ data }: { data: { name: string; spend: number; 
       <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#0d4af5" stopOpacity={1} />
-            <stop offset="100%" stopColor="#0828b8" stopOpacity={0.8} />
+            <stop offset="0%" stopColor="var(--primary)" stopOpacity={1} />
+            <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.8} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2a" vertical={false} />
-        <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#52525b" }} axisLine={false} tickLine={false} dy={8} />
-        <YAxis tick={{ fontSize: 10, fill: "#52525b" }} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`} width={55} />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: "#0d4af5", opacity: 0.05 }} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+        <XAxis dataKey="name" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} dy={8} />
+        <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`} width={55} />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: "var(--primary)", opacity: 0.05 }} />
         <Bar dataKey="spend" fill="url(#barGrad)" radius={[6, 6, 0, 0]} name="Gasto" maxBarSize={50} />
       </BarChart>
     </ResponsiveContainer>
   );
 }
 
-const HEALTH_COLORS = ["#EF4444", "#EF4444", "#EF4444", "#3b6ff5", "#3b6ff5", "#0d4af5", "#0d4af5", "#0d4af5", "#0d4af5", "#0d4af5"];
+const HEALTH_COLORS = ["var(--destructive)", "var(--destructive)", "var(--destructive)", "var(--primary)", "var(--primary)", "var(--primary)", "var(--primary)", "var(--primary)", "var(--primary)", "var(--primary)"];
 
 export function HealthScoreRing({ score, label, size = 120 }: { score: number; label: string; size?: number }) {
   const data = [{ value: score }, { value: 100 - score }];
@@ -157,7 +157,7 @@ export function HealthScoreRing({ score, label, size = 120 }: { score: number; l
             strokeWidth={0}
           >
             <Cell fill={color} />
-            <Cell fill="#1e1e2a" />
+            <Cell fill="var(--border)" />
           </Pie>
         </PieChart>
       </ResponsiveContainer>

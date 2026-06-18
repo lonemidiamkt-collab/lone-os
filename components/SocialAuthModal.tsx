@@ -26,7 +26,7 @@ export default function SocialAuthModal() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-10">
           <div className="w-12 h-12 rounded-lg bg-primary flex items-center justify-center mb-4">
-            <Zap size={24} className="text-white" />
+            <Zap size={24} className="text-foreground" />
           </div>
           <h1 className="text-xl font-bold text-foreground tracking-tight">LONE OS</h1>
           <p className="text-xs text-muted-foreground tracking-widest uppercase mt-1">Social Media</p>
@@ -82,7 +82,7 @@ export default function SocialAuthModal() {
 
           {/* Error */}
           {error && (
-            <p className="text-xs text-red-500 animate-fade-in">Senha incorreta. Tente novamente.</p>
+            <p className="text-xs text-destructive animate-fade-in">Senha incorreta. Tente novamente.</p>
           )}
 
           {/* Login button */}

@@ -62,11 +62,11 @@ export default function RealtimeToast() {
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className="bg-[#121214] border border-[#1e1e2a] rounded-xl p-4 shadow-2xl animate-slide-up"
+          className="bg-card border border-border rounded-xl p-4 shadow-2xl animate-slide-up"
         >
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center shrink-0 mt-0.5">
-              <Bell size={14} className="text-[#0d4af5]" />
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+              <Bell size={14} className="text-primary" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-foreground">{toast.title}</p>
@@ -75,13 +75,13 @@ export default function RealtimeToast() {
                 <Link
                   href={`/clients/${toast.clientId}`}
                   onClick={() => dismissToast(toast.id)}
-                  className="text-[10px] text-[#0d4af5] hover:underline mt-1.5 flex items-center gap-1"
+                  className="text-[10px] text-primary hover:underline mt-1.5 flex items-center gap-1"
                 >
                   Ver agora <ExternalLink size={8} />
                 </Link>
               )}
             </div>
-            <button onClick={() => dismissToast(toast.id)} className="text-zinc-600 hover:text-zinc-400 shrink-0">
+            <button onClick={() => dismissToast(toast.id)} className="text-muted-foreground hover:text-muted-foreground shrink-0">
               <X size={14} />
             </button>
           </div>

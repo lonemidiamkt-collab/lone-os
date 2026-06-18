@@ -201,16 +201,16 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         {/* TTV */}
-        <div className={`card flex items-center gap-3 ${waitingTTV ? "border-amber-500/20" : "border-border"}`}>
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${waitingTTV ? "bg-amber-500/10" : "bg-emerald-500/15"}`}>
-            {waitingTTV ? <Zap size={18} className="text-amber-400" /> : <Check size={18} className="text-emerald-500" />}
+        <div className={`card flex items-center gap-3 ${waitingTTV ? "border-lone-warning-border" : "border-border"}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${waitingTTV ? "bg-lone-warning-bg" : "bg-lone-success-bg"}`}>
+            {waitingTTV ? <Zap size={18} className="text-lone-warning" /> : <Check size={18} className="text-lone-success" />}
           </div>
           <div>
             <p className="text-[10px] text-muted-foreground">Time to Value</p>
             {waitingTTV ? (
-              <p className="text-lg font-bold text-amber-400">{daysSinceJoin}d</p>
+              <p className="text-lg font-bold text-lone-warning">{daysSinceJoin}d</p>
             ) : (
-              <p className="text-lg font-bold text-emerald-400">{ttvDays}d</p>
+              <p className="text-lg font-bold text-lone-success">{ttvDays}d</p>
             )}
           </div>
         </div>
@@ -228,8 +228,8 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
 
         {/* Total Revenue */}
         <div className="card flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-            <TrendingUp size={18} className="text-emerald-500" />
+          <div className="w-10 h-10 rounded-xl bg-lone-success-bg flex items-center justify-center">
+            <TrendingUp size={18} className="text-lone-success" />
           </div>
           <div>
             <p className="text-[10px] text-muted-foreground">Faturamento Total</p>
@@ -238,13 +238,13 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
         </div>
 
         {/* ROI */}
-        <div className={`card flex items-center gap-3 ${avgROI < 0 ? "border-red-500/20" : ""}`}>
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${avgROI >= 100 ? "bg-emerald-500/15" : avgROI >= 0 ? "bg-primary/10" : "bg-red-500/10"}`}>
-            {avgROI >= 0 ? <ArrowUp size={18} className="text-emerald-500" /> : <ArrowDown size={18} className="text-red-500" />}
+        <div className={`card flex items-center gap-3 ${avgROI < 0 ? "border-destructive/20" : ""}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${avgROI >= 100 ? "bg-lone-success-bg" : avgROI >= 0 ? "bg-primary/10" : "bg-destructive/10"}`}>
+            {avgROI >= 0 ? <ArrowUp size={18} className="text-lone-success" /> : <ArrowDown size={18} className="text-destructive" />}
           </div>
           <div>
             <p className="text-[10px] text-muted-foreground">ROI Medio</p>
-            <p className={`text-lg font-bold ${avgROI >= 100 ? "text-emerald-400" : avgROI >= 0 ? "text-foreground" : "text-red-400"}`}>{avgROI}%</p>
+            <p className={`text-lg font-bold ${avgROI >= 100 ? "text-lone-success" : avgROI >= 0 ? "text-foreground" : "text-destructive"}`}>{avgROI}%</p>
           </div>
         </div>
       </div>
@@ -252,7 +252,7 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
       {/* Aha! Moment button */}
       {waitingTTV && isAdmin && (
         <button onClick={handleAhaMoment} disabled={ahaSaving}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-[#0d4af5] to-[#3b6ff5] text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 shadow-[0_4px_20px_rgba(10,52,245,0.3)]">
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-primary to-primary text-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 shadow-[0_4px_20px_rgba(10,52,245,0.3)]">
           {ahaSaving ? <Loader2 size={16} className="animate-spin" /> : <Star size={16} />}
           {ahaSaving ? "Registrando..." : `Aha! Momento — Marcar Primeiro Resultado (${daysSinceJoin} dias)`}
         </button>
@@ -260,9 +260,9 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
 
       {/* Frequency alert */}
       {daysSinceInteraction !== null && daysSinceInteraction > 15 && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/[0.03] p-3 flex items-center gap-2">
-          <AlertTriangle size={14} className="text-red-400 shrink-0" />
-          <p className="text-xs text-red-400">Cliente sem interacao ha <span className="font-bold">{daysSinceInteraction} dias</span> — Risco de churn</p>
+        <div className="rounded-xl border border-destructive/20 bg-destructive/[0.03] p-3 flex items-center gap-2">
+          <AlertTriangle size={14} className="text-destructive shrink-0" />
+          <p className="text-xs text-destructive">Cliente sem interacao ha <span className="font-bold">{daysSinceInteraction} dias</span> — Risco de churn</p>
         </div>
       )}
 
@@ -280,10 +280,10 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
 
       {/* Error feedback */}
       {saveError && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/[0.03] p-3 flex items-center gap-2">
-          <AlertTriangle size={14} className="text-red-400 shrink-0" />
-          <p className="text-xs text-red-400">{saveError}</p>
-          <button onClick={() => setSaveError("")} className="ml-auto text-red-400/50 hover:text-red-400"><X size={12} /></button>
+        <div className="rounded-xl border border-destructive/20 bg-destructive/[0.03] p-3 flex items-center gap-2">
+          <AlertTriangle size={14} className="text-destructive shrink-0" />
+          <p className="text-xs text-destructive">{saveError}</p>
+          <button onClick={() => setSaveError("")} className="ml-auto text-destructive/50 hover:text-destructive"><X size={12} /></button>
         </div>
       )}
 
@@ -296,18 +296,18 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
           <div className="h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2a" />
-                <XAxis dataKey="month" tick={{ fill: "#71717a", fontSize: 11 }} axisLine={{ stroke: "#1e1e2a" }} />
-                <YAxis tick={{ fill: "#71717a", fontSize: 11 }} axisLine={{ stroke: "#1e1e2a" }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="month" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={{ stroke: "var(--border)" }} />
+                <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={{ stroke: "var(--border)" }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: "#1a1a24", border: "1px solid #1e1e2a", borderRadius: 12, fontSize: 12 }}
-                  labelStyle={{ color: "#71717a" }}
+                  contentStyle={{ backgroundColor: "var(--border)", border: "1px solid var(--border)", borderRadius: 12, fontSize: 12 }}
+                  labelStyle={{ color: "var(--muted-foreground)" }}
                   formatter={(v, name) => [formatCurrency(Number(v)), String(name)]}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <ReferenceLine y={0} stroke="#1e1e2a" />
-                <Line type="monotone" dataKey="Investimento" stroke="#0d4af5" strokeWidth={2} dot={{ fill: "#0d4af5", r: 4 }} />
-                <Line type="monotone" dataKey="Faturamento" stroke="#10b981" strokeWidth={2} dot={{ fill: "#10b981", r: 4 }} />
+                <ReferenceLine y={0} stroke="var(--border)" />
+                <Line type="monotone" dataKey="Investimento" stroke="var(--primary)" strokeWidth={2} dot={{ fill: "var(--primary)", r: 4 }} />
+                <Line type="monotone" dataKey="Faturamento" stroke="var(--lone-success)" strokeWidth={2} dot={{ fill: "var(--lone-success)", r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -323,17 +323,17 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
               const ann = annotations.find((a) => a.month === r.month);
               return (
                 <div key={r.id} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-muted/30 transition-colors">
-                  <span className="text-xs text-zinc-500 w-16 shrink-0 font-mono">{r.month}</span>
+                  <span className="text-xs text-muted-foreground w-16 shrink-0 font-mono">{r.month}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-4 text-xs">
                       <span className="text-primary">Inv: {formatCurrency(r.investment)}</span>
-                      <span className="text-emerald-400">Fat: {formatCurrency(r.revenue)}</span>
-                      <span className={`font-medium ${r.roi !== null && r.roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      <span className="text-lone-success">Fat: {formatCurrency(r.revenue)}</span>
+                      <span className={`font-medium ${r.roi !== null && r.roi >= 0 ? "text-lone-success" : "text-destructive"}`}>
                         ROI: {r.roi !== null ? `${r.roi}%` : "—"}
                       </span>
                     </div>
                     {(r.strategyNote || ann) && (
-                      <p className="text-[10px] text-zinc-500 mt-0.5 flex items-center gap-1">
+                      <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
                         <PenLine size={8} /> {r.strategyNote || ann?.annotation}
                       </p>
                     )}
@@ -353,24 +353,24 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
           </h3>
           {daysSinceInteraction !== null && (
             <span className={`text-[10px] px-2 py-0.5 rounded border ${
-              daysSinceInteraction <= 7 ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" :
-              daysSinceInteraction <= 15 ? "text-amber-400 bg-amber-500/10 border-amber-500/20" :
-              "text-red-400 bg-red-500/10 border-red-500/20"
+              daysSinceInteraction <= 7 ? "text-lone-success bg-lone-success-bg border-lone-success-border" :
+              daysSinceInteraction <= 15 ? "text-lone-warning bg-lone-warning-bg border-lone-warning-border" :
+              "text-destructive bg-destructive/10 border-destructive/20"
             }`}>Ultima: {daysSinceInteraction}d atras</span>
           )}
         </div>
         {interactions.length === 0 ? (
-          <p className="text-xs text-zinc-600 text-center py-4">Nenhuma interacao registrada</p>
+          <p className="text-xs text-muted-foreground text-center py-4">Nenhuma interacao registrada</p>
         ) : (
           <div className="space-y-1">
             {interactions.slice(0, 8).map((i) => (
               <div key={i.id} className="flex items-start gap-2 py-1.5 text-xs">
-                <span className="text-zinc-600 shrink-0 w-20 font-mono">{new Date(i.loggedAt).toLocaleDateString("pt-BR")}</span>
+                <span className="text-muted-foreground shrink-0 w-20 font-mono">{new Date(i.loggedAt).toLocaleDateString("pt-BR")}</span>
                 <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] ${
-                  i.type === "alinhamento" ? "bg-primary/10 text-primary" : i.type === "suporte" ? "bg-amber-500/10 text-amber-400" : "bg-zinc-500/10 text-zinc-400"
+                  i.type === "alinhamento" ? "bg-primary/10 text-primary" : i.type === "suporte" ? "bg-lone-warning-bg text-lone-warning" : "bg-muted text-muted-foreground"
                 }`}>{i.type}</span>
                 <span className="text-foreground">{i.summary}</span>
-                <span className="text-zinc-600 ml-auto shrink-0">{i.loggedBy}</span>
+                <span className="text-muted-foreground ml-auto shrink-0">{i.loggedBy}</span>
               </div>
             ))}
           </div>
@@ -383,35 +383,35 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
           <div className="bg-card border border-border rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-foreground text-sm">Inserir Faturamento Mensal</h3>
-              <button onClick={() => setShowAddRecord(false)} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+              <button onClick={() => setShowAddRecord(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400">Mes</label>
+                <label className="text-xs text-muted-foreground">Mes</label>
                 <input type="month" value={form.month} onChange={(e) => setForm((p) => ({ ...p, month: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-400">Investimento (R$)</label>
+                  <label className="text-xs text-muted-foreground">Investimento (R$)</label>
                   <input type="number" value={form.investment} onChange={(e) => setForm((p) => ({ ...p, investment: e.target.value }))}
                     placeholder="0.00" className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-400">Faturamento (R$)</label>
+                  <label className="text-xs text-muted-foreground">Faturamento (R$)</label>
                   <input type="number" value={form.revenue} onChange={(e) => setForm((p) => ({ ...p, revenue: e.target.value }))}
                     placeholder="0.00" className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
                 </div>
               </div>
               {form.investment && form.revenue && Number(form.investment) > 0 && (
-                <div className={`rounded-lg p-3 text-center ${calcROI(Number(form.revenue), Number(form.investment))! >= 0 ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-red-500/10 border border-red-500/20"}`}>
-                  <p className={`text-lg font-bold ${calcROI(Number(form.revenue), Number(form.investment))! >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                <div className={`rounded-lg p-3 text-center ${calcROI(Number(form.revenue), Number(form.investment))! >= 0 ? "bg-lone-success-bg border border-lone-success-border" : "bg-destructive/10 border border-destructive/20"}`}>
+                  <p className={`text-lg font-bold ${calcROI(Number(form.revenue), Number(form.investment))! >= 0 ? "text-lone-success" : "text-destructive"}`}>
                     ROI: {calcROI(Number(form.revenue), Number(form.investment))}%
                   </p>
                 </div>
               )}
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400">Estrategia / Observacao</label>
+                <label className="text-xs text-muted-foreground">Estrategia / Observacao</label>
                 <textarea value={form.strategyNote} onChange={(e) => setForm((p) => ({ ...p, strategyNote: e.target.value }))}
                   rows={2} placeholder="Ex: Campanha de Black Friday gerou pico de vendas..."
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 resize-none" />
@@ -420,7 +420,7 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
             <div className="p-5 border-t border-border flex gap-2">
               <button onClick={() => setShowAddRecord(false)} className="btn-ghost flex-1 text-sm border border-border">Cancelar</button>
               <button onClick={handleAddRecord} disabled={saving || !form.investment}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary/80 text-white text-sm font-medium disabled:opacity-50">
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-medium disabled:opacity-50">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Salvar
               </button>
             </div>
@@ -434,22 +434,22 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
           <div className="bg-card border border-border rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-foreground text-sm">Registrar Interacao</h3>
-              <button onClick={() => setShowAddInteraction(false)} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+              <button onClick={() => setShowAddInteraction(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400">Tipo</label>
+                <label className="text-xs text-muted-foreground">Tipo</label>
                 <div className="flex gap-2">
                   {[{ v: "alinhamento", l: "Alinhamento" }, { v: "suporte", l: "Suporte" }, { v: "feedback", l: "Feedback" }].map((o) => (
                     <button key={o.v} onClick={() => setInteractionForm((p) => ({ ...p, type: o.v }))}
                       className={`flex-1 py-2 rounded-lg border text-xs transition-all ${
-                        interactionForm.type === o.v ? "border-primary/50 bg-primary/10 text-white" : "border-border text-zinc-500"
+                        interactionForm.type === o.v ? "border-primary/50 bg-primary/10 text-foreground" : "border-border text-muted-foreground"
                       }`}>{o.l}</button>
                   ))}
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400">Resumo</label>
+                <label className="text-xs text-muted-foreground">Resumo</label>
                 <textarea value={interactionForm.summary} onChange={(e) => setInteractionForm((p) => ({ ...p, summary: e.target.value }))}
                   rows={3} placeholder="O que foi discutido ou resolvido..."
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 resize-none" />
@@ -458,7 +458,7 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
             <div className="p-5 border-t border-border flex gap-2">
               <button onClick={() => setShowAddInteraction(false)} className="btn-ghost flex-1 text-sm border border-border">Cancelar</button>
               <button onClick={handleAddInteraction} disabled={saving || !interactionForm.summary.trim()}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary/80 text-white text-sm font-medium disabled:opacity-50">
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-medium disabled:opacity-50">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Registrar
               </button>
             </div>

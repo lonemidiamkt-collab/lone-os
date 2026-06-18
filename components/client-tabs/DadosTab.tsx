@@ -264,8 +264,8 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           {client.docLogo ? (
             <img src={client.docLogo} alt="Logo" className="w-12 h-12 rounded-xl object-contain border border-border bg-card" />
           ) : (
-            <div className="w-12 h-12 rounded-xl bg-[#0d4af5]/15 border border-[#0d4af5]/20 flex items-center justify-center">
-              <span className="text-lg font-bold text-[#0d4af5]">{companyInitial}</span>
+            <div className="w-12 h-12 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center">
+              <span className="text-lg font-bold text-primary">{companyInitial}</span>
             </div>
           )}
           <div>
@@ -276,7 +276,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         <div className="flex items-center gap-2">
           {isAdmin && (
             <button onClick={generateOnboardingLink} disabled={generatingLink}
-              className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-amber-500/30 hover:text-amber-400">
+              className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-lone-warning-border hover:text-lone-warning">
               {generatingLink ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
               Link de Correcao
             </button>
@@ -285,7 +285,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             <>
               <button onClick={() => { setForm(initForm()); setEditing(false); }} className="btn-ghost text-xs border border-border">Cancelar</button>
               <button onClick={handleSave} disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white text-xs font-medium transition-colors disabled:opacity-50">
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground text-xs font-medium transition-colors disabled:opacity-50">
                 {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Salvar Alteracoes
               </button>
             </>
@@ -299,8 +299,8 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
 
       {/* Link de Correção gerado */}
       {onboardingLink && (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4 space-y-2">
-          <p className="text-xs font-medium text-amber-400 flex items-center gap-1.5">
+        <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg/[0.03] p-4 space-y-2">
+          <p className="text-xs font-medium text-lone-warning flex items-center gap-1.5">
             <LinkIcon size={12} /> Link de Preenchimento Gerado
           </p>
           <div className="flex items-center gap-2">
@@ -312,14 +312,14 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             />
             <button
               onClick={() => copyToClip(onboardingLink)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/15 text-amber-400 text-xs font-medium hover:bg-amber-500/25 transition-colors border border-amber-500/20 whitespace-nowrap"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-lone-warning-bg text-lone-warning text-xs font-medium hover:bg-lone-warning-bg transition-colors border border-lone-warning-border whitespace-nowrap"
             >
               <LinkIcon size={11} /> Copiar
             </button>
             <a
               href={`https://wa.me/?text=${encodeURIComponent("Olá! Segue o link para preencher/corrigir seus dados: " + onboardingLink)}`}
               target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-colors border border-emerald-500/20 whitespace-nowrap"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-lone-success-bg text-lone-success text-xs font-medium hover:bg-lone-success-bg transition-colors border border-lone-success-border whitespace-nowrap"
             >
               Enviar WA
             </a>
@@ -329,20 +329,20 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
 
       {/* Pendencies */}
       {missing.length > 0 && (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4">
-          <p className="text-xs font-medium text-amber-400 flex items-center gap-1.5 mb-2">
+        <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg/[0.03] p-4">
+          <p className="text-xs font-medium text-lone-warning flex items-center gap-1.5 mb-2">
             <AlertTriangle size={12} /> {missing.length} {missing.length === 1 ? "pendencia" : "pendencias"}
           </p>
           <div className="flex flex-wrap gap-1.5">
-            {missing.map((m) => <span key={m} className="text-[10px] px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/15">{m}</span>)}
+            {missing.map((m) => <span key={m} className="text-[10px] px-2 py-1 rounded-lg bg-lone-warning-bg text-lone-warning border border-lone-warning-border">{m}</span>)}
           </div>
         </div>
       )}
 
       {/* BLOCO 0: Identidade Visual — em destaque, visivel a todos (team precisa do logo) */}
-      <div className="rounded-xl border border-[#0d4af5]/20 bg-gradient-to-br from-[#0d4af5]/[0.04] to-transparent p-5">
+      <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.04] to-transparent p-5">
         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5 mb-4">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#0d4af5]" /> Identidade Visual
+          <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Identidade Visual
         </p>
         <div className="flex items-center gap-5">
           <div className="shrink-0">
@@ -351,9 +351,9 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                 <img src={client.docLogo} alt={`Logo ${companyName}`} className="max-w-full max-h-full object-contain" />
               </div>
             ) : (
-              <div className="w-28 h-28 rounded-2xl border-2 border-dashed border-amber-500/30 bg-amber-500/[0.02] flex flex-col items-center justify-center gap-1.5">
-                <AlertTriangle size={18} className="text-amber-400" />
-                <span className="text-[10px] text-amber-400 text-center px-2">Logo pendente</span>
+              <div className="w-28 h-28 rounded-2xl border-2 border-dashed border-lone-warning-border bg-lone-warning-bg/[0.02] flex flex-col items-center justify-center gap-1.5">
+                <AlertTriangle size={18} className="text-lone-warning" />
+                <span className="text-[10px] text-lone-warning text-center px-2">Logo pendente</span>
               </div>
             )}
           </div>
@@ -366,17 +366,17 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
               {client.docLogo && (
                 <>
                   <button onClick={() => window.open(client.docLogo!, "_blank", "noopener,noreferrer")}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-colors">
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-colors">
                     <Download size={11} /> Baixar Logo
                   </button>
                   <a href={client.docLogo} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface text-foreground text-xs font-medium border border-border hover:border-[#0d4af5]/30 transition-colors">
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface text-foreground text-xs font-medium border border-border hover:border-primary/30 transition-colors">
                     <Eye size={11} /> Visualizar
                   </a>
                 </>
               )}
               {!client.docLogo && isAdmin && (
-                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface text-foreground text-xs font-medium border border-dashed border-border hover:border-[#0d4af5]/30 transition-colors cursor-pointer">
+                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface text-foreground text-xs font-medium border border-dashed border-border hover:border-primary/30 transition-colors cursor-pointer">
                   {uploading === "logo" ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
                   {uploading === "logo" ? "Enviando..." : "Enviar Logo"}
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => {
@@ -393,12 +393,12 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       <div className="rounded-xl border border-border bg-card p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-            !latestContract ? "bg-zinc-500/10" : latestContract.status === "active" ? "bg-emerald-500/15" : latestContract.status === "expired" ? "bg-red-500/10" : "bg-zinc-500/10"
+            !latestContract ? "bg-muted" : latestContract.status === "active" ? "bg-lone-success-bg" : latestContract.status === "expired" ? "bg-destructive/10" : "bg-muted"
           }`}>
-            {!latestContract ? <FileText size={18} className="text-zinc-500" /> :
-             latestContract.status === "active" ? <CheckCircle size={18} className="text-emerald-500" /> :
-             latestContract.status === "expired" ? <Clock size={18} className="text-red-400" /> :
-             <FileText size={18} className="text-zinc-400" />}
+            {!latestContract ? <FileText size={18} className="text-muted-foreground" /> :
+             latestContract.status === "active" ? <CheckCircle size={18} className="text-lone-success" /> :
+             latestContract.status === "expired" ? <Clock size={18} className="text-destructive" /> :
+             <FileText size={18} className="text-muted-foreground" />}
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Status Juridico</p>
@@ -411,7 +411,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           </div>
         </div>
         <button onClick={() => onNavigateTab("contratos")}
-          className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-[#0d4af5]/30 hover:text-[#0d4af5]">
+          className="btn-ghost text-xs flex items-center gap-1 border border-border hover:border-primary/30 hover:text-primary">
           <FileText size={11} /> {latestContract ? "Ver Contratos" : "Gerar Contrato"}
         </button>
       </div>
@@ -420,14 +420,14 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       {form.phone && (
         <div className="rounded-xl border border-border bg-card p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center"><span className="text-lg">📱</span></div>
+            <div className="w-10 h-10 rounded-xl bg-lone-success-bg flex items-center justify-center"><span className="text-lg">📱</span></div>
             <div>
               <p className="text-xs text-muted-foreground">WhatsApp do Cliente</p>
               <p className="text-sm font-medium text-foreground">{form.phone}</p>
             </div>
           </div>
           <a href={`https://wa.me/55${form.phone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-colors border border-emerald-500/20">
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-lone-success-bg text-lone-success text-xs font-medium hover:bg-lone-success-bg transition-colors border border-lone-success-border">
             <ExternalLink size={11} /> Abrir Conversa
           </a>
         </div>
@@ -436,7 +436,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       {/* BLOCO 1: Identificacao */}
       <div className="rounded-xl border border-border bg-card p-5 space-y-4">
         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-          <Building2 size={11} className="text-[#0d4af5]" /> Identificacao Corporativa
+          <Building2 size={11} className="text-primary" /> Identificacao Corporativa
         </p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-3">
           {([
@@ -449,12 +449,12 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             { key: "enderecoCidade", label: "Cidade" }, { key: "enderecoEstado", label: "Estado (UF)" },
           ]).map(({ key, label }) => (
             <div key={key} className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
               {editing ? (
                 <input value={form[key] || ""} onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
-                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50 transition-colors" />
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 transition-colors" />
               ) : (
-                <p className="text-sm text-foreground">{form[key] || <span className="text-zinc-600 italic">Nao informado</span>}</p>
+                <p className="text-sm text-foreground">{form[key] || <span className="text-muted-foreground italic">Nao informado</span>}</p>
               )}
             </div>
           ))}
@@ -465,51 +465,51 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       {role !== "designer" && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-            <Shield size={11} className="text-[#0d4af5]" /> Cofre de Acessos
-            {!isAdmin && <span className="text-[10px] text-zinc-600 normal-case font-normal ml-2">Mostrando apenas plataformas do seu departamento</span>}
+            <Shield size={11} className="text-primary" /> Cofre de Acessos
+            {!isAdmin && <span className="text-[10px] text-muted-foreground normal-case font-normal ml-2">Mostrando apenas plataformas do seu departamento</span>}
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {accessCards.map(({ platform, icon, loginKey, pwKey, testUrl }) => {
               const hasLogin = !!form[loginKey];
               const hasPw = !!form[pwKey];
               return (
-                <div key={loginKey} className={`rounded-xl border p-4 space-y-3 ${hasLogin ? "border-border bg-surface" : "border-amber-500/20 bg-amber-500/[0.02]"}`}>
+                <div key={loginKey} className={`rounded-xl border p-4 space-y-3 ${hasLogin ? "border-border bg-surface" : "border-lone-warning-border bg-lone-warning-bg/[0.02]"}`}>
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-medium text-foreground flex items-center gap-1.5"><span>{icon}</span> {platform}</p>
                     <div className="flex items-center gap-1.5">
                       {hasLogin && (
                         <a href={testUrl} target="_blank" rel="noopener noreferrer"
-                          className="text-[10px] px-2 py-0.5 rounded bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 transition-colors flex items-center gap-1">
+                          className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors flex items-center gap-1">
                           <ExternalLink size={8} /> Testar
                         </a>
                       )}
-                      {!hasLogin && <span className="text-[10px] text-amber-400 flex items-center gap-1"><AlertTriangle size={10} /> Pendente</span>}
+                      {!hasLogin && <span className="text-[10px] text-lone-warning flex items-center gap-1"><AlertTriangle size={10} /> Pendente</span>}
                     </div>
                   </div>
                   <div className="space-y-2">
                     <div className="space-y-1">
-                      <p className="text-[10px] text-zinc-500 uppercase">Login</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">Login</p>
                       {editing ? (
                         <input value={form[loginKey] || ""} onChange={(e) => setForm((p) => ({ ...p, [loginKey]: e.target.value }))}
-                          className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50" placeholder="Login / Email" />
+                          className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" placeholder="Login / Email" />
                       ) : (
                         <div className="flex items-center gap-2">
-                          <p className="text-sm text-foreground flex-1">{form[loginKey] || <span className="text-zinc-600 italic">Nao informado</span>}</p>
-                          {hasLogin && <button type="button" onClick={() => copyToClip(form[loginKey])} className="text-zinc-600 hover:text-[#0d4af5] transition-colors" title="Copiar"><LinkIcon size={11} /></button>}
+                          <p className="text-sm text-foreground flex-1">{form[loginKey] || <span className="text-muted-foreground italic">Nao informado</span>}</p>
+                          {hasLogin && <button type="button" onClick={() => copyToClip(form[loginKey])} className="text-muted-foreground hover:text-primary transition-colors" title="Copiar"><LinkIcon size={11} /></button>}
                         </div>
                       )}
                     </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] text-zinc-500 uppercase flex items-center gap-1">
-                        Senha <Shield size={9} className="text-[#0d4af5]" />
+                      <p className="text-[10px] text-muted-foreground uppercase flex items-center gap-1">
+                        Senha <Shield size={9} className="text-primary" />
                       </p>
                       {editing ? (
                         <div className="relative">
                           <input type={showPw[pwKey] ? "text" : "password"} value={form[pwKey] || ""}
                             onChange={(e) => setForm((p) => ({ ...p, [pwKey]: e.target.value }))}
-                            className="w-full bg-card border border-border rounded-lg px-3 py-2 pr-9 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+                            className="w-full bg-card border border-border rounded-lg px-3 py-2 pr-9 text-sm text-foreground outline-none focus:border-primary/50"
                             placeholder="Deixe em branco pra manter a senha atual" />
-                          <button type="button" onClick={() => setShowPw((p) => ({ ...p, [pwKey]: !p[pwKey] }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+                          <button type="button" onClick={() => setShowPw((p) => ({ ...p, [pwKey]: !p[pwKey] }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground">
                             {showPw[pwKey] ? <EyeOff size={13} /> : <Eye size={13} />}
                           </button>
                         </div>
@@ -519,21 +519,21 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                             {form[pwKey] ? (
                               showPw[pwKey] ? form[pwKey] : "••••••••"
                             ) : (
-                              <span className="text-zinc-600 italic font-sans text-[11px]">
+                              <span className="text-muted-foreground italic font-sans text-[11px]">
                                 {revealingPw === pwKey ? "Descriptografando..." : "🔒 Armazenada (clique pra revelar)"}
                               </span>
                             )}
                           </p>
                           {form[pwKey] ? (
                             <>
-                              <button type="button" onClick={() => setShowPw((p) => ({ ...p, [pwKey]: !p[pwKey] }))} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                              <button type="button" onClick={() => setShowPw((p) => ({ ...p, [pwKey]: !p[pwKey] }))} className="text-muted-foreground hover:text-muted-foreground transition-colors">
                                 {showPw[pwKey] ? <EyeOff size={12} /> : <Eye size={12} />}
                               </button>
-                              <button type="button" onClick={() => copyToClip(form[pwKey])} className="text-zinc-600 hover:text-[#0d4af5] transition-colors" title="Copiar"><LinkIcon size={11} /></button>
+                              <button type="button" onClick={() => copyToClip(form[pwKey])} className="text-muted-foreground hover:text-primary transition-colors" title="Copiar"><LinkIcon size={11} /></button>
                             </>
                           ) : (
                             <button type="button" onClick={() => revealPassword(pwKey)} disabled={revealingPw === pwKey}
-                              className="text-zinc-500 hover:text-[#0d4af5] transition-colors disabled:opacity-50" title="Revelar senha">
+                              className="text-muted-foreground hover:text-primary transition-colors disabled:opacity-50" title="Revelar senha">
                               <Eye size={12} />
                             </button>
                           )}
@@ -554,17 +554,17 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-                <Shield size={11} className="text-amber-400" /> Documentos Legais
+                <Shield size={11} className="text-lone-warning" /> Documentos Legais
               </p>
-              <p className="text-[10px] text-amber-400/70 mt-1 flex items-center gap-1">
+              <p className="text-[10px] text-lone-warning mt-1 flex items-center gap-1">
                 <Shield size={9} /> Acesso restrito a administradores
               </p>
             </div>
           </div>
           {(uploadError || openError) && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-              <AlertTriangle size={13} className="text-red-400 shrink-0" />
-              <span className="text-xs text-red-400">{uploadError ?? openError}</span>
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+              <AlertTriangle size={13} className="text-destructive shrink-0" />
+              <span className="text-xs text-destructive">{uploadError ?? openError}</span>
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -583,29 +583,29 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                     )}
                     {isPrivateRef(url) && (
                       <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border">
-                        <Shield size={16} className="text-amber-400" />
-                        <span className="text-xs text-zinc-400">Arquivo privado — gere link para visualizar</span>
+                        <Shield size={16} className="text-lone-warning" />
+                        <span className="text-xs text-muted-foreground">Arquivo privado — gere link para visualizar</span>
                       </div>
                     )}
                     {!isPrivateRef(url) && url.match(/\.pdf$/i) && (
                       <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border">
-                        <FileText size={18} className="text-[#0d4af5]" /><span className="text-xs text-zinc-400">PDF</span>
+                        <FileText size={18} className="text-primary" /><span className="text-xs text-muted-foreground">PDF</span>
                       </div>
                     )}
                     <div className="flex gap-1.5">
                       <button onClick={() => handleSecureOpen(url, docType, false)}
                         disabled={opening === `${docType}-view`}
-                        className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-border text-xs text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all disabled:opacity-50">
+                        className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all disabled:opacity-50">
                         {opening === `${docType}-view` ? <Loader2 size={10} className="animate-spin" /> : <Eye size={10} />} Visualizar
                       </button>
                       <button onClick={() => handleSecureOpen(url, docType, true)}
                         disabled={opening === `${docType}-dl`}
-                        className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-border text-xs text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all disabled:opacity-50">
+                        className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all disabled:opacity-50">
                         {opening === `${docType}-dl` ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />} Baixar
                       </button>
                     </div>
                     {/* Substituir — admin pode enviar versão recebida via WhatsApp */}
-                    <label className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-zinc-700/50 text-[10px] text-zinc-600 hover:text-zinc-300 hover:border-zinc-500/50 transition-all cursor-pointer">
+                    <label className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-border text-[10px] text-muted-foreground hover:text-muted-foreground hover:border-border transition-all cursor-pointer">
                       {uploading === docType ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
                       {uploading === docType ? "Substituindo..." : "Substituir arquivo"}
                       <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => {
@@ -616,9 +616,9 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                 ) : (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 p-4 rounded-lg border border-dashed border-border bg-card">
-                      <AlertTriangle size={14} className="text-amber-500" /><span className="text-xs text-amber-400">Pendente</span>
+                      <AlertTriangle size={14} className="text-lone-warning" /><span className="text-xs text-lone-warning">Pendente</span>
                     </div>
-                    <label className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-border text-xs text-zinc-400 hover:text-white hover:border-[#0d4af5]/30 transition-all cursor-pointer">
+                    <label className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all cursor-pointer">
                       {uploading === docType ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
                       {uploading === docType ? "Enviando..." : "Enviar arquivo do WhatsApp"}
                       <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => {
@@ -637,14 +637,14 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       {isAdmin && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-            <Settings size={11} className="text-[#0d4af5]" /> Configuracao Operacional
+            <Settings size={11} className="text-primary" /> Configuracao Operacional
           </p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3">
             <div className="space-y-1 col-span-2">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Tipo de Servico</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tipo de Servico</p>
               {editing ? (
                 <select value={form.serviceType || ""} onChange={(e) => setForm((p) => ({ ...p, serviceType: e.target.value }))}
-                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50">
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
                   <option value="">Nao definido</option>
                   <option value="lone_growth">Lone Growth (Trafego + Social + Design)</option>
                   <option value="assessoria_trafego">Assessoria de Trafego</option>
@@ -657,44 +657,44 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                    form.serviceType === "assessoria_trafego" ? "Assessoria de Trafego" :
                    form.serviceType === "assessoria_social" ? "Assessoria de Social" :
                    form.serviceType === "assessoria_design" ? "Assessoria de Design" :
-                   <span className="text-zinc-600 italic">Nao definido</span>}
+                   <span className="text-muted-foreground italic">Nao definido</span>}
                 </p>
               )}
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Responsavel Trafego</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Responsavel Trafego</p>
               {editing ? (
                 <select value={form.assignedTraffic || ""} onChange={(e) => setForm((p) => ({ ...p, assignedTraffic: e.target.value }))}
-                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50">
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
                   <option value="">Nenhum</option>
                   {team.forField("assignedTraffic").map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
               ) : (
-                <p className="text-sm text-foreground">{form.assignedTraffic || <span className="text-zinc-600 italic">Nao atribuido</span>}</p>
+                <p className="text-sm text-foreground">{form.assignedTraffic || <span className="text-muted-foreground italic">Nao atribuido</span>}</p>
               )}
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Responsavel Social</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Responsavel Social</p>
               {editing ? (
                 <select value={form.assignedSocial || ""} onChange={(e) => setForm((p) => ({ ...p, assignedSocial: e.target.value }))}
-                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50">
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
                   <option value="">Nenhum</option>
                   {team.forField("assignedSocial").map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
               ) : (
-                <p className="text-sm text-foreground">{form.assignedSocial || <span className="text-zinc-600 italic">Nao atribuido</span>}</p>
+                <p className="text-sm text-foreground">{form.assignedSocial || <span className="text-muted-foreground italic">Nao atribuido</span>}</p>
               )}
             </div>
             <div className="space-y-1 col-span-2">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Designer Responsavel</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Designer Responsavel</p>
               {editing ? (
                 <select value={form.assignedDesigner || ""} onChange={(e) => setForm((p) => ({ ...p, assignedDesigner: e.target.value }))}
-                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50">
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
                   <option value="">Nenhum</option>
                   {team.forField("assignedDesigner").map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
               ) : (
-                <p className="text-sm text-foreground">{form.assignedDesigner || <span className="text-zinc-600 italic">Nao atribuido</span>}</p>
+                <p className="text-sm text-foreground">{form.assignedDesigner || <span className="text-muted-foreground italic">Nao atribuido</span>}</p>
               )}
             </div>
           </div>
@@ -713,10 +713,10 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
               {emailSending ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
               {emailSending ? "Enviando..." : "Reenviar Boas-Vindas"}
             </button>
-            {emailStatus === "sent" && <span className="text-xs text-emerald-400 flex items-center gap-1"><Check size={12} /> Enviado</span>}
-            {emailStatus === "error" && <span className="text-xs text-red-400 flex items-center gap-1"><AlertTriangle size={12} /> Erro no envio</span>}
+            {emailStatus === "sent" && <span className="text-xs text-lone-success flex items-center gap-1"><Check size={12} /> Enviado</span>}
+            {emailStatus === "error" && <span className="text-xs text-destructive flex items-center gap-1"><AlertTriangle size={12} /> Erro no envio</span>}
           </div>
-          <p className="text-[10px] text-zinc-600">Envia o e-mail de boas-vindas para {form.emailCorporativo || form.phone || "(sem e-mail)"}</p>
+          <p className="text-[10px] text-muted-foreground">Envia o e-mail de boas-vindas para {form.emailCorporativo || form.phone || "(sem e-mail)"}</p>
         </div>
       )}
 

@@ -124,36 +124,36 @@ export default function MorningBriefing({ clients }: Props) {
       {alerts && alerts.alerts.length > 0 && (
         <div className="card p-4 space-y-2">
           <div className="flex items-center gap-2">
-            <Shield size={14} className={criticalCount > 0 ? "text-red-400" : "text-amber-400"} />
+            <Shield size={14} className={criticalCount > 0 ? "text-destructive" : "text-lone-warning"} />
             <h3 className="text-xs font-semibold text-foreground">
               Alertas Criticos
               {criticalCount > 0 && (
-                <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 font-bold">
+                <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-bold">
                   {criticalCount} critico(s)
                 </span>
               )}
             </h3>
-            <span className="text-[10px] text-zinc-600 ml-auto">{alertCount} alerta(s) · 0 tokens</span>
+            <span className="text-[10px] text-muted-foreground ml-auto">{alertCount} alerta(s) · 0 tokens</span>
           </div>
           <div className="space-y-1.5">
             {alerts.alerts.slice(0, 5).map((alert) => (
               <div key={alert.id}
                 className={`flex items-start gap-2.5 p-2.5 rounded-lg ${
                   alert.severity === "critico"
-                    ? "bg-red-500/[0.04] border border-red-500/[0.1]"
-                    : "bg-amber-500/[0.04] border border-amber-500/[0.1]"
+                    ? "bg-destructive/[0.04] border border-destructive/[0.1]"
+                    : "bg-lone-warning-bg/[0.04] border border-lone-warning-border/[0.1]"
                 }`}>
                 <AlertTriangle size={12} className={`mt-0.5 shrink-0 ${
-                  alert.severity === "critico" ? "text-red-400" : "text-amber-400"
+                  alert.severity === "critico" ? "text-destructive" : "text-lone-warning"
                 }`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-zinc-500">{alert.client}</span>
-                    <span className="text-[10px] text-zinc-700">·</span>
+                    <span className="text-[10px] text-muted-foreground">{alert.client}</span>
+                    <span className="text-[10px] text-muted-foreground">·</span>
                     <span className="text-[11px] font-medium text-foreground">{alert.title}</span>
                   </div>
-                  <p className="text-[10px] text-zinc-500 mt-0.5">{alert.detail}</p>
-                  <a href="/traffic" className="text-[10px] text-[#0d4af5] mt-0.5 font-medium flex items-center gap-1 hover:underline cursor-pointer">
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{alert.detail}</p>
+                  <a href="/traffic" className="text-[10px] text-primary mt-0.5 font-medium flex items-center gap-1 hover:underline cursor-pointer">
                     <Zap size={8} /> {alert.action} →
                   </a>
                 </div>
@@ -167,15 +167,15 @@ export default function MorningBriefing({ clients }: Props) {
       <div className="card-glow p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#0d4af5]/10 flex items-center justify-center">
-              {loading ? <Loader2 size={18} className="text-[#0d4af5] animate-spin" /> : <Brain size={18} className="text-[#0d4af5]" />}
+            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+              {loading ? <Loader2 size={18} className="text-primary animate-spin" /> : <Brain size={18} className="text-primary" />}
             </div>
             <div>
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Sun size={12} className="text-amber-400" />
+                <Sun size={12} className="text-lone-warning" />
                 Briefing do Dia
               </h3>
-              <p className="text-[10px] text-zinc-500">
+              <p className="text-[10px] text-muted-foreground">
                 {briefing ? "Gerado pela IA" : `${clients.length} cliente(s) para analisar`}
               </p>
             </div>
@@ -183,15 +183,15 @@ export default function MorningBriefing({ clients }: Props) {
           <div className="flex items-center gap-1.5">
             {briefing && (
               <button onClick={() => setExpanded(!expanded)}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600 hover:text-foreground hover:bg-white/[0.04] transition-all">
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/[0.04] transition-all">
                 {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
             )}
             <button onClick={fetchBriefing} disabled={loading}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 briefing
-                  ? "text-zinc-400 border border-white/[0.06] hover:text-foreground hover:border-[#0d4af5]/30"
-                  : "bg-[#0d4af5] text-white hover:bg-[#0d4af5]/80"
+                  ? "text-muted-foreground border border-border hover:text-foreground hover:border-primary/30"
+                  : "bg-primary text-primary-foreground hover:bg-primary/80"
               } disabled:opacity-30`}>
               {loading ? <Loader2 size={11} className="animate-spin" /> : briefing ? <RefreshCw size={11} /> : <Zap size={11} />}
               {loading ? "Analisando..." : briefing ? "Atualizar" : "Gerar Briefing"}
@@ -200,13 +200,13 @@ export default function MorningBriefing({ clients }: Props) {
         </div>
 
         {error && (
-          <p className="text-[11px] text-red-400 mt-2">{error}</p>
+          <p className="text-[11px] text-destructive mt-2">{error}</p>
         )}
 
         {briefing && expanded && (
           <div className="mt-4 space-y-4 animate-fade-in">
             {/* Greeting */}
-            <p className="text-xs text-zinc-300 font-medium">{briefing.greeting}</p>
+            <p className="text-xs text-muted-foreground font-medium">{briefing.greeting}</p>
 
             {/* Urgent */}
             {briefing.urgent.length > 0 && (
@@ -214,19 +214,19 @@ export default function MorningBriefing({ clients }: Props) {
                 {briefing.urgent.map((item, i) => (
                   <div key={i} className={`flex items-start gap-2.5 p-3 rounded-xl ${
                     item.severity === "critico"
-                      ? "bg-red-500/[0.04] border border-red-500/[0.1]"
-                      : "bg-amber-500/[0.04] border border-amber-500/[0.1]"
+                      ? "bg-destructive/[0.04] border border-destructive/[0.1]"
+                      : "bg-lone-warning-bg/[0.04] border border-lone-warning-border/[0.1]"
                   }`}>
                     <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${
-                      item.severity === "critico" ? "text-red-400" : "text-amber-400"
+                      item.severity === "critico" ? "text-destructive" : "text-lone-warning"
                     }`} />
                     <div className="flex-1">
                       <p className="text-[11px] font-semibold text-foreground">
-                        <span className="text-zinc-500 font-normal">{item.client} — </span>
+                        <span className="text-muted-foreground font-normal">{item.client} — </span>
                         {item.title}
                       </p>
-                      <p className="text-[10px] text-zinc-500 mt-0.5">{item.detail}</p>
-                      <a href="/traffic" className="text-[10px] text-[#0d4af5] mt-1 font-medium flex items-center gap-1 hover:underline cursor-pointer">
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{item.detail}</p>
+                      <a href="/traffic" className="text-[10px] text-primary mt-1 font-medium flex items-center gap-1 hover:underline cursor-pointer">
                         <Zap size={8} /> {item.action} →
                       </a>
                     </div>
@@ -238,18 +238,18 @@ export default function MorningBriefing({ clients }: Props) {
             {/* Opportunities */}
             {briefing.opportunities.length > 0 && (
               <div className="space-y-1.5">
-                <p className="text-[10px] text-emerald-400/70 uppercase tracking-wider font-semibold flex items-center gap-1">
+                <p className="text-[10px] text-lone-success uppercase tracking-wider font-semibold flex items-center gap-1">
                   <TrendingUp size={10} /> Oportunidades
                 </p>
                 {briefing.opportunities.map((item, i) => (
-                  <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-500/[0.03] border border-emerald-500/[0.08]">
-                    <TrendingUp size={12} className="text-emerald-400 mt-0.5 shrink-0" />
+                  <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-lone-success-bg/[0.03] border border-lone-success-border/[0.08]">
+                    <TrendingUp size={12} className="text-lone-success mt-0.5 shrink-0" />
                     <div>
                       <p className="text-[11px] font-medium text-foreground">
                         {item.client}
-                        <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold">{item.metric}</span>
+                        <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-lone-success-bg text-lone-success font-bold">{item.metric}</span>
                       </p>
-                      <p className="text-[10px] text-zinc-500 mt-0.5">{item.suggestion}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{item.suggestion}</p>
                     </div>
                   </div>
                 ))}
@@ -259,10 +259,10 @@ export default function MorningBriefing({ clients }: Props) {
             {/* Stable */}
             {briefing.stable.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
-                <CheckCircle size={10} className="text-zinc-600" />
-                <span className="text-[10px] text-zinc-600">Estavel:</span>
+                <CheckCircle size={10} className="text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">Estavel:</span>
                 {briefing.stable.map((name, i) => (
-                  <span key={i} className="text-[10px] px-2 py-0.5 rounded-md bg-white/[0.03] text-zinc-500 border border-white/[0.04]">
+                  <span key={i} className="text-[10px] px-2 py-0.5 rounded-md bg-card/[0.03] text-muted-foreground border border-border">
                     {name}
                   </span>
                 ))}
@@ -270,12 +270,12 @@ export default function MorningBriefing({ clients }: Props) {
             )}
 
             {/* Summary */}
-            <p className="text-[11px] text-zinc-400 italic border-t border-white/[0.04] pt-3">
+            <p className="text-[11px] text-muted-foreground italic border-t border-border pt-3">
               {briefing.summary}
             </p>
 
             {briefing.tokens && (
-              <p className="text-[9px] text-zinc-700 text-right">{briefing.tokens} tokens · gpt-4o-mini</p>
+              <p className="text-[9px] text-muted-foreground text-right">{briefing.tokens} tokens · gpt-4o-mini</p>
             )}
           </div>
         )}

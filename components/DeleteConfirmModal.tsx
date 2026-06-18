@@ -51,14 +51,14 @@ export default function DeleteConfirmModal({
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-md bg-card border border-red-500/30 rounded-2xl shadow-[0_0_60px_rgba(239,68,68,0.15)] overflow-hidden"
+        className="relative w-full max-w-md bg-card border border-destructive/30 rounded-2xl shadow-[0_0_60px_rgba(239,68,68,0.15)] overflow-hidden"
       >
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-red-500/40 to-transparent" />
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-destructive/40 to-transparent" />
 
         <div className="p-6 space-y-4">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
-              <AlertTriangle size={20} className="text-red-400" />
+            <div className="w-10 h-10 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center shrink-0">
+              <AlertTriangle size={20} className="text-destructive" />
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-base font-semibold text-foreground">{title}</h2>
@@ -68,21 +68,21 @@ export default function DeleteConfirmModal({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all disabled:opacity-50"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all disabled:opacity-50"
             >
               <X size={14} />
             </button>
           </div>
 
           {itemLabel && (
-            <div className="px-4 py-3 rounded-xl bg-red-500/[0.04] border border-red-500/20">
+            <div className="px-4 py-3 rounded-xl bg-destructive/[0.04] border border-destructive/20">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Será apagado</p>
               <p className="text-sm text-foreground font-medium break-words">{itemLabel}</p>
             </div>
           )}
 
           {error && (
-            <div className="px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-xs text-red-400">
+            <div className="px-3 py-2 rounded-md bg-destructive/10 border border-destructive/30 text-xs text-destructive">
               {error}
             </div>
           )}
@@ -92,7 +92,7 @@ export default function DeleteConfirmModal({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="flex-1 px-4 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all disabled:opacity-50"
+              className="flex-1 px-4 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all disabled:opacity-50"
             >
               Cancelar
             </button>
@@ -100,7 +100,7 @@ export default function DeleteConfirmModal({
               type="button"
               onClick={handleConfirm}
               disabled={submitting}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25 hover:border-red-500/50 transition-all disabled:opacity-50 font-medium text-sm"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:border-destructive/50 transition-all disabled:opacity-50 font-medium text-sm"
             >
               {submitting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
               {submitting ? "Apagando..." : confirmLabel}

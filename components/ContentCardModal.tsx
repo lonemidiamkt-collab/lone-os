@@ -28,21 +28,21 @@ import { MarkdownEditor, MarkdownView, htmlToMarkdown } from "@/components/Markd
 
 
 const STATUS_OPTIONS: { value: ContentCard["status"]; label: string; color: string }[] = [
-  { value: "ideas", label: "Ideias", color: "bg-zinc-500" },
-  { value: "script", label: "Roteiro", color: "bg-zinc-500" },
+  { value: "ideas", label: "Ideias", color: "bg-muted" },
+  { value: "script", label: "Roteiro", color: "bg-muted" },
   { value: "in_production", label: "Em Produção", color: "bg-primary" },
-  { value: "approval", label: "Aprovação", color: "bg-zinc-500" },
-  { value: "client_approval", label: "Aprovação Cliente", color: "bg-zinc-500" },
-  { value: "scheduled", label: "Agendado", color: "bg-zinc-500" },
+  { value: "approval", label: "Aprovação", color: "bg-muted" },
+  { value: "client_approval", label: "Aprovação Cliente", color: "bg-muted" },
+  { value: "scheduled", label: "Agendado", color: "bg-muted" },
   { value: "published", label: "Publicado", color: "bg-primary" },
 ];
 
 const ROLE_COLORS: Record<string, string> = {
-  admin: "text-[#0d4af5]",
-  manager: "text-[#0d4af5]",
-  traffic: "text-[#0d4af5]",
-  social: "text-[#0d4af5]",
-  designer: "text-[#3b6ff5]",
+  admin: "text-primary",
+  manager: "text-primary",
+  traffic: "text-primary",
+  social: "text-primary",
+  designer: "text-primary",
 };
 
 function timeAgo(iso: string): string {
@@ -57,7 +57,7 @@ function DrivePreviewFallback({ clientId, label }: { clientId: string; label: st
   const clients = useClientsStore((s) => s.clients);
   const client = clients.find((c) => c.id === clientId);
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-zinc-500 px-4">
+    <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground px-4">
       <ImageIcon size={32} />
       <p className="text-[10px] text-center">{label}</p>
       {client?.driveLink && (
@@ -65,7 +65,7 @@ function DrivePreviewFallback({ clientId, label }: { clientId: string; label: st
           href={client.driveLink}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[10px] text-[#0d4af5] hover:underline flex items-center gap-1"
+          className="text-[10px] text-primary hover:underline flex items-center gap-1"
         >
           <ExternalLink size={9} /> Acesse via Google Drive
         </a>
@@ -266,12 +266,12 @@ export default function ContentCardModal({ card, onClose }: Props) {
               </Button>
               {/* Toast inline — sucesso ou erro */}
               {uploadOk && (
-                <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2 py-1.5">
+                <div className="flex items-center gap-1.5 text-[10px] text-lone-success bg-lone-success-bg border border-lone-success-border rounded-md px-2 py-1.5">
                   <CheckCircle size={11} /> Arte salva — visível para todos da equipe
                 </div>
               )}
               {uploadError && (
-                <div className="flex items-start gap-1.5 text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-2 py-1.5">
+                <div className="flex items-start gap-1.5 text-[10px] text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-2 py-1.5">
                   <XCircle size={11} className="shrink-0 mt-0.5" />
                   <span className="leading-relaxed">{uploadError}</span>
                 </div>
@@ -363,7 +363,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
                     <button
                       type="button"
                       onClick={handleSaveBriefing}
-                      className="text-xs px-3 py-1.5 rounded-md bg-[#0d4af5] hover:bg-[#1a56ff] text-white font-medium transition-colors"
+                      className="text-xs px-3 py-1.5 rounded-md bg-primary hover:bg-primary text-primary-foreground font-medium transition-colors"
                     >
                       Salvar
                     </button>
@@ -474,7 +474,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
             {/* Activity feed scrollável */}
             <div className="flex-1 overflow-auto px-5 py-4 space-y-3">
               {comments.length === 0 ? (
-                <p className="text-xs text-zinc-600 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   Inicie a discussão sobre este conteúdo. Comentários ficam vinculados ao card e aparecem na timeline do cliente.
                 </p>
               ) : (
@@ -488,9 +488,9 @@ export default function ContentCardModal({ card, onClose }: Props) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-medium text-foreground">{cmt.author}</span>
-                        <span className="text-[10px] text-zinc-600">{timeAgo(cmt.createdAt)}</span>
+                        <span className="text-[10px] text-muted-foreground">{timeAgo(cmt.createdAt)}</span>
                       </div>
-                      <p className="text-xs text-zinc-300 mt-1 leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-wrap">{cmt.text}</p>
+                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-wrap">{cmt.text}</p>
                     </div>
                   </div>
                 ))
@@ -505,7 +505,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
           <div className="px-6 py-4 border-t border-border space-y-3">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-semibold text-foreground">Ação de Aprovação</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-medium">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-medium">
                 {card.status === "approval" ? "Aprovação Interna" : "Aprovação Cliente"}
               </span>
             </div>
@@ -516,7 +516,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 href={card.imageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0d4af5]/[0.04] border border-[#0d4af5]/20 hover:border-[#0d4af5]/40 transition-all text-xs text-[#0d4af5]"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/[0.04] border border-primary/20 hover:border-primary/40 transition-all text-xs text-primary"
               >
                 <ExternalLink size={12} /> Abrir arte no Drive
               </a>
@@ -526,13 +526,13 @@ export default function ContentCardModal({ card, onClose }: Props) {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { approveContent(card.id, currentUser); onClose(); }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] hover:shadow-[0_0_25px_rgba(10,52,245,0.5)]"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] hover:shadow-[0_0_25px_rgba(10,52,245,0.5)]"
                 >
                   <CheckCircle size={14} /> Aprovar Arte
                 </button>
                 <button
                   onClick={() => setShowRejectInput(true)}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40 transition-all"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-destructive/10 text-destructive text-xs font-medium border border-destructive/20 hover:bg-destructive/20 hover:border-destructive/40 transition-all"
                 >
                   <XCircle size={14} /> Solicitar Alteração
                 </button>
@@ -549,20 +549,20 @@ export default function ContentCardModal({ card, onClose }: Props) {
                     }
                   }}
                   placeholder="Descreva o motivo da alteração..."
-                  className="w-full bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-600 focus:border-red-500/40 outline-none"
+                  className="w-full bg-destructive/5 border border-destructive/20 rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-destructive/40 outline-none"
                   autoFocus
                 />
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => { setShowRejectInput(false); setRejectReason(""); }}
-                    className="px-3 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-foreground transition-all"
+                    className="px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground transition-all"
                   >
                     Cancelar
                   </button>
                   <button
                     onClick={() => { if (rejectReason.trim()) { rejectContent(card.id, currentUser, rejectReason.trim()); onClose(); } }}
                     disabled={!rejectReason.trim()}
-                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20 hover:bg-red-500/20 transition-all disabled:opacity-30"
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-destructive/10 text-destructive text-xs font-medium border border-destructive/20 hover:bg-destructive/20 transition-all disabled:opacity-30"
                   >
                     <XCircle size={12} /> Enviar Rejeição
                   </button>
@@ -578,13 +578,13 @@ export default function ContentCardModal({ card, onClose }: Props) {
           return cl?.driveLink ? (
             <div className="px-6 py-3 border-t border-border">
               <a href={cl.driveLink} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl bg-[#0d4af5]/[0.06] border border-[#0d4af5]/[0.15] hover:bg-[#0d4af5]/[0.12] hover:border-[#0d4af5]/[0.3] transition-all group">
-                <div className="w-9 h-9 rounded-lg bg-[#0d4af5]/15 flex items-center justify-center shrink-0 group-hover:bg-[#0d4af5]/25 transition-all">
-                  <ExternalLink size={16} className="text-[#0d4af5]" />
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl bg-primary/[0.06] border border-primary/[0.15] hover:bg-primary/[0.12] hover:border-primary/[0.3] transition-all group">
+                <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center shrink-0 group-hover:bg-primary/25 transition-all">
+                  <ExternalLink size={16} className="text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[#0d4af5]">Abrir Drive — {cl.name}</p>
-                  <p className="text-[10px] text-zinc-500">Acesse logos, fotos e arquivos em alta resolucao</p>
+                  <p className="text-sm font-medium text-primary">Abrir Drive — {cl.name}</p>
+                  <p className="text-[10px] text-muted-foreground">Acesse logos, fotos e arquivos em alta resolucao</p>
                 </div>
               </a>
             </div>
@@ -596,7 +596,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
           {role !== "designer" && !card.designRequestId && !card.designerDeliveredAt && (
             <Button
               variant="outline"
-              className="mr-auto flex items-center gap-2 text-[#8b5cf6] border-[#8b5cf6]/30 hover:bg-[#8b5cf6]/10"
+              className="mr-auto flex items-center gap-2 text-[var(--chart-4)] border-[var(--chart-4)]/30 hover:bg-[var(--chart-4)]/10"
               onClick={() => {
                 addDesignRequest({
                   title: `Arte: ${card.title}`,
@@ -619,19 +619,19 @@ export default function ContentCardModal({ card, onClose }: Props) {
           )}
           {/* Designer sees "Enviar Arte" instead */}
           {role === "designer" && !card.designerDeliveredAt && (
-            <span className="mr-auto text-xs text-[#0d4af5] flex items-center gap-1.5">
+            <span className="mr-auto text-xs text-primary flex items-center gap-1.5">
               <Upload size={12} /> Use o botao "Enviar Arte" no kanban
             </span>
           )}
           {role !== "designer" && card.designRequestId && !card.designerDeliveredAt && (
-            <span className="mr-auto text-xs text-amber-400 flex items-center gap-1.5">
+            <span className="mr-auto text-xs text-lone-warning flex items-center gap-1.5">
               <Palette size={12} /> Aguardando design...
             </span>
           )}
           {card.designerDeliveredAt && !card.socialConfirmedAt && role !== "designer" && (
             <Button
               variant="outline"
-              className="mr-auto flex items-center gap-2 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+              className="mr-auto flex items-center gap-2 text-lone-success border-lone-success-border hover:bg-lone-success-bg"
               onClick={() => {
                 updateContentCard(card.id, { socialConfirmedAt: new Date().toISOString(), socialConfirmedBy: currentUser });
               }}
@@ -645,7 +645,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
           </Button>
           <Button
             onClick={handleSave}
-            className={`flex items-center gap-2 ${saved ? "bg-[#0d4af5] hover:bg-[#0d4af5]" : ""}`}
+            className={`flex items-center gap-2 ${saved ? "bg-primary hover:bg-primary" : ""}`}
           >
             <Save size={14} />
             {saved ? "Salvo!" : "Salvar alteracoes"}

@@ -178,17 +178,17 @@ export default function MeetingScheduler({ client, currentUser }: Props) {
                   </span>
                 </div>
                 {m.location && (
-                  <p className="text-[10px] text-zinc-400 flex items-center gap-1"><MapPin size={8} /> {m.location}</p>
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1"><MapPin size={8} /> {m.location}</p>
                 )}
                 <div className="flex items-center gap-2">
                   {m.googleCalendarUrl && (
                     <a href={m.googleCalendarUrl} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] bg-surface border border-border text-zinc-400 hover:text-primary hover:border-primary/20 transition-colors">
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] bg-surface border border-border text-muted-foreground hover:text-primary hover:border-primary/20 transition-colors">
                       <ExternalLink size={8} /> Google Calendar
                     </a>
                   )}
                   <button onClick={() => handleDownloadICS(m)}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] bg-surface border border-border text-zinc-400 hover:text-primary hover:border-primary/20 transition-colors">
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] bg-surface border border-border text-muted-foreground hover:text-primary hover:border-primary/20 transition-colors">
                     <Download size={8} /> Apple / Outlook
                   </button>
                 </div>
@@ -206,9 +206,9 @@ export default function MeetingScheduler({ client, currentUser }: Props) {
             const d = new Date(m.startAt);
             return (
               <div key={m.id} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-muted/30 transition-colors text-xs">
-                <span className="text-zinc-600 w-20 shrink-0 font-mono">{d.toLocaleDateString("pt-BR")}</span>
+                <span className="text-muted-foreground w-20 shrink-0 font-mono">{d.toLocaleDateString("pt-BR")}</span>
                 <span className="text-foreground flex-1 truncate">{m.title}</span>
-                <span className="text-zinc-600 shrink-0">{m.createdBy}</span>
+                <span className="text-muted-foreground shrink-0">{m.createdBy}</span>
               </div>
             );
           })}
@@ -216,7 +216,7 @@ export default function MeetingScheduler({ client, currentUser }: Props) {
       )}
 
       {meetings.length === 0 && !showForm && (
-        <p className="text-xs text-zinc-600 text-center py-6">Nenhuma reuniao agendada</p>
+        <p className="text-xs text-muted-foreground text-center py-6">Nenhuma reuniao agendada</p>
       )}
 
       {/* Form Modal */}
@@ -225,11 +225,11 @@ export default function MeetingScheduler({ client, currentUser }: Props) {
           <div className="bg-card border border-border rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-foreground text-sm">Agendar Reuniao</h3>
-              <button onClick={() => setShowForm(false)} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+              <button onClick={() => setShowForm(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400">Tipo</label>
+                <label className="text-xs text-muted-foreground">Tipo</label>
                 <div className="grid grid-cols-4 gap-2">
                   {MEETING_TYPES.map((t) => (
                     <button key={t.value} onClick={() => {
@@ -240,14 +240,14 @@ export default function MeetingScheduler({ client, currentUser }: Props) {
                       }));
                     }}
                       className={`p-2 rounded-lg border text-center text-xs transition-all ${
-                        form.type === t.value ? "border-primary/50 bg-primary/10 text-white" : "border-border text-zinc-500"
+                        form.type === t.value ? "border-primary/50 bg-primary/10 text-foreground" : "border-border text-muted-foreground"
                       }`}>{t.icon}<br />{t.label}</button>
                   ))}
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400">Titulo</label>
+                <label className="text-xs text-muted-foreground">Titulo</label>
                 <input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
                   placeholder={`${MEETING_TYPES.find((t) => t.value === form.type)?.label} — ${client.nomeFantasia || client.name}`}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
@@ -255,31 +255,31 @@ export default function MeetingScheduler({ client, currentUser }: Props) {
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-400">Data</label>
+                  <label className="text-xs text-muted-foreground">Data</label>
                   <input type="date" value={form.date} onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))}
                     className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-400">Inicio</label>
+                  <label className="text-xs text-muted-foreground">Inicio</label>
                   <input type="time" value={form.startTime} onChange={(e) => setForm((p) => ({ ...p, startTime: e.target.value }))}
                     className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-400">Fim</label>
+                  <label className="text-xs text-muted-foreground">Fim</label>
                   <input type="time" value={form.endTime} onChange={(e) => setForm((p) => ({ ...p, endTime: e.target.value }))}
                     className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400">Local / Link</label>
+                <label className="text-xs text-muted-foreground">Local / Link</label>
                 <input value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
                   placeholder="Google Meet, Zoom, Escritorio..."
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs text-zinc-400">Observacoes</label>
+                <label className="text-xs text-muted-foreground">Observacoes</label>
                 <textarea value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
                   rows={2} placeholder="Pauta, topicos, preparacao..."
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 resize-none" />
@@ -288,7 +288,7 @@ export default function MeetingScheduler({ client, currentUser }: Props) {
             <div className="p-5 border-t border-border flex gap-2">
               <button onClick={() => setShowForm(false)} className="btn-ghost flex-1 text-sm border border-border">Cancelar</button>
               <button onClick={handleCreate} disabled={saving || !form.date}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary/80 text-white text-sm font-medium disabled:opacity-50">
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-medium disabled:opacity-50">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Agendar
               </button>
             </div>

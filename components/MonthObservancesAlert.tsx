@@ -18,8 +18,8 @@ interface ObservanceFromApi {
 const MONTHS_PT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
 const CATEGORY_VISUAL: Record<HolidayCategory, { color: string; bg: string; border: string; label: string; Icon: typeof Flag }> = {
-  national:        { color: "text-amber-300", bg: "bg-amber-500/10", border: "border-amber-500/20", label: "Feriado nacional", Icon: Flag },
-  estadual:        { color: "text-orange-300", bg: "bg-orange-500/10", border: "border-orange-500/20", label: "Feriado estadual", Icon: Flag },
+  national:        { color: "text-lone-warning", bg: "bg-lone-warning-bg", border: "border-lone-warning-border", label: "Feriado nacional", Icon: Flag },
+  estadual:        { color: "text-lone-warning", bg: "bg-lone-warning-bg", border: "border-lone-warning-border", label: "Feriado estadual", Icon: Flag },
   municipal:       { color: "text-lime-300", bg: "bg-lime-500/10", border: "border-lime-500/20", label: "Feriado municipal", Icon: Flag },
   comercial:       { color: "text-pink-300", bg: "bg-pink-500/10", border: "border-pink-500/20", label: "Comercial", Icon: Heart },
   cultural:        { color: "text-purple-300", bg: "bg-purple-500/10", border: "border-purple-500/20", label: "Cultural", Icon: Sparkles },
@@ -116,7 +116,7 @@ export default function MonthObservancesAlert({ year, month, nichos = [], uf, ci
 
   if (compact) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 mb-4">
+      <div className="rounded-xl border border-border bg-card/[0.02] p-3 mb-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{headerTitle}</span>
           {awarenessMonths.map((o) => {
@@ -144,9 +144,9 @@ export default function MonthObservancesAlert({ year, month, nichos = [], uf, ci
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 mb-4">
+    <div className="rounded-xl border border-border bg-card/[0.02] p-4 mb-4">
       <div className="flex items-center gap-2 mb-3">
-        <Sparkles size={14} className="text-[#0d4af5]" />
+        <Sparkles size={14} className="text-primary" />
         <h3 className="text-sm font-semibold text-foreground">{headerTitle}</h3>
         <span className="text-[10px] text-muted-foreground">({filtered.length} {filtered.length === 1 ? "data" : "datas"})</span>
       </div>

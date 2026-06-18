@@ -26,18 +26,18 @@ export default function BudgetAlert({ clients }: Props) {
   if (alerts.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4 space-y-2">
-      <p className="text-xs font-medium text-amber-400 flex items-center gap-1.5">
+    <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg/[0.03] p-4 space-y-2">
+      <p className="text-xs font-medium text-lone-warning flex items-center gap-1.5">
         <AlertTriangle size={12} /> Alerta de Orcamento
       </p>
       {alerts.map(({ client: c }) => (
-        <Link key={c.id} href={`/clients/${c.id}`} className="flex items-center justify-between py-1 hover:bg-amber-500/5 rounded px-1 transition-colors">
-          <p className="text-xs text-zinc-300">{c.nomeFantasia || c.name}</p>
+        <Link key={c.id} href={`/clients/${c.id}`} className="flex items-center justify-between py-1 hover:bg-lone-warning-bg rounded px-1 transition-colors">
+          <p className="text-xs text-muted-foreground">{c.nomeFantasia || c.name}</p>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-amber-400">
+            <span className="text-[10px] text-lone-warning">
               R$ {c.monthlyBudget.toLocaleString("pt-BR")} — dia {today}/{daysInMonth}
             </span>
-            <TrendingUp size={10} className="text-amber-400" />
+            <TrendingUp size={10} className="text-lone-warning" />
           </div>
         </Link>
       ))}

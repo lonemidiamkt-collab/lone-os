@@ -6,10 +6,10 @@ import { X, Bell, Calendar, Clock, Megaphone, AlertTriangle } from "lucide-react
 import type { Notice } from "@/lib/types";
 
 const CATEGORY_CONFIG: Record<string, { icon: typeof Bell; color: string; bg: string; label: string }> = {
-  general:  { icon: Megaphone,      color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/10", label: "Aviso" },
-  meeting:  { icon: Calendar,       color: "text-[#0d4af5]",  bg: "bg-[#0d4af5]/10",  label: "Reunião" },
-  deadline: { icon: AlertTriangle,  color: "text-red-500",   bg: "bg-red-500/10",   label: "Prazo" },
-  reminder: { icon: Clock,          color: "text-[#3b6ff5]", bg: "bg-[#0d4af5]/10", label: "Lembrete" },
+  general:  { icon: Megaphone,      color: "text-primary", bg: "bg-primary/10", label: "Aviso" },
+  meeting:  { icon: Calendar,       color: "text-primary",  bg: "bg-primary/10",  label: "Reunião" },
+  deadline: { icon: AlertTriangle,  color: "text-destructive",   bg: "bg-destructive/10",   label: "Prazo" },
+  reminder: { icon: Clock,          color: "text-primary", bg: "bg-primary/10", label: "Lembrete" },
 };
 
 // Plays a notification sound using Web Audio API (no external file needed)
@@ -171,7 +171,7 @@ export default function ScheduledNoticePopup() {
             key={popup.notice.id}
             className={`pointer-events-auto flex items-start gap-3 p-4 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all duration-300 ${
               popup.notice.urgent
-                ? "bg-red-500/10 border-red-500/30"
+                ? "bg-destructive/10 border-destructive/30"
                 : "bg-card/95 border-border/50"
             } ${
               popup.dismissing
@@ -182,7 +182,7 @@ export default function ScheduledNoticePopup() {
             {/* Pulsing icon */}
             <div className={`w-10 h-10 rounded-xl ${config.bg} flex items-center justify-center shrink-0 relative`}>
               <Icon size={18} className={config.color} />
-              <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#0d4af5] animate-pulse`} />
+              <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full bg-primary animate-pulse`} />
             </div>
 
             <div className="flex-1 min-w-0">

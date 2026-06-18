@@ -144,8 +144,8 @@ export default function EditClientModal({ client, onClose }: Props) {
       <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#0d4af5]/15 flex items-center justify-center">
-              <Pencil size={16} className="text-[#0d4af5]" />
+            <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
+              <Pencil size={16} className="text-primary" />
             </div>
             <div>
               <DialogTitle>Editar Cliente</DialogTitle>
@@ -159,7 +159,7 @@ export default function EditClientModal({ client, onClose }: Props) {
           {TABS.map((t) => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
-                tab === t.key ? "bg-[#0d4af5]/10 text-[#0d4af5]" : "text-zinc-500 hover:text-zinc-300"
+                tab === t.key ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-muted-foreground"
               }`}>
               <t.icon size={12} /> {t.label}
             </button>
@@ -231,7 +231,7 @@ export default function EditClientModal({ client, onClose }: Props) {
                 ]).map((opt) => (
                   <button key={opt.value} type="button" onClick={() => set("serviceType", opt.value)}
                     className={`flex items-center gap-2 p-2.5 rounded-lg border text-left transition-all text-xs ${
-                      form.serviceType === opt.value ? "border-[#0d4af5]/50 bg-[#0d4af5]/[0.06] text-white" : "border-white/[0.06] text-zinc-500 hover:border-white/[0.12]"
+                      form.serviceType === opt.value ? "border-primary/50 bg-primary/[0.06] text-foreground" : "border-border text-muted-foreground hover:border-border"
                     }`}>
                     <span>{opt.icon}</span> {opt.label}
                   </button>
@@ -254,7 +254,7 @@ export default function EditClientModal({ client, onClose }: Props) {
                 <div className="space-y-1.5"><Label>Fim do Contrato</Label><Input type="date" value={form.contractEnd} onChange={(e) => set("contractEnd", e.target.value)} /></div>
               </div>
 
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider pt-2">Equipe Responsavel</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider pt-2">Equipe Responsavel</p>
               {needsTraffic && (
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-1"><Users size={10} /> Gestor de Trafego</Label>
@@ -291,8 +291,8 @@ export default function EditClientModal({ client, onClose }: Props) {
             <div className="space-y-4 animate-fade-in">
               {/* Conta de Anúncio Meta — apenas admin/manager */}
               {isAdmin && (
-                <div className="rounded-lg border border-[#1e2a3a] bg-[#0a0f1a] p-3 space-y-2">
-                  <p className="text-[10px] text-[#0d4af5] uppercase tracking-wider flex items-center gap-1.5">
+                <div className="rounded-lg border border-border bg-card p-3 space-y-2">
+                  <p className="text-[10px] text-primary uppercase tracking-wider flex items-center gap-1.5">
                     <Facebook size={10} /> Conta de Anúncio Meta (Portal de Resultados)
                   </p>
                   <Input
@@ -301,21 +301,21 @@ export default function EditClientModal({ client, onClose }: Props) {
                     placeholder="Ex: 1414336926507044 ou act_1414336926507044"
                     className="text-xs font-mono"
                   />
-                  <p className="text-[9px] text-zinc-600">
+                  <p className="text-[9px] text-muted-foreground">
                     ID da conta de anúncios no Gerenciador da Meta. Usado para gerar o relatório do portal do cliente.
                   </p>
                 </div>
               )}
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
-                <Shield size={10} className="text-[#0d4af5]" /> Cofre de Acessos
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Shield size={10} className="text-primary" /> Cofre de Acessos
               </p>
               {([
                 { platform: "Facebook / Meta Ads", icon: "\u{1F4D8}", loginKey: "facebookLogin", passKey: "facebookPassword" },
                 { platform: "Instagram", icon: "\u{1F4F7}", loginKey: "instagramLogin", passKey: "instagramPassword" },
                 { platform: "Google Ads / Gmail", icon: "\u{1F50D}", loginKey: "googleAdsLogin", passKey: "googleAdsPassword" },
               ] as const).map((acc) => (
-                <div key={acc.platform} className="rounded-lg border border-[#1e1e2a] bg-[#0f0f13] p-3 space-y-2">
-                  <p className="text-xs text-zinc-400 font-medium flex items-center gap-1.5">{acc.icon} {acc.platform}</p>
+                <div key={acc.platform} className="rounded-lg border border-border bg-card p-3 space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">{acc.icon} {acc.platform}</p>
                   <div className="grid grid-cols-2 gap-2">
                     <Input
                       value={form[acc.loginKey]}
@@ -333,7 +333,7 @@ export default function EditClientModal({ client, onClose }: Props) {
                   </div>
                 </div>
               ))}
-              <p className="text-[9px] text-zinc-600">Senhas sao armazenadas de forma segura no banco de dados.</p>
+              <p className="text-[9px] text-muted-foreground">Senhas sao armazenadas de forma segura no banco de dados.</p>
             </div>
           )}
 

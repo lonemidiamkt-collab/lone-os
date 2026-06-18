@@ -27,10 +27,10 @@ interface Audit {
 }
 
 const STATUS_CONFIG = {
-  otimo:   { color: "text-emerald-400", bg: "bg-emerald-500/[0.08]", border: "border-emerald-500/30", label: "Ótimo" },
-  bom:     { color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/[0.08]", border: "border-[#0d4af5]/30", label: "Bom" },
-  atencao: { color: "text-amber-400", bg: "bg-amber-500/[0.08]", border: "border-amber-500/30", label: "Atenção" },
-  critico: { color: "text-red-400", bg: "bg-red-500/[0.08]", border: "border-red-500/30", label: "Crítico" },
+  otimo:   { color: "text-lone-success", bg: "bg-lone-success-bg/[0.08]", border: "border-lone-success-border", label: "Ótimo" },
+  bom:     { color: "text-primary", bg: "bg-primary/[0.08]", border: "border-primary/30", label: "Bom" },
+  atencao: { color: "text-lone-warning", bg: "bg-lone-warning-bg/[0.08]", border: "border-lone-warning-border", label: "Atenção" },
+  critico: { color: "text-destructive", bg: "bg-destructive/[0.08]", border: "border-destructive/30", label: "Crítico" },
 };
 
 const INSIGHT_ICONS = {
@@ -41,10 +41,10 @@ const INSIGHT_ICONS = {
 };
 
 const INSIGHT_COLORS = {
-  positivo: "text-emerald-400",
-  alerta: "text-amber-400",
-  critico: "text-red-400",
-  sugestao: "text-[#0d4af5]",
+  positivo: "text-lone-success",
+  alerta: "text-lone-warning",
+  critico: "text-destructive",
+  sugestao: "text-primary",
 };
 
 interface Props {
@@ -234,7 +234,7 @@ function LatestAuditCard({ audit, daysAgo }: { audit: Audit; daysAgo: string }) 
 
 function InsightRow({ insight }: { insight: Insight }) {
   const Icon = INSIGHT_ICONS[insight.type] ?? Sparkles;
-  const color = INSIGHT_COLORS[insight.type] ?? "text-[#0d4af5]";
+  const color = INSIGHT_COLORS[insight.type] ?? "text-primary";
 
   return (
     <div className="flex items-start gap-3 p-3 rounded-lg bg-background/40 border border-border/50">
