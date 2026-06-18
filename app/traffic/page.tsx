@@ -38,16 +38,16 @@ import { analyzeCampaigns, generateAnalysisSummary, generateAccountReport, gener
 import type { CampaignInsight, PortfolioSummary, AccountAIReport, DailyRoutineAlert } from "@/lib/ai/campaignAnalyzer";
 
 const STATUS_COLUMNS = [
-  { id: "onboarding", title: "Onboarding", color: "bg-zinc-500" },
+  { id: "onboarding", title: "Onboarding", color: "bg-muted" },
   { id: "good", title: "Bons Resultados", color: "bg-primary" },
-  { id: "average", title: "Resultados Medios", color: "bg-zinc-500" },
-  { id: "at_risk", title: "Em Risco", color: "bg-red-500" },
+  { id: "average", title: "Resultados Medios", color: "bg-muted" },
+  { id: "at_risk", title: "Em Risco", color: "bg-destructive" },
 ];
 
 const TASK_COLUMNS = [
-  { id: "pending", title: "Pendente", color: "bg-zinc-600" },
+  { id: "pending", title: "Pendente", color: "bg-muted" },
   { id: "in_progress", title: "Em Execucao", color: "bg-primary" },
-  { id: "review", title: "Validacao", color: "bg-zinc-500" },
+  { id: "review", title: "Validacao", color: "bg-muted" },
   { id: "done", title: "Concluido", color: "bg-primary" },
 ];
 
@@ -251,7 +251,7 @@ export default function TrafficPage() {
           </span>
           <button
             onClick={() => setShowDesignModal(true)}
-            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d4af5]/10 border border-[#0d4af5]/30 text-[#0d4af5] text-xs font-medium hover:bg-[#0d4af5]/20 transition-colors"
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
           >
             <Palette size={13} /> Solicitar Arte ao Designer
           </button>
@@ -261,7 +261,7 @@ export default function TrafficPage() {
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           <MetricCard icon={Users} label="Clientes" value={filteredClients.length} sub="na carteira" iconColor="text-primary" iconBg="bg-primary/15" onClick={() => setActiveTab("status")} />
           <MetricCard icon={CheckCircle} label="Bons Resultados" value={goodCount} sub="clientes" iconColor="text-primary" iconBg="bg-primary/15" />
-          <MetricCard icon={AlertTriangle} label="Em Risco" value={atRiskCount} sub="clientes" iconColor="text-red-500" iconBg="bg-red-500/10" />
+          <MetricCard icon={AlertTriangle} label="Em Risco" value={atRiskCount} sub="clientes" iconColor="text-destructive" iconBg="bg-destructive/10" />
           <MetricCard icon={TrendingUp} label="Tarefas Abertas" value={trafficTasks.filter(t => t.status !== "done").length} sub="pendentes" iconColor="text-primary" iconBg="bg-primary/15" />
         </div>
 
@@ -291,7 +291,7 @@ export default function TrafficPage() {
                   const activeClients = filteredClients.filter((c) => c.status !== "onboarding");
                   const pending = activeClients.length - todayChecks.filter((c) => c.type === "support").length;
                   return pending > 0 ? (
-                    <span className="ml-1 text-xs bg-red-500/20 text-red-500 px-1.5 py-0.5 rounded-full">{pending}</span>
+                    <span className="ml-1 text-xs bg-destructive/20 text-destructive px-1.5 py-0.5 rounded-full">{pending}</span>
                   ) : null;
                 })()}
               </button>
@@ -335,12 +335,12 @@ export default function TrafficPage() {
                     onClick={() => router.push(`/clients/${client.id}`)}
                     className={`bg-card border rounded-lg p-3 transition-colors cursor-pointer ${
                     client.status === "at_risk"
-                      ? "border-red-500/30 hover:border-red-500/50"
+                      ? "border-destructive/30 hover:border-destructive/50"
                       : "border-border hover:border-primary/30"
                   }`}>
                     <div className="flex items-center gap-2 mb-2">
                       <div className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold ${
-                        client.status === "at_risk" ? "bg-red-500/20 text-red-500" : "bg-primary/20 text-primary"
+                        client.status === "at_risk" ? "bg-destructive/20 text-destructive" : "bg-primary/20 text-primary"
                       }`}>
                         {client.name[0]}
                       </div>
@@ -372,7 +372,7 @@ export default function TrafficPage() {
                     ))}
                   </div>
                 </div>
-                <button onClick={() => setShowContentRequest(true)} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#3b6ff5]/15 text-[#3b6ff5] hover:bg-[#3b6ff5]/25 border border-[#3b6ff5]/20 transition-colors">
+                <button onClick={() => setShowContentRequest(true)} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 border border-primary/20 transition-colors">
                   <FileText size={13} />
                   Solicitar Conteúdo
                 </button>
@@ -396,14 +396,14 @@ export default function TrafficPage() {
                         onClick={(e) => { e.stopPropagation(); updateTask(task.id, { status: task.status === "done" ? "pending" : "done" }); }}
                         className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5 transition-all ${
                           task.status === "done"
-                            ? "bg-[#0d4af5] border-[#0d4af5] text-white"
-                            : "border-zinc-600 hover:border-[#0d4af5]"
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "border-border hover:border-primary"
                         }`}
                         title={task.status === "done" ? "Reabrir tarefa" : "Marcar como concluida"}
                       >
                         {task.status === "done" && <Check size={10} />}
                       </button>
-                      <p className={`font-medium text-foreground text-sm leading-tight flex-1 ${task.status === "done" ? "line-through text-zinc-500" : ""}`}>{task.title}</p>
+                      <p className={`font-medium text-foreground text-sm leading-tight flex-1 ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
                       <span className={`badge border text-xs shrink-0 ${getPriorityColor(task.priority)}`}>
                         {getPriorityLabel(task.priority)}
                       </span>
@@ -438,7 +438,7 @@ export default function TrafficPage() {
                         if (timeMs <= 0) return null;
                         const isOvertime = timeMs >= OVERTIME_THRESHOLD_MS;
                         return (
-                          <span className={`ml-auto text-[10px] flex items-center gap-1 ${isOvertime ? "text-amber-400 font-bold" : "text-zinc-600"}`}>
+                          <span className={`ml-auto text-[10px] flex items-center gap-1 ${isOvertime ? "text-lone-warning font-bold" : "text-muted-foreground"}`}>
                             {isOvertime ? "⚠️" : "⏱️"} {formatTimeSpent(timeMs)}
                           </span>
                         );
@@ -602,7 +602,7 @@ function TrafficDesignRequestModal({
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold flex items-center gap-2">
-              <Palette size={16} className="text-[#0d4af5]" /> Solicitar Arte ao Designer
+              <Palette size={16} className="text-primary" /> Solicitar Arte ao Designer
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">Pedido direto do Tráfego → fila do Designer</p>
           </div>
@@ -668,8 +668,8 @@ function TrafficDesignRequestModal({
                   onClick={() => setPriority(p)}
                   className={`flex-1 text-xs py-1.5 rounded-lg border transition-colors ${
                     priority === p
-                      ? p === "critical" ? "bg-red-500/20 text-red-400 border-red-500/30"
-                      : p === "high" ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
+                      ? p === "critical" ? "bg-destructive/20 text-destructive border-destructive/30"
+                      : p === "high" ? "bg-lone-warning-bg text-lone-warning border-lone-warning-border"
                       : p === "medium" ? "bg-primary/20 text-primary border-primary/30"
                       : "bg-muted text-muted-foreground border-border"
                       : "bg-muted text-muted-foreground border-border hover:text-foreground"
@@ -698,7 +698,7 @@ function TrafficDesignRequestModal({
           <button
             onClick={handleSubmit}
             disabled={!briefing.trim() || !clientId}
-            className="flex-1 py-2 rounded-xl bg-[#0d4af5] text-white text-sm font-medium hover:bg-[#1a56ff] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             <Palette size={14} /> Enviar para o Designer
           </button>
@@ -807,28 +807,28 @@ function CreativeRequestModal({
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-xl mx-4 bg-black border border-[#1a1a1a] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/30 to-transparent shrink-0" />
+      <div className="relative w-full max-w-xl mx-4 bg-black border border-border rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/30 to-transparent shrink-0" />
 
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                <Sparkles size={18} className="text-[#0d4af5]" />
+                <Sparkles size={18} className="text-primary" />
                 Solicitar Reforco Criativo
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
                 O pedido ira direto para a fila do Designer com tag [TRAFEGO]
               </p>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5">
+            <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/5">
               <X size={16} />
             </button>
           </div>
 
           {/* Campaign context */}
-          <div className="p-4 rounded-xl bg-[#0d4af5]/[0.03] border border-[#0d4af5]/10 space-y-2">
-            <p className="text-[10px] text-[#3b6ff5] uppercase tracking-wider font-semibold">Contexto da Campanha</p>
+          <div className="p-4 rounded-xl bg-primary/[0.03] border border-primary/10 space-y-2">
+            <p className="text-[10px] text-primary uppercase tracking-wider font-semibold">Contexto da Campanha</p>
             <div className="grid grid-cols-2 gap-3">
               {[
                 { label: "Campanha", value: campaign.name },
@@ -843,7 +843,7 @@ function CreativeRequestModal({
               ))}
             </div>
             {(campaign.ctr < 1 || campaign.cpc > 5) && (
-              <div className="flex items-center gap-1.5 mt-1 text-[10px] text-red-400">
+              <div className="flex items-center gap-1.5 mt-1 text-[10px] text-destructive">
                 <AlertTriangle size={10} />
                 Performance abaixo do esperado — criativo urgente
               </div>
@@ -853,7 +853,7 @@ function CreativeRequestModal({
           {/* Smart Suggestions */}
           <div className="space-y-2">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold flex items-center gap-1.5">
-              <Brain size={10} className="text-[#0d4af5]" />
+              <Brain size={10} className="text-primary" />
               Sugestoes do Sistema — {objectiveLabel}
             </p>
             <div className="space-y-1.5">
@@ -862,15 +862,15 @@ function CreativeRequestModal({
                 return (
                   <button key={i} onClick={() => setSelectedSuggestion(active ? null : i)}
                     className={`w-full text-left p-3 rounded-xl border transition-all ${
-                      active ? "border-[#0d4af5]/40 bg-[#0d4af5]/[0.05]" : "border-[#1a1a1a] hover:border-[#2a2a2a]"
+                      active ? "border-primary/40 bg-primary/[0.05]" : "border-border hover:border-border"
                     }`}>
                     <div className="flex items-center gap-2">
                       <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                        active ? "bg-[#0d4af5] text-white" : "bg-zinc-900 text-zinc-500"
+                        active ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"
                       }`}>{i + 1}</span>
                       <div>
-                        <p className={`text-xs font-medium ${active ? "text-foreground" : "text-zinc-400"}`}>{s.format}</p>
-                        <p className="text-[10px] text-zinc-600 mt-0.5">{s.description}</p>
+                        <p className={`text-xs font-medium ${active ? "text-foreground" : "text-muted-foreground"}`}>{s.format}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{s.description}</p>
                       </div>
                     </div>
                   </button>
@@ -883,7 +883,7 @@ function CreativeRequestModal({
             <div className="space-y-1.5">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Formato Manual</label>
               <select value={customFormat} onChange={(e) => setCustomFormat(e.target.value)}
-                className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none">
+                className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none">
                 {["Post Feed (1:1)", "Reel (9:16)", "Story (9:16)", "Carrossel", "Video", "Banner"].map((f) => (
                   <option key={f}>{f}</option>
                 ))}
@@ -895,12 +895,12 @@ function CreativeRequestModal({
             <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Prioridade</label>
             <div className="flex gap-2">
               {([
-                { value: "high" as const, label: "Alta", color: "text-amber-400 border-amber-500/20 bg-amber-500/5" },
-                { value: "critical" as const, label: "Critica (Verba Rodando)", color: "text-red-400 border-red-500/20 bg-red-500/5" },
+                { value: "high" as const, label: "Alta", color: "text-lone-warning border-lone-warning-border bg-lone-warning-bg" },
+                { value: "critical" as const, label: "Critica (Verba Rodando)", color: "text-destructive border-destructive/20 bg-destructive/5" },
               ]).map((p) => (
                 <button key={p.value} onClick={() => setPriority(p.value)}
                   className={`flex-1 py-2 rounded-xl border text-xs font-medium transition-all ${
-                    priority === p.value ? p.color : "border-[#1a1a1a] text-zinc-600"
+                    priority === p.value ? p.color : "border-border text-muted-foreground"
                   }`}>
                   {p.label}
                 </button>
@@ -913,28 +913,28 @@ function CreativeRequestModal({
             <textarea value={observations} onChange={(e) => setObservations(e.target.value)}
               placeholder="Ex: CPA alto, precisamos de video mais agressivo com CTA direto..."
               rows={3}
-              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none resize-none" />
+              className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary/50 outline-none resize-none" />
           </div>
 
           {/* Preview */}
-          <div className="p-3 rounded-xl bg-zinc-900/30 border border-zinc-800/30">
-            <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">Preview no board do Designer</p>
+          <div className="p-3 rounded-xl bg-card border border-border">
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Preview no board do Designer</p>
             <div className="flex items-center gap-2">
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20 font-bold">TRAFEGO</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive border border-destructive/20 font-bold">TRAFEGO</span>
               <span className="text-xs text-foreground font-medium">Criativo — {campaign.name}</span>
             </div>
-            <p className="text-[10px] text-zinc-500 mt-1">
+            <p className="text-[10px] text-muted-foreground mt-1">
               {client.name} · {selectedSuggestion !== null ? suggestions[selectedSuggestion].format : customFormat} · {priority === "critical" ? "Critica" : "Alta"}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[#1a1a1a] shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all">
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border shrink-0">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all">
             Cancelar
           </button>
           <button onClick={handleSubmit}
-            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#0d4af5] text-white text-xs font-semibold hover:bg-[#0c3cff] transition-all">
+            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary transition-all">
             <Send size={12} /> Enviar para Producao
           </button>
         </div>
@@ -1060,7 +1060,7 @@ function RoutineTab({
               {isUsingRealData ? (
                 <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-bold uppercase tracking-wider ml-auto">Dados reais</span>
               ) : (
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold uppercase tracking-wider ml-auto">Dados simulados</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-bold uppercase tracking-wider ml-auto">Dados simulados</span>
               )}
             </div>
             <div className="space-y-2.5">
@@ -1069,14 +1069,14 @@ function RoutineTab({
                   key={alert.clientId}
                   className={`flex items-start gap-3 p-3.5 rounded-xl border ${
                     alert.urgency === "critical"
-                      ? "border-red-500/20 bg-red-500/5"
-                      : "border-[#0d4af5]/15 bg-[#0d4af5]/5"
+                      ? "border-destructive/20 bg-destructive/5"
+                      : "border-primary/15 bg-primary/5"
                   }`}
                 >
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-black ${
                     alert.urgency === "critical"
-                      ? "bg-red-500/10 text-red-400"
-                      : "bg-[#0d4af5]/10 text-[#3b6ff5]"
+                      ? "bg-destructive/10 text-destructive"
+                      : "bg-primary/10 text-primary"
                   }`}>
                     {alert.healthScore}
                   </div>
@@ -1085,8 +1085,8 @@ function RoutineTab({
                       <p className="text-sm font-bold text-foreground">{alert.clientName}</p>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
                         alert.urgency === "critical"
-                          ? "bg-red-500/10 text-red-400 border border-red-500/20"
-                          : "bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/15"
+                          ? "bg-destructive/10 text-destructive border border-destructive/20"
+                          : "bg-primary/10 text-primary border border-primary/15"
                       }`}>
                         {alert.urgency === "critical" ? "URGENTE" : "ATENÇÃO"}
                       </span>
@@ -1108,38 +1108,38 @@ function RoutineTab({
       {(overdueTasks.length > 0 || dueSoonTasks.length > 0) && (
         <div className="space-y-2">
           {overdueTasks.length > 0 && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+            <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle size={16} className="text-red-500" />
-                <h3 className="text-sm font-semibold text-red-500">
+                <AlertTriangle size={16} className="text-destructive" />
+                <h3 className="text-sm font-semibold text-destructive">
                   {overdueTasks.length} tarefa(s) atrasada(s)
                 </h3>
               </div>
               <div className="space-y-1.5">
                 {overdueTasks.map((t) => (
                   <div key={t.id} className="flex items-center gap-2 text-xs">
-                    <span className="text-red-400 font-medium">{t.title}</span>
-                    <span className="text-red-400/60">· {t.clientName}</span>
-                    <span className="text-red-400/60 ml-auto">Venceu: {t.dueDate}</span>
+                    <span className="text-destructive font-medium">{t.title}</span>
+                    <span className="text-destructive/60">· {t.clientName}</span>
+                    <span className="text-destructive/60 ml-auto">Venceu: {t.dueDate}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
           {dueSoonTasks.length > 0 && (
-            <div className="bg-[#0d4af5]/10 border border-[#0d4af5]/15 rounded-xl p-4">
+            <div className="bg-primary/10 border border-primary/15 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
-                <Calendar size={16} className="text-[#3b6ff5]" />
-                <h3 className="text-sm font-semibold text-[#3b6ff5]">
+                <Calendar size={16} className="text-primary" />
+                <h3 className="text-sm font-semibold text-primary">
                   {dueSoonTasks.length} tarefa(s) vencem em ate 48h
                 </h3>
               </div>
               <div className="space-y-1.5">
                 {dueSoonTasks.map((t) => (
                   <div key={t.id} className="flex items-center gap-2 text-xs">
-                    <span className="text-[#3b6ff5] font-medium">{t.title}</span>
-                    <span className="text-[#3b6ff5]/60">· {t.clientName}</span>
-                    <span className="text-[#3b6ff5]/60 ml-auto">Vence: {t.dueDate}</span>
+                    <span className="text-primary font-medium">{t.title}</span>
+                    <span className="text-primary/60">· {t.clientName}</span>
+                    <span className="text-primary/60 ml-auto">Vence: {t.dueDate}</span>
                   </div>
                 ))}
               </div>
@@ -1257,11 +1257,11 @@ function RoutineTab({
             const done = analysisDone.has(client.id);
             return (
               <div key={client.id} className={`rounded-lg px-3 py-2.5 border ${
-                done ? "bg-primary/5 border-primary/10" : "bg-[#0c0c12] border-[#1e1e2a]"
+                done ? "bg-primary/5 border-primary/10" : "bg-card border-border"
               }`}>
                 <div className="flex items-center gap-2.5">
-                  {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleAnalysis(client)} className="w-5 h-5 rounded border border-zinc-600 shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
-                  <span className={`text-sm flex-1 ${done ? "text-zinc-400" : "text-foreground"}`}>{client.name}</span>
+                  {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleAnalysis(client)} className="w-5 h-5 rounded border border-border shrink-0 hover:border-primary transition-all flex items-center justify-center" />}
+                  <span className={`text-sm flex-1 ${done ? "text-muted-foreground" : "text-foreground"}`}>{client.name}</span>
                   {done && (
                     <span className="text-xs text-muted-foreground truncate max-w-[200px]">
                       {weekChecks.find((c) => c.clientId === client.id && c.type === "analysis")?.note || "Sem nota"}
@@ -1299,11 +1299,11 @@ function RoutineTab({
             const done = feedbackDone.has(client.id);
             return (
               <div key={client.id} className={`rounded-lg px-3 py-2.5 border ${
-                done ? "bg-primary/5 border-primary/10" : "bg-[#0c0c12] border-[#1e1e2a]"
+                done ? "bg-primary/5 border-primary/10" : "bg-card border-border"
               }`}>
                 <div className="flex items-center gap-2.5">
-                  {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleFeedback(client)} className="w-5 h-5 rounded border border-zinc-600 shrink-0 hover:border-[#0d4af5] transition-all flex items-center justify-center" />}
-                  <span className={`text-sm flex-1 ${done ? "text-zinc-400" : "text-foreground"}`}>{client.name}</span>
+                  {done ? <Check size={14} className="text-primary shrink-0" /> : <button onClick={() => handleFeedback(client)} className="w-5 h-5 rounded border border-border shrink-0 hover:border-primary transition-all flex items-center justify-center" />}
+                  <span className={`text-sm flex-1 ${done ? "text-muted-foreground" : "text-foreground"}`}>{client.name}</span>
                   {done && (
                     <span className="text-xs text-muted-foreground truncate max-w-[250px]">
                       {weekChecks.find((c) => c.clientId === client.id && c.type === "feedback")?.note || "Sem nota"}
@@ -1425,7 +1425,7 @@ function MonthlyReportsTab({
                 observations: `Relatorio auto-gerado. ${clientCampaigns.length} campanha(s), investimento total R$ ${totalSpend.toFixed(2)}.`,
               });
             }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-lone-success-bg text-lone-success border border-lone-success-border hover:bg-lone-success-bg transition-all"
             title="Gerar relatorio automaticamente a partir dos dados de campanha"
           >
             <Zap size={13} />
@@ -1474,9 +1474,9 @@ function MonthlyReportsTab({
                   <span className="text-xs text-muted-foreground">Tendencia geral:</span>
                   {(() => {
                     const trend = latest.changes.messages;
-                    if (trend > 5) return <span className="flex items-center gap-1 text-xs font-medium text-[#0d4af5]"><ArrowUpRight size={14} /> Crescendo</span>;
-                    if (trend < -5) return <span className="flex items-center gap-1 text-xs font-medium text-red-500"><ArrowDownRight size={14} /> Caindo</span>;
-                    return <span className="flex items-center gap-1 text-xs font-medium text-zinc-400"><Minus size={14} /> Estavel</span>;
+                    if (trend > 5) return <span className="flex items-center gap-1 text-xs font-medium text-primary"><ArrowUpRight size={14} /> Crescendo</span>;
+                    if (trend < -5) return <span className="flex items-center gap-1 text-xs font-medium text-destructive"><ArrowDownRight size={14} /> Caindo</span>;
+                    return <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><Minus size={14} /> Estavel</span>;
                   })()}
                 </div>
               )}
@@ -1546,11 +1546,11 @@ function MonthlyReportsTab({
                   <tr key={report.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
                     <td className="py-3 px-3 font-medium text-foreground">{formatMonthLabel(report.month)}</td>
                     <td className="py-3 px-3 text-right text-foreground">{report.messages}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.messages} /> : <span className="text-xs text-zinc-600">—</span>}</td>
+                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.messages} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-3 text-right text-foreground">R$ {report.messageCost.toFixed(2)}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.messageCost} invert /> : <span className="text-xs text-zinc-600">—</span>}</td>
+                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.messageCost} invert /> : <span className="text-xs text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-3 text-right text-foreground">{formatNumber(report.impressions)}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.impressions} /> : <span className="text-xs text-zinc-600">—</span>}</td>
+                    <td className="py-3 px-3 text-right">{changes ? <ChangeChip value={changes.impressions} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-3 text-center">
                       <button
                         onClick={() => handleEdit(report)}
@@ -1580,7 +1580,7 @@ function MonthlyReportsTab({
 
 function MetricBox({ label, value, change, invertColor }: { label: string; value: string | number; change?: number; invertColor?: boolean }) {
   return (
-    <div className="bg-[#0c0c12] border border-[#1e1e2a] rounded-lg p-3">
+    <div className="bg-card border border-border rounded-lg p-3">
       <p className="text-xs text-muted-foreground mb-1">{label}</p>
       <div className="flex items-end justify-between gap-2">
         <p className="text-lg font-bold text-foreground">{value}</p>
@@ -1596,10 +1596,10 @@ function ChangeChip({ value, invert }: { value: number; invert?: boolean }) {
   // For cost metrics, positive = bad (invert colors)
   const isGood = invert ? !isPositive : isPositive;
 
-  if (isNeutral) return <span className="text-xs text-zinc-500">0%</span>;
+  if (isNeutral) return <span className="text-xs text-muted-foreground">0%</span>;
 
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isGood ? "text-[#0d4af5]" : "text-red-500"}`}>
+    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isGood ? "text-primary" : "text-destructive"}`}>
       {isPositive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
       {Math.abs(value).toFixed(1)}%
     </span>
@@ -1718,7 +1718,7 @@ function EditReportForm({
   };
 
   return (
-    <div className="card border border-zinc-500/30">
+    <div className="card border border-border">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-semibold text-foreground">Editar Relatorio — {report.clientName}</h3>
@@ -1730,7 +1730,7 @@ function EditReportForm({
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <label className="text-xs text-muted-foreground font-medium">Mes</label>
-            <div className="w-full mt-1 bg-muted/50 rounded-lg p-2.5 text-sm text-zinc-400">{formatMonthLabel(report.month)}</div>
+            <div className="w-full mt-1 bg-muted/50 rounded-lg p-2.5 text-sm text-muted-foreground">{formatMonthLabel(report.month)}</div>
           </div>
           <div>
             <label className="text-xs text-muted-foreground font-medium">Mensagens/Leads *</label>
@@ -1781,14 +1781,14 @@ function TrafficReportTab({ clients }: { clients: Client[] }) {
 
       {relevantClients.length > 0 && (
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-red-500 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-destructive flex items-center gap-2">
             <AlertTriangle size={14} />
             Clientes que Precisam de Atencao ({relevantClients.length})
           </h3>
           {relevantClients.map((client) => (
-            <div key={client.id} className="card border border-red-500/20">
+            <div key={client.id} className="card border border-destructive/20">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center text-sm font-bold text-red-500">
+                <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center text-sm font-bold text-destructive">
                   {client.name[0]}
                 </div>
                 <div className="flex-1">
@@ -1984,20 +1984,20 @@ function fmtMetric(v: number, prefix?: string): string {
 }
 
 const ALL_METRICS: { key: MetricKey; label: string; icon: typeof DollarSign; color: string; format: (v: number) => string }[] = [
-  { key: "spend", label: "Gasto Total", icon: DollarSign, color: "text-[#0d4af5]", format: (v) => `R$ ${formatCurrency(v)}` },
-  { key: "impressions", label: "Impressões", icon: Eye, color: "text-[#0d4af5]", format: (v) => formatNumber(v) },
-  { key: "reach", label: "Alcance", icon: Users, color: "text-[#0d4af5]", format: (v) => formatNumber(v) },
-  { key: "clicks", label: "Cliques", icon: MousePointerClick, color: "text-[#0d4af5]", format: (v) => formatNumber(v) },
-  { key: "conversions", label: "Conversões", icon: Target, color: "text-[#0d4af5]", format: (v) => Math.round(v).toString() },
-  { key: "leads", label: "Leads", icon: Target, color: "text-[#0d4af5]", format: (v) => v > 0 ? Math.round(v).toString() : "N/A" },
-  { key: "messages", label: "Mensagens", icon: MessageCircle, color: "text-[#0d4af5]", format: (v) => v > 0 ? formatNumber(v) : "N/A" },
-  { key: "ctr", label: "CTR Médio", icon: TrendingUp, color: "text-[#0d4af5]", format: (v) => `${v.toFixed(2)}%` },
-  { key: "cpc", label: "CPC Médio", icon: MousePointerClick, color: "text-[#0d4af5]", format: (v) => fmtMetric(v, "R$") },
-  { key: "cpm", label: "CPM Médio", icon: Eye, color: "text-[#0d4af5]", format: (v) => fmtMetric(v, "R$") },
-  { key: "costPerConv", label: "Custo/Conversão", icon: Target, color: "text-[#0d4af5]", format: (v) => fmtMetric(v, "R$") },
-  { key: "costPerLead", label: "Custo/Lead (CPL)", icon: Target, color: "text-[#0d4af5]", format: (v) => fmtMetric(v, "R$") },
-  { key: "costPerMessage", label: "CPA (Melhor Conjunto)", icon: MessageCircle, color: "text-[#0d4af5]", format: (v) => v > 0 ? fmtMetric(v, "R$") : "—" },
-  { key: "costPerResult", label: "Custo/Resultado", icon: Zap, color: "text-[#0d4af5]", format: (v) => fmtMetric(v, "R$") },
+  { key: "spend", label: "Gasto Total", icon: DollarSign, color: "text-primary", format: (v) => `R$ ${formatCurrency(v)}` },
+  { key: "impressions", label: "Impressões", icon: Eye, color: "text-primary", format: (v) => formatNumber(v) },
+  { key: "reach", label: "Alcance", icon: Users, color: "text-primary", format: (v) => formatNumber(v) },
+  { key: "clicks", label: "Cliques", icon: MousePointerClick, color: "text-primary", format: (v) => formatNumber(v) },
+  { key: "conversions", label: "Conversões", icon: Target, color: "text-primary", format: (v) => Math.round(v).toString() },
+  { key: "leads", label: "Leads", icon: Target, color: "text-primary", format: (v) => v > 0 ? Math.round(v).toString() : "N/A" },
+  { key: "messages", label: "Mensagens", icon: MessageCircle, color: "text-primary", format: (v) => v > 0 ? formatNumber(v) : "N/A" },
+  { key: "ctr", label: "CTR Médio", icon: TrendingUp, color: "text-primary", format: (v) => `${v.toFixed(2)}%` },
+  { key: "cpc", label: "CPC Médio", icon: MousePointerClick, color: "text-primary", format: (v) => fmtMetric(v, "R$") },
+  { key: "cpm", label: "CPM Médio", icon: Eye, color: "text-primary", format: (v) => fmtMetric(v, "R$") },
+  { key: "costPerConv", label: "Custo/Conversão", icon: Target, color: "text-primary", format: (v) => fmtMetric(v, "R$") },
+  { key: "costPerLead", label: "Custo/Lead (CPL)", icon: Target, color: "text-primary", format: (v) => fmtMetric(v, "R$") },
+  { key: "costPerMessage", label: "CPA (Melhor Conjunto)", icon: MessageCircle, color: "text-primary", format: (v) => v > 0 ? fmtMetric(v, "R$") : "—" },
+  { key: "costPerResult", label: "Custo/Resultado", icon: Zap, color: "text-primary", format: (v) => fmtMetric(v, "R$") },
 ];
 
 const DEFAULT_VISIBLE_METRICS: MetricKey[] = ["spend", "impressions", "clicks", "leads", "messages", "costPerLead", "costPerMessage", "ctr"];
@@ -2029,10 +2029,10 @@ function AdAnalyticsTab({
   };
 
   const STATUS_LABELS: Record<string, { label: string; cls: string; icon: typeof CheckCircle }> = {
-    active: { label: "Ativa", cls: "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20", icon: CheckCircle },
-    paused: { label: "Pausada", cls: "text-[#3b6ff5] bg-[#0d4af5]/10 border-[#0d4af5]/15", icon: Pause },
-    completed: { label: "Finalizada", cls: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20", icon: Check },
-    error: { label: "Erro", cls: "text-red-500 bg-red-500/10 border-red-500/20", icon: AlertCircle },
+    active: { label: "Ativa", cls: "text-primary bg-primary/10 border-primary/20", icon: CheckCircle },
+    paused: { label: "Pausada", cls: "text-primary bg-primary/10 border-primary/15", icon: Pause },
+    completed: { label: "Finalizada", cls: "text-muted-foreground bg-muted border-border", icon: Check },
+    error: { label: "Erro", cls: "text-destructive bg-destructive/10 border-destructive/20", icon: AlertCircle },
   };
 
   const [selectedClient, setSelectedClient] = useState<string>("all");
@@ -2682,10 +2682,10 @@ function AdAnalyticsTab({
   };
 
   const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: string; icon: typeof AlertCircle }> = {
-    critical: { color: "text-red-500", bg: "bg-red-500/5", border: "border-red-500/20", icon: AlertCircle },
-    warning: { color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/5", border: "border-[#0d4af5]/20", icon: AlertTriangle },
-    info: { color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/5", border: "border-[#0d4af5]/15", icon: CircleDot },
-    success: { color: "text-[#0d4af5]", bg: "bg-[#0d4af5]/5", border: "border-[#0d4af5]/15", icon: Sparkles },
+    critical: { color: "text-destructive", bg: "bg-destructive/5", border: "border-destructive/20", icon: AlertCircle },
+    warning: { color: "text-primary", bg: "bg-primary/5", border: "border-primary/20", icon: AlertTriangle },
+    info: { color: "text-primary", bg: "bg-primary/5", border: "border-primary/15", icon: CircleDot },
+    success: { color: "text-primary", bg: "bg-primary/5", border: "border-primary/15", icon: Sparkles },
   };
 
   // Token expiry display
@@ -2700,14 +2700,14 @@ function AdAnalyticsTab({
       {meta.connected ? (
         <div className="space-y-3">
           {/* Status bar */}
-          <div className="bg-card border border-[#0d4af5]/20 rounded-xl p-4 flex items-center gap-4 shadow-[0_0_20px_rgba(10,52,245,0.05)]">
+          <div className="bg-card border border-primary/20 rounded-xl p-4 flex items-center gap-4 shadow-[0_0_20px_rgba(10,52,245,0.05)]">
             {/* Status indicator */}
             <div className="relative shrink-0">
-              <div className="w-10 h-10 rounded-lg bg-[#0d4af5]/10 border border-[#0d4af5]/20 flex items-center justify-center">
-                <Facebook size={18} className="text-[#0d4af5]" />
+              <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <Facebook size={18} className="text-primary" />
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-card rounded-full flex items-center justify-center">
-                <span className="w-1.5 h-1.5 bg-white rounded-full" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-lone-success-bg border-2 border-card rounded-full flex items-center justify-center">
+                <span className="w-1.5 h-1.5 bg-card rounded-full" />
               </span>
             </div>
 
@@ -2718,8 +2718,8 @@ function AdAnalyticsTab({
                 {meta.tokenType && (
                   <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
                     isTokenShort
-                      ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
-                      : "bg-green-500/10 border-green-500/20 text-green-400"
+                      ? "bg-lone-warning-bg border-lone-warning-border text-lone-warning"
+                      : "bg-lone-success-bg border-lone-success-border text-lone-success"
                   }`}>
                     {isTokenShort ? "Token 2h" : "Token 60d"}
                   </span>
@@ -2738,12 +2738,12 @@ function AdAnalyticsTab({
                 }
               </p>
               {meta.exchangeFailed && (
-                <p className="text-[10px] text-red-400 mt-0.5 font-medium">
+                <p className="text-[10px] text-destructive mt-0.5 font-medium">
                   ⚠️ Upgrade para token longo falhou — token expira em ~85min. Verifique META_APP_SECRET ou reconecte.
                 </p>
               )}
               {isTokenShort && !meta.exchangeFailed && (
-                <p className="text-[10px] text-yellow-500/70 mt-0.5">
+                <p className="text-[10px] text-lone-warning mt-0.5">
                   Token de curta duração — upgrade automático em andamento...
                 </p>
               )}
@@ -2755,7 +2755,7 @@ function AdAnalyticsTab({
                 <button
                   onClick={handleSyncCarteira}
                   disabled={syncing}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[#0d4af5]/30 bg-[#0d4af5]/5 text-[#0d4af5] hover:bg-[#0d4af5]/10 transition-all disabled:opacity-50"
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-all disabled:opacity-50"
                   title="Auto-vincula clientes da carteira às contas Meta pelo nome"
                 >
                   {syncing ? <Loader2 size={12} className="animate-spin" /> : <Users size={12} />}
@@ -2767,7 +2767,7 @@ function AdAnalyticsTab({
                 <button
                   onClick={handleRefreshAll}
                   disabled={refreshingAll}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border bg-muted/50 text-muted-foreground hover:text-foreground hover:border-[#0d4af5]/30 transition-all disabled:opacity-50"
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border bg-muted/50 text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all disabled:opacity-50"
                 >
                   {refreshingAll ? <Loader2 size={12} className="animate-spin" /> : <Activity size={12} />}
                   Atualizar Dados
@@ -2781,7 +2781,7 @@ function AdAnalyticsTab({
                   Trocar Conta
                 </button>
               )}
-              <button onClick={meta.disconnect} className="btn-ghost text-xs border border-red-500/30 text-red-500 hover:bg-red-500/10">
+              <button onClick={meta.disconnect} className="btn-ghost text-xs border border-destructive/30 text-destructive hover:bg-destructive/10">
                 Desconectar
               </button>
             </div>
@@ -2789,7 +2789,7 @@ function AdAnalyticsTab({
 
           {/* Sync result toast */}
           {syncResult && (
-            <div className="flex items-center gap-2 px-4 py-2.5 bg-[#0d4af5]/10 border border-[#0d4af5]/20 rounded-xl text-xs text-[#0d4af5] animate-fade-in">
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-primary/10 border border-primary/20 rounded-xl text-xs text-primary animate-fade-in">
               <CheckCircle size={13} />
               Sincronização concluída: {syncResult.matched} cliente(s) vinculado(s) automaticamente de {syncResult.total} analisado(s).
             </div>
@@ -2797,11 +2797,11 @@ function AdAnalyticsTab({
 
           {/* ── Portfolio Summary ──────────────────────────────────────────── */}
           {portfolioCampaigns.size > 0 && (
-            <div className="card border border-[#0d4af5]/15 shadow-[0_0_30px_rgba(10,52,245,0.04)]">
+            <div className="card border border-primary/15 shadow-[0_0_30px_rgba(10,52,245,0.04)]">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center">
-                    <BarChart2 size={14} className="text-[#0d4af5]" />
+                  <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <BarChart2 size={14} className="text-primary" />
                   </div>
                   <h3 className="text-sm font-semibold text-foreground">Resumo da Carteira</h3>
                   <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
@@ -2812,10 +2812,10 @@ function AdAnalyticsTab({
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 {[
-                  { label: "Gasto Total", value: `R$ ${formatCurrency(portfolioAgg.spend)}`, color: "text-[#0d4af5]" },
-                  { label: "Resultados", value: formatNumber(portfolioAgg.results), color: "text-green-400" },
-                  { label: "Leads", value: formatNumber(portfolioAgg.leads), color: "text-green-400" },
-                  { label: "Mensagens", value: formatNumber(portfolioAgg.messages), color: "text-[#0d4af5]" },
+                  { label: "Gasto Total", value: `R$ ${formatCurrency(portfolioAgg.spend)}`, color: "text-primary" },
+                  { label: "Resultados", value: formatNumber(portfolioAgg.results), color: "text-lone-success" },
+                  { label: "Leads", value: formatNumber(portfolioAgg.leads), color: "text-lone-success" },
+                  { label: "Mensagens", value: formatNumber(portfolioAgg.messages), color: "text-primary" },
                   { label: "Cliques", value: formatNumber(portfolioAgg.clicks), color: "text-foreground" },
                   { label: "Impressões", value: formatNumber(portfolioAgg.impressions), color: "text-muted-foreground" },
                 ].map(({ label, value, color }) => (
@@ -2838,7 +2838,7 @@ function AdAnalyticsTab({
               <button
                 onClick={handleRefreshAll}
                 disabled={refreshingAll}
-                className="text-xs px-3 py-1.5 rounded-lg bg-[#0d4af5]/10 border border-[#0d4af5]/20 text-[#0d4af5] hover:bg-[#0d4af5]/15 transition-all flex items-center gap-1.5"
+                className="text-xs px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary hover:bg-primary/15 transition-all flex items-center gap-1.5"
               >
                 {refreshingAll ? <Loader2 size={11} className="animate-spin" /> : <Activity size={11} />}
                 Carregar
@@ -2856,7 +2856,7 @@ function AdAnalyticsTab({
               </div>
 
               {metaError && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-3 text-xs text-red-400">
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 mb-3 text-xs text-destructive">
                   {metaError}
                 </div>
               )}
@@ -2866,14 +2866,14 @@ function AdAnalyticsTab({
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {[...Array(3)].map((_, i) => (
                       <div key={i} className="p-4 rounded-xl border border-border bg-muted/30 space-y-2">
-                        <div className="h-4 w-32 bg-white/[0.06] rounded animate-pulse" />
-                        <div className="h-3 w-24 bg-white/[0.06] rounded animate-pulse" />
-                        <div className="h-3 w-16 bg-white/[0.06] rounded animate-pulse" />
+                        <div className="h-4 w-32 bg-card/[0.06] rounded animate-pulse" />
+                        <div className="h-3 w-24 bg-card/[0.06] rounded animate-pulse" />
+                        <div className="h-3 w-16 bg-card/[0.06] rounded animate-pulse" />
                       </div>
                     ))}
                   </div>
                   <div className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-[#0d4af5] border-t-transparent rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     <span className="text-xs text-muted-foreground">Buscando contas de anúncio...</span>
                   </div>
                 </div>
@@ -2890,7 +2890,7 @@ function AdAnalyticsTab({
                     <div key={acc.id} className="relative flex items-start gap-3 p-4 rounded-xl border border-border bg-muted/30 hover:bg-muted/60 hover:border-primary/30 transition-all text-left group">
                       <button
                         onClick={(e) => { e.stopPropagation(); hideAccount(acc.id); }}
-                        className="absolute top-2 right-2 w-6 h-6 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                        className="absolute top-2 right-2 w-6 h-6 rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
                         title="Ocultar esta conta"
                       >
                         <X size={12} />
@@ -2899,8 +2899,8 @@ function AdAnalyticsTab({
                         onClick={() => handleSelectAccount(acc.id)}
                         className="flex items-start gap-3 flex-1 text-left"
                       >
-                        <div className="w-10 h-10 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
-                          <Megaphone size={18} className="text-[#0d4af5] group-hover:text-primary transition-colors" />
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
+                          <Megaphone size={18} className="text-primary group-hover:text-primary transition-colors" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-foreground truncate">{acc.name || `Conta ${acc.account_id}`}</p>
@@ -2909,13 +2909,13 @@ function AdAnalyticsTab({
                             <p className="text-xs text-muted-foreground">Business: {acc.business_name}</p>
                           )}
                           <div className="flex items-center gap-2 mt-1.5">
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
                               {acc.currency ?? "BRL"}
                             </span>
                             <span className={`text-[10px] px-1.5 py-0.5 rounded border ${
                               acc.account_status === 1
-                                ? "bg-[#0d4af5]/10 text-[#0d4af5] border-[#0d4af5]/20"
-                                : "bg-[#0d4af5]/10 text-[#3b6ff5] border-[#0d4af5]/15"
+                                ? "bg-primary/10 text-primary border-primary/20"
+                                : "bg-primary/10 text-primary border-primary/15"
                             }`}>
                               {acc.account_status === 1 ? "Ativa" : acc.account_status === 2 ? "Desativada" : "Status " + acc.account_status}
                             </span>
@@ -2952,21 +2952,21 @@ function AdAnalyticsTab({
             <div className="card border border-border animate-fade-in space-y-3 p-4">
               {/* Skeleton header */}
               <div className="flex items-center justify-between">
-                <div className="h-4 w-40 bg-white/[0.06] rounded-md animate-pulse" />
-                <div className="h-4 w-20 bg-white/[0.06] rounded-md animate-pulse" />
+                <div className="h-4 w-40 bg-card/[0.06] rounded-md animate-pulse" />
+                <div className="h-4 w-20 bg-card/[0.06] rounded-md animate-pulse" />
               </div>
               {/* Skeleton rows */}
               {[...Array(5)].map((_, i) => (
                 <div key={i} className="flex items-center gap-3 py-3 border-t border-border/50">
-                  <div className="h-3 w-3 rounded-full bg-white/[0.06] animate-pulse shrink-0" />
-                  <div className="h-3 flex-1 bg-white/[0.06] rounded animate-pulse" style={{ maxWidth: `${200 + i * 30}px` }} />
-                  <div className="h-3 w-16 bg-white/[0.06] rounded animate-pulse" />
-                  <div className="h-3 w-20 bg-white/[0.06] rounded animate-pulse" />
-                  <div className="h-3 w-14 bg-white/[0.06] rounded animate-pulse" />
+                  <div className="h-3 w-3 rounded-full bg-card/[0.06] animate-pulse shrink-0" />
+                  <div className="h-3 flex-1 bg-card/[0.06] rounded animate-pulse" style={{ maxWidth: `${200 + i * 30}px` }} />
+                  <div className="h-3 w-16 bg-card/[0.06] rounded animate-pulse" />
+                  <div className="h-3 w-20 bg-card/[0.06] rounded animate-pulse" />
+                  <div className="h-3 w-14 bg-card/[0.06] rounded animate-pulse" />
                 </div>
               ))}
               <div className="flex items-center justify-center gap-2 pt-2">
-                <div className="w-4 h-4 border-2 border-[#0d4af5] border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                 <span className="text-xs text-muted-foreground">Carregando campanhas e métricas...</span>
               </div>
             </div>
@@ -2975,13 +2975,13 @@ function AdAnalyticsTab({
       ) : isAdmin ? (
         <div className={`rounded-xl p-4 flex items-center gap-4 ${
           meta.tokenExpired
-            ? "bg-amber-500/5 border border-amber-500/20"
-            : "bg-blue-500/5 border border-[#0d4af5]/20"
+            ? "bg-lone-warning-bg border border-lone-warning-border"
+            : "bg-primary/5 border border-primary/20"
         }`}>
           <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-            meta.tokenExpired ? "bg-amber-500/10" : "bg-[#0d4af5]/10"
+            meta.tokenExpired ? "bg-lone-warning-bg" : "bg-primary/10"
           }`}>
-            {meta.tokenExpired ? <AlertTriangle size={20} className="text-amber-500" /> : <Megaphone size={20} className="text-[#0d4af5]" />}
+            {meta.tokenExpired ? <AlertTriangle size={20} className="text-lone-warning" /> : <Megaphone size={20} className="text-primary" />}
           </div>
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-foreground">
@@ -2996,8 +2996,8 @@ function AdAnalyticsTab({
           </div>
           <button onClick={meta.connect} className={`btn-ghost text-xs border ${
             meta.tokenExpired
-              ? "border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
-              : "border-[#0d4af5]/20 text-[#0d4af5] hover:bg-[#0d4af5]/10"
+              ? "border-lone-warning-border text-lone-warning hover:bg-lone-warning-bg"
+              : "border-primary/20 text-primary hover:bg-primary/10"
           }`}>
             {meta.tokenExpired ? "Reconectar" : "Conectar Meta Ads"}
           </button>
@@ -3006,17 +3006,17 @@ function AdAnalyticsTab({
 
       {/* Mock data warning banner */}
       {!isUsingRealData && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0">
-            <AlertCircle size={16} className="text-amber-500" />
+        <div className="bg-lone-warning-bg border border-lone-warning-border rounded-xl px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-lone-warning-bg flex items-center justify-center shrink-0">
+            <AlertCircle size={16} className="text-lone-warning" />
           </div>
           <div className="flex-1">
-            <p className="text-xs font-semibold text-amber-400">Dados Simulados</p>
-            <p className="text-[10px] text-amber-500/70 mt-0.5">
+            <p className="text-xs font-semibold text-lone-warning">Dados Simulados</p>
+            <p className="text-[10px] text-lone-warning mt-0.5">
               As campanhas e métricas abaixo são fictícias para demonstração. Conecte sua conta Meta Ads para ver dados reais.
             </p>
           </div>
-          <span className="text-[9px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-md uppercase tracking-wider shrink-0">
+          <span className="text-[9px] font-bold text-lone-warning bg-lone-warning-bg border border-lone-warning-border px-2 py-1 rounded-md uppercase tracking-wider shrink-0">
             Demo
           </span>
         </div>
@@ -3098,7 +3098,7 @@ function AdAnalyticsTab({
                 }`}
               >
                 {c.metaAdAccountId && (
-                  <Facebook size={9} className={selectedClient === c.id ? "text-primary" : "text-[#3b6ff5] opacity-70"} />
+                  <Facebook size={9} className={selectedClient === c.id ? "text-primary" : "text-primary opacity-70"} />
                 )}
                 <span className="max-w-[130px] truncate">{c.name}</span>
               </button>
@@ -3134,7 +3134,7 @@ function AdAnalyticsTab({
                   onClick={() => handleSelectAccount(acc.id)}
                   className={`text-xs px-3 py-1.5 rounded-md transition-all ${
                     selectedMetaAccount === acc.id
-                      ? "bg-[#0d4af5] text-white shadow-[0_0_12px_rgba(10,52,245,0.3)]"
+                      ? "bg-primary text-primary-foreground shadow-[0_0_12px_rgba(10,52,245,0.3)]"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
@@ -3209,7 +3209,7 @@ function AdAnalyticsTab({
                   setShowCustomRange(false);
                 }}
                 disabled={!pendingFrom || !pendingTo}
-                className="text-xs px-2.5 py-1 bg-primary text-white rounded-md font-semibold hover:bg-primary/90 transition-colors disabled:opacity-40"
+                className="text-xs px-2.5 py-1 bg-primary text-primary-foreground rounded-md font-semibold hover:bg-primary/90 transition-colors disabled:opacity-40"
               >
                 OK
               </button>
@@ -3230,7 +3230,7 @@ function AdAnalyticsTab({
             {exportingPdf ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
             {exportingPdf ? "Gerando..." : "PDF Interno"}
           </button>
-          <div className="w-px h-5 bg-white/10 self-center" />
+          <div className="w-px h-5 bg-card/10 self-center" />
           <button onClick={handleExportClientPdf} disabled={exportingPdf} className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium disabled:opacity-50">
             {exportingPdf ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
             {exportingPdf ? "Gerando..." : "PDF Cliente"}
@@ -3256,10 +3256,10 @@ function AdAnalyticsTab({
 
       {/* Export error banner */}
       {exportAllError && (
-        <div className="flex items-start gap-2.5 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-400 animate-fade-in">
+        <div className="flex items-start gap-2.5 px-4 py-3 bg-lone-warning-bg border border-lone-warning-border rounded-xl text-xs text-lone-warning animate-fade-in">
           <AlertTriangle size={13} className="mt-0.5 shrink-0" />
           <span className="flex-1">{exportAllError}</span>
-          <button onClick={() => setExportAllError(null)} className="text-amber-400/50 hover:text-amber-400 transition-colors">✕</button>
+          <button onClick={() => setExportAllError(null)} className="text-lone-warning hover:text-lone-warning transition-colors">✕</button>
         </div>
       )}
 
@@ -3325,8 +3325,8 @@ function AdAnalyticsTab({
                   <div className="bg-card/60 border border-border rounded-xl p-3">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Tendência Gasto</p>
                     <div className="flex items-center gap-1.5 mt-1">
-                      {aiAnalysis.spendTrend === "up" ? <ArrowUpRight size={16} className="text-red-400" /> : aiAnalysis.spendTrend === "down" ? <ArrowDownRight size={16} className="text-[#0d4af5]" /> : <Minus size={16} className="text-zinc-500" />}
-                      <span className={`text-lg font-black tabular-nums ${aiAnalysis.spendTrend === "up" ? "text-red-400" : aiAnalysis.spendTrend === "down" ? "text-[#0d4af5]" : "text-foreground"}`}>
+                      {aiAnalysis.spendTrend === "up" ? <ArrowUpRight size={16} className="text-destructive" /> : aiAnalysis.spendTrend === "down" ? <ArrowDownRight size={16} className="text-primary" /> : <Minus size={16} className="text-muted-foreground" />}
+                      <span className={`text-lg font-black tabular-nums ${aiAnalysis.spendTrend === "up" ? "text-destructive" : aiAnalysis.spendTrend === "down" ? "text-primary" : "text-foreground"}`}>
                         {aiAnalysis.spendTrend === "up" ? "Alta" : aiAnalysis.spendTrend === "down" ? "Queda" : "Estável"}
                       </span>
                     </div>
@@ -3334,8 +3334,8 @@ function AdAnalyticsTab({
                   <div className="bg-card/60 border border-border rounded-xl p-3">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Performance</p>
                     <div className="flex items-center gap-1.5 mt-1">
-                      {aiAnalysis.performanceTrend === "improving" ? <TrendingUp size={16} className="text-[#0d4af5]" /> : aiAnalysis.performanceTrend === "declining" ? <TrendingDown size={16} className="text-red-400" /> : <Activity size={16} className="text-zinc-500" />}
-                      <span className={`text-lg font-black tabular-nums ${aiAnalysis.performanceTrend === "improving" ? "text-[#0d4af5]" : aiAnalysis.performanceTrend === "declining" ? "text-red-400" : "text-foreground"}`}>
+                      {aiAnalysis.performanceTrend === "improving" ? <TrendingUp size={16} className="text-primary" /> : aiAnalysis.performanceTrend === "declining" ? <TrendingDown size={16} className="text-destructive" /> : <Activity size={16} className="text-muted-foreground" />}
+                      <span className={`text-lg font-black tabular-nums ${aiAnalysis.performanceTrend === "improving" ? "text-primary" : aiAnalysis.performanceTrend === "declining" ? "text-destructive" : "text-foreground"}`}>
                         {aiAnalysis.performanceTrend === "improving" ? "Melhorando" : aiAnalysis.performanceTrend === "declining" ? "Em Queda" : "Estável"}
                       </span>
                     </div>
@@ -3343,9 +3343,9 @@ function AdAnalyticsTab({
                   <div className="bg-card/60 border border-border rounded-xl p-3">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Alertas</p>
                     <div className="flex items-center gap-2 mt-1">
-                      {criticalInsights.length > 0 && <span className="text-lg font-black text-red-400 tabular-nums">{criticalInsights.length}<span className="text-[10px] font-normal"> críticos</span></span>}
-                      {warningInsights.length > 0 && <span className="text-lg font-black text-[#0d4af5] tabular-nums">{warningInsights.length}<span className="text-[10px] font-normal"> atenção</span></span>}
-                      {criticalInsights.length === 0 && warningInsights.length === 0 && <span className="text-lg font-black text-[#0d4af5]">Nenhum</span>}
+                      {criticalInsights.length > 0 && <span className="text-lg font-black text-destructive tabular-nums">{criticalInsights.length}<span className="text-[10px] font-normal"> críticos</span></span>}
+                      {warningInsights.length > 0 && <span className="text-lg font-black text-primary tabular-nums">{warningInsights.length}<span className="text-[10px] font-normal"> atenção</span></span>}
+                      {criticalInsights.length === 0 && warningInsights.length === 0 && <span className="text-lg font-black text-primary">Nenhum</span>}
                     </div>
                   </div>
                 </div>
@@ -3354,7 +3354,7 @@ function AdAnalyticsTab({
                 <div className="flex items-center gap-6 text-xs">
                   {aiAnalysis.topPerformer && (
                     <div className="flex items-center gap-2">
-                      <Star size={12} className="text-[#0d4af5]" />
+                      <Star size={12} className="text-primary" />
                       <span className="text-muted-foreground">Melhor:</span>
                       <span className="text-foreground font-semibold">{aiAnalysis.topPerformer.name}</span>
                       <span className="text-primary font-bold">{aiAnalysis.topPerformer.value}</span>
@@ -3362,10 +3362,10 @@ function AdAnalyticsTab({
                   )}
                   {aiAnalysis.worstPerformer && (
                     <div className="flex items-center gap-2">
-                      <ShieldAlert size={12} className="text-red-400" />
+                      <ShieldAlert size={12} className="text-destructive" />
                       <span className="text-muted-foreground">Revisar:</span>
                       <span className="text-foreground font-semibold">{aiAnalysis.worstPerformer.name}</span>
-                      <span className="text-red-400 font-bold">{aiAnalysis.worstPerformer.value}</span>
+                      <span className="text-destructive font-bold">{aiAnalysis.worstPerformer.value}</span>
                     </div>
                   )}
                 </div>
@@ -3413,10 +3413,10 @@ function AdAnalyticsTab({
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground border border-border">{insight.campaignName}</span>
                       )}
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                        insight.priority === "critical" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
-                        insight.priority === "high" ? "bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20" :
-                        insight.priority === "medium" ? "bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/15" :
-                        "bg-[#111118] text-zinc-500 border border-[#1e1e2a]"
+                        insight.priority === "critical" ? "bg-destructive/10 text-destructive border border-destructive/20" :
+                        insight.priority === "high" ? "bg-primary/10 text-primary border border-primary/20" :
+                        insight.priority === "medium" ? "bg-primary/10 text-primary border border-primary/15" :
+                        "bg-card text-muted-foreground border border-border"
                       }`}>
                         {insight.priority === "critical" ? "Crítico" : insight.priority === "high" ? "Alta" : insight.priority === "medium" ? "Média" : "Baixa"}
                       </span>
@@ -3457,7 +3457,7 @@ function AdAnalyticsTab({
           <Activity size={12} className="text-primary" />
           <span>Última sincronização: {new Date(lastSyncTimestamp).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}</span>
           {filteredCampaigns.some(c => c.hasData === false) && (
-            <span className="text-amber-500 flex items-center gap-1">
+            <span className="text-lone-warning flex items-center gap-1">
               <AlertCircle size={11} />
               {filteredCampaigns.filter(c => c.hasData === false).length} campanha(s) sem dados no período
             </span>
@@ -3489,29 +3489,29 @@ function AdAnalyticsTab({
             return "";
           })();
           return (
-            <div key={m.key} className={`rounded-xl border border-[#1e1e2a] bg-[#111118] p-4 text-center transition-all ${kpiClass || "hover:border-[#0d4af5]/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)]"}`}>
+            <div key={m.key} className={`rounded-xl border border-border bg-card p-4 text-center transition-all ${kpiClass || "hover:border-primary/30 hover:shadow-[0_0_15px_rgba(10,52,245,0.08)]"}`}>
               <div className={`w-9 h-9 mx-auto rounded-lg flex items-center justify-center mb-2 ${
-                kpiClass === "kpi-danger" ? "bg-red-500/10 border border-red-500/20" :
-                kpiClass === "kpi-warning" ? "bg-amber-500/10 border border-amber-500/20" :
-                "bg-[#0d4af5]/10 border border-[#0d4af5]/15"
+                kpiClass === "kpi-danger" ? "bg-destructive/10 border border-destructive/20" :
+                kpiClass === "kpi-warning" ? "bg-lone-warning-bg border border-lone-warning-border" :
+                "bg-primary/10 border border-primary/15"
               }`}>
                 <MIcon size={16} className={
-                  kpiClass === "kpi-danger" ? "text-red-400" :
-                  kpiClass === "kpi-warning" ? "text-amber-400" :
-                  "text-[#0d4af5]"
+                  kpiClass === "kpi-danger" ? "text-destructive" :
+                  kpiClass === "kpi-warning" ? "text-lone-warning" :
+                  "text-primary"
                 } />
               </div>
               <p className={`text-xl font-black tabular-nums ${
-                kpiClass === "kpi-danger" ? "text-red-400" :
-                kpiClass === "kpi-warning" ? "text-amber-400" :
+                kpiClass === "kpi-danger" ? "text-destructive" :
+                kpiClass === "kpi-warning" ? "text-lone-warning" :
                 "text-foreground"
               }`}>{m.format(val)}</p>
               <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mt-0.5">{m.label}</p>
               {kpiClass && (
                 <p className={`text-[9px] mt-1 font-semibold uppercase tracking-wider ${
-                  kpiClass === "kpi-good" ? "text-[#0d4af5]" :
-                  kpiClass === "kpi-warning" ? "text-amber-400" :
-                  "text-red-400"
+                  kpiClass === "kpi-good" ? "text-primary" :
+                  kpiClass === "kpi-warning" ? "text-lone-warning" :
+                  "text-destructive"
                 }`}>
                   {kpiClass === "kpi-good" ? "● Saudável" : kpiClass === "kpi-warning" ? "● Atenção" : "● Crítico"}
                 </p>
@@ -3617,10 +3617,10 @@ function AdAnalyticsTab({
             if (report.activeCampaigns === 0) return null;
             return (
               <div key={clientId} className={`rounded-xl border overflow-hidden ${
-                report.urgency === "critical" ? "border-red-500/20" : report.urgency === "warning" ? "border-[#0d4af5]/15" : "border-primary/20"
+                report.urgency === "critical" ? "border-destructive/20" : report.urgency === "warning" ? "border-primary/15" : "border-primary/20"
               }`}>
                 <div className={`px-5 py-4 ${
-                  report.urgency === "critical" ? "bg-red-500/[0.03]" : report.urgency === "warning" ? "bg-[#3b6ff5]/[0.03]" : "bg-primary/[0.03]"
+                  report.urgency === "critical" ? "bg-destructive/[0.03]" : report.urgency === "warning" ? "bg-primary/[0.03]" : "bg-primary/[0.03]"
                 }`}>
                   <div className="flex items-center gap-4">
                     <div className="shrink-0">
@@ -3630,9 +3630,9 @@ function AdAnalyticsTab({
                       <div className="flex items-center gap-2 mb-2">
                         <h4 className="text-sm font-bold text-foreground">{report.accountName}</h4>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                          report.urgency === "critical" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
-                          report.urgency === "warning" ? "bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/15" :
-                          "bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20"
+                          report.urgency === "critical" ? "bg-destructive/10 text-destructive border border-destructive/20" :
+                          report.urgency === "warning" ? "bg-primary/10 text-primary border border-primary/15" :
+                          "bg-primary/10 text-primary border border-primary/20"
                         }`}>
                           {report.urgency === "critical" ? "CRÍTICO" : report.urgency === "warning" ? "ATENÇÃO" : "SAUDÁVEL"}
                         </span>
@@ -3642,20 +3642,20 @@ function AdAnalyticsTab({
                       <div className="grid grid-cols-2 gap-3">
                         {/* Positives */}
                         <div>
-                          <p className="text-[10px] text-[#0d4af5] font-semibold uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                          <p className="text-[10px] text-primary font-semibold uppercase tracking-wider mb-1.5 flex items-center gap-1">
                             <CheckCircle size={10} /> O que está bom
                           </p>
                           <div className="space-y-1">
                             {report.positives.slice(0, 3).map((p, i) => (
                               <p key={i} className="text-xs text-muted-foreground leading-relaxed flex items-start gap-1.5">
-                                <span className="text-[#0d4af5] mt-0.5 shrink-0">+</span> {p}
+                                <span className="text-primary mt-0.5 shrink-0">+</span> {p}
                               </p>
                             ))}
                           </div>
                         </div>
                         {/* Improvements */}
                         <div>
-                          <p className="text-[10px] text-[#3b6ff5] font-semibold uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                          <p className="text-[10px] text-primary font-semibold uppercase tracking-wider mb-1.5 flex items-center gap-1">
                             <AlertTriangle size={10} /> O que melhorar
                           </p>
                           <div className="space-y-1">
@@ -3664,7 +3664,7 @@ function AdAnalyticsTab({
                             ) : (
                               report.improvements.slice(0, 3).map((imp, i) => (
                                 <p key={i} className="text-xs text-muted-foreground leading-relaxed flex items-start gap-1.5">
-                                  <span className="text-[#3b6ff5] mt-0.5 shrink-0">!</span> {imp}
+                                  <span className="text-primary mt-0.5 shrink-0">!</span> {imp}
                                 </p>
                               ))
                             )}
@@ -3691,7 +3691,7 @@ function AdAnalyticsTab({
             <h3 className="text-sm font-semibold text-foreground">Campanhas Ativas ({filteredCampaigns.filter((c) => c.status === "active").length})</h3>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#0d4af5]" /> {filteredCampaigns.filter((c) => c.status === "active").length} ativas</span>
+            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary" /> {filteredCampaigns.filter((c) => c.status === "active").length} ativas</span>
             {statusFilter === "all" && <span className="text-[10px] text-muted-foreground/60">Mostrando todas as campanhas</span>}
           </div>
         </div>
@@ -3719,9 +3719,9 @@ function AdAnalyticsTab({
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold text-foreground truncate">{camp.name}</p>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${statusInfo?.cls}`}>{statusInfo?.label}</span>
-                      {!isUsingRealData && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold uppercase tracking-wider">Simulado</span>}
-                      {isUsingRealData && camp.hasData === false && <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 font-bold uppercase tracking-wider">Sem dados</span>}
-                      {budgetPct > 90 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 font-semibold">Verba {budgetPct.toFixed(0)}%</span>}
+                      {!isUsingRealData && <span className="text-[9px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-bold uppercase tracking-wider">Simulado</span>}
+                      {isUsingRealData && camp.hasData === false && <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border font-bold uppercase tracking-wider">Sem dados</span>}
+                      {budgetPct > 90 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-semibold">Verba {budgetPct.toFixed(0)}%</span>}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
                       <span>{camp.clientName}</span>
@@ -3745,7 +3745,7 @@ function AdAnalyticsTab({
                       <p className="text-[10px] text-muted-foreground">Conv</p>
                     </div>
                     <div className="text-right">
-                      <p className={`font-bold tabular-nums ${camp.ctr >= 2 ? "text-[#0d4af5]" : camp.ctr < 0.5 ? "text-red-400" : "text-foreground"}`}>{camp.ctr.toFixed(2)}%</p>
+                      <p className={`font-bold tabular-nums ${camp.ctr >= 2 ? "text-primary" : camp.ctr < 0.5 ? "text-destructive" : "text-foreground"}`}>{camp.ctr.toFixed(2)}%</p>
                       <p className="text-[10px] text-muted-foreground">CTR</p>
                     </div>
                     {isExpanded ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
@@ -3785,7 +3785,7 @@ function AdAnalyticsTab({
                         <div className="h-2 bg-muted rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${
-                              budgetPct > 90 ? "bg-red-500" : budgetPct > 70 ? "bg-[#3b6ff5]" : "bg-primary"
+                              budgetPct > 90 ? "bg-destructive" : budgetPct > 70 ? "bg-primary" : "bg-primary"
                             }`}
                             style={{ width: `${Math.min(budgetPct, 100)}%` }}
                           />
@@ -3841,8 +3841,8 @@ function AdAnalyticsTab({
 // INVESTMENT CONTROL TAB
 // ══════════════════════════════════════════════════════════════
 
-const INVESTMENT_BLUE = "#0d4af5";
-const INVESTMENT_BLUE_LIGHT = "#3b6ff5";
+const INVESTMENT_BLUE = "var(--primary)";
+const INVESTMENT_BLUE_LIGHT = "var(--primary)";
 
 function fmtBRL(value: number): string {
   return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -4028,10 +4028,10 @@ function InvestmentControlTab({
   })();
 
   const pacingColor = {
-    ok:       INVESTMENT_BLUE,       // #0d4af5
-    warning:  "#f59e0b",             // amber
-    critical: "#ef4444",             // red
-    slow:     "#a78bfa",             // purple — underperforming
+    ok:       INVESTMENT_BLUE,       // var(--primary)
+    warning:  "var(--lone-warning)",             // amber
+    critical: "var(--destructive)",             // red
+    slow:     "var(--lone-info)",             // purple — underperforming
   }[pacingStatus];
 
   const pacingLabel = {
@@ -4082,7 +4082,7 @@ function InvestmentControlTab({
             />
             {/* Time marker */}
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 rounded-full bg-white/60"
+              className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 rounded-full bg-card/60"
               style={{ left: `${timePctBar}%` }}
               title={`Dia ${currentDay} de ${daysInMonth}`}
             />
@@ -4114,26 +4114,26 @@ function InvestmentControlTab({
               : cDeviation > 15 ? "warning"
               : cDeviation < -15 ? "slow"
               : "ok";
-            const cColor = { ok: INVESTMENT_BLUE, warning: "#f59e0b", critical: "#ef4444", slow: "#a78bfa" }[cStatus];
+            const cColor = { ok: INVESTMENT_BLUE, warning: "var(--lone-warning)", critical: "var(--destructive)", slow: "var(--lone-info)" }[cStatus];
             return (
               <button
                 key={c.id}
                 onClick={() => setSelectedId(c.id)}
                 className={`w-full text-left p-3 rounded-xl border transition-all ${
                   isSelected
-                    ? "border-[#0d4af5]/40 bg-[#0d4af5]/8"
-                    : "border-border bg-card hover:border-[#0d4af5]/20"
+                    ? "border-primary/40 bg-primary/8"
+                    : "border-border bg-card hover:border-primary/20"
                 }`}
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                      isSelected ? "bg-[#0d4af5]/20 text-[#3b6ff5]" : "bg-muted text-muted-foreground"
+                      isSelected ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
                     }`}>
                       {c.name[0]}
                     </div>
                     <span className="text-xs font-semibold text-foreground truncate">{c.name}</span>
-                    {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Alterações não salvas" />}
+                    {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-lone-warning-bg shrink-0" title="Alterações não salvas" />}
                   </div>
                   <span className="text-[10px] tabular-nums shrink-0 ml-1 font-semibold" style={{ color: cColor }}>
                     {pct.toFixed(0)}%
@@ -4146,7 +4146,7 @@ function InvestmentControlTab({
                     style={{ width: `${pct}%`, backgroundColor: cColor }}
                   />
                   <div
-                    className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 rounded-full bg-white/50"
+                    className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 rounded-full bg-card/50"
                     style={{ left: `${timePctBar}%` }}
                   />
                 </div>
@@ -4183,7 +4183,7 @@ function InvestmentControlTab({
               </div>
               <div className="flex items-center gap-2">
                 {!isUsingRealData && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold uppercase tracking-wider">
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-bold uppercase tracking-wider">
                     Dados simulados
                   </span>
                 )}
@@ -4198,26 +4198,26 @@ function InvestmentControlTab({
             <div className="p-5 space-y-5">
               {/* ALERTS — pacing-aware */}
               {pacingStatus === "critical" && (
-                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-red-500/25 bg-red-500/8">
-                  <AlertOctagon size={16} className="text-red-400 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-destructive/25 bg-destructive/8">
+                  <AlertOctagon size={16} className="text-destructive shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-semibold text-red-400">
+                    <p className="text-sm font-semibold text-destructive">
                       {projectedEndDay < 25
                         ? `Verba acaba no dia ~${projectedEndDay} — antes do fim do mês`
                         : "Gasto acima de 30% do ritmo esperado"}
                     </p>
-                    <p className="text-xs text-red-400/70 mt-0.5">
+                    <p className="text-xs text-destructive/70 mt-0.5">
                       Esperado até hoje: <strong>R$ {fmtBRL(expectedSpend)}</strong> · Gasto real: <strong>R$ {fmtBRL(monthlySpend)}</strong> · Desvio: +{deviationPct.toFixed(0)}%
                     </p>
                   </div>
                 </div>
               )}
               {pacingStatus === "warning" && (
-                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-amber-500/25 bg-amber-500/8">
-                  <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-lone-warning-border bg-lone-warning-bg">
+                  <AlertTriangle size={16} className="text-lone-warning shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-semibold text-amber-400">Ritmo de gasto elevado — monitorar</p>
-                    <p className="text-xs text-amber-400/70 mt-0.5">
+                    <p className="text-sm font-semibold text-lone-warning">Ritmo de gasto elevado — monitorar</p>
+                    <p className="text-xs text-lone-warning mt-0.5">
                       Esperado até hoje: <strong>R$ {fmtBRL(expectedSpend)}</strong> · Gasto real: <strong>R$ {fmtBRL(monthlySpend)}</strong> · Desvio: +{deviationPct.toFixed(0)}%
                     </p>
                   </div>
@@ -4235,22 +4235,22 @@ function InvestmentControlTab({
                 </div>
               )}
               {boletoAt80 && (
-                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10">
-                  <Banknote size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-lone-warning-border bg-lone-warning-bg">
+                  <Banknote size={16} className="text-lone-warning shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-semibold text-amber-400">Gerar novo boleto para {selectedClient.name}</p>
-                    <p className="text-xs text-amber-400/70 mt-0.5">
+                    <p className="text-sm font-semibold text-lone-warning">Gerar novo boleto para {selectedClient.name}</p>
+                    <p className="text-xs text-lone-warning mt-0.5">
                       {spendPct.toFixed(0)}% do orçamento consumido · Pagamento via Boleto — providencie o próximo aporte.
                     </p>
                   </div>
                 </div>
               )}
               {balanceWarnDays && (
-                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-amber-500/25 bg-amber-500/8">
-                  <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-lone-warning-border bg-lone-warning-bg">
+                  <AlertTriangle size={16} className="text-lone-warning shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-semibold text-amber-400">Saldo baixo — aporte próximo</p>
-                    <p className="text-xs text-amber-400/70 mt-0.5">
+                    <p className="text-sm font-semibold text-lone-warning">Saldo baixo — aporte próximo</p>
+                    <p className="text-xs text-lone-warning mt-0.5">
                       Saldo restante <strong>R$ {fmtBRL(remaining)}</strong> pode não cobrir os próximos {daysLeft} dias.
                       {daysUntilPayment !== null && <> Próximo aporte em <strong>{daysUntilPayment} dia(s)</strong>.</>}
                     </p>
@@ -4296,7 +4296,7 @@ function InvestmentControlTab({
                   />
                   {/* Day label on the marker */}
                   <div
-                    className="absolute -top-5 text-[9px] font-bold text-white/70 -translate-x-1/2 whitespace-nowrap"
+                    className="absolute -top-5 text-[9px] font-bold text-foreground -translate-x-1/2 whitespace-nowrap"
                     style={{ left: `${timePctBar}%` }}
                   >
                     dia {currentDay}
@@ -4310,7 +4310,7 @@ function InvestmentControlTab({
                     <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: pacingColor }} />
                     Gasto real: {spendPct.toFixed(1)}%
                     <span className="mx-1">·</span>
-                    <span className="w-px h-3 inline-block bg-white/50 align-middle" />
+                    <span className="w-px h-3 inline-block bg-card/50 align-middle" />
                     Hoje: {timePctBar.toFixed(0)}% do mês
                   </span>
                   <span>100%</span>
@@ -4326,7 +4326,7 @@ function InvestmentControlTab({
                   <div className="bg-muted/40 rounded-lg p-2.5 text-center border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Diária Real (Meta)</p>
                     <p className="text-sm font-bold tabular-nums mt-0.5"
-                      style={{ color: avgDailyBurn > idealDailyBudget * 1.15 ? "#ef4444" : avgDailyBurn < idealDailyBudget * 0.85 ? "#a78bfa" : pacingColor }}
+                      style={{ color: avgDailyBurn > idealDailyBudget * 1.15 ? "var(--destructive)" : avgDailyBurn < idealDailyBudget * 0.85 ? "var(--lone-info)" : pacingColor }}
                     >
                       R$ {fmtBRL(avgDailyBurn)}
                     </p>
@@ -4334,7 +4334,7 @@ function InvestmentControlTab({
                   </div>
                   <div className="bg-muted/40 rounded-lg p-2.5 text-center border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Projeção Fim</p>
-                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${projectedEndDay < 25 ? "text-red-400" : projectedEndDay <= daysInMonth ? "text-foreground" : "text-primary"}`}>
+                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${projectedEndDay < 25 ? "text-destructive" : projectedEndDay <= daysInMonth ? "text-foreground" : "text-primary"}`}>
                       {avgDailyBurn > 0 ? `Dia ~${Math.min(projectedEndDay, 99)}` : "—"}
                     </p>
                     <p className="text-[9px] text-muted-foreground">
@@ -4353,13 +4353,13 @@ function InvestmentControlTab({
                   </div>
                   <div className="bg-muted/50 rounded-lg p-2.5 text-center border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Saldo</p>
-                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${remaining > 0 ? "text-primary" : "text-red-400"}`}>
+                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${remaining > 0 ? "text-primary" : "text-destructive"}`}>
                       R$ {fmtBRL(remaining)}
                     </p>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-2.5 text-center border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Hoje</p>
-                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${todaySpend > idealDailyBudget * 1.15 ? "text-red-400" : "text-foreground"}`}>
+                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${todaySpend > idealDailyBudget * 1.15 ? "text-destructive" : "text-foreground"}`}>
                       R$ {fmtBRL(todaySpend)}
                     </p>
                   </div>
@@ -4392,7 +4392,7 @@ function InvestmentControlTab({
                           updateForm(selectedId, { monthlyRaw: fmtBRL(monthly) });
                         }}
                         placeholder="0,00"
-                        className="w-full bg-muted border border-border rounded-lg pl-8 pr-3 py-2.5 text-sm text-foreground outline-none focus:border-[#0d4af5]/60 font-mono tabular-nums transition-colors"
+                        className="w-full bg-muted border border-border rounded-lg pl-8 pr-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/60 font-mono tabular-nums transition-colors"
                       />
                     </div>
                     <p className="text-[10px] text-muted-foreground">Alterar atualiza a diária automaticamente</p>
@@ -4413,7 +4413,7 @@ function InvestmentControlTab({
                           updateForm(selectedId, { dailyRaw: fmtBRL(daily) });
                         }}
                         placeholder="0,00"
-                        className="w-full bg-muted border border-border rounded-lg pl-8 pr-3 py-2.5 text-sm text-foreground outline-none focus:border-[#0d4af5]/60 font-mono tabular-nums transition-colors"
+                        className="w-full bg-muted border border-border rounded-lg pl-8 pr-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/60 font-mono tabular-nums transition-colors"
                       />
                     </div>
                     <p className="text-[10px] text-muted-foreground">Alterar recalcula o mensal proporcional</p>
@@ -4427,7 +4427,7 @@ function InvestmentControlTab({
                     <span>
                       R$ {fmtBRL(monthlyBudget)} ÷ {daysInMonth} dias = <span className="text-foreground font-semibold">R$ {fmtBRL(idealDailyBudget)}/dia</span>
                       {avgDailyBurn > 0 && (
-                        <> · Queima real: <span className={avgDailyBurn > idealDailyBudget * 1.15 ? "text-red-400 font-semibold" : "text-primary font-semibold"}>R$ {fmtBRL(avgDailyBurn)}/dia</span></>
+                        <> · Queima real: <span className={avgDailyBurn > idealDailyBudget * 1.15 ? "text-destructive font-semibold" : "text-primary font-semibold"}>R$ {fmtBRL(avgDailyBurn)}/dia</span></>
                       )}
                     </span>
                   </div>
@@ -4444,7 +4444,7 @@ function InvestmentControlTab({
                   <select
                     value={form.paymentMethod}
                     onChange={(e) => updateForm(selectedId, { paymentMethod: e.target.value as InvestmentPaymentMethod })}
-                    className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#0d4af5]/60 transition-colors"
+                    className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/60 transition-colors"
                   >
                     <option value="pix">PIX</option>
                     <option value="boleto">Boleto</option>
@@ -4462,10 +4462,10 @@ function InvestmentControlTab({
                       type="date"
                       value={form.nextPaymentDate}
                       onChange={(e) => updateForm(selectedId, { nextPaymentDate: e.target.value })}
-                      className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#0d4af5]/60 transition-colors"
+                      className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/60 transition-colors"
                     />
                     {daysUntilPayment !== null && (
-                      <p className={`text-[10px] font-medium ${daysUntilPayment <= 3 ? "text-amber-400" : "text-muted-foreground"}`}>
+                      <p className={`text-[10px] font-medium ${daysUntilPayment <= 3 ? "text-lone-warning" : "text-muted-foreground"}`}>
                         {daysUntilPayment <= 0 ? "Aporte vencido!" : `Em ${daysUntilPayment} dia(s)`}
                       </p>
                     )}
@@ -4497,7 +4497,7 @@ function InvestmentControlTab({
                     <CheckCircle size={13} /> Salvo com sucesso!
                   </span>
                 ) : form.dirty ? (
-                  <span className="text-xs text-amber-400 flex items-center gap-1.5">
+                  <span className="text-xs text-lone-warning flex items-center gap-1.5">
                     <AlertCircle size={13} /> Alterações não salvas
                   </span>
                 ) : (
@@ -4576,8 +4576,8 @@ function ContentRequestModal({
       >
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#3b6ff5]/15 flex items-center justify-center">
-              <FileText size={16} className="text-[#3b6ff5]" />
+            <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+              <FileText size={16} className="text-primary" />
             </div>
             <div>
               <h3 className="text-sm font-semibold text-foreground">Solicitar Conteúdo</h3>
