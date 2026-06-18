@@ -19,7 +19,7 @@ export default function MobileFAB({ phone, clientName }: Props) {
       style={{
         width: 56,
         height: 56,
-        background: "var(--lone-success)",
+        background: "#22C55E",
         boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
       }}
     >

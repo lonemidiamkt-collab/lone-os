@@ -19,10 +19,10 @@ const PERIODS: { value: PeriodKind; label: string }[] = [
 ];
 
 const METRICS = [
-  { key: "messages", label: "Mensagens", color: "var(--primary)" },
-  { key: "clicks",   label: "Cliques",   color: "var(--chart-4)" },
-  { key: "spend",    label: "Investido", color: "var(--lone-warning)" },
-  { key: "reach",    label: "Alcance",   color: "var(--lone-success)" },
+  { key: "messages", label: "Mensagens", color: "#2B3CFF" },
+  { key: "clicks",   label: "Cliques",   color: "#8B5CF6" },
+  { key: "spend",    label: "Investido", color: "#F59E0B" },
+  { key: "reach",    label: "Alcance",   color: "#22C55E" },
 ] as const;
 type MetricKey = typeof METRICS[number]["key"];
 
@@ -64,10 +64,10 @@ function Thumbnail({ url, path, name }: { url: string | null; path: string | nul
     return (
       <div
         className="w-14 h-14 rounded-lg shrink-0 flex flex-col items-center justify-center gap-0.5"
-        style={{ background: "var(--card)", border: "1px solid var(--card)" }}
+        style={{ background: "#1a1a2e", border: "1px solid #1A1F33" }}
       >
         <span style={{ fontSize: 18 }}>{isVideo ? "🎬" : "🖼️"}</span>
-        <span className="text-[8px] text-center px-1" style={{ color: "var(--muted-foreground)", lineHeight: 1.2 }}>
+        <span className="text-[8px] text-center px-1" style={{ color: "#6B7280", lineHeight: 1.2 }}>
           {isVideo ? "Vídeo" : "Arte"}
         </span>
       </div>
@@ -78,7 +78,7 @@ function Thumbnail({ url, path, name }: { url: string | null; path: string | nul
       src={src} alt={name} loading="lazy"
       onError={() => setBroken(true)}
       className="w-14 h-14 rounded-lg object-cover shrink-0"
-      style={{ border: "1px solid var(--card)" }}
+      style={{ border: "1px solid #1A1F33" }}
     />
   );
 }
@@ -88,7 +88,7 @@ const scrollRow = "flex flex-nowrap gap-2 overflow-x-auto pb-1 no-scrollbar";
 function SectionHeader({ title }: { title: string }) {
   return (
     <div className="mb-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--muted-foreground)" }}>
+      <h2 className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#8b91a1" }}>
         {title}
       </h2>
     </div>
@@ -98,7 +98,7 @@ function SectionHeader({ title }: { title: string }) {
 // Card container reutilizável
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-xl ${className}`} style={{ background: "var(--background)", border: "1px solid var(--card)" }}>
+    <div className={`rounded-xl ${className}`} style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
       {children}
     </div>
   );
@@ -191,7 +191,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
   ];
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--background)", color: "var(--card)" }}>
+    <div className="min-h-screen" style={{ background: "#060814", color: "#FFFFFF" }}>
       <MobileFAB phone={phone} clientName={clientName} />
 
       {/* ── Container principal — mais largo no desktop ─────────────── */}
@@ -202,7 +202,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <img src="/logo.png" alt="Lone Mídia" className="h-4 w-auto opacity-60" />
-              <p className="text-[11px] font-medium" style={{ color: "var(--muted-foreground)" }}>Painel de Resultados</p>
+              <p className="text-[11px] font-medium" style={{ color: "#6B7280" }}>Painel de Resultados</p>
             </div>
             <h1
               className="font-bold tracking-tight break-words"
@@ -211,7 +211,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
               {clientName}
             </h1>
             {genAt && (
-              <p className="text-[11px] mt-1" style={{ color: "var(--muted-foreground)" }}>Atualizado em {genAt}</p>
+              <p className="text-[11px] mt-1" style={{ color: "#6B7280" }}>Atualizado em {genAt}</p>
             )}
           </div>
           {/* Desktop: botão no header / Mobile: FAB */}
@@ -229,7 +229,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
         </div>
 
         {welcomeMessage && (
-          <div className="rounded-xl px-4 py-3 mb-4 lg:mb-6 text-sm" style={{ background: "var(--background)", border: "1px solid var(--card)", color: "var(--muted-foreground)" }}>
+          <div className="rounded-xl px-4 py-3 mb-4 lg:mb-6 text-sm" style={{ background: "#0B0E1E", border: "1px solid #1A1F33", color: "#8b91a1" }}>
             {welcomeMessage}
           </div>
         )}
@@ -243,8 +243,8 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
               disabled={loading}
               className="shrink-0 rounded-full text-xs font-semibold transition-all disabled:opacity-50 min-h-[44px] px-4 py-2"
               style={period === p.value
-                ? { background: "var(--primary)", color: "#fff" }
-                : { background: "var(--background)", color: "var(--muted-foreground)", border: "1px solid var(--card)" }}
+                ? { background: "#2B3CFF", color: "#fff" }
+                : { background: "#0B0E1E", color: "#8b91a1", border: "1px solid #1A1F33" }}
             >
               {p.label}
             </button>
@@ -255,9 +255,9 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6 lg:mb-7">
           {kpiItems.map(({ key, label, val, format }) => (
             <Card key={key} className="p-4">
-              <p className="text-xs mb-3" style={{ color: "var(--muted-foreground)" }}>{label}</p>
+              <p className="text-xs mb-3" style={{ color: "#6B7280" }}>{label}</p>
               {loading ? (
-                <div className={`h-8 w-24 rounded ${pulse}`} style={{ background: "var(--card)" }} />
+                <div className={`h-8 w-24 rounded ${pulse}`} style={{ background: "#1A1F33" }} />
               ) : (
                 <p className="text-3xl font-bold leading-none">
                   {val?.value != null ? format(val.value) : "—"}
@@ -291,7 +291,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
                     className="shrink-0 rounded-full text-xs font-medium transition-all min-h-[44px] px-3 py-2"
                     style={metric === m.key
                       ? { background: m.color, color: "#fff" }
-                      : { background: "var(--background)", color: "var(--muted-foreground)", border: "1px solid var(--card)" }}
+                      : { background: "#060814", color: "#8b91a1", border: "1px solid #1A1F33" }}
                   >
                     {m.label}
                   </button>
@@ -299,29 +299,29 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
               </div>
 
               {loading || chartData.length === 0 ? (
-                <div className="flex items-center justify-center" style={{ height: chartHeight, color: "var(--muted-foreground)" }}>
+                <div className="flex items-center justify-center" style={{ height: chartHeight, color: "#6B7280" }}>
                   {loading ? "Carregando…" : "Sem dados para o período"}
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={chartHeight}>
                   <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: chartHeight <= 180 ? 20 : 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--card)" opacity={hideGrid ? 0 : 1} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1A1F33" opacity={hideGrid ? 0 : 1} />
                     <XAxis
                       dataKey="day"
-                      tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
+                      tick={{ fill: "#6B7280", fontSize: 10 }}
                       axisLine={false} tickLine={false}
                       interval="preserveStartEnd"
                       angle={chartHeight <= 180 ? -30 : 0}
                       textAnchor={chartHeight <= 180 ? "end" : "middle"}
                     />
                     <YAxis
-                      tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
+                      tick={{ fill: "#6B7280", fontSize: 10 }}
                       axisLine={false} tickLine={false}
                       width={38} tickFormatter={fmt}
                     />
                     <Tooltip
-                      contentStyle={{ background: "var(--background)", border: "1px solid var(--card)", borderRadius: 8, color: "#fff" }}
-                      labelStyle={{ color: "var(--muted-foreground)" }}
+                      contentStyle={{ background: "#0B0E1E", border: "1px solid #1A1F33", borderRadius: 8, color: "#fff" }}
+                      labelStyle={{ color: "#8b91a1" }}
                     />
                     <Line
                       type="monotone" dataKey={metric}
@@ -338,22 +338,22 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
             {(loading || demo?.gender || (demo?.age_ranges?.length ?? 0) > 0) && (
               <div>
                 <SectionHeader title="Quem está vendo seus anúncios" />
-                <div className="rounded-xl p-4 lg:p-5" style={{ background: "var(--card)", color: "var(--background)" }}>
+                <div className="rounded-xl p-4 lg:p-5" style={{ background: "#FFFFFF", color: "#0B0E1E" }}>
                   {loading ? (
-                    <div className={`h-28 rounded-lg ${pulse}`} style={{ background: "var(--muted)" }} />
+                    <div className={`h-28 rounded-lg ${pulse}`} style={{ background: "#F3F4F6" }} />
                   ) : (
                     <div className="space-y-4">
                       {demo?.gender && (
                         <div>
-                          <p className="text-xs font-semibold mb-3" style={{ color: "var(--muted-foreground)" }}>Gênero</p>
+                          <p className="text-xs font-semibold mb-3" style={{ color: "#374151" }}>Gênero</p>
                           <div className="flex gap-3">
                             {[
                               { label: "Mulheres", pct: demo.gender.female_pct, color: "#E879F9" },
-                              { label: "Homens",   pct: demo.gender.male_pct,   color: "var(--primary)" },
+                              { label: "Homens",   pct: demo.gender.male_pct,   color: "#2B3CFF" },
                             ].map((g) => (
-                              <div key={g.label} className="flex-1 rounded-xl p-3 text-center" style={{ background: "var(--muted)" }}>
+                              <div key={g.label} className="flex-1 rounded-xl p-3 text-center" style={{ background: "#F9FAFB" }}>
                                 <p className="text-2xl font-bold" style={{ color: g.color }}>{g.pct}%</p>
-                                <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>{g.label}</p>
+                                <p className="text-xs mt-1" style={{ color: "#6B7280" }}>{g.label}</p>
                               </div>
                             ))}
                           </div>
@@ -361,18 +361,18 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
                       )}
                       {demo?.age_ranges && demo.age_ranges.length > 0 && (
                         <div>
-                          <p className="text-xs font-semibold mb-3" style={{ color: "var(--muted-foreground)" }}>Faixa etária</p>
+                          <p className="text-xs font-semibold mb-3" style={{ color: "#374151" }}>Faixa etária</p>
                           <ResponsiveContainer width="100%" height={110}>
                             <BarChart data={demo.age_ranges} margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
-                              <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} axisLine={false} tickLine={false} />
-                              <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} axisLine={false} tickLine={false} unit="%" width={28} />
+                              <XAxis dataKey="label" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} />
+                              <YAxis tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} unit="%" width={28} />
                               <Tooltip
-                                contentStyle={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 8, color: "#111" }}
+                                contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, color: "#111" }}
                                 formatter={(v) => [`${v}%`, "Alcance"]}
                               />
                               <Bar dataKey="pct" radius={[4, 4, 0, 0]} maxBarSize={40}>
                                 {demo.age_ranges.map((_, i) => (
-                                  <Cell key={i} fill={i === 0 ? "var(--primary)" : "var(--primary)"} />
+                                  <Cell key={i} fill={i === 0 ? "#2B3CFF" : "#93C5FD"} />
                                 ))}
                               </Bar>
                             </BarChart>
@@ -396,13 +396,13 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
                 <div className="space-y-2">
                   {loading
                     ? Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className={`h-20 rounded-xl ${pulse}`} style={{ background: "var(--background)" }} />
+                        <div key={i} className={`h-20 rounded-xl ${pulse}`} style={{ background: "#0B0E1E" }} />
                       ))
                     : top.map((c) => (
                         <div key={c.id}>
                           <button
                             className="w-full rounded-xl p-3 text-left transition-colors"
-                            style={{ background: "var(--background)", border: `1px solid ${expandedId === c.id ? "var(--primary)" : "var(--card)"}`, minHeight: 68 }}
+                            style={{ background: "#0B0E1E", border: `1px solid ${expandedId === c.id ? "#2B3CFF" : "#1A1F33"}`, minHeight: 68 }}
                             onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
                           >
                             <div className="flex items-center gap-3">
@@ -412,36 +412,36 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
                                   <p className="text-sm font-semibold leading-snug break-words">{c.name}</p>
                                   {c.is_winner && (
                                     <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 whitespace-nowrap"
-                                      style={{ background: "var(--primary)22", color: "var(--primary)", border: "1px solid var(--primary)44" }}>
+                                      style={{ background: "#2B3CFF22", color: "#2B3CFF", border: "1px solid #2B3CFF44" }}>
                                       ⭐ Top
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-1 text-xs" style={{ color: "var(--muted-foreground)" }}>
-                                  <span><strong className="text-foreground">{fmt(c.messages)}</strong> msgs</span>
-                                  <span><strong className="text-foreground">{fmtBrl(c.spend)}</strong></span>
-                                  {c.cpa && <span>CPA <strong className="text-foreground">{fmtBrl(c.cpa)}</strong></span>}
+                                <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-1 text-xs" style={{ color: "#8b91a1" }}>
+                                  <span><strong className="text-white">{fmt(c.messages)}</strong> msgs</span>
+                                  <span><strong className="text-white">{fmtBrl(c.spend)}</strong></span>
+                                  {c.cpa && <span>CPA <strong className="text-white">{fmtBrl(c.cpa)}</strong></span>}
                                 </div>
                               </div>
-                              <svg className="shrink-0" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted-foreground)" strokeWidth="2">
+                              <svg className="shrink-0" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2">
                                 <path d={expandedId === c.id ? "M18 15l-6-6-6 6" : "M6 9l6 6 6-6"} />
                               </svg>
                             </div>
                           </button>
                           {expandedId === c.id && (
                             <div className="rounded-b-xl px-3 py-2.5 -mt-px"
-                              style={{ background: "var(--background)", border: "1px solid var(--primary)", borderTop: "none" }}>
+                              style={{ background: "#0D1120", border: "1px solid #2B3CFF", borderTop: "none" }}>
                               <div className="grid grid-cols-3 gap-2 text-xs">
                                 <div>
-                                  <p style={{ color: "var(--muted-foreground)" }}>CTR</p>
+                                  <p style={{ color: "#6B7280" }}>CTR</p>
                                   <p className="font-semibold mt-0.5">{c.ctr.toFixed(2)}%</p>
                                 </div>
                                 <div>
-                                  <p style={{ color: "var(--muted-foreground)" }}>Frequência</p>
+                                  <p style={{ color: "#6B7280" }}>Frequência</p>
                                   <p className="font-semibold mt-0.5">{c.frequency.toFixed(1)}x</p>
                                 </div>
                                 <div>
-                                  <p style={{ color: "var(--muted-foreground)" }}>Custo/msg</p>
+                                  <p style={{ color: "#6B7280" }}>Custo/msg</p>
                                   <p className="font-semibold mt-0.5">{c.cpa ? fmtBrl(c.cpa) : "—"}</p>
                                 </div>
                               </div>
@@ -460,17 +460,17 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
                 <div className="space-y-2">
                   {loading
                     ? Array.from({ length: 2 }).map((_, i) => (
-                        <div key={i} className={`h-14 rounded-xl ${pulse}`} style={{ background: "var(--background)" }} />
+                        <div key={i} className={`h-14 rounded-xl ${pulse}`} style={{ background: "#0B0E1E" }} />
                       ))
                     : actions.map((a) => (
                         <Card key={a.id} className="p-3">
                           <div className="flex items-start gap-2.5">
                             <span className="text-lg shrink-0">{ICON_MAP[a.icon ?? ""] ?? "📌"}</span>
                             <div className="min-w-0">
-                              <p className="text-[11px] mb-0.5" style={{ color: "var(--muted-foreground)" }}>{fmtDate(a.action_date)}</p>
+                              <p className="text-[11px] mb-0.5" style={{ color: "#6B7280" }}>{fmtDate(a.action_date)}</p>
                               <p className="text-sm font-medium">{a.title}</p>
                               {a.description && (
-                                <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>{a.description}</p>
+                                <p className="text-xs mt-0.5" style={{ color: "#8b91a1" }}>{a.description}</p>
                               )}
                             </div>
                           </div>
@@ -485,11 +485,11 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
         {/* ── Footer ───────────────────────────────────────────────────── */}
         <div className="text-center mt-10 pb-20 lg:pb-10 space-y-2">
           <img src="/logo.png" alt="Lone Mídia" className="h-6 w-auto mx-auto opacity-50" />
-          <p className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+          <p className="text-[11px]" style={{ color: "#6B7280" }}>
             Relatório exclusivo ·{" "}
             {new Date().toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}
           </p>
-          <p className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>
+          <p className="text-[10px]" style={{ color: "#4B5563" }}>
             Atribuição: 7 dias de clique + 1 dia de visualização · Valores podem divergir em até 5% do Gerenciador por atribuição diferida
           </p>
         </div>
