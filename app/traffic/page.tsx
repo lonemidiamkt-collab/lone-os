@@ -3928,7 +3928,7 @@ function InvestmentControlTab({
         if (!next[c.id]) {
           const stored = investmentData[c.id];
           const monthly = stored?.monthlyBudget ?? c.monthlyBudget;
-          const daily = stored?.dailyBudget ?? parseFloat((monthly / daysInMonth).toFixed(2));
+          const daily = stored?.dailyBudget ?? c.dailyBudget ?? parseFloat((monthly / daysInMonth).toFixed(2));
           const pm: InvestmentPaymentMethod = stored?.paymentMethod ??
             (c.paymentMethod === "transferencia" ? "pix" : c.paymentMethod as InvestmentPaymentMethod);
           next[c.id] = {

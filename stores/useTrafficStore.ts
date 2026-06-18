@@ -194,19 +194,24 @@ export const useTrafficStore = create<TrafficState>()(
 
         // Persiste a VERBA no banco (ad_accounts.monthly_budget). Sem isto a verba ficava
         // só no localStorage — não chegava nos alertas nem em outro dispositivo (fake save).
-        if (data.monthlyBudget !== undefined) {
+        if (data.monthlyBudget !== undefined || data.dailyBudget !== undefined || data.paymentMethod !== undefined) {
           try {
             const res = await authedFetch("/api/traffic/ad-accounts", {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ clientId, monthlyBudget: data.monthlyBudget }),
+              body: JSON.stringify({
+                clientId,
+                monthlyBudget: data.monthlyBudget,
+                dailyBudget: data.dailyBudget,
+                paymentMethod: data.paymentMethod,
+              }),
             });
             if (!res.ok) {
               const d = (await res.json().catch(() => ({}))) as { error?: string };
               return { ok: false, error: d.error ?? `Falha ao salvar no banco (HTTP ${res.status})` };
             }
           } catch {
-            return { ok: false, error: "Sem conexão ao salvar a verba no banco." };
+            return { ok: false, error: "Sem conexão ao salvar no banco." };
           }
         }
         return { ok: true };

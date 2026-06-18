@@ -136,45 +136,52 @@ export async function POST(req: NextRequest) {
 }
 
 // PATCH /api/traffic/ad-accounts
-// Persiste a VERBA mensal (monthly_budget) de uma conta — resolvendo a conta pelo
-// clientId no servidor (fonte de verdade). Usado pelo editor de investimento da tela
-// de Tráfego para a verba ir ao banco e alimentar os alertas, em vez de só localStorage.
+// Persiste os dados de investimento do cliente (verba mensal, verba diária, forma de
+// pagamento) no banco — em clients (exibição + cross-device) e sincroniza a verba mensal
+// em ad_accounts (fonte dos alertas). Usado pelo editor de investimento da tela de Tráfego,
+// em vez de salvar só no localStorage.
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { clientId, adAccountId, monthlyBudget } = body as {
+    const { clientId, monthlyBudget, dailyBudget, paymentMethod } = body as {
       clientId?: string;
-      adAccountId?: string;
       monthlyBudget?: number | null;
+      dailyBudget?: number | null;
+      paymentMethod?: string | null;
     };
-    if (monthlyBudget === undefined) {
-      return NextResponse.json({ error: "monthlyBudget obrigatório" }, { status: 400 });
+    if (!clientId) {
+      return NextResponse.json({ error: "clientId obrigatório" }, { status: 400 });
     }
 
-    // Resolve a conta: por id direto, senão pelo client_id (fonte de verdade)
-    let targetId = adAccountId;
-    if (!targetId && clientId) {
+    // 1) Persiste no cliente (exibição + carrega em qualquer dispositivo)
+    const clientUpdate: Record<string, unknown> = {};
+    if (monthlyBudget !== undefined) clientUpdate.monthly_budget = monthlyBudget;
+    if (dailyBudget !== undefined) clientUpdate.daily_budget = dailyBudget;
+    if (paymentMethod !== undefined) clientUpdate.payment_method = paymentMethod;
+    if (Object.keys(clientUpdate).length > 0) {
+      const { error: cErr } = await supabaseAdmin.from("clients").update(clientUpdate).eq("id", clientId);
+      if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 });
+    }
+
+    // 2) Sincroniza a VERBA na conta de anúncio (fonte dos alertas de saldo/verba)
+    let alertsWired = false;
+    if (monthlyBudget !== undefined) {
       const { data: acct } = await supabaseAdmin
         .from("ad_accounts")
         .select("id")
         .eq("client_id", clientId)
         .limit(1)
         .maybeSingle();
-      targetId = (acct?.id as string | undefined) ?? undefined;
-    }
-    if (!targetId) {
-      return NextResponse.json(
-        { error: "Cliente não possui conta de anúncio vinculada — a verba não alimenta alertas." },
-        { status: 404 },
-      );
+      if (acct?.id) {
+        await supabaseAdmin
+          .from("ad_accounts")
+          .update({ monthly_budget: monthlyBudget, updated_at: new Date().toISOString() })
+          .eq("id", acct.id);
+        alertsWired = true;
+      }
     }
 
-    const { error } = await supabaseAdmin
-      .from("ad_accounts")
-      .update({ monthly_budget: monthlyBudget, updated_at: new Date().toISOString() })
-      .eq("id", targetId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, alertsWired });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 400 });
   }

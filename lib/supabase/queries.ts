@@ -55,6 +55,7 @@ function snakeToClient(row: Record<string, unknown>): Client {
     logo: (row.logo as string) ?? undefined,
     industry: (row.industry as string) ?? "Outro",
     monthlyBudget: Number(row.monthly_budget ?? 0),
+    dailyBudget: row.daily_budget != null ? Number(row.daily_budget) : undefined,
     status: (row.status as Client["status"]) ?? "onboarding",
     attentionLevel: (row.attention_level as Client["attentionLevel"]) ?? "medium",
     tags: (row.tags as string[]) ?? [],

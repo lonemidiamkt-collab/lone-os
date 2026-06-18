@@ -30,6 +30,7 @@ export interface Client {
   logo?: string;
   industry: string;
   monthlyBudget: number;
+  dailyBudget?: number;
   status: ClientStatus;
   attentionLevel: AttentionLevel;
   tags: string[];
