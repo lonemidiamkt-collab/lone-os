@@ -1059,9 +1059,9 @@ export default function BudgetsPage() {
                   key={account.id}
                   className={cn(
                     "grid grid-cols-[24px_1fr_100px_130px_80px_100px_80px] gap-3 px-4 py-3 border-b border-border last:border-b-0 items-center transition-colors hover:bg-card/[0.02]",
-                    isCritical && "bg-[rgba(226,75,74,0.04)] border-l-[3px] border-l-destructive",
-                    isWarning  && "bg-[rgba(186,117,23,0.03)] border-l-[3px] border-l-lone-warning",
-                    isReview   && "bg-lone-warning-bg/[0.02] border-l-[3px] border-l-amber-500/40",
+                    isCritical && "bg-destructive/[0.04] border-l-[3px] border-l-destructive",
+                    isWarning  && "bg-lone-warning-bg border-l-[3px] border-l-lone-warning",
+                    isReview   && "bg-lone-warning-bg border-l-[3px] border-l-lone-warning",
                     isPaused   && "opacity-50",
                   )}
                 >
