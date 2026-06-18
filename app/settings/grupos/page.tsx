@@ -51,6 +51,7 @@ export default function GruposPage() {
   const [dest, setDest] = useState<Record<string, string>>({});   // clientId -> 'interno' | 'cliente'
   const [tog, setTog] = useState<Record<string, RowAlerts>>({});  // clientId -> toggles
   const [warnPct, setWarnPct] = useState(18); // % global da verba p/ alerta de saldo baixo (sincronizado)
+  const [critPct, setCritPct] = useState(10); // % crítico (segundo nível)
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,6 +62,7 @@ export default function GruposPage() {
       setGroups(data.groups ?? []);
       setRows(data.clients ?? []);
       if (typeof data.warningPct === "number") setWarnPct(data.warningPct);
+      if (typeof data.criticalPct === "number") setCritPct(data.criticalPct);
       if (data.groupsError) {
         toast.warning("Lista de grupos da Evolution indisponível agora — os clientes aparecem, mas o seletor de grupo pode estar limitado. Tente Recarregar.");
       }
@@ -127,7 +129,7 @@ export default function GruposPage() {
             pro grupo escolhido aqui. {mappedCount}/{rows.length} vinculados.
           </p>
           <p className="text-[11px] text-muted-foreground mt-1">
-            💡 A coluna <b className="text-foreground">Verba mín</b> já vem <b className="text-foreground">sincronizada</b> do Controle de Investimento ({warnPct}% da verba mensal de cada cliente). Só preencha pra exceções.
+            💡 A coluna <b className="text-foreground">Verba mín</b> vem <b className="text-foreground">sincronizada</b> do Controle de Investimento. Alerta em 2 níveis: <b className="text-foreground">{warnPct}%</b> (baixa) e <b className="text-foreground">{critPct}%</b> (crítica) da verba mensal. Só preencha pra exceções.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -169,8 +171,8 @@ export default function GruposPage() {
                 value={verba[r.clientId] ?? ""}
                 onChange={(e) => setVerba((s) => ({ ...s, [r.clientId]: e.target.value }))}
                 title={r.monthlyBudget != null
-                  ? `Sincronizado do Controle de Investimento: ${warnPct}% de R$ ${r.monthlyBudget} = R$ ${Math.round((r.monthlyBudget * warnPct) / 100)}. Preencha só pra um limite diferente deste cliente.`
-                  : `Verba mínima (R$). Vazio = ${warnPct}% da verba mensal (defina a verba no Controle de Investimento).`}
+                  ? `Sincronizado (verba R$ ${r.monthlyBudget}): baixa ${warnPct}% = R$ ${Math.round((r.monthlyBudget * warnPct) / 100)} · crítica ${critPct}% = R$ ${Math.round((r.monthlyBudget * critPct) / 100)}. Preencha só pra um limite diferente deste cliente.`
+                  : `Verba mínima (R$). Vazio = ${warnPct}% (baixa) / ${critPct}% (crítica) da verba mensal do Controle de Investimento.`}
                 className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary/50"
               />
               <select

@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       currentJid: c.whatsapp_group_jid ?? null,
       currentName: c.whatsapp_group_name ?? null,
       suggestion,
-      monthlyBudget: budgetByAccount.get(c.meta_ad_account_id) ?? null,
+      monthlyBudget: budgetByAccount.get(c.meta_ad_account_id ?? "") ?? null,
       verbaMinima: cfg.verbaMinima ?? null,
       destino: cfg.destino,
       alerts: {
@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
     groupsError,
     clients: rows,
     warningPct: settings.warningPct,
+    criticalPct: settings.criticalPct,
     mapped: rows.filter((r) => r.currentJid).length,
     total: rows.length,
   });
