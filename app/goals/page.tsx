@@ -66,23 +66,7 @@ const ROLE_GOALS: Record<string, string> = {
   admin: "Supervisao geral",
 };
 
-const TEAM_OKRS_CURRENT: TeamOKRs[] = [
-  { team: "Trafego Pago", icon: TrendingUp, color: "var(--primary)", okrs: [
-    { id: "tr-1", title: "ROAS medio > 4.0", target: 4.0, current: 3.7, unit: "x", status: "at_risk" },
-    { id: "tr-2", title: "Investimento executado > 95%", target: 95, current: 88, unit: "%", status: "at_risk" },
-    { id: "tr-3", title: "Novos leads/mes > 500", target: 500, current: 420, unit: "leads", status: "at_risk" },
-  ]},
-  { team: "Social Media", icon: Instagram, color: "var(--primary)", okrs: [
-    { id: "so-1", title: "Posts entregues/mes > 96", target: 96, current: 78, unit: "posts", status: "off_track" },
-    { id: "so-2", title: "Engajamento medio > 3.5%", target: 3.5, current: 3.1, unit: "%", status: "at_risk" },
-    { id: "so-3", title: "SLA de entrega < 48h", target: 48, current: 42, unit: "horas", status: "on_track" },
-  ]},
-  { team: "Design", icon: Palette, color: "var(--chart-4)", okrs: [
-    { id: "de-1", title: "Pedidos no prazo > 90%", target: 90, current: 85, unit: "%", status: "at_risk" },
-    { id: "de-2", title: "Tempo medio < 3 dias", target: 3, current: 2.8, unit: "dias", status: "on_track" },
-    { id: "de-3", title: "Satisfacao > 4.5/5", target: 4.5, current: 4.2, unit: "/5", status: "on_track" },
-  ]},
-];
+// (removido: TEAM_OKRS_CURRENT era mock não utilizado — o render usa realTeamOkrs + generateSnapshot)
 
 // ─── Historical Snapshot Generator (called inside component with real team data) ──
 function generateSnapshot(month: number, variance: number, teamMembersList: Array<{ name: string; role: string }>): Omit<PeriodSnapshot, "companyOkrs"> {
@@ -249,11 +233,29 @@ export default function GoalsPage() {
     return { ...snap, trendData };
   }, [MONTHLY_SNAPSHOTS]);
 
+  // Investimento Executado REAL (ad_accounts: gasto ÷ verba dos clientes em operação)
+  // sobrescreve o valor mock do hook quando há dado real de spend
+  const [realInvestPct, setRealInvestPct] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/okr/traffic-metrics")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d?.isReal && typeof d.investmentExecutedPct === "number") setRealInvestPct(d.investmentExecutedPct); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const investmentKpi = useMemo<KPIValue>(() => (
+    realInvestPct != null
+      ? { ...metrics.traffic.investmentExecuted, current: realInvestPct, isReal: true, source: "ad_accounts" }
+      : metrics.traffic.investmentExecuted
+  ), [metrics.traffic.investmentExecuted, realInvestPct]);
+
   // Real team OKRs for "atual" view
   const realTeamOkrs = useMemo<TeamOKRs[]>(() => [
     { team: "Trafego Pago", icon: TrendingUp, color: "var(--primary)", okrs: [
       kpiToOkr("tr-1", "ROAS medio > 4.0", metrics.traffic.roas),
-      kpiToOkr("tr-2", "Investimento executado > 95%", metrics.traffic.investmentExecuted),
+      kpiToOkr("tr-2", "Investimento executado > 95%", investmentKpi),
       kpiToOkr("tr-3", "Novos leads/mes > 500", metrics.traffic.leadsPerMonth),
     ]},
     { team: "Social Media", icon: Instagram, color: "var(--primary)", okrs: [
@@ -266,7 +268,7 @@ export default function GoalsPage() {
       kpiToOkr("de-2", "Tempo medio < 3 dias", metrics.design.avgDeliveryTime, true),
       kpiToOkr("de-3", "Satisfacao > 4.5/5", metrics.design.satisfaction),
     ]},
-  ], [metrics.traffic, metrics.social, metrics.design]);
+  ], [metrics.traffic, metrics.social, metrics.design, investmentKpi]);
 
   // Resolve snapshot based on selected time view
   const snapshot = useMemo<PeriodSnapshot>(() => {
