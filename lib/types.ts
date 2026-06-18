@@ -58,6 +58,7 @@ export interface Client {
   assignedDesigner: string;
   lastPostDate?: string;
   joinDate: string;
+  createdAt?: string; // ISO (created_at) — entrada real do cliente, p/ métrica "novos clientes/mês"
   paymentMethod: "pix" | "boleto" | "cartao" | "transferencia";
   notes?: string;
   contractEnd?: string;

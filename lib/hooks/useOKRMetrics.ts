@@ -26,6 +26,8 @@ export interface OKRMetrics {
   company: {
     churnRate: KPIValue;
     nps: KPIValue;
+    activeClients: KPIValue;
+    newClients: KPIValue;
   };
   traffic: {
     roas: KPIValue;
@@ -107,6 +109,14 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
 
     // NPS average from client_nps table (if available)
     const npsAvg = clients.reduce((sum, c) => sum + (c.npsScore || 0), 0) / Math.max(clients.filter((c) => c.npsScore).length, 1);
+
+    // Active clients: em operacao (good/average/at_risk) — exclui onboarding/draft
+    const activeClientsCount = clients.filter((c) => c.status === "good" || c.status === "average" || c.status === "at_risk").length;
+    audit.push({ metric: "Clientes Ativos", source: "Clients (status)", status: "ok", detail: `${activeClientsCount} em operacao de ${clients.length}` });
+
+    // New clients this month (por created_at — fonte confiavel de entrada)
+    const newClientsCount = clients.filter((c) => isInCurrentMonth((c.createdAt ?? "").slice(0, 10))).length;
+    audit.push({ metric: "Novos Clientes/mes", source: "Clients (created_at)", status: "ok", detail: `${newClientsCount} entradas no mes` });
 
     // ═══════════════════════════════════════════════════════════
     // TRAFFIC OKRs
@@ -294,6 +304,8 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
       company: {
         churnRate: { current: Math.round(churnRate * 10) / 10, target: t("churn_rate", 5), unit: "%", isReal: true, source: "Clients" },
         nps: { current: Math.round(avgHealth * 100) / 100, target: t("nps", 80), unit: "pts", isReal: true, source: "Health Score" },
+        activeClients: { current: activeClientsCount, target: t("active_clients", 40), unit: "", isReal: true, source: "Clients" },
+        newClients: { current: newClientsCount, target: t("new_clients", 3), unit: "", isReal: true, source: "Clients" },
       },
       traffic: {
         roas: {

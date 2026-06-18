@@ -212,6 +212,8 @@ export default function GoalsPage() {
   const companyOkrs = useMemo<OKR[]>(() => [
     kpiToOkr("co-1", "Reduzir churn para < 5%", metrics.company.churnRate, true),
     kpiToOkr("co-2", "Atingir NPS > 8.5", metrics.company.nps),
+    kpiToOkr("co-3", "Clientes ativos", metrics.company.activeClients),
+    kpiToOkr("co-4", "Novos clientes/mes", metrics.company.newClients),
   ], [metrics.company]);
 
   // Generate monthly snapshots using real team data

@@ -63,6 +63,7 @@ function snakeToClient(row: Record<string, unknown>): Client {
     assignedDesigner: (row.assigned_designer as string) ?? "",
     lastPostDate: (row.last_post_date as string) ?? undefined,
     joinDate: (row.join_date as string) ?? new Date().toISOString().slice(0, 10),
+    createdAt: (row.created_at as string) ?? undefined,
     paymentMethod: (row.payment_method as Client["paymentMethod"]) ?? "pix",
     notes: (row.notes as string) ?? undefined,
     contractEnd: (row.contract_end as string) ?? undefined,
