@@ -79,14 +79,14 @@ function getSlaBadge(status: string, columnEnteredAt?: Record<string, string>, s
 }
 
 const SLA_STYLES = {
-  warning: "text-zinc-400 bg-[#111118] border-[#1e1e2a]",
-  critical: "text-red-500 bg-red-500/10 border-red-500/20",
+  warning: "text-muted-foreground bg-card border-border",
+  critical: "text-destructive bg-destructive/10 border-destructive/20",
 };
 
 const DEADLINE_BADGE: Record<string, { label: string; color: string }> = {
-  overdue:  { label: "Vencido",  color: "bg-red-500/10 text-red-500 border-red-500/20" },
-  today:    { label: "Hoje",     color: "bg-[#111118] text-zinc-400 border-[#1e1e2a]" },
-  tomorrow: { label: "Amanhã",   color: "bg-[#111118] text-zinc-400 border-[#1e1e2a]" },
+  overdue:  { label: "Vencido",  color: "bg-destructive/10 text-destructive border-destructive/20" },
+  today:    { label: "Hoje",     color: "bg-card text-muted-foreground border-border" },
+  tomorrow: { label: "Amanhã",   color: "bg-card text-muted-foreground border-border" },
   soon:     { label: "Em breve", color: "bg-primary/15 text-primary border-primary/20" },
 };
 
@@ -94,15 +94,15 @@ const DEADLINE_BADGE: Record<string, { label: string; color: string }> = {
 
 const HEALTH_CONFIG: Record<string, { label: string; led: string; color: string; bg: string; border: string }> = {
   good:       { label: "On Fire",    led: "led led-healthy",  color: "text-primary",       bg: "bg-primary/5",    border: "border-primary/20" },
-  average:    { label: "Atenção",    led: "led led-attention", color: "text-zinc-400",      bg: "bg-[#0a0a10]",     border: "border-[#1a1a22]" },
-  at_risk:    { label: "Crítico",    led: "led led-critical",  color: "text-red-500",       bg: "bg-red-500/5",    border: "border-red-500/20" },
+  average:    { label: "Atenção",    led: "led led-attention", color: "text-muted-foreground",      bg: "bg-card",     border: "border-border" },
+  at_risk:    { label: "Crítico",    led: "led led-critical",  color: "text-destructive",       bg: "bg-destructive/5",    border: "border-destructive/20" },
   onboarding: { label: "Onboarding", led: "led led-healthy",  color: "text-primary",       bg: "bg-primary/5",    border: "border-primary/20" },
 };
 
 const MOOD_CONFIG = {
   happy:   { emoji: "😄", label: "Satisfeito", color: "text-primary" },
-  neutral: { emoji: "😐", label: "Neutro",     color: "text-zinc-400" },
-  angry:   { emoji: "😠", label: "Irritado",   color: "text-red-500" },
+  neutral: { emoji: "😐", label: "Neutro",     color: "text-muted-foreground" },
+  angry:   { emoji: "😠", label: "Irritado",   color: "text-destructive" },
 };
 
 const TONE_LABELS: Record<string, string> = {
@@ -110,24 +110,24 @@ const TONE_LABELS: Record<string, string> = {
 };
 
 const CONTENT_COLUMNS = [
-  { id: "ideas",          title: "Ideias",             color: "bg-zinc-600" },
-  { id: "script",         title: "Roteiro",            color: "bg-zinc-600" },
+  { id: "ideas",          title: "Ideias",             color: "bg-muted" },
+  { id: "script",         title: "Roteiro",            color: "bg-muted" },
   { id: "in_production",  title: "Em Producao",        color: "bg-primary" },
-  { id: "blocked",        title: "Bloqueado (Design)", color: "bg-red-500" },
-  { id: "approval",       title: "Aprovacao Interna",  color: "bg-zinc-500" },
-  { id: "client_approval",title: "Aprovacao Cliente",  color: "bg-zinc-500" },
-  { id: "scheduled",      title: "Agendado",           color: "bg-zinc-500" },
+  { id: "blocked",        title: "Bloqueado (Design)", color: "bg-destructive" },
+  { id: "approval",       title: "Aprovacao Interna",  color: "bg-muted" },
+  { id: "client_approval",title: "Aprovacao Cliente",  color: "bg-muted" },
+  { id: "scheduled",      title: "Agendado",           color: "bg-muted" },
   { id: "published",      title: "Publicado",          color: "bg-primary" },
 ];
 
 const STATUS_DOT: Record<ContentCard["status"], string> = {
-  ideas: "bg-zinc-600",
-  script: "bg-zinc-600",
+  ideas: "bg-muted",
+  script: "bg-muted",
   in_production: "bg-primary",
-  blocked: "bg-red-500",
-  approval: "bg-zinc-500",
-  client_approval: "bg-zinc-500",
-  scheduled: "bg-zinc-500",
+  blocked: "bg-destructive",
+  approval: "bg-muted",
+  client_approval: "bg-muted",
+  scheduled: "bg-muted",
   published: "bg-primary",
 };
 
@@ -141,7 +141,7 @@ function Confetti() {
     Array.from({ length: 40 }, (_, i) => ({
       left: `${(i * 2.5) % 100}%`,
       top: `-${(i * 0.5) % 20}%`,
-      color: ["#0d4af5", "#1a4cff", "#3b6ff5", "#5588ff", "#0d4af5", "#1a4cff"][i % 6],
+      color: ["var(--primary)", "var(--primary)", "var(--primary)", "var(--primary)", "var(--primary)", "var(--primary)"][i % 6],
       delay: `${(i * 0.05) % 2}s`,
       duration: `${1 + (i * 0.05) % 2}s`,
       rotate: `${(i * 9) % 360}deg`,
@@ -415,45 +415,45 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
         {/* Overdue / Due soon */}
         <div className={`rounded-xl p-4 border ${
           overdue.length > 0
-            ? "bg-red-500/5 border-red-500/20"
+            ? "bg-destructive/5 border-destructive/20"
             : dueSoon.length > 0
               ? "bg-primary/5 border-primary/20"
               : "bg-card border-border"
         }`}>
           <div className="flex items-center gap-2 mb-2">
-            <Clock size={13} className={overdue.length > 0 ? "text-red-500" : "text-primary"} />
+            <Clock size={13} className={overdue.length > 0 ? "text-destructive" : "text-primary"} />
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Entregas</span>
           </div>
           {overdue.length > 0 ? (
             <div>
-              <p className="text-xl font-bold text-red-500 tracking-tight">{overdue.length}</p>
-              <p className="text-[10px] text-red-500/70">vencido(s)</p>
+              <p className="text-xl font-bold text-destructive tracking-tight">{overdue.length}</p>
+              <p className="text-[10px] text-destructive/70">vencido(s)</p>
             </div>
           ) : dueSoon.length > 0 ? (
             <div>
               <p className="text-xl font-bold text-primary tracking-tight">{dueSoon.length}</p>
-              <p className="text-[10px] text-zinc-500">até amanhã</p>
+              <p className="text-[10px] text-muted-foreground">até amanhã</p>
             </div>
           ) : (
             <div>
-              <p className="text-xl font-bold text-zinc-600 tracking-tight">0</p>
-              <p className="text-[10px] text-zinc-600">tudo em dia</p>
+              <p className="text-xl font-bold text-muted-foreground tracking-tight">0</p>
+              <p className="text-[10px] text-muted-foreground">tudo em dia</p>
             </div>
           )}
         </div>
 
         {/* SLA alerts */}
         <div className={`rounded-xl p-4 border ${
-          slaAlerts.length > 0 ? "bg-[#0a0a10] border-[#1e1e2a]" : "bg-card border-border"
+          slaAlerts.length > 0 ? "bg-card border-border" : "bg-card border-border"
         }`}>
           <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle size={13} className={slaAlerts.length > 0 ? "text-zinc-400" : "text-zinc-600"} />
+            <AlertTriangle size={13} className={slaAlerts.length > 0 ? "text-muted-foreground" : "text-muted-foreground"} />
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Gargalos</span>
           </div>
-          <p className={`text-xl font-bold tracking-tight ${slaAlerts.length > 0 ? "text-[#c0c0cc]" : "text-zinc-600"}`}>
+          <p className={`text-xl font-bold tracking-tight ${slaAlerts.length > 0 ? "text-muted-foreground" : "text-muted-foreground"}`}>
             {slaAlerts.length}
           </p>
-          <p className="text-[10px] text-zinc-500">card(s) parado(s) 24h+</p>
+          <p className="text-[10px] text-muted-foreground">card(s) parado(s) 24h+</p>
         </div>
 
         {/* Check-in needed */}
@@ -461,13 +461,13 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
           noCheckin.length > 0 ? "bg-primary/5 border-primary/20" : "bg-card border-border"
         }`}>
           <div className="flex items-center gap-2 mb-2">
-            <Smile size={13} className={noCheckin.length > 0 ? "text-primary" : "text-zinc-600"} />
+            <Smile size={13} className={noCheckin.length > 0 ? "text-primary" : "text-muted-foreground"} />
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Check-in</span>
           </div>
-          <p className={`text-xl font-bold tracking-tight ${noCheckin.length > 0 ? "text-primary" : "text-zinc-600"}`}>
+          <p className={`text-xl font-bold tracking-tight ${noCheckin.length > 0 ? "text-primary" : "text-muted-foreground"}`}>
             {noCheckin.length}
           </p>
-          <p className="text-[10px] text-zinc-500">sem check-in 3+ dias</p>
+          <p className="text-[10px] text-muted-foreground">sem check-in 3+ dias</p>
         </div>
       </div>
 
@@ -480,10 +480,10 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
               const isOverdue = overdue.some((o) => o.id === card.id);
               return (
                 <div key={card.id} className="flex items-center gap-3 text-xs">
-                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOverdue ? "bg-red-500" : "bg-primary"}`} />
+                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOverdue ? "bg-destructive" : "bg-primary"}`} />
                   <span className="text-foreground truncate flex-1">{card.title}</span>
-                  <span className="text-zinc-600 shrink-0">{card.clientName}</span>
-                  <span className={`shrink-0 font-medium ${isOverdue ? "text-red-500" : "text-zinc-400"}`}>
+                  <span className="text-muted-foreground shrink-0">{card.clientName}</span>
+                  <span className={`shrink-0 font-medium ${isOverdue ? "text-destructive" : "text-muted-foreground"}`}>
                     {card.dueDate}
                   </span>
                 </div>
@@ -529,7 +529,7 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
   return (
     <div
       className={`bg-card border rounded-xl p-5 hover:border-primary/40 transition-all cursor-pointer ${
-        isAtRisk ? "border-red-500/30" : "border-border"
+        isAtRisk ? "border-destructive/30" : "border-border"
       }`}
       onClick={onOpen360}
     >
@@ -543,15 +543,15 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
             <h3 className="font-semibold text-foreground text-sm tracking-tight truncate">{client.name}</h3>
             <div className={health.led} title={health.label} />
             {inactivity === "urgent" && (
-              <span className="text-[10px] text-red-500 font-medium animate-pulse">URGENTE</span>
+              <span className="text-[10px] text-destructive font-medium animate-pulse">URGENTE</span>
             )}
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
             <span>{client.industry}</span>
             {client.instagramUser && (
               <>
-                <span className="text-zinc-700">·</span>
-                <span className="text-zinc-500">{client.instagramUser}</span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-muted-foreground">{client.instagramUser}</span>
               </>
             )}
           </div>
@@ -567,9 +567,9 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Posts</span>
-            <span className="text-[10px] text-zinc-400 font-medium">{postsNow}/{postsGoal}</span>
+            <span className="text-[10px] text-muted-foreground font-medium">{postsNow}/{postsGoal}</span>
           </div>
-          <div className="h-1 bg-[#111118] rounded-full overflow-hidden">
+          <div className="h-1 bg-card rounded-full overflow-hidden">
             <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${postsPct}%` }} />
           </div>
         </div>
@@ -578,16 +578,16 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
         <div className="text-center">
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Humor</span>
           {mood ? (
-            <span className="text-xs text-zinc-400 mt-1 block">{mood.emoji} {mood.label}</span>
+            <span className="text-xs text-muted-foreground mt-1 block">{mood.emoji} {mood.label}</span>
           ) : (
-            <span className="text-xs text-zinc-600 mt-1 block">—</span>
+            <span className="text-xs text-muted-foreground mt-1 block">—</span>
           )}
         </div>
 
         {/* Activity */}
         <div className="text-right">
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Atividade</span>
-          <span className={`text-xs mt-1 block ${inactivity === "urgent" ? "text-red-500" : inactivity === "warning" ? "text-zinc-400" : "text-primary"}`}>
+          <span className={`text-xs mt-1 block ${inactivity === "urgent" ? "text-destructive" : inactivity === "warning" ? "text-muted-foreground" : "text-primary"}`}>
             {activityLabel}
           </span>
         </div>
@@ -603,23 +603,23 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
           <div className="h-1 bg-primary/10 rounded-full overflow-hidden">
             <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${obPct}%` }} />
           </div>
-          <p className="text-[10px] text-zinc-500 mt-1.5">{obDone} de {obItems.length} etapas</p>
+          <p className="text-[10px] text-muted-foreground mt-1.5">{obDone} de {obItems.length} etapas</p>
         </div>
       )}
 
       {/* Bottom actions */}
-      <div className="flex items-center justify-between pt-3 border-t border-[#1a1a22]/80">
+      <div className="flex items-center justify-between pt-3 border-t border-border/80">
         <div className="flex items-center gap-1">
           <button
             onClick={(e) => { e.stopPropagation(); onIdeas(client); }}
-            className="p-1.5 rounded-lg hover:bg-primary/10 text-zinc-600 hover:text-primary transition-colors"
+            className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
             title="Gerar ideias"
           >
             <Sparkles size={14} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onMood(client.id); }}
-            className="p-1.5 rounded-lg hover:bg-primary/10 text-zinc-600 hover:text-primary transition-colors"
+            className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
             title="Check-in de humor"
           >
             <Smile size={14} />
@@ -627,14 +627,14 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
           <Link
             href={`/clients/${client.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="p-1.5 rounded-lg hover:bg-primary/10 text-zinc-600 hover:text-primary transition-colors"
+            className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
             title="Ver perfil"
           >
             <ExternalLink size={14} />
           </Link>
         </div>
         {client.toneOfVoice && (
-          <span className="text-[10px] text-zinc-600 uppercase tracking-wider">
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
             {TONE_LABELS[client.toneOfVoice] ?? client.toneOfVoice}
           </span>
         )}
@@ -804,7 +804,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
               ))}
             </select>
             {role === "social" && visibleClients.length === 0 && (
-              <p className="text-[10px] text-amber-400 mt-1">Você ainda não tem clientes na sua carteira. Fale com a gerência.</p>
+              <p className="text-[10px] text-lone-warning mt-1">Você ainda não tem clientes na sua carteira. Fale com a gerência.</p>
             )}
           </div>
 
@@ -828,7 +828,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as ContentCard["priority"])}
                 className={`flex h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
-                  priority === "critical" ? "border-red-500/50 bg-red-500/5" : priority === "high" ? "border-yellow-500/50 bg-[#0d4af5]/5" : "border-input bg-background"
+                  priority === "critical" ? "border-destructive/50 bg-destructive/5" : priority === "high" ? "border-lone-warning-border bg-primary/5" : "border-input bg-background"
                 }`}
               >
                 <option value="low">Baixa</option>
@@ -848,7 +848,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
                 className={`flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
-                  !dueDate ? "border-red-500/30" : "border-input"
+                  !dueDate ? "border-destructive/30" : "border-input"
                 }`}
               />
             </div>
@@ -859,14 +859,14 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
                 value={dueTime}
                 onChange={(e) => setDueTime(e.target.value)}
                 className={`flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
-                  !dueTime ? "border-red-500/30" : "border-input"
+                  !dueTime ? "border-destructive/30" : "border-input"
                 }`}
               />
             </div>
           </div>
 
           {(!dueDate || !dueTime) && (
-            <p className="text-xs text-red-400">Data e horário são obrigatórios para enviar a demanda ao designer.</p>
+            <p className="text-xs text-destructive">Data e horário são obrigatórios para enviar a demanda ao designer.</p>
           )}
 
           {/* Briefing — Markdown editor (Trello-like) */}
@@ -883,18 +883,18 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
 
           {/* Drive link auto-recovered */}
           {selectedClient && (
-            <div className={`rounded-lg p-3 ${selectedClient.driveLink ? "bg-[#0d4af5]/[0.04] border border-[#0d4af5]/[0.1]" : "bg-amber-500/[0.04] border border-amber-500/[0.1]"}`}>
+            <div className={`rounded-lg p-3 ${selectedClient.driveLink ? "bg-primary/[0.04] border border-primary/[0.1]" : "bg-lone-warning-bg/[0.04] border border-lone-warning-border/[0.1]"}`}>
               {selectedClient.driveLink ? (
                 <div className="flex items-center gap-2">
-                  <CheckCircle size={12} className="text-[#0d4af5] shrink-0" />
-                  <p className="text-[10px] text-[#0d4af5] font-medium">Link do Drive recuperado do cadastro</p>
+                  <CheckCircle size={12} className="text-primary shrink-0" />
+                  <p className="text-[10px] text-primary font-medium">Link do Drive recuperado do cadastro</p>
                   <a href={selectedClient.driveLink} target="_blank" rel="noopener noreferrer"
-                    className="text-[10px] text-zinc-400 hover:text-[#0d4af5] ml-auto flex items-center gap-1">
+                    className="text-[10px] text-muted-foreground hover:text-primary ml-auto flex items-center gap-1">
                     Abrir <ExternalLink size={9} />
                   </a>
                 </div>
               ) : (
-                <p className="text-[10px] text-amber-400 font-medium">
+                <p className="text-[10px] text-lone-warning font-medium">
                   Cliente sem pasta Drive cadastrada. Cadastre em Clientes → Editar.
                 </p>
               )}
@@ -995,21 +995,21 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl mx-4 bg-black border border-white/[0.06] rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/20 to-transparent shrink-0" />
+      <div className="relative w-full max-w-2xl mx-4 bg-black border border-border rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/20 to-transparent shrink-0" />
 
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                <Layers size={18} className="text-[#0d4af5]" />
+                <Layers size={18} className="text-primary" />
                 Criacao em Batch
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Crie varios cards de conteudo de uma vez
               </p>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5">
+            <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/5">
               <X size={16} />
             </button>
           </div>
@@ -1019,14 +1019,14 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
             <div className="space-y-1.5">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Cliente</label>
               <select value={clientId} onChange={(e) => setClientId(e.target.value)}
-                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none">
+                className="w-full bg-card/[0.03] border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none">
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Prioridade (todos)</label>
               <select value={priority} onChange={(e) => setPriority(e.target.value as ContentCard["priority"])}
-                className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none">
+                className="w-full bg-card/[0.03] border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none">
                 <option value="low">Baixa</option>
                 <option value="medium">Media</option>
                 <option value="high">Alta</option>
@@ -1037,7 +1037,7 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
 
           {/* Drive link indicator */}
           {selectedClient && (
-            <div className={`rounded-lg px-3 py-2 text-[10px] ${selectedClient.driveLink ? "bg-[#0d4af5]/[0.04] border border-[#0d4af5]/[0.1] text-[#0d4af5]" : "bg-amber-500/[0.04] border border-amber-500/[0.1] text-amber-400"}`}>
+            <div className={`rounded-lg px-3 py-2 text-[10px] ${selectedClient.driveLink ? "bg-primary/[0.04] border border-primary/[0.1] text-primary" : "bg-lone-warning-bg/[0.04] border border-lone-warning-border/[0.1] text-lone-warning"}`}>
               {selectedClient.driveLink ? (
                 <span className="flex items-center gap-1.5">
                   <CheckCircle size={10} /> Drive do cliente vinculado automaticamente
@@ -1063,58 +1063,58 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
                   value={row.title}
                   onChange={(e) => updateRow(row.id, "title", e.target.value)}
                   placeholder={`Card ${i + 1}...`}
-                  className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 outline-none"
+                  className="bg-card/[0.03] border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary/50 outline-none"
                 />
                 <select
                   value={row.format}
                   onChange={(e) => updateRow(row.id, "format", e.target.value)}
-                  className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-2 py-2 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
+                  className="bg-card/[0.03] border border-border rounded-lg px-2 py-2 text-xs text-foreground focus:border-primary/50 outline-none"
                 >
                   {["Post", "Reels", "Story", "Carrossel", "BTS"].map((f) => <option key={f}>{f}</option>)}
                 </select>
                 <input
                   type="date" value={row.dueDate}
                   onChange={(e) => updateRow(row.id, "dueDate", e.target.value)}
-                  className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-2 py-2 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
+                  className="bg-card/[0.03] border border-border rounded-lg px-2 py-2 text-xs text-foreground focus:border-primary/50 outline-none"
                 />
                 <input
                   type="time" value={row.dueTime}
                   onChange={(e) => updateRow(row.id, "dueTime", e.target.value)}
-                  className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-2 py-2 text-xs text-foreground focus:border-[#0d4af5]/50 outline-none"
+                  className="bg-card/[0.03] border border-border rounded-lg px-2 py-2 text-xs text-foreground focus:border-primary/50 outline-none"
                 />
                 <button
                   onClick={() => removeRow(row.id)}
                   disabled={rows.length <= 1}
                   title={rows.length <= 1 ? "Mínimo de 1 linha" : "Remover linha"}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:text-zinc-700 disabled:hover:bg-transparent">
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:text-muted-foreground disabled:hover:bg-transparent">
                   <Trash2 size={12} />
                 </button>
               </div>
             ))}
             <button onClick={addRow}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-zinc-500 hover:text-foreground hover:bg-white/[0.03] transition-all w-full justify-center border border-dashed border-white/[0.06]">
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-card/[0.03] transition-all w-full justify-center border border-dashed border-border">
               <Plus size={12} /> Adicionar linha
             </button>
           </div>
 
           {/* Summary */}
-          <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-card/[0.02] border border-border">
             <span className="text-xs text-muted-foreground">
               {filledRows.length} card(s) preenchido(s) de {rows.length} total
             </span>
             {selectedClient && (
-              <span className="text-xs text-[#0d4af5]">→ {selectedClient.name}</span>
+              <span className="text-xs text-primary">→ {selectedClient.name}</span>
             )}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-white/[0.04] shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all">
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border shrink-0">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all">
             Cancelar
           </button>
           <button onClick={handleSubmit} disabled={filledRows.length === 0}
-            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#0d4af5] text-white text-xs font-semibold hover:bg-[#0d4af5]/80 transition-all disabled:opacity-30">
+            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/80 transition-all disabled:opacity-30">
             <Layers size={12} /> Criar {filledRows.length} Card(s)
           </button>
         </div>
@@ -1205,14 +1205,14 @@ function QuickTaskBar({ clients }: QuickTaskBarProps) {
         type="date"
         value={dueDate}
         onChange={(e) => setDueDate(e.target.value)}
-        className={`bg-muted border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none cursor-pointer ${!dueDate ? "border-red-500/40" : "border-border"}`}
+        className={`bg-muted border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none cursor-pointer ${!dueDate ? "border-destructive/40" : "border-border"}`}
         title="Data do post *"
       />
       <input
         type="time"
         value={dueTime}
         onChange={(e) => setDueTime(e.target.value)}
-        className={`bg-muted border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none cursor-pointer w-[90px] ${!dueTime ? "border-red-500/40" : "border-border"}`}
+        className={`bg-muted border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none cursor-pointer w-[90px] ${!dueTime ? "border-destructive/40" : "border-border"}`}
         title="Horário do post *"
       />
       <select
@@ -1284,7 +1284,7 @@ function AddMemberModal({ onAdd, onClose }: { onAdd: (name: string, password: st
           </div>
         </div>
         {(!name.trim() || !password.trim()) && (
-          <p className="text-xs text-amber-400 mb-3">
+          <p className="text-xs text-lone-warning mb-3">
             {!name.trim() && !password.trim() ? "Preencha o nome e a senha." : !name.trim() ? "Nome obrigatório." : "Senha obrigatória."}
           </p>
         )}
@@ -1443,13 +1443,13 @@ function AccessTab({ clients, clientAccess, onSave, isAdmin }: AccessTabProps) {
                   );
                 })}
                 {access?.updatedBy && (
-                  <p className="text-[10px] text-zinc-600 col-span-full mt-1">
+                  <p className="text-[10px] text-muted-foreground col-span-full mt-1">
                     Atualizado por {access.updatedBy} {access.updatedAt ? `· ${new Date(access.updatedAt).toLocaleDateString("pt-BR")}` : ""}
                   </p>
                 )}
               </div>
             ) : (
-              <p className="text-xs text-zinc-600 text-center py-3 border border-dashed border-[#1a1a22] rounded-lg">
+              <p className="text-xs text-muted-foreground text-center py-3 border border-dashed border-border rounded-lg">
                 Nenhum acesso cadastrado ainda. Clique em "Preencher Acessos" para adicionar.
               </p>
             )}
@@ -1521,13 +1521,13 @@ function InternalChatTab({ clients, clientChats, onSend }: InternalChatTabProps)
                         {client.name}
                       </p>
                       {lastMsg ? (
-                        <p className="text-[10px] text-zinc-600 truncate mt-0.5">{lastMsg.user}: {lastMsg.text}</p>
+                        <p className="text-[10px] text-muted-foreground truncate mt-0.5">{lastMsg.user}: {lastMsg.text}</p>
                       ) : (
-                        <p className="text-[10px] text-zinc-700 mt-0.5">Sem mensagens</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Sem mensagens</p>
                       )}
                     </div>
                     {chatMsgs.length > 0 && (
-                      <span className="text-[9px] text-zinc-600 shrink-0">{chatMsgs.length}</span>
+                      <span className="text-[9px] text-muted-foreground shrink-0">{chatMsgs.length}</span>
                     )}
                   </div>
                 </button>
@@ -1556,7 +1556,7 @@ function InternalChatTab({ clients, clientChats, onSend }: InternalChatTabProps)
               <div className="flex-1 overflow-auto p-4 space-y-3">
                 {messages.length === 0 && (
                   <div className="flex items-center justify-center h-full">
-                    <p className="text-xs text-zinc-600">Nenhuma mensagem ainda. Inicie a conversa sobre este cliente.</p>
+                    <p className="text-xs text-muted-foreground">Nenhuma mensagem ainda. Inicie a conversa sobre este cliente.</p>
                   </div>
                 )}
                 {messages.map((msg) => (
@@ -1569,9 +1569,9 @@ function InternalChatTab({ clients, clientChats, onSend }: InternalChatTabProps)
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-medium text-foreground">{msg.user}</span>
-                        <span className="text-[10px] text-zinc-600">{msg.timestamp}</span>
+                        <span className="text-[10px] text-muted-foreground">{msg.timestamp}</span>
                       </div>
-                      <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">{msg.text}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{msg.text}</p>
                     </div>
                   </div>
                 ))}
@@ -1652,7 +1652,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all shrink-0 ${
                 isActive
                   ? "bg-primary/10 border-primary/30 text-primary"
-                  : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-zinc-600"
+                  : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-border"
               }`}
             >
               <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
@@ -1665,7 +1665,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                 <p className="text-[10px] text-muted-foreground">{count} ativos</p>
               </div>
               {overdueCount > 0 && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-500 font-medium">{overdueCount}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive font-medium">{overdueCount}</span>
               )}
             </button>
           );
@@ -1719,7 +1719,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
             return (
               <div
                 className={`bg-card border rounded-lg overflow-hidden hover:border-primary/40 transition-colors cursor-pointer group ${
-                  sla?.level === "critical" ? "border-red-500/30" : "border-border"
+                  sla?.level === "critical" ? "border-destructive/30" : "border-border"
                 }`}
                 onClick={() => onCardClick(card)}
               >
@@ -1735,7 +1735,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                 )}
                 <div className="p-3">
                   {card.requestedByTraffic && (
-                    <div className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md border mb-2 text-[#3b6ff5] bg-[#3b6ff5]/10 border-[#3b6ff5]/20">
+                    <div className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md border mb-2 text-primary bg-primary/10 border-primary/20">
                       <Zap size={10} />
                       Solicitação Tráfego · {card.requestedByTraffic}
                     </div>
@@ -1769,7 +1769,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                         <span className="flex items-center gap-1 text-xs text-muted-foreground">
                           <Calendar size={10} />
                           {card.dueDate}
-                          {card.dueTime && <span className="text-zinc-500 ml-1">{card.dueTime}</span>}
+                          {card.dueTime && <span className="text-muted-foreground ml-1">{card.dueTime}</span>}
                         </span>
                         {badge && (
                           <span className={`text-xs px-1.5 py-0.5 rounded-full border font-medium ${badge.color}`}>
@@ -1794,24 +1794,24 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                     {card.designerDeliveredAt && !card.socialConfirmedAt && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onConfirmArt(card); }}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-[#0d4af5]/15 text-[#0d4af5] hover:bg-[#0d4af5]/25 transition-colors flex items-center gap-0.5"
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors flex items-center gap-0.5"
                       >
                         <CheckCircle size={9} /> Confirmar Arte
                       </button>
                     )}
                     {card.socialConfirmedAt && (
-                      <span className="text-[10px] text-[#0d4af5] flex items-center gap-0.5">
+                      <span className="text-[10px] text-primary flex items-center gap-0.5">
                         <CheckCircle size={9} /> Confirmado
                       </span>
                     )}
                     {card.nonDeliveryReason ? (
-                      <span className="text-[10px] text-red-400 flex items-center gap-0.5" title={card.nonDeliveryReason}>
+                      <span className="text-[10px] text-destructive flex items-center gap-0.5" title={card.nonDeliveryReason}>
                         <FileWarning size={9} /> N/Entregue
                       </span>
                     ) : (card.dueDate && getDeadlineUrgency(card.dueDate) === "overdue" && card.status !== "published" && card.status !== "scheduled") && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onNonDelivery(card); }}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors flex items-center gap-0.5"
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive hover:bg-destructive/25 transition-colors flex items-center gap-0.5"
                       >
                         <FileWarning size={9} /> Reportar
                       </button>
@@ -1823,7 +1823,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                     if (timeMs <= 0) return null;
                     const isOvertime = timeMs >= OVERTIME_THRESHOLD_MS;
                     return (
-                      <div className={`flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/40 text-[10px] ${isOvertime ? "text-amber-400" : "text-zinc-600"}`}>
+                      <div className={`flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/40 text-[10px] ${isOvertime ? "text-lone-warning" : "text-muted-foreground"}`}>
                         <span>{isOvertime ? "⚠️" : "⏱️"}</span>
                         <span className={isOvertime ? "font-bold" : ""}>{formatTimeSpent(timeMs)}</span>
                         {isOvertime && <span className="text-[9px] ml-auto font-medium">OVER-TIME</span>}
@@ -1833,7 +1833,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                 </div>
                 <div className={`h-0.5 w-full ${STATUS_DOT[card.status]} ${(() => {
                   const t = getLiveTimeSpentMs(card.workStartedAt, card.totalTimeSpentMs);
-                  return t >= OVERTIME_THRESHOLD_MS ? "!bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)]" : "";
+                  return t >= OVERTIME_THRESHOLD_MS ? "!bg-lone-warning-bg shadow-[0_0_8px_rgba(245,158,11,0.6)]" : "";
                 })()}`} />
               </div>
             );
@@ -2201,8 +2201,8 @@ export default function SocialPage() {
                 >
                   <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 transition-all ${
                     verifyChecks[item.key]
-                      ? "bg-primary text-white"
-                      : "border border-zinc-600 bg-transparent"
+                      ? "bg-primary text-primary-foreground"
+                      : "border border-border bg-transparent"
                   }`}>
                     {verifyChecks[item.key] && <Check size={12} />}
                   </div>
@@ -2283,24 +2283,24 @@ export default function SocialPage() {
         <div className="flex items-center justify-between gap-3">
           {canSelectWorkspace ? (
             <div className="flex items-center gap-3">
-              <span className="text-xs text-zinc-500 uppercase tracking-wider">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">
                 {isDesigner ? "Visualizando quadro de:" : "Monitorando Workspace de:"}
               </span>
               <div className="relative">
                 <select
                   value={adminWorkspace}
                   onChange={(e) => setAdminWorkspace(e.target.value)}
-                  className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5] appearance-none cursor-pointer pr-8"
+                  className="bg-card border border-border rounded-lg px-4 py-2 text-sm text-foreground outline-none focus:border-primary appearance-none cursor-pointer pr-8"
                 >
                   <option value="Todos">Visao Geral</option>
                   {workspaceOptions.map((name) => (
                     <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
-                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
+                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               </div>
               {isDesigner && activeWorkspace !== "Todos" && (
-                <span className="text-[10px] text-zinc-500 border border-zinc-800 px-2 py-1 rounded">
+                <span className="text-[10px] text-muted-foreground border border-border px-2 py-1 rounded">
                   Modo leitura
                 </span>
               )}
@@ -2317,7 +2317,7 @@ export default function SocialPage() {
           {!isReadOnly && (
             <button
               onClick={() => setNewCardDate(new Date().toISOString().slice(0, 10))}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all shrink-0 shadow-[0_0_20px_rgba(13,74,245,0.15)]"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-sm font-medium transition-all shrink-0 shadow-[0_0_20px_rgba(13,74,245,0.15)]"
             >
               <Plus size={14} /> Novo Conteúdo
             </button>
@@ -2327,10 +2327,10 @@ export default function SocialPage() {
         {/* Tabs */}
         {/* Designer context banner */}
         {isDesigner && activeWorkspace !== "Todos" && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-900/50 border border-zinc-800 text-xs text-zinc-400 mb-2">
-            <Eye size={12} className="text-zinc-500 shrink-0" />
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border text-xs text-muted-foreground mb-2">
+            <Eye size={12} className="text-muted-foreground shrink-0" />
             Visualizando fluxo de trabalho de <span className="text-foreground font-medium">{activeWorkspace}</span>
-            <span className="text-zinc-600 ml-auto">Somente leitura</span>
+            <span className="text-muted-foreground ml-auto">Somente leitura</span>
           </div>
         )}
 
@@ -2364,7 +2364,7 @@ export default function SocialPage() {
                 {badge !== undefined && badge > 0 && (
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold tabular-nums ${
                     isApprovalTab
-                      ? "bg-[#0d4af5]/20 text-[#3b6ff5] shadow-[0_0_8px_rgba(10,52,245,0.3)]"
+                      ? "bg-primary/20 text-primary shadow-[0_0_8px_rgba(10,52,245,0.3)]"
                       : "bg-muted text-muted-foreground"
                   }`}>
                     {badge}
@@ -2393,18 +2393,18 @@ export default function SocialPage() {
             {(churnRisks.length > 0 || urgentClients.length > 0) && (
               <div className="flex flex-col gap-2">
                 {churnRisks.length > 0 && (
-                  <div className="flex items-center gap-3 bg-red-500/5 border border-red-500/15 rounded-lg px-4 py-2.5">
+                  <div className="flex items-center gap-3 bg-destructive/5 border border-destructive/15 rounded-lg px-4 py-2.5">
                     <div className="led led-critical" />
-                    <p className="text-xs text-zinc-400">
-                      <span className="text-red-500 font-semibold">Radar de Churn</span> — {churnRisks.map((c) => c.name).join(", ")}
+                    <p className="text-xs text-muted-foreground">
+                      <span className="text-destructive font-semibold">Radar de Churn</span> — {churnRisks.map((c) => c.name).join(", ")}
                     </p>
                   </div>
                 )}
                 {urgentClients.length > 0 && (
-                  <div className="flex items-center gap-3 bg-[#0a0a10] border border-[#1a1a22] rounded-lg px-4 py-2.5">
-                    <AlertTriangle size={13} className="text-zinc-500 shrink-0" />
-                    <p className="text-xs text-zinc-400">
-                      <span className="text-[#c0c0cc] font-medium">{urgentClients.length} cliente(s)</span> sem movimentação há +48h
+                  <div className="flex items-center gap-3 bg-card border border-border rounded-lg px-4 py-2.5">
+                    <AlertTriangle size={13} className="text-muted-foreground shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                      <span className="text-muted-foreground font-medium">{urgentClients.length} cliente(s)</span> sem movimentação há +48h
                     </p>
                   </div>
                 )}
@@ -2425,7 +2425,7 @@ export default function SocialPage() {
                   className={`rounded-xl p-4 border transition-all text-left ${
                     healthFilter === stat.key
                       ? "bg-primary/5 border-primary/30"
-                      : "bg-card border-border hover:border-[#1e1e2a]"
+                      : "bg-card border-border hover:border-border"
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-2">
@@ -2446,7 +2446,7 @@ export default function SocialPage() {
                 <span className="text-xs text-primary font-medium">{HEALTH_CONFIG[healthFilter]?.label}</span>
                 <button
                   onClick={() => setHealthFilter("all")}
-                  className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors ml-1"
+                  className="text-xs text-muted-foreground hover:text-muted-foreground transition-colors ml-1"
                 >
                   <X size={12} />
                 </button>
@@ -2484,11 +2484,11 @@ export default function SocialPage() {
               const scheduledCards = filteredCards.filter((c) => c.status === "scheduled" && !c.publishVerifiedAt);
               if (scheduledCards.length === 0) return null;
               return (
-                <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 animate-fade-in">
+                <div className="mb-4 rounded-xl border border-lone-warning-border bg-lone-warning-bg p-4 animate-fade-in">
                   <div className="flex items-center gap-2 mb-3">
-                    <ShieldCheck size={16} className="text-amber-400" />
+                    <ShieldCheck size={16} className="text-lone-warning" />
                     <h3 className="text-sm font-bold text-foreground">Verificação de Publicação</h3>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-bold">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-bold">
                       {scheduledCards.length} pendente{scheduledCards.length > 1 ? "s" : ""}
                     </span>
                   </div>
@@ -2500,15 +2500,15 @@ export default function SocialPage() {
                       const isWarning = hoursAgo >= 2;
                       return (
                         <div key={card.id} className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
-                          isUrgent ? "border-red-500/30 bg-red-500/5 kpi-danger" :
-                          isWarning ? "border-amber-500/20 bg-amber-500/5" :
+                          isUrgent ? "border-destructive/30 bg-destructive/5 kpi-danger" :
+                          isWarning ? "border-lone-warning-border bg-lone-warning-bg" :
                           "border-border bg-card/50"
                         }`}>
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                            isUrgent ? "bg-red-500/15" : isWarning ? "bg-amber-500/15" : "bg-primary/10"
+                            isUrgent ? "bg-destructive/15" : isWarning ? "bg-lone-warning-bg" : "bg-primary/10"
                           }`}>
                             <AlertCircle size={14} className={
-                              isUrgent ? "text-red-400" : isWarning ? "text-amber-400" : "text-primary"
+                              isUrgent ? "text-destructive" : isWarning ? "text-lone-warning" : "text-primary"
                             } />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -2519,7 +2519,7 @@ export default function SocialPage() {
                               {card.platform && <span className="text-[10px] text-muted-foreground">· {card.platform}</span>}
                               {card.dueTime && <span className="text-[10px] text-muted-foreground">· {card.dueTime}</span>}
                               <span className={`text-[10px] font-semibold ${
-                                isUrgent ? "text-red-400" : isWarning ? "text-amber-400" : "text-muted-foreground"
+                                isUrgent ? "text-destructive" : isWarning ? "text-lone-warning" : "text-muted-foreground"
                               }`}>
                                 · {hoursAgo > 0 ? `há ${hoursAgo}h` : "agora"}
                               </span>
@@ -2529,7 +2529,7 @@ export default function SocialPage() {
                             onClick={() => { setVerifyingCard(card); setVerifyChecks({ postLive: false, copyCorrect: false }); }}
                             className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
                               isUrgent
-                                ? "bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25"
+                                ? "bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25"
                                 : "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
                             }`}
                           >
@@ -2548,7 +2548,7 @@ export default function SocialPage() {
               <QuickTaskBar clients={filteredClients} />
               <button
                 onClick={() => setShowBatchCreate(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-white/[0.06] text-zinc-400 hover:text-foreground hover:border-[#0d4af5]/30 transition-all shrink-0"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all shrink-0"
               >
                 <Layers size={13} /> Batch ({">"}5 cards)
               </button>
@@ -2642,7 +2642,7 @@ export default function SocialPage() {
                   </div>
 
                   {pct === 100 && (
-                    <div className="mb-4 p-3 bg-[#111118] border border-primary/20 rounded-lg text-center">
+                    <div className="mb-4 p-3 bg-card border border-primary/20 rounded-lg text-center">
                       <p className="text-sm font-semibold text-primary">🎉 Onboarding concluído!</p>
                       <p className="text-xs text-primary/70 mt-0.5">Todas as etapas foram finalizadas.</p>
                     </div>
@@ -2663,13 +2663,13 @@ export default function SocialPage() {
                           </span>
                           {item.completed && item.completedBy && (
                             <div className="flex items-center gap-2 mt-1.5">
-                              <div className="w-5 h-5 rounded-full bg-[#0d4af5]/15 flex items-center justify-center shrink-0">
-                                <span className="text-[8px] font-bold text-[#0d4af5]">
+                              <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+                                <span className="text-[8px] font-bold text-primary">
                                   {item.completedBy.split(" ").map((w: string) => w[0]).join("").slice(0, 2)}
                                 </span>
                               </div>
                               <span className="text-[11px] text-muted-foreground">{item.completedBy}</span>
-                              {item.completedAt && <span className="text-[10px] text-zinc-600">· {item.completedAt}</span>}
+                              {item.completedAt && <span className="text-[10px] text-muted-foreground">· {item.completedAt}</span>}
                             </div>
                           )}
                         </div>
@@ -2714,10 +2714,10 @@ export default function SocialPage() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {socialPerformanceScores.map((score) => {
-                    const meterColor = score.level === "excellent" ? "bg-[#0d4af5]" : score.level === "good" ? "bg-primary" : score.level === "warning" ? "bg-[#3b6ff5]" : "bg-red-500";
-                    const meterBg = score.level === "excellent" ? "bg-[#0d4af5]/10 border-[#0d4af5]/20" : score.level === "good" ? "bg-primary/10 border-primary/20" : score.level === "warning" ? "bg-[#0d4af5]/10 border-[#0d4af5]/15" : "bg-red-500/10 border-red-500/20";
+                    const meterColor = score.level === "excellent" ? "bg-primary" : score.level === "good" ? "bg-primary" : score.level === "warning" ? "bg-primary" : "bg-destructive";
+                    const meterBg = score.level === "excellent" ? "bg-primary/10 border-primary/20" : score.level === "good" ? "bg-primary/10 border-primary/20" : score.level === "warning" ? "bg-primary/10 border-primary/15" : "bg-destructive/10 border-destructive/20";
                     const levelLabel = score.level === "excellent" ? "Excelente" : score.level === "good" ? "Bom" : score.level === "warning" ? "Atenção" : "Reunião Necessária";
-                    const levelColor = score.level === "excellent" ? "text-[#0d4af5]" : score.level === "good" ? "text-primary" : score.level === "warning" ? "text-[#3b6ff5]" : "text-red-500";
+                    const levelColor = score.level === "excellent" ? "text-primary" : score.level === "good" ? "text-primary" : score.level === "warning" ? "text-primary" : "text-destructive";
                     return (
                       <div key={score.socialMedia} className={`border rounded-xl p-4 ${meterBg}`}>
                         <div className="flex items-center justify-between mb-3">
@@ -2737,22 +2737,22 @@ export default function SocialPage() {
                           {score.clientBreakdown.map((cb) => (
                             <div key={cb.clientId} className="flex items-center justify-between text-xs">
                               <span className="text-foreground">{cb.clientName}</span>
-                              <span className={cb.rate >= 80 ? "text-[#0d4af5]" : cb.rate >= 70 ? "text-[#3b6ff5]" : "text-red-500"}>
+                              <span className={cb.rate >= 80 ? "text-primary" : cb.rate >= 70 ? "text-primary" : "text-destructive"}>
                                 {cb.delivered}/{cb.goal} ({cb.rate}%)
                               </span>
                             </div>
                           ))}
                         </div>
                         {score.level === "critical" && (
-                          <div className="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
-                            <p className="text-xs text-red-500 font-medium flex items-center gap-1">
+                          <div className="mt-3 p-2 bg-destructive/10 border border-destructive/20 rounded-lg">
+                            <p className="text-xs text-destructive font-medium flex items-center gap-1">
                               <AlertTriangle size={12} /> Performance abaixo de 70% — agendar reunião
                             </p>
                           </div>
                         )}
                         {score.level === "warning" && (
-                          <div className="mt-3 p-2 bg-[#0d4af5]/10 border border-[#0d4af5]/15 rounded-lg">
-                            <p className="text-xs text-[#3b6ff5] font-medium flex items-center gap-1">
+                          <div className="mt-3 p-2 bg-primary/10 border border-primary/15 rounded-lg">
+                            <p className="text-xs text-primary font-medium flex items-center gap-1">
                               <AlertTriangle size={12} /> Performance em 70-80% — monitorar
                             </p>
                           </div>
@@ -2774,8 +2774,8 @@ export default function SocialPage() {
                 return [
                   { label: "Em andamento", value: active.length, color: "text-primary" },
                   { label: "Publicados", value: published.length, color: "text-primary" },
-                  { label: "Gargalos (SLA)", value: slaIssues.length, color: slaIssues.length > 0 ? "text-red-500" : "text-zinc-600" },
-                  { label: "Vencidos", value: overdue.length, color: overdue.length > 0 ? "text-red-500" : "text-zinc-600" },
+                  { label: "Gargalos (SLA)", value: slaIssues.length, color: slaIssues.length > 0 ? "text-destructive" : "text-muted-foreground" },
+                  { label: "Vencidos", value: overdue.length, color: overdue.length > 0 ? "text-destructive" : "text-muted-foreground" },
                 ].map((kpi) => (
                   <div key={kpi.label} className="bg-card border border-border rounded-xl p-4">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{kpi.label}</p>
@@ -2802,7 +2802,7 @@ export default function SocialPage() {
                         <span className="text-foreground">{col.title}</span>
                         <span className="text-muted-foreground">{count} ({pct}%)</span>
                       </div>
-                      <div className="h-1.5 bg-[#111118] rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-card rounded-full overflow-hidden">
                         <div className="h-full rounded-full transition-all bg-primary" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
@@ -2828,9 +2828,9 @@ export default function SocialPage() {
                       <div key={client.id}>
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className="text-foreground font-medium">{client.name}</span>
-                          <span className={pct >= 80 ? "text-primary" : "text-zinc-400"}>{postsNow}/{goal}</span>
+                          <span className={pct >= 80 ? "text-primary" : "text-muted-foreground"}>{postsNow}/{goal}</span>
                         </div>
-                        <div className="h-1.5 bg-[#111118] rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-card rounded-full overflow-hidden">
                           <div className="h-full rounded-full transition-all bg-primary" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
@@ -2859,7 +2859,7 @@ export default function SocialPage() {
                       return 0;
                     });
                   if (slaCards.length === 0) {
-                    return <p className="text-xs text-zinc-600">Nenhum gargalo no momento.</p>;
+                    return <p className="text-xs text-muted-foreground">Nenhum gargalo no momento.</p>;
                   }
                   return (
                     <div className="space-y-2">
@@ -2874,7 +2874,7 @@ export default function SocialPage() {
                           </span>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-foreground truncate">{card.title}</p>
-                            <p className="text-[10px] text-zinc-500">{card.clientName}</p>
+                            <p className="text-[10px] text-muted-foreground">{card.clientName}</p>
                           </div>
                         </div>
                       ))}
@@ -2900,7 +2900,7 @@ export default function SocialPage() {
                       <div key={fmt} className="bg-muted/50 rounded-xl p-3 border border-border/50">
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{fmt}</p>
                         <p className="text-xl font-bold text-foreground tracking-tight">{count}</p>
-                        <p className="text-[10px] text-zinc-600">{pct}%</p>
+                        <p className="text-[10px] text-muted-foreground">{pct}%</p>
                       </div>
                     );
                   });
@@ -2916,25 +2916,25 @@ export default function SocialPage() {
               return (
                 <div className="bg-card border border-border rounded-xl p-5 space-y-3">
                   <div className="flex items-center gap-2">
-                    <AlertTriangle size={15} className="text-red-500" />
+                    <AlertTriangle size={15} className="text-destructive" />
                     <h3 className="font-semibold text-sm tracking-tight">Alertas de Prazo</h3>
                   </div>
                   {overdue.length > 0 && (
-                    <div className="p-3 bg-red-500/5 border border-red-500/15 rounded-lg">
-                      <p className="text-xs font-semibold text-red-500 mb-2">Vencidos ({overdue.length})</p>
+                    <div className="p-3 bg-destructive/5 border border-destructive/15 rounded-lg">
+                      <p className="text-xs font-semibold text-destructive mb-2">Vencidos ({overdue.length})</p>
                       {overdue.map((c) => (
-                        <button key={c.id} onClick={() => setSelectedCard(c)} className="block text-xs text-zinc-400 hover:text-foreground text-left mb-1">
-                          · {c.title} <span className="text-zinc-600">({c.clientName})</span>
+                        <button key={c.id} onClick={() => setSelectedCard(c)} className="block text-xs text-muted-foreground hover:text-foreground text-left mb-1">
+                          · {c.title} <span className="text-muted-foreground">({c.clientName})</span>
                         </button>
                       ))}
                     </div>
                   )}
                   {dueToday.length > 0 && (
-                    <div className="p-3 bg-[#0a0a10] border border-[#1a1a22] rounded-lg">
-                      <p className="text-xs font-semibold text-zinc-400 mb-2">Vencem hoje ({dueToday.length})</p>
+                    <div className="p-3 bg-card border border-border rounded-lg">
+                      <p className="text-xs font-semibold text-muted-foreground mb-2">Vencem hoje ({dueToday.length})</p>
                       {dueToday.map((c) => (
-                        <button key={c.id} onClick={() => setSelectedCard(c)} className="block text-xs text-zinc-400 hover:text-foreground text-left mb-1">
-                          · {c.title} <span className="text-zinc-600">({c.clientName})</span>
+                        <button key={c.id} onClick={() => setSelectedCard(c)} className="block text-xs text-muted-foreground hover:text-foreground text-left mb-1">
+                          · {c.title} <span className="text-muted-foreground">({c.clientName})</span>
                         </button>
                       ))}
                     </div>
@@ -2994,9 +2994,9 @@ function SocialChg({ value, invert }: { value: number; invert?: boolean }) {
   const isPositive = value > 0;
   const isNeutral = Math.abs(value) < 1;
   const isGood = invert ? !isPositive : isPositive;
-  if (isNeutral) return <span className="text-xs text-zinc-500">0%</span>;
+  if (isNeutral) return <span className="text-xs text-muted-foreground">0%</span>;
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isGood ? "text-[#0d4af5]" : "text-red-500"}`}>
+    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${isGood ? "text-primary" : "text-destructive"}`}>
       {isPositive ? "+" : ""}{value.toFixed(1)}%
     </span>
   );
@@ -3004,7 +3004,7 @@ function SocialChg({ value, invert }: { value: number; invert?: boolean }) {
 
 function SocialMBox({ label, value, change }: { label: string; value: string | number; change?: number }) {
   return (
-    <div className="bg-[#0c0c12] border border-[#1e1e2a] rounded-lg p-3">
+    <div className="bg-card border border-border rounded-lg p-3">
       <p className="text-xs text-muted-foreground mb-1">{label}</p>
       <div className="flex items-end justify-between gap-2">
         <p className="text-lg font-bold text-foreground">{value}</p>
@@ -3083,7 +3083,7 @@ function SocialReportsTab({
 
       {/* Approval Queue */}
       {approvalCards.length > 0 && (
-        <div className="bg-card border border-zinc-500/30 rounded-xl p-5">
+        <div className="bg-card border border-border rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <Check size={15} className="text-primary" />
             <h3 className="font-semibold text-sm">Aprovações Pendentes</h3>
@@ -3099,9 +3099,9 @@ function SocialReportsTab({
                     <p className="text-xs text-muted-foreground">{card.clientName} · {card.format}</p>
                   </div>
                   {approval?.status === "approved" ? (
-                    <span className="text-xs text-[#0d4af5] font-medium">Aprovado</span>
+                    <span className="text-xs text-primary font-medium">Aprovado</span>
                   ) : approval?.status === "rejected" ? (
-                    <span className="text-xs text-red-500 font-medium">Recusado: {approval.reason}</span>
+                    <span className="text-xs text-destructive font-medium">Recusado: {approval.reason}</span>
                   ) : rejectCardId === card.id ? (
                     <div className="flex items-center gap-2">
                       <input
@@ -3113,7 +3113,7 @@ function SocialReportsTab({
                       />
                       <button
                         onClick={() => { if (rejectReason.trim()) { doReject(card.id, currentUser, rejectReason.trim()); setRejectCardId(null); setRejectReason(""); } }}
-                        className="text-xs bg-red-500/20 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-500/30 transition-colors"
+                        className="text-xs bg-destructive/20 text-destructive px-3 py-1.5 rounded-lg hover:bg-destructive/30 transition-colors"
                       >
                         Confirmar
                       </button>
@@ -3125,13 +3125,13 @@ function SocialReportsTab({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => doApprove(card.id, currentUser)}
-                        className="text-xs bg-[#0d4af5]/15 text-[#0d4af5] px-3 py-1.5 rounded-lg hover:bg-[#0d4af5]/30 transition-colors font-medium"
+                        className="text-xs bg-primary/15 text-primary px-3 py-1.5 rounded-lg hover:bg-primary/30 transition-colors font-medium"
                       >
                         Aprovar
                       </button>
                       <button
                         onClick={() => setRejectCardId(card.id)}
-                        className="text-xs bg-red-500/10 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-500/20 transition-colors font-medium"
+                        className="text-xs bg-destructive/10 text-destructive px-3 py-1.5 rounded-lg hover:bg-destructive/20 transition-colors font-medium"
                       >
                         Recusar
                       </button>
@@ -3160,7 +3160,7 @@ function SocialReportsTab({
             </button>
           ))}
         </div>
-        <button onClick={() => { setShowForm(!showForm); setEditingReport(null); }} className="bg-primary hover:bg-primary/80 text-foreground px-3 py-1.5 rounded-lg font-medium text-xs transition-colors flex items-center gap-1.5 ml-auto">
+        <button onClick={() => { setShowForm(!showForm); setEditingReport(null); }} className="bg-primary hover:bg-primary/80 text-primary-foreground px-3 py-1.5 rounded-lg font-medium text-xs transition-colors flex items-center gap-1.5 ml-auto">
           <Plus size={13} /> Novo Relatório
         </button>
       </div>
@@ -3276,12 +3276,12 @@ function SocialReportsTab({
                     <td className="py-3 px-3 font-medium text-foreground">{socialFormatMonth(report.month)}</td>
                     <td className="py-3 px-3 text-right text-foreground">{report.postsPublished}/{report.postsGoal}</td>
                     <td className="py-3 px-3 text-right text-foreground">{socialFmtNum(report.reach)}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.reach} /> : <span className="text-xs text-zinc-600">—</span>}</td>
+                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.reach} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-3 text-right text-foreground">{socialFmtNum(report.engagement)}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.engagement} /> : <span className="text-xs text-zinc-600">—</span>}</td>
+                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.engagement} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-3 text-right text-primary font-medium">{report.engagementRate.toFixed(1)}%</td>
                     <td className="py-3 px-3 text-right text-foreground">+{report.followersGained}</td>
-                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.followersGained} /> : <span className="text-xs text-zinc-600">—</span>}</td>
+                    <td className="py-3 px-3 text-right">{changes ? <SocialChg value={changes.followersGained} /> : <span className="text-xs text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-3 text-center"><button onClick={() => setEditingReport(report)} className="text-xs text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-all">Editar</button></td>
                   </tr>
                 ))}
@@ -3364,7 +3364,7 @@ function SocialEditReportForm({ report, onSave, onCancel }: {
       className="w-full mt-1 bg-muted rounded-lg p-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" /></div>
   );
   return (
-    <div className="bg-card border border-zinc-500/30 rounded-xl p-5">
+    <div className="bg-card border border-border rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div><h3 className="font-semibold text-foreground">Editar — {report.clientName}</h3><p className="text-xs text-muted-foreground mt-0.5">{socialFormatMonth(report.month)}</p></div>
         <button onClick={onCancel} className="text-muted-foreground hover:text-foreground p-1"><X size={16} /></button>
@@ -3375,7 +3375,7 @@ function SocialEditReportForm({ report, onSave, onCancel }: {
         followersGained: +f.fg, followersLost: +f.fl, topPost: f.tp || undefined, observations: f.ob || undefined,
       }); }} className="space-y-4">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div><label className="text-xs text-muted-foreground font-medium">Mês</label><div className="w-full mt-1 bg-muted/50 rounded-lg p-2.5 text-sm text-zinc-400">{socialFormatMonth(report.month)}</div></div>
+          <div><label className="text-xs text-muted-foreground font-medium">Mês</label><div className="w-full mt-1 bg-muted/50 rounded-lg p-2.5 text-sm text-muted-foreground">{socialFormatMonth(report.month)}</div></div>
           {inp("pp", "Posts")}{inp("pg", "Meta")}{inp("rc", "Reels")}
           {inp("sc", "Stories")}{inp("re", "Alcance")}{inp("im", "Impressões")}{inp("en", "Engajamento")}
         </div>
@@ -3447,8 +3447,8 @@ function MonthlyDeliveriesTab({
       {filteredScores.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredScores.map((score) => {
-            const meterColor = score.level === "excellent" ? "bg-[#0d4af5]" : score.level === "good" ? "bg-primary" : score.level === "warning" ? "bg-[#3b6ff5]" : "bg-red-500";
-            const levelColor = score.level === "excellent" ? "text-[#0d4af5]" : score.level === "good" ? "text-primary" : score.level === "warning" ? "text-[#3b6ff5]" : "text-red-500";
+            const meterColor = score.level === "excellent" ? "bg-primary" : score.level === "good" ? "bg-primary" : score.level === "warning" ? "bg-primary" : "bg-destructive";
+            const levelColor = score.level === "excellent" ? "text-primary" : score.level === "good" ? "text-primary" : score.level === "warning" ? "text-primary" : "text-destructive";
             const levelLabel = score.level === "excellent" ? "Excelente" : score.level === "good" ? "Bom" : score.level === "warning" ? "Atenção — Monitorar" : "Crítico — Agendar Reunião";
             return (
               <div key={score.socialMedia} className="bg-card border border-border rounded-xl p-5">
@@ -3479,7 +3479,7 @@ function MonthlyDeliveriesTab({
         </div>
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Taxa</p>
-          <p className={`text-2xl font-bold ${overallRate >= 80 ? "text-[#0d4af5]" : overallRate >= 70 ? "text-[#3b6ff5]" : "text-red-500"}`}>{overallRate}%</p>
+          <p className={`text-2xl font-bold ${overallRate >= 80 ? "text-primary" : overallRate >= 70 ? "text-primary" : "text-destructive"}`}>{overallRate}%</p>
         </div>
       </div>
 
@@ -3490,8 +3490,8 @@ function MonthlyDeliveriesTab({
           <div className="bg-card border border-border rounded-xl p-10 text-center text-muted-foreground text-sm">Nenhum dado de entregas para este mês.</div>
         )}
         {filteredReports.map((report) => {
-          const rateColor = report.completionRate >= 80 ? "text-[#0d4af5]" : report.completionRate >= 70 ? "text-[#3b6ff5]" : "text-red-500";
-          const barColor = report.completionRate >= 80 ? "bg-[#0d4af5]" : report.completionRate >= 70 ? "bg-[#3b6ff5]" : "bg-red-500";
+          const rateColor = report.completionRate >= 80 ? "text-primary" : report.completionRate >= 70 ? "text-primary" : "text-destructive";
+          const barColor = report.completionRate >= 80 ? "bg-primary" : report.completionRate >= 70 ? "bg-primary" : "bg-destructive";
           return (
             <div key={report.id} className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
@@ -3521,8 +3521,8 @@ function MonthlyDeliveriesTab({
                 </div>
               )}
               {report.completionRate < 70 && (
-                <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
-                  <p className="text-xs text-red-500 font-medium">⚠ Entrega abaixo de 70% — ação necessária</p>
+                <div className="mt-2 p-2 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <p className="text-xs text-destructive font-medium">⚠ Entrega abaixo de 70% — ação necessária</p>
                 </div>
               )}
             </div>

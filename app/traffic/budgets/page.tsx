@@ -175,11 +175,11 @@ function timeSince(iso: string | null): string {
 
 function SeverityDot({ severity }: { severity: DisplaySeverity }) {
   const styles: Record<DisplaySeverity, string> = {
-    critical: "bg-[#E24B4A] shadow-[0_0_0_4px_rgba(226,75,74,0.15)]",
-    warning:  "bg-[#BA7517] shadow-[0_0_0_4px_rgba(186,117,23,0.12)]",
-    review:   "bg-amber-400",
-    ok:       "bg-emerald-500",
-    paused:   "bg-zinc-600",
+    critical: "bg-destructive shadow-[0_0_0_4px_rgba(226,75,74,0.15)]",
+    warning:  "bg-lone-warning shadow-[0_0_0_4px_rgba(186,117,23,0.12)]",
+    review:   "bg-lone-warning-bg",
+    ok:       "bg-lone-success-bg",
+    paused:   "bg-muted",
   };
   return <span className={cn("inline-block w-2 h-2 rounded-full shrink-0", styles[severity])} />;
 }
@@ -187,17 +187,17 @@ function SeverityDot({ severity }: { severity: DisplaySeverity }) {
 function StatusBadge({ display, syncError }: { display: BalanceDisplay; syncError: string | null }) {
   if (syncError) {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
+      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
         <WifiOff size={9} /> Erro sync
       </span>
     );
   }
   const config: Record<DisplaySeverity, { label: string; cls: string }> = {
-    critical: { label: "Crítico",     cls: "bg-[rgba(226,75,74,0.12)] text-[#E24B4A] border-[rgba(226,75,74,0.25)]"   },
-    warning:  { label: "Atenção",     cls: "bg-[rgba(186,117,23,0.10)] text-[#BA7517] border-[rgba(186,117,23,0.20)]" },
-    review:   { label: display.primary, cls: "bg-amber-500/10 text-amber-400 border-amber-500/20"                     },
-    ok:       { label: "Ativa",       cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"                 },
-    paused:   { label: display.primary, cls: "bg-zinc-800 text-zinc-500 border-zinc-700"                              },
+    critical: { label: "Crítico",     cls: "bg-[rgba(226,75,74,0.12)] text-destructive border-[rgba(226,75,74,0.25)]"   },
+    warning:  { label: "Atenção",     cls: "bg-[rgba(186,117,23,0.10)] text-lone-warning border-[rgba(186,117,23,0.20)]" },
+    review:   { label: display.primary, cls: "bg-lone-warning-bg text-lone-warning border-lone-warning-border"                     },
+    ok:       { label: "Ativa",       cls: "bg-lone-success-bg text-lone-success border-lone-success-border"                 },
+    paused:   { label: display.primary, cls: "bg-muted text-muted-foreground border-border"                              },
   };
   const c = config[display.severity];
   return (
@@ -329,10 +329,10 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
     rule: typeof warning;
     setter: typeof setWarning;
   }) => {
-    const borderColor = color === "critical" ? "border-[#E24B4A]/25" : "border-[#BA7517]/25";
+    const borderColor = color === "critical" ? "border-destructive/25" : "border-lone-warning/25";
     const bgColor = color === "critical" ? "bg-[rgba(226,75,74,0.04)]" : "bg-[rgba(186,117,23,0.04)]";
-    const textColor = color === "critical" ? "text-[#E24B4A]" : "text-[#BA7517]";
-    const dotColor = color === "critical" ? "bg-[#E24B4A]" : "bg-[#BA7517]";
+    const textColor = color === "critical" ? "text-destructive" : "text-lone-warning";
+    const dotColor = color === "critical" ? "bg-destructive" : "bg-lone-warning";
 
     return (
       <div className={cn("rounded-xl border p-4 space-y-3", borderColor, bgColor)}>
@@ -342,16 +342,16 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
             <p className={cn("text-xs font-semibold", textColor)}>{label}</p>
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
-            <span className="text-[10px] text-zinc-500">Ativo</span>
+            <span className="text-[10px] text-muted-foreground">Ativo</span>
             <div
               onClick={() => setter((p) => ({ ...p, active: !p.active }))}
               className={cn(
                 "w-8 h-4 rounded-full transition-colors cursor-pointer",
-                rule.active ? (color === "critical" ? "bg-[#E24B4A]" : "bg-[#BA7517]") : "bg-zinc-700",
+                rule.active ? (color === "critical" ? "bg-destructive" : "bg-lone-warning") : "bg-muted",
               )}
             >
               <div className={cn(
-                "w-3 h-3 bg-white rounded-full mt-0.5 transition-transform",
+                "w-3 h-3 bg-card rounded-full mt-0.5 transition-transform",
                 rule.active ? "translate-x-4" : "translate-x-0.5",
               )} />
             </div>
@@ -361,30 +361,30 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
         {rule.active && (
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Threshold (R$)</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Threshold (R$)</p>
               <input
                 type="number" min="0" step="10"
                 value={rule.threshold}
                 onChange={(e) => setter((p) => ({ ...p, threshold: e.target.value }))}
-                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary/50"
               />
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Intervalo (h)</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Intervalo (h)</p>
               <input
                 type="number" min="1" max="24"
                 value={rule.interval}
                 onChange={(e) => setter((p) => ({ ...p, interval: e.target.value }))}
-                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary/50"
               />
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Máx. avisos</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Máx. avisos</p>
               <input
                 type="number" min="1" max="20"
                 value={rule.maxNotif}
                 onChange={(e) => setter((p) => ({ ...p, maxNotif: e.target.value }))}
-                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary/50"
               />
             </div>
           </div>
@@ -392,7 +392,7 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
 
         {rule.active && (
           <div className="space-y-1">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Canais</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Canais</p>
             <div className="flex gap-2 flex-wrap">
               {CHANNEL_OPTIONS.map((ch) => (
                 <button
@@ -403,9 +403,9 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
                     "text-[10px] px-2.5 py-1 rounded-full border transition-all capitalize",
                     rule.channels.includes(ch)
                       ? color === "critical"
-                        ? "bg-[rgba(226,75,74,0.15)] border-[rgba(226,75,74,0.4)] text-[#E24B4A]"
-                        : "bg-[rgba(186,117,23,0.15)] border-[rgba(186,117,23,0.4)] text-[#BA7517]"
-                      : "bg-surface border-border text-zinc-500 hover:border-zinc-500",
+                        ? "bg-[rgba(226,75,74,0.15)] border-[rgba(226,75,74,0.4)] text-destructive"
+                        : "bg-[rgba(186,117,23,0.15)] border-[rgba(186,117,23,0.4)] text-lone-warning"
+                      : "bg-surface border-border text-muted-foreground hover:border-border",
                   )}
                 >
                   {ch}
@@ -420,24 +420,24 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-[#111114] border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-2xl">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-2xl">
         {/* Header */}
-        <div className="p-5 border-b border-zinc-800 flex items-start justify-between">
+        <div className="p-5 border-b border-border flex items-start justify-between">
           <div>
-            <p className="text-sm font-semibold text-white">{account.clientName}</p>
-            <p className="text-[11px] text-zinc-500 mt-0.5 font-mono">{account.meta_account_id}</p>
+            <p className="text-sm font-semibold text-foreground">{account.clientName}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">{account.meta_account_id}</p>
             <div className="flex items-center gap-2 mt-1.5">
               <span className={cn(
                 "text-[10px] px-2 py-0.5 rounded-full border",
                 account.is_prepaid
-                  ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                  ? "bg-primary/10 border-primary/20 text-primary"
                   : "bg-purple-500/10 border-purple-500/20 text-purple-400",
               )}>
                 {account.is_prepaid ? "Pré-pago" : "Pós-pago"}
               </span>
             </div>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -446,11 +446,11 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
           {/* Tipo de cobrança */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Tipo de cobrança</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tipo de cobrança</p>
               <select
                 value={isPrepaid ? "prepaid" : "postpaid"}
                 onChange={(e) => setIsPrepaid(e.target.value === "prepaid")}
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
               >
                 <option value="prepaid">Pré-pago (Pix/Boleto)</option>
                 <option value="postpaid">Pós-pago (Cartão)</option>
@@ -458,13 +458,13 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
             </div>
             {!isPrepaid && (
               <div className="space-y-1">
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Spend cap Meta (R$)</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Spend cap Meta (R$)</p>
                 <input
                   type="number" min="0" step="100"
                   value={spendCap}
                   onChange={(e) => setSpendCap(e.target.value)}
                   placeholder="ex: 2000.00"
-                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
                 />
               </div>
             )}
@@ -472,7 +472,7 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
 
           {/* Verba mensal — sempre visível */}
           <div className="space-y-1">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wider">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
               Verba mensal contratada (R$)
             </p>
             <input
@@ -480,18 +480,18 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
               value={monthlyBudget}
               onChange={(e) => setMonthlyBudget(e.target.value)}
               placeholder="ex: 1000.00"
-              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
             />
-            <p className="text-[10px] text-zinc-600">
+            <p className="text-[10px] text-muted-foreground">
               {isPrepaid
                 ? "Pré-pago: deixe em branco para usar o saldo da carteira Meta. Preencha para monitorar por verba contratada."
-                : <>Pós-pago: saldo exibido = <span className="text-zinc-400">verba − gasto do mês (Insights)</span>. Mais preciso que o spend_cap quando esse é teto de segurança.</>}
+                : <>Pós-pago: saldo exibido = <span className="text-muted-foreground">verba − gasto do mês (Insights)</span>. Mais preciso que o spend_cap quando esse é teto de segurança.</>}
             </p>
           </div>
 
           {/* Contexto azul */}
-          <div className="rounded-lg bg-[#0d4af5]/[0.06] border border-[#0d4af5]/20 p-3">
-            <p className="text-[11px] text-[#6b9af5] leading-relaxed">
+          <div className="rounded-lg bg-primary/[0.06] border border-primary/20 p-3">
+            <p className="text-[11px] text-primary leading-relaxed">
               {isPrepaid
                 ? "Pré-pago: saldo disponível = carteira na Meta (funding_source_details). Quando zera, campanhas pausam automaticamente."
                 : monthlyBudget
@@ -503,49 +503,49 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
           {/* Contato financeiro */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Tel. financeiro (WA)</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tel. financeiro (WA)</p>
               <input
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="5522999999999"
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
               />
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Chave Pix</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Chave Pix</p>
               <input
                 type="text"
                 value={pixKey}
                 onChange={(e) => setPixKey(e.target.value)}
                 placeholder="CPF, e-mail ou telefone"
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
               />
             </div>
           </div>
 
           {/* Regras */}
           <div className="space-y-3">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Regras de alerta</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Regras de alerta</p>
             <RuleBlock color="warning"  label="Atenção"  rule={warning}  setter={setWarning}  />
             <RuleBlock color="critical" label="Crítico"  rule={critical} setter={setCritical} />
           </div>
 
           {validationError && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-              <AlertTriangle size={13} className="text-red-400 shrink-0" />
-              <p className="text-xs text-red-400">{validationError}</p>
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+              <AlertTriangle size={13} className="text-destructive shrink-0" />
+              <p className="text-xs text-destructive">{validationError}</p>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-5 border-t border-zinc-800 flex justify-end gap-3">
+        <div className="p-5 border-t border-border flex justify-end gap-3">
           <button onClick={onClose} className="btn-ghost text-xs border border-border px-4">Cancelar</button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-xs font-medium transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-xs font-medium transition-all disabled:opacity-50"
           >
             {saving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
             Salvar
@@ -639,14 +639,14 @@ function AddAccountModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg bg-[#16161D] border border-zinc-800 rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+      <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
             <h2 className="text-sm font-semibold text-foreground">Adicionar Conta de Anúncio</h2>
-            <p className="text-[11px] text-zinc-500 mt-0.5">Vincule uma conta do Meta Ads a um cliente</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Vincule uma conta do Meta Ads a um cliente</p>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-foreground transition-colors">
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -655,21 +655,21 @@ function AddAccountModal({
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {loading ? (
             <div className="flex items-center justify-center py-10">
-              <Loader2 size={18} className="animate-spin text-zinc-500" />
+              <Loader2 size={18} className="animate-spin text-muted-foreground" />
             </div>
           ) : error ? (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive">
               <AlertTriangle size={13} /> {error}
             </div>
           ) : (
             <>
               {/* Cliente selector */}
               <div>
-                <label className="text-[11px] text-zinc-400 font-medium mb-1.5 block">Cliente</label>
+                <label className="text-[11px] text-muted-foreground font-medium mb-1.5 block">Cliente</label>
                 <select
                   value={selectedClient}
                   onChange={(e) => setSelectedClient(e.target.value)}
-                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-[#0d4af5]/50"
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary/50"
                 >
                   <option value="">Selecionar cliente...</option>
                   {clients.map((c) => (
@@ -682,22 +682,22 @@ function AddAccountModal({
 
               {/* Meta account search + list */}
               <div>
-                <label className="text-[11px] text-zinc-400 font-medium mb-1.5 block">
+                <label className="text-[11px] text-muted-foreground font-medium mb-1.5 block">
                   Conta Meta Ads
-                  <span className="ml-1.5 text-zinc-600">({filtered.length} disponíveis)</span>
+                  <span className="ml-1.5 text-muted-foreground">({filtered.length} disponíveis)</span>
                 </label>
                 <div className="relative mb-2">
-                  <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                  <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="text"
                     placeholder="Buscar por nome ou ID..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full bg-surface border border-border rounded-lg pl-8 pr-3 py-2 text-xs text-foreground placeholder-zinc-600 focus:outline-none focus:border-[#0d4af5]/50"
+                    className="w-full bg-surface border border-border rounded-lg pl-8 pr-3 py-2 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary/50"
                   />
                 </div>
                 {filtered.length === 0 ? (
-                  <p className="text-xs text-zinc-600 text-center py-4">
+                  <p className="text-xs text-muted-foreground text-center py-4">
                     {metaAccounts.length === 0
                       ? "Nenhuma conta disponível para vincular"
                       : "Nenhuma conta encontrada"}
@@ -711,18 +711,18 @@ function AddAccountModal({
                         className={cn(
                           "w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-left transition-all",
                           selectedMeta?.id === a.id
-                            ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-foreground"
-                            : "border-border bg-surface text-zinc-300 hover:border-zinc-600",
+                            ? "border-primary/50 bg-primary/10 text-foreground"
+                            : "border-border bg-surface text-muted-foreground hover:border-border",
                         )}
                       >
                         <div>
                           <p className="text-xs font-medium leading-none">{a.name}</p>
-                          <p className="text-[10px] text-zinc-500 mt-0.5">{a.id} · {a.currency}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{a.id} · {a.currency}</p>
                         </div>
                         {a.account_status === 1 ? (
-                          <span className="text-[10px] text-emerald-400 font-medium shrink-0 ml-2">Ativa</span>
+                          <span className="text-[10px] text-lone-success font-medium shrink-0 ml-2">Ativa</span>
                         ) : (
-                          <span className="text-[10px] text-zinc-500 shrink-0 ml-2">Status {a.account_status}</span>
+                          <span className="text-[10px] text-muted-foreground shrink-0 ml-2">Status {a.account_status}</span>
                         )}
                       </button>
                     ))}
@@ -734,8 +734,8 @@ function AddAccountModal({
         </div>
 
         {/* Footer */}
-        <div className="p-5 border-t border-zinc-800 flex items-center justify-between gap-3">
-          <p className="text-[11px] text-zinc-600">
+        <div className="p-5 border-t border-border flex items-center justify-between gap-3">
+          <p className="text-[11px] text-muted-foreground">
             {selectedMeta ? `Selecionada: ${selectedMeta.name}` : "Nenhuma conta selecionada"}
           </p>
           <div className="flex gap-2">
@@ -743,7 +743,7 @@ function AddAccountModal({
             <button
               onClick={handleAdd}
               disabled={saving || !selectedMeta || !selectedClient}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-xs font-medium transition-all disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-xs font-medium transition-all disabled:opacity-50"
             >
               {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
               Adicionar e Sincronizar
@@ -896,7 +896,7 @@ export default function BudgetsPage() {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <Loader2 size={20} className="animate-spin text-zinc-500" />
+        <Loader2 size={20} className="animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -911,9 +911,9 @@ export default function BudgetsPage() {
             <h1 className="text-lg font-semibold text-foreground">Monitoramento de Saldos</h1>
             <div className="flex items-center gap-1.5 mt-1">
               {syncStale
-                ? <WifiOff size={11} className="text-amber-400" />
-                : <Wifi size={11} className="text-zinc-500" />}
-              <p className={cn("text-[11px]", syncStale ? "text-amber-400" : "text-zinc-500")}>
+                ? <WifiOff size={11} className="text-lone-warning" />
+                : <Wifi size={11} className="text-muted-foreground" />}
+              <p className={cn("text-[11px]", syncStale ? "text-lone-warning" : "text-muted-foreground")}>
                 {syncStale
                   ? `Última sincronização ${timeSince(lastSyncAt)} — verificar conexão Meta`
                   : `Última sincronização Meta API · ${timeSince(lastSyncAt)}`}
@@ -923,7 +923,7 @@ export default function BudgetsPage() {
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface border border-border text-xs text-foreground hover:border-[#0d4af5]/30 hover:text-[#0d4af5] transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface border border-border text-xs text-foreground hover:border-primary/30 hover:text-primary transition-all"
             >
               <Plus size={12} />
               Adicionar Conta
@@ -931,7 +931,7 @@ export default function BudgetsPage() {
             <button
               onClick={handleSync}
               disabled={syncing}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface border border-border text-xs text-foreground hover:border-[#0d4af5]/30 hover:text-[#0d4af5] transition-all disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface border border-border text-xs text-foreground hover:border-primary/30 hover:text-primary transition-all disabled:opacity-50"
             >
               <RefreshCw size={12} className={syncing ? "animate-spin" : ""} />
               {syncing ? "Sincronizando..." : "Sincronizar"}
@@ -941,9 +941,9 @@ export default function BudgetsPage() {
 
         {/* Aviso sync desatualizado */}
         {syncStale && (
-          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-amber-500/[0.06] border border-amber-500/20">
-            <AlertTriangle size={13} className="text-amber-400 shrink-0" />
-            <p className="text-xs text-amber-300">
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-lone-warning-bg/[0.06] border border-lone-warning-border">
+            <AlertTriangle size={13} className="text-lone-warning shrink-0" />
+            <p className="text-xs text-lone-warning">
               Dados desatualizados há mais de 30 minutos. Clique em "Sincronizar" ou verifique o token Meta.
             </p>
           </div>
@@ -966,7 +966,7 @@ export default function BudgetsPage() {
               sub: `${computedAccounts.length} de ${accounts.length} com saldo`,
               onClick: () => setFilterSeverity("ok"),
               active: filterSeverity === "ok",
-              color: "text-emerald-400",
+              color: "text-lone-success",
             },
             {
               label: "Atenção",
@@ -974,7 +974,7 @@ export default function BudgetsPage() {
               sub: "saldo baixo ou em revisão",
               onClick: () => setFilterSeverity(filterSeverity === "warning" ? "all" : "warning"),
               active: filterSeverity === "warning",
-              color: "text-[#BA7517]",
+              color: "text-lone-warning",
             },
             {
               label: "Críticos",
@@ -982,7 +982,7 @@ export default function BudgetsPage() {
               sub: "ação imediata",
               onClick: () => setFilterSeverity(filterSeverity === "critical" ? "all" : "critical"),
               active: filterSeverity === "critical",
-              color: "text-[#E24B4A]",
+              color: "text-destructive",
             },
             {
               label: "Cartão ativo",
@@ -990,7 +990,7 @@ export default function BudgetsPage() {
               sub: "sem monitor de saldo",
               onClick: () => setFilterSeverity("all"),
               active: false,
-              color: "text-zinc-400",
+              color: "text-muted-foreground",
             },
           ].map((card) => (
             <button
@@ -1000,12 +1000,12 @@ export default function BudgetsPage() {
                 "text-left p-4 rounded-xl border transition-all",
                 card.active
                   ? "bg-primary/5 border-primary/25"
-                  : "bg-card border-border hover:border-zinc-700",
+                  : "bg-card border-border hover:border-border",
               )}
             >
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">{card.label}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">{card.label}</p>
               <p className={cn("text-2xl font-bold", card.color)}>{card.value}</p>
-              <p className="text-[10px] text-zinc-600 mt-0.5">{card.sub}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{card.sub}</p>
             </button>
           ))}
         </div>
@@ -1013,12 +1013,12 @@ export default function BudgetsPage() {
         {/* Filtro ativo */}
         {filterSeverity !== "all" && (
           <div className="flex items-center gap-2">
-            <Filter size={12} className="text-zinc-500" />
-            <span className="text-xs text-zinc-400">
+            <Filter size={12} className="text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">
               Mostrando apenas:
               <span className="ml-1 font-medium text-foreground capitalize">{filterSeverity}</span>
             </span>
-            <button onClick={() => setFilterSeverity("all")} className="text-zinc-600 hover:text-zinc-300 transition-colors">
+            <button onClick={() => setFilterSeverity("all")} className="text-muted-foreground hover:text-muted-foreground transition-colors">
               <X size={12} />
             </button>
           </div>
@@ -1026,8 +1026,8 @@ export default function BudgetsPage() {
 
         {/* Tabela */}
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-zinc-600">
-            <CheckCircle size={24} className="mb-2 text-zinc-700" />
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <CheckCircle size={24} className="mb-2 text-muted-foreground" />
             <p className="text-sm">
               {accounts.length === 0
                 ? "Nenhuma conta Meta cadastrada ainda"
@@ -1040,9 +1040,9 @@ export default function BudgetsPage() {
         ) : (
           <div className="rounded-xl border border-border overflow-hidden">
             {/* Cabeçalho */}
-            <div className="grid grid-cols-[24px_1fr_100px_130px_80px_100px_80px] gap-3 px-4 py-2.5 bg-[#0c0c0f] border-b border-border">
+            <div className="grid grid-cols-[24px_1fr_100px_130px_80px_100px_80px] gap-3 px-4 py-2.5 bg-card border-b border-border">
               {["", "Cliente / Conta", "Status", "Saldo disponível", "Dias", "Gasto/dia", "Ações"].map((h) => (
-                <p key={h} className="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">{h}</p>
+                <p key={h} className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">{h}</p>
               ))}
             </div>
 
@@ -1058,10 +1058,10 @@ export default function BudgetsPage() {
                 <div
                   key={account.id}
                   className={cn(
-                    "grid grid-cols-[24px_1fr_100px_130px_80px_100px_80px] gap-3 px-4 py-3 border-b border-border last:border-b-0 items-center transition-colors hover:bg-white/[0.02]",
-                    isCritical && "bg-[rgba(226,75,74,0.04)] border-l-[3px] border-l-[#E24B4A]",
-                    isWarning  && "bg-[rgba(186,117,23,0.03)] border-l-[3px] border-l-[#BA7517]",
-                    isReview   && "bg-amber-500/[0.02] border-l-[3px] border-l-amber-500/40",
+                    "grid grid-cols-[24px_1fr_100px_130px_80px_100px_80px] gap-3 px-4 py-3 border-b border-border last:border-b-0 items-center transition-colors hover:bg-card/[0.02]",
+                    isCritical && "bg-[rgba(226,75,74,0.04)] border-l-[3px] border-l-destructive",
+                    isWarning  && "bg-[rgba(186,117,23,0.03)] border-l-[3px] border-l-lone-warning",
+                    isReview   && "bg-lone-warning-bg/[0.02] border-l-[3px] border-l-amber-500/40",
                     isPaused   && "opacity-50",
                   )}
                 >
@@ -1074,7 +1074,7 @@ export default function BudgetsPage() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">{account.clientName}</p>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <p className="text-[10px] text-zinc-600 font-mono truncate">{account.meta_account_id}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono truncate">{account.meta_account_id}</p>
                       <button
                         onClick={(e) => handleToggleBillingType(account, e)}
                         disabled={togglingId === account.id}
@@ -1082,7 +1082,7 @@ export default function BudgetsPage() {
                         className={cn(
                           "text-[9px] px-1.5 py-0.5 rounded border transition-all cursor-pointer hover:opacity-70 disabled:opacity-40",
                           account.is_prepaid
-                            ? "text-blue-400 border-blue-500/20 bg-blue-500/[0.06]"
+                            ? "text-primary border-primary/20 bg-primary/[0.06]"
                             : "text-purple-400 border-purple-500/20 bg-purple-500/[0.06]",
                         )}
                       >
@@ -1097,7 +1097,7 @@ export default function BudgetsPage() {
                     <StatusBadge display={account.display} syncError={account.sync_error} />
                     {account.sync_error && (
                       <p
-                        className="text-[9px] text-zinc-500 mt-0.5 truncate cursor-help"
+                        className="text-[9px] text-muted-foreground mt-0.5 truncate cursor-help"
                         title={account.last_error_message ?? account.sync_error}
                         style={{ maxWidth: 96 }}
                       >
@@ -1110,22 +1110,22 @@ export default function BudgetsPage() {
                   <div>
                     <p className={cn(
                       "text-[15px] font-semibold leading-tight",
-                      isCritical ? "text-[#E24B4A]"
-                        : isWarning ? "text-[#BA7517]"
-                        : account.display.primary === "Ativa" ? "text-emerald-400"
-                        : isPaused || isReview ? "text-zinc-500"
+                      isCritical ? "text-destructive"
+                        : isWarning ? "text-lone-warning"
+                        : account.display.primary === "Ativa" ? "text-lone-success"
+                        : isPaused || isReview ? "text-muted-foreground"
                         : "text-foreground",
                     )}>
                       {account.display.primary}
                     </p>
-                    <p className="text-[10px] text-zinc-600 mt-0.5">{account.display.secondary}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{account.display.secondary}</p>
                     {/* CTA discreto para contas cartão sem verba definida */}
                     {!account.is_prepaid && account.monthly_budget === null &&
                      (account.spend_cap === null || account.spend_cap === 0) &&
                      account.account_status === 1 && (
                       <button
                         onClick={() => setModalAccount(account)}
-                        className="text-[9px] text-zinc-600 hover:text-[#0d4af5] transition-colors mt-0.5"
+                        className="text-[9px] text-muted-foreground hover:text-primary transition-colors mt-0.5"
                       >
                         Definir verba →
                       </button>
@@ -1137,7 +1137,7 @@ export default function BudgetsPage() {
                     <p className={cn(
                       "text-sm font-medium",
                       account.daysRemaining !== null && account.daysRemaining <= 1
-                        ? "text-[#E24B4A]"
+                        ? "text-destructive"
                         : "text-foreground",
                     )}>
                       {formatDaysRemaining(account.daysRemaining)}
@@ -1150,7 +1150,7 @@ export default function BudgetsPage() {
                       {account.avgDailySpend !== null ? formatCurrency(account.avgDailySpend) : "—"}
                     </p>
                     {account.avgDailySpend !== null && (
-                      <p className="text-[10px] text-zinc-600">/dia</p>
+                      <p className="text-[10px] text-muted-foreground">/dia</p>
                     )}
                   </div>
 
@@ -1165,8 +1165,8 @@ export default function BudgetsPage() {
                         className={cn(
                           "p-1.5 rounded-lg border transition-all",
                           isCritical
-                            ? "text-[#E24B4A] border-[rgba(226,75,74,0.25)] hover:bg-[rgba(226,75,74,0.10)]"
-                            : "text-zinc-500 border-border hover:text-emerald-400 hover:border-emerald-500/30",
+                            ? "text-destructive border-[rgba(226,75,74,0.25)] hover:bg-[rgba(226,75,74,0.10)]"
+                            : "text-muted-foreground border-border hover:text-lone-success hover:border-lone-success-border",
                         )}
                       >
                         <MessageCircle size={13} />
@@ -1175,7 +1175,7 @@ export default function BudgetsPage() {
                       <button
                         disabled
                         title="Cadastre o telefone financeiro nas configurações"
-                        className="p-1.5 rounded-lg border border-border text-zinc-700 cursor-not-allowed"
+                        className="p-1.5 rounded-lg border border-border text-muted-foreground cursor-not-allowed"
                       >
                         <MessageCircle size={13} />
                       </button>
@@ -1183,7 +1183,7 @@ export default function BudgetsPage() {
                     <button
                       onClick={() => setModalAccount(account)}
                       title="Configurar alertas"
-                      className="p-1.5 rounded-lg border border-border text-zinc-500 hover:text-foreground hover:border-zinc-500 transition-all"
+                      className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border transition-all"
                     >
                       <Settings size={13} />
                     </button>
@@ -1195,13 +1195,13 @@ export default function BudgetsPage() {
         )}
 
         {/* Legenda */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[10px] text-zinc-600 pt-1">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[10px] text-muted-foreground pt-1">
           {[
-            { color: "bg-[#E24B4A]",  label: "Crítico — saldo abaixo do threshold ou <1d" },
-            { color: "bg-[#BA7517]",  label: "Atenção — saldo baixo ou <3d" },
-            { color: "bg-amber-400",  label: "Em revisão / Pendente — conta Meta suspensa" },
-            { color: "bg-emerald-500",label: "Ativa — saldo OK ou cartão sem limite" },
-            { color: "bg-zinc-600",   label: "Desativada / fora de operação" },
+            { color: "bg-destructive",  label: "Crítico — saldo abaixo do threshold ou <1d" },
+            { color: "bg-lone-warning",  label: "Atenção — saldo baixo ou <3d" },
+            { color: "bg-lone-warning-bg",  label: "Em revisão / Pendente — conta Meta suspensa" },
+            { color: "bg-lone-success-bg",label: "Ativa — saldo OK ou cartão sem limite" },
+            { color: "bg-muted",   label: "Desativada / fora de operação" },
           ].map((item) => (
             <div key={item.label} className="flex items-center gap-1.5">
               <span className={cn("w-2 h-2 rounded-full shrink-0", item.color)} />

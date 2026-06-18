@@ -27,10 +27,10 @@ import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 // Maps: ideas/script → "queue", in_production → "doing", blocked → "blocked", rest → "delivered"
 
 const DESIGNER_COLUMNS = [
-  { id: "queue",     title: "Fila / Pra Fazer",           color: "bg-zinc-600",   statuses: ["ideas", "script"] },
+  { id: "queue",     title: "Fila / Pra Fazer",           color: "bg-muted",   statuses: ["ideas", "script"] },
   { id: "doing",     title: "Em Producao",                color: "bg-primary",    statuses: ["in_production"] },
-  { id: "blocked",   title: "Bloqueado / Devolvido",      color: "bg-red-500",    statuses: ["blocked"] },
-  { id: "delivered", title: "Aprovação",                  color: "bg-[#0d4af5]",  statuses: ["approval", "client_approval", "scheduled", "published"] },
+  { id: "blocked",   title: "Bloqueado / Devolvido",      color: "bg-destructive",    statuses: ["blocked"] },
+  { id: "delivered", title: "Aprovação",                  color: "bg-primary",  statuses: ["approval", "client_approval", "scheduled", "published"] },
 ];
 
 // Status mapping: designer column → actual content card status
@@ -53,9 +53,9 @@ const BLOCK_REASONS = [
 // ── Design request columns ───────────────────────────────────────────────────
 
 const DESIGN_COLUMNS = [
-  { id: "queued",      title: "Na Fila",       color: "bg-zinc-600" },
+  { id: "queued",      title: "Na Fila",       color: "bg-muted" },
   { id: "in_progress", title: "Em Produção",   color: "bg-primary" },
-  { id: "done",        title: "Concluído",     color: "bg-[#0d4af5]" },
+  { id: "done",        title: "Concluído",     color: "bg-primary" },
 ];
 
 type TabView = "kanbans" | "requests" | "performance" | "history" | "clientes";
@@ -70,8 +70,8 @@ function getDeadlineUrgency(dueDate?: string): "overdue" | "today" | "soon" | "o
 }
 
 const URGENCY_BADGE: Record<string, { label: string; cls: string }> = {
-  overdue: { label: "Vencido", cls: "text-red-500 bg-red-500/10 border-red-500/20" },
-  today:   { label: "Hoje",   cls: "text-[#3b6ff5] bg-[#0d4af5]/10 border-[#0d4af5]/15" },
+  overdue: { label: "Vencido", cls: "text-destructive bg-destructive/10 border-destructive/20" },
+  today:   { label: "Hoje",   cls: "text-primary bg-primary/10 border-primary/15" },
   soon:    { label: "Em breve", cls: "text-primary bg-primary/10 border-primary/20" },
   ok:      { label: "",       cls: "text-muted-foreground" },
 };
@@ -193,12 +193,12 @@ function UploadArtModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-black border border-[#1a1a1a] rounded-2xl w-full max-w-md mx-4 shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in" onClick={(e) => e.stopPropagation()}>
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-[#0d4af5]/40 to-transparent" />
-        <div className="flex items-center justify-between p-5 border-b border-[#1a1a1a]">
+      <div className="bg-black border border-border rounded-2xl w-full max-w-md mx-4 shadow-[0_0_60px_rgba(10,52,245,0.08)] animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
+        <div className="flex items-center justify-between p-5 border-b border-border">
           <div>
             <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
-              <Upload size={14} className="text-[#0d4af5]" /> Entregar Arte
+              <Upload size={14} className="text-primary" /> Entregar Arte
             </h3>
             <p className="text-xs text-primary mt-0.5">{card.title} — {card.clientName}</p>
           </div>
@@ -214,14 +214,14 @@ function UploadArtModal({
               href={clientDriveLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#0d4af5]/[0.04] border border-[#0d4af5]/20 hover:border-[#0d4af5]/40 hover:shadow-[0_0_15px_rgba(10,52,245,0.1)] transition-all"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-primary/[0.04] border border-primary/20 hover:border-primary/40 hover:shadow-[0_0_15px_rgba(10,52,245,0.1)] transition-all"
             >
-              <FolderOpen size={14} className="text-[#0d4af5] drop-shadow-[0_0_4px_rgba(10,52,245,0.6)]" />
+              <FolderOpen size={14} className="text-primary drop-shadow-[0_0_4px_rgba(10,52,245,0.6)]" />
               <div className="flex-1">
                 <p className="text-xs text-foreground font-medium">Pasta do cliente no Drive</p>
                 <p className="text-[9px] text-muted-foreground">Abrir para fazer upload da arte</p>
               </div>
-              <ExternalLink size={12} className="text-[#0d4af5]" />
+              <ExternalLink size={12} className="text-primary" />
             </a>
           )}
 
@@ -239,20 +239,20 @@ function UploadArtModal({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading || saving}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-[#0d4af5]/40 bg-[#0d4af5]/[0.04] hover:bg-[#0d4af5]/[0.08] hover:border-[#0d4af5]/60 transition-all text-sm text-foreground disabled:opacity-50 disabled:cursor-wait"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-primary/40 bg-primary/[0.04] hover:bg-primary/[0.08] hover:border-primary/60 transition-all text-sm text-foreground disabled:opacity-50 disabled:cursor-wait"
             >
-              <Upload size={14} className="text-[#0d4af5]" />
+              <Upload size={14} className="text-primary" />
               {uploading ? "Enviando..." : "Selecionar arquivo (PNG, JPG, PDF, MP4 — até 25MB)"}
             </button>
             {uploadProgress && (
-              <p className="text-[10px] text-emerald-400 mt-1">{uploadProgress}</p>
+              <p className="text-[10px] text-lone-success mt-1">{uploadProgress}</p>
             )}
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex-1 h-px bg-[#1a1a1a]" />
-            <span className="text-[9px] text-zinc-700 uppercase tracking-wider">ou</span>
-            <div className="flex-1 h-px bg-[#1a1a1a]" />
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-[9px] text-muted-foreground uppercase tracking-wider">ou</span>
+            <div className="flex-1 h-px bg-border" />
           </div>
 
           {/* Art link input — fallback */}
@@ -262,16 +262,16 @@ function UploadArtModal({
               value={artLink}
               onChange={(e) => { setArtLink(e.target.value); setError(""); }}
               placeholder="https://drive.google.com/file/d/..."
-              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-700 focus:border-[#0d4af5]/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
+              className="w-full bg-card border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:shadow-[0_0_0_3px_rgba(10,52,245,0.08)] outline-none transition-all"
               autoFocus
             />
-            {error && <p className="text-[10px] text-red-400">{error}</p>}
+            {error && <p className="text-[10px] text-destructive">{error}</p>}
           </div>
 
           {/* Preview */}
           {artLink && artLink.includes("http") && (
             isImageUrl(artLink) ? (
-              <div className="rounded-xl overflow-hidden border border-[#1a1a1a] bg-[#0a0a0a]">
+              <div className="rounded-xl overflow-hidden border border-border bg-card">
                 <SignedImage src={artLink} alt="Preview da arte" className="w-full max-h-48 object-contain" />
               </div>
             ) : (
@@ -279,7 +279,7 @@ function UploadArtModal({
                 href={artLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-xs text-[#0d4af5] hover:underline"
+                className="flex items-center gap-2 text-xs text-primary hover:underline"
               >
                 <ExternalLink size={11} /> Verificar arquivo antes de enviar
               </a>
@@ -287,7 +287,7 @@ function UploadArtModal({
           )}
 
           {/* Card info */}
-          <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3 space-y-1.5 text-xs">
+          <div className="bg-card border border-border rounded-xl p-3 space-y-1.5 text-xs">
             <div className="flex items-center gap-2">
               <User size={11} className="text-muted-foreground" />
               <span className="text-muted-foreground">Social:</span>
@@ -299,20 +299,20 @@ function UploadArtModal({
               <span className="text-foreground">{card.format}</span>
             </div>
             {card.briefing && (
-              <div className="pt-1.5 border-t border-[#1a1a1a] mt-1.5">
+              <div className="pt-1.5 border-t border-border mt-1.5">
                 <p className="text-muted-foreground leading-relaxed line-clamp-3">{markdownPlainText(card.briefing)}</p>
               </div>
             )}
           </div>
         </div>
 
-        <div className="p-5 border-t border-[#1a1a1a] flex gap-2">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-xs text-zinc-500 hover:text-foreground hover:bg-white/5 transition-all">Cancelar</button>
+        <div className="p-5 border-t border-border flex gap-2">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all">Cancelar</button>
           <button
             type="button"
             onClick={handleSave}
             disabled={!artLink.trim() || saved || saving}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] disabled:opacity-30 disabled:shadow-none"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all shadow-[0_0_15px_rgba(10,52,245,0.3)] disabled:opacity-30 disabled:shadow-none"
           >
             {saved ? (
               <><CheckCircle size={14} /> Entregue!</>
@@ -355,12 +355,12 @@ function DownloadButton({ url, title }: { url: string; title: string }) {
   return (
     <button
       onClick={handleDownload}
-      className="text-[11px] px-3 py-1.5 rounded-lg bg-white/[0.06] text-zinc-300 font-medium hover:text-white hover:bg-white/[0.1] transition-all flex items-center gap-1.5 border border-white/[0.06]"
+      className="text-[11px] px-3 py-1.5 rounded-lg bg-card/[0.06] text-muted-foreground font-medium hover:text-foreground hover:bg-card/[0.1] transition-all flex items-center gap-1.5 border border-border"
     >
       {state === "loading" ? (
         <Loader size={11} className="animate-spin" />
       ) : state === "done" ? (
-        <CheckCircle size={11} className="text-emerald-400" />
+        <CheckCircle size={11} className="text-lone-success" />
       ) : (
         <Download size={11} />
       )}
@@ -613,11 +613,11 @@ export default function DesignPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="card flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${needsArt > 0 ? "bg-[#3b6ff5]/15" : "bg-[#111118]"}`}>
-              <ImageIcon size={18} className={needsArt > 0 ? "text-[#3b6ff5]" : "text-zinc-400"} />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${needsArt > 0 ? "bg-primary/15" : "bg-card"}`}>
+              <ImageIcon size={18} className={needsArt > 0 ? "text-primary" : "text-muted-foreground"} />
             </div>
             <div>
-              <p className={`text-2xl font-bold ${needsArt > 0 ? "text-[#3b6ff5]" : "text-foreground"}`}>{needsArt}</p>
+              <p className={`text-2xl font-bold ${needsArt > 0 ? "text-primary" : "text-foreground"}`}>{needsArt}</p>
               <p className="text-xs text-muted-foreground">Precisam de arte</p>
             </div>
           </div>
@@ -631,8 +631,8 @@ export default function DesignPage() {
             </div>
           </div>
           <div className="card flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-[#0d4af5]/15 flex items-center justify-center">
-              <CheckCircle size={18} className="text-[#0d4af5]" />
+            <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center">
+              <CheckCircle size={18} className="text-primary" />
             </div>
             <div>
               <p className="text-2xl font-bold text-foreground">{totalDone}</p>
@@ -640,11 +640,11 @@ export default function DesignPage() {
             </div>
           </div>
           <div className="card flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${urgentCards > 0 ? "bg-red-500/15" : "bg-[#111118]"}`}>
-              <AlertTriangle size={18} className={urgentCards > 0 ? "text-red-500" : "text-zinc-500"} />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${urgentCards > 0 ? "bg-destructive/15" : "bg-card"}`}>
+              <AlertTriangle size={18} className={urgentCards > 0 ? "text-destructive" : "text-muted-foreground"} />
             </div>
             <div>
-              <p className={`text-2xl font-bold ${urgentCards > 0 ? "text-red-500" : "text-foreground"}`}>{urgentCards}</p>
+              <p className={`text-2xl font-bold ${urgentCards > 0 ? "text-destructive" : "text-foreground"}`}>{urgentCards}</p>
               <p className="text-xs text-muted-foreground">Urgentes</p>
             </div>
           </div>
@@ -658,7 +658,7 @@ export default function DesignPage() {
               <p className="text-xs text-muted-foreground">Gerencie as artes em produção e crie tarefas próprias.</p>
               <button
                 onClick={() => setNewTaskOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-xs font-medium transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-xs font-medium transition-colors"
               >
                 <Plus size={12} /> Nova Tarefa
               </button>
@@ -689,17 +689,17 @@ export default function DesignPage() {
                         <div
                           key={card.id}
                           className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors cursor-pointer hover:border-primary/30 ${
-                            isOverdue ? "bg-red-500/5 border-red-500/20" : isToday ? "bg-[#0d4af5]/5 border-[#0d4af5]/15" : "bg-muted/50 border-border"
+                            isOverdue ? "bg-destructive/5 border-destructive/20" : isToday ? "bg-primary/5 border-primary/15" : "bg-muted/50 border-border"
                           }`}
                           onClick={() => setUploadCard(card)}
                         >
-                          <div className={`w-2 h-2 rounded-full shrink-0 ${isOverdue ? "bg-red-500" : isToday ? "bg-[#3b6ff5]" : "bg-primary"}`} />
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${isOverdue ? "bg-destructive" : isToday ? "bg-primary" : "bg-primary"}`} />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-foreground font-medium truncate">{card.title}</p>
                             <p className="text-[10px] text-muted-foreground">{card.clientName} · {card.socialMedia}</p>
                           </div>
                           <div className="text-right shrink-0">
-                            <p className={`text-[10px] font-medium ${isOverdue ? "text-red-500" : isToday ? "text-[#3b6ff5]" : "text-muted-foreground"}`}>
+                            <p className={`text-[10px] font-medium ${isOverdue ? "text-destructive" : isToday ? "text-primary" : "text-muted-foreground"}`}>
                               {card.dueDate}
                             </p>
                             {card.dueTime && (
@@ -732,7 +732,7 @@ export default function DesignPage() {
                       <p className="text-xs text-muted-foreground">
                         {cards.length} cards
                         {personNeedsArt > 0 && (
-                          <span className="text-[#3b6ff5] ml-2">
+                          <span className="text-primary ml-2">
                             · {personNeedsArt} precisam de arte
                           </span>
                         )}
@@ -794,23 +794,23 @@ export default function DesignPage() {
                           onClick={() => setDetailCard(fullCard)}
                           className={`bg-card border rounded-lg p-3 space-y-2 transition-colors cursor-pointer ${
                           isAtRisk
-                            ? "border-red-500/30 bg-red-500/[0.03]"
+                            ? "border-destructive/30 bg-destructive/[0.03]"
                             : fullCard.status === "blocked"
-                            ? "border-red-500/40 bg-red-500/[0.05]"
+                            ? "border-destructive/40 bg-destructive/[0.05]"
                             : !hasArt && ["in_production", "approval", "client_approval"].includes(fullCard.status)
-                              ? "border-yellow-500/30 bg-[#0d4af5]/5"
+                              ? "border-lone-warning-border bg-primary/5"
                               : "border-border hover:border-primary/30"
                         }`}>
                           {/* Client risk + budget indicator */}
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {isAtRisk && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20 font-bold">RISCO</span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive border border-destructive/20 font-bold">RISCO</span>
                             )}
                             {budgetTier === "high" && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20 font-bold">$$$$</span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-bold">$$$$</span>
                             )}
                             {item.requestedByTraffic && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#3b6ff5]/10 text-[#3b6ff5] border border-[#3b6ff5]/20 font-medium flex items-center gap-0.5">
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-medium flex items-center gap-0.5">
                                 <Zap size={8} /> TRAFEGO
                               </span>
                             )}
@@ -818,7 +818,7 @@ export default function DesignPage() {
 
                           {/* Blocked reason banner */}
                           {fullCard.status === "blocked" && fullCard.blockedReason && (
-                            <div className="px-2 py-1.5 rounded-md bg-red-500/10 border border-red-500/20 text-[10px] text-red-400 font-medium">
+                            <div className="px-2 py-1.5 rounded-md bg-destructive/10 border border-destructive/20 text-[10px] text-destructive font-medium">
                               Bloqueado: {fullCard.blockedReason}
                             </div>
                           )}
@@ -856,11 +856,11 @@ export default function DesignPage() {
                               {getPriorityLabel(item.priority)}
                             </span>
                             {hasArt ? (
-                              <span className="text-[10px] text-[#0d4af5] flex items-center gap-0.5">
+                              <span className="text-[10px] text-primary flex items-center gap-0.5">
                                 <CheckCircle size={9} /> Arte
                               </span>
                             ) : (
-                              <span className="text-[10px] text-[#3b6ff5] flex items-center gap-0.5">
+                              <span className="text-[10px] text-primary flex items-center gap-0.5">
                                 <ImageIcon size={9} /> Sem arte
                               </span>
                             )}
@@ -873,7 +873,7 @@ export default function DesignPage() {
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.06] text-[10px] text-zinc-400 hover:text-[#0d4af5] hover:border-[#0d4af5]/30 transition-all w-full"
+                              className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-card/[0.04] border border-border text-[10px] text-muted-foreground hover:text-primary hover:border-primary/30 transition-all w-full"
                             >
                               <FolderOpen size={10} className="shrink-0" />
                               <span className="truncate">Abrir Drive — {item.clientName}</span>
@@ -886,17 +886,17 @@ export default function DesignPage() {
                               <>
                                 {fullCard.designerDeliveredAt && (
                                   <div className="flex items-center gap-1 text-[10px]">
-                                    <CheckCircle size={9} className="text-[#0d4af5]" />
-                                    <span className="text-[#0d4af5]">Entregue</span>
+                                    <CheckCircle size={9} className="text-primary" />
+                                    <span className="text-primary">Entregue</span>
                                     {fullCard.socialConfirmedAt ? (
-                                      <span className="text-[#0d4af5] ml-1">· Confirmado</span>
+                                      <span className="text-primary ml-1">· Confirmado</span>
                                     ) : (
-                                      <span className="text-[#3b6ff5] ml-1">· Aguardando social</span>
+                                      <span className="text-primary ml-1">· Aguardando social</span>
                                     )}
                                   </div>
                                 )}
                                 {fullCard.nonDeliveryReason && (
-                                  <div className="flex items-center gap-1 text-[10px] text-red-400" title={fullCard.nonDeliveryReason}>
+                                  <div className="flex items-center gap-1 text-[10px] text-destructive" title={fullCard.nonDeliveryReason}>
                                     <FileWarning size={9} /> N/Entregue: {fullCard.nonDeliveryReason.slice(0, 30)}...
                                   </div>
                                 )}
@@ -908,7 +908,7 @@ export default function DesignPage() {
                           <div className="flex items-center gap-1.5 pt-2 border-t border-border flex-wrap">
                             <button
                               onClick={(e) => { e.stopPropagation(); setUploadCard(fullCard); }}
-                              className="text-[11px] px-3 py-1.5 rounded-lg bg-[#0d4af5] text-white font-medium hover:bg-[#0d4af5]/80 transition-all flex items-center gap-1.5"
+                              className="text-[11px] px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/80 transition-all flex items-center gap-1.5"
                             >
                               <Upload size={11} />
                               {hasArt ? "Trocar Arte" : "Enviar Arte"}
@@ -924,7 +924,7 @@ export default function DesignPage() {
                               return (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setNonDeliveryCard(fc); }}
-                                  className="text-[10px] px-2 py-1 rounded-md bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors flex items-center gap-1"
+                                  className="text-[10px] px-2 py-1 rounded-md bg-destructive/15 text-destructive hover:bg-destructive/25 transition-colors flex items-center gap-1"
                                 >
                                   <FileWarning size={10} /> Reportar
                                 </button>
@@ -1011,21 +1011,21 @@ export default function DesignPage() {
             </div>
             <div className="card">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">No Prazo</p>
-              <p className="text-2xl font-bold text-[#0d4af5]">
+              <p className="text-2xl font-bold text-primary">
                 {myContentCards.filter((c) => c.designerDeliveredAt && c.dueDate && c.designerDeliveredAt.slice(0, 10) <= c.dueDate).length}
               </p>
               <p className="text-xs text-muted-foreground">entregas antes do deadline</p>
             </div>
             <div className="card">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Atrasadas</p>
-              <p className="text-2xl font-bold text-red-400">
+              <p className="text-2xl font-bold text-destructive">
                 {myContentCards.filter((c) => c.designerDeliveredAt && c.dueDate && c.designerDeliveredAt.slice(0, 10) > c.dueDate).length}
               </p>
               <p className="text-xs text-muted-foreground">entregas após deadline</p>
             </div>
             <div className="card">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pendentes</p>
-              <p className="text-2xl font-bold text-amber-400">{needsArt}</p>
+              <p className="text-2xl font-bold text-lone-warning">{needsArt}</p>
               <p className="text-xs text-muted-foreground">aguardando arte</p>
             </div>
           </div>
@@ -1047,7 +1047,7 @@ export default function DesignPage() {
                     </div>
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-[#0d4af5] rounded-full transition-all duration-500"
+                        className="h-full bg-primary rounded-full transition-all duration-500"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -1072,12 +1072,12 @@ export default function DesignPage() {
                     const onTime = c.dueDate && c.designerDeliveredAt && c.designerDeliveredAt.slice(0, 10) <= c.dueDate;
                     return (
                       <div key={c.id} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0">
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${onTime ? "bg-[#0d4af5]" : "bg-red-400"}`} />
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${onTime ? "bg-primary" : "bg-destructive"}`} />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-foreground truncate">{c.title}</p>
                           <p className="text-[10px] text-muted-foreground">{c.clientName} · {c.socialMedia}</p>
                         </div>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${onTime ? "bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${onTime ? "bg-primary/10 text-primary border border-primary/20" : "bg-destructive/10 text-destructive border border-destructive/20"}`}>
                           {onTime ? "No prazo" : "Atrasado"}
                         </span>
                       </div>
@@ -1092,7 +1092,7 @@ export default function DesignPage() {
       {/* ═══ HISTORY TAB ═══ */}
       {tab === "history" && (
         <div className="space-y-4 animate-fade-in">
-          <p className="text-xs text-zinc-400">Cards entregues e aprovados — historico completo de producao.</p>
+          <p className="text-xs text-muted-foreground">Cards entregues e aprovados — historico completo de producao.</p>
           <div className="space-y-2">
             {myContentCards
               .filter((c) => c.designerDeliveredAt || c.status === "published" || c.status === "scheduled")
@@ -1102,41 +1102,41 @@ export default function DesignPage() {
                 const onTime = card.dueDate && card.designerDeliveredAt && card.designerDeliveredAt.slice(0, 10) <= card.dueDate;
                 return (
                   <div key={card.id} onClick={() => setDetailCard(card)}
-                    className="card p-4 flex items-center gap-4 cursor-pointer hover:border-[#0d4af5]/20 transition-all">
+                    className="card p-4 flex items-center gap-4 cursor-pointer hover:border-primary/20 transition-all">
                     {card.imageUrl ? (
                       <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted shrink-0">
                         <SignedImage src={card.imageUrl!} alt="" className="w-full h-full object-cover" />
                       </div>
                     ) : (
                       <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                        <ImageIcon size={16} className="text-zinc-600" />
+                        <ImageIcon size={16} className="text-muted-foreground" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{card.title}</p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-zinc-400">{card.clientName}</span>
-                        <span className="text-[10px] text-zinc-600">·</span>
-                        <span className="text-[10px] text-zinc-400">{card.format}</span>
+                        <span className="text-[10px] text-muted-foreground">{card.clientName}</span>
+                        <span className="text-[10px] text-muted-foreground">·</span>
+                        <span className="text-[10px] text-muted-foreground">{card.format}</span>
                         {card.designerDeliveredAt && (
                           <>
-                            <span className="text-[10px] text-zinc-600">·</span>
-                            <span className="text-[10px] text-zinc-500">Entregue {card.designerDeliveredAt.slice(0, 10)}</span>
+                            <span className="text-[10px] text-muted-foreground">·</span>
+                            <span className="text-[10px] text-muted-foreground">Entregue {card.designerDeliveredAt.slice(0, 10)}</span>
                           </>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
-                        card.status === "published" ? "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" :
-                        card.status === "scheduled" ? "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" :
-                        "text-zinc-400 bg-zinc-500/10 border-zinc-500/20"
+                        card.status === "published" ? "text-primary bg-primary/10 border-primary/20" :
+                        card.status === "scheduled" ? "text-muted-foreground bg-muted border-border" :
+                        "text-muted-foreground bg-muted border-border"
                       }`}>
                         {card.status === "published" ? "Publicado" : card.status === "scheduled" ? "Agendado" : "Entregue"}
                       </span>
                       {card.designerDeliveredAt && (
                         <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
-                          onTime ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10"
+                          onTime ? "text-lone-success bg-lone-success-bg" : "text-destructive bg-destructive/10"
                         }`}>
                           {onTime ? "No prazo" : "Atrasado"}
                         </span>
@@ -1147,8 +1147,8 @@ export default function DesignPage() {
               })}
             {myContentCards.filter((c) => c.designerDeliveredAt || c.status === "published").length === 0 && (
               <div className="text-center py-12">
-                <Clock size={24} className="text-zinc-800 mx-auto mb-3" />
-                <p className="text-xs text-zinc-600">Nenhuma entrega no historico ainda.</p>
+                <Clock size={24} className="text-muted-foreground mx-auto mb-3" />
+                <p className="text-xs text-muted-foreground">Nenhuma entrega no historico ainda.</p>
               </div>
             )}
           </div>
@@ -1193,12 +1193,12 @@ export default function DesignPage() {
       {/* Block Reason Modal — Designer's Panic Button */}
       {blockingCard && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setBlockingCard(null); setBlockReason(""); }}>
-          <div className="bg-card border border-red-500/20 rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-card border border-destructive/20 rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border">
-              <h3 className="font-semibold text-red-400 text-sm flex items-center gap-2">
+              <h3 className="font-semibold text-destructive text-sm flex items-center gap-2">
                 <AlertTriangle size={15} /> Devolver Card — Motivo do Bloqueio
               </h3>
-              <p className="text-xs text-zinc-400 mt-1">{blockingCard.title} — {blockingCard.clientName}</p>
+              <p className="text-xs text-muted-foreground mt-1">{blockingCard.title} — {blockingCard.clientName}</p>
             </div>
             <div className="p-5 space-y-2">
               {BLOCK_REASONS.map((reason) => (
@@ -1207,8 +1207,8 @@ export default function DesignPage() {
                   onClick={() => setBlockReason(reason)}
                   className={`w-full text-left px-3 py-2.5 rounded-lg text-xs transition-all ${
                     blockReason === reason
-                      ? "bg-red-500/10 text-red-400 border border-red-500/30"
-                      : "bg-white/[0.02] text-zinc-400 border border-transparent hover:bg-white/[0.04]"
+                      ? "bg-destructive/10 text-destructive border border-destructive/30"
+                      : "bg-card/[0.02] text-muted-foreground border border-transparent hover:bg-card/[0.04]"
                   }`}
                 >
                   {reason}
@@ -1245,7 +1245,7 @@ export default function DesignPage() {
                   setBlockReason("");
                 }}
                 disabled={!blockReason}
-                className="flex-1 px-4 py-2 rounded-xl bg-red-500/15 text-red-400 text-sm font-medium border border-red-500/30 hover:bg-red-500/25 transition-all disabled:opacity-30"
+                className="flex-1 px-4 py-2 rounded-xl bg-destructive/15 text-destructive text-sm font-medium border border-destructive/30 hover:bg-destructive/25 transition-all disabled:opacity-30"
               >
                 Devolver Card
               </button>
@@ -1277,8 +1277,8 @@ export default function DesignPage() {
                     onClick={() => setNonDeliveryReason(reason)}
                     className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all ${
                       nonDeliveryReason === reason
-                        ? "bg-[#0d4af5]/10 text-[#0d4af5] border border-[#0d4af5]/30"
-                        : "bg-muted/50 text-zinc-400 border border-transparent hover:bg-muted"
+                        ? "bg-primary/10 text-primary border border-primary/30"
+                        : "bg-muted/50 text-muted-foreground border border-transparent hover:bg-muted"
                     }`}
                   >
                     {reason}
@@ -1353,14 +1353,14 @@ export default function DesignPage() {
                 ];
                 const score = Math.round((checks.filter((c) => c.ok).length / checks.length) * 100);
                 return (
-                  <div className={`p-3 rounded-lg border ${score >= 75 ? "bg-emerald-500/[0.04] border-emerald-500/[0.1]" : score >= 50 ? "bg-amber-500/[0.04] border-amber-500/[0.1]" : "bg-red-500/[0.04] border-red-500/[0.1]"}`}>
+                  <div className={`p-3 rounded-lg border ${score >= 75 ? "bg-lone-success-bg/[0.04] border-lone-success-border/[0.1]" : score >= 50 ? "bg-lone-warning-bg/[0.04] border-lone-warning-border/[0.1]" : "bg-destructive/[0.04] border-destructive/[0.1]"}`}>
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] uppercase tracking-wider font-semibold text-zinc-400">Saude do Briefing</p>
-                      <span className={`text-xs font-bold ${score >= 75 ? "text-emerald-400" : score >= 50 ? "text-amber-400" : "text-red-400"}`}>{score}%</span>
+                      <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Saude do Briefing</p>
+                      <span className={`text-xs font-bold ${score >= 75 ? "text-lone-success" : score >= 50 ? "text-lone-warning" : "text-destructive"}`}>{score}%</span>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       {checks.map((c) => (
-                        <span key={c.label} className={`text-[9px] px-2 py-0.5 rounded-full border ${c.ok ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-red-400 bg-red-500/10 border-red-500/20"}`}>
+                        <span key={c.label} className={`text-[9px] px-2 py-0.5 rounded-full border ${c.ok ? "text-lone-success bg-lone-success-bg border-lone-success-border" : "text-destructive bg-destructive/10 border-destructive/20"}`}>
                           {c.ok ? "✓" : "✗"} {c.label}
                         </span>
                       ))}
@@ -1387,15 +1387,15 @@ export default function DesignPage() {
                   <>
                     {client?.fixedBriefing && (
                       <div>
-                        <p className="text-xs text-[#0d4af5]/70 font-medium mb-1.5 uppercase tracking-wider">Guidelines do Cliente</p>
-                        <div className="bg-[#0d4af5]/[0.03] border border-[#0d4af5]/[0.08] rounded-lg p-3">
+                        <p className="text-xs text-primary/70 font-medium mb-1.5 uppercase tracking-wider">Guidelines do Cliente</p>
+                        <div className="bg-primary/[0.03] border border-primary/[0.08] rounded-lg p-3">
                           <MarkdownView source={client.fixedBriefing} />
                         </div>
                       </div>
                     )}
                     {client?.driveLink && (
                       <a href={client.driveLink} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:border-[#0d4af5]/30 transition-all text-xs text-zinc-400 hover:text-[#0d4af5]">
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card/[0.03] border border-border hover:border-primary/30 transition-all text-xs text-muted-foreground hover:text-primary">
                         <FolderOpen size={13} /> Abrir pasta Drive do cliente →
                       </a>
                     )}
@@ -1421,9 +1421,9 @@ export default function DesignPage() {
               {/* Status badge */}
               <div className="flex items-center gap-2">
                 <span className={`badge border text-xs ${
-                  briefingReq.status === "done" ? "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" :
+                  briefingReq.status === "done" ? "text-primary bg-primary/10 border-primary/20" :
                   briefingReq.status === "in_progress" ? "text-primary bg-primary/10 border-primary/20" :
-                  "text-zinc-400 bg-[#0e0e14] border-[#1e1e2a]"
+                  "text-muted-foreground bg-card border-border"
                 }`}>
                   {briefingReq.status === "queued" ? "Na Fila" : briefingReq.status === "in_progress" ? "Em Produção" : "Concluído"}
                 </span>
@@ -1448,7 +1448,7 @@ export default function DesignPage() {
                               href={url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0d4af5]/[0.05] border border-[#0d4af5]/20 hover:border-[#0d4af5]/40 transition-all text-xs text-[#3b6ff5] min-w-0"
+                              className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/[0.05] border border-primary/20 hover:border-primary/40 transition-all text-xs text-primary min-w-0"
                             >
                               <ExternalLink size={11} className="shrink-0" />
                               <span className="truncate">{isImg ? `Imagem ${i + 1}` : `Anexo #${i + 1}`}</span>
@@ -1456,7 +1456,7 @@ export default function DesignPage() {
                             <a
                               href={url}
                               download
-                              className="p-2 rounded-lg border border-border hover:border-emerald-500/30 hover:text-emerald-400 text-muted-foreground transition-colors"
+                              className="p-2 rounded-lg border border-border hover:border-lone-success-border hover:text-lone-success text-muted-foreground transition-colors"
                               title="Baixar arquivo"
                             >
                               <Download size={11} />
@@ -1469,7 +1469,7 @@ export default function DesignPage() {
                                   updateDesignRequest(briefingReq.id, { attachments: next, status: nextStatus });
                                   setBriefingReq({ ...briefingReq, attachments: next, status: nextStatus });
                                 }}
-                                className="p-2 rounded-lg border border-border hover:border-red-500/30 hover:text-red-400 text-muted-foreground transition-colors"
+                                className="p-2 rounded-lg border border-border hover:border-destructive/30 hover:text-destructive text-muted-foreground transition-colors"
                                 title="Remover anexo"
                               >
                                 <X size={11} />
@@ -1497,7 +1497,7 @@ export default function DesignPage() {
                   type="button"
                   onClick={() => briefingUploadInputRef.current?.click()}
                   disabled={briefingUploading}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all shadow-[0_0_20px_rgba(13,74,245,0.2)] disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary hover:bg-primary text-primary-foreground text-sm font-medium transition-all shadow-[0_0_20px_rgba(13,74,245,0.2)] disabled:opacity-50"
                 >
                   {briefingUploading ? (
                     <><Upload size={14} className="animate-pulse" /> Carregando...</>
@@ -1508,12 +1508,12 @@ export default function DesignPage() {
                   )}
                 </button>
                 {briefingUploadOk && (
-                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[11px] text-lone-success bg-lone-success-bg border border-lone-success-border rounded-md px-3 py-2">
                     <CheckCircle size={12} /> {role === "designer" ? "Arte enviada — demanda marcada como concluída." : "Referência adicionada ao pedido."}
                   </div>
                 )}
                 {briefingUploadError && (
-                  <div className="flex items-start gap-1.5 text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-3 py-2">
+                  <div className="flex items-start gap-1.5 text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3 py-2">
                     <XCircle size={12} className="shrink-0 mt-0.5" />
                     <span className="leading-relaxed">{briefingUploadError}</span>
                   </div>
@@ -1539,7 +1539,7 @@ export default function DesignPage() {
                     updateDesignRequest(briefingReq.id, { status: "done" });
                     setBriefingReq(null);
                   }}
-                  className="bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white px-3 py-2 rounded-lg font-medium text-sm transition-colors flex-1 flex items-center justify-center gap-1.5"
+                  className="bg-primary hover:bg-primary/80 text-primary-foreground px-3 py-2 rounded-lg font-medium text-sm transition-colors flex-1 flex items-center justify-center gap-1.5"
                 >
                   <CheckCircle size={13} /> Marcar Concluído
                 </button>
@@ -1619,7 +1619,7 @@ function RequestsView({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-            className="bg-card border border-border text-sm text-[#c0c0cc] rounded-lg px-3 py-1.5 outline-none focus:border-primary"
+            className="bg-card border border-border text-sm text-muted-foreground rounded-lg px-3 py-1.5 outline-none focus:border-primary"
           >
             <option value="all">Status: Todos</option>
             <option value="queued">Na Fila</option>
@@ -1629,7 +1629,7 @@ function RequestsView({
           <select
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value as typeof priorityFilter)}
-            className="bg-card border border-border text-sm text-[#c0c0cc] rounded-lg px-3 py-1.5 outline-none focus:border-primary"
+            className="bg-card border border-border text-sm text-muted-foreground rounded-lg px-3 py-1.5 outline-none focus:border-primary"
           >
             <option value="all">Prioridade: Todas</option>
             <option value="critical">Critica</option>
@@ -1640,7 +1640,7 @@ function RequestsView({
           <select
             value={clientFilter}
             onChange={(e) => setClientFilter(e.target.value)}
-            className="bg-card border border-border text-sm text-[#c0c0cc] rounded-lg px-3 py-1.5 outline-none focus:border-primary"
+            className="bg-card border border-border text-sm text-muted-foreground rounded-lg px-3 py-1.5 outline-none focus:border-primary"
           >
             <option value="all">Cliente: Todos</option>
             {uniqueClients.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -1693,7 +1693,7 @@ function RequestsView({
               </div>
               <div className="flex items-center gap-1.5 pt-1.5 border-t border-border">
                 {currentUser && item.requestedBy === currentUser ? (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20 font-medium flex-1 text-center">
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 font-medium flex-1 text-center">
                     ⚡ Auto-iniciada
                   </span>
                 ) : (
@@ -1741,14 +1741,14 @@ function RequestsView({
                       <span className="text-xs text-muted-foreground">{req.format}</span>
                       <span className="text-muted-foreground/50">·</span>
                       {currentUser && req.requestedBy === currentUser ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20 font-medium">⚡ Auto-iniciada</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 font-medium">⚡ Auto-iniciada</span>
                       ) : (
                         <span className="text-xs text-muted-foreground">por {req.requestedBy}</span>
                       )}
                     </div>
                     {req.briefing && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{markdownPlainText(req.briefing)}</p>}
                     {linked && (
-                      <span className="text-[10px] text-zinc-400 bg-[#111118] border border-[#1e1e2a] px-2 py-0.5 rounded-full mt-1.5 inline-block">
+                      <span className="text-[10px] text-muted-foreground bg-card border border-border px-2 py-0.5 rounded-full mt-1.5 inline-block">
                         Card: {linked.title}
                       </span>
                     )}
@@ -1756,9 +1756,9 @@ function RequestsView({
                   <div className="flex items-center gap-2 shrink-0">
                     <span className={`badge border text-xs ${getPriorityColor(req.priority)}`}>{getPriorityLabel(req.priority)}</span>
                     <span className={`badge border text-xs ${
-                      req.status === "done" ? "text-[#0d4af5] bg-[#0d4af5]/10 border-[#0d4af5]/20" :
+                      req.status === "done" ? "text-primary bg-primary/10 border-primary/20" :
                       req.status === "in_progress" ? "text-primary bg-primary/10 border-primary/20" :
-                      "text-zinc-400 bg-[#0e0e14] border-[#1e1e2a]"
+                      "text-muted-foreground bg-card border-border"
                     }`}>
                       {req.status === "queued" ? "Na Fila" : req.status === "in_progress" ? "Em Produção" : "Concluído"}
                     </span>
@@ -1771,12 +1771,12 @@ function RequestsView({
                     </button>
                   )}
                   {req.status === "in_progress" && (
-                    <button onClick={(e) => { e.stopPropagation(); updateDesignRequest(req.id, { status: "done" }); }} className="bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white px-3 py-1.5 rounded-lg font-medium text-xs transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); updateDesignRequest(req.id, { status: "done" }); }} className="bg-primary hover:bg-primary/80 text-primary-foreground px-3 py-1.5 rounded-lg font-medium text-xs transition-colors">
                       Marcar Concluído
                     </button>
                   )}
                   {req.status === "done" && (
-                    <span className="text-xs text-[#0d4af5] flex items-center gap-1"><CheckCircle size={12} /> Concluído</span>
+                    <span className="text-xs text-primary flex items-center gap-1"><CheckCircle size={12} /> Concluído</span>
                   )}
                   <button onClick={(e) => { e.stopPropagation(); onBriefing(req); }} className="btn-ghost text-xs flex items-center gap-1">
                     <Paperclip size={12} /> Briefing
@@ -1817,11 +1817,11 @@ function ClientesView({
   }
 
   const statusColor = (s: string) => {
-    if (s === "good")       return { dot: "bg-emerald-500", label: "On Fire" };
-    if (s === "average")    return { dot: "bg-amber-400",   label: "Atenção" };
-    if (s === "at_risk")    return { dot: "bg-red-500",     label: "Crítico" };
-    if (s === "onboarding") return { dot: "bg-[#0d4af5]",   label: "Onboarding" };
-    return { dot: "bg-zinc-500", label: s };
+    if (s === "good")       return { dot: "bg-lone-success-bg", label: "On Fire" };
+    if (s === "average")    return { dot: "bg-lone-warning-bg",   label: "Atenção" };
+    if (s === "at_risk")    return { dot: "bg-destructive",     label: "Crítico" };
+    if (s === "onboarding") return { dot: "bg-primary",   label: "Onboarding" };
+    return { dot: "bg-muted", label: s };
   };
 
   return (
@@ -1869,7 +1869,7 @@ function ClientesView({
                       <span className="text-muted-foreground">{st.label}</span>
                     </span>
                     {openRequests > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border">
                         {openRequests} pedido{openRequests > 1 ? "s" : ""}
                       </span>
                     )}
@@ -1977,7 +1977,7 @@ function ClientDrawer({
               <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Entregues</p>
             </div>
             <div className="rounded-lg bg-muted/40 border border-border p-3 text-center">
-              <p className="text-xl font-bold text-amber-400">{openRequests.length}</p>
+              <p className="text-xl font-bold text-lone-warning">{openRequests.length}</p>
               <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Pendentes</p>
             </div>
             <div className="rounded-lg bg-muted/40 border border-border p-3 text-center">
@@ -1995,13 +1995,13 @@ function ClientDrawer({
               {!editingBriefing ? (
                 <button
                   onClick={() => setEditingBriefing(true)}
-                  className="text-[10px] px-2 py-0.5 rounded-md bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 transition-colors"
+                  className="text-[10px] px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
                 >
                   {hasBriefing ? "Editar" : "+ Adicionar"}
                 </button>
               ) : (
                 <div className="flex items-center gap-1">
-                  {briefingSaved && <span className="text-[10px] text-emerald-400">✓ Salvo</span>}
+                  {briefingSaved && <span className="text-[10px] text-lone-success">✓ Salvo</span>}
                   <button
                     onClick={() => {
                       setEditingBriefing(false);
@@ -2018,7 +2018,7 @@ function ClientDrawer({
                   <button
                     onClick={handleSaveBriefing}
                     disabled={savingBriefing}
-                    className="text-[10px] px-2 py-0.5 rounded-md bg-[#0d4af5] text-white hover:bg-[#1a56ff] disabled:opacity-50"
+                    className="text-[10px] px-2 py-0.5 rounded-md bg-primary text-primary-foreground hover:bg-primary disabled:opacity-50"
                   >
                     {savingBriefing ? "Salvando..." : "Salvar"}
                   </button>
@@ -2132,7 +2132,7 @@ function ClientDrawer({
           <div className="space-y-2 pt-2">
             <button
               onClick={onCreateTask}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-sm font-medium transition-colors"
             >
               <Plus size={14} /> Criar Tarefa para este Cliente
             </button>
@@ -2212,8 +2212,8 @@ function NewTaskModal({
       >
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#0d4af5]/15 flex items-center justify-center">
-              <Plus size={14} className="text-[#0d4af5]" />
+            <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+              <Plus size={14} className="text-primary" />
             </div>
             <div>
               <h2 className="text-sm font-semibold text-foreground">Nova Tarefa</h2>
@@ -2315,7 +2315,7 @@ function NewTaskModal({
           <button
             onClick={handleSubmit}
             disabled={!canSubmit || saving}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-sm font-medium transition-colors disabled:opacity-50"
           >
             {saving ? <Loader size={13} className="animate-spin" /> : <Plus size={13} />}
             {saving ? "Criando..." : "Criar Tarefa"}
