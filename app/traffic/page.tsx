@@ -1191,58 +1191,54 @@ function RoutineTab({
           </div>
         </div>
 
-        {/* Falhas da automação hoje — ação manual necessária */}
-        {supportFailed.length > 0 && (
-          <div className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5">
-            <AlertTriangle size={14} className="text-destructive shrink-0 mt-0.5" />
-            <p className="text-xs text-foreground">
-              <span className="font-semibold text-destructive">Automação falhou para {supportFailed.length} cliente(s) hoje.</span>{" "}
-              Envie o suporte na mão e marque abaixo: {supportFailed.map((c) => c.name).join(", ")}.
-            </p>
-          </div>
-        )}
-
-        {/* Pending */}
-        {supportPending.length > 0 && (
+        {/* Painel de status da automação — sem marcar os 35 à mão; ação SÓ nas falhas */}
+        {supportFailed.length > 0 ? (
           <div className="space-y-2 mb-4">
-            <p className="text-xs font-medium text-muted-foreground">Pendentes ({supportPending.length})</p>
-            {supportPending.map((client) => (
-              <div key={client.id} className="flex items-center gap-3 bg-card border border-border rounded-lg px-3 py-2.5">
-                <div className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold ${
-                  client.status === "at_risk" ? "bg-lone-danger-bg text-destructive" : "bg-lone-brand-bg-soft text-primary"
-                }`}>
+            <p className="text-xs font-medium text-destructive flex items-center gap-1.5">
+              <AlertTriangle size={13} /> Falharam na automação ({supportFailed.length}) — envie manualmente e marque:
+            </p>
+            {supportFailed.map((client) => (
+              <div key={client.id} className="flex items-center gap-3 bg-card border border-destructive/30 rounded-lg px-3 py-2.5">
+                <div className="w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold bg-lone-danger-bg text-destructive">
                   {client.name[0]}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground">{client.name}</p>
                   <p className="text-xs text-muted-foreground">{client.assignedTraffic}</p>
                 </div>
-                <button
-                  onClick={() => handleSupport(client)}
-                  className="btn-primary text-xs py-1.5 flex items-center gap-1.5"
-                >
-                  <MessageCircle size={12} />
-                  Marcar Suporte
+                <button onClick={() => handleSupport(client)} className="btn-primary text-xs py-1.5 flex items-center gap-1.5">
+                  <MessageCircle size={12} /> Marcar enviado
                 </button>
               </div>
             ))}
           </div>
+        ) : supportPending.length === 0 && activeClients.length > 0 ? (
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-lone-success-border bg-lone-success-bg px-3 py-3 text-xs text-lone-success">
+            <Check size={14} /> Automação concluída — {activeClients.length}/{activeClients.length} grupos atendidos hoje. Sem ação manual.
+          </div>
+        ) : (
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-3 text-xs text-muted-foreground">
+            <ClipboardCheck size={14} />
+            A automação envia o suporte seg/qua/sex às 08:00 e marca sozinha.{supportCompleted.length > 0 ? ` ${supportCompleted.length}/${activeClients.length} já enviados hoje.` : ""} Sem ação manual pendente.
+          </div>
         )}
 
-        {/* Completed */}
+        {/* Atendidos — recolhivel, so leitura (sem botoes) */}
         {supportCompleted.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-primary">Concluidos ({supportCompleted.length})</p>
-            {supportCompleted.map((client) => (
-              <div key={client.id} className="flex items-center gap-3 bg-lone-brand-bg-soft border border-border rounded-lg px-3 py-2">
-                <Check size={14} className="text-primary shrink-0" />
-                <span className="text-sm text-muted-foreground">{client.name}</span>
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {todayChecks.find((c) => c.clientId === client.id && c.type === "support")?.completedBy}
-                </span>
-              </div>
-            ))}
-          </div>
+          <details className="mt-1">
+            <summary className="text-xs font-medium text-primary cursor-pointer select-none">Ver {supportCompleted.length} atendidos pela automação</summary>
+            <div className="space-y-1.5 mt-2">
+              {supportCompleted.map((client) => (
+                <div key={client.id} className="flex items-center gap-3 bg-lone-brand-bg-soft border border-border rounded-lg px-3 py-2">
+                  <Check size={14} className="text-primary shrink-0" />
+                  <span className="text-sm text-muted-foreground">{client.name}</span>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {todayChecks.find((c) => c.clientId === client.id && c.type === "support")?.completedBy}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </details>
         )}
       </div>
 
