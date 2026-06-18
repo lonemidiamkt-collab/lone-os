@@ -18,6 +18,7 @@ interface Row {
   currentJid: string | null;
   currentName: string | null;
   suggestion: Suggestion;
+  monthlyBudget: number | null;
   verbaMinima: number | null;
   destino: string;
   alerts: RowAlerts;
@@ -33,10 +34,10 @@ const ALERT_CHIPS: { key: keyof RowAlerts; label: string }[] = [
 ];
 
 const CONF_STYLE: Record<string, string> = {
-  high: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  medium: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  low: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  none: "bg-red-500/10 text-red-400 border-red-500/20",
+  high: "bg-lone-success-bg text-lone-success border-lone-success-border",
+  medium: "bg-lone-warning-bg text-lone-warning border-lone-warning-border",
+  low: "bg-lone-warning-bg text-lone-warning border-lone-warning-border",
+  none: "bg-destructive/10 text-destructive border-destructive/20",
 };
 const CONF_LABEL: Record<string, string> = { high: "alta", medium: "média", low: "baixa", none: "sem match" };
 
@@ -49,6 +50,7 @@ export default function GruposPage() {
   const [verba, setVerba] = useState<Record<string, string>>({}); // clientId -> verba mínima (R$)
   const [dest, setDest] = useState<Record<string, string>>({});   // clientId -> 'interno' | 'cliente'
   const [tog, setTog] = useState<Record<string, RowAlerts>>({});  // clientId -> toggles
+  const [warnPct, setWarnPct] = useState(18); // % global da verba p/ alerta de saldo baixo (sincronizado)
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,6 +60,7 @@ export default function GruposPage() {
       if (!res.ok) { toast.error(data.error ?? "Erro ao carregar"); return; }
       setGroups(data.groups ?? []);
       setRows(data.clients ?? []);
+      if (typeof data.warningPct === "number") setWarnPct(data.warningPct);
       if (data.groupsError) {
         toast.warning("Lista de grupos da Evolution indisponível agora — os clientes aparecem, mas o seletor de grupo pode estar limitado. Tente Recarregar.");
       }
@@ -123,19 +126,22 @@ export default function GruposPage() {
             Vincule cada cliente ao seu grupo. ⚠️ Confira os de confiança baixa/sem match — o relatório vai
             pro grupo escolhido aqui. {mappedCount}/{rows.length} vinculados.
           </p>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            💡 A coluna <b className="text-foreground">Verba mín</b> já vem <b className="text-foreground">sincronizada</b> do Controle de Investimento ({warnPct}% da verba mensal de cada cliente). Só preencha pra exceções.
+          </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface border border-border text-xs hover:border-primary/30">
             <RefreshCw size={12} /> Recarregar
           </button>
-          <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-xs font-medium disabled:opacity-50">
+          <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-xs font-medium disabled:opacity-50">
             {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Salvar
           </button>
         </div>
       </div>
 
       <div className="rounded-xl border border-border overflow-hidden">
-        <div className="grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 bg-[#0c0c0f] border-b border-border">
+        <div className="grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 bg-card border-b border-border">
           {["Cliente", "Grupo WhatsApp", "Verba mín (R$)", "Destino", "Alertas", "Confiança"].map((h) => (
             <p key={h} className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">{h}</p>
           ))}
@@ -144,12 +150,12 @@ export default function GruposPage() {
           const conf = r.suggestion.confidence;
           const needsReview = !sel[r.clientId] || conf === "low" || conf === "none";
           return (
-            <div key={r.clientId} className={`grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 border-b border-border last:border-0 items-center ${needsReview ? "bg-amber-500/[0.03]" : ""}`}>
+            <div key={r.clientId} className={`grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 border-b border-border last:border-0 items-center ${needsReview ? "bg-lone-warning-bg/[0.03]" : ""}`}>
               <p className="text-sm text-foreground truncate" title={r.metaAccountId}>{r.clientName}</p>
               <select
                 value={sel[r.clientId] ?? ""}
                 onChange={(e) => setSel((s) => ({ ...s, [r.clientId]: e.target.value }))}
-                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50"
+                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary/50"
               >
                 <option value="">— selecionar grupo —</option>
                 {sel[r.clientId] && !groups.some((g) => g.id === sel[r.clientId]) && (
@@ -158,17 +164,20 @@ export default function GruposPage() {
                 {groups.map((g) => <option key={g.id} value={g.id}>{g.subject}</option>)}
               </select>
               <input
-                type="text" inputMode="decimal" placeholder="% global"
+                type="text" inputMode="decimal"
+                placeholder={r.monthlyBudget != null ? `sync R$ ${Math.round((r.monthlyBudget * warnPct) / 100)}` : `${warnPct}% global`}
                 value={verba[r.clientId] ?? ""}
                 onChange={(e) => setVerba((s) => ({ ...s, [r.clientId]: e.target.value }))}
-                title="Verba mínima em R$ para alerta de saldo baixo. Vazio = usa o % global."
-                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50"
+                title={r.monthlyBudget != null
+                  ? `Sincronizado do Controle de Investimento: ${warnPct}% de R$ ${r.monthlyBudget} = R$ ${Math.round((r.monthlyBudget * warnPct) / 100)}. Preencha só pra um limite diferente deste cliente.`
+                  : `Verba mínima (R$). Vazio = ${warnPct}% da verba mensal (defina a verba no Controle de Investimento).`}
+                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary/50"
               />
               <select
                 value={dest[r.clientId] ?? "interno"}
                 onChange={(e) => setDest((s) => ({ ...s, [r.clientId]: e.target.value }))}
                 title="Para qual grupo os alertas operacionais deste cliente vão."
-                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-[#0d4af5]/50"
+                className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary/50"
               >
                 <option value="interno">Interno</option>
                 <option value="cliente">Cliente</option>
@@ -182,7 +191,7 @@ export default function GruposPage() {
                       type="button"
                       title={`${label} — clique pra ligar/desligar`}
                       onClick={() => setTog((s) => ({ ...s, [r.clientId]: { ...(s[r.clientId] ?? r.alerts), [key]: !on } }))}
-                      className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${on ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "bg-surface text-muted-foreground border-border"}`}
+                      className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${on ? "bg-lone-success-bg text-lone-success border-lone-success-border" : "bg-surface text-muted-foreground border-border"}`}
                     >
                       {label}
                     </button>

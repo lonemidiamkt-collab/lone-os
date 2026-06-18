@@ -11,7 +11,7 @@ import { getServerUser } from "@/lib/supabase/auth-server";
 import { listGroups } from "@/lib/whatsapp/evolution";
 import { matchGroupForClient, type GroupOption } from "@/lib/whatsapp/group-match";
 import { selectActiveMetaClients, clientDisplayName } from "@/lib/traffic/weekly-report";
-import { getClientAlertConfigs } from "@/lib/traffic/sync-core";
+import { getClientAlertConfigs, getAlertSettings } from "@/lib/traffic/sync-core";
 import { DEFAULT_CLIENT_ALERT_CONFIG } from "@/lib/budgets/operational-alerts";
 
 export async function GET(req: NextRequest) {
@@ -27,6 +27,12 @@ export async function GET(req: NextRequest) {
 
   const clients = await selectActiveMetaClients();
   const configs = await getClientAlertConfigs();
+  const settings = await getAlertSettings();
+  // Verba mensal por conta (Controle de Investimento) — p/ sincronizar o limite na tela.
+  const { data: accts } = await supabaseAdmin.from("ad_accounts").select("meta_account_id, monthly_budget");
+  const budgetByAccount = new Map(
+    (accts ?? []).map((a: { meta_account_id: string; monthly_budget: number | null }) => [a.meta_account_id, a.monthly_budget] as const),
+  );
   const rows = clients.map((c) => {
     const name = clientDisplayName(c);
     const suggestion = matchGroupForClient(name, groups);
@@ -38,6 +44,7 @@ export async function GET(req: NextRequest) {
       currentJid: c.whatsapp_group_jid ?? null,
       currentName: c.whatsapp_group_name ?? null,
       suggestion,
+      monthlyBudget: budgetByAccount.get(c.meta_ad_account_id) ?? null,
       verbaMinima: cfg.verbaMinima ?? null,
       destino: cfg.destino,
       alerts: {
@@ -55,6 +62,7 @@ export async function GET(req: NextRequest) {
     groups: groups.sort((a, b) => a.subject.localeCompare(b.subject)),
     groupsError,
     clients: rows,
+    warningPct: settings.warningPct,
     mapped: rows.filter((r) => r.currentJid).length,
     total: rows.length,
   });
