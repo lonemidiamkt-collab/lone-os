@@ -73,6 +73,13 @@ Regras: pesos **400 (corpo) e 500/600 (ênfase)** — evite 700+ exceto número-
 - **Largura de leitura:** blocos de texto longo `max-w-prose`.
 
 ## 6. Padrões de componente
+
+**PREFIRA os componentes base de `components/ui/`** (já tokenizados): `<Button>`, `<Card>`,
+`<Badge>`, `<Input>`, `<Dialog>`, `<Select>`, `<Tabs>`, `<Tooltip>`, `<Progress>`, etc. Em
+código NOVO, use-os em vez de remontar à mão. Ao tocar numa tela legada que monta card/botão/
+badge na unha, migre pro componente base **se for trivial** (não force refactor estrutural só
+por isso). Classes cruas abaixo = fallback quando o componente base não serve.
+
 - **Card:** `rounded-xl bg-card border border-border p-5` (classe utilitária `.card` já existe). Nada de glow.
 - **Botão primário:** `bg-primary text-primary-foreground rounded-lg px-4 h-9 text-sm font-medium hover:opacity-90`.
 - **Botão sutil:** `bg-secondary text-secondary-foreground` ou `hover:bg-accent`.
