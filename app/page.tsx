@@ -539,7 +539,7 @@ function AdminDashboard() {
       {/* KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         <KPICard label="Clientes Ativos" value={activeClients.length} caption="em operação" tone="default" accent icon={<Users size={12} />} onClick={() => router.push("/clients")} />
-        <KPICard label="Em Risco" value={atRiskClients.length} caption="precisam atenção" tone={atRiskClients.length > 0 ? "danger" : "default"} accent icon={<AlertTriangle size={12} />} onClick={() => setStatusFilter("at_risk")} />
+        <KPICard label="Em Risco" value={atRiskClients.length} caption="precisam atenção" tone={atRiskClients.length > 0 ? "danger" : "default"} accent icon={<AlertTriangle size={12} />} onClick={() => router.push("/clients?filter=at_risk")} />
         <KPICard label="Onboarding" value={onboardingClients.length} caption="novos clientes" tone={onboardingClients.length > 0 ? "warning" : "default"} accent icon={<UserPlus size={12} />} onClick={() => router.push("/clients?filter=onboarding")} />
         <KPICard label="Tarefas Urgentes" value={urgentTasks.length} caption="prioridade crítica" tone={urgentTasks.length > 0 ? "warning" : "default"} accent icon={<Zap size={12} />} onClick={() => router.push("/my-work")} />
       </div>
@@ -582,7 +582,7 @@ function AdminDashboard() {
       {/* Banner de urgências */}
       <CriticalAlertBanner
         alerts={[
-          { type: "clients_at_risk",   count: atRiskClients.length,    onClick: () => setStatusFilter("at_risk") },
+          { type: "clients_at_risk",   count: atRiskClients.length,    href: "/clients?filter=at_risk" },
           { type: "stuck_cards",        count: stuckCards.length,        href: "/social" },
           { type: "urgent_tasks",       count: urgentTasks.length,       href: "/calendar" },
           { type: "expiring_contracts", count: contractStats.expiring,   href: "/clients" },
