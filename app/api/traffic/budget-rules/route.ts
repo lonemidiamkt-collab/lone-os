@@ -45,6 +45,8 @@ export async function POST(req: NextRequest) {
     isPrepaid?: boolean;
     spendCap?: number | null;
     monthlyBudget?: number | null;
+    dailyBudget?: number | null;
+    paymentMethod?: string | null;
     rules: {
       severity: "warning" | "critical";
       threshold_value: number;
@@ -63,7 +65,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
 
-  const { adAccountId, isPrepaid, spendCap, monthlyBudget, rules, phone, pixKey } = body;
+  const { adAccountId, isPrepaid, spendCap, monthlyBudget, dailyBudget, paymentMethod, rules, phone, pixKey } = body;
   if (!adAccountId) return NextResponse.json({ error: "adAccountId obrigatório" }, { status: 400 });
 
   // ── Validações ───────────────────────────────────────────
@@ -98,8 +100,8 @@ export async function POST(req: NextRequest) {
   if (monthlyBudget !== undefined) accountUpdate.monthly_budget = monthlyBudget;
   await supabaseAdmin.from("ad_accounts").update(accountUpdate).eq("id", adAccountId);
 
-  // ── Atualizar phone/pix no client ───────────────────────
-  if (phone !== undefined || pixKey !== undefined) {
+  // ── Atualizar dados do cliente (contato + verba sincronizada) ──
+  if (phone !== undefined || pixKey !== undefined || monthlyBudget !== undefined || dailyBudget !== undefined || paymentMethod !== undefined) {
     const { data: acct } = await supabaseAdmin
       .from("ad_accounts")
       .select("client_id")
@@ -109,7 +111,13 @@ export async function POST(req: NextRequest) {
       const clientUpdate: Record<string, unknown> = {};
       if (phone !== undefined) clientUpdate.client_finance_phone = phone;
       if (pixKey !== undefined) clientUpdate.client_pix_key = pixKey;
-      await supabaseAdmin.from("clients").update(clientUpdate).eq("id", acct.client_id);
+      // Sincroniza a verba/pagamento em clients (exibição + cross-device, igual ao Controle de Investimento)
+      if (monthlyBudget !== undefined) clientUpdate.monthly_budget = monthlyBudget;
+      if (dailyBudget !== undefined) clientUpdate.daily_budget = dailyBudget;
+      if (paymentMethod !== undefined) clientUpdate.payment_method = paymentMethod;
+      if (Object.keys(clientUpdate).length > 0) {
+        await supabaseAdmin.from("clients").update(clientUpdate).eq("id", acct.client_id);
+      }
     }
   }
 

@@ -52,6 +52,8 @@ interface AdAccountRow {
     nome_fantasia: string | null;
     client_finance_phone: string | null;
     client_pix_key: string | null;
+    daily_budget: number | null;
+    payment_method: string | null;
   };
   budget_alert_rules: AlertRule[];
 }
@@ -221,6 +223,8 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
   const [monthlyBudget, setMonthlyBudget] = useState(account.monthly_budget?.toFixed(2) ?? "");
   const [phone, setPhone] = useState(account.clients?.client_finance_phone ?? "");
   const [pixKey, setPixKey] = useState(account.clients?.client_pix_key ?? "");
+  const [dailyBudget, setDailyBudget] = useState(account.clients?.daily_budget?.toFixed(2) ?? "");
+  const [paymentMethod, setPaymentMethod] = useState(account.clients?.payment_method ?? "pix");
 
   const warningDefault = account.warningThreshold ?? 200;
   const criticalDefault = account.criticalThreshold ?? 80;
@@ -301,6 +305,8 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
           isPrepaid,
           spendCap: spendCap ? parseFloat(spendCap) : null,
           monthlyBudget: monthlyBudget ? parseFloat(monthlyBudget) : null,
+          dailyBudget: dailyBudget ? parseFloat(dailyBudget) : null,
+          paymentMethod: paymentMethod || null,
           rules,
           phone: phone || null,
           pixKey: pixKey || null,
@@ -487,6 +493,32 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
                 ? "Pré-pago: deixe em branco para usar o saldo da carteira Meta. Preencha para monitorar por verba contratada."
                 : <>Pós-pago: saldo exibido = <span className="text-muted-foreground">verba − gasto do mês (Insights)</span>. Mais preciso que o spend_cap quando esse é teto de segurança.</>}
             </p>
+          </div>
+
+          {/* Verba diária + forma de pagamento (absorvido do Controle de Investimento) */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Verba diária (R$)</p>
+              <input
+                type="number" min="0" step="10"
+                value={dailyBudget}
+                onChange={(e) => setDailyBudget(e.target.value)}
+                placeholder="ex: 33.33"
+                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Forma de pagamento</p>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+              >
+                <option value="pix">Pix</option>
+                <option value="boleto">Boleto</option>
+                <option value="cartao">Cartão</option>
+              </select>
+            </div>
           </div>
 
           {/* Contexto azul */}

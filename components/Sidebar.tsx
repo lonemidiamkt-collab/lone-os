@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   LayoutDashboard, TrendingUp, Instagram, Palette, Users, Lock,
   MessageCircle, Calendar, LogOut, Sun, Moon,
-  ClipboardCheck, BarChart2, Wallet, Megaphone, Brain, FileText,
+  ClipboardCheck, BarChart2, Megaphone, Brain, FileText,
   ChevronLeft, Activity, Layers, AlertTriangle, Settings,
   Users2, Globe, Target, Inbox, ShieldCheck, ShieldAlert, Package, Zap, PanelLeftClose, PanelLeft, Thermometer,
 } from "lucide-react";
@@ -78,9 +78,8 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
       {
         title: "Verba",
         items: [
-          { label: "Controle de Investimento", icon: Wallet,      tab: "investimento" },
           { label: "Anúncios Meta",            icon: Megaphone,   tab: "anuncios",   badgeKey: "activeCampaigns" },
-          { label: "Saldos & Alertas",         icon: Activity,    href: "/traffic/budgets" },
+          { label: "Saldos, Verba & Alertas",  icon: Activity,    href: "/traffic/budgets" },
         ],
       },
       {

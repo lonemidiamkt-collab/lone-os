@@ -17,7 +17,7 @@ export async function GET() {
         last_balance, last_amount_spent, current_month_spend, last_3d_avg_spend, daily_spend_3d,
         last_synced_at, currency, account_status, sync_error, last_error_message, monthly_budget,
         clients!inner (
-          id, name, nome_fantasia, client_finance_phone, client_pix_key
+          id, name, nome_fantasia, client_finance_phone, client_pix_key, daily_budget, payment_method
         ),
         budget_alert_rules (
           id, severity, threshold_value, is_active

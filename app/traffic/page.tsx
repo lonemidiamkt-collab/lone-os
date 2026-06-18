@@ -216,7 +216,6 @@ export default function TrafficPage() {
     { key: "relatorios", label: "Relatorios Mensais", icon: <BarChart2 size={14} /> },
     { key: "report", label: "Analise" },
     { key: "anuncios", label: "Anuncios", icon: <Megaphone size={14} /> },
-    { key: "investimento", label: "Controle de Investimento", icon: <Wallet size={14} /> },
   ];
 
   return (
