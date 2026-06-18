@@ -41,7 +41,7 @@ interface TrafficState {
   addTrafficReport: (report: Omit<TrafficMonthlyReport, "id" | "createdAt">) => Promise<TrafficMonthlyReport>;
   updateTrafficReport: (id: string, updates: Partial<TrafficMonthlyReport>) => Promise<void>;
   addTrafficRoutineCheck: (check: Omit<TrafficRoutineCheck, "id" | "completedAt">) => Promise<void>;
-  updateInvestmentData: (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => void;
+  updateInvestmentData: (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 export const selectAdAccounts = (s: TrafficState) => s.adAccounts;
@@ -180,7 +180,7 @@ export const useTrafficStore = create<TrafficState>()(
         }
       },
 
-      updateInvestmentData: (clientId, data, actor) => {
+      updateInvestmentData: async (clientId, data, actor) => {
         const prev = get().investmentData[clientId];
         const updated: ClientInvestmentData = {
           ...(prev ?? { clientId, monthlyBudget: 0, dailyBudget: 0, paymentMethod: "pix" as InvestmentPaymentMethod }),
@@ -191,6 +191,25 @@ export const useTrafficStore = create<TrafficState>()(
         const next = { ...get().investmentData, [clientId]: updated };
         set({ investmentData: next }, false, "traffic/investment/update");
         saveInvestmentDataToStorage(next);
+
+        // Persiste a VERBA no banco (ad_accounts.monthly_budget). Sem isto a verba ficava
+        // só no localStorage — não chegava nos alertas nem em outro dispositivo (fake save).
+        if (data.monthlyBudget !== undefined) {
+          try {
+            const res = await authedFetch("/api/traffic/ad-accounts", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ clientId, monthlyBudget: data.monthlyBudget }),
+            });
+            if (!res.ok) {
+              const d = (await res.json().catch(() => ({}))) as { error?: string };
+              return { ok: false, error: d.error ?? `Falha ao salvar no banco (HTTP ${res.status})` };
+            }
+          } catch {
+            return { ok: false, error: "Sem conexão ao salvar a verba no banco." };
+          }
+        }
+        return { ok: true };
       },
     })),
     { name: "TrafficStore" }

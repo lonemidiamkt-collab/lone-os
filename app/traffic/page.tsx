@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "sonner";
 import Header from "@/components/Header";
 import DefesaAlertBanner from "@/components/DefesaAlertBanner";
 import SystemAlertBanner from "@/components/SystemAlertBanner";
@@ -3905,7 +3906,7 @@ function InvestmentControlTab({
   clients: Client[];
   adCampaigns: AdCampaign[];
   investmentData: Record<string, ClientInvestmentData>;
-  onSave: (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => void;
+  onSave: (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => Promise<{ ok: boolean; error?: string }>;
   isUsingRealData: boolean;
   currentUser: string;
 }) {
@@ -3988,16 +3989,21 @@ function InvestmentControlTab({
     });
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form || !selectedId) return;
     const monthly = parseBRL(form.monthlyRaw);
     const daily = parseBRL(form.dailyRaw);
-    onSave(selectedId, {
+    const result = await onSave(selectedId, {
       monthlyBudget: monthly,
       dailyBudget: daily,
       paymentMethod: form.paymentMethod,
       nextPaymentDate: form.nextPaymentDate || undefined,
     }, currentUser);
+    if (!result?.ok) {
+      // Não mostra "Salvo!" se o banco recusou — mantém o form sujo p/ retentar
+      toast.error(result?.error ?? "Erro ao salvar a verba. Tente novamente.");
+      return;
+    }
     setForms((prev) => ({
       ...prev,
       [selectedId]: { ...prev[selectedId], dirty: false },
