@@ -61,6 +61,7 @@ export function detectClientAlerts(
   snap: AccountAlertSnapshot,
   cfg: ClientAlertConfig,
   globalWarnPct: number,
+  globalCritPct?: number,
 ): OpAlertHit[] {
   const hits: OpAlertHit[] = [];
 
@@ -82,17 +83,28 @@ export function detectClientAlerts(
     return hits; // conta pausada: não avalia saldo/gasto
   }
 
-  // 3) Verba zerada / baixa (conta ativa)
+  // 3) Verba: zerada (≤0) → baixa-crítica (≤ critPct% da verba) → baixa (≤ override ou warnPct%)
   if (snap.available !== null) {
     if (cfg.alertVerbaZerada && snap.available <= 0) {
       hits.push({ type: "verba_zerada", severity: "critical", reason: "Saldo zerado" });
-    } else if (cfg.alertVerbaBaixa) {
-      const limite = cfg.verbaMinima ?? (snap.monthlyBudget ? (snap.monthlyBudget * globalWarnPct) / 100 : null);
-      if (limite !== null && snap.available > 0 && snap.available <= limite) {
+    } else if (cfg.alertVerbaBaixa && snap.available > 0) {
+      // Override manual em R$ vence o % global — MAS só se for positivo. Um valor 0/negativo
+      // significa "sem limite manual" e herda o % da verba; senão `verbaMinima ?? %` daria 0
+      // (0 não é nullish) e o aviso nunca dispararia — era o bug das contas com "0".
+      const override = cfg.verbaMinima != null && cfg.verbaMinima > 0 ? cfg.verbaMinima : null;
+      const warnLimite = override ?? (snap.monthlyBudget ? (snap.monthlyBudget * globalWarnPct) / 100 : null);
+      // Segundo nível (crítico): sempre derivado do % crítico da verba contratada.
+      const critLimite = globalCritPct != null && snap.monthlyBudget
+        ? (snap.monthlyBudget * globalCritPct) / 100
+        : null;
+
+      if (critLimite !== null && snap.available <= critLimite) {
+        hits.push({ type: "verba_baixa", severity: "critical", reason: `Saldo ≤ ${globalCritPct}% da verba` });
+      } else if (warnLimite !== null && snap.available <= warnLimite) {
         hits.push({
           type: "verba_baixa",
           severity: "warning",
-          reason: cfg.verbaMinima != null ? `Saldo ≤ R$ ${cfg.verbaMinima.toFixed(2)}` : `Saldo ≤ ${globalWarnPct}% da verba`,
+          reason: override != null ? `Saldo ≤ R$ ${override.toFixed(2)}` : `Saldo ≤ ${globalWarnPct}% da verba`,
         });
       }
     }

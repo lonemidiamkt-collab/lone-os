@@ -45,7 +45,8 @@ export async function GET(req: NextRequest) {
       currentName: c.whatsapp_group_name ?? null,
       suggestion,
       monthlyBudget: budgetByAccount.get(c.meta_ad_account_id ?? "") ?? null,
-      verbaMinima: cfg.verbaMinima ?? null,
+      // 0/negativo gravado no banco = "sem override" → exibe vazio (herda o % sincronizado).
+      verbaMinima: cfg.verbaMinima != null && cfg.verbaMinima > 0 ? cfg.verbaMinima : null,
       destino: cfg.destino,
       alerts: {
         verbaBaixa: cfg.alertVerbaBaixa,
@@ -102,7 +103,8 @@ export async function POST(req: NextRequest) {
     if (error) { errors.push(`${m.clientId}: ${error.message}`); continue; }
 
     // Config de alerta (verba mínima R$ + destino). Upsert preserva os toggles.
-    const verba = m.verbaMinima != null && Number.isFinite(m.verbaMinima) ? m.verbaMinima : null;
+    // Só grava override POSITIVO; 0/negativo vira null (= herda o % da verba, evita o bug do "0").
+    const verba = m.verbaMinima != null && Number.isFinite(m.verbaMinima) && m.verbaMinima > 0 ? m.verbaMinima : null;
     const a = m.alerts;
     const { error: cErr } = await supabaseAdmin.from("client_alert_config").upsert({
       client_id: m.clientId,

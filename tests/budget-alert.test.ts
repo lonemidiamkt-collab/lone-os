@@ -93,6 +93,35 @@ describe("evaluateAccount — status e erros", () => {
   });
 });
 
+describe("evaluateAccount — bug do override '0' (não pode silenciar o alerta)", () => {
+  // Contas com verba_minima = 0 (fake-save antigo) faziam `0 ?? warnFromPct` = 0,
+  // e o aviso nunca disparava. O 0 deve ser tratado como "sem override".
+  it("warningThreshold=0 é ignorado → herda o % da verba (200/1000=20% → warning)", () => {
+    const r = evaluateAccount({
+      available: 200, monthlyBudget: 1000, daysRemaining: 30, accountStatus: ACTIVE,
+      warningThreshold: 0,
+    });
+    expect(r.severity).toBe("warning");
+    expect(r.reason).toMatch(/20%/);
+  });
+
+  it("criticalThreshold=0 é ignorado → herda o crítico % da verba (40/1000=4% → critical)", () => {
+    const r = evaluateAccount({
+      available: 40, monthlyBudget: 1000, daysRemaining: 30, accountStatus: ACTIVE,
+      criticalThreshold: 0, warningThreshold: 0,
+    });
+    expect(r.severity).toBe("critical");
+  });
+
+  it("override negativo também é ignorado", () => {
+    const r = evaluateAccount({
+      available: 200, monthlyBudget: 1000, daysRemaining: 30, accountStatus: ACTIVE,
+      warningThreshold: -5,
+    });
+    expect(r.severity).toBe("warning");
+  });
+});
+
 describe("config customizada", () => {
   it("warningPct=30 → saldo 250/1000 vira warning", () => {
     expect(evaluateAccount(

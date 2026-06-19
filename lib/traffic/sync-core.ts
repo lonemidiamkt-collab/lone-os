@@ -266,6 +266,7 @@ export async function runBalanceSync(opts?: {
       },
       acfg,
       settings.warningPct,
+      settings.criticalPct,
     );
 
     const updatePayload: Record<string, unknown> = {

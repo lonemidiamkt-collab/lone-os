@@ -97,7 +97,8 @@ export default function GruposPage() {
         const vnum = vraw === "" ? null : Number(vraw);
         return {
           clientId: r.clientId, groupJid: jid, groupName: g?.subject ?? null,
-          verbaMinima: vnum != null && Number.isFinite(vnum) ? vnum : null,
+          // Só override positivo; 0/negativo = vazio (herda o % sincronizado da verba).
+          verbaMinima: vnum != null && Number.isFinite(vnum) && vnum > 0 ? vnum : null,
           destino: dest[r.clientId] || "interno",
           alerts: tog[r.clientId] ?? r.alerts,
         };

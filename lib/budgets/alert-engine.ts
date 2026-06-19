@@ -71,10 +71,15 @@ export function evaluateAccount(
   const pctRemaining = base !== null ? clampPct((available / base) * 100) : null;
 
   // Thresholds efetivos: override manual vence; senão % da verba.
+  // ATENÇÃO: override só vale se for POSITIVO. Um valor 0/negativo significa
+  // "sem limite manual" e deve herdar o % da verba — senão `0 ?? warnFromPct`
+  // resolveria para 0 (0 não é nullish) e o aviso NUNCA dispararia (bug do "0").
   const critFromPct = base !== null ? (base * cfg.criticalPct) / 100 : null;
   const warnFromPct = base !== null ? (base * cfg.warningPct) / 100 : null;
-  const critThreshold = input.criticalThreshold ?? critFromPct;
-  const warnThreshold = input.warningThreshold ?? warnFromPct;
+  const manualCrit = input.criticalThreshold != null && input.criticalThreshold > 0 ? input.criticalThreshold : null;
+  const manualWarn = input.warningThreshold != null && input.warningThreshold > 0 ? input.warningThreshold : null;
+  const critThreshold = manualCrit ?? critFromPct;
+  const warnThreshold = manualWarn ?? warnFromPct;
 
   // ── Crítico ──
   if (available <= 0) {
@@ -83,7 +88,7 @@ export function evaluateAccount(
   if (critThreshold !== null && available <= critThreshold) {
     return {
       severity: "critical",
-      reason: base !== null && input.criticalThreshold == null
+      reason: base !== null && manualCrit == null
         ? `Saldo ≤ ${cfg.criticalPct}% da verba`
         : `Saldo ≤ limite crítico`,
       pctRemaining,
@@ -97,7 +102,7 @@ export function evaluateAccount(
   if (warnThreshold !== null && available <= warnThreshold) {
     return {
       severity: "warning",
-      reason: base !== null && input.warningThreshold == null
+      reason: base !== null && manualWarn == null
         ? `Saldo ≤ ${cfg.warningPct}% da verba`
         : `Saldo ≤ limite de atenção`,
       pctRemaining,
