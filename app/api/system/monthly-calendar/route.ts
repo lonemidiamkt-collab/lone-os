@@ -28,7 +28,9 @@ import { requireCron } from "@/lib/api/cron-guard";
 import {
   selectActiveClientsWithGroup, clientDisplayName,
 } from "@/lib/traffic/weekly-report";
-import { renderMonthHolidaysPdfBuffer, holidaysPdfFilename } from "@/lib/holidays/pdf-server";
+import { renderMonthCalendarHtml } from "@/lib/holidays/email-html";
+import { holidaysPdfFilename } from "@/lib/holidays/pdf-server";
+import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { sendMediaDocument } from "@/lib/whatsapp/evolution";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
@@ -75,6 +77,16 @@ async function loadMessageTemplate(): Promise<string> {
 function renderCaption(tpl: string, cliente: string, mes: string): string {
   const Mes = mes.charAt(0).toUpperCase() + mes.slice(1);
   return tpl.replace(/\{cliente\}/g, cliente).replace(/\{Mes\}/g, Mes).replace(/\{mes\}/g, mes);
+}
+/** Embrulha o fragmento HTML do calendário num documento A4 limpo p/ o chromium. */
+function wrapCalendarHtml(fragment: string): string {
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:28px 32px;background:#fff;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .lm-head{font-size:15px;letter-spacing:1px;color:#0d4af5;font-weight:700;margin:0 0 4px}
+</style></head>
+<body><div class="lm-head">LONE MÍDIA</div>${fragment}</body></html>`;
 }
 async function alreadySent(clientId: string, dateKey: string): Promise<boolean> {
   const { data } = await supabaseAdmin
@@ -129,12 +141,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Gera o calendário do mês alvo UMA vez (reusado por todos)
-    const pdf = await renderMonthHolidaysPdfBuffer({ year: target.year, month: target.month, region: "BRASIL" });
-    if (!pdf) {
-      await notifyAdminFailure("Calendário mensal não gerado", `Falha ao renderizar o PDF de ${mesNome}/${target.year}.`);
-      return NextResponse.json({ ok: false, status: "failed", error: "PDF não gerado" }, { status: 200 });
+    // Gera o calendário do mês alvo UMA vez (reusado por todos). Usa o HTML do
+    // calendário + chromium/browserless — o mesmo caminho do relatório, que funciona.
+    // (O gerador @react-pdf quebra no bundle de produção com React error #31.)
+    const fragment = await renderMonthCalendarHtml({ year: target.year, month: target.month, region: "BRASIL" });
+    if (!fragment) {
+      await notifyAdminFailure("Calendário mensal não gerado", `Sem datas para ${mesNome}/${target.year}.`);
+      return NextResponse.json({ ok: false, status: "failed", error: "Sem datas no mês" }, { status: 200 });
     }
+    const render = await htmlToPdf(wrapCalendarHtml(fragment));
+    if (!render.ok || !render.buffer) {
+      await notifyAdminFailure("Calendário mensal não gerado", `htmlToPdf: ${render.error ?? "falha"} (${mesNome}/${target.year}).`);
+      return NextResponse.json({ ok: false, status: "failed", error: render.error ?? "PDF não gerado" }, { status: 200 });
+    }
+    const pdf = render.buffer;
     const fileName = holidaysPdfFilename(target.year, target.month);
 
     // dryRun: salva preview no Storage e lista elegíveis (não envia nada)
