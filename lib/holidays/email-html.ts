@@ -17,8 +17,8 @@ const MONTHS_SHORT_UPPER = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AG
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const WEEKDAYS_FULL = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
 
-// Paleta — branco/cinza pra máxima compatibilidade de email (sem dark mode)
-const C = {
+// Paletas — claro (email, default) e escuro (PDF do calendário pro cliente).
+const C_LIGHT = {
   bg: "#ffffff",
   bgAlt: "#f8fafc",
   text: "#0f172a",
@@ -35,6 +35,24 @@ const C = {
   comemorativa: "#0d4af5",
   comemorativaBg: "#eff6ff",
 };
+const C_DARK: typeof C_LIGHT = {
+  bg: "#16161f",
+  bgAlt: "#101018",
+  text: "#f4f4f5",
+  textMuted: "#a1a1aa",
+  textLight: "#71717a",
+  border: "#2c2c3a",
+  brand: "#4f7cff",
+  national: "#f87171",
+  nationalBg: "#3a1d1d",
+  estadual: "#fb923c",
+  estadualBg: "#3a281a",
+  municipal: "#a3e635",
+  municipalBg: "#26301a",
+  comemorativa: "#6b9bff",
+  comemorativaBg: "#1c2747",
+};
+type Palette = typeof C_LIGHT;
 
 interface BuildOptions {
   year: number;
@@ -44,6 +62,8 @@ interface BuildOptions {
   nichos?: string[];
   uf?: string;
   city?: string;
+  /** "dark" usa a paleta escura (PDF pro cliente); default "light" (email). */
+  theme?: "light" | "dark";
 }
 
 type StyleKey = "national" | "estadual" | "municipal" | "comemorativa";
@@ -53,7 +73,7 @@ function styleKeyFor(category: Holiday["category"]): StyleKey {
   if (category === "municipal") return "municipal";
   return "comemorativa";
 }
-function colorPair(key: StyleKey): { fg: string; bg: string } {
+function colorPair(key: StyleKey, C: Palette): { fg: string; bg: string } {
   if (key === "national") return { fg: C.national, bg: C.nationalBg };
   if (key === "estadual") return { fg: C.estadual, bg: C.estadualBg };
   if (key === "municipal") return { fg: C.municipal, bg: C.municipalBg };
@@ -100,6 +120,7 @@ function buildMonthCells(year: number, month: number): Array<number | null> {
  * Retorna string vazia se não houver observances no período.
  */
 export async function renderMonthCalendarHtml(opts: BuildOptions): Promise<string> {
+  const C = opts.theme === "dark" ? C_DARK : C_LIGHT;
   const all = await getAllObservances(opts.year);
   const prefix = `${opts.year}-${String(opts.month).padStart(2, "0")}-`;
   let inMonth = all.filter((o) => o.date.startsWith(prefix));
@@ -145,7 +166,7 @@ export async function renderMonthCalendarHtml(opts: BuildOptions): Promise<strin
     ${week.map((day) => {
       if (day === null) return `<td style="height:54px;background:transparent;"></td>`;
       const cat = dayCategory[day];
-      const colors = cat ? colorPair(cat) : null;
+      const colors = cat ? colorPair(cat, C) : null;
       const bg = colors ? colors.bg : C.bgAlt;
       const fg = colors ? colors.fg : C.textMuted;
       const fontWeight = colors ? "700" : "400";
@@ -164,11 +185,13 @@ export async function renderMonthCalendarHtml(opts: BuildOptions): Promise<strin
   const legendHtml = legendItems.length > 0 ? `<p style="font-size:11px;color:${C.textMuted};margin:0 0 20px;">${legendItems.join('  &nbsp;&nbsp;  ')}</p>` : "";
 
   // ── Awareness banners ────────────────────────────────────────
+  const awBg = opts.theme === "dark" ? "#2a1420" : "#fdf2f8";
+  const awText = opts.theme === "dark" ? "#fbcfe8" : "#831843";
   const awarenessHtml = awareness.length === 0 ? "" : `
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 20px;">
   ${awareness.map((a) => `
   <tr>
-    <td style="border-left:3px solid #ec4899;background:#fdf2f8;padding:10px 14px;font-size:11px;color:#831843;">
+    <td style="border-left:3px solid #ec4899;background:${awBg};padding:10px 14px;font-size:11px;color:${awText};">
       <strong style="display:block;font-size:9px;color:#ec4899;letter-spacing:1px;margin-bottom:2px;">MÊS DE CONSCIENTIZAÇÃO</strong>
       ${escapeHtml(a.name)}
     </td>
@@ -178,7 +201,7 @@ export async function renderMonthCalendarHtml(opts: BuildOptions): Promise<strin
   // ── Cards detalhados ─────────────────────────────────────────
   const cardsHtml = [...awareness, ...dailyDates].map((o) => {
     const styleKey = styleKeyFor(o.category);
-    const { fg, bg } = colorPair(styleKey);
+    const { fg, bg } = colorPair(styleKey, C);
     const day = o.monthLong ? null : parseInt(o.date.slice(8, 10), 10);
     const monthAbbr = MONTHS_SHORT_UPPER[opts.month - 1];
     const weekdayIdx = o.monthLong ? null : new Date(o.date + "T12:00:00Z").getUTCDay();
@@ -218,7 +241,7 @@ export async function renderMonthCalendarHtml(opts: BuildOptions): Promise<strin
       ${legendHtml}
       ${awarenessHtml}
       ${cardsHtml}
-      <p style="color:${C.textLight};font-size:10px;text-align:center;margin:24px 0 0;">Gerado por Lone Mídia · Calendário interno do mês</p>
+      <p style="color:${C.textLight};font-size:10px;text-align:center;margin:24px 0 0;">${opts.theme === "dark" ? "Lone Mídia · Feriados e datas do mês" : "Gerado por Lone Mídia · Calendário interno do mês"}</p>
     </td>
   </tr>
 </table>`;

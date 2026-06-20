@@ -83,8 +83,8 @@ function wrapCalendarHtml(fragment: string): string {
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <style>
   *{box-sizing:border-box}
-  body{margin:0;padding:28px 32px;background:#fff;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .lm-head{font-size:15px;letter-spacing:1px;color:#0d4af5;font-weight:700;margin:0 0 4px}
+  body{margin:0;padding:28px 32px;background:#0b0b12;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .lm-head{font-size:15px;letter-spacing:1px;color:#4f7cff;font-weight:700;margin:0 0 4px}
 </style></head>
 <body><div class="lm-head">LONE MÍDIA</div>${fragment}</body></html>`;
 }
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
     // Gera o calendário do mês alvo UMA vez (reusado por todos). Usa o HTML do
     // calendário + chromium/browserless — o mesmo caminho do relatório, que funciona.
     // (O gerador @react-pdf quebra no bundle de produção com React error #31.)
-    const fragment = await renderMonthCalendarHtml({ year: target.year, month: target.month, region: "BRASIL" });
+    const fragment = await renderMonthCalendarHtml({ year: target.year, month: target.month, region: "BRASIL", theme: "dark" });
     if (!fragment) {
       await notifyAdminFailure("Calendário mensal não gerado", `Sem datas para ${mesNome}/${target.year}.`);
       return NextResponse.json({ ok: false, status: "failed", error: "Sem datas no mês" }, { status: 200 });
