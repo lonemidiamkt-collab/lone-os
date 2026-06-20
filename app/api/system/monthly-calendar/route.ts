@@ -117,6 +117,7 @@ export async function POST(req: NextRequest) {
   const force = url.searchParams.get("force") === "1";
   const onlyClientId = url.searchParams.get("clientId");
   const testJid = url.searchParams.get("testJid");
+  const testName = url.searchParams.get("testName") || "equipe"; // nome usado no teste via testJid
 
   // Datas em BRT
   const dateKey = dateKeyBRT();
@@ -175,10 +176,11 @@ export async function POST(req: NextRequest) {
 
     const template = await loadMessageTemplate();
 
-    // testJid: 1 envio real p/ um grupo (ex.: interno) — valida msg+PDF sem tocar clientes
+    // testJid: 1 envio real p/ um grupo (ex.: interno) — valida msg+PDF sem tocar clientes.
+    // ?testName= define o nome do cliente simulado na legenda (default "equipe").
     if (testJid) {
-      const res = await sendMediaDocument(testJid, pdf.toString("base64"), fileName, renderCaption(template, "equipe", mesNome));
-      return NextResponse.json({ ok: res.ok, status: res.ok ? "test_sent" : "failed", testJid, error: res.error ?? null });
+      const res = await sendMediaDocument(testJid, pdf.toString("base64"), fileName, renderCaption(template, testName, mesNome));
+      return NextResponse.json({ ok: res.ok, status: res.ok ? "test_sent" : "failed", testJid, testName, error: res.error ?? null });
     }
 
     // Envio real aos grupos dos clientes
