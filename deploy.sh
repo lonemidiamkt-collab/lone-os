@@ -2,7 +2,11 @@
 set -e
 
 echo "==> Puxando atualizações..."
-git pull origin main
+# Puxa a branch que está realmente em checkout no VPS (produção roda deploy/budget-only,
+# não main). Hardcodar "main" fazia o deploy puxar a branch errada.
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "    branch: $BRANCH"
+git pull origin "$BRANCH"
 
 echo "==> Reconstruindo containers..."
 docker compose -f docker-compose.prod.yml up -d --build app
