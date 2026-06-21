@@ -5,6 +5,11 @@ const SUPABASE_INTERNAL = process.env.SUPABASE_INTERNAL_URL ?? "http://supabase-
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // @react-pdf/renderer tem o próprio reconciler React. Se o webpack do Next o
+  // empacotar, os elementos JSX ficam com shape incompatível e o render quebra com
+  // "Minified React error #31" (mesmo em PDFs triviais). Externalizando, ele é
+  // carregado como módulo node em runtime, com uma instância de React consistente.
+  serverExternalPackages: ["@react-pdf/renderer"],
   // Permite bodies até 51MB em route handlers (5 artes × 10MB + 1MB overhead multipart).
   // Sem isso, Next.js 15 trunca bodies >10MB e req.formData() falha com erro opaco.
   // A validação real por arquivo (10MB card / 25MB misc) é feita em upload-art/route.ts.

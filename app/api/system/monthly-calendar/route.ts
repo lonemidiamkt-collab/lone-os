@@ -29,7 +29,7 @@ import {
   selectActiveClientsWithGroup, clientDisplayName,
 } from "@/lib/traffic/weekly-report";
 import { renderMonthCalendarHtml } from "@/lib/holidays/email-html";
-import { holidaysPdfFilename } from "@/lib/holidays/pdf-server";
+import { renderMonthHolidaysPdfBuffer, holidaysPdfFilename } from "@/lib/holidays/pdf-server";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { sendMediaDocument } from "@/lib/whatsapp/evolution";
 
@@ -142,21 +142,25 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Gera o calendário do mês alvo UMA vez (reusado por todos). Usa o HTML do
-    // calendário + chromium/browserless — o mesmo caminho do relatório, que funciona.
-    // (O gerador @react-pdf quebra no bundle de produção com React error #31.)
-    const fragment = await renderMonthCalendarHtml({ year: target.year, month: target.month, region: "BRASIL", theme: "dark" });
-    if (!fragment) {
-      await notifyAdminFailure("Calendário mensal não gerado", `Sem datas para ${mesNome}/${target.year}.`);
-      return NextResponse.json({ ok: false, status: "failed", error: "Sem datas no mês" }, { status: 200 });
-    }
-    const render = await htmlToPdf(wrapCalendarHtml(fragment));
-    if (!render.ok || !render.buffer) {
-      await notifyAdminFailure("Calendário mensal não gerado", `htmlToPdf: ${render.error ?? "falha"} (${mesNome}/${target.year}).`);
-      return NextResponse.json({ ok: false, status: "failed", error: render.error ?? "PDF não gerado" }, { status: 200 });
-    }
-    const pdf = render.buffer;
+    // Gera o calendário do mês alvo UMA vez (reusado por todos).
+    // 1ª opção: gerador @react-pdf (design de capa que o cliente prefere) — agora
+    // externalizado no next.config. Fallback: HTML do calendário (tema escuro) +
+    // chromium/browserless, caso o @react-pdf ainda retorne null.
     const fileName = holidaysPdfFilename(target.year, target.month);
+    let pdf = await renderMonthHolidaysPdfBuffer({ year: target.year, month: target.month, region: "BRASIL" });
+    let pdfSource: "react-pdf" | "html" = "react-pdf";
+    if (!pdf) {
+      pdfSource = "html";
+      const fragment = await renderMonthCalendarHtml({ year: target.year, month: target.month, region: "BRASIL", theme: "dark" });
+      if (fragment) {
+        const render = await htmlToPdf(wrapCalendarHtml(fragment));
+        if (render.ok && render.buffer) pdf = render.buffer;
+      }
+    }
+    if (!pdf) {
+      await notifyAdminFailure("Calendário mensal não gerado", `Falha no @react-pdf e no fallback HTML (${mesNome}/${target.year}).`);
+      return NextResponse.json({ ok: false, status: "failed", error: "PDF não gerado" }, { status: 200 });
+    }
 
     // dryRun: salva preview no Storage e lista elegíveis (não envia nada)
     if (dryRun) {
@@ -167,7 +171,7 @@ export async function POST(req: NextRequest) {
       const withGroup = clients.filter((c) => c.whatsapp_group_jid);
       return NextResponse.json({
         ok: true, status: "dry_run", mes: `${mesNome}/${target.year}`,
-        isSendDay, sendDay, dateKey, pdfBytes: pdf.length, previewUrl: pub,
+        isSendDay, sendDay, dateKey, pdfBytes: pdf.length, pdfSource, previewUrl: pub,
         eligible: withGroup.length,
         withGroup: withGroup.map(clientDisplayName),
         semGrupo: clients.filter((c) => !c.whatsapp_group_jid).map(clientDisplayName),
