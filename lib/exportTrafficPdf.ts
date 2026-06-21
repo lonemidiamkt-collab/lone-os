@@ -777,16 +777,24 @@ export function buildTrafficReportData(
 ): TrafficReportData {
   const reportCampaigns = campaigns;
   let totalSpend = 0, totalImpressions = 0, totalReach = 0, totalClicks = 0, totalMessages = 0;
+  // Investimento APENAS das campanhas que geraram conversa — base correta do
+  // "custo por mensagem". Sem isso, o gasto de tráfego/engajamento/branding (que
+  // não rende mensagem) entrava no numerador e inflava o custo/msg.
+  let messagingSpend = 0;
 
   if (dateRange) {
     reportCampaigns.forEach((c) => {
       const days = c.dailyMetrics.filter((d) => d.date >= dateRange.startStr && d.date <= dateRange.endStr);
+      let campSpend = 0, campMessages = 0;
       days.forEach((d) => {
-        totalSpend += d.spend;
+        campSpend += d.spend;
         totalImpressions += d.impressions;
         totalClicks += d.clicks;
-        totalMessages += d.messages ?? 0;
+        campMessages += d.messages ?? 0;
       });
+      totalSpend += campSpend;
+      totalMessages += campMessages;
+      if (campMessages > 0) messagingSpend += campSpend;
       const ratio = days.length / Math.max(c.dailyMetrics.length, 1);
       totalReach += Math.round(c.reach * ratio);
     });
@@ -796,6 +804,7 @@ export function buildTrafficReportData(
     totalReach = reportCampaigns.reduce((s, c) => s + c.reach, 0);
     totalClicks = reportCampaigns.reduce((s, c) => s + c.clicks, 0);
     totalMessages = reportCampaigns.reduce((s, c) => s + (c.messages ?? 0), 0);
+    messagingSpend = reportCampaigns.reduce((s, c) => s + ((c.messages ?? 0) > 0 ? c.spend : 0), 0);
   }
 
   const adsetCandidates = reportCampaigns
@@ -829,7 +838,8 @@ export function buildTrafficReportData(
     clicks: totalClicks,
     messages: totalMessages,
     spend: totalSpend,
-    costPerMessage: totalMessages > 0 ? totalSpend / totalMessages : 0,
+    // Custo por mensagem usa só o investimento das campanhas que geraram conversa.
+    costPerMessage: totalMessages > 0 ? messagingSpend / totalMessages : 0,
     costPerClick: totalClicks > 0 ? totalSpend / totalClicks : 0,
     cpm: totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0,
     bestAdsetCpa: bestAdset?.cpa,
