@@ -116,6 +116,15 @@ export default function GruposPage() {
 
   const mappedCount = Object.values(sel).filter(Boolean).length;
 
+  // Detecta grupos com mais de um cliente — risco de o relatório de um vazar pro
+  // grupo do outro. NÃO bloqueia (pode ser proposital, ex.: mesmo dono); só destaca.
+  const groupCounts = rows.reduce<Record<string, number>>((acc, r) => {
+    const g = sel[r.clientId];
+    if (g) acc[g] = (acc[g] ?? 0) + 1;
+    return acc;
+  }, {});
+  const dupGroupJids = Object.entries(groupCounts).filter(([, n]) => n > 1).map(([jid]) => jid);
+
   if (loading) {
     return <div className="flex-1 flex items-center justify-center py-20"><Loader2 className="animate-spin text-muted-foreground" /></div>;
   }
@@ -143,6 +152,21 @@ export default function GruposPage() {
         </div>
       </div>
 
+      {dupGroupJids.length > 0 && (
+        <div className="rounded-xl bg-lone-warning-bg/[0.06] border border-lone-warning-border px-4 py-3">
+          <p className="text-xs text-lone-warning font-medium flex items-center gap-1.5">
+            <AlertTriangle size={13} /> {dupGroupJids.length} grupo(s) com mais de um cliente — confira (pode ser proposital, ex.: mesmo dono; senão um vê o relatório do outro):
+          </p>
+          <ul className="mt-1.5 space-y-0.5">
+            {dupGroupJids.map((jid) => {
+              const inGroup = rows.filter((r) => sel[r.clientId] === jid).map((r) => r.clientName);
+              const gName = groups.find((g) => g.id === jid)?.subject ?? rows.find((r) => sel[r.clientId] === jid)?.currentName ?? jid;
+              return <li key={jid} className="text-[11px] text-muted-foreground">• <b className="text-foreground">{gName}</b>: {inGroup.join(" + ")}</li>;
+            })}
+          </ul>
+        </div>
+      )}
+
       <div className="rounded-xl border border-border overflow-hidden">
         <div className="grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 bg-card border-b border-border">
           {["Cliente", "Grupo WhatsApp", "Verba mín (R$)", "Destino", "Alertas", "Confiança"].map((h) => (
@@ -152,9 +176,13 @@ export default function GruposPage() {
         {rows.map((r) => {
           const conf = r.suggestion.confidence;
           const needsReview = !sel[r.clientId] || conf === "low" || conf === "none";
+          const isDup = !!sel[r.clientId] && groupCounts[sel[r.clientId]] > 1;
           return (
-            <div key={r.clientId} className={`grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 border-b border-border last:border-0 items-center ${needsReview ? "bg-lone-warning-bg/[0.03]" : ""}`}>
-              <p className="text-sm text-foreground truncate" title={r.metaAccountId}>{r.clientName}</p>
+            <div key={r.clientId} className={`grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 border-b border-border last:border-0 items-center ${isDup ? "bg-destructive/[0.05]" : needsReview ? "bg-lone-warning-bg/[0.03]" : ""}`}>
+              <p className="text-sm text-foreground truncate" title={r.metaAccountId}>
+                {r.clientName}
+                {isDup && <span title="Grupo repetido — confira" className="ml-1.5 text-[9px] text-destructive font-medium whitespace-nowrap">⚠️ repetido</span>}
+              </p>
               <select
                 value={sel[r.clientId] ?? ""}
                 onChange={(e) => setSel((s) => ({ ...s, [r.clientId]: e.target.value }))}
