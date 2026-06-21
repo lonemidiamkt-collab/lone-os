@@ -28,8 +28,8 @@ import { requireCron } from "@/lib/api/cron-guard";
 import {
   selectActiveClientsWithGroup, clientDisplayName,
 } from "@/lib/traffic/weekly-report";
-import { renderMonthCalendarHtml } from "@/lib/holidays/email-html";
-import { renderMonthHolidaysPdfBuffer, holidaysPdfFilename } from "@/lib/holidays/pdf-server";
+import { buildClientCalendarHtml } from "@/lib/holidays/client-calendar-html";
+import { holidaysPdfFilename } from "@/lib/holidays/pdf-server";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { sendMediaDocument } from "@/lib/whatsapp/evolution";
 
@@ -77,16 +77,6 @@ async function loadMessageTemplate(): Promise<string> {
 function renderCaption(tpl: string, cliente: string, mes: string): string {
   const Mes = mes.charAt(0).toUpperCase() + mes.slice(1);
   return tpl.replace(/\{cliente\}/g, cliente).replace(/\{Mes\}/g, Mes).replace(/\{mes\}/g, mes);
-}
-/** Embrulha o fragmento HTML do calendário num documento A4 limpo p/ o chromium. */
-function wrapCalendarHtml(fragment: string): string {
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
-<style>
-  *{box-sizing:border-box}
-  body{margin:0;padding:28px 32px;background:#0b0b12;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .lm-head{font-size:15px;letter-spacing:1px;color:#4f7cff;font-weight:700;margin:0 0 4px}
-</style></head>
-<body><div class="lm-head">LONE MÍDIA</div>${fragment}</body></html>`;
 }
 async function alreadySent(clientId: string, dateKey: string): Promise<boolean> {
   const { data } = await supabaseAdmin
@@ -142,25 +132,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Gera o calendário do mês alvo UMA vez (reusado por todos).
-    // 1ª opção: gerador @react-pdf (design de capa que o cliente prefere) — agora
-    // externalizado no next.config. Fallback: HTML do calendário (tema escuro) +
-    // chromium/browserless, caso o @react-pdf ainda retorne null.
+    // Gera o calendário do mês alvo UMA vez (reusado por todos): HTML premium
+    // (tema escuro, capa + página de cards) renderizado pelo chromium/browserless.
     const fileName = holidaysPdfFilename(target.year, target.month);
-    let pdf = await renderMonthHolidaysPdfBuffer({ year: target.year, month: target.month, region: "BRASIL" });
-    let pdfSource: "react-pdf" | "html" = "react-pdf";
-    if (!pdf) {
-      pdfSource = "html";
-      const fragment = await renderMonthCalendarHtml({ year: target.year, month: target.month, region: "BRASIL", theme: "dark" });
-      if (fragment) {
-        const render = await htmlToPdf(wrapCalendarHtml(fragment));
-        if (render.ok && render.buffer) pdf = render.buffer;
-      }
+    const html = await buildClientCalendarHtml({ year: target.year, month: target.month, region: "BRASIL" });
+    if (!html) {
+      await notifyAdminFailure("Calendário mensal não gerado", `Sem datas para ${mesNome}/${target.year}.`);
+      return NextResponse.json({ ok: false, status: "failed", error: "Sem datas no mês" }, { status: 200 });
     }
-    if (!pdf) {
-      await notifyAdminFailure("Calendário mensal não gerado", `Falha no @react-pdf e no fallback HTML (${mesNome}/${target.year}).`);
-      return NextResponse.json({ ok: false, status: "failed", error: "PDF não gerado" }, { status: 200 });
+    const render = await htmlToPdf(html);
+    if (!render.ok || !render.buffer) {
+      await notifyAdminFailure("Calendário mensal não gerado", `htmlToPdf: ${render.error ?? "falha"} (${mesNome}/${target.year}).`);
+      return NextResponse.json({ ok: false, status: "failed", error: render.error ?? "PDF não gerado" }, { status: 200 });
     }
+    const pdf = render.buffer;
 
     // dryRun: salva preview no Storage e lista elegíveis (não envia nada)
     if (dryRun) {
@@ -171,7 +156,7 @@ export async function POST(req: NextRequest) {
       const withGroup = clients.filter((c) => c.whatsapp_group_jid);
       return NextResponse.json({
         ok: true, status: "dry_run", mes: `${mesNome}/${target.year}`,
-        isSendDay, sendDay, dateKey, pdfBytes: pdf.length, pdfSource, previewUrl: pub,
+        isSendDay, sendDay, dateKey, pdfBytes: pdf.length, previewUrl: pub,
         eligible: withGroup.length,
         withGroup: withGroup.map(clientDisplayName),
         semGrupo: clients.filter((c) => !c.whatsapp_group_jid).map(clientDisplayName),
