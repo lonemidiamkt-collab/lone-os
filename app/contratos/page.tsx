@@ -294,10 +294,10 @@ export default function ContratosGlobalPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5 justify-end">
                             {c.pdf_url && (
-                              <a href={c.pdf_url} target="_blank" rel="noopener noreferrer"
+                              <button onClick={() => handleViewSigned(c.pdf_url!)}
                                 className="p-1.5 rounded hover:bg-muted text-zinc-500 hover:text-foreground" title="Ver PDF preliminar">
                                 <Download size={13} />
-                              </a>
+                              </button>
                             )}
                             {c.signed_pdf_path ? (
                               <button onClick={() => handleViewSigned(c.signed_pdf_path!)}

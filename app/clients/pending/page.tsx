@@ -122,7 +122,10 @@ export default function PendingClientsPage() {
 
     async function resolve(url: string | null): Promise<string | null> {
       if (!url) return null;
-      if (!url.startsWith("legal://")) return url;
+      // Assina refs do cofre: legal:// (atual) e URLs públicas legadas (onboarding-docs,
+      // hoje privado). Demais (ex.: brand-assets/logo) seguem direto.
+      const needsSign = url.startsWith("legal://") || url.includes("/storage/v1/object/");
+      if (!needsSign) return url;
       try {
         const res = await fetch("/api/storage/signed-url", {
           method: "POST",
