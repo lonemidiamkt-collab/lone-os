@@ -3,7 +3,7 @@
 // grupos dos clientes (/api/system/client-messages).
 
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { fetchCampaignInsights, fetchAccountDemographics } from "@/lib/meta/insights-server";
+import { fetchCampaignInsights, fetchAccountDemographics, fetchAccountReach } from "@/lib/meta/insights-server";
 import { buildTrafficReportData, buildClientReportHtml } from "@/lib/exportTrafficPdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import type { AdCampaign } from "@/lib/types";
@@ -91,7 +91,10 @@ export async function buildClientPdf(
     demographics = demo ?? undefined;
   } catch { /* demografia é opcional */ }
 
-  const reportData = buildTrafficReportData(clientName, campaigns, periodLabel7d(), undefined, demographics, undefined, 7);
+  // Alcance deduplicado no nível da conta (não somar campanha a campanha).
+  const accountReach = await fetchAccountReach(token, accountId, 7);
+
+  const reportData = buildTrafficReportData(clientName, campaigns, periodLabel7d(), undefined, demographics, undefined, 7, accountReach ?? undefined);
   const html = buildClientReportHtml(reportData);
   const pdf = await htmlToPdf(html);
   if (!pdf.ok || !pdf.buffer) return { ok: false, error: pdf.error ?? "falha no render" };

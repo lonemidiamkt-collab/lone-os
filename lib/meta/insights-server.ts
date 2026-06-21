@@ -84,6 +84,40 @@ export async function fetchActiveCampaignCount(
   }
 }
 
+/**
+ * Alcance (reach) DEDUPLICADO no nível da CONTA, numa única chamada. Somar o reach
+ * de cada campanha super-conta (a mesma pessoa atingida por 2 campanhas é contada
+ * 2x). Aqui pegamos o reach real da conta no período. Retorna null se indisponível
+ * (caller cai no fallback de somar).
+ */
+export async function fetchAccountReach(
+  token: string,
+  accountId: string,
+  days: number = 7,
+  dateFrom?: string,
+  dateTo?: string,
+): Promise<number | null> {
+  try {
+    const PRESET_MAP: Record<number, string> = { 7: "last_7d", 14: "last_14d", 30: "last_30d", 90: "last_90d" };
+    const usePreset = !dateFrom && !dateTo && days in PRESET_MAP;
+    const params = new URLSearchParams({
+      access_token: token,
+      fields: "reach",
+      ...(usePreset
+        ? { date_preset: PRESET_MAP[days] }
+        : { time_range: JSON.stringify({ since: dateFrom ?? "", until: dateTo ?? "" }) }),
+      limit: "1",
+    });
+    const res = await fetch(`https://graph.facebook.com/v21.0/${accountId}/insights?${params}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const reach = safeInt(data.data?.[0]?.reach);
+    return reach > 0 ? reach : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Funções abaixo copiadas verbatim de useMetaAds.ts (via sed) ──────────────
 
 export async function fetchCampaignInsights(
@@ -129,9 +163,13 @@ export async function fetchCampaignInsights(
       try {
         const timeRangeParam = !usePreset ? JSON.stringify({ since: sinceStr, until: untilStr }) : null;
 
+        // Janela de atribuição fixa em 7d_click — espelha a coluna "Resultados" do
+        // Gerenciador. Sem isso, a Meta usava o default (podia incluir 1d_view) e os
+        // leads/conversões divergiam do painel. (Mensagens já vêm fixas pelo action_type _7d.)
         const dailyParams = new URLSearchParams({
           access_token: token,
           fields: "date_start,date_stop,spend,impressions,reach,clicks,inline_link_clicks,actions",
+          action_attribution_windows: '["7d_click"]',
           ...(datePreset ? { date_preset: datePreset } : { time_range: timeRangeParam! }),
           time_increment: "1",
           limit: "100",
@@ -140,6 +178,7 @@ export async function fetchCampaignInsights(
         const totalParams = new URLSearchParams({
           access_token: token,
           fields: "spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions",
+          action_attribution_windows: '["7d_click"]',
           ...(datePreset ? { date_preset: datePreset } : { time_range: timeRangeParam! }),
           limit: "1",
         });
@@ -148,6 +187,7 @@ export async function fetchCampaignInsights(
         const adsetParams = new URLSearchParams({
           access_token: token,
           fields: "adset_id,adset_name,effective_status,spend,actions",
+          action_attribution_windows: '["7d_click"]',
           ...(datePreset ? { date_preset: datePreset } : { time_range: timeRangeParam! }),
           level: "adset",
           limit: "50",

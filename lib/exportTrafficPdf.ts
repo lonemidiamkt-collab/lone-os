@@ -774,6 +774,7 @@ export function buildTrafficReportData(
   demographics?: TrafficReportData["demographics"],
   dateRange?: { startStr: string; endStr: string },
   periodDays?: number,
+  accountReach?: number,
 ): TrafficReportData {
   const reportCampaigns = campaigns;
   let totalSpend = 0, totalImpressions = 0, totalReach = 0, totalClicks = 0, totalMessages = 0;
@@ -833,7 +834,8 @@ export function buildTrafficReportData(
     clientName,
     period: periodLabel,
     periodDays,
-    reach: totalReach,
+    // Alcance da CONTA (deduplicado) quando disponível; senão, soma das campanhas (super-conta).
+    reach: accountReach != null ? accountReach : totalReach,
     impressions: totalImpressions,
     clicks: totalClicks,
     messages: totalMessages,
