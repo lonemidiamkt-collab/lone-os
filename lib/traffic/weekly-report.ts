@@ -22,10 +22,14 @@ export function clientDisplayName(c: { nome_fantasia: string | null; name: strin
 }
 
 export function periodLabel7d(): string {
+  // O last_7d da Meta NÃO inclui hoje: cobre os 7 dias que terminam ONTEM.
+  // Rodando na segunda, isso é exatamente segunda → domingo da semana passada.
   const now = new Date();
+  const until = new Date(now);
+  until.setDate(until.getDate() - 1); // domingo (último dia fechado)
   const since = new Date(now);
-  since.setDate(since.getDate() - 7);
-  return `${since.toLocaleDateString("pt-BR")} – ${now.toLocaleDateString("pt-BR")}`;
+  since.setDate(since.getDate() - 7); // segunda
+  return `${since.toLocaleDateString("pt-BR")} – ${until.toLocaleDateString("pt-BR")}`;
 }
 
 export function slug(s: string): string {
