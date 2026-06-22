@@ -28,7 +28,7 @@ import {
   buildClientPdf, selectActiveClientsWithGroup, slug, clientDisplayName,
   type ReportClientRow,
 } from "@/lib/traffic/weekly-report";
-import { MONDAY_REPORT_MESSAGE, MONDAY_SOCIAL_MESSAGE, supportMessageFor, type ClientMsgKind } from "@/lib/traffic/support-message";
+import { MONDAY_REPORT_MESSAGE, MONDAY_SOCIAL_MESSAGE, RESEND_REPORT_MESSAGE, supportMessageFor, type ClientMsgKind } from "@/lib/traffic/support-message";
 import { sendGroupText, sendMediaDocument } from "@/lib/whatsapp/evolution";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
@@ -77,6 +77,8 @@ export async function POST(req: NextRequest) {
   const dryRun = url.searchParams.get("dryRun") === "1";
   const force = url.searchParams.get("force") === "1";
   const onlyClientId = url.searchParams.get("clientId");
+  // resend=1: usa a legenda de "relatório corrigido" (reenvio pós-erro da Meta).
+  const resend = url.searchParams.get("resend") === "1";
   const dateKey = todayKeyBRT();
 
   try {
@@ -128,7 +130,7 @@ export async function POST(req: NextRequest) {
               reportFail++; errors.push(`${name} (relatório): ${pdf.error}`); await logMsg(c.id, dateKey, "report", "failed", pdf.error);
             } else {
               const fileName = `relatorio-${slug(name)}-${dateKey}.pdf`;
-              const res = await sendMediaDocument(jid, pdf.buffer.toString("base64"), fileName, MONDAY_REPORT_MESSAGE);
+              const res = await sendMediaDocument(jid, pdf.buffer.toString("base64"), fileName, resend ? RESEND_REPORT_MESSAGE : MONDAY_REPORT_MESSAGE);
               if (res.ok) { reportSent++; await logMsg(c.id, dateKey, "report", "sent"); }
               else { reportFail++; errors.push(`${name} (relatório): ${res.error}`); await logMsg(c.id, dateKey, "report", "failed", res.error); }
             }
