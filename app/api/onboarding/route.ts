@@ -3,6 +3,11 @@ export const runtime = "nodejs"; // vault usa crypto nativo de Node
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
+import { getServerUser } from "@/lib/supabase/auth-server";
+
+// Ações do PORTAL EXTERNO do cliente (sem login) — autenticadas pelo token de
+// onboarding. Todas as outras ações do POST são administrativas e exigem admin logado.
+const PUBLIC_ONBOARDING_ACTIONS = new Set(["auto_save", "submit", "check_duplicate"]);
 
 const supabaseUrl = process.env.SUPABASE_INTERNAL_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://supabase-kong-1:8000";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -40,6 +45,15 @@ export async function GET(req: NextRequest) {
 // POST — Handle all onboarding actions
 export async function POST(req: NextRequest) {
   const body = await req.json();
+
+  // Ações administrativas (criar rascunho, gerar link, aprovar, rejeitar) exigem
+  // usuário LOGADO. As do portal do cliente (PUBLIC_ONBOARDING_ACTIONS) seguem pelo token.
+  if (!PUBLIC_ONBOARDING_ACTIONS.has(body.action)) {
+    const user = await getServerUser(req);
+    if (!user) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+  }
 
   // ─── Generate link WITH draft client (main flow from modal) ───
   if (body.action === "generate_link_with_draft") {

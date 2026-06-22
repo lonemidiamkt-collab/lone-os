@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 
 const DATA_FILE = join(process.cwd(), "data", "state.json");
 const DATA_DIR = join(process.cwd(), "data");
 
-// GET — download shared state
-export async function GET() {
+// GET — download shared state (exige login: estado global do app)
+export async function GET(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   try {
     if (!existsSync(DATA_FILE)) {
       return NextResponse.json({ state: null, lastSync: null });
@@ -18,8 +21,10 @@ export async function GET() {
   }
 }
 
-// POST — upload state (admin only saves, everyone reads)
+// POST — upload state (exige login: sobrescreve o estado global do app)
 export async function POST(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   try {
     const body = await req.json();
     if (!body.state) {

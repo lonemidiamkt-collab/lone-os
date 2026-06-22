@@ -2,8 +2,11 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 
 export async function POST(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   try {
     const { accountId, isPrepaid } = await req.json();
     if (!accountId || typeof isPrepaid !== "boolean") {

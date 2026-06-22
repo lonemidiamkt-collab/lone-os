@@ -4,11 +4,15 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { runBalanceSync } from "@/lib/traffic/sync-core";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 
 // ── GET /api/traffic/sync-balances ───────────────────────────
 // Retorna dados atuais do DB (sem chamar Meta) para o frontend.
+// Exige login (vaza PIX/telefone dos clientes) ou CRON_SECRET.
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   try {
     const { data, error } = await supabaseAdmin
       .from("ad_accounts")
@@ -39,6 +43,8 @@ export async function GET() {
 // pelo digest agendado).
 
 export async function POST(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   try {
     // Aceita chamada de cron (sem body) ou manual ({ accountIds: [...] }).
     let targetAccountIds: string[] | null = null;

@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { fetchAccountBalances, detectAccountType } from "@/lib/meta/account-balance";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 
 async function getMetaToken(): Promise<string | null> {
   const { data } = await supabaseAdmin
@@ -21,7 +22,9 @@ async function getMetaToken(): Promise<string | null> {
 // GET /api/traffic/ad-accounts
 // Returns Meta ad accounts accessible with the stored token, filtered to exclude already-linked ones.
 // Also returns all clients for the selector.
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   try {
     const token = await getMetaToken();
     if (!token) {
@@ -77,6 +80,8 @@ export async function GET() {
 // POST /api/traffic/ad-accounts
 // Links a Meta ad account to a client and triggers an immediate sync.
 export async function POST(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   try {
     const body = await req.json();
     const { clientId, metaAccountId, accountName, isPrepaid } = body as {
@@ -141,6 +146,8 @@ export async function POST(req: NextRequest) {
 // em ad_accounts (fonte dos alertas). Usado pelo editor de investimento da tela de Tráfego,
 // em vez de salvar só no localStorage.
 export async function PATCH(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   try {
     const body = await req.json();
     const { clientId, monthlyBudget, dailyBudget, paymentMethod } = body as {

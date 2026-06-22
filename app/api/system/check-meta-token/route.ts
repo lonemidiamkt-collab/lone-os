@@ -15,9 +15,10 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/emailService";
+import { requireCron } from "@/lib/api/cron-guard";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
 
@@ -25,7 +26,9 @@ function daysUntil(expiresAtMs: number): number {
   return Math.floor((expiresAtMs - Date.now()) / 86_400_000);
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const denied = requireCron(req);
+  if (denied) return denied;
   try {
     // 1. Ler token e data de expiração
     const { data: settings } = await supabaseAdmin

@@ -1,14 +1,18 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 
 // GET /api/okr/traffic-metrics
 // Agrega o investimento REAL (gasto ÷ verba) das contas de anúncio dos clientes
 // em operação (exclui draft e onboarding). Usado em Metas & OKRs para o
 // "Investimento Executado" deixar de ser mock e passar a refletir ad_accounts.
-export async function GET() {
+// Exige login: expõe orçamento/gasto consolidado (financeiro).
+export async function GET(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   try {
     const [{ data: accounts }, { data: clients }] = await Promise.all([
       supabaseAdmin.from("ad_accounts").select("meta_account_id, monthly_budget, current_month_spend"),
