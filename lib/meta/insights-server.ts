@@ -143,7 +143,7 @@ export async function fetchCampaignInsights(
     }).toString();
   let campPages = 0;
   while (campUrl && campPages < 30) {
-    const campRes = await fetch(campUrl);
+    const campRes: Response = await fetch(campUrl);
     if (!campRes.ok) {
       const err = await campRes.json().catch(() => ({}));
       if (isMetaAuthError(campRes.status, err)) {
