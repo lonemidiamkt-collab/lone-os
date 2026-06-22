@@ -84,6 +84,8 @@ export async function buildClientPdf(
   const raw = await fetchCampaignInsights(token, accountId, 7);
   const campaigns = (raw as Array<{ error?: boolean }>).filter((c) => !c.error) as unknown as AdCampaign[];
   if (campaigns.length === 0) return { ok: false, error: "sem campanhas no período" };
+  // DEBUG temporário p/ diagnosticar subcontagem
+  console.log(`[DEBUG-REPORT] ${clientName} ${accountId}: raw=${(raw as unknown[]).length} campanhas=${campaigns.length} msgs=${campaigns.reduce((s, c) => s + ((c as unknown as { messages?: number }).messages ?? 0), 0)} spend=${campaigns.reduce((s, c) => s + ((c as unknown as { spend?: number }).spend ?? 0), 0).toFixed(2)}`);
 
   let demographics: ReturnType<typeof buildTrafficReportData>["demographics"] | undefined;
   try {
