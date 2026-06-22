@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { aiCache } from "@/lib/ai/cache";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
@@ -45,6 +46,8 @@ REGRAS:
 - Responda APENAS o JSON`;
 
 export async function POST(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   if (!OPENAI_API_KEY) {
     return NextResponse.json({ error: "OPENAI_API_KEY nao configurada" }, { status: 500 });
   }

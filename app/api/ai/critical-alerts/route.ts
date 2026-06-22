@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 
 // Critical alerts are rule-based (no AI needed = 0 tokens)
 // Only escalates to AI when context is ambiguous
@@ -16,6 +17,8 @@ interface Alert {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   try {
     const { clients } = await req.json();
     if (!clients || !Array.isArray(clients)) {

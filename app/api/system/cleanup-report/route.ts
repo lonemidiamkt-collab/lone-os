@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   try {
     const reportPath = join(process.cwd(), "public", "cleanup-report.json");
     const data = readFileSync(reportPath, "utf-8");

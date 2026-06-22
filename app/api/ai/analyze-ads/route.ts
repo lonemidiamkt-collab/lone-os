@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { aiCache } from "@/lib/ai/cache";
+import { requireCronOrUser } from "@/lib/api/cron-guard";
 
 // Server-side only — API key never exposed to frontend
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -41,6 +42,8 @@ REGRAS:
 - Responda APENAS o JSON, sem markdown`;
 
 export async function POST(req: NextRequest) {
+  const denied = await requireCronOrUser(req);
+  if (denied) return denied;
   if (!OPENAI_API_KEY) {
     return NextResponse.json(
       { error: "API key nao configurada. Adicione OPENAI_API_KEY ao .env.local" },

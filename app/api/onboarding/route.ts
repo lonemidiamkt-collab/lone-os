@@ -4,6 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { randomBytes } from "crypto";
+
+/** Token de onboarding forte (128 bits) — não enumerável. */
+function newOnboardingToken(): string {
+  return `ob-${randomBytes(16).toString("hex")}`;
+}
 
 // Ações do PORTAL EXTERNO do cliente (sem login) — autenticadas pelo token de
 // onboarding. Todas as outras ações do POST são administrativas e exigem admin logado.
@@ -76,7 +82,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Generate onboarding token
-    const token = `ob-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const token = newOnboardingToken();
     const { error: subErr } = await supabase.from("client_onboarding_submissions").insert({
       client_id: client.id,
       token,
@@ -89,7 +95,7 @@ export async function POST(req: NextRequest) {
 
   // ─── Generate link for an existing client ───
   if (body.action === "generate_link") {
-    const token = `ob-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const token = newOnboardingToken();
     const { error } = await supabase.from("client_onboarding_submissions").insert({
       client_id: body.clientId,
       token,
