@@ -25,10 +25,10 @@ import { sendEmail } from "@/lib/email/emailService";
 import { requireCron } from "@/lib/api/cron-guard";
 import { getMetaToken } from "@/lib/traffic/sync-core";
 import {
-  buildClientPdf, selectActiveMetaClients, selectActiveClientsWithGroup, slug, clientDisplayName,
+  buildClientPdf, selectActiveClientsWithGroup, slug, clientDisplayName,
   type ReportClientRow,
 } from "@/lib/traffic/weekly-report";
-import { MONDAY_REPORT_MESSAGE, supportMessageFor, type ClientMsgKind } from "@/lib/traffic/support-message";
+import { MONDAY_REPORT_MESSAGE, MONDAY_SOCIAL_MESSAGE, supportMessageFor, type ClientMsgKind } from "@/lib/traffic/support-message";
 import { sendGroupText, sendMediaDocument } from "@/lib/whatsapp/evolution";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
@@ -85,11 +85,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, status: "disabled", message: "traffic_client_msgs_enabled=false" });
     }
 
-    // Segunda (relatório) exige conta Meta vinculada; quarta/sexta (suporte) vai
-    // pra qualquer cliente ativo com grupo, mesmo sem conta de anúncio (só-suporte).
-    const clients = withReport
-      ? await selectActiveMetaClients(onlyClientId)
-      : await selectActiveClientsWithGroup(onlyClientId);
+    // Todos os clientes ativos com grupo. Na SEGUNDA: quem tem conta Meta recebe o
+    // RELATÓRIO; quem é só-social (sem Meta) recebe a mensagem de início de semana.
+    // Quarta/sexta: mensagem de suporte do dia pra todos.
+    const clients = await selectActiveClientsWithGroup(onlyClientId);
     const withGroup = clients.filter((c) => c.whatsapp_group_jid);
     const withoutGroup = clients.filter((c) => !c.whatsapp_group_jid).map(clientDisplayName);
 
@@ -106,10 +105,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, status: "skipped", message: "Nenhum cliente com grupo confirmado", withoutGroup });
     }
 
+    // Token Meta só é necessário pros relatórios (segunda, clientes com Meta).
+    // Sem token, os relatórios falham por cliente — os social-puro seguem normal.
     const token = withReport ? await getMetaToken() : null;
-    if (withReport && !token) {
-      return NextResponse.json({ ok: false, status: "failed", error: "Token Meta ausente/expirado" }, { status: 200 });
-    }
 
     let supportSent = 0, supportFail = 0, reportSent = 0, reportFail = 0;
     const errors: string[] = [];
@@ -119,19 +117,29 @@ export async function POST(req: NextRequest) {
       const name = clientDisplayName(c);
       const jid = c.whatsapp_group_jid!;
 
-      if (withReport) {
-        // Segunda: PDF de 7 dias com a mensagem personalizada como legenda
-        // (sem mensagem de suporte separada).
+      if (withReport && c.meta_ad_account_id) {
+        // Segunda, cliente de tráfego: PDF de 7 dias com a mensagem como legenda.
         if (force || !(await alreadySent(c.id, dateKey, "report"))) {
-          const pdf = await buildClientPdf(token!, c);
-          if (!pdf.ok || !pdf.buffer) {
-            reportFail++; errors.push(`${name} (relatório): ${pdf.error}`); await logMsg(c.id, dateKey, "report", "failed", pdf.error);
+          if (!token) {
+            reportFail++; errors.push(`${name} (relatório): token Meta ausente`); await logMsg(c.id, dateKey, "report", "failed", "token ausente");
           } else {
-            const fileName = `relatorio-${slug(name)}-${dateKey}.pdf`;
-            const res = await sendMediaDocument(jid, pdf.buffer.toString("base64"), fileName, MONDAY_REPORT_MESSAGE);
-            if (res.ok) { reportSent++; await logMsg(c.id, dateKey, "report", "sent"); }
-            else { reportFail++; errors.push(`${name} (relatório): ${res.error}`); await logMsg(c.id, dateKey, "report", "failed", res.error); }
+            const pdf = await buildClientPdf(token, c);
+            if (!pdf.ok || !pdf.buffer) {
+              reportFail++; errors.push(`${name} (relatório): ${pdf.error}`); await logMsg(c.id, dateKey, "report", "failed", pdf.error);
+            } else {
+              const fileName = `relatorio-${slug(name)}-${dateKey}.pdf`;
+              const res = await sendMediaDocument(jid, pdf.buffer.toString("base64"), fileName, MONDAY_REPORT_MESSAGE);
+              if (res.ok) { reportSent++; await logMsg(c.id, dateKey, "report", "sent"); }
+              else { reportFail++; errors.push(`${name} (relatório): ${res.error}`); await logMsg(c.id, dateKey, "report", "failed", res.error); }
+            }
           }
+        }
+      } else if (withReport) {
+        // Segunda, cliente SÓ-SOCIAL (sem Meta): mensagem de início de semana.
+        if (force || !(await alreadySent(c.id, dateKey, "support"))) {
+          const res = await sendGroupText(jid, MONDAY_SOCIAL_MESSAGE);
+          if (res.ok) { supportSent++; await logMsg(c.id, dateKey, "support", "sent"); }
+          else { supportFail++; errors.push(`${name} (início de semana): ${res.error}`); await logMsg(c.id, dateKey, "support", "failed", res.error); }
         }
       } else {
         // Quarta/Sexta: só a mensagem de suporte do dia.

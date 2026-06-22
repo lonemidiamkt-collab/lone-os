@@ -10,6 +10,12 @@ export const MONDAY_REPORT_MESSAGE =
   "Espero que a nossa semana seja positiva, que a gente gere muitas vendas e que a gente vá " +
   "atrás do melhor resultado possível. 🚀";
 
+/** Segunda, clientes só-social (sem relatório de tráfego): início de semana + oferta de arte. */
+export const MONDAY_SOCIAL_MESSAGE =
+  "Olá, bom dia, amigos! Começando mais uma semana com tudo! 🚀 Que seja uma ótima semana " +
+  "pra vocês. Tem alguma novidade, aviso ou promoção pra essa semana que a gente possa " +
+  "desenvolver uma arte? É só mandar aqui que a gente cuida. 🎨";
+
 /** Quarta: acompanhamento de meio de semana. */
 export const WEDNESDAY_MESSAGE =
   "Olá, pessoal! Ótima quarta-feira para a gente, ótimo meio de semana. Vamos para cima hoje, " +
