@@ -169,8 +169,7 @@ export async function fetchCampaignInsights(
 
   console.log(`[Meta API] fetchCampaignInsights: ${usePreset ? `date_preset=${datePreset}` : `${sinceStr} → ${untilStr}`}`);
 
-  return Promise.all(
-    campaigns.map(async (campaign: any) => {
+  const processCampaign = async (campaign: any) => {
       try {
         const timeRangeParam = !usePreset ? JSON.stringify({ since: sinceStr, until: untilStr }) : null;
 
@@ -344,8 +343,15 @@ export async function fetchCampaignInsights(
       } catch {
         return { id: campaign.id, name: campaign.name, error: true };
       }
-    })
-  );
+  };
+  // Processa em LOTES pequenos p/ não estourar a concorrência de fetch no Node. Antes,
+  // ~500 chamadas simultâneas (N campanhas × 3) faziam a MAIORIA falhar (error:true) e
+  // serem descartadas (ex.: Imperio 165 camp → só 13 sobreviviam → 62 msgs vs 179 reais).
+  const out: any[] = [];
+  for (let i = 0; i < campaigns.length; i += 6) {
+    out.push(...(await Promise.all(campaigns.slice(i, i + 6).map(processCampaign))));
+  }
+  return out;
 }
 
 export async function fetchAccountDemographics(
