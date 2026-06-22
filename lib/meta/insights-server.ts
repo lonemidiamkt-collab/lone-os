@@ -129,22 +129,33 @@ export async function fetchCampaignInsights(
 ) {
   const syncTimestamp = new Date().toISOString();
 
-  const campParams = new URLSearchParams({
-    access_token: token,
-    fields: "id,name,objective,status,daily_budget,lifetime_budget,start_time,stop_time",
-    effective_status: '["ACTIVE","PAUSED"]',
-    limit: "100",
-  });
-  const campRes = await fetch(`https://graph.facebook.com/v21.0/${accountId}/campaigns?${campParams}`);
-  if (!campRes.ok) {
-    const err = await campRes.json().catch(() => ({}));
-    if (isMetaAuthError(campRes.status, err)) {
-      throw new TokenExpiredError(`Token inválido ou expirado (code ${err?.error?.code ?? campRes.status})`);
+  // PAGINA todas as campanhas ACTIVE/PAUSED. Antes parava em limit=100 sem seguir
+  // paging.next → contas com >100 campanhas (ex.: Imperio, 165) perdiam METADE dos
+  // dados (gasto/impressões/cliques/mensagens). Agora busca todas as páginas.
+  const campaigns: any[] = [];
+  let campUrl: string | null =
+    `https://graph.facebook.com/v21.0/${accountId}/campaigns?` +
+    new URLSearchParams({
+      access_token: token,
+      fields: "id,name,objective,status,daily_budget,lifetime_budget,start_time,stop_time",
+      effective_status: '["ACTIVE","PAUSED"]',
+      limit: "100",
+    }).toString();
+  let campPages = 0;
+  while (campUrl && campPages < 30) {
+    const campRes = await fetch(campUrl);
+    if (!campRes.ok) {
+      const err = await campRes.json().catch(() => ({}));
+      if (isMetaAuthError(campRes.status, err)) {
+        throw new TokenExpiredError(`Token inválido ou expirado (code ${err?.error?.code ?? campRes.status})`);
+      }
+      throw new Error(`Failed to fetch campaigns: ${err?.error?.message ?? campRes.status}`);
     }
-    throw new Error(`Failed to fetch campaigns: ${err?.error?.message ?? campRes.status}`);
+    const campData = await campRes.json();
+    campaigns.push(...(campData.data ?? []));
+    campUrl = campData.paging?.next ?? null;
+    campPages++;
   }
-  const campData = await campRes.json();
-  const campaigns = campData.data ?? [];
 
   // For preset periods (no custom date range), use Meta's native date_preset so the API
   // respects the account's timezone rather than UTC midnight boundaries.
