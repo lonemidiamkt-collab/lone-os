@@ -30,6 +30,7 @@ import { useNav } from "@/lib/context/NavContext";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { exportReportAsPdf } from "@/lib/exportPdf";
@@ -1610,6 +1611,61 @@ function InternalChatTab({ clients, clientChats, onSend }: InternalChatTabProps)
   );
 }
 
+// ── Card Status Selector (ClickUp-style) ──────────────────────────────────────
+// Chip colorido no card; ao escolher outro status, move o card de coluna sozinho
+// (reusa o mesmo onMoveCard do drag-and-drop). Portal do Radix escapa do
+// overflow-hidden do card.
+function CardStatusSelector({
+  status,
+  onChange,
+  disabled,
+}: {
+  status: ContentCard["status"];
+  onChange: (to: ContentCard["status"]) => void;
+  disabled?: boolean;
+}) {
+  const current = CONTENT_COLUMNS.find((c) => c.id === status) ?? CONTENT_COLUMNS[0];
+
+  if (disabled) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold bg-muted text-muted-foreground border border-border max-w-full">
+        <span className={`w-2 h-2 rounded-full shrink-0 ${current.color}`} />
+        <span className="truncate">{current.title}</span>
+      </span>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold bg-muted text-foreground border border-border hover:border-primary/40 transition-colors max-w-full outline-none"
+          title="Mudar status — move o card de coluna"
+        >
+          <span className={`w-2 h-2 rounded-full shrink-0 ${current.color}`} />
+          <span className="truncate">{current.title}</span>
+          <ChevronDown size={10} className="text-muted-foreground shrink-0" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-48">
+        {CONTENT_COLUMNS.map((col) => (
+          <DropdownMenuItem
+            key={col.id}
+            onSelect={() => { if (col.id !== status) onChange(col.id as ContentCard["status"]); }}
+            className="gap-2 text-xs cursor-pointer"
+          >
+            <span className={`w-2 h-2 rounded-full shrink-0 ${col.color}`} />
+            <span className="flex-1">{col.title}</span>
+            {col.id === status && <Check size={12} className="text-primary shrink-0" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 // ── Kanban By Client ──────────────────────────────────────────────────────────
 
 interface KanbanByClientProps {
@@ -1628,6 +1684,7 @@ interface KanbanByClientProps {
 
 function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, onDeleteCard, currentUser, role }: KanbanByClientProps) {
   const [activeClientId, setActiveClientId] = useState(clients[0]?.id ?? "");
+  const isReadOnly = role === "designer"; // Designer só visualiza; seletor vira etiqueta estática
 
   const activeClient = allClients.find((c) => c.id === activeClientId);
   const clientCards = contentCards.filter((c) => c.clientId === activeClientId);
@@ -1734,6 +1791,13 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                   </div>
                 )}
                 <div className="p-3">
+                  <div className="mb-2" onClick={(e) => e.stopPropagation()}>
+                    <CardStatusSelector
+                      status={card.status}
+                      disabled={isReadOnly}
+                      onChange={(toStatus) => onMoveCard(card.id, toStatus)}
+                    />
+                  </div>
                   {card.requestedByTraffic && (
                     <div className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md border mb-2 text-primary bg-primary/10 border-primary/20">
                       <Zap size={10} />
