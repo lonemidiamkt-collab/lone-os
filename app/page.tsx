@@ -36,6 +36,7 @@ import TrafficChecklist from "@/components/sector/TrafficChecklist";
 import PostCounter from "@/components/sector/PostCounter";
 import DesignQueue from "@/components/sector/DesignQueue";
 import BudgetAlert from "@/components/sector/BudgetAlert";
+import DesignDeliveriesAlert from "@/components/DesignDeliveriesAlert";
 import SmartAlerts from "@/components/SmartAlerts";
 import SystemAlertBanner from "@/components/SystemAlertBanner";
 import MetaHealthCard from "@/components/MetaHealthCard";
@@ -341,6 +342,9 @@ function EmployeeDashboard() {
         <TrafficChecklist clients={myClients.filter((c) => c.status !== "onboarding")} currentUser={currentUser} />
       )}
       {role === "social" && (
+        <DesignDeliveriesAlert cards={contentCards.filter((c) => c.socialMedia === currentUser)} />
+      )}
+      {role === "social" && (
         <PostCounter cards={contentCards} currentUser={currentUser} />
       )}
       {role === "designer" && myDesignRequests.length > 0 && (
@@ -589,6 +593,9 @@ function AdminDashboard() {
           { type: "pending_approval",   count: pendingApproval,          href: "/social" },
         ]}
       />
+
+      {/* Artes entregues pelo designer aguardando confirmação do social */}
+      <DesignDeliveriesAlert cards={contentCards} />
 
       {/* Health Radar + Smart Alerts */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

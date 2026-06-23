@@ -1967,7 +1967,16 @@ export default function SocialPage() {
       setNewCardDate(new Date().toISOString().slice(0, 10));
       router.replace(pathname, { scroll: false });
     }
-  }, [searchParams, router, pathname]);
+    // Atalho ?card=<id> (vindo do bloco "Artes prontas" da Home): abre o card direto.
+    const cardId = searchParams.get("card");
+    if (cardId) {
+      const card = contentCards.find((c) => c.id === cardId);
+      if (card) {
+        setSelectedCard(card);
+        router.replace(pathname, { scroll: false });
+      }
+    }
+  }, [searchParams, router, pathname, contentCards]);
 
   // Auth: use global session (no secondary login needed)
   const isDesigner = role === "designer";
