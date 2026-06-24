@@ -57,6 +57,9 @@ function snakeToClient(row: Record<string, unknown>): Client {
     monthlyBudget: Number(row.monthly_budget ?? 0),
     dailyBudget: row.daily_budget != null ? Number(row.daily_budget) : undefined,
     status: (row.status as Client["status"]) ?? "onboarding",
+    active: (row.active as boolean) ?? true,
+    churnedAt: (row.churned_at as string) ?? undefined,
+    churnReason: (row.churn_reason as string) ?? undefined,
     attentionLevel: (row.attention_level as Client["attentionLevel"]) ?? "medium",
     tags: (row.tags as string[]) ?? [],
     assignedTraffic: (row.assigned_traffic as string) ?? "",
@@ -131,6 +134,9 @@ function clientToSnake(c: Partial<Client>): Record<string, unknown> {
   if (c.industry !== undefined) row.industry = c.industry;
   if (c.monthlyBudget !== undefined) row.monthly_budget = c.monthlyBudget;
   if (c.status !== undefined) row.status = c.status;
+  if (c.active !== undefined) row.active = c.active;
+  if (c.churnedAt !== undefined) row.churned_at = c.churnedAt;
+  if (c.churnReason !== undefined) row.churn_reason = c.churnReason;
   if (c.attentionLevel !== undefined) row.attention_level = c.attentionLevel;
   if (c.tags !== undefined) row.tags = c.tags;
   if (c.paymentMethod !== undefined) row.payment_method = c.paymentMethod;
@@ -187,9 +193,19 @@ function clientToSnake(c: Partial<Client>): Record<string, unknown> {
   return row;
 }
 
+// Clientes ATIVOS (carteira atual). Ex-clientes (active=false) ficam de fora de
+// toda a operação — listagens, /social, automação que lê o estado do app.
+// Arquivados são carregados sob demanda por fetchChurnedClients (view de arquivados / métricas).
 export async function fetchClients(): Promise<Client[]> {
-  const { data, error } = await db.from("clients").select("*").is("draft_status", null).order("name");
+  const { data, error } = await db.from("clients").select("*").is("draft_status", null).neq("active", false).order("name");
   if (error) { console.error("[DB] fetchClients:", error); return []; }
+  return (data ?? []).map(snakeToClient);
+}
+
+// Ex-clientes (churned). Para a aba "Arquivados" e métricas de carteira.
+export async function fetchChurnedClients(): Promise<Client[]> {
+  const { data, error } = await db.from("clients").select("*").is("draft_status", null).eq("active", false).order("churned_at", { ascending: false });
+  if (error) { console.error("[DB] fetchChurnedClients:", error); return []; }
   return (data ?? []).map(snakeToClient);
 }
 

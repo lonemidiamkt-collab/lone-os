@@ -36,7 +36,7 @@ async function resolveAudience(audience: string): Promise<Recipient[]> {
     return emails.map((email) => ({ clientId: null, email, contactName: email.split("@")[0], companyName: "" }));
   }
 
-  let q = supabaseAdmin.from("clients").select("id, name, nome_fantasia, contact_name, email, email_corporativo, industry, nicho, endereco_cidade, endereco_estado");
+  let q = supabaseAdmin.from("clients").select("id, name, nome_fantasia, contact_name, email, email_corporativo, industry, nicho, endereco_cidade, endereco_estado").neq("active", false); // nunca envia broadcast a ex-cliente
 
   if (audience.startsWith("industry:")) {
     q = q.eq("industry", audience.slice("industry:".length));

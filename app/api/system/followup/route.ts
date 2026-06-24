@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     .from("clients")
     .select("id, name, nome_fantasia, assigned_traffic, assigned_social, status, draft_status")
     .is("draft_status", null)
+    .neq("active", false) // ex-clientes (churned) não geram follow-up
     .neq("status", "onboarding");
 
   if (!clients || clients.length === 0) {

@@ -68,6 +68,7 @@ export async function selectActiveClientsWithGroup(onlyClientId?: string | null)
     .not("whatsapp_group_jid", "is", null)
     .in("status", ["good", "average", "onboarding"])
     .is("draft_status", null)
+    .neq("active", false) // ex-clientes (churned) não recebem mensagem/relatório
     .order("nome_fantasia");
   if (onlyClientId) q = q.eq("id", onlyClientId);
   const { data, error } = await q;

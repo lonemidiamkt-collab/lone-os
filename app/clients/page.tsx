@@ -18,11 +18,12 @@ import {
 import {
   Search, UserPlus, ChevronRight, MessageSquare,
   ExternalLink, Activity, MoreHorizontal, Facebook, AlertTriangle, Zap,
-  Check, X, Loader2, Clock, Send,
+  Check, X, Loader2, Clock, Send, Archive, RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
 import { mockAdCampaigns } from "@/lib/mockData";
-import { fetchDraftClients } from "@/lib/supabase/queries";
+import { fetchDraftClients, fetchChurnedClients } from "@/lib/supabase/queries";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 // Health score: uses shared calcHealthScore from lib/utils.ts
 
@@ -117,6 +118,63 @@ export default function ClientsPage() {
     }
   };
 
+  // ─── Lifecycle: arquivar (churn) / reativar (admin/manager) ───
+  const [showArchived, setShowArchived] = useState(false);
+  const [archived, setArchived] = useState<Client[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<Client | null>(null);
+  const [archiveReason, setArchiveReason] = useState("");
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+
+  const loadArchived = () => {
+    setArchivedLoading(true);
+    fetchChurnedClients().then(setArchived).finally(() => setArchivedLoading(false));
+  };
+  useEffect(() => {
+    if (showArchived && isAdmin) loadArchived();
+  }, [showArchived, isAdmin]);
+
+  const confirmArchive = async () => {
+    if (!archiveTarget) return;
+    setLifecycleBusy(true);
+    setLifecycleError(null);
+    try {
+      const res = await authedFetch(`/api/clients/${archiveTarget.id}/lifecycle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "archive", reason: archiveReason.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
+      // O realtime patcha active=false → o cliente sai da lista ativa (filtro abaixo).
+      setArchiveTarget(null);
+      setArchiveReason("");
+      if (showArchived) loadArchived();
+    } catch (e) {
+      setLifecycleError(e instanceof Error ? e.message : "Erro ao arquivar");
+    } finally {
+      setLifecycleBusy(false);
+    }
+  };
+
+  const handleReactivate = async (clientId: string) => {
+    setLifecycleBusy(true);
+    setLifecycleError(null);
+    try {
+      const res = await authedFetch(`/api/clients/${clientId}/lifecycle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reactivate" }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
+      setArchived((prev) => prev.filter((c) => c.id !== clientId));
+      window.location.reload(); // recarrega p/ trazer o cliente de volta à carteira ativa
+    } catch (e) {
+      setLifecycleError(e instanceof Error ? e.message : "Erro ao reativar");
+      setLifecycleBusy(false);
+    }
+  };
+
   // Role-based: which field maps the current user to a client
   const isOperator = role === "traffic" || role === "social" || role === "designer";
   const getAssignedField = (c: Client): string => {
@@ -132,6 +190,7 @@ export default function ClientsPage() {
     : [];
 
   const filtered = clients.filter((c) => {
+    if (c.active === false) return false; // arquivados (churn) não aparecem na carteira ativa
     const matchSearch = c.name.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "all" || c.status === statusFilter;
     // Role-based filter: operators see only their clients by default
@@ -162,6 +221,46 @@ export default function ClientsPage() {
             router.push(`/clients/${id}`);
           }}
         />
+      )}
+
+      {archiveTarget && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !lifecycleBusy && setArchiveTarget(null)}
+        >
+          <div className="bg-card border border-border rounded-xl w-full max-w-md p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-1">
+              <Archive size={16} className="text-amber-500" />
+              <h3 className="font-semibold text-foreground">Arquivar cliente</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-3">
+              <span className="text-foreground font-medium">{archiveTarget.name}</span> sai da carteira ativa e de
+              toda a automação (mensagens, relatórios, sync). O histórico é mantido e pode ser reativado.
+            </p>
+            <label className="text-xs text-muted-foreground">Motivo do churn (opcional)</label>
+            <textarea
+              value={archiveReason}
+              onChange={(e) => setArchiveReason(e.target.value)}
+              rows={3}
+              placeholder="Ex.: encerrou contrato, trocou de agência…"
+              className="w-full mt-1 bg-muted rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-amber-500 resize-none"
+            />
+            {lifecycleError && <p className="text-xs text-destructive mt-2">{lifecycleError}</p>}
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setArchiveTarget(null)} disabled={lifecycleBusy} className="btn-secondary text-sm disabled:opacity-50">
+                Cancelar
+              </button>
+              <button
+                onClick={confirmArchive}
+                disabled={lifecycleBusy}
+                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium bg-amber-500 text-black hover:bg-amber-400 transition-colors disabled:opacity-50"
+              >
+                {lifecycleBusy ? <Loader2 className="animate-spin" size={14} /> : <Archive size={14} />}
+                Arquivar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="flex flex-col flex-1 overflow-auto">
@@ -283,6 +382,19 @@ export default function ClientsPage() {
                   ))}
                 </select>
               )}
+              {isAdmin && (
+                <button
+                  onClick={() => setShowArchived((v) => !v)}
+                  className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm border transition-colors ${
+                    showArchived
+                      ? "bg-amber-500/15 text-amber-500 border-amber-500/30"
+                      : "bg-card text-muted-foreground border-border hover:text-foreground"
+                  }`}
+                >
+                  <Archive size={15} />
+                  Arquivados
+                </button>
+              )}
               <button
                 onClick={() => setShowNewModal(true)}
                 className="btn-primary flex items-center gap-2 whitespace-nowrap"
@@ -292,7 +404,44 @@ export default function ClientsPage() {
               </button>
             </div>
 
-            {/* Client Cards */}
+            {/* Client Cards / Arquivados */}
+            {showArchived ? (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Archive size={12} /> Ex-clientes (churn). Reativar traz o cliente de volta à carteira ativa.
+                </p>
+                {lifecycleError && <p className="text-xs text-destructive">{lifecycleError}</p>}
+                {archivedLoading && (
+                  <div className="card text-center py-6 text-muted-foreground flex items-center justify-center gap-2">
+                    <Loader2 className="animate-spin" size={16} /> Carregando…
+                  </div>
+                )}
+                {!archivedLoading && archived.length === 0 && (
+                  <div className="card text-center py-10 text-muted-foreground">Nenhum cliente arquivado.</div>
+                )}
+                {archived.map((c) => (
+                  <div key={c.id} className="card flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold text-foreground tracking-tight truncate">{c.name}</h4>
+                        <span className="text-xs text-muted-foreground shrink-0">{c.industry}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Arquivado {c.churnedAt ? new Date(c.churnedAt).toLocaleDateString("pt-BR") : "—"}
+                        {c.churnReason ? ` · ${c.churnReason}` : ""}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleReactivate(c.id)}
+                      disabled={lifecycleBusy}
+                      className="btn-secondary flex items-center gap-2 whitespace-nowrap text-xs disabled:opacity-50"
+                    >
+                      <RotateCcw size={13} /> Reativar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
             <div className="space-y-3">
               {filtered.length === 0 && (
                 <div className="card text-center py-10 text-muted-foreground">
@@ -390,6 +539,21 @@ export default function ClientsPage() {
                                 <ExternalLink size={12} />
                                 Abrir Perfil
                               </Link>
+                              {isAdmin && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setArchiveTarget(client);
+                                    setArchiveReason("");
+                                    setLifecycleError(null);
+                                    setMenuOpen(null);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs text-amber-500 hover:bg-muted transition-colors flex items-center gap-2"
+                                >
+                                  <Archive size={12} />
+                                  Arquivar (churn)
+                                </button>
+                              )}
                             </div>
                           </>
                         )}
@@ -405,6 +569,7 @@ export default function ClientsPage() {
                 );
               })}
             </div>
+            )}
           </div>
 
           {/* Client Quick-Chat Panel */}

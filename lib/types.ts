@@ -32,6 +32,12 @@ export interface Client {
   monthlyBudget: number;
   dailyBudget?: number;
   status: ClientStatus;
+  /** Ciclo de vida: false = ex-cliente (churned). Distinto de `status` (saúde). */
+  active?: boolean;
+  /** Quando virou ex-cliente (ISO). Base das métricas de churn. */
+  churnedAt?: string;
+  /** Motivo do churn (opcional). */
+  churnReason?: string;
   attentionLevel: AttentionLevel;
   tags: string[];
   serviceType?: ServiceType;

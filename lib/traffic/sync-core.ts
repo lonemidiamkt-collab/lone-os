@@ -151,7 +151,8 @@ export async function runBalanceSync(opts?: {
     .select(`
       id, meta_account_id, account_name, is_prepaid, spend_cap, monthly_budget, billing_type_source,
       clients!inner ( id, name, nome_fantasia, client_pix_key )
-    `);
+    `)
+    .neq("clients.active", false); // não sincroniza contas de ex-clientes (churned)
   if (targetAccountIds && targetAccountIds.length > 0) {
     query = query.in("meta_account_id", targetAccountIds) as typeof query;
   }
