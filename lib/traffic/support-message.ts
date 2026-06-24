@@ -23,6 +23,18 @@ export const MONDAY_SOCIAL_MESSAGE =
   "pra vocês. Tem alguma novidade, aviso ou promoção pra essa semana que a gente possa " +
   "desenvolver uma arte? É só mandar aqui que a gente cuida. 🎨";
 
+/** Quarta, clientes só-social: meio de semana com foco em arte (sem linguagem de tráfego). */
+export const WEDNESDAY_SOCIAL_MESSAGE =
+  "Olá, pessoal! Ótima quarta-feira pra vocês! 🎨 Como estão as coisas por aí? Se tiver alguma " +
+  "novidade, promoção ou data especial chegando, é só mandar aqui que a gente desenvolve a arte " +
+  "pra vocês. 🚀";
+
+/** Sexta, clientes só-social: fechamento de semana com foco em arte. */
+export const FRIDAY_SOCIAL_MESSAGE =
+  "Olá, pessoal! Sextou! 🎉 Pra fechar a semana: tem alguma arte, post ou novidade que vocês " +
+  "queiram que a gente prepare pro fim de semana ou pra próxima? É só chamar aqui que a gente " +
+  "cuida. 🎨";
+
 /** Quarta: acompanhamento de meio de semana. */
 export const WEDNESDAY_MESSAGE =
   "Olá, pessoal! Ótima quarta-feira para a gente, ótimo meio de semana. Vamos para cima hoje, " +
@@ -34,7 +46,12 @@ export const FRIDAY_MESSAGE =
   "o resultado da semana no geral? Conseguimos gerar mais resultados de vendas na loja? Vamos atrás " +
   "hoje buscando o melhor resultado possível!";
 
-/** Texto de suporte para os dias sem relatório (qua/sex). */
+/** Texto de suporte (tráfego) para os dias sem relatório (qua/sex). */
 export function supportMessageFor(kind: ClientMsgKind): string {
   return kind === "fri" ? FRIDAY_MESSAGE : WEDNESDAY_MESSAGE;
+}
+
+/** Texto para clientes SÓ-SOCIAL (sem tráfego) nos dias sem relatório (qua/sex). */
+export function socialMessageFor(kind: ClientMsgKind): string {
+  return kind === "fri" ? FRIDAY_SOCIAL_MESSAGE : WEDNESDAY_SOCIAL_MESSAGE;
 }

@@ -188,46 +188,98 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
   throw lastError ?? new Error("fetchWithRetry: todas tentativas falharam");
 }
 
+type BalanceEntry = MetaAccountFields | { error: string; errorJson?: string };
+
+// Busca UMA conta isolada (forma GET simples). Usado no fallback quando o multiget
+// em lote falha — o `?ids=` da Meta é tudo-ou-nada, então UMA conta sem acesso
+// derruba todas. Indo conta-a-conta, só a(s) realmente sem acesso ficam com erro.
+async function fetchOneBalance(token: string, id: string, fields: string): Promise<BalanceEntry> {
+  const url = `${META_CONFIG.graphApiBase}/${META_CONFIG.graphApiVersion}/${id}?fields=${fields}&access_token=${token}`;
+  try {
+    const res = await fetchWithRetry(url);
+    const json = await res.json();
+    if (!res.ok) {
+      const err = json?.error;
+      const msg = err
+        ? `${err.message} (code ${err.code}${err.error_subcode ? `, subcode ${err.error_subcode}` : ""})`
+        : `HTTP ${res.status}`;
+      return { error: msg, errorJson: JSON.stringify(json) };
+    }
+    return json as MetaAccountFields;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function fetchAccountBalances(
   token: string,
   accountIds: string[],
-): Promise<Map<string, MetaAccountFields | { error: string; errorJson?: string }>> {
-  const result = new Map<string, MetaAccountFields | { error: string; errorJson?: string }>();
+): Promise<Map<string, BalanceEntry>> {
+  const result = new Map<string, BalanceEntry>();
   if (accountIds.length === 0) return result;
 
   const fields = "balance,amount_spent,spend_cap,currency,account_status,min_daily_budget,funding_source_details";
+
+  // Fallback conta-a-conta (em chunks pequenos p/ não estourar concorrência no Node).
+  const fillIndividually = async (ids: string[]) => {
+    const CHUNK = 5;
+    for (let j = 0; j < ids.length; j += CHUNK) {
+      const slice = ids.slice(j, j + CHUNK);
+      const settledChunk = await Promise.all(slice.map((id) => fetchOneBalance(token, id, fields)));
+      slice.forEach((id, k) => result.set(id, settledChunk[k]));
+    }
+  };
+
   const BATCH_SIZE = 50;
+  // Erros transitórios da Meta: a API às vezes devolve OAuthException #200/#1/#2 etc.
+  // por instabilidade momentânea (não é falta de permissão de verdade). Como as contas
+  // vão num único request, sem retry um único soluço marca TODAS como "erro no Meta" e
+  // dispara alarme falso no grupo. Retentamos o batch inteiro nesses casos.
+  // (fetchWithRetry já cobre rede/timeout/429; aqui tratamos o erro vindo no corpo.)
+  const TRANSIENT_META_CODES = new Set([1, 2, 4, 17, 32, 200, 341, 368, 613]);
+  const MAX_BATCH_ATTEMPTS = 3;
 
   for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
     const batch = accountIds.slice(i, i + BATCH_SIZE);
     const ids = batch.join(",");
     const url = `${META_CONFIG.graphApiBase}/${META_CONFIG.graphApiVersion}/?ids=${encodeURIComponent(ids)}&fields=${fields}&access_token=${token}`;
 
-    try {
-      const res = await fetchWithRetry(url);
-      const json = await res.json();
+    let settled = false;
+    for (let attempt = 0; attempt < MAX_BATCH_ATTEMPTS && !settled; attempt++) {
+      if (attempt > 0) await sleep(Math.pow(2, attempt) * 1500); // 3s, 6s
+      try {
+        const res = await fetchWithRetry(url);
+        const json = await res.json();
 
-      if (!res.ok) {
-        console.error("[Meta API ERROR] batch", batch, JSON.stringify(json, null, 2));
-        const err = json?.error;
-        const msg = err
-          ? `${err.message} (code ${err.code}${err.error_subcode ? `, subcode ${err.error_subcode}` : ""})`
-          : `HTTP ${res.status}`;
-        const fullJson = JSON.stringify(json);
-        for (const id of batch) result.set(id, { error: msg, errorJson: fullJson });
-        continue;
-      }
-
-      for (const id of batch) {
-        if (json[id]) {
-          result.set(id, json[id] as MetaAccountFields);
-        } else {
-          result.set(id, { error: "Conta não encontrada na resposta" });
+        if (!res.ok) {
+          const err = json?.error;
+          const code = typeof err?.code === "number" ? err.code : null;
+          const msg = err
+            ? `${err.message} (code ${err.code}${err.error_subcode ? `, subcode ${err.error_subcode}` : ""})`
+            : `HTTP ${res.status}`;
+          if (code !== null && TRANSIENT_META_CODES.has(code) && attempt < MAX_BATCH_ATTEMPTS - 1) {
+            console.warn(`[Meta API] erro transitório (code ${code}) no batch — retry ${attempt + 1}/${MAX_BATCH_ATTEMPTS - 1}`);
+            continue; // tenta o batch de novo
+          }
+          // Lote falhou (ex.: #200 de UMA conta sem acesso envenena o multiget tudo-ou-nada).
+          // Refaz conta-a-conta pra isolar a(s) culpada(s) e preservar as contas boas.
+          console.warn(`[Meta API] batch falhou (${msg}) — refazendo ${batch.length} conta(s) individualmente`);
+          await fillIndividually(batch);
+          settled = true;
+          break;
         }
+
+        for (const id of batch) {
+          result.set(id, json[id] ? (json[id] as MetaAccountFields) : { error: "Conta não encontrada na resposta" });
+        }
+        settled = true;
+      } catch (err) {
+        // Rede/timeout: fetchWithRetry já tentou 3x. Tenta conta-a-conta antes de desistir.
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[Meta API] erro de rede no batch (${msg}) — refazendo conta-a-conta`);
+        await fillIndividually(batch);
+        settled = true;
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      for (const id of batch) result.set(id, { error: msg });
     }
   }
 

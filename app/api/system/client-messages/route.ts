@@ -28,7 +28,7 @@ import {
   buildClientPdf, selectActiveClientsWithGroup, slug, clientDisplayName,
   type ReportClientRow,
 } from "@/lib/traffic/weekly-report";
-import { MONDAY_REPORT_MESSAGE, MONDAY_SOCIAL_MESSAGE, RESEND_REPORT_MESSAGE, supportMessageFor, type ClientMsgKind } from "@/lib/traffic/support-message";
+import { MONDAY_REPORT_MESSAGE, MONDAY_SOCIAL_MESSAGE, RESEND_REPORT_MESSAGE, supportMessageFor, socialMessageFor, type ClientMsgKind } from "@/lib/traffic/support-message";
 import { sendGroupText, sendMediaDocument } from "@/lib/whatsapp/evolution";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
@@ -59,6 +59,21 @@ async function alreadySent(clientId: string, dateKey: string, kind: "report" | "
   const { data } = await supabaseAdmin
     .from("client_group_message_log")
     .select("id").eq("client_id", clientId).eq("date_key", dateKey).eq("kind", kind).eq("status", "sent").limit(1);
+  return !!(data && data.length > 0);
+}
+
+/**
+ * O TEXTO de suporte já foi enviado hoje p/ ESTE GRUPO? Idempotência por grupo
+ * (não por cliente): clientes diferentes que compartilham o mesmo grupo (ex.: Bazar
+ * Ribeiro Maricá + Saquarema) não devem duplicar o mesmo texto no grupo. Como o log
+ * é por cliente, checamos todos os clientes mapeados ao grupo. (O relatório de segunda
+ * segue por cliente — cada loja tem o seu PDF — então não passa por aqui.)
+ */
+async function groupTextAlreadySent(clientIdsInGroup: string[], dateKey: string): Promise<boolean> {
+  if (clientIdsInGroup.length === 0) return false;
+  const { data } = await supabaseAdmin
+    .from("client_group_message_log")
+    .select("id").in("client_id", clientIdsInGroup).eq("date_key", dateKey).eq("kind", "support").eq("status", "sent").limit(1);
   return !!(data && data.length > 0);
 }
 
@@ -93,6 +108,15 @@ export async function POST(req: NextRequest) {
     const clients = await selectActiveClientsWithGroup(onlyClientId);
     const withGroup = clients.filter((c) => c.whatsapp_group_jid);
     const withoutGroup = clients.filter((c) => !c.whatsapp_group_jid).map(clientDisplayName);
+
+    // Mapa grupo→clientes: usado pra dedup do TEXTO por grupo (clientes que
+    // compartilham o mesmo grupo, ex.: Bazar Maricá + Saquarema, não duplicam).
+    const jidToClientIds = new Map<string, string[]>();
+    for (const c of withGroup) {
+      const arr = jidToClientIds.get(c.whatsapp_group_jid!) ?? [];
+      arr.push(c.id);
+      jidToClientIds.set(c.whatsapp_group_jid!, arr);
+    }
 
     if (dryRun) {
       return NextResponse.json({
@@ -138,18 +162,23 @@ export async function POST(req: NextRequest) {
         }
       } else if (withReport) {
         // Segunda, cliente SÓ-SOCIAL (sem Meta): mensagem de início de semana.
-        if (force || !(await alreadySent(c.id, dateKey, "support"))) {
+        const groupClientIds = jidToClientIds.get(jid) ?? [c.id];
+        if (force || !(await groupTextAlreadySent(groupClientIds, dateKey))) {
           const res = await sendGroupText(jid, MONDAY_SOCIAL_MESSAGE);
           if (res.ok) { supportSent++; await logMsg(c.id, dateKey, "support", "sent"); }
           else { supportFail++; errors.push(`${name} (início de semana): ${res.error}`); await logMsg(c.id, dateKey, "support", "failed", res.error); }
-        }
+        } else { await logMsg(c.id, dateKey, "support", "skipped", "grupo já recebeu o texto hoje (cliente compartilha grupo)"); }
       } else {
-        // Quarta/Sexta: só a mensagem de suporte do dia.
-        if (force || !(await alreadySent(c.id, dateKey, "support"))) {
-          const res = await sendGroupText(jid, supportMessageFor(kind));
+        // Quarta/Sexta: texto do dia. Cliente com Meta → mensagem de tráfego;
+        // só-social → mensagem social (foco em arte). Dedup por grupo evita o
+        // texto duplicado quando dois clientes compartilham o mesmo grupo.
+        const text = c.meta_ad_account_id ? supportMessageFor(kind) : socialMessageFor(kind);
+        const groupClientIds = jidToClientIds.get(jid) ?? [c.id];
+        if (force || !(await groupTextAlreadySent(groupClientIds, dateKey))) {
+          const res = await sendGroupText(jid, text);
           if (res.ok) { supportSent++; await logMsg(c.id, dateKey, "support", "sent"); }
           else { supportFail++; errors.push(`${name} (suporte): ${res.error}`); await logMsg(c.id, dateKey, "support", "failed", res.error); }
-        }
+        } else { await logMsg(c.id, dateKey, "support", "skipped", "grupo já recebeu o texto hoje (cliente compartilha grupo)"); }
       }
 
       if (i < withGroup.length - 1) await sleep(2500);
