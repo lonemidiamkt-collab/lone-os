@@ -27,6 +27,30 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   const isAdmin = role === "admin" || role === "manager";
   const team = useTeamMembers();
 
+  const [logoPdfBusy, setLogoPdfBusy] = useState(false);
+  const [logoPdfError, setLogoPdfError] = useState<string | null>(null);
+  const downloadLogoPdf = async () => {
+    setLogoPdfBusy(true);
+    setLogoPdfError(null);
+    try {
+      const res = await authedFetch(`/api/clients/${client.id}/logo-pdf`);
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `logo-${(client.nomeFantasia || client.name || "cliente").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setLogoPdfError(e instanceof Error ? e.message : "Erro ao gerar PDF");
+    } finally {
+      setLogoPdfBusy(false);
+    }
+  };
+
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
@@ -373,8 +397,14 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface text-foreground text-xs font-medium border border-border hover:border-primary/30 transition-colors">
                     <Eye size={11} /> Visualizar
                   </a>
+                  <button onClick={downloadLogoPdf} disabled={logoPdfBusy}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface text-foreground text-xs font-medium border border-border hover:border-primary/30 transition-colors disabled:opacity-50">
+                    {logoPdfBusy ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
+                    {logoPdfBusy ? "Gerando..." : "Logo (PDF)"}
+                  </button>
                 </>
               )}
+              {logoPdfError && <span className="text-[10px] text-destructive w-full">{logoPdfError}</span>}
               {!client.docLogo && isAdmin && (
                 <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface text-foreground text-xs font-medium border border-dashed border-border hover:border-primary/30 transition-colors cursor-pointer">
                   {uploading === "logo" ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
@@ -389,7 +419,8 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         </div>
       </div>
 
-      {/* Contract status */}
+      {/* Contract status — RESTRITO a admin/manager (operadores não veem contrato/valor) */}
+      {isAdmin && (
       <div className="rounded-xl border border-border bg-card p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
@@ -415,6 +446,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           <FileText size={11} /> {latestContract ? "Ver Contratos" : "Gerar Contrato"}
         </button>
       </div>
+      )}
 
       {/* WhatsApp quick-link */}
       {form.phone && (
