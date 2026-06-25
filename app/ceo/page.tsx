@@ -17,7 +17,8 @@ import {
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { USER_PROFILES } from "@/lib/context/RoleContext";
 import MedievalAvatar, { AVATAR_OPTIONS, getUserAvatar, setUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
-import type { Role } from "@/lib/types";
+import type { Role, Client } from "@/lib/types";
+import { fetchChurnedClients } from "@/lib/supabase/queries";
 import { mockAdCampaigns } from "@/lib/mockData";
 
 const CORRECT_PIN = "8822";
@@ -44,6 +45,43 @@ export default function CEOPage() {
   const [pinError, setPinError] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [activeSection, setActiveSection] = useState<"overview" | "team" | "reports" | "ltv" | "manage" | "timesheet" | "workload" | "churn">("overview");
+
+  // Ex-clientes (churned) — o store só traz ativos; carregamos os arquivados aqui p/ métricas.
+  const [churnedClients, setChurnedClients] = useState<Client[]>([]);
+  useEffect(() => {
+    if (!unlocked) return;
+    fetchChurnedClients().then(setChurnedClients).catch(() => {});
+  }, [unlocked]);
+
+  // Métricas de carteira/churn (mês corrente + série de 6 meses).
+  const churnMetrics = useMemo(() => {
+    const now = new Date();
+    const mk = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const cur = mk(now);
+    const createdIn = (c: Client, k: string) => !!c.createdAt && mk(new Date(c.createdAt)) === k;
+    const churnedIn = (c: Client, k: string) => !!c.churnedAt && mk(new Date(c.churnedAt)) === k;
+
+    const activeCount = clients.length;
+    const churnedTotal = churnedClients.length;
+    const newThisMonth = clients.filter((c) => createdIn(c, cur)).length + churnedClients.filter((c) => createdIn(c, cur)).length;
+    const churnedThisMonth = churnedClients.filter((c) => churnedIn(c, cur)).length;
+    const netThisMonth = newThisMonth - churnedThisMonth;
+    const churnBase = activeCount + churnedThisMonth;
+    const churnRate = churnBase > 0 ? (churnedThisMonth / churnBase) * 100 : 0;
+
+    const months: { label: string; novos: number; churn: number; net: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const k = mk(d);
+      const novos = clients.filter((c) => createdIn(c, k)).length + churnedClients.filter((c) => createdIn(c, k)).length;
+      const churn = churnedClients.filter((c) => churnedIn(c, k)).length;
+      months.push({ label: d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""), novos, churn, net: novos - churn });
+    }
+    const maxBar = Math.max(1, ...months.map((m) => Math.max(m.novos, m.churn)));
+    const recentChurns = [...churnedClients].sort((a, b) => (b.churnedAt ?? "").localeCompare(a.churnedAt ?? "")).slice(0, 8);
+
+    return { activeCount, churnedTotal, newThisMonth, churnedThisMonth, netThisMonth, churnRate, months, maxBar, recentChurns };
+  }, [clients, churnedClients]);
 
   useEffect(() => {
     if (!unlocked) return;
@@ -1446,7 +1484,79 @@ export default function CEOPage() {
 
           {activeSection === "churn" && (
             <div className="space-y-4 animate-fade-in">
-              <p className="text-muted-foreground text-sm">Análise preditiva de risco de cancelamento baseada em atividade, comunicação e satisfação.</p>
+              {/* ── MÉTRICAS DE CARTEIRA & CHURN ────────────────────────── */}
+              <div>
+                <h3 className="text-base font-semibold text-foreground mb-1">Carteira & Churn</h3>
+                <p className="text-muted-foreground text-sm mb-3">Crescimento e perda de clientes ao longo do tempo.</p>
+
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="card">
+                    <p className="text-xs text-muted-foreground">Carteira ativa</p>
+                    <p className="text-2xl font-bold text-foreground mt-1">{churnMetrics.activeCount}</p>
+                  </div>
+                  <div className="card">
+                    <p className="text-xs text-muted-foreground">Novos no mês</p>
+                    <p className="text-2xl font-bold text-primary mt-1">+{churnMetrics.newThisMonth}</p>
+                  </div>
+                  <div className="card">
+                    <p className="text-xs text-muted-foreground">Churn no mês</p>
+                    <p className="text-2xl font-bold text-destructive mt-1">−{churnMetrics.churnedThisMonth}</p>
+                  </div>
+                  <div className="card">
+                    <p className="text-xs text-muted-foreground">Saldo líquido</p>
+                    <p className={`text-2xl font-bold mt-1 flex items-center gap-1 ${churnMetrics.netThisMonth >= 0 ? "text-primary" : "text-destructive"}`}>
+                      {churnMetrics.netThisMonth >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                      {churnMetrics.netThisMonth >= 0 ? "+" : ""}{churnMetrics.netThisMonth}
+                    </p>
+                  </div>
+                  <div className="card">
+                    <p className="text-xs text-muted-foreground">Churn total · taxa mês</p>
+                    <p className="text-2xl font-bold text-foreground mt-1">{churnMetrics.churnedTotal} <span className="text-sm text-muted-foreground">· {churnMetrics.churnRate.toFixed(1)}%</span></p>
+                  </div>
+                </div>
+
+                <div className="card mt-3">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-3">Últimos 6 meses · novos vs churn</p>
+                  <div className="flex items-end justify-between gap-3 h-32">
+                    {churnMetrics.months.map((m, i) => (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                        <div className="flex items-end gap-1 h-24 w-full justify-center">
+                          <div className="w-3 rounded-t bg-primary" style={{ height: `${Math.max(2, (m.novos / churnMetrics.maxBar) * 100)}%` }} title={`${m.novos} novos`} />
+                          <div className="w-3 rounded-t bg-destructive" style={{ height: `${Math.max(2, (m.churn / churnMetrics.maxBar) * 100)}%` }} title={`${m.churn} churn`} />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground capitalize">{m.label}</span>
+                        <span className={`text-[10px] font-semibold ${m.net >= 0 ? "text-primary" : "text-destructive"}`}>{m.net >= 0 ? "+" : ""}{m.net}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-4 mt-3 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-primary" /> Novos</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-destructive" /> Churn</span>
+                  </div>
+                </div>
+
+                {churnMetrics.recentChurns.length > 0 && (
+                  <div className="card mt-3">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-3">Churns recentes</p>
+                    <div className="space-y-2">
+                      {churnMetrics.recentChurns.map((c) => (
+                        <div key={c.id} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-foreground font-medium truncate">{c.name}</span>
+                          <span className="text-xs text-muted-foreground shrink-0 text-right">
+                            {c.churnedAt ? new Date(c.churnedAt).toLocaleDateString("pt-BR") : "—"}{c.churnReason ? ` · ${c.churnReason}` : ""}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── RISCO DE CHURN (preditivo) ──────────────────────────── */}
+              <div className="border-t border-border pt-4">
+                <h3 className="text-base font-semibold text-foreground mb-1">Risco de Churn (preditivo)</h3>
+                <p className="text-muted-foreground text-sm">Análise preditiva de risco de cancelamento baseada em atividade, comunicação e satisfação.</p>
+              </div>
               <div className="space-y-3">
                 {clients.filter((c) => c.status !== "onboarding").map((client) => {
                   // Churn score: 0-100 (higher = more risk)
