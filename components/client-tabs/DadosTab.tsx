@@ -321,13 +321,6 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {client.docLogo && (
-            <button onClick={downloadLogo} disabled={logoPdfBusy} title={logoPdfError ?? "Baixar a logo do cliente"}
-              className={`btn-ghost text-xs flex items-center gap-1.5 border disabled:opacity-50 ${logoPdfError ? "border-destructive/40 text-destructive" : "border-border hover:border-primary/30 hover:text-primary"}`}>
-              {logoPdfBusy ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-              {logoPdfError ? "Erro — tentar de novo" : "Baixar Logo"}
-            </button>
-          )}
           {isAdmin && (
             <button onClick={generateOnboardingLink} disabled={generatingLink}
               className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-lone-warning-border hover:text-lone-warning">
@@ -419,9 +412,9 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             <div className="flex items-center gap-2 mt-3 flex-wrap">
               {client.docLogo && (
                 <>
-                  <button onClick={() => window.open(client.docLogo!, "_blank", "noopener,noreferrer")}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-colors">
-                    <Download size={11} /> Baixar Logo
+                  <button onClick={downloadLogo} disabled={logoPdfBusy}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-colors disabled:opacity-50">
+                    {logoPdfBusy ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />} Baixar Logo
                   </button>
                   <a href={client.docLogo} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface text-foreground text-xs font-medium border border-border hover:border-primary/30 transition-colors">
@@ -435,15 +428,15 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                 </>
               )}
               {logoPdfError && <span className="text-[10px] text-destructive w-full">{logoPdfError}</span>}
-              {!client.docLogo && isAdmin && (
-                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface text-foreground text-xs font-medium border border-dashed border-border hover:border-primary/30 transition-colors cursor-pointer">
-                  {uploading === "logo" ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
-                  {uploading === "logo" ? "Enviando..." : "Enviar Logo"}
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                    const f = e.target.files?.[0]; if (f) handleDocUpload(f, "logo"); e.target.value = "";
-                  }} />
-                </label>
-              )}
+              {/* Upload da logo liberado pra TODO o time (social/designer/admin) — logo não é sensível.
+                  Mostra "Trocar Logo" quando já existe uma, pra permitir atualizar. */}
+              <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface text-foreground text-xs font-medium border border-dashed border-border hover:border-primary/30 transition-colors cursor-pointer">
+                {uploading === "logo" ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                {uploading === "logo" ? "Enviando..." : (client.docLogo ? "Trocar Logo" : "Enviar Logo")}
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                  const f = e.target.files?.[0]; if (f) handleDocUpload(f, "logo"); e.target.value = "";
+                }} />
+              </label>
             </div>
           </div>
         </div>
