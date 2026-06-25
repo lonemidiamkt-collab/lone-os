@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getServerUser } from "@/lib/supabase/auth-server";
 
 const supabaseUrl = process.env.SUPABASE_INTERNAL_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://supabase-kong-1:8000";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -61,6 +62,29 @@ export async function POST(req: NextRequest) {
 
   if (!file || !clientId || !docType) {
     return NextResponse.json({ error: "file, clientId and docType required" }, { status: 400 });
+  }
+
+  // ─── Autorização ────────────────────────────────────────────
+  // Esta rota usa service_role (bypassa RLS) e grava docs sensíveis (identidade,
+  // contrato) em qualquer pasta de cliente. Exigimos UMA de duas provas:
+  //   1. Usuário LOGADO (uploads internos: cadastro, /clients, modal de novo cliente).
+  //   2. Token de onboarding VÁLIDO amarrado a ESTE clientId (portal público do cliente).
+  // Sem isso, qualquer anônimo que adivinhe um UUID de cliente poderia sobrescrever
+  // os documentos dele. O token (ob-<128 bits>) não é enumerável.
+  const user = await getServerUser(req);
+  if (!user) {
+    const token = (formData.get("token") as string | null)?.trim() || null;
+    if (!token) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+    const { data: sub } = await supabase
+      .from("client_onboarding_submissions")
+      .select("client_id")
+      .eq("token", token)
+      .maybeSingle();
+    if (!sub || sub.client_id !== clientId) {
+      return NextResponse.json({ error: "Token inválido para este cliente." }, { status: 401 });
+    }
   }
 
   const bucket = BUCKET_BY_DOC_TYPE[docType];

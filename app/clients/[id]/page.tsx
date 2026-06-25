@@ -243,7 +243,7 @@ export default function ClientDetailPage() {
       fd.append("file", file);
       fd.append("clientId", client.id);
       fd.append("docType", docType);
-      const res = await fetch("/api/onboarding/upload", { method: "POST", body: fd });
+      const res = await authedFetch("/api/onboarding/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (res.ok && data.url) {
         const field = docType === "contrato_social" ? "docContratoSocial" : docType === "identidade" ? "docIdentidade" : "docLogo";

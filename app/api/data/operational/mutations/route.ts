@@ -15,10 +15,23 @@ async function syncAccessToClients(clientId: string, access: Partial<ClientAcces
   const patch: Record<string, unknown> = {};
   if (access.instagramLogin !== undefined) patch.instagram_login = access.instagramLogin || null;
   if (access.facebookLogin !== undefined) patch.facebook_login = access.facebookLogin || null;
-  if (access.instagramPassword !== undefined)
-    patch.instagram_password = access.instagramPassword ? encryptVault(access.instagramPassword) : null;
-  if (access.facebookPassword !== undefined)
-    patch.facebook_password = access.facebookPassword ? encryptVault(access.facebookPassword) : null;
+
+  // A senha é criptografada no vault antes de ir pra coluna que o Cofre admin
+  // decripta. Se VAULT_KEY faltar/falhar, encryptVault LANÇA — sem este try/catch
+  // o erro derrubava todo o POST (o save do social já tinha gravado em client_access,
+  // deixando as tabelas dessincronizadas). Em falha: PULAMOS a senha (gravar plaintext
+  // na coluna vault quebraria o decrypt do Cofre), logamos, e seguimos com o login.
+  try {
+    if (access.instagramPassword !== undefined)
+      patch.instagram_password = access.instagramPassword ? encryptVault(access.instagramPassword) : null;
+    if (access.facebookPassword !== undefined)
+      patch.facebook_password = access.facebookPassword ? encryptVault(access.facebookPassword) : null;
+  } catch (err) {
+    delete patch.instagram_password;
+    delete patch.facebook_password;
+    console.error("[syncAccessToClients] encryptVault falhou — senha NÃO sincronizada p/ clients:", err);
+  }
+
   if (Object.keys(patch).length === 0) return;
   const { error } = await supabaseAdmin.from("clients").update(patch).eq("id", clientId);
   if (error) console.error("[syncAccessToClients] falhou:", error.message);

@@ -6,6 +6,7 @@ import { useRole } from "@/lib/context/RoleContext";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { fetchDraftClients } from "@/lib/supabase/queries";
 import { supabase } from "@/lib/supabase/client";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import type { Client } from "@/lib/types";
 import {
   Check, X, Loader2, Clock, Send, ArrowLeft, FileText, Download,
@@ -179,7 +180,7 @@ export default function PendingClientsPage() {
       fd.append("file", file);
       fd.append("clientId", selected.id);
       fd.append("docType", docType);
-      const res = await fetch("/api/onboarding/upload", { method: "POST", body: fd });
+      const res = await authedFetch("/api/onboarding/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) { setUploadError(data.error || "Erro no upload."); return; }
       const newUrl: string = data.url;

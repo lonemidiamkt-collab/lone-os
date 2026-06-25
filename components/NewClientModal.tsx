@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 const INDUSTRIES = [
   "Tecnologia", "Saude", "Imobiliario", "Fitness", "Gastronomia",
@@ -48,7 +49,7 @@ function DocUpload({ label, onUploaded, uploaded }: { label: string; onUploaded:
       fd.append("file", file);
       fd.append("clientId", `manual-${Date.now()}`);
       fd.append("docType", label.toLowerCase().replace(/\s/g, "_"));
-      const res = await fetch("/api/onboarding/upload", { method: "POST", body: fd });
+      const res = await authedFetch("/api/onboarding/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) { setError(data.error); return; }
       onUploaded(data.url);

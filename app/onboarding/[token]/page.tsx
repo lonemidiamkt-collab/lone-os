@@ -104,8 +104,8 @@ function InputField({ label, value, onChange, placeholder, required, type = "tex
   );
 }
 
-function FileUpload({ label, docType, clientId, onUploaded, uploaded, previewRound, required, missing, onToast }: {
-  label: string; docType: string; clientId: string; onUploaded: (url: string) => void; uploaded?: string;
+function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, previewRound, required, missing, onToast }: {
+  label: string; docType: string; clientId: string; token: string; onUploaded: (url: string) => void; uploaded?: string;
   previewRound?: boolean; required?: boolean; missing?: boolean; onToast?: (msg: string) => void;
 }) {
   const [uploading, setUploading] = useState(false);
@@ -127,6 +127,7 @@ function FileUpload({ label, docType, clientId, onUploaded, uploaded, previewRou
       fd.append("file", file);
       fd.append("clientId", clientId);
       fd.append("docType", docType);
+      fd.append("token", token); // portal público: autoriza o upload sem login (validado contra o clientId no server)
       const res = await fetch("/api/onboarding/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Erro no servidor."); setPreview(null); return; }
@@ -719,11 +720,11 @@ export default function ExternalOnboardingPage() {
         {step === "documentos" && submission && (
           <div className="space-y-4 animate-fade-in">
             <p className="text-xs text-zinc-500">Envie os documentos abaixo. Voce pode selecionar um arquivo ou tirar uma foto.</p>
-            <FileUpload label="Logo da Empresa" docType="logo" clientId={submission.client_id} onUploaded={setDocLogo} uploaded={docLogo} previewRound
+            <FileUpload label="Logo da Empresa" docType="logo" clientId={submission.client_id} token={token} onUploaded={setDocLogo} uploaded={docLogo} previewRound
               required missing={showValidation && missingRequired.docLogo} onToast={setUploadToast} />
-            <FileUpload label="Contrato Social (PDF ou Foto)" docType="contrato_social" clientId={submission.client_id} onUploaded={setDocContrato} uploaded={docContrato}
+            <FileUpload label="Contrato Social (PDF ou Foto)" docType="contrato_social" clientId={submission.client_id} token={token} onUploaded={setDocContrato} uploaded={docContrato}
               required missing={showValidation && missingRequired.docContrato} onToast={setUploadToast} />
-            <FileUpload label="Documento com Foto (RG ou CNH)" docType="identidade" clientId={submission.client_id} onUploaded={setDocIdentidade} uploaded={docIdentidade}
+            <FileUpload label="Documento com Foto (RG ou CNH)" docType="identidade" clientId={submission.client_id} token={token} onUploaded={setDocIdentidade} uploaded={docIdentidade}
               onToast={setUploadToast} />
           </div>
         )}
