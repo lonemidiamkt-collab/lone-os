@@ -3,8 +3,26 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import { encryptVault } from "@/lib/crypto/vault";
 import * as db from "@/lib/supabase/queries";
-import type { Role } from "@/lib/types";
+import type { Role, ClientAccess } from "@/lib/types";
+
+// Mantém o cadastro do admin (tabela `clients`) em sincronia com o Cofre do social
+// (tabela `client_access`). Assim, quando o social atualiza uma senha que o cliente
+// trocou, o admin vê a mesma coisa. Login fica plano; senha é criptografada (vault).
+async function syncAccessToClients(clientId: string, access: Partial<ClientAccess>) {
+  const patch: Record<string, unknown> = {};
+  if (access.instagramLogin !== undefined) patch.instagram_login = access.instagramLogin || null;
+  if (access.facebookLogin !== undefined) patch.facebook_login = access.facebookLogin || null;
+  if (access.instagramPassword !== undefined)
+    patch.instagram_password = access.instagramPassword ? encryptVault(access.instagramPassword) : null;
+  if (access.facebookPassword !== undefined)
+    patch.facebook_password = access.facebookPassword ? encryptVault(access.facebookPassword) : null;
+  if (Object.keys(patch).length === 0) return;
+  const { error } = await supabaseAdmin.from("clients").update(patch).eq("id", clientId);
+  if (error) console.error("[syncAccessToClients] falhou:", error.message);
+}
 
 export async function POST(req: NextRequest) {
   const user = await getServerUser(req);
@@ -33,6 +51,7 @@ export async function POST(req: NextRequest) {
     }
     case "upsertClientAccess": {
       await db.upsertClientAccess(body.clientId, body.access, body.actor);
+      await syncAccessToClients(body.clientId, body.access);
       return NextResponse.json({ ok: true });
     }
     case "insertCreativeAsset": {

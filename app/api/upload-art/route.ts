@@ -135,7 +135,16 @@ export async function POST(req: NextRequest) {
   }
 
   if (isCardMode) {
-    return handleCardUpload(cardId, files);
+    // Um UUID pode ser um content_card OU uma demanda (design_request). Demandas sobem
+    // como upload avulso (o modal de briefing faz o vínculo e usa a URL retornada);
+    // content_cards seguem o fluxo de anexos. Evita o falso "Card não encontrado".
+    const { data: contentCard } = await supabaseAdmin
+      .from("content_cards").select("id").eq("id", cardId).maybeSingle();
+    if (contentCard) return handleCardUpload(cardId, files);
+    const { data: designReq } = await supabaseAdmin
+      .from("design_requests").select("id").eq("id", cardId).maybeSingle();
+    if (designReq) return handleMiscUpload(cardId, files[0]);
+    return NextResponse.json({ error: "Card não encontrado" }, { status: 404 });
   }
   return handleMiscUpload(cardId, files[0]);
 }

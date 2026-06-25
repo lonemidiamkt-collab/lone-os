@@ -132,6 +132,16 @@ export async function POST(req: NextRequest) {
   const { error } = await supabaseAdmin.from(table).update({ [field]: encrypted }).eq(idColumn, clientId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Espelha a senha (plaintext) no Cofre do social (client_access) — mantém os dois lados
+  // em sincronia: admin altera no cadastro → social vê a mesma senha.
+  if (table === "clients" && (field === "instagram_password" || field === "facebook_password")) {
+    const { error: mirrorErr } = await supabaseAdmin.from("client_access").upsert(
+      { client_id: clientId, [field]: value || null, updated_by: user.email, updated_at: new Date().toISOString() },
+      { onConflict: "client_id" },
+    );
+    if (mirrorErr) console.error("[client-vault] espelho p/ client_access falhou:", mirrorErr.message);
+  }
+
   await logAccess({ user, clientId, field, action: "update", req });
   return NextResponse.json({ ok: true });
 }
