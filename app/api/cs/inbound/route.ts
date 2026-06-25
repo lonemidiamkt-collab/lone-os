@@ -56,19 +56,25 @@ export async function POST(req: NextRequest) {
   if (isLoneTeam(msg.authorJid, teamJids())) return NextResponse.json({ ok: true, skip: "autor = equipe Lone" });
   if (isTrivial(msg.text)) return NextResponse.json({ ok: true, skip: "trivial" });
 
-  // Resolve cliente pelo JID do grupo. Sem cliente ativo → ignora (ex-cliente / grupo errado).
+  // Resolve cliente pelo JID do grupo.
   const { data: clients } = await supabaseAdmin
     .from("clients")
     .select("id, name, nome_fantasia, nicho, campaign_briefing, fixed_briefing")
     .eq("whatsapp_group_jid", msg.groupJid);
 
-  if (!clients || clients.length === 0) {
+  // Grupo de teste = está na allowlist do piloto mas NÃO mapeia cliente (ex.: grupo Automação).
+  // Usa um "Cliente Teste" sintético pra exercitar o A1 sem dado real — você manda como se fosse o cliente.
+  const isTestGroup = (!clients || clients.length === 0) && allow.includes(msg.groupJid);
+  if ((!clients || clients.length === 0) && !isTestGroup) {
     console.warn("[CS/inbound] grupo sem cliente mapeado:", msg.groupJid);
     return NextResponse.json({ ok: true, skip: "grupo sem cliente" });
   }
-  const multiCliente = clients.length > 1; // blueprint 11.3 — ambiguidade vira confiança baixa
-  const c = clients[0];
-  const clienteNome = (c.nome_fantasia as string) || (c.name as string) || "Cliente";
+
+  const multiCliente = (clients?.length ?? 0) > 1; // blueprint 11.3 — ambiguidade vira confiança baixa
+  const c = clients?.[0];
+  const clienteNome = isTestGroup
+    ? "Cliente Teste"
+    : (c?.nome_fantasia as string) || (c?.name as string) || "Cliente";
 
   if (!isOpenAIConfigured()) {
     console.log(`[CS/inbound] A1 desligado (sem OPENAI_API_KEY). Bloco de "${clienteNome}": ${msg.text.slice(0, 80)}`);
@@ -77,10 +83,10 @@ export async function POST(req: NextRequest) {
 
   const ctx: ClassifierContext = {
     clienteNome,
-    clienteNicho: (c.nicho as string) || undefined,
-    briefing: (c.campaign_briefing as string) || (c.fixed_briefing as string) || undefined,
+    clienteNicho: isTestGroup ? undefined : (c?.nicho as string) || undefined,
+    briefing: isTestGroup ? undefined : (c?.campaign_briefing as string) || (c?.fixed_briefing as string) || undefined,
     nomesEquipeLone: teamJids(),
-    clientesDoGrupo: clients.map((x) => (x.nome_fantasia as string) || (x.name as string)),
+    clientesDoGrupo: isTestGroup ? [clienteNome] : (clients ?? []).map((x) => (x.nome_fantasia as string) || (x.name as string)),
   };
 
   const res = await classifyBlock([{ author: msg.authorName || "Cliente", text: msg.text }], ctx);
