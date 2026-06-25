@@ -50,6 +50,29 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       setLogoPdfBusy(false);
     }
   };
+  // Baixa a logo crua (imagem) — útil pro social/designer usar nas artes.
+  const downloadLogo = async () => {
+    setLogoPdfBusy(true);
+    setLogoPdfError(null);
+    try {
+      const res = await authedFetch(`/api/clients/${client.id}/logo`);
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
+      const blob = await res.blob();
+      const ext = (blob.type.split("/")[1] || "png").replace("svg+xml", "svg").replace("jpeg", "jpg");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `logo-${(client.nomeFantasia || client.name || "cliente").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase()}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setLogoPdfError(e instanceof Error ? e.message : "Erro ao baixar logo");
+    } finally {
+      setLogoPdfBusy(false);
+    }
+  };
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -298,6 +321,13 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {client.docLogo && (
+            <button onClick={downloadLogo} disabled={logoPdfBusy} title={logoPdfError ?? "Baixar a logo do cliente"}
+              className={`btn-ghost text-xs flex items-center gap-1.5 border disabled:opacity-50 ${logoPdfError ? "border-destructive/40 text-destructive" : "border-border hover:border-primary/30 hover:text-primary"}`}>
+              {logoPdfBusy ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+              {logoPdfError ? "Erro — tentar de novo" : "Baixar Logo"}
+            </button>
+          )}
           {isAdmin && (
             <button onClick={generateOnboardingLink} disabled={generatingLink}
               className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-lone-warning-border hover:text-lone-warning">
