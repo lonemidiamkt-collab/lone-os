@@ -1684,6 +1684,7 @@ interface KanbanByClientProps {
 
 function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, onDeleteCard, currentUser, role }: KanbanByClientProps) {
   const [activeClientId, setActiveClientId] = useState(clients[0]?.id ?? "");
+  const [viewMode, setViewMode] = useState<"single" | "unified">("single"); // cliente único vs visão unificada (todos os clientes)
   const isReadOnly = role === "designer"; // Designer só visualiza; seletor vira etiqueta estática
 
   const activeClient = allClients.find((c) => c.id === activeClientId);
@@ -1696,6 +1697,28 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
 
   return (
     <div className="space-y-4">
+      {/* Toggle de visão: cliente único vs unificada (todos os clientes em colunas) */}
+      <div className="flex items-center gap-1 bg-card border border-border rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setViewMode("single")}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            viewMode === "single" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Cliente único
+        </button>
+        <button
+          onClick={() => setViewMode("unified")}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            viewMode === "unified" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Visão unificada
+        </button>
+      </div>
+
+      {viewMode === "single" && (
+      <>
       {/* Client tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1">
         {clients.map((client) => {
@@ -1908,6 +1931,66 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
           <ImageIcon size={32} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm">Nenhum conteúdo para {activeClient?.name ?? "este cliente"}.</p>
           <p className="text-xs mt-1">Use a barra de criação rápida acima para adicionar.</p>
+        </div>
+      )}
+      </>
+      )}
+
+      {/* ── VISÃO UNIFICADA: cada cliente é uma coluna (estilo Trello) ── */}
+      {viewMode === "unified" && (
+        <div className="flex gap-3 overflow-x-auto pb-3">
+          {clients.length === 0 && (
+            <p className="text-sm text-muted-foreground py-8">Nenhum cliente na carteira.</p>
+          )}
+          {clients.map((client) => {
+            const cards = [...contentCards.filter((c) => c.clientId === client.id)].sort(
+              (a, b) =>
+                CONTENT_COLUMNS.findIndex((s) => s.id === a.status) -
+                CONTENT_COLUMNS.findIndex((s) => s.id === b.status),
+            );
+            const activeCount = cards.filter((c) => c.status !== "published").length;
+            return (
+              <div key={client.id} className="w-64 shrink-0 flex flex-col bg-muted/20 border border-border rounded-xl">
+                <div className="flex items-center gap-2 p-3 border-b border-border rounded-t-xl bg-muted/40">
+                  <div className="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                    {client.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-foreground truncate">{client.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{activeCount} ativos · {cards.length} total</p>
+                  </div>
+                </div>
+                <div className="p-2 space-y-2 overflow-y-auto" style={{ maxHeight: "68vh" }}>
+                  {cards.length === 0 && (
+                    <p className="text-[10px] text-muted-foreground/50 text-center py-6">Sem produções</p>
+                  )}
+                  {cards.map((card) => (
+                    <div
+                      key={card.id}
+                      onClick={() => onCardClick(card)}
+                      className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/40 transition-colors cursor-pointer"
+                    >
+                      {card.imageUrl && (
+                        <div className="aspect-video w-full overflow-hidden bg-muted">
+                          <SignedImage src={card.imageUrl!} alt={card.title} className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      <div className="p-2">
+                        <div className="mb-1.5" onClick={(e) => e.stopPropagation()}>
+                          <CardStatusSelector status={card.status} disabled={isReadOnly} onChange={(toStatus) => onMoveCard(card.id, toStatus)} />
+                        </div>
+                        <p className="text-[11px] font-medium text-foreground leading-tight">{card.title}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-[10px] text-muted-foreground">{card.format}</span>
+                          {card.dueDate && <span className="text-[10px] text-muted-foreground">{card.dueDate}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
