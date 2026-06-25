@@ -308,6 +308,7 @@ export function snakeToContentCard(row: Record<string, unknown>): ContentCard {
     caption: (row.caption as string) ?? undefined,
     hashtags: (row.hashtags as string) ?? undefined,
     imageUrl: (row.image_url as string) ?? undefined,
+    archivedAt: (row.archived_at as string) ?? undefined,
     observations: (row.observations as string) ?? undefined,
     statusChangedAt: (row.status_changed_at as string) ?? undefined,
     columnEnteredAt: (row.column_entered_at as Record<string, string>) ?? undefined,
@@ -328,9 +329,11 @@ export function snakeToContentCard(row: Record<string, unknown>): ContentCard {
   };
 }
 
-export async function fetchContentCards(filter?: { socialMedia?: string }): Promise<ContentCard[]> {
+export async function fetchContentCards(filter?: { socialMedia?: string; archived?: boolean }): Promise<ContentCard[]> {
   let query = db.from("content_cards").select("*").order("created_at", { ascending: false });
   if (filter?.socialMedia) query = query.eq("social_media", filter.socialMedia);
+  // Por padrão o board mostra só demandas ativas. archived=true traz só as arquivadas (tela "Arquivadas").
+  query = filter?.archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
   const { data, error } = await query;
   if (error) { console.error("[DB] fetchContentCards:", error); return []; }
   // Also load comments for each card

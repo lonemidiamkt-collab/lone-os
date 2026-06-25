@@ -18,7 +18,7 @@ const KEY_MAP: Record<string, string> = {
   publishVerifiedBy: "publish_verified_by", blockedReason: "blocked_reason",
   blockedBy: "blocked_by", blockedAt: "blocked_at", scheduledAt: "scheduled_at",
   requestedByTraffic: "requested_by_traffic", trafficSuggestion: "traffic_suggestion",
-  lastKanbanActivity: "last_kanban_activity",
+  lastKanbanActivity: "last_kanban_activity", archivedAt: "archived_at",
 };
 
 export async function POST(req: NextRequest) {

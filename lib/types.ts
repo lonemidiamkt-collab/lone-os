@@ -179,6 +179,7 @@ export interface ContentCard {
   imageUrl?: string;
   observations?: string;
   trafficSuggestion?: string;
+  archivedAt?: string;      // ISO — soft-delete ("arquivar"); some das visões ativas mas fica no banco
   statusChangedAt?: string; // ISO datetime — tracks SLA per column
   columnEnteredAt?: Record<string, string>; // maps status → ISO timestamp of when card entered that column
   comments?: CardComment[];

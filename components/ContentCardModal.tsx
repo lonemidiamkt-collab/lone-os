@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   Upload, Calendar, FileText, User, Tag,
   Save, ImageIcon, Hash, AlignLeft,
-  Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Palette,
+  Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Palette, Trash2, Archive,
 } from "lucide-react";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
@@ -105,6 +105,8 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadOk, setUploadOk] = useState(false);
+  const [confirmDeleteArt, setConfirmDeleteArt] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
@@ -196,6 +198,31 @@ export default function ContentCardModal({ card, onClose }: Props) {
     setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   };
 
+  // Apaga só a ARTE (image_url = ""), mantendo a demanda. Persiste na hora.
+  const handleDeleteArt = async () => {
+    setConfirmDeleteArt(false);
+    setImageUrl("");
+    setUploadOk(false);
+    setUploadError(null);
+    try {
+      await updateContentCard(card.id, { imageUrl: "" });
+    } catch {
+      setUploadError("Falha ao apagar a arte. Tente de novo.");
+    }
+  };
+
+  // Arquiva a DEMANDA (soft-delete): some do quadro ativo mas fica no banco, recuperável em "Arquivadas".
+  const handleArchive = async () => {
+    setArchiving(true);
+    try {
+      await updateContentCard(card.id, { archivedAt: new Date().toISOString() });
+      pushNotification("content", "Demanda arquivada", `"${card.title}" saiu do quadro. Recupere em Arquivadas.`, card.clientId);
+      onClose();
+    } catch {
+      setArchiving(false);
+    }
+  };
+
   const currentStatus = STATUS_OPTIONS.find((s) => s.value === status);
 
   return (
@@ -264,6 +291,28 @@ export default function ContentCardModal({ card, onClose }: Props) {
                   <><Upload size={13} /> {imageUrl ? "Trocar arquivo" : "Anexar arte / arquivo"}</>
                 )}
               </Button>
+              {/* Apagar arte — só quando há arte anexada */}
+              {imageUrl && !uploading && (
+                confirmDeleteArt ? (
+                  <div className="flex items-center gap-1.5">
+                    <Button type="button" variant="ghost" size="sm" className="flex-1 text-muted-foreground"
+                      onClick={() => setConfirmDeleteArt(false)}>
+                      Cancelar
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm"
+                      className="flex-1 flex items-center justify-center gap-1.5 text-destructive hover:bg-destructive/10"
+                      onClick={handleDeleteArt}>
+                      <Trash2 size={13} /> Confirmar
+                    </Button>
+                  </div>
+                ) : (
+                  <Button type="button" variant="ghost" size="sm"
+                    className="w-full flex items-center justify-center gap-2 text-destructive hover:bg-destructive/10"
+                    onClick={() => setConfirmDeleteArt(true)}>
+                    <Trash2 size={13} /> Apagar arte
+                  </Button>
+                )
+              )}
               {/* Toast inline — sucesso ou erro */}
               {uploadOk && (
                 <div className="flex items-center gap-1.5 text-[10px] text-lone-success bg-lone-success-bg border border-lone-success-border rounded-md px-2 py-1.5">
@@ -638,6 +687,18 @@ export default function ContentCardModal({ card, onClose }: Props) {
             >
               <CheckCircle size={14} />
               Confirmar Arte
+            </Button>
+          )}
+          {/* Arquivar demanda — soft-delete (some do quadro, fica recuperável). Não pro designer. */}
+          {role !== "designer" && (
+            <Button
+              variant="ghost"
+              onClick={handleArchive}
+              disabled={archiving}
+              title="Arquivar: some do quadro mas fica salvo (recuperável em Arquivadas)"
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+            >
+              <Archive size={14} /> {archiving ? "Arquivando..." : "Arquivar"}
             </Button>
           )}
           <Button variant="ghost" onClick={onClose}>

@@ -85,9 +85,18 @@ export const useContentStore = create<ContentState>()(
             const { snakeToContentCard } = await import("@/lib/supabase/queries");
             try {
               const card = snakeToContentCard(p.new as Record<string, unknown>);
-              set((s) => ({
-                contentCards: s.contentCards.map((c) => c.id === card.id ? { ...c, ...card } : c),
-              }), false, "content/rt/card/update");
+              set((s) => {
+                // Arquivada → remove do board ativo. Desarquivada → re-insere (respeitando o filtro de carteira).
+                if (card.archivedAt) {
+                  return { contentCards: s.contentCards.filter((c) => c.id !== card.id) };
+                }
+                const exists = s.contentCards.some((c) => c.id === card.id);
+                if (exists) {
+                  return { contentCards: s.contentCards.map((c) => c.id === card.id ? { ...c, ...card } : c) };
+                }
+                if (socialMediaFilter && card.socialMedia !== socialMediaFilter) return s;
+                return { contentCards: [...s.contentCards, card] };
+              }, false, "content/rt/card/update");
             } catch {}
           })
           .on("postgres_changes", { event: "DELETE", schema: "public", table: "content_cards" }, (p) => {

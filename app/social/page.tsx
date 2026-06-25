@@ -3,6 +3,7 @@
 import Header from "@/components/Header";
 import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
+import ArchivedDemandsModal from "@/components/ArchivedDemandsModal";
 import SignedImage from "@/components/shared/SignedImage";
 import ContentIdeasModal from "@/components/ContentIdeasModal";
 import Client360Modal from "@/components/Client360Modal";
@@ -20,7 +21,7 @@ import {
   Sparkles, Clock, Target, Zap, BarChart2,
   TrendingUp, Hash, Check, Plus, ChevronDown,
   Key, MessageCircle, Send, Eye, EyeOff, Save,
-  Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle, Layers, Trash2, Copy,
+  Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle, Layers, Trash2, Copy, Archive,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
@@ -2026,6 +2027,7 @@ export default function SocialPage() {
   const [verifyingCard, setVerifyingCard] = useState<ContentCard | null>(null);
   const [verifyChecks, setVerifyChecks] = useState({ postLive: false, copyCorrect: false });
   const [showBatchCreate, setShowBatchCreate] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const { role, currentUser } = useRole();
 
@@ -2143,7 +2145,7 @@ export default function SocialPage() {
   });
 
   const filteredCards = contentCards.filter((c) =>
-    activeWorkspace === "Todos" ? true : c.socialMedia === activeWorkspace
+    !c.archivedAt && (activeWorkspace === "Todos" ? true : c.socialMedia === activeWorkspace)
   );
 
   const onboardingClients = filteredClients.filter((c) => c.status === "onboarding");
@@ -2429,6 +2431,12 @@ export default function SocialPage() {
           onClose={() => setShowBatchCreate(false)}
         />
       )}
+      {showArchived && (
+        <ArchivedDemandsModal
+          workspace={activeWorkspace}
+          onClose={() => setShowArchived(false)}
+        />
+      )}
 
       <div className="p-6 space-y-5 animate-fade-in">
 
@@ -2707,6 +2715,12 @@ export default function SocialPage() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all shrink-0"
               >
                 <Layers size={13} /> Batch ({">"}5 cards)
+              </button>
+              <button
+                onClick={() => setShowArchived(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all shrink-0"
+              >
+                <Archive size={13} /> Arquivadas
               </button>
             </div>
 
