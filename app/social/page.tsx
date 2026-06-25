@@ -1684,7 +1684,7 @@ interface KanbanByClientProps {
 
 function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, onDeleteCard, currentUser, role }: KanbanByClientProps) {
   const [activeClientId, setActiveClientId] = useState(clients[0]?.id ?? "");
-  const [viewMode, setViewMode] = useState<"single" | "unified">("single"); // cliente único vs visão unificada (todos os clientes)
+  const [viewMode, setViewMode] = useState<"single" | "unified">("single"); // cliente único vs visão unificada (todos os clientes em colunas)
   const isReadOnly = role === "designer"; // Designer só visualiza; seletor vira etiqueta estática
 
   const activeClient = allClients.find((c) => c.id === activeClientId);
