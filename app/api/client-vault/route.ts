@@ -55,7 +55,6 @@ async function logAccess(params: {
 export async function GET(req: NextRequest) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  if (!user.isAdmin) return NextResponse.json({ error: "Acesso restrito a administradores" }, { status: 403 });
 
   const url = new URL(req.url);
   const clientId = url.searchParams.get("clientId");
@@ -67,6 +66,28 @@ export async function GET(req: NextRequest) {
   }
   if (!validateField(table, field)) {
     return NextResponse.json({ error: `Campo '${field}' não autorizado pra ${table}` }, { status: 400 });
+  }
+
+  // Autorização: admin tem acesso total. O social ATRIBUÍDO pode revelar APENAS a
+  // senha do Instagram (clients.instagram_password) dos clientes da própria carteira.
+  if (!user.isAdmin) {
+    const { data: tm } = await supabaseAdmin
+      .from("team_members")
+      .select("name, role")
+      .eq("auth_id", user.id)
+      .maybeSingle();
+    const socialPodeVer = tm?.role === "social" && table === "clients" && field === "instagram_password";
+    if (!socialPodeVer) {
+      return NextResponse.json({ error: "Acesso restrito" }, { status: 403 });
+    }
+    const { data: c } = await supabaseAdmin
+      .from("clients")
+      .select("assigned_social")
+      .eq("id", clientId)
+      .maybeSingle();
+    if (!c || (c as { assigned_social?: string | null }).assigned_social !== tm?.name) {
+      return NextResponse.json({ error: "Cliente fora da sua carteira" }, { status: 403 });
+    }
   }
 
   const idColumn = table === "clients" ? "id" : "client_id";
