@@ -399,6 +399,7 @@ export default function DesignPage() {
     return () => { u1(); u2(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState<TabView>("kanbans");
+  const [kanbanGroupBy, setKanbanGroupBy] = useState<"person" | "client">("person"); // agrupar por pessoa ou por cliente (visão unificada)
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();
 
   // NavContext wiring — sidebar tab switching
@@ -544,6 +545,18 @@ export default function DesignPage() {
     return map;
   }, [myContentCards, socialPeople]);
 
+  // Agrupamento por cliente (visão unificada — clientes como colunas, estilo Trello)
+  const cardsByClient = useMemo(() => {
+    const map: Record<string, ContentCard[]> = {};
+    myContentCards.forEach((c) => { (map[c.clientId] ??= []).push(c); });
+    return map;
+  }, [myContentCards]);
+  const clientsWithCards = useMemo(() => {
+    return clients
+      .filter((cl) => (cardsByClient[cl.id]?.length ?? 0) > 0)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [clients, cardsByClient]);
+
   // Stats
   const needsArt = myContentCards.filter((c) =>
     !c.imageUrl && ["in_production", "approval", "client_approval"].includes(c.status)
@@ -664,6 +677,26 @@ export default function DesignPage() {
               </button>
             </div>
 
+            {/* Toggle de agrupamento: por pessoa (social) vs por cliente (unificada) */}
+            <div className="flex items-center gap-1 bg-card border border-border rounded-lg p-1 w-fit">
+              <button
+                onClick={() => setKanbanGroupBy("person")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  kanbanGroupBy === "person" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Por pessoa
+              </button>
+              <button
+                onClick={() => setKanbanGroupBy("client")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  kanbanGroupBy === "client" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Por cliente (unificada)
+              </button>
+            </div>
+
             {/* Pending deadlines strip */}
             {(() => {
               const upcoming = contentCards
@@ -714,6 +747,8 @@ export default function DesignPage() {
               );
             })()}
 
+            {kanbanGroupBy === "person" && (
+            <>
             {socialPeople.map((person) => {
               const cards = cardsBySocial[person] ?? [];
               const personNeedsArt = cards.filter((c) =>
@@ -973,6 +1008,67 @@ export default function DesignPage() {
                 </div>
               );
             })}
+            </>
+            )}
+
+            {/* ── VISÃO UNIFICADA: cada cliente é uma coluna (estilo Trello) ── */}
+            {kanbanGroupBy === "client" && (
+              <div className="flex gap-3 overflow-x-auto pb-3">
+                {clientsWithCards.length === 0 && (
+                  <p className="text-sm text-muted-foreground py-8">Nenhuma produção nos clientes.</p>
+                )}
+                {clientsWithCards.map((client) => {
+                  const cards = [...(cardsByClient[client.id] ?? [])].sort(
+                    (a, b) =>
+                      DESIGNER_COLUMNS.findIndex((dc) => dc.statuses.includes(a.status)) -
+                      DESIGNER_COLUMNS.findIndex((dc) => dc.statuses.includes(b.status)),
+                  );
+                  const needArt = cards.filter((c) => !c.imageUrl && ["in_production", "approval", "client_approval"].includes(c.status)).length;
+                  return (
+                    <div key={client.id} className="w-64 shrink-0 flex flex-col bg-muted/20 border border-border rounded-xl">
+                      <div className="flex items-center gap-2 p-3 border-b border-border rounded-t-xl bg-muted/40">
+                        <div className="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                          {client.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-foreground truncate">{client.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{cards.length} cards{needArt > 0 ? ` · ${needArt} sem arte` : ""}</p>
+                        </div>
+                      </div>
+                      <div className="p-2 space-y-2 overflow-y-auto" style={{ maxHeight: "68vh" }}>
+                        {cards.map((card) => {
+                          const col = DESIGNER_COLUMNS.find((dc) => dc.statuses.includes(card.status)) ?? DESIGNER_COLUMNS[0];
+                          return (
+                            <div
+                              key={card.id}
+                              onClick={() => setDetailCard(card)}
+                              className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/40 transition-colors cursor-pointer"
+                            >
+                              {card.imageUrl && (
+                                <div className="aspect-video w-full overflow-hidden bg-muted">
+                                  <SignedImage src={card.imageUrl!} alt={card.title} className="w-full h-full object-cover" />
+                                </div>
+                              )}
+                              <div className="p-2">
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-muted text-foreground border border-border mb-1.5">
+                                  <span className={`w-2 h-2 rounded-full ${col.color}`} />
+                                  {col.title}
+                                </span>
+                                <p className="text-[11px] font-medium text-foreground leading-tight">{card.title}</p>
+                                <div className="flex items-center justify-between mt-1">
+                                  <span className="text-[10px] text-muted-foreground">{card.format}</span>
+                                  {card.dueDate && <span className="text-[10px] text-muted-foreground">{card.dueDate}</span>}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

@@ -479,7 +479,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             { key: "enderecoCep", label: "CEP" }, { key: "enderecoRua", label: "Rua / Logradouro" },
             { key: "enderecoNumero", label: "Número" }, { key: "enderecoBairro", label: "Bairro" },
             { key: "enderecoCidade", label: "Cidade" }, { key: "enderecoEstado", label: "Estado (UF)" },
-          ]).map(({ key, label }) => (
+          ]).filter(({ key }) => isAdmin || !["razaoSocial", "cnpj", "cpfCnpj"].includes(key)).map(({ key, label }) => (
             <div key={key} className="space-y-1">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
               {editing ? (
