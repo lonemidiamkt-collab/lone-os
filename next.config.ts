@@ -5,6 +5,10 @@ const SUPABASE_INTERNAL = process.env.SUPABASE_INTERNAL_URL ?? "http://supabase-
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Deploy mais rápido: type-check e lint NÃO rodam no build da VPS (1 vCPU).
+  // O type-check roda localmente (repo rápido ~15s) ANTES de cada deploy; lint não é gate.
+  typescript: { ignoreBuildErrors: true },
+  eslint: { ignoreDuringBuilds: true },
   // @react-pdf/renderer tem o próprio reconciler React. Se o webpack do Next o
   // empacotar, os elementos JSX ficam com shape incompatível e o render quebra com
   // "Minified React error #31" (mesmo em PDFs triviais). Externalizando, ele é
