@@ -35,6 +35,11 @@ services:
       EVOLUTION_API_URL: ${EVOLUTION_API_URL}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE}
+      # Agente CS (inbound). Webhook valida CS_INBOUND_SECRET. CS_LONE_TEAM_JIDS = números da
+      # equipe (nunca viram demanda). CS_PILOT_GROUP_JIDS = allowlist do piloto (LGPD): vazio = todos.
+      CS_INBOUND_SECRET: ${CS_INBOUND_SECRET}
+      CS_LONE_TEAM_JIDS: ${CS_LONE_TEAM_JIDS}
+      CS_PILOT_GROUP_JIDS: ${CS_PILOT_GROUP_JIDS}
       # browserless (headless chrome) p/ renderizar o PDF do relatório semanal
       BROWSERLESS_TOKEN: ${BROWSERLESS_TOKEN}
       BROWSERLESS_URL: http://chromium:3000
