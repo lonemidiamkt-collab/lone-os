@@ -352,7 +352,13 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 {STATUS_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
-                    onClick={() => setStatus(opt.value)}
+                    onClick={() => {
+                      if (opt.value === status) return;
+                      setStatus(opt.value);
+                      // Status salva automaticamente ao clicar — não precisa do "Salvar alterações"
+                      // (pedido do social). updateContentCard já faz rollback se a gravação falhar.
+                      updateContentCard(card.id, { status: opt.value, statusChangedAt: new Date().toISOString() }).catch(() => {});
+                    }}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                       status === opt.value
                         ? "bg-primary/20 text-primary border border-primary/30"
@@ -656,6 +662,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
                   status: "queued",
                   format: card.format || "Post Feed",
                   briefing: card.briefing || card.observations || `Criar arte para: ${card.title}`,
+                  contentCardId: card.id, // vincula a demanda ao card já na criação (link à prova de falha)
                 }).then((req) => {
                   updateContentCard(card.id, { designRequestId: req.id });
                 });

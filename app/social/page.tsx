@@ -1951,7 +1951,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
             );
             const activeCount = cards.filter((c) => c.status !== "published").length;
             return (
-              <div key={client.id} className="w-64 shrink-0 flex flex-col bg-muted/20 border border-border rounded-xl">
+              <div key={client.id} className="w-72 shrink-0 flex flex-col bg-muted/20 border border-border rounded-xl">
                 <div className="flex items-center gap-2 p-3 border-b border-border rounded-t-xl bg-muted/40">
                   <div className="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs font-bold shrink-0">
                     {client.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
@@ -1972,7 +1972,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                       className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/40 transition-colors cursor-pointer"
                     >
                       {card.imageUrl && (
-                        <div className="aspect-video w-full overflow-hidden bg-muted">
+                        <div className="aspect-square w-full overflow-hidden bg-muted">
                           <SignedImage src={card.imageUrl!} alt={card.title} className="w-full h-full object-cover" />
                         </div>
                       )}

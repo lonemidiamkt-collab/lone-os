@@ -242,6 +242,8 @@ export const useContentStore = create<ContentState>()(
 
       rejectContent: (cardId, reviewer, reason) => {
         const card = get().contentCards.find((c) => c.id === cardId);
+        const prevCard = card;
+        const prevApprovals = get().contentApprovals;
         const approval: ContentApproval = {
           id: `ca-${Date.now()}`,
           cardId,
@@ -256,12 +258,25 @@ export const useContentStore = create<ContentState>()(
             c.id === cardId ? { ...c, status: "in_production" as const, statusChangedAt: new Date().toISOString() } : c
           ),
         }), false, "content/reject");
-        authedFetch("/api/content-cards/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cardId, status: "in_production", contentApproval: { status: "rejected", reviewedBy: reviewer, reviewedAt: new Date().toISOString(), reason } }) }).catch(() => {});
-        if (card) {
-          import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
-            useNotificationsStore.getState().push("content", "Conteúdo reprovado", `"${card.title}" de ${card.clientName} foi reprovado: ${reason}`, card.clientId);
+        // Mesma lógica do approveContent: não falhar em silêncio — desfaz e avisa.
+        authedFetch("/api/content-cards/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cardId, status: "in_production", contentApproval: { status: "rejected", reviewedBy: reviewer, reviewedAt: new Date().toISOString(), reason } }) })
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            if (card) {
+              import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
+                useNotificationsStore.getState().push("content", "Conteúdo reprovado", `"${card.title}" de ${card.clientName} foi reprovado: ${reason}`, card.clientId);
+              });
+            }
+          })
+          .catch(() => {
+            set((s) => ({
+              contentApprovals: prevApprovals,
+              contentCards: prevCard ? s.contentCards.map((c) => c.id === cardId ? prevCard : c) : s.contentCards,
+            }), false, "content/reject/rollback");
+            import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
+              useNotificationsStore.getState().push("system", "Falha ao reprovar a arte", `Não deu pra salvar a reprovação${card ? ` de "${card.title}"` : ""}. Verifique a conexão e tente de novo.`, card?.clientId);
+            });
           });
-        }
       },
 
       addSocialReport: async (report) => {
@@ -340,13 +355,27 @@ export const useContentStore = create<ContentState>()(
             c.id === cardId ? { ...c, comments: [...(c.comments ?? []), comment] } : c
           ),
         }), false, "content/card/comment/add");
-        authedFetch("/api/data/content/mutations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "addCardComment", cardId, author, text }) }).catch(() => {});
         const card = get().contentCards.find((c) => c.id === cardId);
-        if (card) {
-          import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
-            useNotificationsStore.getState().push("content", "Novo comentário", `${author} comentou em "${card.title}" — ${card.clientName}: "${text.slice(0, 60)}${text.length > 60 ? "..." : ""}"`, card.clientId);
+        // Comentário não pode sumir em silêncio: notifica só em sucesso; em falha, desfaz e avisa.
+        authedFetch("/api/data/content/mutations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "addCardComment", cardId, author, text }) })
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            if (card) {
+              import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
+                useNotificationsStore.getState().push("content", "Novo comentário", `${author} comentou em "${card.title}" — ${card.clientName}: "${text.slice(0, 60)}${text.length > 60 ? "..." : ""}"`, card.clientId);
+              });
+            }
+          })
+          .catch(() => {
+            set((s) => ({
+              contentCards: s.contentCards.map((c) =>
+                c.id === cardId ? { ...c, comments: (c.comments ?? []).filter((cm) => cm.id !== comment.id) } : c
+              ),
+            }), false, "content/card/comment/rollback");
+            import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
+              useNotificationsStore.getState().push("system", "Falha ao enviar comentário", `Não deu pra salvar seu comentário${card ? ` em "${card.title}"` : ""}. Tente de novo.`, card?.clientId);
+            });
           });
-        }
       },
 
       deleteDesignRequest: async (id) => {

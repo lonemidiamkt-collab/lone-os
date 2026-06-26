@@ -40,6 +40,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Grava o link reverso (content_cards.design_request_id) no servidor, atômico com a
+    // criação. Antes isso era um 2º fetch do cliente que, se falhasse, deixava a demanda
+    // ÓRFÃ (sem vínculo nos 2 sentidos) — a entrega do designer não voltava pro card.
+    if (body.contentCardId) {
+      const { error: linkErr } = await supabaseAdmin
+        .from("content_cards")
+        .update({ design_request_id: data.id })
+        .eq("id", body.contentCardId);
+      if (linkErr) console.error("[design-requests/create] link reverso falhou:", linkErr.message);
+    }
+
     return NextResponse.json({ id: data.id });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
