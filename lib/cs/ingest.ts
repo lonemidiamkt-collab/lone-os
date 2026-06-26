@@ -24,6 +24,8 @@ export interface NormalizedInbound {
   messageId: string;
   timestamp: number;
   fromMe: boolean;
+  /** Se for um REPLY: id da mensagem citada (pra casar a resposta com a sugestão do agente). */
+  quotedMsgId?: string;
 }
 
 /** Extrai texto de conversation / extendedTextMessage / caption de imagem/vídeo. */
@@ -50,6 +52,9 @@ export function parseUpsert(payload: EvolutionUpsert): NormalizedInbound | null 
   if (!text) return null; // sem texto legível (áudio/figurinha sem caption → A0 sinaliza noutro lugar)
   const messageId = d?.key?.id ?? "";
   if (!messageId) return null;
+  // Reply/citação: WhatsApp manda o id da msg citada em extendedTextMessage.contextInfo.stanzaId.
+  const ext = d?.message?.extendedTextMessage as { contextInfo?: { stanzaId?: string } } | undefined;
+  const quotedMsgId = ext?.contextInfo?.stanzaId || undefined;
   return {
     groupJid: remoteJid,
     authorJid: d?.key?.participant ?? remoteJid,
@@ -58,6 +63,7 @@ export function parseUpsert(payload: EvolutionUpsert): NormalizedInbound | null 
     messageId,
     timestamp: d?.messageTimestamp ?? 0,
     fromMe: !!d?.key?.fromMe,
+    quotedMsgId,
   };
 }
 

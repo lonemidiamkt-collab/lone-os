@@ -43,19 +43,35 @@ type ClientRow = Record<string, unknown>;
 const nomeOf = (c?: ClientRow | null) =>
   ((c?.nome_fantasia as string) || (c?.name as string) || "Cliente");
 
-function parseDecision(text: string): { acao: "confirmar" | "descartar"; codigo: string } | null {
-  const m = text.trim().match(/^(ok|sim|confirmar|confirma|nao|não|descartar|descarta)\s+([a-z0-9]{3,8})$/i);
+// Sem código nas mensagens: a equipe RESPONDE (reply) a sugestão com "ok"/"não". Código vira
+// opcional só por legado/hábito.
+function parseDecision(text: string): { acao: "confirmar" | "descartar"; codigo?: string } | null {
+  const m = text.trim().match(/^(ok|sim|confirmar|confirma|nao|não|descartar|descarta)(?:\s+([a-z0-9]{3,8}))?$/i);
   if (!m) return null;
   const acao = /^(ok|sim|confirm)/i.test(m[1]) ? "confirmar" : "descartar";
-  return { acao, codigo: m[2].toLowerCase() };
+  return { acao, codigo: m[2]?.toLowerCase() };
 }
 
-// "ajustar <cód> <o que mudar>" — a equipe refina o briefing antes de criar o card.
-// A instrução é anexada VERBATIM ao briefing (não re-gera via IA → preserva o pedido humano).
-function parseAjuste(text: string): { codigo: string; instrucao: string } | null {
-  const m = text.trim().match(/^(ajustar|ajusta|ajuste)\s+([a-z0-9]{3,8})\s+([\s\S]+)$/i);
+// "ajustar <o que mudar>" — refina o briefing antes de criar o card (anexa VERBATIM, não re-gera).
+function parseAjuste(text: string): { instrucao: string } | null {
+  const m = text.trim().match(/^(ajustar|ajusta|ajuste)\s+([\s\S]+)$/i);
   if (!m) return null;
-  return { codigo: m[2].toLowerCase(), instrucao: m[3].trim() };
+  return { instrucao: m[2].trim() };
+}
+
+// Acha a demanda PENDENTE alvo da resposta: 1) reply na sugestão (msg citada via quotedMsgId),
+// 2) código (se a pessoa digitar, legado), 3) a última pendente (fallback se não deu reply).
+async function acharDemanda(quotedMsgId?: string, codigo?: string) {
+  if (quotedMsgId) {
+    const { data } = await supabaseAdmin.from("cs_demandas").select("*").eq("msg_id_sugestao", quotedMsgId).eq("status", "pendente").maybeSingle();
+    if (data) return data;
+  }
+  if (codigo) {
+    const { data } = await supabaseAdmin.from("cs_demandas").select("*").eq("codigo", codigo).eq("status", "pendente").maybeSingle();
+    if (data) return data;
+  }
+  const { data } = await supabaseAdmin.from("cs_demandas").select("*").eq("status", "pendente").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  return data ?? null;
 }
 
 async function criarCard(opts: {
@@ -104,24 +120,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skip: "fora da allowlist do piloto" });
   }
 
-  // ─── Decisão humana (grupo interno): "ok <cod>" cria o card; "nao <cod>" descarta ───
+  // ─── Decisão humana (grupo interno): RESPONDA a sugestão com "ok" (cria) ou "não" (descarta) ───
   const decision = parseDecision(msg.text);
   if (decision && msg.groupJid === internalGroupJid()) {
-    const { data: d } = await supabaseAdmin
-      .from("cs_demandas").select("*").eq("codigo", decision.codigo).eq("status", "pendente").maybeSingle();
+    const d = await acharDemanda(msg.quotedMsgId, decision.codigo);
     if (!d) {
-      await csSendGroupText(msg.groupJid, `❓ Código *${decision.codigo}* não encontrado (ou já decidido).`);
+      await csSendGroupText(msg.groupJid, `❓ Não achei a sugestão — responde *na própria mensagem* do agente (dá um "reply") que aí eu sei qual é. 😉`);
       return NextResponse.json({ ok: true, decision: "not_found" });
     }
     const decidedBy = msg.authorName || msg.authorJid;
     if (decision.acao === "descartar") {
       await supabaseAdmin.from("cs_demandas").update({ status: "descartada", decided_at: new Date().toISOString(), decided_by: decidedBy }).eq("id", d.id);
-      await csSendGroupText(msg.groupJid, `❌ Demanda *${decision.codigo}* descartada — você cuida então. 👍`);
+      await csSendGroupText(msg.groupJid, `❌ Beleza, descartei *${d.resumo}* — você cuida então. 👍`);
       return NextResponse.json({ ok: true, decision: "descartada" });
     }
     const clientId = (d.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
     if (!clientId) {
-      await csSendGroupText(msg.groupJid, `⚠️ Sem cliente para criar o card de *${decision.codigo}*.`);
+      await csSendGroupText(msg.groupJid, `⚠️ Sem cliente pra criar o card de *${d.resumo}*.`);
       return NextResponse.json({ ok: true, decision: "sem_cliente" });
     }
     const cardId = await criarCard({
@@ -134,27 +149,27 @@ export async function POST(req: NextRequest) {
     }).eq("id", d.id);
     await csSendGroupText(msg.groupJid, cardId
       ? `✅ Pronto! Criei o card *${d.resumo}* nas demandas${d.responsavel ? ` pra ${d.responsavel}` : ""}.`
-      : `⚠️ Falha ao criar o card de *${decision.codigo}*.`);
-    console.log(`[CS/inbound] demanda ${decision.codigo} confirmada → card ${cardId}`);
+      : `⚠️ Falha ao criar o card de *${d.resumo}*.`);
+    console.log(`[CS/inbound] demanda ${d.codigo} confirmada → card ${cardId}`);
     return NextResponse.json({ ok: true, decision: "confirmada", cardId });
   }
 
-  // ─── Ajuste humano (grupo interno): "ajustar <cod> <texto>" enriquece o briefing e re-posta ───
+  // ─── Ajuste humano: RESPONDA a sugestão com "ajustar <o que mudar>" → enriquece o briefing ───
   const ajuste = parseAjuste(msg.text);
   if (ajuste && msg.groupJid === internalGroupJid()) {
-    const { data: d } = await supabaseAdmin
-      .from("cs_demandas").select("*").eq("codigo", ajuste.codigo).eq("status", "pendente").maybeSingle();
+    const d = await acharDemanda(msg.quotedMsgId);
     if (!d) {
-      await csSendGroupText(msg.groupJid, `❓ Código *${ajuste.codigo}* não encontrado (ou já decidido).`);
+      await csSendGroupText(msg.groupJid, `❓ Não achei a sugestão pra ajustar — responde *na própria mensagem* do agente. 😉`);
       return NextResponse.json({ ok: true, ajuste: "not_found" });
     }
     const quem = msg.authorName || msg.authorJid;
     const novoBriefing = `${(d.briefing as string) || (d.message_text as string)}\n\n---\n✏️ Ajuste (${quem}): ${ajuste.instrucao}`;
     await supabaseAdmin.from("cs_demandas").update({ briefing: novoBriefing }).eq("id", d.id);
-    await csSendGroupText(msg.groupJid,
-      `✏️ Anotei o ajuste na *${ajuste.codigo}*:\n\n${novoBriefing}\n\nResponda *ok ${ajuste.codigo}* pra criar o card já com o ajuste.`);
-    console.log(`[CS/inbound] demanda ${ajuste.codigo} ajustada por ${quem}`);
-    return NextResponse.json({ ok: true, ajuste: "ok", codigo: ajuste.codigo });
+    const r = await csSendGroupText(msg.groupJid,
+      `✏️ Anotei o ajuste em *${d.resumo}*:\n\n${novoBriefing}\n\nResponde *ok* aqui que eu crio o card já com o ajuste.`);
+    if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", d.id);
+    console.log(`[CS/inbound] demanda ${d.codigo} ajustada por ${quem}`);
+    return NextResponse.json({ ok: true, ajuste: "ok" });
   }
 
   // ─── Mensagem de cliente: A0 → A1 → A3 → sugere ───
@@ -250,26 +265,27 @@ export async function POST(req: NextRequest) {
     const titulo = a3.ok && a3.data ? a3.data.titulo : it.resumo;
     const precisaConfirmar = a3.ok && !!a3.data?.observacao; // A3 achou o pedido vago → falta info do cliente
 
-    const codigo = randomBytes(2).toString("hex");
-    const { error: insErr } = await supabaseAdmin.from("cs_demandas").insert({
+    const codigo = randomBytes(2).toString("hex"); // mantido só p/ auditoria — NÃO aparece na mensagem
+    const { data: novaDem, error: insErr } = await supabaseAdmin.from("cs_demandas").insert({
       codigo, group_jid: msg.groupJid, client_id: (c.id as string) ?? null, cliente_nome: clienteNome,
       author: msg.authorName || msg.authorJid, message_id: msg.messageId, message_text: msg.text,
       tipo: it.tipo, urgencia: it.urgencia, confianca: it.confianca, resumo: titulo,
       briefing: briefingTxt, responsavel, status: "pendente",
-    });
-    if (insErr) { console.error("[CS/inbound] gravar demanda:", insErr.message); continue; }
+    }).select("id").single();
+    if (insErr || !novaDem) { console.error("[CS/inbound] gravar demanda:", insErr?.message); continue; }
     sugeridas.push(`${it.tipo}/${it.urgencia}[${codigo}→${responsavel}]`);
 
     if (internalJid) {
-      // Mensagem do WhatsApp = CURTA e humana (o briefing completo vai pro card no "ok").
+      // Mensagem CURTA e humana, SEM código — a equipe RESPONDE (reply) nesta mensagem.
       const a3d = a3.ok ? a3.data : null;
-      // Ação em tom natural — sem o placeholder "<o que mudar>" (parecia campo não preenchido).
-      const acao = `Responde aqui: *ok ${codigo}* (crio o card) · *nao ${codigo}* (você cuida) · ou *ajustar ${codigo}* e me diz o que mudar 😉`;
+      const acao = `É só responder *nesta mensagem*: *ok* (crio o card) · *não* (você cuida) · ou *ajustar* e me diz o que mudar 😉`;
       const txt = precisaConfirmar
         ? `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}* — mas o pedido tá meio vago. Antes de produzir, confirma com eles:\n${a3d?.observacao ?? ""}\n\n${acao}`
         : `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}*.\n\n${a3d ? a3d.briefing.trim() : `Mensagem: "${msg.text}"`}${a3d ? `\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : ""}\n\n${acao}`;
       const r = await csSendGroupText(internalJid, txt);
-      if (!r.ok) console.error("[CS/inbound] post sugestão falhou:", r.error);
+      // Guarda o id da msg postada → o "reply" da equipe casa com esta demanda (sem código).
+      if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", novaDem.id);
+      else if (!r.ok) console.error("[CS/inbound] post sugestão falhou:", r.error);
     }
   }
 
