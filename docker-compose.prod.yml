@@ -42,6 +42,8 @@ services:
       CS_PILOT_GROUP_JIDS: ${CS_PILOT_GROUP_JIDS}
       # Cliente alvo dos cards de TESTE quando o grupo do piloto não mapeia cliente real.
       CS_TEST_CLIENT_ID: ${CS_TEST_CLIENT_ID}
+      # Grupo interno onde o agente posta as sugestões e recebe "ok/nao <código>".
+      CS_INTERNAL_GROUP_JID: ${CS_INTERNAL_GROUP_JID}
       # browserless (headless chrome) p/ renderizar o PDF do relatório semanal
       BROWSERLESS_TOKEN: ${BROWSERLESS_TOKEN}
       BROWSERLESS_URL: http://chromium:3000
