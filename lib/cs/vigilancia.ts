@@ -39,6 +39,12 @@ export function isPostingDay(d = spNow()): boolean {
   return POSTING_WEEKDAYS.has(d.getDay());
 }
 
+/** Dia FIRME de postagem: seg e sex (quarta é leve — às vezes não tem / só vídeo). */
+export function isFirmPostingDay(d = spNow()): boolean {
+  const wd = d.getDay();
+  return wd === 1 || wd === 5;
+}
+
 /** Dia útil = seg–sex E não-feriado nacional. Sem API de feriado → não bloqueia (fail-open). */
 export async function isBusinessDay(d = spNow()): Promise<boolean> {
   if (!isWeekday(d)) return false;
@@ -49,4 +55,25 @@ export async function isBusinessDay(d = spNow()): Promise<boolean> {
   } catch {
     return true;
   }
+}
+
+/**
+ * Horas ÚTEIS (8h–18h, seg–sex em SP) decorridas desde `fromISO` até `now`.
+ * Usado pelos thresholds de "parado há X horas". Infinity se nulo; 0 se futuro.
+ * Passo de 30min, com teto de 30 dias (card muito antigo → trata como "muito tempo").
+ */
+export function businessHoursSince(fromISO?: string | null, now = new Date()): number {
+  if (!fromISO) return Infinity;
+  const from = new Date(fromISO);
+  if (Number.isNaN(from.getTime()) || from.getTime() >= now.getTime()) return 0;
+  if (now.getTime() - from.getTime() > 30 * 24 * 3600 * 1000) return 9999;
+  const STEP = 30 * 60 * 1000;
+  let horas = 0;
+  for (let t = from.getTime(); t < now.getTime(); t += STEP) {
+    const sp = spNow(new Date(t));
+    const wd = sp.getDay();
+    const h = sp.getHours();
+    if (wd >= 1 && wd <= 5 && h >= BUSINESS_START_HOUR && h < BUSINESS_END_HOUR) horas += 0.5;
+  }
+  return horas;
 }

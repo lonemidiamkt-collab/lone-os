@@ -4,35 +4,80 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
-import { spNow, ymd, addDays, isBusinessDay, isBusinessHour, isPostingDay } from "@/lib/cs/vigilancia";
+import {
+  spNow, ymd, addDays, isBusinessDay, isBusinessHour, isFirmPostingDay, businessHoursSince,
+} from "@/lib/cs/vigilancia";
 
 // POST /api/system/cs-vigilancia — "Vigilância de Fluxo" do Agente CS.
-// FASE 0 = MODO SECO: avalia o fluxo e REGISTRA em cs_cobrancas (dry_run=true) o que cobraria,
-// mas NÃO posta no WhatsApp. Serve pra calibrar sem incomodar a equipe. Cron sugerido: 10h30 e 15h.
-// Vigilâncias ativas nesta fase: #2 (pauta no dia) e #1 (pauta D-1). As demais entram depois.
+// FASE 0 = MODO SECO: avalia o fluxo de produção e REGISTRA em cs_cobrancas (dry_run=true) o que
+// cobraria, mas NÃO posta no WhatsApp. Cron sugerido: 10h30 e 15h (BRT). Calibrar antes da Fase 1.
+//
+// Vigia o pipeline de cada post (seg/sex firmes; quarta leve), nas etapas que o Roberto definiu:
+//   pauta pro dia → social mandou pro designer ("A fazer") → designer fez → (ou travada) →
+//   social viu e agendou no Meta (= moveu o card pra coluna "Agendado").
+// Mapeamento p/ os status reais do board: ideas/script=Fila · in_production=Produção ·
+// blocked=Travado · approval/client_approval=Aprovação(entregue) · scheduled=Agendado · published=ok.
 
-const DRY_RUN = true; // Fase 0. Só vira false (cobrança real) quando o Roberto aprovar a Fase 1.
+const DRY_RUN = true; // Fase 0. Só vira false (cobrança real no grupo) quando o Roberto aprovar.
 
-interface Candidato {
-  vigilancia: number;
-  client_id: string;
-  cliente: string;
-  pessoa: string | null;
-  chave: string;
-  motivo: string;
+// Thresholds em HORAS ÚTEIS (decisão do Roberto: manter os propostos).
+const TH_DESIGNER_PEGAR = 4; // card com demanda parado na Fila (designer não pegou)
+const TH_PRODUCAO = 8;       // card em Produção sem entregar
+const TH_SOCIAL_VER = 2;     // designer entregou e o social ainda não revisou
+const TH_AGENDAR = 3;        // social revisou e não agendou (mover pra "Agendado")
+const TH_TRAVADO = 2;        // card travado sem resolução
+
+type Area = "social" | "designer";
+interface Cobranca { vigilancia: number; area: Area; client_id: string; card_id: string | null; chave: string; motivo: string; }
+
+interface CardRow {
+  id: string; client_id: string; status: string; due_date: string | null;
+  design_request_id: string | null; designer_delivered_at: string | null;
+  social_confirmed_at: string | null; status_changed_at: string | null;
+  column_entered_at: Record<string, string> | null; blocked_reason: string | null;
 }
 
-/** Cliente ATIVO tem pelo menos 1 card "em movimento" (≠ ideias, não arquivado) pra a data dada? */
-async function temPautaEmMovimento(clientId: string, dateKey: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from("content_cards")
-    .select("id")
-    .eq("client_id", clientId)
-    .eq("due_date", dateKey)
-    .is("archived_at", null)
-    .neq("status", "ideas")
-    .limit(1);
-  return !!data && data.length > 0;
+/** Quando o card entrou no estágio atual (p/ medir "parado há X"). */
+function enteredAt(c: CardRow): string | null {
+  return (c.column_entered_at && c.column_entered_at[c.status]) || c.status_changed_at;
+}
+
+/** Avalia 1 card e devolve a cobrança da etapa travada (ou null se está fluindo). */
+function avaliarPipeline(c: CardRow, now: Date): { vigilancia: number; area: Area; motivo: string } | null {
+  const h = businessHoursSince(enteredAt(c), now);
+  switch (c.status) {
+    case "published":
+    case "scheduled":
+      return null; // agendado/publicado → fluxo completo
+    case "blocked":
+      return h >= TH_TRAVADO
+        ? { vigilancia: 3, area: "social", motivo: `card travado${c.blocked_reason ? `: ${c.blocked_reason}` : ""}` }
+        : null;
+    case "ideas":
+    case "script":
+      if (!c.design_request_id)
+        return { vigilancia: 2, area: "social", motivo: 'ainda não foi pro designer (faltou marcar "A fazer")' };
+      return h >= TH_DESIGNER_PEGAR
+        ? { vigilancia: 3, area: "designer", motivo: "aguardando o designer pegar em produção" }
+        : null;
+    case "in_production":
+      return h >= TH_PRODUCAO
+        ? { vigilancia: 3, area: "designer", motivo: "em produção há um tempo sem entregar" }
+        : null;
+    case "approval":
+    case "client_approval":
+      if (!c.social_confirmed_at) {
+        const since = businessHoursSince(c.designer_delivered_at ?? enteredAt(c), now);
+        return since >= TH_SOCIAL_VER
+          ? { vigilancia: 4, area: "social", motivo: "o designer entregou e ainda não foi revisado" }
+          : null;
+      }
+      return businessHoursSince(c.social_confirmed_at, now) >= TH_AGENDAR
+        ? { vigilancia: 5, area: "social", motivo: 'revisado — falta agendar no Meta (mover pra "Agendado")' }
+        : null;
+    default:
+      return null;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -40,70 +85,83 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
 
   const now = spNow();
-  // Fora de dia útil / horário comercial → acumula mas NÃO cobra (regra do PDF).
   if (!(await isBusinessDay(now)) || !isBusinessHour(now)) {
     return NextResponse.json({ ok: true, skip: "fora de dia útil/horário comercial (8h–18h)", dia: ymd(now), hora: now.getHours() });
   }
 
-  // Clientes ATIVOS (active != false). assigned_social = quem seria cobrado.
-  const { data: clients, error } = await supabaseAdmin
+  const hoje = ymd(now);
+  const amanhaDate = addDays(now, 1);
+  const amanha = ymd(amanhaDate);
+
+  // Clientes ativos
+  const { data: clientsData, error: cErr } = await supabaseAdmin
     .from("clients")
-    .select("id, name, assigned_social, active")
+    .select("id, name, assigned_social, assigned_designer, active")
     .or("active.is.null,active.eq.true");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const ativos = clients ?? [];
+  if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 });
+  const clients = clientsData ?? [];
+  const clientById = new Map(clients.map((c) => [c.id as string, c]));
 
-  const hojeKey = ymd(now);
-  const amanha = addDays(now, 1);
-  const amanhaKey = ymd(amanha);
-  const candidatos: Candidato[] = [];
+  // Cards near/overdue (due até amanhã+2), não-arquivados, não publicados.
+  const limite = ymd(addDays(now, 2));
+  const { data: cardsData, error: kErr } = await supabaseAdmin
+    .from("content_cards")
+    .select("id, client_id, status, due_date, design_request_id, designer_delivered_at, social_confirmed_at, status_changed_at, column_entered_at, blocked_reason")
+    .is("archived_at", null)
+    .neq("status", "published")
+    .not("due_date", "is", null)
+    .lte("due_date", limite);
+  if (kErr) return NextResponse.json({ error: kErr.message }, { status: 500 });
+  const cards = (cardsData ?? []) as CardRow[];
 
-  // ── Vigilância #2 — pauta NO DIA (só se HOJE é dia de postagem) ──
-  if (isPostingDay(now)) {
-    for (const c of ativos) {
-      if (await temPautaEmMovimento(c.id as string, hojeKey)) continue;
-      candidatos.push({
-        vigilancia: 2, client_id: c.id as string, cliente: c.name as string,
-        pessoa: (c.assigned_social as string) || null, chave: `2-${c.id}-${hojeKey}`,
-        motivo: "hoje é dia de postagem e não há pauta em movimento",
-      });
+  const cobrancas: Cobranca[] = [];
+
+  // ── A) PAUTA AUSENTE — só em dia FIRME (seg/sex). Quarta é leve (pula). ──
+  const temCardNaData = (clientId: string, dia: string) =>
+    cards.some((k) => k.client_id === clientId && k.due_date === dia);
+  for (const c of clients) {
+    if (!(c.active === null || c.active === true)) continue;
+    // #2 — hoje é dia firme e não há pauta pra hoje
+    if (isFirmPostingDay(now) && !temCardNaData(c.id as string, hoje)) {
+      cobrancas.push({ vigilancia: 2, area: "social", client_id: c.id as string, card_id: null,
+        chave: `2-${c.id}-${hoje}`, motivo: "hoje é dia de postagem e não há pauta criada" });
+    }
+    // #1 — amanhã é dia firme e nada planejado (D-1)
+    if (isFirmPostingDay(amanhaDate) && !temCardNaData(c.id as string, amanha)) {
+      cobrancas.push({ vigilancia: 1, area: "social", client_id: c.id as string, card_id: null,
+        chave: `1-${c.id}-${amanha}`, motivo: "amanhã é dia de postagem e nada está planejado" });
     }
   }
 
-  // ── Vigilância #1 — pauta D-1 (só se AMANHÃ é dia de postagem) ──
-  if (isPostingDay(amanha)) {
-    for (const c of ativos) {
-      if (await temPautaEmMovimento(c.id as string, amanhaKey)) continue;
-      candidatos.push({
-        vigilancia: 1, client_id: c.id as string, cliente: c.name as string,
-        pessoa: (c.assigned_social as string) || null, chave: `1-${c.id}-${amanhaKey}`,
-        motivo: "amanhã é dia de postagem e nada está planejado",
-      });
-    }
+  // ── B) PIPELINE TRAVADO — por card (qualquer dia, inclusive quarta). ──
+  for (const k of cards) {
+    const v = avaliarPipeline(k, now);
+    if (!v) continue;
+    cobrancas.push({ vigilancia: v.vigilancia, area: v.area, client_id: k.client_id, card_id: k.id,
+      chave: `${v.vigilancia}-${k.id}-${hoje}`, motivo: v.motivo });
   }
 
-  // Registra em cs_cobrancas (dedup pela `chave` UNIQUE → não cobra a mesma situação 2x no dia).
-  // DRY_RUN: grava com dry_run=true e NÃO posta. (Fase 1 trocará isso por csSendGroupText.)
-  for (const cand of candidatos) {
+  // Resolve quem seria cobrado (assigned_social/designer) e registra (dry-run, dedup pela chave).
+  const detalhe: Array<Record<string, unknown>> = [];
+  for (const cob of cobrancas) {
+    const cli = clientById.get(cob.client_id);
+    const nome = (cli?.name as string) || "Cliente";
+    const pessoa = cob.area === "designer" ? (cli?.assigned_designer as string) : (cli?.assigned_social as string);
     await supabaseAdmin.from("cs_cobrancas").upsert({
-      vigilancia: cand.vigilancia,
-      client_id: cand.client_id,
-      pessoa_cobrada: cand.pessoa,
-      chave: cand.chave,
-      mensagem: `[dry-run] ${cand.cliente}: ${cand.motivo}${cand.pessoa ? ` (@${cand.pessoa})` : ""}`,
+      vigilancia: cob.vigilancia, client_id: cob.client_id, card_id: cob.card_id,
+      pessoa_cobrada: pessoa || null, chave: cob.chave,
+      mensagem: `[dry-run] ${nome}: ${cob.motivo}${pessoa ? ` (@${pessoa})` : ""}`,
       dry_run: DRY_RUN,
     }, { onConflict: "chave", ignoreDuplicates: true });
+    detalhe.push({ vig: cob.vigilancia, cliente: nome, pessoa: pessoa || null, motivo: cob.motivo });
   }
 
-  console.log(`[cs-vigilancia] dry_run=${DRY_RUN} dia=${hojeKey} postagem_hoje=${isPostingDay(now)} candidatos=${candidatos.length}`);
+  console.log(`[cs-vigilancia] dry_run=${DRY_RUN} dia=${hoje} firme=${isFirmPostingDay(now)} cobrancas=${cobrancas.length}`);
   return NextResponse.json({
-    ok: true,
-    dry_run: DRY_RUN,
-    dia: hojeKey,
-    dia_postagem_hoje: isPostingDay(now),
-    amanha_postagem: isPostingDay(amanha),
-    clientes_ativos: ativos.length,
-    candidatos: candidatos.length,
-    detalhe: candidatos,
+    ok: true, dry_run: DRY_RUN, dia: hoje, dia_firme_hoje: isFirmPostingDay(now),
+    clientes_ativos: clients.length, cards_avaliados: cards.length,
+    cobrancas: cobrancas.length,
+    por_vigilancia: cobrancas.reduce((acc, c) => { acc[c.vigilancia] = (acc[c.vigilancia] || 0) + 1; return acc; }, {} as Record<number, number>),
+    detalhe: detalhe.slice(0, 30),
   });
 }
