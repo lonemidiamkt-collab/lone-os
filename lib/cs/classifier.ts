@@ -86,10 +86,11 @@ classifica. Outra etapa (humano) confirma antes de qualquer ação.
 3. NÃO invente demanda. Se não há pedido claro, classifique como "conversa".
 4. ISOLAMENTO: classifique apenas sobre o cliente indicado no contexto. Não misture outros clientes.
 5. Seja honesto na confiança (0.0 a 1.0). Na dúvida, confiança baixa — outra etapa revisa.
-6. CALIBRE PARA RECALL: é pior deixar passar um pedido do que classificar a mais. Cobrança e
-   pedido de ajuste SÃO demandas — mesmo curtos ou em forma de pergunta. Só use "conversa"
-   quando claramente NÃO há nada a fazer (saudação, papo, comentário/elogio sem pedido).
-   "NÃO invente demanda" vale para papo solto, NÃO para pedido/cobrança real.
+6. CALIBRE PARA RECALL: é pior deixar passar um pedido do que classificar a mais. Cobrança,
+   pedido de ajuste E reclamação/insatisfação sobre a Lone SÃO demandas — mesmo curtos, em
+   forma de pergunta ou sem pedido explícito. Só use "conversa" quando claramente NÃO há nada
+   a fazer (saudação, papo, elogio sem pedido). "NÃO invente demanda" vale para papo solto,
+   NÃO para pedido/cobrança/reclamação real.
 
 # Tipos (enum "tipo")
 arte_nova, ajuste_arte, cobranca_prazo, feedback_campanha, duvida, reclamacao,
@@ -102,6 +103,8 @@ elogio, agendamento, retracao, conversa.
 - cliente: nome do cliente quando o grupo tiver mais de um; senão null.
 
 # Casos-armadilha (preste MUITA atenção)
+- Insatisfação/reclamação sobre a LONE ("tô insatisfeito", "ninguém me responde", "tá uma bagunça",
+  "que serviço é esse") → reclamacao, mesmo SEM pedido específico. (Sobre OUTRO fornecedor → conversa.)
 - Pergunta/cobrança sobre algo já pedido ("cadê a arte?", "e aquilo?", "sai hoje?", "ficou pronto?")
   → cobranca_prazo, NUNCA conversa.
 - Pedido de mudança em peça existente, mesmo imperativo curto ("muda a cor", "troca a foto",
@@ -132,6 +135,8 @@ Cliente: "cadê a arte que pedi semana passada?"
 → {is_demanda:true, tipo:"cobranca_prazo", urgencia:"alta", confianca:0.85, resumo:"Cobrança de arte pendente pedida na semana passada", trecho_origem:"cadê a arte que pedi semana passada?", cliente:null}
 Cliente: "muda a cor desse post"
 → {is_demanda:true, tipo:"ajuste_arte", urgencia:"media", confianca:0.85, resumo:"Mudar a cor do post", trecho_origem:"muda a cor desse post", cliente:null}
+Cliente: "tô muito insatisfeito, ninguém me responde aqui"
+→ {is_demanda:true, tipo:"reclamacao", urgencia:"alta", confianca:0.85, resumo:"Insatisfação com a falta de resposta da Lone", trecho_origem:"tô muito insatisfeito, ninguém me responde aqui", cliente:null}
 
 # Saída
 Responda APENAS no formato JSON definido (schema). Liste todos os itens detectados
