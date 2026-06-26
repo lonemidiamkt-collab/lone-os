@@ -22,6 +22,7 @@ import {
   TrendingUp, Hash, Check, Plus, ChevronDown,
   Key, MessageCircle, Send, Eye, EyeOff, Save,
   Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle, Layers, Trash2, Copy, Archive,
+  Palette,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
@@ -1679,11 +1680,12 @@ interface KanbanByClientProps {
   onNonDelivery: (card: ContentCard) => void;
   onMoveCard: (cardId: string, toStatus: string) => void;
   onDeleteCard?: (card: ContentCard) => void;
+  onSendToDesigner: (card: ContentCard) => void;
   currentUser: string;
   role: string;
 }
 
-function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, onDeleteCard, currentUser, role }: KanbanByClientProps) {
+function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, onDeleteCard, onSendToDesigner, currentUser, role }: KanbanByClientProps) {
   const [activeClientId, setActiveClientId] = useState(clients[0]?.id ?? "");
   const [viewMode, setViewMode] = useState<"single" | "unified">("single"); // cliente único vs visão unificada (todos os clientes em colunas)
   const isReadOnly = role === "designer"; // Designer só visualiza; seletor vira etiqueta estática
@@ -1869,6 +1871,21 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                   })()}
                   {/* Art actions */}
                   <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border/60 flex-wrap">
+                    {!card.designerDeliveredAt && card.status !== "published" && card.status !== "scheduled" && (
+                      card.designRequestId ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--chart-4)]/15 text-[var(--chart-4)] flex items-center gap-0.5">
+                          <Palette size={9} /> A fazer · na fila
+                        </span>
+                      ) : !isReadOnly && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onSendToDesigner(card); }}
+                          title="Marca como 'A fazer' e envia automaticamente pro designer"
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--chart-4)]/15 text-[var(--chart-4)] hover:bg-[var(--chart-4)]/25 transition-colors flex items-center gap-0.5"
+                        >
+                          <Palette size={9} /> A fazer
+                        </button>
+                      )
+                    )}
                     {card.imageUrl && (
                       <a
                         href={card.imageUrl}
@@ -1981,6 +1998,23 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                           <CardStatusSelector status={card.status} disabled={isReadOnly} onChange={(toStatus) => onMoveCard(card.id, toStatus)} />
                         </div>
                         <p className="text-[11px] font-medium text-foreground leading-tight">{card.title}</p>
+                        {!card.designerDeliveredAt && card.status !== "published" && card.status !== "scheduled" && (
+                          <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+                            {card.designRequestId ? (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--chart-4)]/15 text-[var(--chart-4)] inline-flex items-center gap-0.5">
+                                <Palette size={9} /> A fazer · na fila
+                              </span>
+                            ) : !isReadOnly && (
+                              <button
+                                onClick={() => onSendToDesigner(card)}
+                                title="Marca como 'A fazer' e envia automaticamente pro designer"
+                                className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--chart-4)]/15 text-[var(--chart-4)] hover:bg-[var(--chart-4)]/25 transition-colors inline-flex items-center gap-0.5"
+                              >
+                                <Palette size={9} /> A fazer
+                              </button>
+                            )}
+                          </div>
+                        )}
                         <div className="flex items-center justify-between mt-1">
                           <span className="text-[10px] text-muted-foreground">{card.format}</span>
                           {card.dueDate && <span className="text-[10px] text-muted-foreground">{card.dueDate}</span>}
@@ -2051,6 +2085,7 @@ export default function SocialPage() {
   const updateSocialReport = useContentStore((s) => s.updateSocialReport);
   const initContent = useContentStore((s) => s.init);
   const refreshContent = useContentStore((s) => s.refresh);
+  const addDesignRequest = useContentStore((s) => s.addDesignRequest);
   const subContent = useContentStore((s) => s.subscribeRealtime);
 
   const onboarding = useOperationalStore((s) => s.onboarding);
@@ -2771,6 +2806,25 @@ export default function SocialPage() {
                 }, { bypassWorkflow: true });
               }}
               onDeleteCard={(card) => setCardToDelete(card)}
+              onSendToDesigner={(card) => {
+                // Etiqueta "A fazer": envia a ideia automaticamente pro designer (cria a demanda).
+                // Mesma lógica do "Solicitar Design", mas em 1 clique no card. Idempotente.
+                if (card.designRequestId || card.designerDeliveredAt) return;
+                addDesignRequest({
+                  title: `Arte: ${card.title}`,
+                  clientId: card.clientId,
+                  clientName: card.clientName,
+                  requestedBy: currentUser,
+                  priority: card.priority || "medium",
+                  status: "queued",
+                  format: card.format || "Post Feed",
+                  briefing: card.briefing || card.observations || `Criar arte para: ${card.title}`,
+                  contentCardId: card.id,
+                }).then((req) => {
+                  updateContentCard(card.id, { designRequestId: req.id });
+                }).catch(() => {});
+                pushNotification("content", "A fazer → Designer", `"${card.title}" (${card.clientName}) foi marcado como A fazer e enviado pro designer.`, card.clientId);
+              }}
               currentUser={currentUser}
               role={role}
             />

@@ -4,12 +4,13 @@ import { useState, useRef, useEffect } from "react";
 import {
   Upload, Calendar, FileText, User, Tag,
   Save, ImageIcon, Hash, AlignLeft,
-  Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Palette, Trash2, Archive,
+  Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Palette, Trash2, Archive, AtSign,
 } from "lucide-react";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
+import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import type { ContentCard } from "@/lib/types";
 import SignedImage from "@/components/shared/SignedImage";
@@ -88,6 +89,11 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const addDesignRequest = useContentStore((s) => s.addDesignRequest);
   const pushNotification = useNotificationsStore((s) => s.push);
   const { role, currentUser } = useRole();
+  const team = useTeamMembers();
+  // Quem pode ser marcado num comentário: designers e socials (quem mexe na arte).
+  const mentionable = [...team.designer, ...team.social].filter((m) => m.name && m.name !== currentUser);
+  const [mentions, setMentions] = useState<string[]>([]);
+  const toggleMention = (name: string) => setMentions((m) => m.includes(name) ? m.filter((x) => x !== name) : [...m, name]);
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [observations, setObservations] = useState(card.observations ?? "");
@@ -193,8 +199,16 @@ export default function ContentCardModal({ card, onClose }: Props) {
 
   const handleComment = () => {
     if (!commentText.trim()) return;
-    addCardComment(card.id, currentUser, role, commentText.trim());
+    const body = commentText.trim();
+    // Prefixa o comentário com @PrimeiroNome de quem foi marcado (fica visível no thread).
+    const prefix = mentions.length ? mentions.map((m) => `@${m.split(" ")[0]}`).join(" ") + " " : "";
+    addCardComment(card.id, currentUser, role, prefix + body);
+    // Notifica cada pessoa marcada pra ela ver rápido (notificação global, mas endereçada).
+    mentions.forEach((name) => {
+      pushNotification("content", `📌 ${name}, você foi marcado`, `${currentUser} te marcou em "${card.title}" (${card.clientName}): "${body.slice(0, 80)}${body.length > 80 ? "..." : ""}"`, card.clientId);
+    });
     setCommentText("");
+    setMentions([]);
     setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   };
 
@@ -524,6 +538,25 @@ export default function ContentCardModal({ card, onClose }: Props) {
                   <Send size={14} />
                 </Button>
               </div>
+              {mentionable.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap mt-2">
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><AtSign size={10} /> Marcar:</span>
+                  {mentionable.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => toggleMention(m.name)}
+                      title={`Marcar ${m.name} (${m.role})`}
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${
+                        mentions.includes(m.name)
+                          ? "bg-primary/20 text-primary border-primary/30"
+                          : "bg-muted text-muted-foreground border-border hover:text-foreground"
+                      }`}
+                    >
+                      {m.name.split(" ")[0]}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Activity feed scrollável */}
@@ -545,7 +578,13 @@ export default function ContentCardModal({ card, onClose }: Props) {
                         <span className="text-xs font-medium text-foreground">{cmt.author}</span>
                         <span className="text-[10px] text-muted-foreground">{timeAgo(cmt.createdAt)}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-wrap">{cmt.text}</p>
+                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed bg-muted/40 rounded-lg px-3 py-2 whitespace-pre-wrap">
+                        {cmt.text.split(/(@[^\s@]+)/g).map((part, i) =>
+                          part.startsWith("@")
+                            ? <span key={i} className="text-primary font-semibold">{part}</span>
+                            : part
+                        )}
+                      </p>
                     </div>
                   </div>
                 ))
