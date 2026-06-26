@@ -2086,6 +2086,7 @@ export default function SocialPage() {
   const initContent = useContentStore((s) => s.init);
   const refreshContent = useContentStore((s) => s.refresh);
   const addDesignRequest = useContentStore((s) => s.addDesignRequest);
+  const sendingDesignRef = useRef<Set<string>>(new Set()); // cards com demanda em voo (anti-duplicata)
   const subContent = useContentStore((s) => s.subscribeRealtime);
 
   const onboarding = useOperationalStore((s) => s.onboarding);
@@ -2808,8 +2809,10 @@ export default function SocialPage() {
               onDeleteCard={(card) => setCardToDelete(card)}
               onSendToDesigner={(card) => {
                 // Etiqueta "A fazer": envia a ideia automaticamente pro designer (cria a demanda).
-                // Mesma lógica do "Solicitar Design", mas em 1 clique no card. Idempotente.
-                if (card.designRequestId || card.designerDeliveredAt) return;
+                // Guard de in-flight (ref) evita demanda DUPLICADA em duplo-clique — designRequestId
+                // só fica setado depois do round-trip. Notifica conforme o resultado real.
+                if (card.designRequestId || card.designerDeliveredAt || sendingDesignRef.current.has(card.id)) return;
+                sendingDesignRef.current.add(card.id);
                 addDesignRequest({
                   title: `Arte: ${card.title}`,
                   clientId: card.clientId,
@@ -2820,10 +2823,15 @@ export default function SocialPage() {
                   format: card.format || "Post Feed",
                   briefing: card.briefing || card.observations || `Criar arte para: ${card.title}`,
                   contentCardId: card.id,
-                }).then((req) => {
-                  updateContentCard(card.id, { designRequestId: req.id });
-                }).catch(() => {});
-                pushNotification("content", "A fazer → Designer", `"${card.title}" (${card.clientName}) foi marcado como A fazer e enviado pro designer.`, card.clientId);
+                })
+                  .then((req) => {
+                    updateContentCard(card.id, { designRequestId: req.id });
+                    pushNotification("content", "A fazer → Designer", `"${card.title}" (${card.clientName}) foi marcado como A fazer e enviado pro designer.`, card.clientId);
+                  })
+                  .catch(() => {
+                    pushNotification("system", "Falha ao enviar pro designer", `Não deu pra enviar "${card.title}". Tente de novo.`, card.clientId);
+                  })
+                  .finally(() => { sendingDesignRef.current.delete(card.id); });
               }}
               currentUser={currentUser}
               role={role}

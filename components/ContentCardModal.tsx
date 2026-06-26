@@ -113,6 +113,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [uploadOk, setUploadOk] = useState(false);
   const [confirmDeleteArt, setConfirmDeleteArt] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [sendingDesign, setSendingDesign] = useState(false); // anti-duplo-clique no Solicitar Design
   const fileInputRef = useRef<HTMLInputElement>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
@@ -368,10 +369,16 @@ export default function ContentCardModal({ card, onClose }: Props) {
                     key={opt.value}
                     onClick={() => {
                       if (opt.value === status) return;
+                      const prev = status;
                       setStatus(opt.value);
-                      // Status salva automaticamente ao clicar — não precisa do "Salvar alterações"
-                      // (pedido do social). updateContentCard já faz rollback se a gravação falhar.
-                      updateContentCard(card.id, { status: opt.value, statusChangedAt: new Date().toISOString() }).catch(() => {});
+                      // Status salva automaticamente ao clicar — dispensa "Salvar alterações" (pedido
+                      // do social). Se a gravação falhar, reverte o pill (store também faz rollback) e avisa,
+                      // pra o pill não divergir do board nem reaplicar valor errado num "Salvar" depois.
+                      updateContentCard(card.id, { status: opt.value, statusChangedAt: new Date().toISOString() })
+                        .catch(() => {
+                          setStatus(prev);
+                          pushNotification("system", "Falha ao salvar status", `Não deu pra mudar o status de "${card.title}". Tente de novo.`, card.clientId);
+                        });
                     }}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                       status === opt.value
@@ -690,8 +697,11 @@ export default function ContentCardModal({ card, onClose }: Props) {
           {role !== "designer" && !card.designRequestId && !card.designerDeliveredAt && (
             <Button
               variant="outline"
+              disabled={sendingDesign}
               className="mr-auto flex items-center gap-2 text-[var(--chart-4)] border-[var(--chart-4)]/30 hover:bg-[var(--chart-4)]/10"
               onClick={() => {
+                if (sendingDesign) return;          // anti-duplo-clique: evita demanda duplicada
+                setSendingDesign(true);
                 addDesignRequest({
                   title: `Arte: ${card.title}`,
                   clientId: card.clientId,
@@ -702,14 +712,19 @@ export default function ContentCardModal({ card, onClose }: Props) {
                   format: card.format || "Post Feed",
                   briefing: card.briefing || card.observations || `Criar arte para: ${card.title}`,
                   contentCardId: card.id, // vincula a demanda ao card já na criação (link à prova de falha)
-                }).then((req) => {
-                  updateContentCard(card.id, { designRequestId: req.id });
-                });
-                pushNotification("content", "Design solicitado", `Pedido de arte para "${card.title}" enviado ao designer.`, card.clientId);
+                })
+                  .then((req) => {
+                    updateContentCard(card.id, { designRequestId: req.id });
+                    pushNotification("content", "Design solicitado", `Pedido de arte para "${card.title}" enviado ao designer.`, card.clientId);
+                  })
+                  .catch(() => {
+                    pushNotification("system", "Falha ao solicitar design", `Não deu pra enviar "${card.title}" pro designer. Tente de novo.`, card.clientId);
+                  })
+                  .finally(() => setSendingDesign(false));
               }}
             >
               <Palette size={14} />
-              Solicitar Design
+              {sendingDesign ? "Enviando..." : "Solicitar Design"}
             </Button>
           )}
           {/* Designer sees "Enviar Arte" instead */}
