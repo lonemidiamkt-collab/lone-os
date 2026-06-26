@@ -78,6 +78,8 @@ export interface Client {
   lastKanbanActivity?: string;
   campaignBriefing?: string;
   fixedBriefing?: string;
+  /** Agente CS ligado pra este cliente? false = pausa total (captação + vigilância). */
+  agenteAtivo?: boolean;
   // Meta Ads
   metaAdAccountId?: string;
   metaAdAccountName?: string;

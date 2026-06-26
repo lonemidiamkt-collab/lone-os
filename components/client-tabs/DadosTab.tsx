@@ -772,6 +772,28 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             {emailStatus === "error" && <span className="text-xs text-destructive flex items-center gap-1"><AlertTriangle size={12} /> Erro no envio</span>}
           </div>
           <p className="text-[10px] text-muted-foreground">Envia o e-mail de boas-vindas para {form.emailCorporativo || form.phone || "(sem e-mail)"}</p>
+
+          {/* Toggle: Agente CS ligado/pausado p/ este cliente */}
+          {(() => {
+            const agenteAtivo = client.agenteAtivo !== false;
+            return (
+              <div className="flex items-center justify-between pt-3 border-t border-border/60">
+                <div>
+                  <p className="text-xs font-medium text-foreground">🤖 Agente CS</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {agenteAtivo ? "Ativo — capta demanda e vigia o fluxo deste cliente" : "Pausado — o agente ignora este cliente"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => updateClientData(client.id, { agenteAtivo: !agenteAtivo })}
+                  title={agenteAtivo ? "Pausar o agente p/ este cliente" : "Reativar o agente"}
+                  className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${agenteAtivo ? "bg-primary" : "bg-muted"}`}
+                >
+                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${agenteAtivo ? "left-[22px]" : "left-0.5"}`} />
+                </button>
+              </div>
+            );
+          })()}
         </div>
       )}
 

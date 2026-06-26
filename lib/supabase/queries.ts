@@ -99,6 +99,7 @@ function snakeToClient(row: Record<string, unknown>): Client {
     lastKanbanActivity: (row.last_kanban_activity as string) ?? undefined,
     campaignBriefing: (row.campaign_briefing as string) ?? undefined,
     fixedBriefing: (row.fixed_briefing as string) ?? undefined,
+    agenteAtivo: (row.agente_ativo as boolean) ?? true,
     metaAdAccountId: (row.meta_ad_account_id as string) ?? undefined,
     metaAdAccountName: (row.meta_ad_account_name as string) ?? undefined,
     cpfCnpj: (row.cpf_cnpj as string) ?? undefined,

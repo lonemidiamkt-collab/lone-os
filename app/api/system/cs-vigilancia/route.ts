@@ -41,11 +41,29 @@ interface CardRow {
   design_request_status?: string | null; // status REAL da demanda (queued/in_progress/done)
 }
 
-/** Mensagem amigável pro grupo interno: [o que vi] + [pergunta] + [oferta de ajuda]. 1 emoji máx. */
-function mensagemAmigavel(vig: number, area: Area, cliente: string, pessoa: string, motivo: string): string {
-  const oi = `Oi ${pessoa}! `;
+/** Mensagem amigável: [o que vi] + [pergunta] + [oferta de ajuda]. 1 emoji máx. T3: tom escala
+ *  conforme `nivel` (1ª/2ª/3ª+ vez que a MESMA situação é cobrada) — sempre educado. */
+function mensagemAmigavel(vig: number, area: Area, cliente: string, pessoa: string, motivo: string, nivel = 1): string {
+  const travado = vig === 3 && /travado/i.test(motivo);
+  if (nivel >= 3) { // 3ª+ vez: firme (educado), oferece ajuda direta
+    const oi = `${pessoa}, `;
+    if (travado) return `${oi}o card do *${cliente}* segue travado faz uns dias. Tem algum impedimento? Me fala que a gente resolve junto.`;
+    if (vig === 3) return `${oi}o card do *${cliente}* continua parado esperando produção. Tá rolando alguma coisa? Posso ajudar com algo.`;
+    if (vig === 4) return `${oi}a arte do *${cliente}* segue entregue e sem revisão. Consegue dar uma olhada hoje? Se travou em algo, me avisa.`;
+    if (vig === 5) return `${oi}a arte do *${cliente}* ainda não foi agendada — falta só esse passo. Precisa de ajuda?`;
+    return `${oi}o *${cliente}* segue pendente: ${motivo}. Posso ajudar com algo?`;
+  }
+  if (nivel === 2) { // 2ª vez: lembrete reconhecendo que já passou aqui
+    const oi = `${pessoa}, só passando de novo aqui — `;
+    if (travado) return `${oi}o card do *${cliente}* ainda tá travado. Quando puder, dá uma olhada.`;
+    if (vig === 3) return `${oi}o card do *${cliente}* segue esperando produção. Tá tudo certo com o briefing?`;
+    if (vig === 4) return `${oi}a arte do *${cliente}* ainda não foi revisada. Quando der, confirma se tá ok.`;
+    if (vig === 5) return `${oi}a arte do *${cliente}* ainda falta agendar no Meta.`;
+    return `${oi}o *${cliente}*: ${motivo}.`;
+  }
+  const oi = `Oi ${pessoa}! `; // 1ª vez
   if (vig === 2) return `${oi}a pauta do *${cliente}* ainda não foi pro designer. Quando puder, marca *"A fazer"* pra ela seguir — qualquer dúvida, tô aqui.`;
-  if (vig === 3 && /travado/i.test(motivo)) return `${oi}o card do *${cliente}* tá travado${motivo.replace(/^card travado/i, "")}. Consegue dar uma destravada? Se precisar de algo, me chama.`;
+  if (travado) return `${oi}o card do *${cliente}* tá travado${motivo.replace(/^card travado/i, "")}. Consegue dar uma destravada? Se precisar de algo, me chama.`;
   if (vig === 3) return `${oi}tem um card do *${cliente}* esperando produção. Tá tudo certo com o briefing? Se faltar referência, é só falar. 🎨`;
   if (vig === 4) return `${oi}o designer entregou a arte do *${cliente}*. Quando puder, dá uma olhada e confirma se tá ok pra seguir.`;
   if (vig === 5) return `${oi}a arte do *${cliente}* já tá aprovada internamente — falta agendar no Meta (mover pra *Agendado*). Consegue dar esse último passo?`;
@@ -178,8 +196,15 @@ export async function POST(req: NextRequest) {
     const card = cob.card_id ? cardById.get(cob.card_id) : null;
     const recente = card ? (spDateKeyOf(card.created_at) ?? "") >= ontem : false;
     const live = VIGILANCIA_LIVE && !!cob.card_id && recente && !!pessoa && !!internalJid;
+    let nivel = 1;
+    if (live && cob.card_id) {
+      // T3: quantas vezes essa MESMA situação (card+vigilância) já foi cobrada antes → escala o tom.
+      const { count } = await supabaseAdmin.from("cs_cobrancas").select("id", { count: "exact", head: true })
+        .eq("card_id", cob.card_id).eq("vigilancia", cob.vigilancia);
+      nivel = (count ?? 0) + 1;
+    }
     const msg = live
-      ? mensagemAmigavel(cob.vigilancia, cob.area, nome, pessoa!, cob.motivo)
+      ? mensagemAmigavel(cob.vigilancia, cob.area, nome, pessoa!, cob.motivo, nivel)
       : `[dry-run] ${nome}: ${cob.motivo}${pessoa ? ` (@${pessoa})` : ""}`;
     const { error: insErr } = await supabaseAdmin.from("cs_cobrancas").insert({
       vigilancia: cob.vigilancia, client_id: cob.client_id, card_id: cob.card_id,

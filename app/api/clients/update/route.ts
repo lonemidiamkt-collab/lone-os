@@ -24,7 +24,7 @@ const FIELD_MAP: Record<string, string> = {
   nomeFantasia: "nome_fantasia", nicho: "nicho",
   clientFinancePhone: "client_finance_phone", clientPixKey: "client_pix_key",
   cpfCnpj: "cpf_cnpj", birthDate: "birth_date", phone: "phone", email: "email",
-  draftStatus: "draft_status",
+  draftStatus: "draft_status", agenteAtivo: "agente_ativo",
 };
 
 const ClientUpdateSchema = z.object({
@@ -66,6 +66,7 @@ const ClientUpdateSchema = z.object({
   phone: z.string().max(32).optional(),
   email: z.string().email().max(256).optional(),
   draftStatus: z.string().max(64).optional(),
+  agenteAtivo: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
