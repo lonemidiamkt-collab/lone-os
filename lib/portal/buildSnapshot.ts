@@ -7,6 +7,7 @@ import {
   getDemographicBreakdown,
 } from "@/lib/meta/api";
 import { countMessagesFromActions } from "@/lib/meta/messages";
+import { fetchAccountReach } from "@/lib/meta/insights-server";
 import { toBRTDateStr } from "@/lib/meta/timezone";
 import type { PeriodKind, SnapshotData, CreativeItem, DemographicRow } from "./types";
 
@@ -191,17 +192,23 @@ export async function buildSnapshot(params: {
   }
 
   // ── Fetch insights em paralelo (período atual + anterior) ─────────────────
-  const [currentInsights, prevInsights, adInsights, demographics] = await Promise.allSettled([
+  const [currentInsights, prevInsights, adInsights, demographics, curReachR, prevReachR] = await Promise.allSettled([
     getInsightsByDateRange(metaAccountId, metaToken, period.start, period.end),
     getInsightsByDateRange(metaAccountId, metaToken, period.previous_start, period.previous_end),
     getTopAdInsights(metaAccountId, metaToken, period.start, period.end, 10),
     getDemographicBreakdown(metaAccountId, metaToken, period.start, period.end),
+    // Alcance DEDUPLICADO no nível da conta (Meta dedup numa chamada só). Somar o reach diário
+    // super-conta (mesma pessoa atingida em 2 dias = 2). Usa a janela exata do período.
+    fetchAccountReach(metaToken, metaAccountId, 7, period.start, period.end),
+    fetchAccountReach(metaToken, metaAccountId, 7, period.previous_start, period.previous_end),
   ]);
 
   const cur = currentInsights.status === "fulfilled" ? currentInsights.value : [];
   const prev = prevInsights.status === "fulfilled" ? prevInsights.value : [];
   const ads = adInsights.status === "fulfilled" ? adInsights.value : [];
   const demo = demographics.status === "fulfilled" ? demographics.value : [];
+  const curReachDedup  = curReachR.status === "fulfilled" ? curReachR.value : null;
+  const prevReachDedup = prevReachR.status === "fulfilled" ? prevReachR.value : null;
 
   // ── KPIs período atual ────────────────────────────────────────────────────
   const sumNum = (rows: typeof cur, field: keyof typeof cur[0]) =>
@@ -209,12 +216,13 @@ export async function buildSnapshot(params: {
 
   const curMessages = cur.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
   const curSpend    = sumNum(cur, "spend");
-  const curReach    = sumNum(cur, "reach");
+  // Alcance: usa o dedup da conta; só cai na soma diária (super-conta) se a API falhar.
+  const curReach    = curReachDedup ?? sumNum(cur, "reach");
   const curCpa: number | null  = curMessages > 0 ? curSpend / curMessages : null;
 
   const prevMessages = prev.reduce((acc, r) => acc + countMessagesFromActions(r.actions), 0);
   const prevSpend    = sumNum(prev, "spend");
-  const prevReach    = sumNum(prev, "reach");
+  const prevReach    = prevReachDedup ?? sumNum(prev, "reach");
   const prevCpa: number | null = prevMessages > 0 ? prevSpend / prevMessages : null;
 
   // ── Chart (série diária) ──────────────────────────────────────────────────
