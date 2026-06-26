@@ -10,7 +10,12 @@ import { classifyBlock, type ClassifierContext } from "@/lib/cs/classifier";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { tipoToArea, resolveResponsavel } from "@/lib/cs/routing";
 import { gerarBriefing, formatBriefing } from "@/lib/cs/briefing";
+import { verificarDemanda, A2_TRUST_FROM } from "@/lib/cs/verifier";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
+
+// Janela de coalescência (debounce): mensagens do mesmo autor+grupo dentro desta janela
+// enriquecem a demanda pendente em vez de criar/postar uma nova (evita spam de rajada).
+const COALESCE_WINDOW_S = 90;
 
 // Webhook INBOUND do Agente CS — `messages.upsert` da Evolution (monitor[IA]). Suggest-only:
 // A0 filtra → A1 classifica → A3 redige o briefing (regras do cliente) → posta a sugestão no
@@ -43,6 +48,14 @@ function parseDecision(text: string): { acao: "confirmar" | "descartar"; codigo:
   if (!m) return null;
   const acao = /^(ok|sim|confirm)/i.test(m[1]) ? "confirmar" : "descartar";
   return { acao, codigo: m[2].toLowerCase() };
+}
+
+// "ajustar <cód> <o que mudar>" — a equipe refina o briefing antes de criar o card.
+// A instrução é anexada VERBATIM ao briefing (não re-gera via IA → preserva o pedido humano).
+function parseAjuste(text: string): { codigo: string; instrucao: string } | null {
+  const m = text.trim().match(/^(ajustar|ajusta|ajuste)\s+([a-z0-9]{3,8})\s+([\s\S]+)$/i);
+  if (!m) return null;
+  return { codigo: m[2].toLowerCase(), instrucao: m[3].trim() };
 }
 
 async function criarCard(opts: {
@@ -119,9 +132,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, decision: "confirmada", cardId });
   }
 
+  // ─── Ajuste humano (grupo interno): "ajustar <cod> <texto>" enriquece o briefing e re-posta ───
+  const ajuste = parseAjuste(msg.text);
+  if (ajuste && msg.groupJid === internalGroupJid()) {
+    const { data: d } = await supabaseAdmin
+      .from("cs_demandas").select("*").eq("codigo", ajuste.codigo).eq("status", "pendente").maybeSingle();
+    if (!d) {
+      await csSendGroupText(msg.groupJid, `❓ Código *${ajuste.codigo}* não encontrado (ou já decidido).`);
+      return NextResponse.json({ ok: true, ajuste: "not_found" });
+    }
+    const quem = msg.authorName || msg.authorJid;
+    const novoBriefing = `${(d.briefing as string) || (d.message_text as string)}\n\n---\n✏️ Ajuste (${quem}): ${ajuste.instrucao}`;
+    await supabaseAdmin.from("cs_demandas").update({ briefing: novoBriefing }).eq("id", d.id);
+    await csSendGroupText(msg.groupJid,
+      `✏️ Anotei o ajuste na *${ajuste.codigo}*:\n\n${novoBriefing}\n\nResponda *ok ${ajuste.codigo}* pra criar o card já com o ajuste.`);
+    console.log(`[CS/inbound] demanda ${ajuste.codigo} ajustada por ${quem}`);
+    return NextResponse.json({ ok: true, ajuste: "ok", codigo: ajuste.codigo });
+  }
+
   // ─── Mensagem de cliente: A0 → A1 → A3 → sugere ───
   if (isLoneTeam(msg.authorJid, teamJids())) return NextResponse.json({ ok: true, skip: "autor = equipe Lone" });
   if (isTrivial(msg.text)) return NextResponse.json({ ok: true, skip: "trivial" });
+
+  // Dedup: a Evolution reenvia `messages.upsert`. Se este message_id já gerou demanda, ignora.
+  if (msg.messageId) {
+    const { data: jaProcessada } = await supabaseAdmin
+      .from("cs_demandas").select("id").eq("message_id", msg.messageId).limit(1).maybeSingle();
+    if (jaProcessada) return NextResponse.json({ ok: true, skip: "message_id já processado (dedup)" });
+  }
 
   let { data: clients } = await supabaseAdmin.from("clients").select(CLIENT_COLS).eq("whatsapp_group_jid", msg.groupJid);
   const isTestGroup = (!clients || clients.length === 0) && allow.includes(msg.groupJid);
@@ -139,6 +177,24 @@ export async function POST(req: NextRequest) {
   const c = clients[0];
   const clienteNome = nomeOf(c);
   const clienteBriefing = (c.campaign_briefing as string) || (c.fixed_briefing as string) || undefined;
+
+  // ─── Debounce (coalescência): rajada do mesmo autor+grupo numa janela curta enriquece a
+  // demanda pendente em vez de criar/postar outra — evita 1 sugestão por mensagem da rajada.
+  // A mensagem nova é anexada ao texto E ao briefing, então o card final terá o contexto todo. ───
+  const autor = msg.authorName || msg.authorJid;
+  const desde = new Date(Date.now() - COALESCE_WINDOW_S * 1000).toISOString();
+  const { data: pendente } = await supabaseAdmin
+    .from("cs_demandas").select("id, codigo, message_text, briefing")
+    .eq("group_jid", msg.groupJid).eq("author", autor).eq("status", "pendente")
+    .gte("created_at", desde)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (pendente) {
+    const combinado = `${(pendente.message_text as string) || ""}\n${msg.text}`.trim();
+    const novoBriefing = `${(pendente.briefing as string) || ""}\n\n+ (cliente complementou): ${msg.text}`.trim();
+    await supabaseAdmin.from("cs_demandas").update({ message_text: combinado, briefing: novoBriefing }).eq("id", pendente.id);
+    console.log(`[CS/inbound] coalesce → demanda ${pendente.codigo} (+"${msg.text.slice(0, 40)}")`);
+    return NextResponse.json({ ok: true, coalesced: pendente.codigo as string });
+  }
 
   if (!isOpenAIConfigured()) {
     return NextResponse.json({ ok: true, classified: false, reason: "A1 desligado (sem key)", cliente: clienteNome });
@@ -161,6 +217,18 @@ export async function POST(req: NextRequest) {
   const internalJid = internalGroupJid();
   const sugeridas: string[] = [];
   for (const it of res.data.itens.filter((i) => i.is_demanda && i.confianca >= 0.6)) {
+    // A2 — verificador cético só nos AMBÍGUOS (confiança < A2_TRUST_FROM). Refuta falso-positivo
+    // antes de incomodar a equipe. Fail-open: erro de API no A2 não bloqueia o pipeline.
+    if (it.confianca < A2_TRUST_FROM) {
+      const a2 = await verificarDemanda({
+        clienteNome, briefing: clienteBriefing, tipo: it.tipo as CsDemandType,
+        resumo: it.resumo, trechoOrigem: it.trecho_origem, mensagemOriginal: msg.text,
+      });
+      if (a2.ok && a2.data && !a2.data.is_demanda_real) {
+        console.log(`[CS/inbound] A2 refutou "${it.resumo}" (A1=${it.confianca}): ${a2.data.motivo}`);
+        continue;
+      }
+    }
     const area = tipoToArea(it.tipo as CsDemandType);
     const responsavel = resolveResponsavel(area, {
       assigned_social: c.assigned_social as string, assigned_designer: c.assigned_designer as string, assigned_traffic: c.assigned_traffic as string,
@@ -189,7 +257,7 @@ export async function POST(req: NextRequest) {
         `${responsavel}, a *${clienteNome}* pediu: ${it.resumo}.\n` +
         `Montei o briefing seguindo as regras do cliente — *mando pras demandas (crio o card) ou você envia?*\n\n` +
         `${briefingTxt}\n\n` +
-        `Responda: *ok ${codigo}* (criar card) · *nao ${codigo}* (você cuida)`;
+        `Responda: *ok ${codigo}* (criar card) · *ajustar ${codigo} <o que mudar>* · *nao ${codigo}* (você cuida)`;
       const r = await csSendGroupText(internalJid, txt);
       if (!r.ok) console.error("[CS/inbound] post sugestão falhou:", r.error);
     }
