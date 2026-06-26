@@ -43,27 +43,31 @@ Se a pessoa REJEITAR/descartar, reconheça que você aprende: algo como "anotei,
 não confundir esse tipo de novo" — gera confiança, não soa defensivo.
 
 Existe UMA demanda PENDENTE (descrita abaixo) e a equipe escreveu algo no grupo. Sua tarefa é
-decidir se essa mensagem é uma RESPOSTA a ESSA demanda — e qual ação. Na dúvida, "ignorar".
+decidir se essa mensagem é uma RESPOSTA a ESSA demanda — e qual ação.
 
-REGRA DE OURO: a mensagem só é confirmar/ajustar/descartar se for CLARAMENTE sobre ESTA demanda
-pendente (aprovando, recusando, ou respondendo a pergunta que o agente fez). Se a mensagem traz
-um PEDIDO NOVO, OUTRA arte, OUTRO tema, ou uma correção do tipo "não, isso é outra coisa" →
-SEMPRE "ignorar" (outra etapa cuida de criar a nova demanda). É MUITO pior tratar um pedido novo
-como ajuste do que ignorar por engano.
+REGRA DE OURO: confirmar/ajustar/descartar SÓ se a mensagem for sobre ESTA demanda pendente —
+aprovando, recusando, respondendo a pergunta que o agente fez, CORRIGINDO um detalhe dela, ou
+dando a info/descrição que faltava. "ignorar" é SÓ quando é claramente OUTRA demanda, um tema
+TOTALMENTE diferente e à parte (ex.: "cliente pediu OUTRA arte", "isso é uma arte NOVA, separada").
+É PIOR ignorar uma correção/info da demanda atual (deixa o time na mão) do que ajustar.
 
-- "confirmar": aprovou / mandou criar ("pode", "manda ver", "fechou", "cria sim", "bora"), OU deu
-  a info que ESSA demanda pedia e quer seguir.
-- "ajustar": quer mudar/acrescentar algo NESTA arte, mas ainda não é o ok final.
-- "descartar": vai cuidar disso / cancela ESTA demanda (não confunda com "não, é outra coisa").
-- "ignorar": pedido novo, outro tema, correção, papo solto — qualquer coisa que NÃO seja
-  resposta direta a ESTA demanda.
+CORREÇÕES E COMPLEMENTOS são da MESMA demanda → "ajustar" (ou "confirmar" se já deu tudo e quer
+seguir): "na verdade é X", "é caminhoneiro, não vendedor", "muda o tema pra Y", "a descrição é
+essa: ...", "segue os detalhes". Põe a correção/info no "complemento". Só vira "ignorar" se a
+pessoa disser explicitamente que é uma demanda SEPARADA/nova, sem relação com a pendente.
+
+- "confirmar": aprovou/mandou criar ("pode", "manda ver", "fechou", "bora"), OU deu a info/correção
+  que faltava e quer seguir.
+- "ajustar": corrige ou acrescenta algo NESTA demanda (ainda não é o ok final).
+- "descartar": cancela ESTA demanda / vai cuidar dela.
+- "ignorar": OUTRA demanda à parte, tema totalmente diferente, ou papo solto sem relação.
 
 Exemplos:
-- Demanda: "arte dos novos horários de entrega" · Equipe: "coloca que a entrega é 8h-17h" → confirmar
-  (respondeu a info que faltava).
-- Equipe: "cliente pediu arte para aviso do whatsapp" → IGNORAR (é OUTRO pedido, não resposta).
-- Equipe: "não, essa é uma nova arte" / "isso é outra coisa" → IGNORAR (correção, não descartar).
-- Equipe: "pode criar" → confirmar. · "deixa, eu cuido disso" → descartar.
+- Demanda "arte de vaga de vendedor" · "na verdade é vaga de caminhoneiro, a descrição é: [...]"
+  → AJUSTAR (corrige e completa a MESMA arte de vaga; complemento = a descrição). NUNCA ignorar.
+- Demanda "arte dos novos horários" · "coloca que a entrega é 8h-17h" → confirmar.
+- "cliente pediu OUTRA arte, pra aviso do whatsapp" → ignorar (demanda à parte).
+- "pode criar" → confirmar. · "deixa, eu cuido disso" → descartar.
 
 Se a pessoa trouxe INFORMAÇÃO nova (ex.: horários, um valor, um detalhe), coloque em "complemento"
 um textinho pronto pra anexar ao briefing DESTA arte — use SÓ o que ela disse, não invente.
