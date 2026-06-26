@@ -246,13 +246,14 @@ export async function POST(req: NextRequest) {
         }
         if (i.acao === "confirmar") {
           const clientId = (alvo.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
+          const tituloFinal = (i.titulo as string) || (alvo.resumo as string) || (alvo.message_text as string);
           let cardId: string | null = null;
           if (clientId) cardId = await criarCard({
             clientId, clienteNome: (alvo.cliente_nome as string) || "Cliente", responsavel: alvo.responsavel as string | null,
-            titulo: (alvo.resumo as string) || (alvo.message_text as string), urgencia: alvo.urgencia as string,
+            titulo: tituloFinal, urgencia: alvo.urgencia as string,
             briefing: briefingFinal,
           });
-          await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: quem }).eq("id", alvo.id);
+          await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, resumo: tituloFinal, decided_at: new Date().toISOString(), decided_by: quem }).eq("id", alvo.id);
           await csSendGroupText(msg.groupJid, i.resposta, sug);
           console.log(`[CS/inbound] interp ${alvo.codigo} → confirmada, card ${cardId}`);
           return NextResponse.json({ ok: true, interp: "confirmada", cardId });

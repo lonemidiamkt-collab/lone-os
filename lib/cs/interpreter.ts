@@ -19,6 +19,7 @@ export interface InterpInput {
 export interface InterpOutput {
   acao: "confirmar" | "descartar" | "ajustar" | "ignorar";
   complemento: string | null;  // info/ajuste pra anexar ao briefing DESTA demanda (só o que a pessoa disse)
+  titulo: string | null;       // título NOVO se a correção mudou o assunto da arte (ou null se não mudou)
   aprendizado: string | null;  // fato DURÁVEL do cliente pra lembrar sempre (ou null se é one-off)
   resposta: string;            // resposta curta e calorosa pro grupo, na voz da Lone
 }
@@ -26,10 +27,11 @@ export interface InterpOutput {
 const INTERP_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  required: ["acao", "complemento", "aprendizado", "resposta"],
+  required: ["acao", "complemento", "titulo", "aprendizado", "resposta"],
   properties: {
     acao: { type: "string", enum: ["confirmar", "descartar", "ajustar", "ignorar"] },
     complemento: { type: ["string", "null"] },
+    titulo: { type: ["string", "null"] },
     aprendizado: { type: ["string", "null"] },
     resposta: { type: "string" },
   },
@@ -56,21 +58,33 @@ seguir): "na verdade é X", "é caminhoneiro, não vendedor", "muda o tema pra Y
 essa: ...", "segue os detalhes". Põe a correção/info no "complemento". Só vira "ignorar" se a
 pessoa disser explicitamente que é uma demanda SEPARADA/nova, sem relação com a pendente.
 
-- "confirmar": aprovou/mandou criar ("pode", "manda ver", "fechou", "bora"), OU deu a info/correção
-  que faltava e quer seguir.
-- "ajustar": corrige ou acrescenta algo NESTA demanda (ainda não é o ok final).
+- "confirmar" (= CRIA o card no sistema): aprovou/mandou criar ("pode", "manda ver", "fechou",
+  "bora"); OU deu a INFO/descrição/correção que faltava (dar a info já significa "quer que isso vire
+  arte" → CRIE o card); OU perguntou se já foi feito ("já mandou pra plataforma?", "criou?", "tá
+  lá?") com a demanda ainda pendente (ele espera que esteja pronto → CRIE agora). Entre confirmar e
+  ajustar quando a info já está completa: SEMPRE confirmar.
+- "ajustar": SÓ quando a pessoa quer mexer em algo mas explicitamente AINDA NÃO quer finalizar
+  ("anota isso mas espera", "depois confirmo o resto"). A resposta DEVE perguntar se pode criar o card.
 - "descartar": cancela ESTA demanda / vai cuidar dela.
 - "ignorar": OUTRA demanda à parte, tema totalmente diferente, ou papo solto sem relação.
 
+Em "confirmar", deixe CLARO na resposta que o card foi criado (ex.: "Pronto, criei o card da vaga
+de caminhoneiro! 🚀" ou "Show, mandei pro sistema com a descrição.").
+
 Exemplos:
-- Demanda "arte de vaga de vendedor" · "na verdade é vaga de caminhoneiro, a descrição é: [...]"
-  → AJUSTAR (corrige e completa a MESMA arte de vaga; complemento = a descrição). NUNCA ignorar.
+- Demanda "arte de vaga" · "na verdade é vaga de caminhoneiro, a descrição é: [...]" → CONFIRMAR
+  (a info está completa → cria o card; complemento = a descrição). NÃO ajustar nem ignorar.
 - Demanda "arte dos novos horários" · "coloca que a entrega é 8h-17h" → confirmar.
+- "já mandou pra plataforma?" / "criou o card?" (demanda pendente) → confirmar (cria e avisa que mandou).
 - "cliente pediu OUTRA arte, pra aviso do whatsapp" → ignorar (demanda à parte).
 - "pode criar" → confirmar. · "deixa, eu cuido disso" → descartar.
 
 Se a pessoa trouxe INFORMAÇÃO nova (ex.: horários, um valor, um detalhe), coloque em "complemento"
 um textinho pronto pra anexar ao briefing DESTA arte — use SÓ o que ela disse, não invente.
+
+"titulo": se a correção MUDOU o assunto da arte (ex.: era "vaga de vendedor" e na verdade é
+"vaga de caminhoneiro"), escreva o título novo e curto aqui (ex.: "Arte para vaga de caminhoneiro").
+Se o assunto não mudou, null.
 
 "aprendizado": se a info for um FATO DURÁVEL do cliente (que vale pra SEMPRE, não só pra esta arte
 — ex.: "horário de entrega: 8h às 17h", "agendamento pelo app deles", "logo sempre no canto
