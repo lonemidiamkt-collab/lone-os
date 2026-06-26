@@ -261,12 +261,12 @@ export async function POST(req: NextRequest) {
     sugeridas.push(`${it.tipo}/${it.urgencia}[${codigo}→${responsavel}]`);
 
     if (internalJid) {
-      const lead = precisaConfirmar
-        ? `${responsavel}, a *${clienteNome}* pediu: ${it.resumo} — mas o pedido tá meio vago. Antes de produzir, vale alinhar uns pontos com o cliente:`
-        : `${responsavel}, a *${clienteNome}* pediu: ${it.resumo}. Montei o briefing — *crio o card pra você ou prefere alinhar antes?*`;
-      const txt =
-        `${lead}\n\n${briefingTxt}\n\n` +
-        `Responda: *ok ${codigo}* (criar card) · *ajustar ${codigo} <o que mudar>* · *nao ${codigo}* (você cuida)`;
+      // Mensagem do WhatsApp = CURTA e humana (o briefing completo vai pro card no "ok").
+      const a3d = a3.ok ? a3.data : null;
+      const acao = `*ok ${codigo}* · *ajustar ${codigo} <o que mudar>* · *nao ${codigo}* (você cuida)`;
+      const txt = precisaConfirmar
+        ? `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}* — mas o pedido tá meio vago. Antes de produzir, confirma com eles:\n${a3d?.observacao ?? ""}\n\nQuer que eu já abra o card pra acompanhar? ${acao}`
+        : `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}*.\n\n${a3d ? a3d.briefing.trim() : `Mensagem: "${msg.text}"`}${a3d ? `\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : ""}\n\nCrio o card? ${acao}`;
       const r = await csSendGroupText(internalJid, txt);
       if (!r.ok) console.error("[CS/inbound] post sugestão falhou:", r.error);
     }
