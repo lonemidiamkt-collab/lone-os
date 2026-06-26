@@ -23,7 +23,7 @@ const COALESCE_WINDOW_S = 90;
 // grupo interno NOMEANDO o responsável (assigned_*). Card só nasce no "ok <código>".
 
 const CLIENT_COLS =
-  "id, name, nome_fantasia, nicho, campaign_briefing, fixed_briefing, assigned_social, assigned_designer, assigned_traffic";
+  "id, name, nome_fantasia, nicho, campaign_briefing, fixed_briefing, assigned_social, assigned_designer, assigned_traffic, agente_ativo";
 
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CS_INBOUND_SECRET;
@@ -43,6 +43,25 @@ const PRIO: Record<string, string> = { alta: "high", media: "medium", baixa: "lo
 type ClientRow = Record<string, unknown>;
 const nomeOf = (c?: ClientRow | null) =>
   ((c?.nome_fantasia as string) || (c?.name as string) || "Cliente");
+
+// T7: variações pra confirmação/descarte não parecerem script. T9: descarte admite aprendizado.
+const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
+function ackCriado(resumo: string, resp?: string | null): string {
+  return pick([
+    `Fechou! Criei o card *${resumo}*${resp ? ` pro ${resp}` : ""}.`,
+    `Show, *${resumo}* já tá no Kanban${resp ? ` com o ${resp}` : ""}.`,
+    `Combinado — mandei *${resumo}* pra produção.`,
+    `Beleza, *${resumo}* criado${resp ? ` pro ${resp}` : ""}. Tamo junto.`,
+    `Pronto, subi o card *${resumo}*.`,
+  ]);
+}
+function ackDescartado(resumo: string): string {
+  return pick([
+    `Beleza, tirei *${resumo}* da fila — você cuida então. Anotei pra não confundir esse tipo de novo.`,
+    `Tranquilo, deixo *${resumo}* de fora. Vou ficar esperto pra não te chamar à toa.`,
+    `Fechou, descartei *${resumo}*. Valeu o toque — assim eu aprendo.`,
+  ]);
+}
 
 // Sem código nas mensagens: a equipe RESPONDE (reply) a sugestão com "ok"/"não". Código vira
 // opcional só por legado/hábito.
@@ -142,7 +161,7 @@ export async function POST(req: NextRequest) {
     const sug = (d.msg_id_sugestao as string) || undefined; // threading: responde a sugestão
     if (decision.acao === "descartar") {
       await supabaseAdmin.from("cs_demandas").update({ status: "descartada", decided_at: new Date().toISOString(), decided_by: decidedBy }).eq("id", d.id);
-      await csSendGroupText(msg.groupJid, `❌ Beleza, descartei *${d.resumo}* — você cuida então. 👍`, sug);
+      await csSendGroupText(msg.groupJid, ackDescartado(d.resumo as string), sug);
       return NextResponse.json({ ok: true, decision: "descartada" });
     }
     const clientId = (d.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
@@ -159,8 +178,8 @@ export async function POST(req: NextRequest) {
       status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: decidedBy,
     }).eq("id", d.id);
     await csSendGroupText(msg.groupJid, cardId
-      ? `✅ Pronto! Criei o card *${d.resumo}* nas demandas${d.responsavel ? ` pra ${d.responsavel}` : ""}.`
-      : `⚠️ Falha ao criar o card de *${d.resumo}*.`, sug);
+      ? ackCriado(d.resumo as string, d.responsavel as string | null)
+      : `Eita, deu ruim pra criar o card de *${d.resumo}* — pode tentar de novo?`, sug);
     console.log(`[CS/inbound] demanda ${d.codigo} confirmada → card ${cardId}`);
     return NextResponse.json({ ok: true, decision: "confirmada", cardId });
   }
@@ -270,6 +289,7 @@ export async function POST(req: NextRequest) {
 
   const multiCliente = clients.length > 1;
   const c = clients[0];
+  if (c.agente_ativo === false) return NextResponse.json({ ok: true, skip: "agente pausado p/ este cliente" }); // S8
   const clienteNome = nomeOf(c);
   const clienteBriefing = (c.campaign_briefing as string) || (c.fixed_briefing as string) || undefined;
 
@@ -351,7 +371,7 @@ export async function POST(req: NextRequest) {
     if (internalJid) {
       // Mensagem CURTA e humana, SEM código — a equipe RESPONDE (reply) nesta mensagem.
       const a3d = a3.ok ? a3.data : null;
-      const acao = `É só responder *nesta mensagem*: *ok* (crio o card) · *não* (você cuida) · ou *ajustar* e me diz o que mudar 😉`;
+      const acao = `É só responder *nesta mensagem*: *ok* (crio o card) · *não* (você cuida) · ou *ajustar* e me diz o que mudar.`;
       const txt = precisaConfirmar
         ? `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}* — mas o pedido tá meio vago. Antes de produzir, confirma com eles:\n${a3d?.observacao ?? ""}\n\n${acao}`
         : `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}*.\n\n${a3d ? a3d.briefing.trim() : `Mensagem: "${msg.text}"`}${a3d ? `\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : ""}\n\n${acao}`;

@@ -6,7 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { csSendGroupText } from "@/lib/cs/notify";
 import {
-  spNow, ymd, addDays, isBusinessDay, isBusinessHour, isFirmPostingDay, businessHoursSince, spDateKeyOf,
+  spNow, ymd, addDays, isBusinessDay, isBusinessHour, isFirmPostingDay, isPostingDay, businessHoursSince, spDateKeyOf,
 } from "@/lib/cs/vigilancia";
 
 // POST /api/system/cs-vigilancia — "Vigilância de Fluxo" do Agente CS.
@@ -41,15 +41,15 @@ interface CardRow {
   design_request_status?: string | null; // status REAL da demanda (queued/in_progress/done)
 }
 
-/** Mensagem amigável pro grupo interno (tom leve, nunca de auditoria). */
+/** Mensagem amigável pro grupo interno: [o que vi] + [pergunta] + [oferta de ajuda]. 1 emoji máx. */
 function mensagemAmigavel(vig: number, area: Area, cliente: string, pessoa: string, motivo: string): string {
   const oi = `Oi ${pessoa}! `;
-  if (vig === 2) return `${oi}A pauta do *${cliente}* ainda não foi pro designer — quando puder, marca *"A fazer"* pra ela seguir o fluxo. Qualquer coisa tô por aqui! 😊`;
-  if (vig === 3 && /travado/i.test(motivo)) return `${oi}O card do *${cliente}* tá travado${motivo.replace(/^card travado/i, "")}. Quando der, dá uma destravada pra ele andar! 🙏`;
-  if (vig === 3) return `${oi}Tem um card do *${cliente}* esperando produção. Se precisar de referência ou tiver dúvida no briefing, é só falar! 🎨`;
-  if (vig === 4) return `${oi}A arte do *${cliente}* foi entregue pelo designer. Quando puder, dá uma olhada e confirma se tá ok pra seguir! 👀`;
-  if (vig === 5) return `${oi}A arte do *${cliente}* já tá aprovada internamente — falta agendar no Meta (mover pra *Agendado*). Quando der! 📅`;
-  return `${oi}Sobre o *${cliente}*: ${motivo}. Quando puder, dá uma olhada! 😊`;
+  if (vig === 2) return `${oi}a pauta do *${cliente}* ainda não foi pro designer. Quando puder, marca *"A fazer"* pra ela seguir — qualquer dúvida, tô aqui.`;
+  if (vig === 3 && /travado/i.test(motivo)) return `${oi}o card do *${cliente}* tá travado${motivo.replace(/^card travado/i, "")}. Consegue dar uma destravada? Se precisar de algo, me chama.`;
+  if (vig === 3) return `${oi}tem um card do *${cliente}* esperando produção. Tá tudo certo com o briefing? Se faltar referência, é só falar. 🎨`;
+  if (vig === 4) return `${oi}o designer entregou a arte do *${cliente}*. Quando puder, dá uma olhada e confirma se tá ok pra seguir.`;
+  if (vig === 5) return `${oi}a arte do *${cliente}* já tá aprovada internamente — falta agendar no Meta (mover pra *Agendado*). Consegue dar esse último passo?`;
+  return `${oi}sobre o *${cliente}*: ${motivo}. Quando puder, dá uma olhada — tamo junto.`;
 }
 
 /** Quando o card entrou no estágio atual (p/ medir "parado há X"). */
@@ -104,7 +104,8 @@ export async function POST(req: NextRequest) {
   const { data: clientsData, error: cErr } = await supabaseAdmin
     .from("clients")
     .select("id, name, assigned_social, assigned_designer, active")
-    .or("active.is.null,active.eq.true");
+    .or("active.is.null,active.eq.true")
+    .eq("agente_ativo", true); // S8: pula clientes com o agente pausado
   if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 });
   const clients = clientsData ?? [];
   const clientById = new Map(clients.map((c) => [c.id as string, c]));
@@ -133,18 +134,23 @@ export async function POST(req: NextRequest) {
 
   const cobrancas: Cobranca[] = [];
 
-  // ── A) PAUTA AUSENTE — só em dia FIRME (seg/sex). Quarta é leve (pula). ──
+  // ── A) PAUTA AUSENTE — seg/sex firmes; QUARTA leve (lembra 1x, na rodada das ~13h). ──
   const temCardNaData = (clientId: string, dia: string) =>
     cards.some((k) => k.client_id === clientId && k.due_date === dia);
+  const firmeHoje = isFirmPostingDay(now);
+  // Quarta (dia de postagem mas não firme): só na rodada das ~13h (a chave diária garante 1x só).
+  const quartaLembra = isPostingDay(now) && !firmeHoje && now.getHours() === 13;
   for (const c of clients) {
     if (!(c.active === null || c.active === true)) continue;
     if (!c.assigned_social) continue; // só clientes com social (tira os de tráfego-only)
-    // #2 — hoje é dia firme e não há pauta pra hoje
-    if (isFirmPostingDay(now) && !temCardNaData(c.id as string, hoje)) {
+    // #2 — pauta de HOJE
+    if ((firmeHoje || quartaLembra) && !temCardNaData(c.id as string, hoje)) {
       cobrancas.push({ vigilancia: 2, area: "social", client_id: c.id as string, card_id: null,
-        chave: `2-${c.id}-${hoje}`, motivo: "hoje é dia de postagem e não há pauta criada" });
+        chave: `2-${c.id}-${hoje}`,
+        motivo: firmeHoje ? "hoje é dia de postagem e não há pauta criada"
+                          : "quarta é mais de boa, mas não vi nenhuma pauta criada pra hoje" });
     }
-    // #1 — amanhã é dia firme e nada planejado (D-1)
+    // #1 — D-1 só pros dias firmes (seg/sex); quarta não tem véspera firme
     if (isFirmPostingDay(amanhaDate) && !temCardNaData(c.id as string, amanha)) {
       cobrancas.push({ vigilancia: 1, area: "social", client_id: c.id as string, card_id: null,
         chave: `1-${c.id}-${amanha}`, motivo: "amanhã é dia de postagem e nada está planejado" });
