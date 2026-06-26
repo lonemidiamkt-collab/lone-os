@@ -40,6 +40,8 @@ services:
       CS_INBOUND_SECRET: ${CS_INBOUND_SECRET}
       CS_LONE_TEAM_JIDS: ${CS_LONE_TEAM_JIDS}
       CS_PILOT_GROUP_JIDS: ${CS_PILOT_GROUP_JIDS}
+      # Cliente alvo dos cards de TESTE quando o grupo do piloto não mapeia cliente real.
+      CS_TEST_CLIENT_ID: ${CS_TEST_CLIENT_ID}
       # browserless (headless chrome) p/ renderizar o PDF do relatório semanal
       BROWSERLESS_TOKEN: ${BROWSERLESS_TOKEN}
       BROWSERLESS_URL: http://chromium:3000

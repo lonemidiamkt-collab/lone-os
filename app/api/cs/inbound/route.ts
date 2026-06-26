@@ -105,11 +105,49 @@ export async function POST(req: NextRequest) {
       `"${msg.text.slice(0, 70)}" → ${det}`,
   );
 
+  // Cria card no kanban pra cada demanda — modo PILOTO: rótulo [TESTE] + badge do agente.
+  // Em produção isso vira suggest-only: posta no grupo interno e só cria no "Confirmar".
+  const testClientId = process.env.CS_TEST_CLIENT_ID || null;
+  const targetClientId = (c?.id as string) || testClientId; // cliente real, ou cliente de teste (grupo de teste)
+  const PRIO: Record<string, string> = { alta: "high", media: "medium", baixa: "low" };
+  const cardsCriados: string[] = [];
+  if (targetClientId) {
+    for (const it of res.data.itens.filter((i) => i.is_demanda && i.confianca >= 0.6)) {
+      const briefing =
+        `Demanda detectada pelo Agente CS (piloto).\n` +
+        `Tipo: ${it.tipo} · Urgência: ${it.urgencia} · Confiança: ${it.confianca}\n` +
+        `Cliente: ${clienteNome}\nMensagem original: "${msg.text}"`;
+      const { data: card, error: cardErr } = await supabaseAdmin
+        .from("content_cards")
+        .insert({
+          title: `[TESTE] ${it.resumo}`,
+          client_id: targetClientId,
+          client_name: clienteNome,
+          status: "ideas",
+          priority: PRIO[it.urgencia] ?? "medium",
+          briefing,
+          requested_by_traffic: "🤖 Agente CS (teste)",
+          status_changed_at: new Date().toISOString(),
+          column_entered_at: { ideas: new Date().toISOString() },
+        })
+        .select("id")
+        .maybeSingle();
+      if (cardErr) console.error("[CS/inbound] criar card falhou:", cardErr.message);
+      else if (card) {
+        cardsCriados.push(card.id as string);
+        console.log(`[CS/inbound] card [TESTE] criado (${it.tipo}): ${it.resumo}`);
+      }
+    }
+  } else {
+    console.warn("[CS/inbound] sem client_id alvo (defina CS_TEST_CLIENT_ID) — card não criado");
+  }
+
   return NextResponse.json({
     ok: true,
     classified: true,
     cliente: clienteNome,
     itens: res.data.itens,
+    cardsCriados,
     multiCliente,
     cacheRead: res.usage?.prompt_tokens_details?.cached_tokens ?? 0,
   });
