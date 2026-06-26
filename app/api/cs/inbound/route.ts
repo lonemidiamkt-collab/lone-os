@@ -263,10 +263,11 @@ export async function POST(req: NextRequest) {
     if (internalJid) {
       // Mensagem do WhatsApp = CURTA e humana (o briefing completo vai pro card no "ok").
       const a3d = a3.ok ? a3.data : null;
-      const acao = `*ok ${codigo}* · *ajustar ${codigo} <o que mudar>* · *nao ${codigo}* (você cuida)`;
+      // Ação em tom natural — sem o placeholder "<o que mudar>" (parecia campo não preenchido).
+      const acao = `Responde aqui: *ok ${codigo}* (crio o card) · *nao ${codigo}* (você cuida) · ou *ajustar ${codigo}* e me diz o que mudar 😉`;
       const txt = precisaConfirmar
-        ? `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}* — mas o pedido tá meio vago. Antes de produzir, confirma com eles:\n${a3d?.observacao ?? ""}\n\nQuer que eu já abra o card pra acompanhar? ${acao}`
-        : `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}*.\n\n${a3d ? a3d.briefing.trim() : `Mensagem: "${msg.text}"`}${a3d ? `\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : ""}\n\nCrio o card? ${acao}`;
+        ? `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}* — mas o pedido tá meio vago. Antes de produzir, confirma com eles:\n${a3d?.observacao ?? ""}\n\n${acao}`
+        : `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}*.\n\n${a3d ? a3d.briefing.trim() : `Mensagem: "${msg.text}"`}${a3d ? `\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : ""}\n\n${acao}`;
       const r = await csSendGroupText(internalJid, txt);
       if (!r.ok) console.error("[CS/inbound] post sugestão falhou:", r.error);
     }
