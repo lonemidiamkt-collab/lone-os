@@ -241,6 +241,7 @@ export async function POST(req: NextRequest) {
     });
     const briefingTxt = a3.ok && a3.data ? formatBriefing(a3.data) : `${it.resumo}\nMensagem: "${msg.text}"`;
     const titulo = a3.ok && a3.data ? a3.data.titulo : it.resumo;
+    const precisaConfirmar = a3.ok && !!a3.data?.observacao; // A3 achou o pedido vago → falta info do cliente
 
     const codigo = randomBytes(2).toString("hex");
     const { error: insErr } = await supabaseAdmin.from("cs_demandas").insert({
@@ -253,10 +254,11 @@ export async function POST(req: NextRequest) {
     sugeridas.push(`${it.tipo}/${it.urgencia}[${codigo}→${responsavel}]`);
 
     if (internalJid) {
+      const lead = precisaConfirmar
+        ? `${responsavel}, a *${clienteNome}* pediu: ${it.resumo} — mas o pedido tá meio vago. Antes de produzir, vale alinhar uns pontos com o cliente:`
+        : `${responsavel}, a *${clienteNome}* pediu: ${it.resumo}. Montei o briefing — *crio o card pra você ou prefere alinhar antes?*`;
       const txt =
-        `${responsavel}, a *${clienteNome}* pediu: ${it.resumo}.\n` +
-        `Montei o briefing seguindo as regras do cliente — *mando pras demandas (crio o card) ou você envia?*\n\n` +
-        `${briefingTxt}\n\n` +
+        `${lead}\n\n${briefingTxt}\n\n` +
         `Responda: *ok ${codigo}* (criar card) · *ajustar ${codigo} <o que mudar>* · *nao ${codigo}* (você cuida)`;
       const r = await csSendGroupText(internalJid, txt);
       if (!r.ok) console.error("[CS/inbound] post sugestão falhou:", r.error);
