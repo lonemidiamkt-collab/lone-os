@@ -2868,7 +2868,11 @@ export default function SocialPage() {
         {/* ── ACESSOS TAB ──────────────────────────────────────────────────── */}
         {activeTab === "acessos" && (
           <AccessTab
-            clients={filteredClients.filter((c) => c.status !== "onboarding")}
+            // Inclui clientes em onboarding: é justamente na entrada que se coletam as
+            // credenciais, e a AccessTab é a ÚNICA tela que vê/edita acesso de cliente.
+            // Excluir onboarding aqui deixava esses clientes (ex: Léo Carros, Complexo Vida)
+            // invisíveis pro social atribuído, mesmo com login/senha já cadastrados.
+            clients={filteredClients}
             clientAccess={clientAccess}
             onSave={(clientId, access) => updateClientAccess(clientId, access, currentUser)}
             isAdmin={isAdmin}
