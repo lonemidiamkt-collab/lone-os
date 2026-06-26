@@ -8,16 +8,20 @@ import { isOpenAIConfigured } from "@/lib/ai/openai";
 import { parseUpsert, isTrivial, isLoneTeam, type EvolutionUpsert } from "@/lib/cs/ingest";
 import { classifyBlock, type ClassifierContext } from "@/lib/cs/classifier";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { tipoToArea, resolveResponsavel } from "@/lib/cs/routing";
+import { gerarBriefing, formatBriefing } from "@/lib/cs/briefing";
+import type { CsDemandType } from "@/lib/cs/taxonomy";
 
-// Webhook INBOUND do Agente CS — recebe `messages.upsert` da Evolution (número monitor[IA]).
-// Rota PÚBLICA (Evolution não manda cookie/JWT) MAS autenticada por segredo (CS_INBOUND_SECRET).
-// Fluxo SUGGEST-ONLY: A0 filtra → A1 classifica → grava demanda 'pendente' em cs_demandas e
-// POSTA a sugestão no grupo interno com um código. NÃO cria card sozinho — só quando alguém
-// responde "ok <código>" no grupo interno. Card só nasce na confirmação humana.
+// Webhook INBOUND do Agente CS — `messages.upsert` da Evolution (monitor[IA]). Suggest-only:
+// A0 filtra → A1 classifica → A3 redige o briefing (regras do cliente) → posta a sugestão no
+// grupo interno NOMEANDO o responsável (assigned_*). Card só nasce no "ok <código>".
+
+const CLIENT_COLS =
+  "id, name, nome_fantasia, nicho, campaign_briefing, fixed_briefing, assigned_social, assigned_designer, assigned_traffic";
 
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CS_INBOUND_SECRET;
-  if (!secret) return false; // sem segredo configurado → rota desligada (fail-closed)
+  if (!secret) return false;
   const got = req.headers.get("x-cs-secret") || req.nextUrl.searchParams.get("secret");
   return got === secret;
 }
@@ -26,11 +30,14 @@ const splitEnv = (v?: string) => (v ?? "").split(",").map((s) => s.trim()).filte
 const teamJids = () => splitEnv(process.env.CS_LONE_TEAM_JIDS);
 const pilotGroupAllowlist = () => splitEnv(process.env.CS_PILOT_GROUP_JIDS);
 const internalGroupJid = () => process.env.CS_INTERNAL_GROUP_JID || null;
-const isPilot = () => pilotGroupAllowlist().length > 0; // piloto = rótulo [TESTE] nos cards
+const isPilot = () => pilotGroupAllowlist().length > 0;
 
 const PRIO: Record<string, string> = { alta: "high", media: "medium", baixa: "low" };
 
-// Comando de decisão no grupo interno: "ok <cod>" / "nao <cod>".
+type ClientRow = Record<string, unknown>;
+const nomeOf = (c?: ClientRow | null) =>
+  ((c?.nome_fantasia as string) || (c?.name as string) || "Cliente");
+
 function parseDecision(text: string): { acao: "confirmar" | "descartar"; codigo: string } | null {
   const m = text.trim().match(/^(ok|sim|confirmar|confirma|nao|não|descartar|descarta)\s+([a-z0-9]{3,8})$/i);
   if (!m) return null;
@@ -39,23 +46,19 @@ function parseDecision(text: string): { acao: "confirmar" | "descartar"; codigo:
 }
 
 async function criarCard(opts: {
-  clientId: string; clienteNome: string; tipo: string; urgencia: string;
-  confianca: number; resumo: string; messageText: string;
+  clientId: string; clienteNome: string; responsavel?: string | null;
+  titulo: string; urgencia: string; briefing: string;
 }): Promise<string | null> {
-  const titulo = (isPilot() ? "[TESTE] " : "") + opts.resumo;
-  const briefing =
-    `Demanda confirmada via Agente CS.\n` +
-    `Tipo: ${opts.tipo} · Urgência: ${opts.urgencia} · Confiança: ${opts.confianca}\n` +
-    `Cliente: ${opts.clienteNome}\nMensagem original: "${opts.messageText}"`;
   const { data: card, error } = await supabaseAdmin
     .from("content_cards")
     .insert({
-      title: titulo,
+      title: (isPilot() ? "[TESTE] " : "") + opts.titulo,
       client_id: opts.clientId,
       client_name: opts.clienteNome,
+      social_media: opts.responsavel || null,
       status: "ideas",
       priority: PRIO[opts.urgencia] ?? "medium",
-      briefing,
+      briefing: opts.briefing,
       requested_by_traffic: isPilot() ? "🤖 Agente CS (teste)" : "🤖 Agente CS",
       status_changed_at: new Date().toISOString(),
       column_entered_at: { ideas: new Date().toISOString() },
@@ -81,7 +84,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skip: "fora da allowlist do piloto" });
   }
 
-  // ─── Decisão humana (só no grupo interno): "ok <cod>" cria o card, "nao <cod>" descarta ───
+  // ─── Decisão humana (grupo interno): "ok <cod>" cria o card; "nao <cod>" descarta ───
   const decision = parseDecision(msg.text);
   if (decision && msg.groupJid === internalGroupJid()) {
     const { data: d } = await supabaseAdmin
@@ -93,7 +96,7 @@ export async function POST(req: NextRequest) {
     const decidedBy = msg.authorName || msg.authorJid;
     if (decision.acao === "descartar") {
       await supabaseAdmin.from("cs_demandas").update({ status: "descartada", decided_at: new Date().toISOString(), decided_by: decidedBy }).eq("id", d.id);
-      await csSendGroupText(msg.groupJid, `❌ Demanda *${decision.codigo}* descartada.`);
+      await csSendGroupText(msg.groupJid, `❌ Demanda *${decision.codigo}* descartada — você cuida então. 👍`);
       return NextResponse.json({ ok: true, decision: "descartada" });
     }
     const clientId = (d.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
@@ -102,39 +105,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, decision: "sem_cliente" });
     }
     const cardId = await criarCard({
-      clientId, clienteNome: (d.cliente_nome as string) || "Cliente", tipo: d.tipo as string,
-      urgencia: d.urgencia as string, confianca: Number(d.confianca), resumo: (d.resumo as string) || (d.message_text as string),
-      messageText: d.message_text as string,
+      clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null,
+      titulo: (d.resumo as string) || (d.message_text as string), urgencia: d.urgencia as string,
+      briefing: (d.briefing as string) || (d.message_text as string),
     });
     await supabaseAdmin.from("cs_demandas").update({
       status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: decidedBy,
     }).eq("id", d.id);
     await csSendGroupText(msg.groupJid, cardId
-      ? `✅ Card criado: *${d.resumo}* (${d.tipo}/${d.urgencia}).`
+      ? `✅ Pronto! Criei o card *${d.resumo}* nas demandas${d.responsavel ? ` pra ${d.responsavel}` : ""}.`
       : `⚠️ Falha ao criar o card de *${decision.codigo}*.`);
     console.log(`[CS/inbound] demanda ${decision.codigo} confirmada → card ${cardId}`);
     return NextResponse.json({ ok: true, decision: "confirmada", cardId });
   }
 
-  // ─── Mensagem de cliente: A0 → A1 → sugere ───
+  // ─── Mensagem de cliente: A0 → A1 → A3 → sugere ───
   if (isLoneTeam(msg.authorJid, teamJids())) return NextResponse.json({ ok: true, skip: "autor = equipe Lone" });
   if (isTrivial(msg.text)) return NextResponse.json({ ok: true, skip: "trivial" });
 
-  const { data: clients } = await supabaseAdmin
-    .from("clients")
-    .select("id, name, nome_fantasia, nicho, campaign_briefing, fixed_briefing")
-    .eq("whatsapp_group_jid", msg.groupJid);
-
-  // Grupo de teste = na allowlist mas sem cliente mapeado (ex.: grupo Automação) → cliente sintético.
+  let { data: clients } = await supabaseAdmin.from("clients").select(CLIENT_COLS).eq("whatsapp_group_jid", msg.groupJid);
   const isTestGroup = (!clients || clients.length === 0) && allow.includes(msg.groupJid);
-  if ((!clients || clients.length === 0) && !isTestGroup) {
+  if (isTestGroup && process.env.CS_TEST_CLIENT_ID) {
+    // Grupo de teste: usa o cliente de teste (com briefing/assigned cadastrados) como stand-in.
+    const { data: t } = await supabaseAdmin.from("clients").select(CLIENT_COLS).eq("id", process.env.CS_TEST_CLIENT_ID).maybeSingle();
+    if (t) clients = [t];
+  }
+  if (!clients || clients.length === 0) {
     console.warn("[CS/inbound] grupo sem cliente mapeado:", msg.groupJid);
     return NextResponse.json({ ok: true, skip: "grupo sem cliente" });
   }
 
-  const multiCliente = (clients?.length ?? 0) > 1;
-  const c = clients?.[0];
-  const clienteNome = isTestGroup ? "Cliente Teste" : (c?.nome_fantasia as string) || (c?.name as string) || "Cliente";
+  const multiCliente = clients.length > 1;
+  const c = clients[0];
+  const clienteNome = nomeOf(c);
+  const clienteBriefing = (c.campaign_briefing as string) || (c.fixed_briefing as string) || undefined;
 
   if (!isOpenAIConfigured()) {
     return NextResponse.json({ ok: true, classified: false, reason: "A1 desligado (sem key)", cliente: clienteNome });
@@ -142,10 +146,10 @@ export async function POST(req: NextRequest) {
 
   const ctx: ClassifierContext = {
     clienteNome,
-    clienteNicho: isTestGroup ? undefined : (c?.nicho as string) || undefined,
-    briefing: isTestGroup ? undefined : (c?.campaign_briefing as string) || (c?.fixed_briefing as string) || undefined,
+    clienteNicho: (c.nicho as string) || undefined,
+    briefing: clienteBriefing,
     nomesEquipeLone: teamJids(),
-    clientesDoGrupo: isTestGroup ? [clienteNome] : (clients ?? []).map((x) => (x.nome_fantasia as string) || (x.name as string)),
+    clientesDoGrupo: clients.map(nomeOf),
   };
 
   const res = await classifyBlock([{ author: msg.authorName || "Cliente", text: msg.text }], ctx);
@@ -154,30 +158,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, classified: false, reason: res.error });
   }
 
-  // Grava cada demanda como 'pendente' e posta a sugestão no grupo interno (suggest-only).
   const internalJid = internalGroupJid();
   const sugeridas: string[] = [];
   for (const it of res.data.itens.filter((i) => i.is_demanda && i.confianca >= 0.6)) {
-    const codigo = randomBytes(2).toString("hex"); // 4 chars
+    const area = tipoToArea(it.tipo as CsDemandType);
+    const responsavel = resolveResponsavel(area, {
+      assigned_social: c.assigned_social as string, assigned_designer: c.assigned_designer as string, assigned_traffic: c.assigned_traffic as string,
+    });
+
+    // A3 — redige o briefing seguindo as regras do cliente (não inventa; pede o que falta).
+    const a3 = await gerarBriefing({
+      clienteNome, clienteNicho: c.nicho as string, clienteBriefing,
+      tipo: it.tipo, urgencia: it.urgencia, resumo: it.resumo, mensagemOriginal: msg.text,
+    });
+    const briefingTxt = a3.ok && a3.data ? formatBriefing(a3.data) : `${it.resumo}\nMensagem: "${msg.text}"`;
+    const titulo = a3.ok && a3.data ? a3.data.titulo : it.resumo;
+
+    const codigo = randomBytes(2).toString("hex");
     const { error: insErr } = await supabaseAdmin.from("cs_demandas").insert({
-      codigo, group_jid: msg.groupJid, client_id: (c?.id as string) ?? null, cliente_nome: clienteNome,
+      codigo, group_jid: msg.groupJid, client_id: (c.id as string) ?? null, cliente_nome: clienteNome,
       author: msg.authorName || msg.authorJid, message_id: msg.messageId, message_text: msg.text,
-      tipo: it.tipo, urgencia: it.urgencia, confianca: it.confianca, resumo: it.resumo, status: "pendente",
+      tipo: it.tipo, urgencia: it.urgencia, confianca: it.confianca, resumo: titulo,
+      briefing: briefingTxt, responsavel, status: "pendente",
     });
     if (insErr) { console.error("[CS/inbound] gravar demanda:", insErr.message); continue; }
-    sugeridas.push(`${it.tipo}/${it.urgencia}[${codigo}]`);
+    sugeridas.push(`${it.tipo}/${it.urgencia}[${codigo}→${responsavel}]`);
+
     if (internalJid) {
       const txt =
-        `🤖 *Possível demanda* — ${clienteNome}${multiCliente ? " (grupo multi-cliente!)" : ""}\n` +
-        `"${msg.text.slice(0, 140)}"\n` +
-        `Tipo: *${it.tipo}* · Urgência: *${it.urgencia}* · Confiança: ${it.confianca}\n` +
-        `Resumo: ${it.resumo}\n\n` +
-        `Responda: *ok ${codigo}* (criar card) · *nao ${codigo}* (descartar)`;
+        `${responsavel}, a *${clienteNome}* pediu: ${it.resumo}.\n` +
+        `Montei o briefing seguindo as regras do cliente — *mando pras demandas (crio o card) ou você envia?*\n\n` +
+        `${briefingTxt}\n\n` +
+        `Responda: *ok ${codigo}* (criar card) · *nao ${codigo}* (você cuida)`;
       const r = await csSendGroupText(internalJid, txt);
       if (!r.ok) console.error("[CS/inbound] post sugestão falhou:", r.error);
     }
   }
 
-  console.log(`[CS/inbound] ${clienteNome} "${msg.text.slice(0, 60)}" → sugeridas: ${sugeridas.join(", ") || "nenhuma"}`);
-  return NextResponse.json({ ok: true, classified: true, cliente: clienteNome, sugeridas, itens: res.data.itens });
+  console.log(`[CS/inbound] ${clienteNome} "${msg.text.slice(0, 60)}" → ${sugeridas.join(", ") || "nenhuma demanda"}`);
+  return NextResponse.json({ ok: true, classified: true, cliente: clienteNome, sugeridas, multiCliente });
 }
