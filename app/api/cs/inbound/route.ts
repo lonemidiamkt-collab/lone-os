@@ -60,6 +60,15 @@ function parseAjuste(text: string): { instrucao: string } | null {
   return { instrucao: m[2].trim() };
 }
 
+// Heurística: a mensagem parece um PEDIDO NOVO (não uma resposta à demanda pendente)? Se sim e
+// não for reply, não chama o interpretador — manda direto pro fluxo de classificação (nova demanda).
+function pareceNovoPedido(text: string): boolean {
+  const t = text.toLowerCase();
+  return /\bcliente\b.*\b(pediu|solicit|quer|querem|precisa|mandou|pedindo)\b/.test(t)
+    || /^\s*(preciso|precisamos|quero|queremos|faz|fazer|cria|criar|monta|montar|manda|fa[çc]a)\b.*\b(arte|post|an[úu]ncio|story|stories|panfleto|banner|card|pe[çc]a|cria[çc][aã]o|flyer|reels|v[íi]deo)/.test(t)
+    || /\b(nova arte|outra arte|novo pedido|nova demanda|outra demanda|nova pe[çc]a)\b/.test(t);
+}
+
 // Acha a demanda PENDENTE alvo da resposta: 1) reply na sugestão (msg citada via quotedMsgId),
 // 2) código (se a pessoa digitar, legado), 3) a última pendente (fallback se não deu reply).
 async function acharDemanda(quotedMsgId?: string, codigo?: string) {
@@ -181,7 +190,10 @@ export async function POST(req: NextRequest) {
   if (msg.groupJid === internalGroupJid() && !isTrivial(msg.text) && isOpenAIConfigured()) {
     const alvo = await acharDemanda(msg.quotedMsgId);
     const recente = !!alvo && (!!msg.quotedMsgId || (Date.now() - new Date(alvo.created_at as string).getTime() < 30 * 60 * 1000));
-    if (alvo && recente) {
+    // Só interpreta como RESPOSTA se: for reply à sugestão, OU (há pendente recente E NÃO parece
+    // pedido novo). Pedido novo sem reply → cai no fluxo de classificação (cria demanda nova).
+    const ehResposta = recente && (!!msg.quotedMsgId || !pareceNovoPedido(msg.text));
+    if (alvo && ehResposta) {
       const interp = await interpretarResposta({
         clienteNome: (alvo.cliente_nome as string) || "Cliente",
         resumo: (alvo.resumo as string) || (alvo.message_text as string) || "",
