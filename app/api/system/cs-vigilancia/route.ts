@@ -38,6 +38,7 @@ interface CardRow {
   design_request_id: string | null; designer_delivered_at: string | null;
   social_confirmed_at: string | null; status_changed_at: string | null;
   column_entered_at: Record<string, string> | null; blocked_reason: string | null;
+  design_request_status?: string | null; // status REAL da demanda (queued/in_progress/done)
 }
 
 /** Mensagem amigável pro grupo interno (tom leve, nunca de auditoria). */
@@ -56,42 +57,33 @@ function enteredAt(c: CardRow): string | null {
   return (c.column_entered_at && c.column_entered_at[c.status]) || c.status_changed_at;
 }
 
-/** Avalia 1 card e devolve a cobrança da etapa travada (ou null se está fluindo). */
+/**
+ * Avalia 1 card pelos SINAIS REAIS (não só o status do board, que costuma ficar atrasado —
+ * card entregue continua parado em "Ideias"). Conservador: na dúvida NÃO cobra (regra do PDF —
+ * falso positivo destrói a confiança). Só cobra o que é inequívoco e atual.
+ */
 function avaliarPipeline(c: CardRow, now: Date): { vigilancia: number; area: Area; motivo: string } | null {
+  if (c.status === "published" || c.status === "scheduled") return null; // fluxo completo
+
+  // Se o designer JÁ entregou (designer_delivered_at) ou a demanda está "done" → trabalho dele
+  // acabou: NUNCA cobrar o designer. E o que vem depois (revisar/agendar) depende de o board estar
+  // atualizado, o que não é confiável hoje → SILENCIA pra não gerar falso positivo.
+  if (c.designer_delivered_at || c.design_request_status === "done") return null;
+
   const h = businessHoursSince(enteredAt(c), now);
-  switch (c.status) {
-    case "published":
-    case "scheduled":
-      return null; // agendado/publicado → fluxo completo
-    case "blocked":
-      return h >= TH_TRAVADO
-        ? { vigilancia: 3, area: "social", motivo: `card travado${c.blocked_reason ? `: ${c.blocked_reason}` : ""}` }
-        : null;
-    case "ideas":
-    case "script":
-      if (!c.design_request_id)
-        return { vigilancia: 2, area: "social", motivo: 'ainda não foi pro designer (faltou marcar "A fazer")' };
-      return h >= TH_DESIGNER_PEGAR
-        ? { vigilancia: 3, area: "designer", motivo: "aguardando o designer pegar em produção" }
-        : null;
-    case "in_production":
-      return h >= TH_PRODUCAO
-        ? { vigilancia: 3, area: "designer", motivo: "em produção há um tempo sem entregar" }
-        : null;
-    case "approval":
-    case "client_approval":
-      if (!c.social_confirmed_at) {
-        const since = businessHoursSince(c.designer_delivered_at ?? enteredAt(c), now);
-        return since >= TH_SOCIAL_VER
-          ? { vigilancia: 4, area: "social", motivo: "o designer entregou e ainda não foi revisado" }
-          : null;
-      }
-      return businessHoursSince(c.social_confirmed_at, now) >= TH_AGENDAR
-        ? { vigilancia: 5, area: "social", motivo: 'revisado — falta agendar no Meta (mover pra "Agendado")' }
-        : null;
-    default:
-      return null;
-  }
+  if (c.status === "blocked")
+    return h >= TH_TRAVADO
+      ? { vigilancia: 3, area: "social", motivo: `card travado${c.blocked_reason ? `: ${c.blocked_reason}` : ""}` }
+      : null;
+
+  // Ainda NÃO entregue:
+  if (!c.design_request_id)
+    return { vigilancia: 2, area: "social", motivo: 'ainda não foi pro designer (faltou marcar "A fazer")' };
+  if (c.design_request_status === "in_progress") return null; // designer está produzindo → não cobra
+  // Demanda "queued" (designer ainda não pegou) e parada além do limite:
+  return h >= TH_DESIGNER_PEGAR
+    ? { vigilancia: 3, area: "designer", motivo: "aguardando o designer pegar em produção" }
+    : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -129,6 +121,15 @@ export async function POST(req: NextRequest) {
   if (kErr) return NextResponse.json({ error: kErr.message }, { status: 500 });
   const cards = (cardsData ?? []) as CardRow[];
   const cardById = new Map(cards.map((k) => [k.id, k]));
+
+  // Status REAL da demanda (queued/in_progress/done) — sinal mais confiável que o status do card,
+  // que o time não atualiza no board (card entregue fica em "Ideias").
+  const drIds = [...new Set(cards.map((k) => k.design_request_id).filter((x): x is string => !!x))];
+  if (drIds.length) {
+    const { data: drs } = await supabaseAdmin.from("design_requests").select("id, status").in("id", drIds);
+    const drStatus = new Map((drs ?? []).map((d) => [d.id as string, d.status as string]));
+    for (const k of cards) k.design_request_status = k.design_request_id ? (drStatus.get(k.design_request_id) ?? null) : null;
+  }
 
   const cobrancas: Cobranca[] = [];
 
