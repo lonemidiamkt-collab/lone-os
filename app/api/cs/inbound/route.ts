@@ -95,13 +95,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, classified: false, reason: res.error });
   }
 
-  // Suggest-only em modo OBSERVAÇÃO: por enquanto só loga. Próxima fatia: surfaçar no grupo
-  // interno (Confirmar/Ajustar/Descartar) e, na confirmação, criar o ContentCard.
-  const demandas = res.data.itens.filter((i) => i.is_demanda);
+  // Suggest-only em modo OBSERVAÇÃO: por enquanto só loga (entrada → classificação, p/ calibração).
+  // Próxima fatia: surfaçar no grupo interno (Confirmar/Ajustar/Descartar) e criar o ContentCard.
+  const det = res.data.itens
+    .map((i) => (i.is_demanda ? `${i.tipo}/${i.urgencia}(${i.confianca}): ${i.resumo}` : `não-demanda(${i.tipo})`))
+    .join(" | ");
   console.log(
-    `[CS/inbound] ${clienteNome}${multiCliente ? " (grupo multi-cliente!)" : ""}: ` +
-      `${demandas.length} demanda(s) de ${res.data.itens.length} item(ns) — ` +
-      demandas.map((d) => `${d.tipo}/${d.urgencia}(${d.confianca})`).join(", "),
+    `[CS/inbound] ${clienteNome}${multiCliente ? " (multi-cliente!)" : ""} ` +
+      `"${msg.text.slice(0, 70)}" → ${det}`,
   );
 
   return NextResponse.json({
