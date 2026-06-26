@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type { Client, ClientStatus, ChatMessage } from "@/lib/types";
-import { supabase } from "@/lib/supabase/client";
+import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -64,6 +64,8 @@ export const useClientsStore = create<ClientsState>()(
 
       // ── Supabase Realtime subscription ───────────────────────────────────
       subscribeRealtime: () => {
+        // Realtime desligado no servidor (RAM) — não tenta o WebSocket pra não spammar o console.
+        if (!REALTIME_ENABLED) return () => {};
         const channel = supabase
           .channel("store:clients")
           .on("postgres_changes", { event: "INSERT", schema: "public", table: "clients" }, (p) => {

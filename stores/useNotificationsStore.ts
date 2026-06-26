@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type { AppNotification, NotificationType } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
-import { supabase } from "@/lib/supabase/client";
+import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
 
 interface NotificationsState {
   notifications: AppNotification[];
@@ -39,6 +39,8 @@ export const useNotificationsStore = create<NotificationsState>()(
       },
 
       subscribeRealtime: () => {
+        // Realtime desligado no servidor (RAM) — não tenta o WebSocket pra não spammar o console.
+        if (!REALTIME_ENABLED) return () => {};
         const channel = supabase
           .channel("store:notifications")
           .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, (p) => {

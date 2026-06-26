@@ -2050,6 +2050,7 @@ export default function SocialPage() {
   const addSocialReport = useContentStore((s) => s.addSocialReport);
   const updateSocialReport = useContentStore((s) => s.updateSocialReport);
   const initContent = useContentStore((s) => s.init);
+  const refreshContent = useContentStore((s) => s.refresh);
   const subContent = useContentStore((s) => s.subscribeRealtime);
 
   const onboarding = useOperationalStore((s) => s.onboarding);
@@ -2075,6 +2076,18 @@ export default function SocialPage() {
     const u3 = subOps();
     return () => { u1(); u2(); u3(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Polling leve do board ──────────────────────────────────────────────────
+  // Realtime está OFF no servidor (RAM), então o board não atualiza sozinho. Em vez de
+  // ressuscitar o WebSocket, refetch silencioso a cada 45s — só com a aba visível — e
+  // assim que a aba volta ao foco. Mantém artes/cards novos aparecendo sem F5, com custo
+  // baixo no VPS (1 GET, sem flicker).
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === "visible") refreshContent(); };
+    const interval = setInterval(tick, 45000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", tick); };
+  }, [refreshContent]);
 
   // ── NavContext: secondary sidebar tab navigation ──────────────
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();

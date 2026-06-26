@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type { ContentCard, DesignRequest, ContentApproval, SocialMonthlyReport, CardComment, Role } from "@/lib/types";
-import { supabase } from "@/lib/supabase/client";
+import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 interface ContentState {
@@ -13,6 +13,7 @@ interface ContentState {
   initialized: boolean;
 
   init: (filter?: { socialMedia?: string }) => Promise<void>;
+  refresh: (filter?: { socialMedia?: string }) => Promise<void>;
   subscribeRealtime: (socialMediaFilter?: string) => () => void;
 
   addContentCard: (card: Omit<ContentCard, "id">) => Promise<ContentCard>;
@@ -66,7 +67,23 @@ export const useContentStore = create<ContentState>()(
         }
       },
 
+      refresh: async (filter) => {
+        // Refetch silencioso p/ polling do board: SEM flag de loading (não pisca a tela) e
+        // sem o guard de init (serve justamente pra atualizar depois de já inicializado).
+        // Substitui as coleções server-authoritative; updates otimistas locais persistem em
+        // <1s, então a janela de corrida com um poll de ~45s é desprezível.
+        try {
+          const params = filter?.socialMedia ? `?socialMedia=${encodeURIComponent(filter.socialMedia)}` : "";
+          const res = await authedFetch(`/api/data/content${params}`);
+          if (!res.ok) return;
+          const { contentCards, designRequests, contentApprovals, socialReports } = await res.json();
+          set({ contentCards, designRequests, contentApprovals, socialReports }, false, "content/refresh");
+        } catch {}
+      },
+
       subscribeRealtime: (socialMediaFilter) => {
+        // Realtime desligado no servidor (RAM) — não tenta o WebSocket pra não spammar o console.
+        if (!REALTIME_ENABLED) return () => {};
         const channel = supabase
           .channel("store:content")
           .on("postgres_changes", { event: "INSERT", schema: "public", table: "content_cards" }, async (p) => {
@@ -185,6 +202,8 @@ export const useContentStore = create<ContentState>()(
 
       approveContent: (cardId, reviewer) => {
         const card = get().contentCards.find((c) => c.id === cardId);
+        const prevCard = card;                            // snapshot p/ rollback se o save falhar
+        const prevApprovals = get().contentApprovals;
         const approval: ContentApproval = {
           id: `ca-${Date.now()}`,
           cardId,
@@ -198,12 +217,27 @@ export const useContentStore = create<ContentState>()(
             c.id === cardId ? { ...c, status: "scheduled" as const, statusChangedAt: new Date().toISOString() } : c
           ),
         }), false, "content/approve");
-        authedFetch("/api/content-cards/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cardId, status: "scheduled", contentApproval: { status: "approved", reviewedBy: reviewer, reviewedAt: new Date().toISOString() } }) }).catch(() => {});
-        if (card) {
-          import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
-            useNotificationsStore.getState().push("content", "Conteúdo aprovado", `"${card.title}" de ${card.clientName} foi aprovado por ${reviewer}. Pronto para agendamento.`, card.clientId);
+        // O save NÃO pode falhar em silêncio: antes era .catch(() => {}), então uma falha no
+        // servidor deixava a UI mostrando "aprovado" sem ter gravado nada. Agora desfaz o
+        // update otimista e avisa o social via notificação.
+        authedFetch("/api/content-cards/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cardId, status: "scheduled", contentApproval: { status: "approved", reviewedBy: reviewer, reviewedAt: new Date().toISOString() } }) })
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            if (card) {
+              import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
+                useNotificationsStore.getState().push("content", "Conteúdo aprovado", `"${card.title}" de ${card.clientName} foi aprovado por ${reviewer}. Pronto para agendamento.`, card.clientId);
+              });
+            }
+          })
+          .catch(() => {
+            set((s) => ({
+              contentApprovals: prevApprovals,
+              contentCards: prevCard ? s.contentCards.map((c) => c.id === cardId ? prevCard : c) : s.contentCards,
+            }), false, "content/approve/rollback");
+            import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
+              useNotificationsStore.getState().push("system", "Falha ao confirmar a arte", `Não deu pra salvar a aprovação${card ? ` de "${card.title}"` : ""}. Verifique a conexão e tente de novo.`, card?.clientId);
+            });
           });
-        }
       },
 
       rejectContent: (cardId, reviewer, reason) => {

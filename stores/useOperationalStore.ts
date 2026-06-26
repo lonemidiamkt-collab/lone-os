@@ -16,7 +16,7 @@ import type {
   ClientAccess,
 } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
-import { supabase } from "@/lib/supabase/client";
+import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
 
 interface OperationalState {
   timeline: Record<string, TimelineEntry[]>;
@@ -105,6 +105,8 @@ export const useOperationalStore = create<OperationalState>()(
       },
 
       subscribeRealtime: () => {
+        // Realtime desligado no servidor (RAM) — não tenta o WebSocket pra não spammar o console.
+        if (!REALTIME_ENABLED) return () => {};
         const channel = supabase
           .channel("store:operational")
           .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks" }, (p) => {
