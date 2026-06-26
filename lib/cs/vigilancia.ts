@@ -24,6 +24,13 @@ export function addDays(d: Date, n: number): Date {
   return x;
 }
 
+/** YYYY-MM-DD (no fuso de SP) de um timestamp ISO qualquer (ex.: created_at do card). */
+export function spDateKeyOf(iso?: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
 export function isBusinessHour(d = spNow()): boolean {
   const h = d.getHours();
   return h >= BUSINESS_START_HOUR && h < BUSINESS_END_HOUR;

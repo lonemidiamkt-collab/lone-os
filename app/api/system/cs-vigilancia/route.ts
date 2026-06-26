@@ -4,8 +4,9 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
+import { csSendGroupText } from "@/lib/cs/notify";
 import {
-  spNow, ymd, addDays, isBusinessDay, isBusinessHour, isFirmPostingDay, businessHoursSince,
+  spNow, ymd, addDays, isBusinessDay, isBusinessHour, isFirmPostingDay, businessHoursSince, spDateKeyOf,
 } from "@/lib/cs/vigilancia";
 
 // POST /api/system/cs-vigilancia — "Vigilância de Fluxo" do Agente CS.
@@ -18,7 +19,9 @@ import {
 // Mapeamento p/ os status reais do board: ideas/script=Fila · in_production=Produção ·
 // blocked=Travado · approval/client_approval=Aprovação(entregue) · scheduled=Agendado · published=ok.
 
-const DRY_RUN = true; // Fase 0. Só vira false (cobrança real no grupo) quando o Roberto aprovar.
+// Roberto aprovou ligar (26/jun) — mas SÓ posta cobrança de card REAL, criado ontem/hoje e com
+// responsável (os cards antigos são lixo acumulado). "Sem pauta" e card antigo seguem só dry-run.
+const VIGILANCIA_LIVE = true; // false = volta tudo pra dry-run (kill switch).
 
 // Thresholds em HORAS ÚTEIS (decisão do Roberto: manter os propostos).
 const TH_DESIGNER_PEGAR = 4; // card com demanda parado na Fila (designer não pegou)
@@ -31,10 +34,21 @@ type Area = "social" | "designer";
 interface Cobranca { vigilancia: number; area: Area; client_id: string; card_id: string | null; chave: string; motivo: string; }
 
 interface CardRow {
-  id: string; client_id: string; status: string; due_date: string | null;
+  id: string; client_id: string; status: string; due_date: string | null; created_at: string | null;
   design_request_id: string | null; designer_delivered_at: string | null;
   social_confirmed_at: string | null; status_changed_at: string | null;
   column_entered_at: Record<string, string> | null; blocked_reason: string | null;
+}
+
+/** Mensagem amigável pro grupo interno (tom leve, nunca de auditoria). */
+function mensagemAmigavel(vig: number, area: Area, cliente: string, pessoa: string, motivo: string): string {
+  const oi = `Oi ${pessoa}! `;
+  if (vig === 2) return `${oi}A pauta do *${cliente}* ainda não foi pro designer — quando puder, marca *"A fazer"* pra ela seguir o fluxo. Qualquer coisa tô por aqui! 😊`;
+  if (vig === 3 && /travado/i.test(motivo)) return `${oi}O card do *${cliente}* tá travado${motivo.replace(/^card travado/i, "")}. Quando der, dá uma destravada pra ele andar! 🙏`;
+  if (vig === 3) return `${oi}Tem um card do *${cliente}* esperando produção. Se precisar de referência ou tiver dúvida no briefing, é só falar! 🎨`;
+  if (vig === 4) return `${oi}A arte do *${cliente}* foi entregue pelo designer. Quando puder, dá uma olhada e confirma se tá ok pra seguir! 👀`;
+  if (vig === 5) return `${oi}A arte do *${cliente}* já tá aprovada internamente — falta agendar no Meta (mover pra *Agendado*). Quando der! 📅`;
+  return `${oi}Sobre o *${cliente}*: ${motivo}. Quando puder, dá uma olhada! 😊`;
 }
 
 /** Quando o card entrou no estágio atual (p/ medir "parado há X"). */
@@ -92,6 +106,7 @@ export async function POST(req: NextRequest) {
   const hoje = ymd(now);
   const amanhaDate = addDays(now, 1);
   const amanha = ymd(amanhaDate);
+  const ontem = ymd(addDays(now, -1)); // janela de "recente": card criado ontem ou hoje
 
   // Clientes ativos
   const { data: clientsData, error: cErr } = await supabaseAdmin
@@ -106,13 +121,14 @@ export async function POST(req: NextRequest) {
   const limite = ymd(addDays(now, 2));
   const { data: cardsData, error: kErr } = await supabaseAdmin
     .from("content_cards")
-    .select("id, client_id, status, due_date, design_request_id, designer_delivered_at, social_confirmed_at, status_changed_at, column_entered_at, blocked_reason")
+    .select("id, client_id, status, due_date, created_at, design_request_id, designer_delivered_at, social_confirmed_at, status_changed_at, column_entered_at, blocked_reason")
     .is("archived_at", null)
     .neq("status", "published")
     .not("due_date", "is", null)
     .lte("due_date", limite);
   if (kErr) return NextResponse.json({ error: kErr.message }, { status: 500 });
   const cards = (cardsData ?? []) as CardRow[];
+  const cardById = new Map(cards.map((k) => [k.id, k]));
 
   const cobrancas: Cobranca[] = [];
 
@@ -121,6 +137,7 @@ export async function POST(req: NextRequest) {
     cards.some((k) => k.client_id === clientId && k.due_date === dia);
   for (const c of clients) {
     if (!(c.active === null || c.active === true)) continue;
+    if (!c.assigned_social) continue; // só clientes com social (tira os de tráfego-only)
     // #2 — hoje é dia firme e não há pauta pra hoje
     if (isFirmPostingDay(now) && !temCardNaData(c.id as string, hoje)) {
       cobrancas.push({ vigilancia: 2, area: "social", client_id: c.id as string, card_id: null,
@@ -141,26 +158,40 @@ export async function POST(req: NextRequest) {
       chave: `${v.vigilancia}-${k.id}-${hoje}`, motivo: v.motivo });
   }
 
-  // Resolve quem seria cobrado (assigned_social/designer) e registra (dry-run, dedup pela chave).
+  // Registra cada cobrança e POSTA no grupo interno só as que estão "ao vivo":
+  // card REAL + criado ontem/hoje (recente) + com responsável. O resto (sem pauta, card antigo)
+  // só registra (dry-run). INSERT (não upsert): conflito de chave = já cobrado hoje → não repete.
+  const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   const detalhe: Array<Record<string, unknown>> = [];
+  let postadas = 0;
   for (const cob of cobrancas) {
     const cli = clientById.get(cob.client_id);
     const nome = (cli?.name as string) || "Cliente";
     const pessoa = cob.area === "designer" ? (cli?.assigned_designer as string) : (cli?.assigned_social as string);
-    await supabaseAdmin.from("cs_cobrancas").upsert({
+    const card = cob.card_id ? cardById.get(cob.card_id) : null;
+    const recente = card ? (spDateKeyOf(card.created_at) ?? "") >= ontem : false;
+    const live = VIGILANCIA_LIVE && !!cob.card_id && recente && !!pessoa && !!internalJid;
+    const msg = live
+      ? mensagemAmigavel(cob.vigilancia, cob.area, nome, pessoa!, cob.motivo)
+      : `[dry-run] ${nome}: ${cob.motivo}${pessoa ? ` (@${pessoa})` : ""}`;
+    const { error: insErr } = await supabaseAdmin.from("cs_cobrancas").insert({
       vigilancia: cob.vigilancia, client_id: cob.client_id, card_id: cob.card_id,
-      pessoa_cobrada: pessoa || null, chave: cob.chave,
-      mensagem: `[dry-run] ${nome}: ${cob.motivo}${pessoa ? ` (@${pessoa})` : ""}`,
-      dry_run: DRY_RUN,
-    }, { onConflict: "chave", ignoreDuplicates: true });
-    detalhe.push({ vig: cob.vigilancia, cliente: nome, pessoa: pessoa || null, motivo: cob.motivo });
+      pessoa_cobrada: pessoa || null, chave: cob.chave, mensagem: msg, dry_run: !live,
+    });
+    const novo = !insErr;
+    if (insErr && insErr.code !== "23505") console.error("[cs-vigilancia] insert:", insErr.message);
+    if (novo && live && internalJid) {
+      const r = await csSendGroupText(internalJid, msg);
+      if (r.ok) postadas++; else console.error("[cs-vigilancia] post falhou:", r.error);
+    }
+    detalhe.push({ vig: cob.vigilancia, cliente: nome, pessoa: pessoa || null, live, motivo: cob.motivo });
   }
 
-  console.log(`[cs-vigilancia] dry_run=${DRY_RUN} dia=${hoje} firme=${isFirmPostingDay(now)} cobrancas=${cobrancas.length}`);
+  console.log(`[cs-vigilancia] live=${VIGILANCIA_LIVE} dia=${hoje} firme=${isFirmPostingDay(now)} cobrancas=${cobrancas.length} postadas=${postadas}`);
   return NextResponse.json({
-    ok: true, dry_run: DRY_RUN, dia: hoje, dia_firme_hoje: isFirmPostingDay(now),
+    ok: true, live: VIGILANCIA_LIVE, dia: hoje, dia_firme_hoje: isFirmPostingDay(now),
     clientes_ativos: clients.length, cards_avaliados: cards.length,
-    cobrancas: cobrancas.length,
+    cobrancas: cobrancas.length, postadas_ao_vivo: postadas,
     por_vigilancia: cobrancas.reduce((acc, c) => { acc[c.vigilancia] = (acc[c.vigilancia] || 0) + 1; return acc; }, {} as Record<number, number>),
     detalhe: detalhe.slice(0, 30),
   });
