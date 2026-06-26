@@ -12,6 +12,7 @@ import { tipoToArea, resolveResponsavel } from "@/lib/cs/routing";
 import { gerarBriefing, formatBriefing } from "@/lib/cs/briefing";
 import { verificarDemanda, A2_TRUST_FROM } from "@/lib/cs/verifier";
 import { interpretarResposta } from "@/lib/cs/interpreter";
+import { detectarAprovacao } from "@/lib/cs/aprovacao";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
 
 // Janela de coalescência (debounce): mensagens do mesmo autor+grupo dentro desta janela
@@ -292,6 +293,29 @@ export async function POST(req: NextRequest) {
   if (c.agente_ativo === false) return NextResponse.json({ ok: true, skip: "agente pausado p/ este cliente" }); // S8
   const clienteNome = nomeOf(c);
   const clienteBriefing = (c.campaign_briefing as string) || (c.fixed_briefing as string) || undefined;
+
+  // ─── S3: o cliente APROVOU uma arte entregue? Marca o card e avisa o time (não publica sozinho). ───
+  if (isOpenAIConfigured()) {
+    const { data: cardAprov } = await supabaseAdmin
+      .from("content_cards")
+      .select("id, title")
+      .eq("client_id", c.id as string)
+      .is("client_approved_at", null)
+      .not("designer_delivered_at", "is", null)
+      .neq("status", "published")
+      .order("designer_delivered_at", { ascending: false })
+      .limit(1).maybeSingle();
+    if (cardAprov) {
+      const ap = await detectarAprovacao(msg.text, (cardAprov.title as string) || clienteNome);
+      if (ap.ok && ap.data?.aprovou) {
+        await supabaseAdmin.from("content_cards").update({ client_approved_at: new Date().toISOString() }).eq("id", cardAprov.id);
+        const jid = internalGroupJid();
+        if (jid) await csSendGroupText(jid, `🎉 O cliente *${clienteNome}* aprovou a arte *${cardAprov.title}*! Já pode agendar.`);
+        console.log(`[CS/inbound] cliente aprovou card ${cardAprov.id}`);
+        return NextResponse.json({ ok: true, aprovacao: cardAprov.id as string });
+      }
+    }
+  }
 
   // ─── Debounce (coalescência): rajada do mesmo autor+grupo numa janela curta enriquece a
   // demanda pendente em vez de criar/postar outra — evita 1 sugestão por mensagem da rajada.
