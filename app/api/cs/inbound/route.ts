@@ -62,13 +62,20 @@ async function criarCard(opts: {
   clientId: string; clienteNome: string; responsavel?: string | null;
   titulo: string; urgencia: string; briefing: string;
 }): Promise<string | null> {
+  // O card é CONTEÚDO do cliente → o DONO (social_media) é o assigned_social, pra aparecer no
+  // board do social responsável pela carteira. O "responsável" da demanda (designer p/ arte) serve
+  // só pro @ na sugestão; o designer enxerga o card pelo board dele (filtra por assigned_designer),
+  // independente do social_media. Sem isso, card de arte ficava com social_media=designer e sumia
+  // do board do social dono do cliente.
+  const { data: cli } = await supabaseAdmin.from("clients").select("assigned_social").eq("id", opts.clientId).maybeSingle();
+  const dono = ((cli?.assigned_social as string) || opts.responsavel || "").trim() || null;
   const { data: card, error } = await supabaseAdmin
     .from("content_cards")
     .insert({
       title: (isPilot() ? "[TESTE] " : "") + opts.titulo,
       client_id: opts.clientId,
       client_name: opts.clienteNome,
-      social_media: opts.responsavel || null,
+      social_media: dono,
       status: "ideas",
       priority: PRIO[opts.urgencia] ?? "medium",
       briefing: opts.briefing,
