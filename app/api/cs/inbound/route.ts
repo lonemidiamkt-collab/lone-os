@@ -11,6 +11,7 @@ import { csSendGroupText } from "@/lib/cs/notify";
 import { tipoToArea, resolveResponsavel } from "@/lib/cs/routing";
 import { gerarBriefing, formatBriefing } from "@/lib/cs/briefing";
 import { verificarDemanda, A2_TRUST_FROM } from "@/lib/cs/verifier";
+import { interpretarResposta } from "@/lib/cs/interpreter";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
 
 // Janela de coalescência (debounce): mensagens do mesmo autor+grupo dentro desta janela
@@ -170,6 +171,54 @@ export async function POST(req: NextRequest) {
     if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", d.id);
     console.log(`[CS/inbound] demanda ${d.codigo} ajustada por ${quem}`);
     return NextResponse.json({ ok: true, ajuste: "ok" });
+  }
+
+  // ─── Resposta NATURAL da equipe (não foi keyword): interpreta a intenção com IA ───
+  // Ex.: "coloca que a entrega é 8h-17h, pode criar" → entende = confirmar + complemento, cria o
+  // card e responde no tom da Lone. Só dispara se há demanda pendente RECENTE (ou um reply).
+  if (msg.groupJid === internalGroupJid() && !isTrivial(msg.text) && isOpenAIConfigured()) {
+    const alvo = await acharDemanda(msg.quotedMsgId);
+    const recente = !!alvo && (!!msg.quotedMsgId || (Date.now() - new Date(alvo.created_at as string).getTime() < 30 * 60 * 1000));
+    if (alvo && recente) {
+      const interp = await interpretarResposta({
+        clienteNome: (alvo.cliente_nome as string) || "Cliente",
+        resumo: (alvo.resumo as string) || (alvo.message_text as string) || "",
+        briefing: (alvo.briefing as string) || "",
+        mensagemEquipe: msg.text,
+        responsavel: (alvo.responsavel as string) || msg.authorName || "",
+      });
+      if (interp.ok && interp.data && interp.data.acao !== "ignorar") {
+        const i = interp.data;
+        const quem = msg.authorName || msg.authorJid;
+        let briefingFinal = (alvo.briefing as string) || (alvo.message_text as string) || "";
+        if (i.complemento) {
+          briefingFinal = `${briefingFinal}\n\n---\n✏️ ${quem}: ${i.complemento}`.trim();
+          await supabaseAdmin.from("cs_demandas").update({ briefing: briefingFinal }).eq("id", alvo.id);
+        }
+        if (i.acao === "descartar") {
+          await supabaseAdmin.from("cs_demandas").update({ status: "descartada", decided_at: new Date().toISOString(), decided_by: quem }).eq("id", alvo.id);
+          await csSendGroupText(msg.groupJid, i.resposta);
+          return NextResponse.json({ ok: true, interp: "descartada" });
+        }
+        if (i.acao === "confirmar") {
+          const clientId = (alvo.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
+          let cardId: string | null = null;
+          if (clientId) cardId = await criarCard({
+            clientId, clienteNome: (alvo.cliente_nome as string) || "Cliente", responsavel: alvo.responsavel as string | null,
+            titulo: (alvo.resumo as string) || (alvo.message_text as string), urgencia: alvo.urgencia as string,
+            briefing: briefingFinal,
+          });
+          await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: quem }).eq("id", alvo.id);
+          await csSendGroupText(msg.groupJid, i.resposta);
+          console.log(`[CS/inbound] interp ${alvo.codigo} → confirmada, card ${cardId}`);
+          return NextResponse.json({ ok: true, interp: "confirmada", cardId });
+        }
+        // ajustar → segue pendente; manda o ack (a IA já frasou "anotei, e aí?")
+        const r = await csSendGroupText(msg.groupJid, i.resposta);
+        if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", alvo.id);
+        return NextResponse.json({ ok: true, interp: "ajustada" });
+      }
+    }
   }
 
   // ─── Mensagem de cliente: A0 → A1 → A3 → sugere ───
