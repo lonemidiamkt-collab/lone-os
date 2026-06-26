@@ -18,17 +18,19 @@ export interface InterpInput {
 
 export interface InterpOutput {
   acao: "confirmar" | "descartar" | "ajustar" | "ignorar";
-  complemento: string | null; // info/ajuste pra anexar ao briefing (só o que a pessoa disse; null se nada)
-  resposta: string;           // resposta curta e calorosa pro grupo, na voz da Lone
+  complemento: string | null;  // info/ajuste pra anexar ao briefing DESTA demanda (só o que a pessoa disse)
+  aprendizado: string | null;  // fato DURÁVEL do cliente pra lembrar sempre (ou null se é one-off)
+  resposta: string;            // resposta curta e calorosa pro grupo, na voz da Lone
 }
 
 const INTERP_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  required: ["acao", "complemento", "resposta"],
+  required: ["acao", "complemento", "aprendizado", "resposta"],
   properties: {
     acao: { type: "string", enum: ["confirmar", "descartar", "ajustar", "ignorar"] },
     complemento: { type: ["string", "null"] },
+    aprendizado: { type: ["string", "null"] },
     resposta: { type: "string" },
   },
 };
@@ -45,7 +47,12 @@ O agente sugeriu uma demanda de um cliente e a EQUIPE respondeu. Entenda a respo
 - "ignorar": a mensagem não tem nada a ver com essa demanda (papo solto, outro assunto).
 
 Se a pessoa trouxe INFORMAÇÃO nova (ex.: horários, um valor, um detalhe), coloque em "complemento"
-um textinho pronto pra anexar ao briefing — use SÓ o que ela disse, não invente.
+um textinho pronto pra anexar ao briefing DESTA arte — use SÓ o que ela disse, não invente.
+
+"aprendizado": se a info for um FATO DURÁVEL do cliente (que vale pra SEMPRE, não só pra esta arte
+— ex.: "horário de entrega: 8h às 17h", "agendamento pelo app deles", "logo sempre no canto
+direito"), escreva esse fato curto aqui pra eu lembrar nas próximas. Se for algo só desta arte
+(one-off), deixe null. Na dúvida, null.
 
 "resposta": uma frase curta, natural e calorosa pro grupo, no seu tom. Cite o nome quando couber.
 Ex.: "Fechou, Julio! 🚀 Já tô mandando pro sistema." · "Boa, anotei aqui — bora!" · "Tranquilo,

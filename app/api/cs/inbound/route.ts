@@ -130,14 +130,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, decision: "not_found" });
     }
     const decidedBy = msg.authorName || msg.authorJid;
+    const sug = (d.msg_id_sugestao as string) || undefined; // threading: responde a sugestão
     if (decision.acao === "descartar") {
       await supabaseAdmin.from("cs_demandas").update({ status: "descartada", decided_at: new Date().toISOString(), decided_by: decidedBy }).eq("id", d.id);
-      await csSendGroupText(msg.groupJid, `❌ Beleza, descartei *${d.resumo}* — você cuida então. 👍`);
+      await csSendGroupText(msg.groupJid, `❌ Beleza, descartei *${d.resumo}* — você cuida então. 👍`, sug);
       return NextResponse.json({ ok: true, decision: "descartada" });
     }
     const clientId = (d.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
     if (!clientId) {
-      await csSendGroupText(msg.groupJid, `⚠️ Sem cliente pra criar o card de *${d.resumo}*.`);
+      await csSendGroupText(msg.groupJid, `⚠️ Sem cliente pra criar o card de *${d.resumo}*.`, sug);
       return NextResponse.json({ ok: true, decision: "sem_cliente" });
     }
     const cardId = await criarCard({
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
     }).eq("id", d.id);
     await csSendGroupText(msg.groupJid, cardId
       ? `✅ Pronto! Criei o card *${d.resumo}* nas demandas${d.responsavel ? ` pra ${d.responsavel}` : ""}.`
-      : `⚠️ Falha ao criar o card de *${d.resumo}*.`);
+      : `⚠️ Falha ao criar o card de *${d.resumo}*.`, sug);
     console.log(`[CS/inbound] demanda ${d.codigo} confirmada → card ${cardId}`);
     return NextResponse.json({ ok: true, decision: "confirmada", cardId });
   }
@@ -164,10 +165,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, ajuste: "not_found" });
     }
     const quem = msg.authorName || msg.authorJid;
+    const sugAj = (d.msg_id_sugestao as string) || undefined; // threading
     const novoBriefing = `${(d.briefing as string) || (d.message_text as string)}\n\n---\n✏️ Ajuste (${quem}): ${ajuste.instrucao}`;
     await supabaseAdmin.from("cs_demandas").update({ briefing: novoBriefing }).eq("id", d.id);
     const r = await csSendGroupText(msg.groupJid,
-      `✏️ Anotei o ajuste em *${d.resumo}*:\n\n${novoBriefing}\n\nResponde *ok* aqui que eu crio o card já com o ajuste.`);
+      `✏️ Anotei o ajuste em *${d.resumo}*:\n\n${novoBriefing}\n\nResponde *ok* aqui que eu crio o card já com o ajuste.`, sugAj);
     if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", d.id);
     console.log(`[CS/inbound] demanda ${d.codigo} ajustada por ${quem}`);
     return NextResponse.json({ ok: true, ajuste: "ok" });
@@ -190,14 +192,24 @@ export async function POST(req: NextRequest) {
       if (interp.ok && interp.data && interp.data.acao !== "ignorar") {
         const i = interp.data;
         const quem = msg.authorName || msg.authorJid;
+        const sug = (alvo.msg_id_sugestao as string) || undefined; // threading: responde a sugestão
         let briefingFinal = (alvo.briefing as string) || (alvo.message_text as string) || "";
         if (i.complemento) {
           briefingFinal = `${briefingFinal}\n\n---\n✏️ ${quem}: ${i.complemento}`.trim();
           await supabaseAdmin.from("cs_demandas").update({ briefing: briefingFinal }).eq("id", alvo.id);
         }
+        // Memória do cliente: fato durável → anexa ao fixed_briefing pra não perguntar de novo.
+        if (i.aprendizado && alvo.client_id) {
+          const { data: cli } = await supabaseAdmin.from("clients").select("fixed_briefing").eq("id", alvo.client_id as string).maybeSingle();
+          const fb = (cli?.fixed_briefing as string) || "";
+          if (!fb.includes(i.aprendizado)) {
+            await supabaseAdmin.from("clients").update({ fixed_briefing: `${fb}\n📌 (CS) ${i.aprendizado}`.trim() }).eq("id", alvo.client_id as string);
+            console.log(`[CS/inbound] aprendi sobre ${alvo.cliente_nome}: ${i.aprendizado}`);
+          }
+        }
         if (i.acao === "descartar") {
           await supabaseAdmin.from("cs_demandas").update({ status: "descartada", decided_at: new Date().toISOString(), decided_by: quem }).eq("id", alvo.id);
-          await csSendGroupText(msg.groupJid, i.resposta);
+          await csSendGroupText(msg.groupJid, i.resposta, sug);
           return NextResponse.json({ ok: true, interp: "descartada" });
         }
         if (i.acao === "confirmar") {
@@ -209,12 +221,12 @@ export async function POST(req: NextRequest) {
             briefing: briefingFinal,
           });
           await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: quem }).eq("id", alvo.id);
-          await csSendGroupText(msg.groupJid, i.resposta);
+          await csSendGroupText(msg.groupJid, i.resposta, sug);
           console.log(`[CS/inbound] interp ${alvo.codigo} → confirmada, card ${cardId}`);
           return NextResponse.json({ ok: true, interp: "confirmada", cardId });
         }
         // ajustar → segue pendente; manda o ack (a IA já frasou "anotei, e aí?")
-        const r = await csSendGroupText(msg.groupJid, i.resposta);
+        const r = await csSendGroupText(msg.groupJid, i.resposta, sug);
         if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", alvo.id);
         return NextResponse.json({ ok: true, interp: "ajustada" });
       }
