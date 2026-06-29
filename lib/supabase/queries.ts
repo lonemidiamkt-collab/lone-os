@@ -77,6 +77,7 @@ function snakeToClient(row: Record<string, unknown>): Client {
     postsThisMonth: (row.posts_this_month as number) ?? 0,
     postsGoal: (row.posts_goal as number) ?? 12,
     serviceType: (row.service_type as Client["serviceType"]) ?? "lone_growth",
+    perfilConteudo: (row.perfil_conteudo as Client["perfilConteudo"]) ?? undefined,
     draftStatus: (row.draft_status as Client["draftStatus"]) ?? null,
     contactName: (row.contact_name as string) ?? undefined,
     contactRole: (row.contact_role as string) ?? undefined,
@@ -154,6 +155,7 @@ function clientToSnake(c: Partial<Client>): Record<string, unknown> {
   if (c.postsThisMonth !== undefined) row.posts_this_month = c.postsThisMonth;
   if (c.postsGoal !== undefined) row.posts_goal = c.postsGoal;
   if (c.serviceType !== undefined) row.service_type = c.serviceType;
+  if (c.perfilConteudo !== undefined) row.perfil_conteudo = c.perfilConteudo;
   if (c.draftStatus !== undefined) row.draft_status = c.draftStatus;
   if (c.contactName !== undefined) row.contact_name = c.contactName;
   if (c.contactRole !== undefined) row.contact_role = c.contactRole;

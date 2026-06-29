@@ -22,6 +22,8 @@ export type MoodType = "happy" | "neutral" | "angry";
 export type LeadSource = "indicacao" | "trafego" | "organico" | "outros";
 
 export type ServiceType = "lone_growth" | "assessoria_trafego" | "assessoria_social" | "assessoria_design" | "trafego_social_site";
+// Perfil de conteúdo (Playbook Social §4): video/completo = faz vídeo (quarta = Reels).
+export type ContentProfile = "so_arte" | "video" | "completo";
 export type DraftStatus = "pending_invite" | "awaiting_approval" | null;
 
 export interface Client {
@@ -41,6 +43,7 @@ export interface Client {
   attentionLevel: AttentionLevel;
   tags: string[];
   serviceType?: ServiceType;
+  perfilConteudo?: ContentProfile; // só arte / vídeo / completo (Playbook §4)
   draftStatus?: DraftStatus;
   contactName?: string;
   contactRole?: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Client, Role, ServiceType } from "@/lib/types";
+import type { Client, Role, ServiceType, ContentProfile } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
   Building2, Shield, FileText, Eye, EyeOff, Download, Upload,
@@ -119,6 +119,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
     instagramLogin: client.instagramLogin || "", instagramPassword: client.instagramPassword || "",
     googleAdsLogin: client.googleAdsLogin || "", googleAdsPassword: client.googleAdsPassword || "",
     serviceType: client.serviceType || "",
+    perfilConteudo: client.perfilConteudo || "",
     assignedTraffic: client.assignedTraffic || "",
     assignedSocial: client.assignedSocial || "",
     assignedDesigner: client.assignedDesigner || "",
@@ -161,6 +162,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         googleAdsLogin: form.googleAdsLogin || undefined,
         // Operational fields
         serviceType: (form.serviceType as ServiceType) || undefined,
+        perfilConteudo: (form.perfilConteudo as ContentProfile) || undefined,
         assignedTraffic: form.assignedTraffic || undefined,
         assignedSocial: form.assignedSocial || undefined,
         assignedDesigner: form.assignedDesigner || undefined,
@@ -712,6 +714,25 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                    form.serviceType === "assessoria_trafego" ? "Assessoria de Trafego" :
                    form.serviceType === "assessoria_social" ? "Assessoria de Social" :
                    form.serviceType === "assessoria_design" ? "Assessoria de Design" :
+                   <span className="text-muted-foreground italic">Nao definido</span>}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1 col-span-2">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Perfil de Conteudo</p>
+              {editing ? (
+                <select value={form.perfilConteudo || ""} onChange={(e) => setForm((p) => ({ ...p, perfilConteudo: e.target.value }))}
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
+                  <option value="">Nao definido</option>
+                  <option value="so_arte">So Arte</option>
+                  <option value="video">Video (grava videos - quarta e dia de Reels)</option>
+                  <option value="completo">Completo (video + arte + stories)</option>
+                </select>
+              ) : (
+                <p className="text-sm text-foreground">
+                  {form.perfilConteudo === "video" ? "Video (faz Reels)" :
+                   form.perfilConteudo === "completo" ? "Completo" :
+                   form.perfilConteudo === "so_arte" ? "So Arte" :
                    <span className="text-muted-foreground italic">Nao definido</span>}
                 </p>
               )}
