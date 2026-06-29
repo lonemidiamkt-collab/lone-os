@@ -17,8 +17,8 @@ const ROLE_COLORS: Record<string, string> = {
   admin: "text-primary bg-primary/15",
   manager: "text-primary bg-primary/15",
   traffic: "text-primary bg-primary/15",
-  social: "text-zinc-400 bg-[#111118]",
-  designer: "text-zinc-400 bg-[#111118]",
+  social: "text-muted-foreground bg-muted",
+  designer: "text-muted-foreground bg-muted",
 };
 
 const ROLE_LABELS: Record<string, string> = {

@@ -30,7 +30,7 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 function HealthBar({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1 bg-[#0a0a10] rounded-full overflow-hidden">
+      <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
         <div className="h-full rounded-full transition-all bg-primary" style={{ width: `${score}%` }} />
       </div>
       <span className="text-xs font-medium tabular-nums text-muted-foreground">
@@ -273,9 +273,9 @@ export default function ClientsPage() {
             <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
               {[
                 { label: isOperator ? "Meus Clientes" : "Total de Clientes", value: filtered.length, color: "text-foreground", bg: "bg-muted" },
-                { label: "Bons Resultados", value: filtered.filter((c) => c.status === "good").length, color: "text-primary", bg: "bg-[#111118]" },
+                { label: "Bons Resultados", value: filtered.filter((c) => c.status === "good").length, color: "text-primary", bg: "bg-primary/10" },
                 { label: "Em Risco (Churn)", value: filtered.filter((c) => c.status === "at_risk").length, color: "text-red-500", bg: "bg-red-500/10" },
-                { label: "Em Onboarding", value: filtered.filter((c) => c.status === "onboarding").length, color: "text-primary", bg: "bg-[#111118]" },
+                { label: "Em Onboarding", value: filtered.filter((c) => c.status === "onboarding").length, color: "text-primary", bg: "bg-primary/10" },
               ].map((stat) => (
                 <div key={stat.label} className={`rounded-xl p-4 ${stat.bg} border border-border`}>
                   <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
@@ -303,7 +303,7 @@ export default function ClientsPage() {
                 )}
                 <div className="space-y-2">
                   {drafts.map((draft) => (
-                    <div key={draft.id} className="flex items-center gap-3 bg-[#111113] border border-[#1e1e2a] rounded-lg p-3">
+                    <div key={draft.id} className="flex items-center gap-3 bg-muted border border-border rounded-lg p-3">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground">{draft.name}</p>
                         <div className="flex items-center gap-2 mt-0.5">

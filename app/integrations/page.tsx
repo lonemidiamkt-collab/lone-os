@@ -675,7 +675,7 @@ export default function IntegrationsPage() {
       {/* Connect Modal */}
       {connectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-[#16161D] border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-slide-up">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-slide-up">
             <div className="flex items-center justify-between p-5 border-b border-border">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-xl">
@@ -751,7 +751,7 @@ export default function IntegrationsPage() {
       {/* Disconnect Confirmation Modal */}
       {disconnectConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-[#16161D] border border-border rounded-2xl w-full max-w-sm mx-4 shadow-2xl animate-slide-up p-5 space-y-4">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-sm mx-4 shadow-2xl animate-slide-up p-5 space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
                 <AlertTriangle size={20} className="text-red-400" />
