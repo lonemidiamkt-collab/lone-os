@@ -15,11 +15,19 @@ const CTX: ClassifierContext = {
 
 // Bateria de calibração (blueprint §5 + misses reais do piloto). esperado aceita
 // alternativas "a|b" (casos legitimamente ambíguos). minDemandas testa múltiplas demandas.
-const CASES: Array<{ msg: string; author?: string; esperado: string; minDemandas?: number }> = [
+// msgs = rajada (várias mensagens num bloco). resumoTem/resumoNaoTem = checa o conteúdo do resumo.
+const CASES: Array<{
+  msg?: string; msgs?: string[]; author?: string; esperado: string;
+  minDemandas?: number; resumoTem?: string; resumoNaoTem?: string;
+}> = [
   // demandas — devem virar demanda do tipo certo
   { msg: "preciso de uma arte de promoção pro dia das mães, pra amanhã", esperado: "arte_nova" },
   { msg: "cadê a arte que pedi semana passada?", esperado: "cobranca_prazo" },
   { msg: "e aquele post, sai hoje?", esperado: "cobranca_prazo" },
+  // armadilha "entregar hoje" num PEDIDO NOVO → arte_nova (não cobranca) — miss real do piloto
+  { msg: "preciso de uma arte sobre os novos horários de entrega, consegue entregar hoje?", esperado: "arte_nova" },
+  // auto-correção na rajada → resumo deve usar o valor CORRIGIDO — miss real do piloto
+  { msgs: ["preciso de arte pra vaga de vendedor", "opa, na verdade é vaga de caminhoneiro"], esperado: "arte_nova", resumoTem: "caminhoneiro", resumoNaoTem: "vendedor" },
   { msg: "tem que mudar a cor daquele post!", esperado: "ajuste_arte" },
   { msg: "troca o telefone na arte de ontem, mudou o número", esperado: "ajuste_arte" },
   { msg: "semana que vem vou precisar de uns stories", esperado: "agendamento" },
@@ -47,9 +55,12 @@ async function main() {
   let acertos = 0;
   let cacheReads = 0;
   for (const c of CASES) {
-    const res = await classifyBlock([{ author: c.author ?? "Cliente", text: c.msg }], CTX);
+    const texts = c.msgs ?? (c.msg ? [c.msg] : []);
+    const label = (c.msgs ? c.msgs.join(" / ") : c.msg ?? "").slice(0, 42);
+    const block = texts.map((t) => ({ author: c.author ?? "Cliente", text: t }));
+    const res = await classifyBlock(block, CTX);
     if (!res.ok || !res.data) {
-      console.log(`❌ ERRO  "${c.msg.slice(0, 42)}"  → ${res.error}`);
+      console.log(`❌ ERRO  "${label}"  → ${res.error}`);
       continue;
     }
     const itens = res.data.itens ?? [];
@@ -61,12 +72,17 @@ async function main() {
       got = `${demandas.length} demanda(s): ${demandas.map((d) => d.tipo).join(",")}`;
     } else {
       const alt = c.esperado.split("|");
-      ok = itens.length > 0 && alt.includes(itens[0].tipo);
-      got = itens.length === 0 ? "(sem item)" : `${itens[0].tipo}(${itens[0].confianca})`;
+      const resumo = (itens[0]?.resumo ?? "").toLowerCase();
+      const resumoOk =
+        (!c.resumoTem || resumo.includes(c.resumoTem.toLowerCase())) &&
+        (!c.resumoNaoTem || !resumo.includes(c.resumoNaoTem.toLowerCase()));
+      ok = itens.length > 0 && alt.includes(itens[0].tipo) && resumoOk;
+      const resumoNota = c.resumoTem || c.resumoNaoTem ? ` resumo="${itens[0]?.resumo ?? ""}"` : "";
+      got = itens.length === 0 ? "(sem item)" : `${itens[0].tipo}(${itens[0].confianca})${resumoNota}`;
     }
     if (ok) acertos++;
     cacheReads += res.usage?.prompt_tokens_details?.cached_tokens ?? 0;
-    console.log(`${ok ? "✅" : "⚠️ "} esperado=${c.esperado.padEnd(30)} got=${got.padEnd(32)} "${c.msg.slice(0, 42)}"`);
+    console.log(`${ok ? "✅" : "⚠️ "} esperado=${c.esperado.padEnd(30)} got=${got.padEnd(32)} "${label}"`);
   }
   console.log(`\n${acertos}/${CASES.length} corretos · cache_read acumulado: ${cacheReads}`);
 }

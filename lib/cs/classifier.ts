@@ -105,8 +105,15 @@ elogio, agendamento, retracao, conversa.
 # Casos-armadilha (preste MUITA atenção)
 - Insatisfação/reclamação sobre a LONE ("tô insatisfeito", "ninguém me responde", "tá uma bagunça",
   "que serviço é esse") → reclamacao, mesmo SEM pedido específico. (Sobre OUTRO fornecedor → conversa.)
-- Pergunta/cobrança sobre algo já pedido ("cadê a arte?", "e aquilo?", "sai hoje?", "ficou pronto?")
+- Pergunta/cobrança sobre algo já pedido ("cadê a arte?", "e aquilo?", "ficou pronto?", "já saiu?")
   → cobranca_prazo, NUNCA conversa.
+- "ENTREGAR HOJE" ≠ COBRANÇA: um PEDIDO NOVO com prazo apertado ("preciso de uma arte X, consegue
+  entregar hoje?", "faz um post de Y pra hoje", "cliente pediu Z, dá pra fazer hoje?") é arte_nova
+  (ou ajuste_arte) com urgencia=ALTA — NÃO cobranca_prazo. cobranca_prazo é SÓ quando se cobra algo
+  JÁ pedido antes, sem um pedido novo junto. Na dúvida entre os dois quando HÁ um pedido novo: é o pedido novo.
+- AUTO-CORREÇÃO na rajada: se o cliente se corrige ("vaga de vendedor... opa, na verdade é
+  caminhoneiro", "não é X, é Y", "me corrigindo:", "ignora o que falei, é..."), use SEMPRE o valor
+  CORRIGIDO (o último) no resumo e no trecho_origem. Ignore o valor retratado — não o coloque no resumo.
 - Pedido de mudança em peça existente, mesmo imperativo curto ("muda a cor", "troca a foto",
   "tira esse texto") → ajuste_arte, NUNCA conversa.
 - "kkk depois a gente vê", "qualquer dia desses" → conversa, NÃO urgência.
@@ -137,6 +144,10 @@ Cliente: "muda a cor desse post"
 → {is_demanda:true, tipo:"ajuste_arte", urgencia:"media", confianca:0.85, resumo:"Mudar a cor do post", trecho_origem:"muda a cor desse post", cliente:null}
 Cliente: "tô muito insatisfeito, ninguém me responde aqui"
 → {is_demanda:true, tipo:"reclamacao", urgencia:"alta", confianca:0.85, resumo:"Insatisfação com a falta de resposta da Lone", trecho_origem:"tô muito insatisfeito, ninguém me responde aqui", cliente:null}
+Cliente: "preciso de uma arte sobre os novos horários de entrega, consegue entregar hoje?"
+→ {is_demanda:true, tipo:"arte_nova", urgencia:"alta", confianca:0.9, resumo:"Arte sobre os novos horários de entrega", trecho_origem:"preciso de uma arte sobre os novos horários de entrega, consegue entregar hoje?", cliente:null}
+Cliente: "preciso de uma arte pra vaga de vendedor" / "opa, na verdade é vaga de caminhoneiro"
+→ {is_demanda:true, tipo:"arte_nova", urgencia:"media", confianca:0.9, resumo:"Arte para vaga de caminhoneiro", trecho_origem:"opa, na verdade é vaga de caminhoneiro", cliente:null}
 
 # Saída
 Responda APENAS no formato JSON definido (schema). Liste todos os itens detectados
