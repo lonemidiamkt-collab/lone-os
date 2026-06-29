@@ -28,7 +28,7 @@ import type {
   MoodEntry, MoodType, CreativeAsset, SocialProofEntry, CrisisNote,
   Notice, QuinzReport, ClientAccess, TrafficMonthlyReport,
   TrafficRoutineCheck, SocialMonthlyReport, ContentApproval,
-  Role, CardAttachment,
+  Role, CardAttachment, CsClientRule,
 } from "@/lib/types";
 
 // No servidor (API routes), supabase browser client não tem session → RLS bloqueia tudo.
@@ -1122,6 +1122,34 @@ export async function upsertContentApproval(approval: Omit<ContentApproval, "id"
     reason: approval.reason,
   });
   if (error) console.error("[DB] upsertContentApproval:", error);
+}
+
+// ═══════════════════════════════════════════════════════════
+// CS — DO'S & DON'TS ESTRUTURADOS (cs_client_rules)
+// ═══════════════════════════════════════════════════════════
+
+function snakeToCsRule(row: Record<string, unknown>): CsClientRule {
+  return {
+    id: row.id as string,
+    clientId: row.client_id as string,
+    texto: row.texto as string,
+    escopo: (row.escopo as CsClientRule["escopo"]) ?? "sempre",
+    origem: (row.origem as CsClientRule["origem"]) ?? "manual",
+    ativo: (row.ativo as boolean) ?? true,
+    createdAt: row.created_at as string,
+  };
+}
+
+/** Regras ativas do cliente (do's & don'ts). Resiliente: se a tabela não existe ainda, retorna []. */
+export async function fetchClientCsRules(clientId: string): Promise<CsClientRule[]> {
+  const { data, error } = await db
+    .from("cs_client_rules")
+    .select("*")
+    .eq("client_id", clientId)
+    .eq("ativo", true)
+    .order("created_at", { ascending: true });
+  if (error) { console.error("[DB] fetchClientCsRules:", error.message); return []; }
+  return (data ?? []).map(snakeToCsRule);
 }
 
 // ═══════════════════════════════════════════════════════════

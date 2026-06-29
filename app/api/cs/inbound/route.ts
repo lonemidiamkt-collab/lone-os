@@ -13,6 +13,7 @@ import { gerarBriefing, formatBriefing } from "@/lib/cs/briefing";
 import { verificarDemanda, A2_TRUST_FROM } from "@/lib/cs/verifier";
 import { interpretarResposta } from "@/lib/cs/interpreter";
 import { detectarAprovacao } from "@/lib/cs/aprovacao";
+import { fetchClientCsRules } from "@/lib/supabase/queries";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
 
 // Janela de coalescência (debounce): mensagens do mesmo autor+grupo dentro desta janela
@@ -230,13 +231,17 @@ export async function POST(req: NextRequest) {
           briefingFinal = `${briefingFinal}\n\n---\n✏️ ${quem}: ${i.complemento}`.trim();
           await supabaseAdmin.from("cs_demandas").update({ briefing: briefingFinal }).eq("id", alvo.id);
         }
-        // Memória do cliente: fato durável → anexa ao fixed_briefing pra não perguntar de novo.
+        // Memória do cliente: fato durável → vira REGRA estruturada (do's & don'ts), não texto
+        // solto no fixed_briefing (que o A3 ignora quando há campaign_briefing). Dedup pelo texto.
         if (i.aprendizado && alvo.client_id) {
-          const { data: cli } = await supabaseAdmin.from("clients").select("fixed_briefing").eq("id", alvo.client_id as string).maybeSingle();
-          const fb = (cli?.fixed_briefing as string) || "";
-          if (!fb.includes(i.aprendizado)) {
-            await supabaseAdmin.from("clients").update({ fixed_briefing: `${fb}\n📌 (CS) ${i.aprendizado}`.trim() }).eq("id", alvo.client_id as string);
-            console.log(`[CS/inbound] aprendi sobre ${alvo.cliente_nome}: ${i.aprendizado}`);
+          const { data: existentes } = await supabaseAdmin
+            .from("cs_client_rules").select("id")
+            .eq("client_id", alvo.client_id as string).eq("texto", i.aprendizado).eq("ativo", true).limit(1);
+          if (!existentes || existentes.length === 0) {
+            await supabaseAdmin.from("cs_client_rules").insert({
+              client_id: alvo.client_id as string, texto: i.aprendizado, escopo: "sempre", origem: "aprendido",
+            });
+            console.log(`[CS/inbound] aprendi (regra) sobre ${alvo.cliente_nome}: ${i.aprendizado}`);
           }
         }
         if (i.acao === "descartar") {
@@ -294,6 +299,9 @@ export async function POST(req: NextRequest) {
   if (c.agente_ativo === false) return NextResponse.json({ ok: true, skip: "agente pausado p/ este cliente" }); // S8
   const clienteNome = nomeOf(c);
   const clienteBriefing = (c.campaign_briefing as string) || (c.fixed_briefing as string) || undefined;
+  // Do's & don'ts estruturados do cliente → injetados no A3 (independem do texto livre).
+  const csRules = await fetchClientCsRules(c.id as string);
+  const regrasFmt = csRules.map((r) => `${r.texto} (${r.escopo})`);
 
   // ─── S3: o cliente APROVOU uma arte entregue? Marca o card e avisa o time (não publica sozinho). ───
   if (isOpenAIConfigured()) {
@@ -376,7 +384,7 @@ export async function POST(req: NextRequest) {
 
     // A3 — redige o briefing seguindo as regras do cliente (não inventa; pede o que falta).
     const a3 = await gerarBriefing({
-      clienteNome, clienteNicho: c.nicho as string, clienteBriefing,
+      clienteNome, clienteNicho: c.nicho as string, clienteBriefing, regras: regrasFmt,
       tipo: it.tipo, urgencia: it.urgencia, resumo: it.resumo, mensagemOriginal: msg.text,
     });
     const briefingTxt = a3.ok && a3.data ? formatBriefing(a3.data) : `${it.resumo}\nMensagem: "${msg.text}"`;

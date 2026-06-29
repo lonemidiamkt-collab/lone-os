@@ -223,6 +223,18 @@ export interface CardAttachment {
   created_at: string; // ISO
 }
 
+// Do's & don'ts estruturados do Agente CS (tabela cs_client_rules).
+export type CsRuleEscopo = "sempre" | "promocao" | "arte" | "social" | "trafego";
+export interface CsClientRule {
+  id: string;
+  clientId: string;
+  texto: string;
+  escopo: CsRuleEscopo;
+  origem: "manual" | "aprendido";
+  ativo: boolean;
+  createdAt: string; // ISO
+}
+
 export interface CardComment {
   id: string;
   author: string;

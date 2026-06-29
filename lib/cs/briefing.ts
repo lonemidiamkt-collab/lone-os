@@ -16,6 +16,8 @@ export interface BriefingInput {
   clienteNicho?: string;
   /** fixed_briefing/campaign_briefing do cliente: tom, regras, do's & don'ts, produtos/preços. */
   clienteBriefing?: string;
+  /** Do's & don'ts ESTRUTURADOS (cs_client_rules) — cada um já formatado "texto (escopo)". */
+  regras?: string[];
   tipo: string;
   urgencia: string;
   resumo: string;
@@ -82,9 +84,13 @@ SE O PEDIDO ESTÁ CLARO:
 Responda APENAS no formato JSON definido (schema).`;
 
 function buildUser(input: BriefingInput): string {
+  const regras = input.regras?.length
+    ? input.regras.map((r) => `  - ${r}`).join("\n")
+    : "  (nenhuma)";
   return [
     `Cliente: ${input.clienteNome}${input.clienteNicho ? ` (${input.clienteNicho})` : ""}`,
     `Briefing/regras do cliente (REFERÊNCIA — use só o que se aplica a ESTE pedido, não jogue tudo): ${input.clienteBriefing?.trim() || "(sem briefing cadastrado)"}`,
+    `Do's & don'ts ESTRUTURADOS do cliente (regras firmes — APLIQUE as relevantes a ESTE pedido; cada uma traz o escopo entre parênteses):\n${regras}`,
     `Demanda detectada: tipo=${input.tipo} · urgência=${input.urgencia}`,
     `Resumo: ${input.resumo}`,
     `Mensagem original do cliente: "${input.mensagemOriginal}"`,

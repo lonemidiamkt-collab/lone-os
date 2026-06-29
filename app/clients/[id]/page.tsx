@@ -6,6 +6,7 @@ import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import HolidaysPdfButton from "@/components/HolidaysPdfButton";
 import { MarkdownEditor } from "@/components/Markdown";
 import BriefingTab from "./BriefingTab";
+import ClientCsRules from "@/components/cs/ClientCsRules";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
@@ -679,7 +680,10 @@ export default function ClientDetailPage() {
 
           {/* ── BRIEFING ─────────────────────────────────────────────────────── */}
           {activeTab === "briefing" && (
-            <BriefingTab clientId={clientId} />
+            <div className="space-y-4">
+              <BriefingTab clientId={clientId} />
+              <ClientCsRules clientId={clientId} />
+            </div>
           )}
 
           {/* ── CONTRATOS ────────────────────────────────────────────────────── */}
