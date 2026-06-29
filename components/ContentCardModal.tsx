@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   Upload, Calendar, FileText, User, Tag,
   Save, ImageIcon, Hash, AlignLeft,
-  Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Palette, Trash2, Archive, AtSign,
+  Send, MessageSquare, CheckCircle, XCircle, ExternalLink, Palette, Archive, AtSign,
 } from "lucide-react";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
@@ -12,8 +12,9 @@ import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
-import type { ContentCard } from "@/lib/types";
-import SignedImage from "@/components/shared/SignedImage";
+import type { ContentCard, CardAttachment } from "@/lib/types";
+import CardArtAttachments from "@/components/kanban/CardArtAttachments";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
   Dialog,
   DialogContent,
@@ -54,27 +55,6 @@ function timeAgo(iso: string): string {
   return `${Math.floor(diff / 86400)}d`;
 }
 
-function DrivePreviewFallback({ clientId, label }: { clientId: string; label: string }) {
-  const clients = useClientsStore((s) => s.clients);
-  const client = clients.find((c) => c.id === clientId);
-  return (
-    <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground px-4">
-      <ImageIcon size={32} />
-      <p className="text-[10px] text-center">{label}</p>
-      {client?.driveLink && (
-        <a
-          href={client.driveLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[10px] text-primary hover:underline flex items-center gap-1"
-        >
-          <ExternalLink size={9} /> Acesse via Google Drive
-        </a>
-      )}
-    </div>
-  );
-}
-
 interface Props {
   card: ContentCard;
   onClose: () => void;
@@ -104,76 +84,38 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [hashtags, setHashtags] = useState(card.hashtags ?? "");
   const [dueDate, setDueDate] = useState(card.dueDate ?? "");
   const [status, setStatus] = useState(card.status);
-  const [imageUrl, setImageUrl] = useState(card.imageUrl ?? "");
+  const [attachments, setAttachments] = useState<CardAttachment[] | null>(null); // null = carregando
   const [saved, setSaved] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [editingBriefing, setEditingBriefing] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadOk, setUploadOk] = useState(false);
-  const [confirmDeleteArt, setConfirmDeleteArt] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [sendingDesign, setSendingDesign] = useState(false); // anti-duplo-clique no Solicitar Design
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
   const comments = card.comments ?? [];
 
-  // Upload real pra bucket "arts" via /api/upload-art (service role bypassa RLS)
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Carrega as artes (multi-arte) ao abrir o card
+  useEffect(() => {
+    let alive = true;
+    authedFetch(`/api/cards/${card.id}/attachments`)
+      .then((r) => (r.ok ? r.json() : { attachments: [] }))
+      .then((d) => { if (alive) setAttachments((d.attachments as CardAttachment[]) ?? []); })
+      .catch(() => { if (alive) setAttachments([]); });
+    return () => { alive = false; };
+  }, [card.id]);
 
-    setUploadError(null);
-    setUploadOk(false);
-
-
-    // Validações antes de subir
-    if (file.size === 0) { setUploadError("Arquivo vazio."); return; }
-    if (file.size > 25 * 1024 * 1024) {
-      setUploadError(`Arquivo muito grande (${(file.size / 1024 / 1024).toFixed(1)}MB). Máximo: 25MB`);
-      return;
-    }
-    const allowed = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "application/pdf", "video/mp4", "video/webm"];
-    if (!allowed.includes(file.type)) {
-      setUploadError(`Tipo não suportado (${file.type}). Use PNG, JPEG, WebP, PDF ou MP4.`);
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("cardId", card.id);
-
-      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
-      const res = await authedFetch("/api/upload-art", { method: "POST", body: formData });
-      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-
-      if (!res.ok) {
-        const msg = data.error || `Falha no upload (HTTP ${res.status})`;
-        setUploadError(msg);
-        console.error("[ContentCardModal upload]", { status: res.status, data });
-        return;
-      }
-
-      setImageUrl(data.url);
-      // Persiste imediatamente ao banco — não espera o botão "Salvar"
-      // Garante que outros usuários (ex: Designer) vejam a referência sem depender do save manual
-      updateContentCard(card.id, { imageUrl: data.url }).catch((err) => {
-        console.error("[ContentCardModal] auto-save imageUrl failed:", err);
-      });
-      setUploadOk(true);
-      // Limpa o feedback de sucesso após 3s
-      setTimeout(() => setUploadOk(false), 3000);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro de conexão";
-      console.error("[ContentCardModal upload exception]", err);
-      setUploadError(`Erro: ${msg}`);
-    } finally {
-      setUploading(false);
-      // Limpa o input pra permitir re-upload do mesmo arquivo
-      if (fileInputRef.current) fileInputRef.current.value = "";
+  // Reflete a mudança de arte no board na hora (capa = 1ª arte; sem arte = sem capa).
+  const handleAttachmentsChange = (next: CardAttachment[]) => {
+    const real = next.filter((a) => a.id !== "legacy");
+    const cover = next[0]?.url; // 1ª arte visível (real ou capa legada)
+    useContentStore.setState((s) => ({
+      contentCards: s.contentCards.map((c) =>
+        c.id === card.id ? { ...c, cardAttachments: real, imageUrl: cover } : c,
+      ),
+    }));
+    // Removeu tudo (inclusive a capa legada) → persiste a limpeza do image_url legado.
+    if (next.length === 0 && card.imageUrl) {
+      updateContentCard(card.id, { imageUrl: "" }).catch(() => {});
     }
   };
 
@@ -185,7 +127,6 @@ export default function ContentCardModal({ card, onClose }: Props) {
       hashtags: hashtags || undefined,
       dueDate: dueDate || undefined,
       status,
-      imageUrl: imageUrl || undefined,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
@@ -211,19 +152,6 @@ export default function ContentCardModal({ card, onClose }: Props) {
     setCommentText("");
     setMentions([]);
     setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-  };
-
-  // Apaga só a ARTE (image_url = ""), mantendo a demanda. Persiste na hora.
-  const handleDeleteArt = async () => {
-    setConfirmDeleteArt(false);
-    setImageUrl("");
-    setUploadOk(false);
-    setUploadError(null);
-    try {
-      await updateContentCard(card.id, { imageUrl: "" });
-    } catch {
-      setUploadError("Falha ao apagar a arte. Tente de novo.");
-    }
   };
 
   // Arquiva a DEMANDA (soft-delete): some do quadro ativo mas fica no banco, recuperável em "Arquivadas".
@@ -262,86 +190,26 @@ export default function ContentCardModal({ card, onClose }: Props) {
 
         {/* Body */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Left: Art preview */}
-          <div className="w-72 border-r border-border flex flex-col shrink-0">
-            <div className="flex-1 relative bg-muted overflow-hidden">
-              {imageUrl && !imageUrl.startsWith("blob:") ? (
-                <SignedImage
-                  src={imageUrl}
-                  alt="Arte do conteúdo"
-                  className="w-full h-full object-cover"
-                />
-              ) : imageUrl ? (
-                <DrivePreviewFallback
-                  clientId={card.clientId}
-                  label="Preview removido para otimizar o sistema."
-                />
+          {/* Left: Artes (multi-arte) */}
+          <div className="w-72 border-r border-border flex flex-col shrink-0 overflow-auto">
+            <div className="p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                <ImageIcon size={13} /> Artes do card
+              </div>
+              {attachments === null ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <Upload size={16} className="animate-pulse" />
+                </div>
               ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
-                  <ImageIcon size={40} />
-                  <p className="text-xs text-center px-4">Nenhuma arte anexada ainda</p>
-                </div>
-              )}
-            </div>
-            <div className="p-3 border-t border-border space-y-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,video/mp4,video/webm"
-                className="hidden"
-                onChange={handleFileChange}
-                disabled={uploading}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="w-full flex items-center justify-center gap-2"
-              >
-                {uploading ? (
-                  <><Upload size={13} className="animate-pulse" /> Carregando arte...</>
-                ) : (
-                  <><Upload size={13} /> {imageUrl ? "Trocar arquivo" : "Anexar arte / arquivo"}</>
-                )}
-              </Button>
-              {/* Apagar arte — só quando há arte anexada */}
-              {imageUrl && !uploading && (
-                confirmDeleteArt ? (
-                  <div className="flex items-center gap-1.5">
-                    <Button type="button" variant="ghost" size="sm" className="flex-1 text-muted-foreground"
-                      onClick={() => setConfirmDeleteArt(false)}>
-                      Cancelar
-                    </Button>
-                    <Button type="button" variant="ghost" size="sm"
-                      className="flex-1 flex items-center justify-center gap-1.5 text-destructive hover:bg-destructive/10"
-                      onClick={handleDeleteArt}>
-                      <Trash2 size={13} /> Confirmar
-                    </Button>
-                  </div>
-                ) : (
-                  <Button type="button" variant="ghost" size="sm"
-                    className="w-full flex items-center justify-center gap-2 text-destructive hover:bg-destructive/10"
-                    onClick={() => setConfirmDeleteArt(true)}>
-                    <Trash2 size={13} /> Apagar arte
-                  </Button>
-                )
-              )}
-              {/* Toast inline — sucesso ou erro */}
-              {uploadOk && (
-                <div className="flex items-center gap-1.5 text-[10px] text-lone-success bg-lone-success-bg border border-lone-success-border rounded-md px-2 py-1.5">
-                  <CheckCircle size={11} /> Arte salva — visível para todos da equipe
-                </div>
-              )}
-              {uploadError && (
-                <div className="flex items-start gap-1.5 text-[10px] text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-2 py-1.5">
-                  <XCircle size={11} className="shrink-0 mt-0.5" />
-                  <span className="leading-relaxed">{uploadError}</span>
-                </div>
+                <CardArtAttachments
+                  cardId={card.id}
+                  existingAttachments={attachments}
+                  legacyImageUrl={card.imageUrl}
+                  onAttachmentsChange={handleAttachmentsChange}
+                />
               )}
               <p className="text-[9px] text-muted-foreground text-center">
-                PNG, JPEG, WebP, GIF, PDF, MP4 — até 25MB
+                PNG, JPEG, WebP, GIF — até 10MB, máx 5 artes
               </p>
             </div>
           </div>

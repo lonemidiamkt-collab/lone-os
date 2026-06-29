@@ -4,6 +4,8 @@ import Header from "@/components/Header";
 import SignedImage from "@/components/shared/SignedImage";
 import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
+import CardArtAttachments from "@/components/kanban/CardArtAttachments";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
@@ -17,7 +19,7 @@ import {
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
-import type { Client, ContentCard, DesignRequest } from "@/lib/types";
+import type { Client, ContentCard, DesignRequest, CardAttachment } from "@/lib/types";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import { MarkdownView, MarkdownEditor, markdownPlainText } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
@@ -94,29 +96,76 @@ function UploadArtModal({
   const [artLink, setArtLink] = useState(
     card.imageUrl && card.imageUrl.includes("drive.google.com") ? card.imageUrl : ""
   );
+  const [attachments, setAttachments] = useState<CardAttachment[] | null>(null); // null = carregando
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<string>("");
   const [error, setError] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const clientDriveLink = clients.find((c) => c.id === card.clientId)?.driveLink;
   const isImageUrl = (url: string) => /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
 
-  // Shared save logic — called both from file upload (atomic) and Drive link button
-  const saveArt = async (url: string) => {
+  // Carrega as artes já anexadas ao card ao abrir o modal
+  useEffect(() => {
+    let alive = true;
+    authedFetch(`/api/cards/${card.id}/attachments`)
+      .then((r) => (r.ok ? r.json() : { attachments: [] }))
+      .then((d) => { if (alive) setAttachments((d.attachments as CardAttachment[]) ?? []); })
+      .catch(() => { if (alive) setAttachments([]); });
+    return () => { alive = false; };
+  }, [card.id]);
+
+  // Mantém a capa do card no board atualizada conforme o designer anexa/remove artes
+  const handleAttachmentsChange = (next: CardAttachment[]) => {
+    setAttachments(next);
+    const real = next.filter((a) => a.id !== "legacy");
+    const cover = next[0]?.url;
+    useContentStore.setState((s) => ({
+      contentCards: s.contentCards.map((c) =>
+        c.id === card.id ? { ...c, cardAttachments: real, imageUrl: cover } : c,
+      ),
+    }));
+    // Removeu tudo (inclusive a capa legada) → persiste a limpeza do image_url legado.
+    if (next.length === 0 && card.imageUrl) {
+      updateContentCard(card.id, { imageUrl: "" }).catch(() => {});
+    }
+  };
+
+  // Entrega da arte. As artes (multi) são enviadas direto pela grid (card_attachments);
+  // o link do Drive continua como alternativa legada (1 arte via URL externa).
+  const handleDeliver = async () => {
+    setError("");
+    const link = artLink.trim();
+    const real = (attachments ?? []).filter((a) => a.id !== "legacy");
+
+    // Precisa de pelo menos uma arte anexada OU um link do Drive
+    if (real.length === 0 && !link) {
+      setError("Anexe pelo menos uma arte OU cole um link da arte.");
+      return;
+    }
+    if (real.length === 0 && link) {
+      try {
+        const url = new URL(link);
+        if (!url.protocol.startsWith("http")) { setError("URL inválida — deve começar com https://"); return; }
+      } catch {
+        setError("URL inválida — verifique o formato."); return;
+      }
+    }
+
     setSaving(true);
     try {
+      // URLs entregues: as artes anexadas (multi) OU o link do Drive (legado)
+      const deliveredUrls = real.length > 0 ? real.map((a) => a.url) : [link];
+
       updateContentCard(card.id, {
-        imageUrl: url,
         designerDeliveredAt: new Date().toISOString(),
         designerDeliveredBy: currentUser,
+        // Só grava imageUrl no caminho legado (link). Com anexos, a capa vem de card_attachments.
+        ...(real.length === 0 ? { imageUrl: link } : {}),
       }, { bypassWorkflow: true });
 
       if (card.designRequestId) {
         const dr = designRequests.find((r) => r.id === card.designRequestId);
-        const nextAttachments = [...(dr?.attachments ?? []), url];
+        const nextAttachments = [...(dr?.attachments ?? []), ...deliveredUrls];
         updateDesignRequest(card.designRequestId, { attachments: nextAttachments, status: "done" });
       }
       pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmação.`, card.clientId);
@@ -125,70 +174,10 @@ function UploadArtModal({
       setTimeout(() => { setSaved(false); onClose(); }, 800);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      console.error("[UploadArt] save failed:", err);
-      setError(`Não foi possível salvar: ${msg}`);
+      console.error("[UploadArt] deliver failed:", err);
+      setError(`Não foi possível entregar: ${msg}`);
       setSaving(false);
     }
-  };
-
-  // ─── Upload de arquivo direto (PNG/JPG/PDF/MP4) — atômico ───
-  const handleFileUpload = async (file: File) => {
-    setError("");
-    if (file.size === 0) { setError("Arquivo vazio."); return; }
-    if (file.size > 25 * 1024 * 1024) {
-      setError(`Arquivo muito grande (${(file.size / 1024 / 1024).toFixed(1)}MB). Máximo: 25MB`);
-      return;
-    }
-    const allowed = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "application/pdf", "video/mp4", "video/webm"];
-    if (!allowed.includes(file.type)) {
-      setError(`Tipo não suportado (${file.type}). Use PNG, JPEG, WebP, GIF, PDF ou MP4.`);
-      return;
-    }
-
-    setUploading(true);
-    setUploadProgress("Enviando arquivo...");
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("cardId", card.id);
-
-      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
-      const res = await authedFetch("/api/upload-art", { method: "POST", body: formData });
-      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-
-      if (!res.ok) {
-        setError(data.error || `Falha no upload: HTTP ${res.status}`);
-        console.error("[UploadArt] upload failed:", { status: res.status, data });
-        return;
-      }
-
-      const url = data.url as string;
-      setArtLink(url);
-      setUploadProgress("Upload concluído. Salvando...");
-      await saveArt(url);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro de conexão";
-      console.error("[UploadArt] upload exception:", err);
-      setError(`Erro no upload: ${msg}`);
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const handleSave = async () => {
-    setError("");
-    const link = artLink.trim();
-    if (!link) { setError("Faça upload do arquivo OU cole um link da arte."); return; }
-    try {
-      const url = new URL(link);
-      if (!url.protocol.startsWith("http")) {
-        setError("URL inválida — deve começar com https://"); return;
-      }
-    } catch {
-      setError("URL inválida — verifique o formato."); return;
-    }
-    await saveArt(link);
   };
 
   return (
@@ -225,27 +214,20 @@ function UploadArtModal({
             </a>
           )}
 
-          {/* File upload — direto do computador */}
+          {/* Artes (multi-arte) — upload direto, colar (Ctrl+V) ou arrastar */}
           <div className="space-y-1.5">
-            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Upload do arquivo</label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,video/mp4,video/webm"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading || saving}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-primary/40 bg-primary/[0.04] hover:bg-primary/[0.08] hover:border-primary/60 transition-all text-sm text-foreground disabled:opacity-50 disabled:cursor-wait"
-            >
-              <Upload size={14} className="text-primary" />
-              {uploading ? "Enviando..." : "Selecionar arquivo (PNG, JPG, PDF, MP4 — até 25MB)"}
-            </button>
-            {uploadProgress && (
-              <p className="text-[10px] text-lone-success mt-1">{uploadProgress}</p>
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Artes do card (até 5 · PNG, JPG, WebP, GIF · 10MB)</label>
+            {attachments === null ? (
+              <div className="flex items-center justify-center py-6 text-muted-foreground">
+                <Upload size={16} className="animate-pulse" />
+              </div>
+            ) : (
+              <CardArtAttachments
+                cardId={card.id}
+                existingAttachments={attachments.filter((a) => a.id !== "legacy")}
+                legacyImageUrl={card.imageUrl}
+                onAttachmentsChange={handleAttachmentsChange}
+              />
             )}
           </div>
 
@@ -310,8 +292,8 @@ function UploadArtModal({
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all">Cancelar</button>
           <button
             type="button"
-            onClick={handleSave}
-            disabled={!artLink.trim() || saved || saving}
+            onClick={handleDeliver}
+            disabled={saved || saving || ((attachments ?? []).filter((a) => a.id !== "legacy").length === 0 && !artLink.trim())}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all disabled:opacity-30 disabled:shadow-none"
           >
             {saved ? (

@@ -28,7 +28,7 @@ import type {
   MoodEntry, MoodType, CreativeAsset, SocialProofEntry, CrisisNote,
   Notice, QuinzReport, ClientAccess, TrafficMonthlyReport,
   TrafficRoutineCheck, SocialMonthlyReport, ContentApproval,
-  Role,
+  Role, CardAttachment,
 } from "@/lib/types";
 
 // No servidor (API routes), supabase browser client não tem session → RLS bloqueia tudo.
@@ -357,6 +357,35 @@ export async function fetchContentCards(filter?: { socialMedia?: string; archive
       for (const card of cards) {
         if (commentMap.has(card.id)) {
           card.comments = commentMap.get(card.id);
+        }
+      }
+    }
+
+    // Multi-arte: carrega os anexos de todos os cards em lote e define a capa.
+    // Resiliente: se a tabela ainda não existe (migration 044 não aplicada),
+    // o board continua funcionando com o image_url legado.
+    const cardIds = cards.map((c) => c.id);
+    const { data: atts, error: attErr } = await db
+      .from("card_attachments")
+      .select("id, card_id, url, path, position, created_at")
+      .in("card_id", cardIds)
+      .order("position", { ascending: true });
+    if (attErr) {
+      console.error("[DB] fetchContentCards attachments:", attErr.message);
+    } else if (atts) {
+      const attMap = new Map<string, CardAttachment[]>();
+      for (const a of atts) {
+        const cid = a.card_id as string;
+        if (!attMap.has(cid)) attMap.set(cid, []);
+        attMap.get(cid)!.push(a as unknown as CardAttachment);
+      }
+      for (const card of cards) {
+        const list = attMap.get(card.id);
+        if (list && list.length > 0) {
+          card.cardAttachments = list;
+          // Capa = 1ª arte (position 0). Mantém todos os leitores de imageUrl
+          // funcionando mesmo após a migração silenciosa zerar image_url.
+          if (!card.imageUrl) card.imageUrl = list[0].url;
         }
       }
     }

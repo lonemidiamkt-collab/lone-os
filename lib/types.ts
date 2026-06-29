@@ -178,7 +178,8 @@ export interface ContentCard {
   briefing?: string;
   caption?: string;
   hashtags?: string;
-  imageUrl?: string;
+  imageUrl?: string;                  // capa do card — arte legada única OU 1ª arte dos anexos (preenchida no fetch)
+  cardAttachments?: CardAttachment[]; // multi-arte — carregado em lote por fetchContentCards
   observations?: string;
   trafficSuggestion?: string;
   archivedAt?: string;      // ISO — soft-delete ("arquivar"); some das visões ativas mas fica no banco
@@ -212,13 +213,14 @@ export interface ContentCard {
   totalTimeSpentMs?: number;       // accumulated milliseconds of active work
 }
 
+// Espelha as linhas de card_attachments como vêm da API (snake_case cru do banco).
 export interface CardAttachment {
   id: string;
-  cardId: string;
+  card_id: string;
   url: string;
   path: string;
   position: number;
-  createdAt: string; // ISO
+  created_at: string; // ISO
 }
 
 export interface CardComment {

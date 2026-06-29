@@ -1807,9 +1807,14 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                 onClick={() => onCardClick(card)}
               >
                 {card.imageUrl ? (
-                  <div className="aspect-video w-full overflow-hidden bg-muted">
+                  <div className="aspect-video w-full overflow-hidden bg-muted relative">
                     <SignedImage src={card.imageUrl!} alt={card.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    {(card.cardAttachments?.length ?? 0) > 1 && (
+                      <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-black/70 text-white">
+                        <ImageIcon size={10} /> {card.cardAttachments!.length}
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <div className="aspect-video w-full flex items-center justify-center bg-muted text-muted-foreground">
@@ -1989,8 +1994,13 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                       className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/40 transition-colors cursor-pointer"
                     >
                       {card.imageUrl && (
-                        <div className="aspect-square w-full overflow-hidden bg-muted">
+                        <div className="aspect-square w-full overflow-hidden bg-muted relative">
                           <SignedImage src={card.imageUrl!} alt={card.title} className="w-full h-full object-cover" />
+                          {(card.cardAttachments?.length ?? 0) > 1 && (
+                            <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-black/70 text-white">
+                              <ImageIcon size={10} /> {card.cardAttachments!.length}
+                            </span>
+                          )}
                         </div>
                       )}
                       <div className="p-2">
