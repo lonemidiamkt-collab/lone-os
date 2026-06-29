@@ -120,12 +120,18 @@ export default function ContentCardModal({ card, onClose }: Props) {
   };
 
   const handleSave = () => {
+    // Data de postagem é OBRIGATÓRIA: o agente CS acompanha a pauta por ela (quem tem/não tem
+    // post no dia). Sem data, a demanda fica invisível pro acompanhamento. Pedido do Roberto.
+    if (!dueDate) {
+      pushNotification("system", "Falta a data de postagem", `Defina quando "${card.title}" vai ao ar — é obrigatório pra equipe e pro agente acompanharem a pauta.`, card.clientId);
+      return;
+    }
     updateContentCard(card.id, {
       observations,
       briefing: briefing || undefined,
       caption: caption || undefined,
       hashtags: hashtags || undefined,
-      dueDate: dueDate || undefined,
+      dueDate,
       status,
     });
     setSaved(true);
@@ -261,18 +267,23 @@ export default function ContentCardModal({ card, onClose }: Props) {
               </div>
             </div>
 
-            {/* Posting date */}
+            {/* Posting date — OBRIGATÓRIA (o agente CS acompanha a pauta por ela) */}
             <div>
               <Label className="flex items-center gap-1.5 mb-2">
                 <Calendar size={12} />
-                Data de Postagem
+                Data de Postagem <span className="text-destructive">*</span>
               </Label>
               <input
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring"
+                className={`bg-muted border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring ${dueDate ? "border-border" : "border-destructive/50"}`}
               />
+              {!dueDate && (
+                <p className="text-[10px] text-destructive mt-1">
+                  Defina quando esse post vai ao ar — obrigatório pra equipe e pro agente acompanharem a pauta.
+                </p>
+              )}
             </div>
 
             {/* Briefing — editável estilo Trello (clique pra editar) */}
@@ -569,6 +580,11 @@ export default function ContentCardModal({ card, onClose }: Props) {
               className="mr-auto flex items-center gap-2 text-[var(--chart-4)] border-[var(--chart-4)]/30 hover:bg-[var(--chart-4)]/10"
               onClick={() => {
                 if (sendingDesign) return;          // anti-duplo-clique: evita demanda duplicada
+                // Não manda pro designer sem data de postagem — toda demanda precisa de pauta datada.
+                if (!dueDate) {
+                  pushNotification("system", "Falta a data de postagem", `Defina quando "${card.title}" vai ao ar antes de mandar pro designer.`, card.clientId);
+                  return;
+                }
                 setSendingDesign(true);
                 addDesignRequest({
                   title: `Arte: ${card.title}`,
