@@ -128,7 +128,7 @@ export default function PendingClientsPage() {
       const needsSign = url.startsWith("legal://") || url.includes("/storage/v1/object/");
       if (!needsSign) return url;
       try {
-        const res = await fetch("/api/storage/signed-url", {
+        const res = await authedFetch("/api/storage/signed-url", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path: url }),
@@ -191,7 +191,7 @@ export default function PendingClientsPage() {
         return { ...prev, [selected.id]: { ...existing, [field]: newUrl } };
       });
       if (newUrl.startsWith("legal://")) {
-        const res2 = await fetch("/api/storage/signed-url", {
+        const res2 = await authedFetch("/api/storage/signed-url", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path: newUrl }),
         });
@@ -247,7 +247,7 @@ export default function PendingClientsPage() {
   // ─── Reject ───────────────────────────────────
   const handleReject = async () => {
     if (!selected || !confirm("Rejeitar este cadastro? Os dados serao removidos permanentemente.")) return;
-    await fetch("/api/onboarding", {
+    await authedFetch("/api/onboarding", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "reject", clientId: selected.id }),

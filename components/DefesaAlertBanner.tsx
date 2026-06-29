@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ShieldAlert, ChevronRight } from "lucide-react";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 interface Summary {
   unack_total: number;
@@ -18,7 +19,7 @@ export default function DefesaAlertBanner() {
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch("/api/defense/alerts?status=unack");
+        const res = await authedFetch("/api/defense/alerts?status=unack");
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled) setSummary(data.summary ?? null);

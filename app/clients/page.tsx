@@ -88,7 +88,7 @@ export default function ClientsPage() {
     setApprovingId(clientId);
     setDraftActionError(null);
     try {
-      const res = await fetch("/api/onboarding", {
+      const res = await authedFetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "approve", clientId }),
@@ -106,7 +106,7 @@ export default function ClientsPage() {
     if (!confirm("Tem certeza que deseja rejeitar este cadastro? Os dados serao removidos.")) return;
     setDraftActionError(null);
     try {
-      const res = await fetch("/api/onboarding", {
+      const res = await authedFetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "reject", clientId }),

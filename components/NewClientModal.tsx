@@ -159,7 +159,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
     if (!name) { setError("Preencha o nome da empresa ou contato."); return; }
     setGeneratingLink(true); setError("");
     try {
-      const res = await fetch("/api/onboarding", {
+      const res = await authedFetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "generate_link_with_draft", name, contactName: form.contactName.trim(), industry: form.industry, serviceType: form.serviceType }),

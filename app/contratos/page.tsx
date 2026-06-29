@@ -9,6 +9,7 @@ import {
   CheckCircle, Clock, AlertTriangle, ChevronRight, ExternalLink, X,
 } from "lucide-react";
 import { SERVICE_LABELS } from "@/lib/contracts/types";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 interface Row {
   id: string;
@@ -77,7 +78,7 @@ export default function ContratosGlobalPage() {
       if (serviceFilter !== "all") params.set("serviceType", serviceFilter);
       if (search.trim()) params.set("search", search.trim());
       params.set("limit", "200");
-      const res = await fetch(`/api/contracts/list?${params.toString()}`);
+      const res = await authedFetch(`/api/contracts/list?${params.toString()}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: "Erro desconhecido" }));
         setErr(data.error || "Falha ao carregar contratos");
@@ -127,7 +128,7 @@ export default function ContratosGlobalPage() {
       fd.append("file", file);
       fd.append("contractId", contractId);
       fd.append("method", "d4sign_manual");
-      const res = await fetch("/api/contracts/upload-signed", { method: "POST", body: fd });
+      const res = await authedFetch("/api/contracts/upload-signed", { method: "POST", body: fd });
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: "Falha no upload" }));
         setErr(data.error || "Falha no upload");
@@ -144,7 +145,7 @@ export default function ContratosGlobalPage() {
 
   const handleViewSigned = async (signedPath: string) => {
     try {
-      const res = await fetch("/api/storage/signed-url", {
+      const res = await authedFetch("/api/storage/signed-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: signedPath, download: false }),

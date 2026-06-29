@@ -4,6 +4,7 @@ import { useState, useRef, useMemo } from "react";
 import {
   X, Upload, Loader2, AlertTriangle, FileCheck2, Calendar, Clock, FileText,
 } from "lucide-react";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 interface Props {
   clientId: string;
@@ -91,7 +92,7 @@ export default function LegacyContractModal({ clientId, clientName, open, onClos
       fd.append("signatureMethod", signatureMethod);
       if (notes.trim()) fd.append("notes", notes.trim());
 
-      const res = await fetch("/api/contracts/upload-legacy", { method: "POST", body: fd });
+      const res = await authedFetch("/api/contracts/upload-legacy", { method: "POST", body: fd });
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: "Falha no upload" }));
         setErr(data.error || "Falha no upload");

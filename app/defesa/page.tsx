@@ -72,7 +72,7 @@ export default function DefesaAtivaPage() {
     setLoading(true);
     setErr("");
     try {
-      const res = await fetch(`/api/defense/alerts?status=${filter}`);
+      const res = await authedFetch(`/api/defense/alerts?status=${filter}`);
       if (!res.ok) {
         const d = await res.json().catch(() => ({ error: "Erro" }));
         setErr(d.error || "Falha ao carregar");
@@ -109,7 +109,7 @@ export default function DefesaAtivaPage() {
   const acknowledge = async (id: string) => {
     setAckingId(id);
     try {
-      const res = await fetch(`/api/defense/alerts/${id}/acknowledge`, { method: "POST" });
+      const res = await authedFetch(`/api/defense/alerts/${id}/acknowledge`, { method: "POST" });
       if (res.ok) await load();
     } finally {
       setAckingId(null);

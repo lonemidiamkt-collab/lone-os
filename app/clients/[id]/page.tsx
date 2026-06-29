@@ -146,7 +146,7 @@ export default function ClientDetailPage() {
   // Dot indicator: true se o cliente tem briefing cadastrado
   const [hasBriefing, setHasBriefing] = useState(false);
   useEffect(() => {
-    fetch(`/api/clients/${clientId}/briefing`)
+    authedFetch(`/api/clients/${clientId}/briefing`)
       .then((r) => r.json())
       .then((d) => setHasBriefing(!!d.briefing))
       .catch(() => {});
@@ -293,7 +293,7 @@ export default function ClientDetailPage() {
   const generateOnboardingLink = async () => {
     setGeneratingLink(true);
     try {
-      const res = await fetch("/api/onboarding", {
+      const res = await authedFetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "generate_link", clientId }),
