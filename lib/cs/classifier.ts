@@ -26,6 +26,8 @@ export interface ClassifierContext {
   nomesEquipeLone: string[];
   /** Clientes neste grupo (pode ter mais de um — ambiguidade vira confiança baixa). */
   clientesDoGrupo: string[];
+  /** Autoaprendizado: mensagens que a equipe RECUSOU recentemente deste cliente (NÃO repetir). */
+  recusasRecentes?: string[];
 }
 
 export interface CsClassifiedItem {
@@ -196,13 +198,16 @@ Responda APENAS no formato JSON definido (schema). Liste todos os itens detectad
 export function buildClassifierSystem(ctx: ClassifierContext): string {
   const equipe = ctx.nomesEquipeLone.length ? ctx.nomesEquipeLone.join(", ") : "(nenhum informado)";
   const clientes = ctx.clientesDoGrupo.length ? ctx.clientesDoGrupo.join(", ") : ctx.clienteNome;
+  const recusas = ctx.recusasRecentes && ctx.recusasRecentes.length
+    ? `\n\n# APRENDIZADO — a equipe RECUSOU isto recentemente deste cliente (NÃO eram demanda; se algo MUITO parecido aparecer, classifique como conversa / is_demanda=false):\n${ctx.recusasRecentes.map((r) => `- "${r}"`).join("\n")}`
+    : "";
   return `${A1_SYSTEM_INSTRUCTIONS}
 
 # Contexto deste grupo
 - Cliente: ${ctx.clienteNome}${ctx.clienteNicho ? ` (${ctx.clienteNicho})` : ""}
 - Briefing do cliente (tom, o que costuma pedir): ${ctx.briefing?.trim() || "(sem briefing)"}
 - Equipe da Lone neste grupo (NÃO são clientes): ${equipe}
-- Clientes neste grupo: ${clientes}`;
+- Clientes neste grupo: ${clientes}${recusas}`;
 }
 
 /** Serializa o bloco de mensagens (autor: texto) para o turno do usuário. */

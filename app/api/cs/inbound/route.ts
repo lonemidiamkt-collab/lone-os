@@ -703,12 +703,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, classified: false, reason: "A1 desligado (sem key)", cliente: clienteNome });
   }
 
+  // Autoaprendizado (Nível 2): carrega o que a equipe RECUSOU recentemente deste cliente, pra o A1
+  // evitar repetir o mesmo falso-positivo. Fecha o loop do Cap 7 sem eu editar o prompt na mão.
+  const { data: recusadas } = await supabaseAdmin
+    .from("cs_demandas").select("message_text, resumo")
+    .eq("client_id", c.id as string).eq("status", "descartada")
+    .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+    .order("created_at", { ascending: false }).limit(5);
+  const recusasRecentes = (recusadas ?? [])
+    .map((r) => ((r.message_text as string) || (r.resumo as string) || "").trim().slice(0, 120))
+    .filter(Boolean);
+
   const ctx: ClassifierContext = {
     clienteNome,
     clienteNicho: (c.nicho as string) || undefined,
     briefing: clienteBriefing,
     nomesEquipeLone: teamJids(),
     clientesDoGrupo: clients.map(nomeOf),
+    recusasRecentes,
   };
 
   const res = await classifyBlock([{ author: msg.authorName || "Cliente", text: msg.text }], ctx);
