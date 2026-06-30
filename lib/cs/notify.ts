@@ -30,3 +30,34 @@ export async function csSendGroupText(
     return { ok: false, error: err instanceof Error ? err.message : "erro de conexão" };
   }
 }
+
+/** Envia um documento (ex: PDF de roteiro) a um grupo pelo número do agente (monitor[IA]). */
+export async function csSendGroupDocument(
+  jid: string,
+  base64: string,
+  fileName: string,
+  caption?: string,
+  mimetype = "application/pdf",
+): Promise<{ ok: boolean; error?: string }> {
+  const baseUrl = process.env.EVOLUTION_API_URL?.replace(/\/+$/, "");
+  const apiKey = process.env.EVOLUTION_API_KEY_NEW;
+  const instance = process.env.EVOLUTION_INSTANCE_NEW;
+  if (!baseUrl || !apiKey || !instance) return { ok: false, error: "Evolution (monitor[IA]) não configurada" };
+  if (!base64) return { ok: false, error: "documento vazio" };
+  try {
+    const res = await fetch(`${baseUrl}/message/sendMedia/${encodeURIComponent(instance)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: apiKey },
+      body: JSON.stringify({
+        number: jid, mediatype: "document", mimetype, media: base64, fileName,
+        ...(caption ? { caption } : {}),
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    const body = await res.text().catch(() => "");
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${body.slice(0, 150)}` };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "erro de conexão" };
+  }
+}
