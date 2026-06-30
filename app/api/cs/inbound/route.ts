@@ -13,6 +13,8 @@ import { gerarBriefing, formatBriefing } from "@/lib/cs/briefing";
 import { verificarDemanda, A2_TRUST_FROM } from "@/lib/cs/verifier";
 import { interpretarResposta } from "@/lib/cs/interpreter";
 import { detectarAprovacao } from "@/lib/cs/aprovacao";
+import { gerarRoteiros, formatRoteiro } from "@/lib/cs/criativo";
+import { loadBriefingForClient } from "@/lib/cs/load-briefing";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
 
@@ -90,6 +92,40 @@ function pareceNovoPedido(text: string): boolean {
     || /\b(nova arte|outra arte|novo pedido|nova demanda|outra demanda|nova pe[çc]a)\b/.test(t);
 }
 
+// ── Agente "Lone": pedido de ROTEIRO no grupo. Dispara só quando CHAMAM o Lone + falam de roteiro
+// (evita falso-positivo, já que "Lone" aparece muito em conversa). Ex.: "Lone, faz um roteiro pro Império".
+function ehPedidoRoteiro(text: string): boolean {
+  const t = text.toLowerCase();
+  if (!/\blone\b/.test(t)) return false;
+  return /\b(roteiro|roteiros|an[úu]ncio|anuncio|criativo|script|vsl)\b/.test(t);
+}
+
+const normNome = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+// Palavras genéricas do nome que não identificam o cliente (não casar só por elas).
+const STOP_NOME = new Set([
+  "solar", "energia", "material", "materiais", "construcao", "construcoes", "pisos", "piso",
+  "moveis", "loja", "lojas", "ltda", "comercio", "distribuidora", "grupo", "store", "shop",
+  "oficial", "centro", "casa", "ribeiro", "bazar",
+]);
+
+// Acha o cliente citado na mensagem: pontua por quantas palavras distintivas do nome aparecem.
+async function resolveClientePorNome(text: string): Promise<{ id: string; nome: string; nicho?: string } | null> {
+  const { data: clients } = await supabaseAdmin
+    .from("clients").select("id, name, nome_fantasia, nicho, industry").or("active.is.null,active.eq.true");
+  const t = normNome(text);
+  let best: { id: string; nome: string; nicho?: string; score: number; maxw: number } | null = null;
+  for (const c of clients ?? []) {
+    const nome = (c.nome_fantasia as string) || (c.name as string) || "";
+    const words = normNome(nome).split(/\s+/).filter((w) => w.length >= 4 && !STOP_NOME.has(w));
+    let score = 0, maxw = 0;
+    for (const w of words) if (t.includes(w)) { score++; maxw = Math.max(maxw, w.length); }
+    if (score > 0 && (!best || score > best.score || (score === best.score && maxw > best.maxw))) {
+      best = { id: c.id as string, nome, nicho: (c.nicho as string) || (c.industry as string) || undefined, score, maxw };
+    }
+  }
+  return best ? { id: best.id, nome: best.nome, nicho: best.nicho } : null;
+}
+
 // Acha a demanda PENDENTE alvo da resposta: 1) reply na sugestão (msg citada via quotedMsgId),
 // 2) código (se a pessoa digitar, legado), 3) a última pendente (fallback se não deu reply).
 async function acharDemanda(quotedMsgId?: string, codigo?: string) {
@@ -149,6 +185,47 @@ export async function POST(req: NextRequest) {
   const allow = pilotGroupAllowlist();
   if (allow.length > 0 && !allow.includes(msg.groupJid)) {
     return NextResponse.json({ ok: true, skip: "fora da allowlist do piloto" });
+  }
+
+  // ─── Agente "Lone": pedido de ROTEIRO no grupo interno ("Lone, faz um roteiro pro [cliente]") ───
+  // Reconhece o pedido, acha o cliente, lê o briefing e devolve os roteiros. Se faltar briefing, pede.
+  // Cada pedido vira corpus (cs_roteiro_pedidos) p/ ir aprendendo o estilo de cada cliente.
+  if (msg.groupJid === internalGroupJid() && ehPedidoRoteiro(msg.text)) {
+    if (!isOpenAIConfigured()) {
+      await csSendGroupText(msg.groupJid, "Tô sem acesso à IA agora pra montar roteiro 😕 já já volto.");
+      return NextResponse.json({ ok: true, roteiro: "sem_ia" });
+    }
+    const alvo = await resolveClientePorNome(msg.text);
+    if (!alvo) {
+      await csSendGroupText(msg.groupJid, "Bora! 🎬 De qual cliente é o roteiro? Me diz o nome que eu já monto.");
+      return NextResponse.json({ ok: true, roteiro: "sem_cliente" });
+    }
+    const quem = msg.authorName || "";
+    const { briefing, temBriefing } = await loadBriefingForClient({ clientId: alvo.id, nome: alvo.nome, nicho: alvo.nicho });
+    const r = await gerarRoteiros({ briefing, pedido: msg.text });
+    if (!r.ok || !r.data) {
+      await csSendGroupText(msg.groupJid, `Eita, não consegui montar o roteiro do *${alvo.nome}* agora 😕 me chama de novo daqui a pouco?`);
+      return NextResponse.json({ ok: true, roteiro: "erro", cliente: alvo.nome });
+    }
+    if (r.data.precisa_briefing) {
+      const perg = r.data.perguntas.length ? "\n" + r.data.perguntas.map((p) => `• ${p}`).join("\n") : "";
+      await csSendGroupText(msg.groupJid, `Pra fazer um roteiro afiado do *${alvo.nome}* eu preciso de um pouco mais:${perg}\n\nMe passa isso (ou preenche o briefing dele na plataforma) que eu mando na hora. 🙌`);
+      return NextResponse.json({ ok: true, roteiro: "precisa_briefing", cliente: alvo.nome });
+    }
+    const versoes = r.data.roteiros.slice(0, 2);
+    const obs = temBriefing ? "" : " _(ainda sem briefing salvo — fiz no meu melhor, vale revisar)_";
+    await csSendGroupText(msg.groupJid, `🎬 Bora${quem ? `, ${quem}` : ""}! Montei ${versoes.length > 1 ? `${versoes.length} versões` : "1 versão"} de roteiro pro *${alvo.nome}*${obs}:`);
+    for (const [i, rot] of versoes.entries()) await csSendGroupText(msg.groupJid, formatRoteiro(rot, alvo.nome, i + 1));
+    await csSendGroupText(msg.groupJid, "Me diz o que ajustar (gancho, CTA, mais curto, outro produto…) que eu refaço — assim eu vou pegando o estilo de cada cliente. 😉");
+    // Corpus de aprendizado (não pode derrubar o webhook se a tabela/insert falhar).
+    try {
+      await supabaseAdmin.from("cs_roteiro_pedidos").insert({
+        client_id: alvo.id, cliente_nome: alvo.nome, solicitante: quem || msg.authorJid,
+        pedido: msg.text, roteiros: r.data.roteiros, scorecard: r.data.roteiros[0]?.scorecard ?? null,
+      });
+    } catch { /* corpus é best-effort */ }
+    console.log(`[CS/inbound] roteiro on-demand → ${alvo.nome} (${r.data.roteiros.length} versões) p/ ${quem}`);
+    return NextResponse.json({ ok: true, roteiro: "ok", cliente: alvo.nome, n: r.data.roteiros.length });
   }
 
   // ─── Decisão humana (grupo interno): RESPONDA a sugestão com "ok" (cria) ou "não" (descarta) ───
