@@ -86,3 +86,34 @@ export async function csSendGroupDocument(
     return { ok: false, error: err instanceof Error ? err.message : "erro de conexão" };
   }
 }
+
+const normNm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+
+/** Acha o JID de um grupo do monitor[IA] pelo NOME (melhor match). Pro onboarding. */
+export async function csFindGroupByName(name: string): Promise<{ jid?: string; subject?: string; error?: string }> {
+  const baseUrl = process.env.EVOLUTION_API_URL?.replace(/\/+$/, "");
+  const apiKey = process.env.EVOLUTION_API_KEY_NEW;
+  const instance = process.env.EVOLUTION_INSTANCE_NEW;
+  if (!baseUrl || !apiKey || !instance) return { error: "Evolution (monitor[IA]) não configurada" };
+  try {
+    const res = await fetch(`${baseUrl}/group/fetchAllGroups/${encodeURIComponent(instance)}?getParticipants=false`, {
+      headers: { apikey: apiKey }, signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return { error: `HTTP ${res.status}` };
+    const groups = (await res.json()) as Array<{ id?: string; subject?: string }>;
+    const t = normNm(name);
+    if (!t) return {};
+    let best: { jid: string; subject: string; score: number } | null = null;
+    for (const g of groups) {
+      if (!g.id) continue;
+      const ns = normNm(g.subject || "");
+      let score = 0;
+      if (ns && (ns.includes(t) || t.includes(ns))) score = Math.min(ns.length, t.length) + 50;
+      else { const words = t.split(/\s+/).filter((w) => w.length >= 3); score = words.filter((w) => ns.includes(w)).length; }
+      if (score > 0 && (!best || score > best.score)) best = { jid: g.id, subject: g.subject || "", score };
+    }
+    return best ? { jid: best.jid, subject: best.subject } : {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "erro de conexão" };
+  }
+}

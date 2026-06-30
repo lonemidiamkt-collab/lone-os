@@ -7,8 +7,12 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { isOpenAIConfigured } from "@/lib/ai/openai";
 import { parseUpsert, isTrivial, isLoneTeam, type EvolutionUpsert } from "@/lib/cs/ingest";
 import { classifyBlock, type ClassifierContext } from "@/lib/cs/classifier";
-import { csSendGroupText, csSendGroupDocument, csFetchMediaBase64 } from "@/lib/cs/notify";
+import { csSendGroupText, csSendGroupDocument, csFetchMediaBase64, csFindGroupByName } from "@/lib/cs/notify";
 import { transcribeAudio } from "@/lib/cs/transcribe";
+import {
+  ehOnboardingTrigger, parseOnboardingTrigger, onboardingWelcome, onboardingQuestion,
+  onboardingDone, estruturarBriefing, ONBOARDING_TOTAL, type BriefingEstruturado,
+} from "@/lib/cs/onboarding";
 import { tipoToArea, resolveResponsavel } from "@/lib/cs/routing";
 import { gerarBriefing, formatBriefing } from "@/lib/cs/briefing";
 import { verificarDemanda, A2_TRUST_FROM } from "@/lib/cs/verifier";
@@ -191,6 +195,46 @@ async function criarCard(opts: {
   return (card?.id as string) ?? null;
 }
 
+// Onboarding: acha o cliente pelo nome ou cria um mínimo (clients só exige `name`), linkando o grupo.
+async function ensureClienteOnboarding(nome: string, groupJid: string): Promise<{ id: string; nome: string } | null> {
+  const t = (nome || "").trim();
+  if (t) {
+    const { data: all } = await supabaseAdmin.from("clients").select("id, name, nome_fantasia").or("active.is.null,active.eq.true");
+    const nt = normNome(t);
+    const hit = (all ?? []).find((c) => {
+      const a = normNome((c.name as string) || ""), b = normNome((c.nome_fantasia as string) || "");
+      return (a.length >= 3 && (a.includes(nt) || nt.includes(a))) || (b.length >= 3 && (b.includes(nt) || nt.includes(b)));
+    });
+    if (hit) {
+      await supabaseAdmin.from("clients").update({ whatsapp_group_jid: groupJid }).eq("id", hit.id);
+      return { id: hit.id as string, nome: (hit.nome_fantasia as string) || (hit.name as string) };
+    }
+  }
+  const { data: novo, error } = await supabaseAdmin
+    .from("clients").insert({ name: t || "Novo cliente", whatsapp_group_jid: groupJid, status: "onboarding" })
+    .select("id, name").maybeSingle();
+  if (error || !novo) { console.error("[CS/onboarding] criar cliente:", error?.message); return null; }
+  return { id: novo.id as string, nome: novo.name as string };
+}
+
+// Salva o briefing do onboarding como nova versão CURRENT em client_briefings.
+async function salvarBriefingOnboarding(clientId: string, est: BriefingEstruturado): Promise<boolean> {
+  const { data: maxv } = await supabaseAdmin
+    .from("client_briefings").select("version").eq("client_id", clientId).order("version", { ascending: false }).limit(1).maybeSingle();
+  const version = ((maxv?.version as number) ?? 0) + 1;
+  await supabaseAdmin.from("client_briefings").update({ is_current: false }).eq("client_id", clientId).eq("is_current", true);
+  const { error } = await supabaseAdmin.from("client_briefings").insert({
+    client_id: clientId, version, is_current: true,
+    resumo_estrategico: est.resumo_estrategico, posicionamento: est.posicionamento,
+    produtos: est.produtos, produtos_destaque_atual: est.produtos_destaque_atual,
+    publico_alvo: est.publico_alvo, dores: est.dores, tom_voz: est.tom_voz,
+    palavras_proibidas: est.palavras_proibidas, concorrentes_evitar_mencionar: est.concorrentes_evitar_mencionar,
+    ganchos: est.ganchos, ctas: est.ctas,
+  });
+  if (error) { console.error("[CS/onboarding] salvar briefing:", error.message); return false; }
+  return true;
+}
+
 export async function POST(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
@@ -200,6 +244,35 @@ export async function POST(req: NextRequest) {
   const msg = parseUpsert(payload);
   if (!msg) return NextResponse.json({ ok: true, skip: "não é mensagem de grupo com texto" });
   if (msg.fromMe) return NextResponse.json({ ok: true, skip: "própria mensagem" });
+
+  // ─── Onboarding em andamento neste grupo? A mensagem do cliente é uma RESPOSTA do onboarding. ───
+  // Vem ANTES da allowlist: o grupo do cliente novo pode ainda não estar na allowlist.
+  {
+    const { data: sess } = await supabaseAdmin
+      .from("cs_onboarding_sessions").select("*").eq("group_jid", msg.groupJid).eq("status", "coletando").maybeSingle();
+    if (sess && !isLoneTeam(msg.authorJid, teamJids()) && !isTrivial(msg.text)) {
+      const cliente = (sess.cliente_nome as string) || "cliente";
+      const answers = ((sess.answers as Array<{ pergunta: string; resposta: string }>) ?? []);
+      const step = (sess.step as number) ?? 0;
+      answers.push({ pergunta: onboardingQuestion(step, cliente), resposta: msg.text });
+      const next = step + 1;
+      if (next < ONBOARDING_TOTAL) {
+        await supabaseAdmin.from("cs_onboarding_sessions").update({ step: next, answers, updated_at: new Date().toISOString() }).eq("id", sess.id);
+        await csSendGroupText(msg.groupJid, onboardingQuestion(next, cliente));
+        return NextResponse.json({ ok: true, onboarding: "pergunta", step: next });
+      }
+      // Última resposta → agradece, estrutura e salva o briefing, avisa a equipe.
+      await csSendGroupText(msg.groupJid, onboardingDone());
+      let salvou = false;
+      const est = await estruturarBriefing(cliente, answers);
+      if (est.ok && est.data && sess.client_id) salvou = await salvarBriefingOnboarding(sess.client_id as string, est.data);
+      await supabaseAdmin.from("cs_onboarding_sessions").update({ status: "concluido", answers, updated_at: new Date().toISOString() }).eq("id", sess.id);
+      const internalFim = internalGroupJid();
+      if (internalFim) await csSendGroupText(internalFim, `✅ Onboarding da *${cliente}* concluído!${salvou ? " Montei o briefing — revisa a ficha do cliente. O Lone Criativo já consegue gerar roteiro. 🎬" : " (não consegui salvar o briefing automático — confere os dados.)"}`);
+      console.log(`[CS/inbound] onboarding concluído → ${cliente} (briefing salvo=${salvou})`);
+      return NextResponse.json({ ok: true, onboarding: "concluido", cliente });
+    }
+  }
 
   const allow = pilotGroupAllowlist();
   if (allow.length > 0 && !allow.includes(msg.groupJid)) {
@@ -340,6 +413,41 @@ export async function POST(req: NextRequest) {
     if (rsug.ok && rsug.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: rsug.id }).eq("id", novaDem.id);
     console.log(`[CS/inbound] demanda por comando → ${clienteNome}: ${titulo} (${codigo})`);
     return NextResponse.json({ ok: true, demanda_cmd: "sugerida", cliente: clienteNome, titulo });
+  }
+
+  // ─── Onboarding: equipe avisa "Lone, entrou um novo cliente X no grupo Y" → o Lone CONDUZ lá. ───
+  if (msg.groupJid === internalGroupJid() && ehOnboardingTrigger(msg.text)) {
+    if (!isOpenAIConfigured()) {
+      await csSendGroupText(msg.groupJid, "Tô sem IA agora pra conduzir o onboarding 😕");
+      return NextResponse.json({ ok: true, onboarding: "sem_ia" });
+    }
+    const { cliente, grupo } = await parseOnboardingTrigger(msg.text);
+    if (!grupo) {
+      await csSendGroupText(msg.groupJid, `Pra eu conduzir, me diz o *nome do grupo* do cliente (e o nome do cliente). Ex.: _"Lone, entrou o cliente Padaria do João no grupo Padaria João x Lone"_. 😉`);
+      return NextResponse.json({ ok: true, onboarding: "sem_grupo" });
+    }
+    const found = await csFindGroupByName(grupo);
+    if (!found.jid) {
+      await csSendGroupText(msg.groupJid, `Não achei o grupo "${grupo}" entre os que eu participo 🤔 me adiciona nesse grupo e confere o nome que aí eu começo.`);
+      return NextResponse.json({ ok: true, onboarding: "grupo_nao_encontrado" });
+    }
+    const grupoJid = found.jid;
+    const { data: jaSess } = await supabaseAdmin
+      .from("cs_onboarding_sessions").select("id").eq("group_jid", grupoJid).eq("status", "coletando").maybeSingle();
+    if (jaSess) {
+      await csSendGroupText(msg.groupJid, `Já tem um onboarding rolando no grupo "${found.subject}". 😉`);
+      return NextResponse.json({ ok: true, onboarding: "ja_ativo" });
+    }
+    const cli = await ensureClienteOnboarding(cliente || found.subject || "", grupoJid);
+    const nomeCli = cli?.nome || cliente || "cliente";
+    await supabaseAdmin.from("cs_onboarding_sessions").insert({
+      client_id: cli?.id ?? null, cliente_nome: nomeCli, group_jid: grupoJid, status: "coletando",
+      step: 0, answers: [], iniciado_por: msg.authorName || msg.authorJid,
+    });
+    await csSendGroupText(grupoJid, onboardingWelcome(nomeCli));
+    await csSendGroupText(msg.groupJid, `🚪 Beleza! Comecei o onboarding da *${nomeCli}* no grupo "${found.subject}". Conduzo por lá e te aviso quando terminar. 🙌`);
+    console.log(`[CS/inbound] onboarding iniciado → ${nomeCli} no grupo ${found.subject}`);
+    return NextResponse.json({ ok: true, onboarding: "iniciado", cliente: nomeCli, grupo: found.subject });
   }
 
   // ─── Decisão humana (grupo interno): RESPONDA a sugestão com "ok" (cria) ou "não" (descarta) ───
