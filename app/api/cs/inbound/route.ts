@@ -245,6 +245,33 @@ async function salvarBriefingOnboarding(clientId: string, est: BriefingEstrutura
   return true;
 }
 
+// Pra cobrança/status: acha entre os cards recentes do cliente o mais relacionado ao tema
+// (>=2 palavras distintivas em comum com o título). Evita cobrar algo já entregue.
+async function acharCardRelacionado(
+  clientId: string, topic: string,
+): Promise<{ title: string; status: string; social_media: string | null; designer_delivered_at: string | null } | null> {
+  const { data: cards } = await supabaseAdmin
+    .from("content_cards").select("title, status, social_media, designer_delivered_at")
+    .eq("client_id", clientId).neq("status", "archived")
+    .order("created_at", { ascending: false }).limit(25);
+  if (!cards || !cards.length) return null;
+  const tw = normNome(topic).split(/\s+/).filter((w) => w.length >= 4);
+  if (!tw.length) return null;
+  let best: { c: (typeof cards)[number]; score: number } | null = null;
+  for (const card of cards) {
+    const ct = normNome((card.title as string) || "");
+    const score = tw.filter((w) => ct.includes(w)).length;
+    if (score >= 2 && (!best || score > best.score)) best = { c: card, score };
+  }
+  if (!best) return null;
+  return {
+    title: (best.c.title as string) || "arte",
+    status: (best.c.status as string) || "—",
+    social_media: (best.c.social_media as string) || null,
+    designer_delivered_at: (best.c.designer_delivered_at as string) || null,
+  };
+}
+
 export async function POST(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
@@ -724,21 +751,39 @@ export async function POST(req: NextRequest) {
     }
     const ehReclamacao = it.tipo === "reclamacao";
     const area = tipoToArea(it.tipo as CsDemandType);
-    // KB: reclamação ESCALA pra gestão (Julio + Roberto), não fica com o social.
+
+    // COBRANÇA/STATUS: o cliente pode estar perguntando por algo JÁ em andamento. Antes de cobrar,
+    // checa os cards do cliente. Se achar o tema, REPORTA o status (entregue? com quem?) em vez de
+    // cobrar do zero — e pula o A3 (economiza tokens).
+    let statusBriefing: string | null = null, statusTitulo: string | null = null, statusResp: string | null = null;
+    if (it.tipo === "cobranca_prazo") {
+      const card = await acharCardRelacionado(c.id as string, `${it.resumo} ${it.trecho_origem}`);
+      if (card) {
+        const entregue = !!card.designer_delivered_at;
+        statusResp = card.social_media;
+        statusTitulo = `Status: ${card.title}`;
+        const quando = card.designer_delivered_at ? ` (entregue ${new Date(card.designer_delivered_at).toLocaleDateString("pt-BR")})` : "";
+        statusBriefing = entregue
+          ? `O cliente perguntou pela arte *${card.title}* — ela JÁ está em *${card.status}*${quando}. Provavelmente perguntou antes de ver. Confirma com ele que já saiu! 👍`
+          : `O cliente perguntou pela arte *${card.title}* — está em *${card.status}*${statusResp ? ` com ${statusResp}` : ""}. Dá um retorno pro cliente sobre o andamento.`;
+      }
+    }
+
+    // KB: reclamação ESCALA pra gestão; status → o dono do card; senão a área da demanda.
     const responsavel = ehReclamacao
       ? (process.env.CS_ESCALATION_NAMES || "Julio e Roberto")
-      : resolveResponsavel(area, {
+      : statusResp || resolveResponsavel(area, {
           assigned_social: c.assigned_social as string, assigned_designer: c.assigned_designer as string, assigned_traffic: c.assigned_traffic as string,
         });
 
-    // A3 — redige o briefing seguindo as regras do cliente (não inventa; pede o que falta).
-    const a3 = await gerarBriefing({
+    // A3 só quando NÃO é status conhecido (redige o briefing; não inventa, pede o que falta).
+    const a3 = statusBriefing ? null : await gerarBriefing({
       clienteNome, clienteNicho: c.nicho as string, clienteBriefing, regras: regrasFmt,
       tipo: it.tipo, urgencia: it.urgencia, resumo: it.resumo, mensagemOriginal: msg.text,
     });
-    const briefingTxt = a3.ok && a3.data ? formatBriefing(a3.data) : `${it.resumo}\nMensagem: "${msg.text}"`;
-    const titulo = a3.ok && a3.data ? a3.data.titulo : it.resumo;
-    const precisaConfirmar = a3.ok && !!a3.data?.observacao; // A3 achou o pedido vago → falta info do cliente
+    const briefingTxt = statusBriefing ?? (a3?.ok && a3.data ? formatBriefing(a3.data) : `${it.resumo}\nMensagem: "${msg.text}"`);
+    const titulo = statusTitulo ?? (a3?.ok && a3.data ? a3.data.titulo : it.resumo);
+    const precisaConfirmar = !statusBriefing && !!(a3?.ok && a3.data?.observacao); // A3 achou o pedido vago
 
     const codigo = randomBytes(2).toString("hex"); // mantido só p/ auditoria — NÃO aparece na mensagem
     const { data: novaDem, error: insErr } = await supabaseAdmin.from("cs_demandas").insert({
@@ -752,9 +797,11 @@ export async function POST(req: NextRequest) {
 
     if (internalJid) {
       // Mensagem CURTA e humana, SEM código — a equipe RESPONDE (reply) nesta mensagem.
-      const a3d = a3.ok ? a3.data : null;
+      const a3d = a3?.ok ? a3.data : null;
       const acao = `É só responder *nesta mensagem*: *ok* (crio o card) · *não* (você cuida) · ou *ajustar* e me diz o que mudar.`;
-      const txt = ehReclamacao
+      const txt = statusBriefing
+        ? `Oi ${responsavel}! 👋 ${statusBriefing}\n\n_(É acompanhamento, não pedido novo — responde *não* se já tratou, ou *ok* se quer um card de follow-up.)_`
+        : ehReclamacao
         ? `🔴 *RECLAMAÇÃO* da *${clienteNome}* — ${responsavel}, atenção:\n\n${a3d ? a3d.briefing.trim() : `"${msg.text}"`}\n\nResponde *aqui*: *ok* (registro como demanda) · *não* (vocês tratam direto).`
         : precisaConfirmar
         ? `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}* — mas o pedido tá meio vago. Antes de produzir, confirma com eles:\n${a3d?.observacao ?? ""}\n\n${acao}`
