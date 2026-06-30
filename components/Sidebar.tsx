@@ -7,7 +7,7 @@ import {
   MessageCircle, Calendar, LogOut, Sun, Moon,
   ClipboardCheck, BarChart2, Megaphone, Brain, FileText,
   ChevronLeft, Activity, Layers, AlertTriangle, Settings,
-  Users2, Globe, Target, Inbox, ShieldCheck, ShieldAlert, Package, Zap, PanelLeftClose, PanelLeft, Thermometer,
+  Users2, Globe, Target, Inbox, ShieldCheck, ShieldAlert, Package, Zap, PanelLeftClose, PanelLeft, Thermometer, Bot,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -46,6 +46,7 @@ const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/broadcasts",    icon: Megaphone,       label: "Comunicados", roles: ["admin","manager"] },
   { href: "/sobre",         icon: FileText,        label: "Sobre o Sistema", roles: ["admin","manager","traffic","social","designer"] },
   { href: "/automations",   icon: Zap,             label: "Automações", roles: ["admin","manager"] },
+  { href: "/agente",        icon: Bot,             label: "Agente Lone", roles: ["admin","manager"] },
   { href: "/goals",         icon: Target,          label: "Metas & OKRs", roles: ["admin","manager"] },
   { href: "/ceo",           icon: Lock,            label: "Área CEO",   roles: ["admin"] },
 ];
