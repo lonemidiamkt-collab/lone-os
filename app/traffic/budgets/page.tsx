@@ -133,7 +133,7 @@ function enrichAccount(a: AdAccountRow): EnrichedAccount {
     a.monthly_budget,
   );
 
-  const enriched = { ...a, clientName, availableBalance: available, balanceLabel, daysRemaining, avgDailySpend, severity, warningThreshold, criticalThreshold, currency: cur };
+  const enriched = { ...a, clientName, availableBalance: available, balanceLabel, daysRemaining, avgDailySpend, severity, warningThreshold, criticalThreshold, currency: cur, payment_method: a.clients?.payment_method ?? null };
   const display = getBalanceDisplay(enriched);
   return { ...enriched, display };
 }
@@ -795,6 +795,7 @@ export default function BudgetsPage() {
   const [syncing, setSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<DisplaySeverity | "all">("all");
+  const [clientSearch, setClientSearch] = useState("");
   const [modalAccount, setModalAccount] = useState<EnrichedAccount | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -887,9 +888,13 @@ export default function BudgetsPage() {
   }, [load]);
 
   // ── Dados computados ─────────────────────────────────────
-  const filtered = filterSeverity === "all"
+  const bySeverity = filterSeverity === "all"
     ? accounts
     : accounts.filter((a) => a.display.severity === filterSeverity);
+  const q = clientSearch.trim().toLowerCase();
+  const filtered = q
+    ? bySeverity.filter((a) => a.clientName.toLowerCase().includes(q) || a.id.toLowerCase().includes(q))
+    : bySeverity;
 
   // Saldo agregado: contas ativas com saldo calculável (pré-pago + pós com cap)
   const computedAccounts = accounts.filter(
@@ -900,11 +905,13 @@ export default function BudgetsPage() {
   const criticalCount  = accounts.filter((a) => a.display.severity === "critical").length;
   const warningCount   = accounts.filter((a) => a.display.severity === "warning").length;
   const reviewCount    = accounts.filter((a) => a.display.severity === "review").length;
-  // Contas cartão ativas sem monitoramento de saldo
+  // Contas cartão ativas sem monitoramento de saldo (marcadas como payment_method=cartao,
+  // ou pós-pago sem verba/cap definido — cartão sem teto).
   const activeCardCount = accounts.filter(
-    (a) => !a.is_prepaid && a.monthly_budget === null &&
-           (a.spend_cap === null || a.spend_cap === 0) &&
-           a.account_status === 1,
+    (a) => a.account_status === 1 && (
+      a.clients?.payment_method === "cartao" ||
+      (!a.is_prepaid && a.monthly_budget === null && (a.spend_cap === null || a.spend_cap === 0))
+    ),
   ).length;
 
   // Alerta de sync desatualizado (>30min)
@@ -1042,6 +1049,26 @@ export default function BudgetsPage() {
           ))}
         </div>
 
+        {/* Busca por cliente */}
+        <div className="relative">
+          <input
+            type="text"
+            value={clientSearch}
+            onChange={(e) => setClientSearch(e.target.value)}
+            placeholder="Buscar cliente por nome ou ID da conta…"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+          />
+          {clientSearch && (
+            <button
+              onClick={() => setClientSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Limpar busca"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
         {/* Filtro ativo */}
         {filterSeverity !== "all" && (
           <div className="flex items-center gap-2">
@@ -1063,6 +1090,8 @@ export default function BudgetsPage() {
             <p className="text-sm">
               {accounts.length === 0
                 ? "Nenhuma conta Meta cadastrada ainda"
+                : q
+                ? `Nenhum cliente encontrado para "${clientSearch}"`
                 : "Nenhuma conta nessa categoria"}
             </p>
             {accounts.length === 0 && (

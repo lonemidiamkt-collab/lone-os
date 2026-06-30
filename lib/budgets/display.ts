@@ -22,6 +22,7 @@ export interface AccountForDisplay {
   avgDailySpend: number | null;
   severity: BalanceSeverity;
   currency: string;
+  payment_method?: string | null; // "cartao" = paga no cartão → sem alerta de saldo baixo
 }
 
 function fmt(n: number | null | undefined, currency = "BRL"): string {
@@ -51,6 +52,16 @@ export function getBalanceDisplay(a: AccountForDisplay): BalanceDisplay {
   if (st === 9) return { primary: "Grace period", secondary: "Risco de pausa", severity: "critical" };
   if (st !== null && st !== 1) {
     return { primary: `Status ${st}`, secondary: "—", severity: "paused" };
+  }
+
+  // 1.5. CARTÃO DE CRÉDITO: a Meta cobra direto no cartão — a conta não "esvazia" saldo, então
+  // saldo baixo NÃO é alerta. Sobrepõe a lógica de saldo (mostra gasto, sem severidade crítica).
+  if (a.payment_method === "cartao") {
+    return {
+      primary:   "Cartão",
+      secondary: a.avgDailySpend !== null ? `Sem monitor de saldo · gasto ${fmt(a.avgDailySpend, cur)}/dia` : "Sem monitor de saldo (cartão)",
+      severity:  "ok",
+    };
   }
 
   // 2. Pré-pago: saldo da carteira calculado no sync
