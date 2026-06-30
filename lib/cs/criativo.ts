@@ -130,9 +130,12 @@ Ford(identificação→varejo popular) · Samsung(inovação→solar/marketing) 
 # SCORECARD (avalie cada roteiro 0-100; gancho3s, dor específica, identificação, consequência, quebra,
 solução-resposta, benefícios-transformação, prova, CTA-única, linguagem natural). Só entregue >= 70.
 
-# SE O BRIEFING ESTÁ INSUFICIENTE (sem dores ou sem produto/contexto pra produzir): NÃO invente. Marque
-precisa_briefing=true e liste em "perguntas" o que perguntar ao social/tráfego (qual produto/promoção,
-qual transformação, números/cases disponíveis, região, estágio do funil).
+# QUANDO PEDIR vs GERAR: precisa_briefing=true SÓ quando o briefing NÃO tem dores OU não tem
+produto/contexto nenhum pra produzir. Se há dores E produtos, GERE — mesmo SEM um pedido específico:
+escolha o "produto em destaque" (produtos_destaque_atual) ou o produto/dor mais forte do briefing e
+crie em cima dele. NÃO marque precisa_briefing só por falta de um pedido — você tem autonomia pra
+escolher o ângulo. Se precisa_briefing=true, liste em "perguntas" o que falta (produto/promoção,
+transformação, números/cases, região).
 
 # SAÍDA
 Gere 2-3 roteiros com ÂNGULOS diferentes (ex.: PAS direto, BAB visual, AIDCA com prova). Cada um com
@@ -156,7 +159,7 @@ function buildUser(inp: CriativoInput): string {
     `Palavras PROIBIDAS (não usar): ${arr(b.palavrasProibidas)}`,
     `Concorrentes a NÃO mencionar: ${arr(b.concorrentesEvitar)}`,
     ``,
-    `Pedido do social/tráfego: ${inp.pedido?.trim() || "(não especificado — escolha o produto/ângulo mais forte do briefing)"}`,
+    `Pedido do social/tráfego: ${inp.pedido?.trim() || "(não especificado — você escolhe: use o produto em destaque ou o mais forte do briefing e GERE, não peça info)"}`,
     `Estágio do funil: ${inp.estagioFunil?.trim() || "(inferir do contexto)"}`,
     ``,
     `Monte 2-3 roteiros seguindo o Método Lone. Se faltar base no briefing, peça (precisa_briefing).`,
