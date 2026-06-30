@@ -242,6 +242,7 @@ export async function runBalanceSync(opts?: {
         accountStatus: meta.account_status,
         // Verba mínima em R$ definida por cliente vence o % global.
         warningThreshold: acfg.alertVerbaBaixa ? acfg.verbaMinima : null,
+        isPrepaid, // pós-pago (cartão) não alarma por saldo baixo
       },
       settings,
     );

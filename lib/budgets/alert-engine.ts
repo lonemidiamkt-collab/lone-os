@@ -37,6 +37,8 @@ export interface AccountAlertInput {
   /** Override manual absoluto (budget_alert_rules), em R$. */
   warningThreshold?: number | null;
   criticalThreshold?: number | null;
+  /** Pós-pago (cartão/fatura) não tem saldo que esgota → não alarma por saldo baixo. */
+  isPrepaid?: boolean;
 }
 
 export interface AccountAlertResult {
@@ -69,6 +71,14 @@ export function evaluateAccount(
 
   const base = monthlyBudget !== null && monthlyBudget > 0 ? monthlyBudget : null;
   const pctRemaining = base !== null ? clampPct((available / base) * 100) : null;
+
+  // Pós-pago = cobrado no cartão/fatura: NÃO há saldo que esgota (a Meta não pausa por falta de
+  // saldo). Verba−gasto é só tracking do orçamento → nunca crítico por saldo. Só avisa (amarelo)
+  // se ESTOUROU a verba contratada do mês.
+  if (input.isPrepaid === false) {
+    if (available <= 0) return { severity: "warning", reason: "Estourou a verba do mês (cartão)", pctRemaining };
+    return { severity: "ok", reason: "Cartão · sem alerta de saldo", pctRemaining };
+  }
 
   // Thresholds efetivos: override manual vence; senão % da verba.
   // ATENÇÃO: override só vale se for POSITIVO. Um valor 0/negativo significa

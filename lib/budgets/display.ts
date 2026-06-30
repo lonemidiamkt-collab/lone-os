@@ -79,12 +79,16 @@ export function getBalanceDisplay(a: AccountForDisplay): BalanceDisplay {
   // para não gerar falso alarme.
   if (a.monthly_budget !== null) {
     const synced = a.current_month_spend !== null;
+    // Pós-pago = cobrado no cartão/fatura: NÃO há saldo que esgota. Verba−gasto é só tracking do
+    // orçamento contratado → nunca "crítico" (não vai pausar por falta de saldo). Só avisa (amarelo)
+    // se ESTOUROU a verba do mês.
+    const estourou = synced && a.availableBalance !== null && a.availableBalance <= 0;
     return {
       primary:   synced ? fmt(a.availableBalance, cur) : "—",
       secondary: synced
         ? `Verba ${fmt(a.monthly_budget, cur)} · gasto ${fmt(a.current_month_spend, cur)}`
         : "Verba mensal · sync pendente",
-      severity: synced ? toDisplay(a.severity) : "ok",
+      severity: estourou ? "warning" : "ok",
     };
   }
 
@@ -92,10 +96,12 @@ export function getBalanceDisplay(a: AccountForDisplay): BalanceDisplay {
   const hasRealCap =
     a.spend_cap !== null && a.spend_cap > 0 && a.spend_cap < CAP_INFINITY_BRL;
   if (hasRealCap) {
+    // Pós-pago com cap: o cap é teto de gasto, não saldo que esvazia → não vira crítico.
+    const estourou = a.availableBalance !== null && a.availableBalance <= 0;
     return {
       primary:   fmt(a.availableBalance, cur),
       secondary: `Cap ${fmt(a.spend_cap, cur)} · gasto ${fmt(a.last_amount_spent, cur)}`,
-      severity:  toDisplay(a.severity),
+      severity:  estourou ? "warning" : "ok",
     };
   }
 
