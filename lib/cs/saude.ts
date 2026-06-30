@@ -20,9 +20,10 @@ export function avaliarSaude(cliente: string, s: SinaisSaude): AvaliacaoSaude {
   if (s.reclamacaoRecente) { motivos.push("reclamou nos últimos 14 dias"); alto = true; }
   if (s.status === "at_risk") { motivos.push("marcado como 'em risco'"); alto = true; }
   if (s.retracaoRecente) { motivos.push("cancelou/pausou pauta recentemente"); alto = true; }
+  // "Parou de postar" só conta pra quem JÁ postou e ficou em silêncio (>21d). Quem nunca teve post
+  // publicado NÃO é flag — o rastreio de posts é incompleto (nem tudo é marcado "published"), seria ruído.
   if (s.diasSemPost !== null && s.diasSemPost > 30) { motivos.push(`${s.diasSemPost} dias sem postagem`); alto = true; }
   else if (s.diasSemPost !== null && s.diasSemPost > 21) { motivos.push(`${s.diasSemPost} dias sem postagem`); }
-  else if (s.diasSemPost === null) { motivos.push("nunca teve postagem publicada"); }
 
   const risco: AvaliacaoSaude["risco"] = alto ? "alto" : motivos.length ? "medio" : "baixo";
   return { cliente, risco, motivos };
