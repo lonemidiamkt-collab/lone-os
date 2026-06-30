@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
-import { csSendGroupDocument } from "@/lib/cs/notify";
+import { csSendGroupDocument, csSendGroupText } from "@/lib/cs/notify";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { spNow } from "@/lib/cs/vigilancia";
 import { gerarRoteiros, type BriefingCliente } from "@/lib/cs/criativo";
@@ -78,7 +78,13 @@ export async function POST(req: NextRequest) {
 
     const res = await gerarRoteiros({ briefing, estagioFunil: "meio" });
     if (!res.ok || !res.data || res.data.precisa_briefing || res.data.roteiros.length === 0) {
-      detalhe.push({ cliente: nome, ok: false, motivo: res.data?.precisa_briefing ? "briefing fraco" : (res.error || "sem roteiro") });
+      const motivo = res.data?.precisa_briefing ? "briefing fraco" : (res.error || "sem roteiro");
+      // Sem briefing → em vez de pular calado, PEDE o briefing ao social (não inventa roteiro).
+      if (!dry && internalJid && res.data?.precisa_briefing) {
+        const social = (c.assigned_social as string) || "equipe";
+        await csSendGroupText(internalJid, `⚠️ Não consegui montar o roteiro da semana do *${nome}* — falta briefing. ${social}, dá pra preencher o briefing dele na plataforma? Aí já mando o roteiro pra gravar. 🙏`);
+      }
+      detalhe.push({ cliente: nome, ok: false, motivo });
       continue;
     }
     const roteiro = res.data.roteiros[0];
