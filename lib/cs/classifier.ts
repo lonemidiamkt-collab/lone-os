@@ -93,8 +93,15 @@ classifica. Outra etapa (humano) confirma antes de qualquer ação.
    NÃO para pedido/cobrança/reclamação real.
 
 # Tipos (enum "tipo")
-arte_nova, ajuste_arte, cobranca_prazo, feedback_campanha, duvida, reclamacao,
-elogio, agendamento, retracao, conversa.
+arte_nova, ajuste_arte, cobranca_prazo, feedback_campanha, duvida, duvida_estrategia,
+reclamacao, info_operacional, elogio, agendamento, retracao, conversa.
+- duvida = dúvida OPERACIONAL ("como faço pra…", "qual o prazo?"). duvida_estrategia = pergunta
+  ESTRATÉGICA de negócio ("vale a pena investir mais em vídeo?", "qual a melhor estratégia pro mês?",
+  "acha que devo baixar o preço?") → vai pro gestor, não pro social.
+- info_operacional (is_demanda=FALSE) = o cliente INFORMA um fato durável que muda como a Lone
+  atende, mas NÃO é um pedido ("mudamos o horário pra 9h", "nosso telefone novo é X", "vamos ficar
+  fechados na semana que vem", "agora quem aprova é a Maria"). NÃO vira card — vira MEMÓRIA do cliente.
+  Diferente de conversa (papo sem valor durável).
 
 # Como classificar cada item
 - urgencia: baixa | media | alta (prazo curto, data comemorativa próxima, tom = alta).
@@ -148,6 +155,10 @@ Cliente: "preciso de uma arte sobre os novos horários de entrega, consegue entr
 → {is_demanda:true, tipo:"arte_nova", urgencia:"alta", confianca:0.9, resumo:"Arte sobre os novos horários de entrega", trecho_origem:"preciso de uma arte sobre os novos horários de entrega, consegue entregar hoje?", cliente:null}
 Cliente: "preciso de uma arte pra vaga de vendedor" / "opa, na verdade é vaga de caminhoneiro"
 → {is_demanda:true, tipo:"arte_nova", urgencia:"media", confianca:0.9, resumo:"Arte para vaga de caminhoneiro", trecho_origem:"opa, na verdade é vaga de caminhoneiro", cliente:null}
+Cliente: "a partir de hoje nosso horário mudou pra 9h às 19h"
+→ {is_demanda:false, tipo:"info_operacional", urgencia:"baixa", confianca:0.9, resumo:"Novo horário: 9h às 19h", trecho_origem:"a partir de hoje nosso horário mudou pra 9h às 19h", cliente:null}
+Cliente: "vocês acham que vale a pena investir mais em vídeo esse mês?"
+→ {is_demanda:true, tipo:"duvida_estrategia", urgencia:"media", confianca:0.85, resumo:"Pergunta estratégica sobre investir mais em vídeo", trecho_origem:"vocês acham que vale a pena investir mais em vídeo esse mês?", cliente:null}
 
 # Saída
 Responda APENAS no formato JSON definido (schema). Liste todos os itens detectados

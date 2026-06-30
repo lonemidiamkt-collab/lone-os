@@ -279,7 +279,7 @@ export async function POST(req: NextRequest) {
       const { data: ex } = await supabaseAdmin.from("cs_client_rules")
         .select("id").eq("client_id", alvo.id).eq("texto", pref).eq("ativo", true).limit(1);
       if (!ex || ex.length === 0) {
-        await supabaseAdmin.from("cs_client_rules").insert({ client_id: alvo.id, texto: pref, escopo: "roteiro", origem: "aprendido" });
+        await supabaseAdmin.from("cs_client_rules").insert({ client_id: alvo.id, texto: pref, escopo: "roteiro", origem: "aprendido", source_message: msg.text, author: quem || msg.authorJid });
         console.log(`[CS/inbound] aprendi preferência de roteiro (${alvo.nome}): ${pref}`);
       }
     }
@@ -431,6 +431,7 @@ export async function POST(req: NextRequest) {
           if (!existentes || existentes.length === 0) {
             await supabaseAdmin.from("cs_client_rules").insert({
               client_id: alvo.client_id as string, texto: i.aprendizado, escopo: "sempre", origem: "aprendido",
+              source_message: msg.text, author: quem,
             });
             console.log(`[CS/inbound] aprendi (regra) sobre ${alvo.cliente_nome}: ${i.aprendizado}`);
           }
@@ -555,6 +556,23 @@ export async function POST(req: NextRequest) {
 
   const internalJid = internalGroupJid();
   const sugeridas: string[] = [];
+
+  // info_operacional (KB): o cliente INFORMOU um fato durável (horário, contato, quem aprova…) →
+  // vira MEMÓRIA do cliente (cs_client_rules), NÃO card. Guarda fonte + autor (KB M1/M2).
+  for (const it of res.data.itens.filter((i) => i.tipo === "info_operacional")) {
+    const texto = it.resumo?.trim();
+    if (!texto || !c.id) continue;
+    const { data: jaTem } = await supabaseAdmin.from("cs_client_rules")
+      .select("id").eq("client_id", c.id as string).eq("texto", texto).eq("ativo", true).limit(1);
+    if (jaTem && jaTem.length) continue;
+    await supabaseAdmin.from("cs_client_rules").insert({
+      client_id: c.id as string, texto, escopo: "sempre", origem: "aprendido",
+      source_message: msg.text, author: msg.authorName || msg.authorJid,
+    });
+    if (internalJid) await csSendGroupText(internalJid, `🧠 Anotei do *${clienteNome}*: _${texto}_ — vou lembrar disso.`);
+    console.log(`[CS/inbound] info_operacional → memória (${clienteNome}): ${texto}`);
+  }
+
   for (const it of res.data.itens.filter((i) => i.is_demanda && i.confianca >= 0.6)) {
     // A2 — verificador cético só nos AMBÍGUOS (confiança < A2_TRUST_FROM). Refuta falso-positivo
     // antes de incomodar a equipe. Fail-open: erro de API no A2 não bloqueia o pipeline.
@@ -568,10 +586,14 @@ export async function POST(req: NextRequest) {
         continue;
       }
     }
+    const ehReclamacao = it.tipo === "reclamacao";
     const area = tipoToArea(it.tipo as CsDemandType);
-    const responsavel = resolveResponsavel(area, {
-      assigned_social: c.assigned_social as string, assigned_designer: c.assigned_designer as string, assigned_traffic: c.assigned_traffic as string,
-    });
+    // KB: reclamação ESCALA pra gestão (Julio + Roberto), não fica com o social.
+    const responsavel = ehReclamacao
+      ? (process.env.CS_ESCALATION_NAMES || "Julio e Roberto")
+      : resolveResponsavel(area, {
+          assigned_social: c.assigned_social as string, assigned_designer: c.assigned_designer as string, assigned_traffic: c.assigned_traffic as string,
+        });
 
     // A3 — redige o briefing seguindo as regras do cliente (não inventa; pede o que falta).
     const a3 = await gerarBriefing({
@@ -596,7 +618,9 @@ export async function POST(req: NextRequest) {
       // Mensagem CURTA e humana, SEM código — a equipe RESPONDE (reply) nesta mensagem.
       const a3d = a3.ok ? a3.data : null;
       const acao = `É só responder *nesta mensagem*: *ok* (crio o card) · *não* (você cuida) · ou *ajustar* e me diz o que mudar.`;
-      const txt = precisaConfirmar
+      const txt = ehReclamacao
+        ? `🔴 *RECLAMAÇÃO* da *${clienteNome}* — ${responsavel}, atenção:\n\n${a3d ? a3d.briefing.trim() : `"${msg.text}"`}\n\nResponde *aqui*: *ok* (registro como demanda) · *não* (vocês tratam direto).`
+        : precisaConfirmar
         ? `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}* — mas o pedido tá meio vago. Antes de produzir, confirma com eles:\n${a3d?.observacao ?? ""}\n\n${acao}`
         : `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}*.\n\n${a3d ? a3d.briefing.trim() : `Mensagem: "${msg.text}"`}${a3d ? `\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : ""}\n\n${acao}`;
       const r = await csSendGroupText(internalJid, txt);

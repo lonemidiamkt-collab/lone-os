@@ -12,7 +12,8 @@ export const BRIEFING_COLS =
 export async function loadRoteiroPrefs(clientId: string): Promise<string[]> {
   const { data } = await supabaseAdmin
     .from("cs_client_rules").select("texto")
-    .eq("client_id", clientId).eq("ativo", true).in("escopo", ["roteiro", "sempre"]);
+    .eq("client_id", clientId).eq("ativo", true).in("escopo", ["roteiro", "sempre"])
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`); // ignora regras expiradas (KB: validade)
   return (data ?? []).map((r) => r.texto as string).filter(Boolean);
 }
 

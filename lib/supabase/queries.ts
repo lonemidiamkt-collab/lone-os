@@ -1149,6 +1149,7 @@ export async function fetchClientCsRules(clientId: string): Promise<CsClientRule
     .select("*")
     .eq("client_id", clientId)
     .eq("ativo", true)
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`) // ignora regras expiradas (KB: validade)
     .order("created_at", { ascending: true });
   if (error) { console.error("[DB] fetchClientCsRules:", error.message); return []; }
   return (data ?? []).map(snakeToCsRule);

@@ -9,8 +9,9 @@ export function tipoToArea(tipo: CsDemandType): CsArea {
     case "ajuste_arte":
       return "designer";
     case "feedback_campanha":
+    case "duvida_estrategia": // pergunta estratégica → gestor de tráfego (escala p/ direção)
       return "trafego";
-    default: // cobranca_prazo, duvida, reclamacao, elogio, agendamento, retracao
+    default: // cobranca_prazo, duvida, reclamacao, elogio, agendamento, retracao, info_operacional
       return "social";
   }
 }
