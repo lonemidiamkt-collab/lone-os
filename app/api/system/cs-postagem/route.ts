@@ -37,7 +37,9 @@ export async function POST(req: NextRequest) {
     .select("id, name, assigned_social, active, perfil_conteudo")
     .or("active.is.null,active.eq.true");
   if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 });
-  const clientes = (clientsData ?? []).filter((c) => (c.assigned_social as string)?.trim());
+  const clientes = (clientsData ?? []).filter(
+    (c) => (c.assigned_social as string)?.trim() && !(c.name as string)?.startsWith("🧪"),
+  );
   const fazVideo = (c: (typeof clientes)[number]) => c.perfil_conteudo === "video" || c.perfil_conteudo === "completo";
 
   // Cards com due_date = hoje (pauta do dia) → quais clientes têm post.
