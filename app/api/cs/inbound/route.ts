@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { isOpenAIConfigured } from "@/lib/ai/openai";
-import { parseUpsert, isTrivial, isLoneTeam, type EvolutionUpsert } from "@/lib/cs/ingest";
+import { parseUpsert, isTrivial, isLoneTeam, ehNomeEquipeLone, type EvolutionUpsert } from "@/lib/cs/ingest";
 import { classifyBlock, type ClassifierContext } from "@/lib/cs/classifier";
 import { csSendGroupText, csSendGroupDocument, csFetchMediaBase64, csFindGroupByName } from "@/lib/cs/notify";
 import { transcribeAudio } from "@/lib/cs/transcribe";
@@ -106,6 +106,15 @@ function ehPedidoRoteiro(text: string): boolean {
   const t = text.toLowerCase();
   if (!/\blone\b/.test(t)) return false;
   return /\b(roteiro|roteiros|an[úu]ncio|anuncio|criativo|script|vsl)\b/.test(t);
+}
+
+// Follow-up de ajuste num roteiro recém-enviado ("ajusta o gancho", "mais curto", "refaz o CTA").
+// NÃO exige "lone" (a equipe responde direto ao "me diz o que ajustar"). Só vale se houver roteiro recente.
+function ehAjusteRoteiro(text: string): boolean {
+  const t = text.toLowerCase();
+  return /\b(refaz|refazer|refa[çc]a|ajusta|ajustar|ajuste|muda|mudar|troca|trocar|encurta|encurtar|melhora|melhorar|reescreve|reescrever)\b/.test(t)
+    || /\b(mais|menos)\s+(curto|longo|forte|direto|formal|informal|leve|emocional|agressivo)\b/.test(t)
+    || /\boutro\s+(gancho|cta|[âa]ngulo|angulo|produto|tom)\b/.test(t);
 }
 
 const normNome = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -297,7 +306,9 @@ export async function POST(req: NextRequest) {
   // ─── Agente "Lone": pedido de ROTEIRO no grupo interno ("Lone, faz um roteiro pro [cliente]") ───
   // Reconhece o pedido, acha o cliente, lê o briefing e devolve os roteiros. Se faltar briefing, pede.
   // Cada pedido vira corpus (cs_roteiro_pedidos) p/ ir aprendendo o estilo de cada cliente.
-  if (msg.groupJid === internalGroupJid() && ehPedidoRoteiro(msg.text)) {
+  const pedeRot = msg.groupJid === internalGroupJid() && ehPedidoRoteiro(msg.text);
+  const ajusteRot = msg.groupJid === internalGroupJid() && !pedeRot && ehAjusteRoteiro(msg.text);
+  if (pedeRot || ajusteRot) {
     if (!isOpenAIConfigured()) {
       await csSendGroupText(msg.groupJid, "Tô sem acesso à IA agora pra montar roteiro 😕 já já volto.");
       return NextResponse.json({ ok: true, roteiro: "sem_ia" });
@@ -314,14 +325,27 @@ export async function POST(req: NextRequest) {
       if (claimErr?.code === "23505") return NextResponse.json({ ok: true, roteiro: "dedup" });
       pedidoId = claim?.id ?? null; // outro erro → segue sem corpus (best-effort)
     }
-    const alvo = await resolveClientePorNome(msg.text);
+    let alvo = pedeRot ? await resolveClientePorNome(msg.text) : null;
+    let pedidoRoteiro = msg.text;
+    if (!alvo && ajusteRot) {
+      // Follow-up de ajuste sem nome de cliente → usa o roteiro recente (últimos 30 min) como contexto.
+      const desde30 = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data: ult } = await supabaseAdmin.from("cs_roteiro_pedidos")
+        .select("client_id, cliente_nome, pedido").not("client_id", "is", null).gte("created_at", desde30)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (ult?.client_id) {
+        alvo = { id: ult.client_id as string, nome: ult.cliente_nome as string, nicho: undefined };
+        pedidoRoteiro = `O roteiro anterior era sobre: ${(ult.pedido as string) || "—"}. A equipe pediu este AJUSTE: ${msg.text}`;
+      }
+    }
     if (!alvo) {
+      if (ajusteRot) return NextResponse.json({ ok: true, roteiro: "ajuste_sem_contexto" }); // não sei qual roteiro — fico quieto
       await csSendGroupText(msg.groupJid, "Bora! 🎬 De qual cliente é o roteiro? Me diz o nome que eu já monto.");
       return NextResponse.json({ ok: true, roteiro: "sem_cliente" });
     }
     const { briefing, temBriefing } = await loadBriefingForClient({ clientId: alvo.id, nome: alvo.nome, nicho: alvo.nicho });
     const preferencias = await loadRoteiroPrefs(alvo.id); // estilo já aprendido deste cliente
-    const r = await gerarRoteiros({ briefing, pedido: msg.text, preferencias });
+    const r = await gerarRoteiros({ briefing, pedido: pedidoRoteiro, preferencias });
     if (!r.ok || !r.data) {
       await csSendGroupText(msg.groupJid, `Eita, não consegui montar o roteiro do *${alvo.nome}* agora 😕 me chama de novo daqui a pouco?`);
       return NextResponse.json({ ok: true, roteiro: "erro", cliente: alvo.nome });
@@ -573,7 +597,10 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── Mensagem de cliente: A0 → A1 → A3 → sugere ───
-  if (isLoneTeam(msg.authorJid, teamJids())) return NextResponse.json({ ok: true, skip: "autor = equipe Lone" });
+  if (isLoneTeam(msg.authorJid, teamJids()) || ehNomeEquipeLone(msg.authorName)) return NextResponse.json({ ok: true, skip: "autor = equipe Lone" });
+  // O grupo INTERNO é coordenação da equipe — nada aqui é demanda de cliente. (Já passou pelos
+  // handlers internos: decisão/roteiro/comando/onboarding/interpretação.) Evita "alucinada".
+  if (msg.groupJid === internalGroupJid()) return NextResponse.json({ ok: true, skip: "grupo interno — não classifica demanda" });
   if (isTrivial(msg.text)) return NextResponse.json({ ok: true, skip: "trivial" });
 
   // Dedup: a Evolution reenvia `messages.upsert`. Se este message_id já gerou demanda, ignora.

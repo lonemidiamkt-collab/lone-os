@@ -97,3 +97,12 @@ export function isLoneTeam(authorJid: string, teamJids: string[]): boolean {
     return jd.length > 0 && (digits === jd || digits.endsWith(jd) || jd.endsWith(digits));
   });
 }
+
+// Conta da própria Lone (ex.: "Lone Midia - Assessoria de Marketing", "Carlos - Social Midia | Lone
+// Midia", "Lucas Socio Lone") — o nome denuncia a agência, mesmo de um número não cadastrado.
+// Mensagem da Lone NUNCA vira demanda do cliente. Heurística: "Lone" + marcador de papel/agência.
+export function ehNomeEquipeLone(pushName?: string): boolean {
+  if (!pushName) return false;
+  if (/assessoria de marketing/i.test(pushName)) return true;
+  return /\blone\b/i.test(pushName) && /(m[íi]dia|social|s[óo]cio|assessoria|marketing|gestor|tr[áa]fego|designer)/i.test(pushName);
+}

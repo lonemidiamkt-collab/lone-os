@@ -29,14 +29,16 @@ export async function parseOnboardingTrigger(text: string): Promise<{ cliente: s
   return res.ok && res.data ? res.data : { cliente: null, grupo: null };
 }
 
-// Perguntas na ordem em que o Lone faz (tom da Lone, leves, 1 por vez).
+// Perguntas de onboarding da Lone (lista oficial do Roberto), no tom da Lone, 1 por vez.
 export const ONBOARDING_QUESTIONS: string[] = [
-  "Pra começar: me conta o que a *{cliente}* faz e o que diferencia vocês da concorrência? 🚀",
-  "Show! Quais são os principais produtos ou serviços de vocês? E tem algum que vocês querem dar destaque agora?",
-  "Entendi! E quem é o cliente de vocês — perfil, idade, região, esse tipo de coisa?",
-  "Perfeito. Qual a maior dor ou problema que vocês resolvem pra esse cliente?",
-  "Ótimo. Como vocês gostam de se comunicar — mais sério, mais descontraído? E tem alguma palavra, assunto ou concorrente que a gente NÃO deve mencionar?",
-  "Por último: tem alguma promoção, data importante ou objetivo pro próximo mês que a gente já deva mirar? 🎯",
+  "Pra começar: vocês já têm fotos profissionais ou um banco de imagens próprio? 📸",
+  "Qual o principal objetivo de vocês com o Instagram nesse momento? (atrair mais clientes, construir autoridade, divulgar produtos/serviços, fortalecer a marca…)",
+  "Quais serviços ou produtos vocês querem dar mais foco nas postagens?",
+  "Como vocês descreveriam a missão da empresa? Se quiser, pode contar um pouco da história — ajuda a criar um conteúdo mais humano e autêntico. 💙",
+  "Vocês têm algum slogan ou frase de impacto que costumam usar?",
+  "Existe algum perfil no Instagram que vocês curtem ou se inspiram? (pelo design, linguagem, estilo dos posts… se lembrar, manda os @!)",
+  "Quais são os produtos que mais vendem?",
+  "E por último: quais produtos dão mais margem (mais lucro) pro negócio? 🎯",
 ];
 
 export function onboardingWelcome(cliente: string): string {

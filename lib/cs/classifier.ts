@@ -126,6 +126,11 @@ reclamacao, info_operacional, elogio, agendamento, retracao, conversa.
 - "kkk depois a gente vê", "qualquer dia desses" → conversa, NÃO urgência.
 - Ironia/sarcasmo ("ótimo, mais um post atrasado") → pode ser reclamacao, não elogio.
 - Reclamação sobre OUTRO fornecedor/plataforma → NÃO é demanda pra Lone → conversa.
+- A Lone faz MARKETING (arte, post, vídeo, anúncio, tráfego, campanha, conteúdo, identidade). Pedido
+  sobre o PRÓPRIO PRODUTO/VENDA/OPERAÇÃO do cliente — orçamento/cotação de produto, "me passa um
+  orçamento de X peças", preço de venda ao consumidor, pedido de mercadoria, prazo de entrega do
+  produto — NÃO é demanda pra Lone → conversa. (Geralmente é um CLIENTE DO CLIENTE que mandou no grupo
+  errado.) Só vira demanda se for sobre a COMUNICAÇÃO/MARKETING daquilo (ex.: "faz uma arte com esse orçamento").
 - Pedido futuro/condicional ("semana que vem vou precisar") → agendamento, não arte_nova agora.
 - Retração ("esquece a pauta de quarta", "cancela") → retracao (fecha/ajusta), não nova demanda.
 - Pergunta ("tem como mudar a foto?") → duvida OU ajuste_arte; se for pedido de mudança
@@ -159,6 +164,8 @@ Cliente: "a partir de hoje nosso horário mudou pra 9h às 19h"
 → {is_demanda:false, tipo:"info_operacional", urgencia:"baixa", confianca:0.9, resumo:"Novo horário: 9h às 19h", trecho_origem:"a partir de hoje nosso horário mudou pra 9h às 19h", cliente:null}
 Cliente: "vocês acham que vale a pena investir mais em vídeo esse mês?"
 → {is_demanda:true, tipo:"duvida_estrategia", urgencia:"media", confianca:0.85, resumo:"Pergunta estratégica sobre investir mais em vídeo", trecho_origem:"vocês acham que vale a pena investir mais em vídeo esse mês?", cliente:null}
+Cliente: "me passa por favor um orçamento de 60 peças de perna de 3"
+→ {is_demanda:false, tipo:"conversa", urgencia:"baixa", confianca:0.9, resumo:"Orçamento de produto do cliente (não é marketing da Lone)", trecho_origem:"me passa por favor um orçamento de 60 peças de perna de 3", cliente:null}
 
 # Saída
 Responda APENAS no formato JSON definido (schema). Liste todos os itens detectados
