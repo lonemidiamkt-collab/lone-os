@@ -532,13 +532,13 @@ export async function POST(req: NextRequest) {
   // ─── Resposta NATURAL da equipe (não foi keyword): interpreta a intenção com IA ───
   // Ex.: "coloca que a entrega é 8h-17h, pode criar" → entende = confirmar + complemento, cria o
   // card e responde no tom da Lone. Só dispara se há demanda pendente RECENTE (ou um reply).
-  if (msg.groupJid === internalGroupJid() && !isTrivial(msg.text) && isOpenAIConfigured()) {
-    const alvo = await acharDemanda(msg.quotedMsgId);
-    const recente = !!alvo && (!!msg.quotedMsgId || (Date.now() - new Date(alvo.created_at as string).getTime() < 30 * 60 * 1000));
-    // Só interpreta como RESPOSTA se: for reply à sugestão, OU (há pendente recente E NÃO parece
-    // pedido novo). Pedido novo sem reply → cai no fluxo de classificação (cria demanda nova).
-    const ehResposta = recente && (!!msg.quotedMsgId || !pareceNovoPedido(msg.text));
-    if (alvo && ehResposta) {
+  // Só interpreta como resposta natural se for um REPLY à PRÓPRIA sugestão do agente (quotedMsgId
+  // casa com msg_id_sugestao). Sem isso, coordenação da equipe no grupo virava "confirmação" à toa
+  // (alucinada). O "ok/não/ajustar" explícito (parseDecision/parseAjuste) segue funcionando sem reply.
+  if (msg.groupJid === internalGroupJid() && !isTrivial(msg.text) && isOpenAIConfigured() && msg.quotedMsgId) {
+    const { data: alvo } = await supabaseAdmin.from("cs_demandas").select("*")
+      .eq("msg_id_sugestao", msg.quotedMsgId).eq("status", "pendente").maybeSingle();
+    if (alvo) {
       const interp = await interpretarResposta({
         clienteNome: (alvo.cliente_nome as string) || "Cliente",
         resumo: (alvo.resumo as string) || (alvo.message_text as string) || "",
