@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS cs_roteiro_pedidos (
   client_id    uuid REFERENCES clients(id) ON DELETE SET NULL,
   cliente_nome text,
   solicitante  text,             -- quem pediu (nome/jid)
+  message_id   text,             -- id da msg do WhatsApp — dedup do reenvio do webhook (claim atômico)
   pedido       text,             -- a mensagem original ("Lone, roteiro pro Império da promo")
   roteiros     jsonb,            -- os roteiros gerados (pra auditoria/aprendizado)
   scorecard    int,              -- scorecard do 1º roteiro
@@ -14,3 +15,5 @@ CREATE TABLE IF NOT EXISTS cs_roteiro_pedidos (
 );
 CREATE INDEX IF NOT EXISTS idx_cs_roteiro_pedidos_client ON cs_roteiro_pedidos(client_id);
 CREATE INDEX IF NOT EXISTS idx_cs_roteiro_pedidos_created ON cs_roteiro_pedidos(created_at DESC);
+-- NULLs são distintos no Postgres → linhas sem message_id (ex.: proativo) convivem numa boa.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cs_roteiro_pedidos_msg ON cs_roteiro_pedidos(message_id);
