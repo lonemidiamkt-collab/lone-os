@@ -5,7 +5,13 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(clients.claim());
+  // Purga QUALQUER cache antigo (de versões passadas do SW) — evita o app servir uma versão
+  // velha em cache e "esconder" features já entregues. Depois assume o controle das abas.
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
+  );
 });
 
 self.addEventListener("fetch", (event) => {
