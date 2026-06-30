@@ -228,6 +228,7 @@ async function salvarBriefingOnboarding(clientId: string, est: BriefingEstrutura
     resumo_estrategico: est.resumo_estrategico, posicionamento: est.posicionamento,
     produtos: est.produtos, produtos_destaque_atual: est.produtos_destaque_atual,
     publico_alvo: est.publico_alvo, dores: est.dores, tom_voz: est.tom_voz,
+    observacoes_estrategicas: est.observacoes_estrategicas,
     palavras_proibidas: est.palavras_proibidas, concorrentes_evitar_mencionar: est.concorrentes_evitar_mencionar,
     ganchos: est.ganchos, ctas: est.ctas,
   });

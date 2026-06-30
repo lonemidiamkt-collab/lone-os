@@ -62,6 +62,9 @@ export function onboardingDone(): string {
 }
 
 // ── Estruturação final: a IA transforma o Q&A em campos do client_briefings ──
+// tom_voz é restrito no banco (chk_tom_voz). A nuance rica do tom vai em observacoes_estrategicas.
+export type TomVoz = "formal" | "informal" | "divertido" | "tecnico" | "misto" | null;
+
 export interface BriefingEstruturado {
   resumo_estrategico: string;
   posicionamento: string;
@@ -69,7 +72,8 @@ export interface BriefingEstruturado {
   produtos_destaque_atual: string[];
   publico_alvo: string[];
   dores: string[];
-  tom_voz: string;
+  tom_voz: TomVoz;
+  observacoes_estrategicas: string;
   palavras_proibidas: string[];
   concorrentes_evitar_mencionar: string[];
   ganchos: string[];
@@ -81,7 +85,7 @@ const BRIEFING_SCHEMA: Record<string, unknown> = {
   additionalProperties: false,
   required: [
     "resumo_estrategico", "posicionamento", "produtos", "produtos_destaque_atual", "publico_alvo",
-    "dores", "tom_voz", "palavras_proibidas", "concorrentes_evitar_mencionar", "ganchos", "ctas",
+    "dores", "tom_voz", "observacoes_estrategicas", "palavras_proibidas", "concorrentes_evitar_mencionar", "ganchos", "ctas",
   ],
   properties: {
     resumo_estrategico: { type: "string" },
@@ -90,7 +94,8 @@ const BRIEFING_SCHEMA: Record<string, unknown> = {
     produtos_destaque_atual: { type: "array", items: { type: "string" } },
     publico_alvo: { type: "array", items: { type: "string" } },
     dores: { type: "array", items: { type: "string" } },
-    tom_voz: { type: "string" },
+    tom_voz: { type: ["string", "null"], enum: ["formal", "informal", "divertido", "tecnico", "misto", null] },
+    observacoes_estrategicas: { type: "string" },
     palavras_proibidas: { type: "array", items: { type: "string" } },
     concorrentes_evitar_mencionar: { type: "array", items: { type: "string" } },
     ganchos: { type: "array", items: { type: "string" } },
@@ -113,8 +118,11 @@ export async function estruturarBriefing(
       "Você organiza as respostas de onboarding de um cliente de agência de marketing num briefing " +
       "estruturado. Use SÓ o que o cliente disse — NÃO invente. Campos vazios = array vazio ou string curta. " +
       "Seja fiel e conciso. resumo_estrategico = 1-2 frases sobre o negócio e o objetivo. posicionamento = " +
-      "como a marca quer ser vista. tom_voz = o estilo de comunicação. palavras_proibidas/concorrentes = só " +
-      "o que o cliente pediu pra evitar. ganchos/ctas = ideias derivadas do que ele falou (promoção/objetivo).",
+      "como a marca quer ser vista. tom_voz = EXATAMENTE um de: formal | informal | divertido | tecnico | misto " +
+      "(o mais próximo do que o cliente descreveu; null se não der pra inferir). observacoes_estrategicas = a " +
+      "NUANCE do tom e qualquer detalhe útil que não cabe nos outros campos (ex.: 'tom acolhedor e caseiro'). " +
+      "palavras_proibidas/concorrentes = só o que o cliente pediu pra evitar. ganchos/ctas = ideias derivadas " +
+      "do que ele falou (promoção/objetivo).",
     user: `Cliente: ${cliente}\n\nConversa de onboarding:\n${conversa}\n\nEstruture no schema.`,
   });
 }
