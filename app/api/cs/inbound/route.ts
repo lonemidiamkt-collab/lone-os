@@ -23,6 +23,7 @@ import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { spNow } from "@/lib/cs/vigilancia";
 import { loadBriefingForClient, loadRoteiroPrefs } from "@/lib/cs/load-briefing";
+import { ehComandoAusencia, parseAusencia } from "@/lib/cs/ausencia";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
 
@@ -502,6 +503,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, onboarding: "iniciado", cliente: nomeCli, grupo: found.subject });
   }
 
+  // ─── Férias/ausência: "Lone, o Rodrigo está de férias até dia 15" / "Lone, o Carlos voltou" ───
+  if (msg.groupJid === internalGroupJid() && ehComandoAusencia(msg.text)) {
+    if (!isOpenAIConfigured()) {
+      await csSendGroupText(msg.groupJid, "Tô sem IA agora pra anotar isso 😕");
+      return NextResponse.json({ ok: true, ausencia: "sem_ia" });
+    }
+    const hoje = spNow().toISOString().slice(0, 10);
+    const { nome, disponivel, ate } = await parseAusencia(msg.text, hoje);
+    if (!nome) {
+      await csSendGroupText(msg.groupJid, "De quem? Me diz o nome — ex.: _\"Lone, o Rodrigo está de férias até dia 20\"_.");
+      return NextResponse.json({ ok: true, ausencia: "sem_nome" });
+    }
+    const { data: membro } = await supabaseAdmin
+      .from("team_members").select("id, name").ilike("name", `%${nome}%`).limit(1).maybeSingle();
+    if (!membro) {
+      await csSendGroupText(msg.groupJid, `Não achei "${nome}" na equipe 🤔 confere o nome?`);
+      return NextResponse.json({ ok: true, ausencia: "membro_nao_encontrado" });
+    }
+    const novoAte = disponivel ? null : (ate ? new Date(`${ate}T23:59:59-03:00`).toISOString() : new Date(Date.now() + 30 * 864e5).toISOString());
+    await supabaseAdmin.from("team_members").update({ unavailable_until: novoAte }).eq("id", membro.id);
+    await csSendGroupText(msg.groupJid, disponivel
+      ? `✅ Anotado: *${membro.name}* tá de volta! Volto a rotear demanda pra ele. 🙌`
+      : `✅ Anotado: *${membro.name}* tá fora${ate ? ` até ${new Date(`${ate}T12:00:00`).toLocaleDateString("pt-BR")}` : ""}. Nas demandas dele eu aviso pra alguém cobrir. 👍`);
+    console.log(`[CS/inbound] ausência → ${membro.name} ${disponivel ? "voltou" : `fora até ${novoAte}`}`);
+    return NextResponse.json({ ok: true, ausencia: disponivel ? "voltou" : "fora", membro: membro.name });
+  }
+
   // ─── Decisão humana (grupo interno): RESPONDA a sugestão com "ok" (cria) ou "não" (descarta) ───
   const decision = parseDecision(msg.text);
   if (decision && msg.groupJid === internalGroupJid()) {
@@ -732,6 +760,16 @@ export async function POST(req: NextRequest) {
   const internalJid = internalGroupJid();
   const sugeridas: string[] = [];
 
+  // Férias/ausência: quem está fora agora (pra avisar na sugestão se a demanda for roteada pra ele).
+  const { data: foraData } = await supabaseAdmin
+    .from("team_members").select("name")
+    .not("unavailable_until", "is", null).gt("unavailable_until", new Date().toISOString());
+  const ausentes = (foraData ?? []).map((m) => (m.name as string).toLowerCase());
+  const estaAusente = (resp: string): boolean => {
+    const f = resp.trim().toLowerCase().split(/\s+/)[0];
+    return !!f && ausentes.some((a) => a.includes(f) || a.split(/\s+/)[0] === f);
+  };
+
   // info_operacional (KB): o cliente INFORMOU um fato durável (horário, contato, quem aprova…) →
   // vira MEMÓRIA do cliente (cs_client_rules), NÃO card. Guarda fonte + autor (KB M1/M2).
   for (const it of res.data.itens.filter((i) => i.tipo === "info_operacional")) {
@@ -811,13 +849,15 @@ export async function POST(req: NextRequest) {
       // Mensagem CURTA e humana, SEM código — a equipe RESPONDE (reply) nesta mensagem.
       const a3d = a3?.ok ? a3.data : null;
       const acao = `É só responder *nesta mensagem*: *ok* (crio o card) · *não* (você cuida) · ou *ajustar* e me diz o que mudar.`;
-      const txt = statusBriefing
+      // Férias/ausência: se o responsável está fora, avisa pra alguém cobrir.
+      const aviso = !ehReclamacao && estaAusente(responsavel) ? `⚠️ _Heads up: ${responsavel} tá fora (férias/ausência) — alguém cobre?_\n\n` : "";
+      const txt = aviso + (statusBriefing
         ? `Oi ${responsavel}! 👋 ${statusBriefing}\n\n_(É acompanhamento, não pedido novo — responde *não* se já tratou, ou *ok* se quer um card de follow-up.)_`
         : ehReclamacao
         ? `🔴 *RECLAMAÇÃO* da *${clienteNome}* — ${responsavel}, atenção:\n\n${a3d ? a3d.briefing.trim() : `"${msg.text}"`}\n\nResponde *aqui*: *ok* (registro como demanda) · *não* (vocês tratam direto).`
         : precisaConfirmar
         ? `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}* — mas o pedido tá meio vago. Antes de produzir, confirma com eles:\n${a3d?.observacao ?? ""}\n\n${acao}`
-        : `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}*.\n\n${a3d ? a3d.briefing.trim() : `Mensagem: "${msg.text}"`}${a3d ? `\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : ""}\n\n${acao}`;
+        : `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}*.\n\n${a3d ? a3d.briefing.trim() : `Mensagem: "${msg.text}"`}${a3d ? `\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : ""}\n\n${acao}`);
       const r = await csSendGroupText(internalJid, txt);
       // Guarda o id da msg postada → o "reply" da equipe casa com esta demanda (sem código).
       if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", novaDem.id);
