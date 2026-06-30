@@ -57,10 +57,14 @@ export function getBalanceDisplay(a: AccountForDisplay): BalanceDisplay {
   // 1.5. CARTÃO DE CRÉDITO: a Meta cobra direto no cartão — a conta não "esvazia" saldo, então
   // saldo baixo NÃO é alerta. Sobrepõe a lógica de saldo (mostra gasto, sem severidade crítica).
   if (a.payment_method === "cartao") {
+    const temVerba = a.monthly_budget !== null && a.current_month_spend !== null;
+    const estourou = temVerba && (a.current_month_spend as number) > (a.monthly_budget as number);
     return {
       primary:   "Cartão",
-      secondary: a.avgDailySpend !== null ? `Sem monitor de saldo · gasto ${fmt(a.avgDailySpend, cur)}/dia` : "Sem monitor de saldo (cartão)",
-      severity:  "ok",
+      secondary: temVerba
+        ? `Verba ${fmt(a.monthly_budget, cur)} · gasto ${fmt(a.current_month_spend, cur)}`
+        : a.avgDailySpend !== null ? `Sem monitor de saldo · gasto ${fmt(a.avgDailySpend, cur)}/dia` : "Sem monitor de saldo (cartão)",
+      severity:  estourou ? "warning" : "ok",
     };
   }
 
