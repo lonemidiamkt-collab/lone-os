@@ -252,7 +252,7 @@ async function acharCardRelacionado(
 ): Promise<{ title: string; status: string; social_media: string | null; designer_delivered_at: string | null } | null> {
   const { data: cards } = await supabaseAdmin
     .from("content_cards").select("title, status, social_media, designer_delivered_at")
-    .eq("client_id", clientId).neq("status", "archived")
+    .eq("client_id", clientId).is("archived_at", null)
     .order("created_at", { ascending: false }).limit(25);
   if (!cards || !cards.length) return null;
   const tw = normNome(topic).split(/\s+/).filter((w) => w.length >= 4);
