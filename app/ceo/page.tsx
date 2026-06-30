@@ -3,6 +3,7 @@
 import Header from "@/components/Header";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
+import { OperationalKpisPanel } from "@/components/ceo/OperationalKpisPanel";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
 import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
@@ -44,7 +45,7 @@ export default function CEOPage() {
   const [unlocked, setUnlocked] = useState(() => isCeoSessionValid());
   const [pinError, setPinError] = useState(false);
   const [showPin, setShowPin] = useState(false);
-  const [activeSection, setActiveSection] = useState<"overview" | "team" | "reports" | "ltv" | "manage" | "timesheet" | "workload" | "churn">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "operacao" | "team" | "reports" | "ltv" | "manage" | "timesheet" | "workload" | "churn">("overview");
 
   // Ex-clientes (churned) — o store só traz ativos; carregamos os arquivados aqui p/ métricas.
   const [churnedClients, setChurnedClients] = useState<Client[]>([]);
@@ -445,7 +446,7 @@ export default function CEOPage() {
         {/* Tabs */}
         <div>
           <div className="flex gap-1 mb-5 border-b border-border">
-            {(["overview", "team", "manage", "timesheet", "workload", "churn", "reports", "ltv"] as const).map((tab) => (
+            {(["overview", "operacao", "team", "manage", "timesheet", "workload", "churn", "reports", "ltv"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveSection(tab)}
@@ -458,10 +459,16 @@ export default function CEOPage() {
                 {tab === "manage" && <UserCog size={14} />}
                 {tab === "timesheet" && <Clock size={14} />}
                 {tab === "workload" && <BarChart2 size={14} />}
-                {tab === "overview" ? "Visão Geral" : tab === "team" ? "Desempenho" : tab === "manage" ? "Gestão da Equipe" : tab === "timesheet" ? "Timesheet" : tab === "workload" ? "Carga de Trabalho" : tab === "churn" ? "Risco de Churn" : tab === "reports" ? "Relatórios" : "Retenção"}
+                {tab === "overview" ? "Visão Geral" : tab === "operacao" ? "Operação" : tab === "team" ? "Desempenho" : tab === "manage" ? "Gestão da Equipe" : tab === "timesheet" ? "Timesheet" : tab === "workload" ? "Carga de Trabalho" : tab === "churn" ? "Risco de Churn" : tab === "reports" ? "Relatórios" : "Retenção"}
               </button>
             ))}
           </div>
+
+          {activeSection === "operacao" && (
+            <div className="animate-fade-in">
+              <OperationalKpisPanel cards={contentCards} />
+            </div>
+          )}
 
           {activeSection === "overview" && (
             <div className="space-y-4 animate-fade-in">
