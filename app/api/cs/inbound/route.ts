@@ -7,7 +7,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { isOpenAIConfigured } from "@/lib/ai/openai";
 import { parseUpsert, isTrivial, isLoneTeam, type EvolutionUpsert } from "@/lib/cs/ingest";
 import { classifyBlock, type ClassifierContext } from "@/lib/cs/classifier";
-import { csSendGroupText, csSendGroupDocument } from "@/lib/cs/notify";
+import { csSendGroupText, csSendGroupDocument, csFetchMediaBase64 } from "@/lib/cs/notify";
+import { transcribeAudio } from "@/lib/cs/transcribe";
 import { tipoToArea, resolveResponsavel } from "@/lib/cs/routing";
 import { gerarBriefing, formatBriefing } from "@/lib/cs/briefing";
 import { verificarDemanda, A2_TRUST_FROM } from "@/lib/cs/verifier";
@@ -188,6 +189,20 @@ export async function POST(req: NextRequest) {
   const allow = pilotGroupAllowlist();
   if (allow.length > 0 && !allow.includes(msg.groupJid)) {
     return NextResponse.json({ ok: true, skip: "fora da allowlist do piloto" });
+  }
+
+  // ─── Nota de voz: baixa o áudio (Evolution) e TRANSCREVE (Whisper) → segue o fluxo com o texto.
+  // Sem isso o agente é cego pra demanda mandada por áudio (muito comum no WhatsApp do cliente). ───
+  if (msg.isAudio && !msg.text) {
+    if (!isOpenAIConfigured()) return NextResponse.json({ ok: true, skip: "áudio mas IA off" });
+    const media = await csFetchMediaBase64(payload.data ?? {});
+    if (!media.base64) {
+      console.warn("[CS/inbound] áudio sem mídia:", media.error);
+      return NextResponse.json({ ok: true, skip: "áudio sem mídia" });
+    }
+    msg.text = await transcribeAudio(media.base64, media.mimetype);
+    if (!msg.text) return NextResponse.json({ ok: true, skip: "áudio sem transcrição" });
+    console.log(`[CS/inbound] 🎤 áudio transcrito (${msg.authorName || "?"}): "${msg.text.slice(0, 80)}"`);
   }
 
   // ─── Agente "Lone": pedido de ROTEIRO no grupo interno ("Lone, faz um roteiro pro [cliente]") ───

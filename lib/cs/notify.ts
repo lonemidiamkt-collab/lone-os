@@ -31,6 +31,31 @@ export async function csSendGroupText(
   }
 }
 
+/** Baixa a mídia (ex: nota de voz) de uma mensagem via Evolution (monitor[IA]) → base64. */
+export async function csFetchMediaBase64(
+  rawData: { key?: unknown; message?: unknown },
+): Promise<{ base64?: string; mimetype?: string; error?: string }> {
+  const baseUrl = process.env.EVOLUTION_API_URL?.replace(/\/+$/, "");
+  const apiKey = process.env.EVOLUTION_API_KEY_NEW;
+  const instance = process.env.EVOLUTION_INSTANCE_NEW;
+  if (!baseUrl || !apiKey || !instance) return { error: "Evolution (monitor[IA]) não configurada" };
+  try {
+    const res = await fetch(`${baseUrl}/chat/getBase64FromMediaMessage/${encodeURIComponent(instance)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: apiKey },
+      // Manda a mensagem completa (key+message) — forma mais compatível entre versões da Evolution.
+      body: JSON.stringify({ message: { key: rawData.key, message: rawData.message }, convertToMp4: false }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const body = await res.text().catch(() => "");
+    if (!res.ok) return { error: `HTTP ${res.status}: ${body.slice(0, 160)}` };
+    const j = JSON.parse(body) as { base64?: string; mimetype?: string };
+    return { base64: j.base64, mimetype: j.mimetype };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "erro de conexão" };
+  }
+}
+
 /** Envia um documento (ex: PDF de roteiro) a um grupo pelo número do agente (monitor[IA]). */
 export async function csSendGroupDocument(
   jid: string,

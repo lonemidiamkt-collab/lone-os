@@ -26,6 +26,8 @@ export interface NormalizedInbound {
   fromMe: boolean;
   /** Se for um REPLY: id da mensagem citada (pra casar a resposta com a sugestão do agente). */
   quotedMsgId?: string;
+  /** Nota de voz sem texto — a camada de cima transcreve (Whisper) e preenche o text. */
+  isAudio?: boolean;
 }
 
 /** Extrai texto de conversation / extendedTextMessage / caption de imagem/vídeo. */
@@ -49,7 +51,9 @@ export function parseUpsert(payload: EvolutionUpsert): NormalizedInbound | null 
   const remoteJid = d?.key?.remoteJid ?? "";
   if (!remoteJid.endsWith("@g.us")) return null; // só grupos
   const text = extractText(d?.message);
-  if (!text) return null; // sem texto legível (áudio/figurinha sem caption → A0 sinaliza noutro lugar)
+  // Nota de voz (audioMessage/PTT) não tem texto → marca isAudio p/ a camada de cima transcrever.
+  const isAudio = !!(d?.message?.audioMessage);
+  if (!text && !isAudio) return null; // sem texto e sem áudio (figurinha/etc) → ignora
   const messageId = d?.key?.id ?? "";
   if (!messageId) return null;
   // Reply/citação: WhatsApp manda o id da msg citada em extendedTextMessage.contextInfo.stanzaId.
@@ -64,6 +68,7 @@ export function parseUpsert(payload: EvolutionUpsert): NormalizedInbound | null 
     timestamp: d?.messageTimestamp ?? 0,
     fromMe: !!d?.key?.fromMe,
     quotedMsgId,
+    isAudio,
   };
 }
 
