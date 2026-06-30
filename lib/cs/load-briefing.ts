@@ -7,6 +7,15 @@ import type { BriefingCliente } from "@/lib/cs/criativo";
 export const BRIEFING_COLS =
   "resumo_estrategico, produtos, publico_alvo, posicionamento, dores, ganchos, ctas, tom_voz, produtos_destaque_atual, palavras_proibidas, concorrentes_evitar_mencionar";
 
+// Preferências de estilo de roteiro aprendidas do cliente (loop de feedback): regras 'roteiro' +
+// as 'sempre' (do's & don'ts gerais valem p/ o roteiro também).
+export async function loadRoteiroPrefs(clientId: string): Promise<string[]> {
+  const { data } = await supabaseAdmin
+    .from("cs_client_rules").select("texto")
+    .eq("client_id", clientId).eq("ativo", true).in("escopo", ["roteiro", "sempre"]);
+  return (data ?? []).map((r) => r.texto as string).filter(Boolean);
+}
+
 export async function loadBriefingForClient(opts: {
   clientId: string; nome: string; nicho?: string;
 }): Promise<{ briefing: BriefingCliente; temBriefing: boolean }> {

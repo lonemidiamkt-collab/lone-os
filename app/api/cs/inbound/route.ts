@@ -7,14 +7,17 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { isOpenAIConfigured } from "@/lib/ai/openai";
 import { parseUpsert, isTrivial, isLoneTeam, type EvolutionUpsert } from "@/lib/cs/ingest";
 import { classifyBlock, type ClassifierContext } from "@/lib/cs/classifier";
-import { csSendGroupText } from "@/lib/cs/notify";
+import { csSendGroupText, csSendGroupDocument } from "@/lib/cs/notify";
 import { tipoToArea, resolveResponsavel } from "@/lib/cs/routing";
 import { gerarBriefing, formatBriefing } from "@/lib/cs/briefing";
 import { verificarDemanda, A2_TRUST_FROM } from "@/lib/cs/verifier";
 import { interpretarResposta } from "@/lib/cs/interpreter";
 import { detectarAprovacao } from "@/lib/cs/aprovacao";
-import { gerarRoteiros, formatRoteiro } from "@/lib/cs/criativo";
-import { loadBriefingForClient } from "@/lib/cs/load-briefing";
+import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/cs/criativo";
+import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
+import { htmlToPdf } from "@/lib/traffic/renderPdf";
+import { spNow } from "@/lib/cs/vigilancia";
+import { loadBriefingForClient, loadRoteiroPrefs } from "@/lib/cs/load-briefing";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
 
@@ -213,7 +216,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, roteiro: "sem_cliente" });
     }
     const { briefing, temBriefing } = await loadBriefingForClient({ clientId: alvo.id, nome: alvo.nome, nicho: alvo.nicho });
-    const r = await gerarRoteiros({ briefing, pedido: msg.text });
+    const preferencias = await loadRoteiroPrefs(alvo.id); // estilo já aprendido deste cliente
+    const r = await gerarRoteiros({ briefing, pedido: msg.text, preferencias });
     if (!r.ok || !r.data) {
       await csSendGroupText(msg.groupJid, `Eita, não consegui montar o roteiro do *${alvo.nome}* agora 😕 me chama de novo daqui a pouco?`);
       return NextResponse.json({ ok: true, roteiro: "erro", cliente: alvo.nome });
@@ -227,9 +231,28 @@ export async function POST(req: NextRequest) {
     }
     const versoes = r.data.roteiros.slice(0, 2);
     const obs = temBriefing ? "" : " _(ainda sem briefing salvo — fiz no meu melhor, vale revisar)_";
-    await csSendGroupText(msg.groupJid, `🎬 Bora${quem ? `, ${quem}` : ""}! Montei ${versoes.length > 1 ? `${versoes.length} versões` : "1 versão"} de roteiro pro *${alvo.nome}*${obs}:`);
-    for (const [i, rot] of versoes.entries()) await csSendGroupText(msg.groupJid, formatRoteiro(rot, alvo.nome, i + 1));
+    const now = spNow();
+    const dataLabel = `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const logo = await loadLoneLogo();
+    const pdf = await htmlToPdf(roteirosPdfHtml(alvo.nome, versoes, logo, dataLabel));
+    await csSendGroupText(msg.groupJid, `🎬 Bora${quem ? `, ${quem}` : ""}! Montei ${versoes.length > 1 ? `${versoes.length} versões` : "1 versão"} de roteiro pro *${alvo.nome}*${obs} — segue o PDF organizado pra já mandar pro cliente:`);
+    if (pdf.ok && pdf.buffer) {
+      await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), `Roteiro ${alvo.nome} - ${dataLabel}.pdf`);
+    } else {
+      // Fallback: PDF falhou → manda em texto pra não deixar o time sem nada.
+      for (const [i, rot] of versoes.entries()) await csSendGroupText(msg.groupJid, formatRoteiro(rot, alvo.nome, i + 1));
+    }
     await csSendGroupText(msg.groupJid, "Me diz o que ajustar (gancho, CTA, mais curto, outro produto…) que eu refaço — assim eu vou pegando o estilo de cada cliente. 😉");
+    // Loop de aprendizado: mina uma preferência DURÁVEL de estilo da mensagem e guarda (dedup p/ texto).
+    const pref = await extrairPreferenciaRoteiro(msg.text);
+    if (pref) {
+      const { data: ex } = await supabaseAdmin.from("cs_client_rules")
+        .select("id").eq("client_id", alvo.id).eq("texto", pref).eq("ativo", true).limit(1);
+      if (!ex || ex.length === 0) {
+        await supabaseAdmin.from("cs_client_rules").insert({ client_id: alvo.id, texto: pref, escopo: "roteiro", origem: "aprendido" });
+        console.log(`[CS/inbound] aprendi preferência de roteiro (${alvo.nome}): ${pref}`);
+      }
+    }
     console.log(`[CS/inbound] roteiro on-demand → ${alvo.nome} (${r.data.roteiros.length} versões) p/ ${quem}`);
     return NextResponse.json({ ok: true, roteiro: "ok", cliente: alvo.nome, n: r.data.roteiros.length });
   }

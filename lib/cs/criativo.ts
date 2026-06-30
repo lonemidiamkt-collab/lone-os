@@ -29,6 +29,8 @@ export interface CriativoInput {
   pedido?: string;
   /** topo | meio | fundo — se souber. */
   estagioFunil?: string;
+  /** Preferências de estilo APRENDIDAS deste cliente (loop de feedback) — a IA deve respeitar. */
+  preferencias?: string[];
 }
 
 export interface Etapa { tempo: string; nome: string; texto: string; }
@@ -161,6 +163,9 @@ function buildUser(inp: CriativoInput): string {
     ``,
     `Pedido do social/tráfego: ${inp.pedido?.trim() || "(não especificado — você escolhe: use o produto em destaque ou o mais forte do briefing e GERE, não peça info)"}`,
     `Estágio do funil: ${inp.estagioFunil?.trim() || "(inferir do contexto)"}`,
+    inp.preferencias && inp.preferencias.length
+      ? `\nPREFERÊNCIAS APRENDIDAS deste cliente (a equipe já pediu — RESPEITE em todas as versões):\n${inp.preferencias.map((p) => `- ${p}`).join("\n")}`
+      : ``,
     ``,
     `Monte 2-3 roteiros seguindo o Método Lone. Se faltar base no briefing, peça (precisa_briefing).`,
   ].join("\n");
@@ -177,6 +182,30 @@ export async function gerarRoteiros(inp: CriativoInput): Promise<OpenAiResult<Cr
     system: CRIATIVO_SYSTEM,
     user: buildUser(inp),
   });
+}
+
+const PREF_SCHEMA: Record<string, unknown> = {
+  type: "object", additionalProperties: false, required: ["preferencia"],
+  properties: { preferencia: { type: ["string", "null"] } },
+};
+
+// Extrai uma PREFERÊNCIA DURÁVEL de estilo de roteiro da mensagem da equipe (loop de feedback).
+// Retorna null quando a mensagem é só um pedido pontual (produto/promo da vez) sem preferência.
+export async function extrairPreferenciaRoteiro(mensagem: string): Promise<string | null> {
+  const res = await chatJson<{ preferencia: string | null }>({
+    model: "gpt-4o-mini", schemaName: "cs_roteiro_pref", schema: PREF_SCHEMA,
+    maxTokens: 120, temperature: 0,
+    system:
+      "Você extrai PREFERÊNCIAS DURÁVEIS de estilo de roteiro de anúncio a partir de uma mensagem da " +
+      "equipe sobre um cliente. Preferência durável = tom de voz, formato, tipo de gancho, CTA, duração, " +
+      "ou algo a SEMPRE fazer/evitar nos roteiros DAQUELE cliente. Se a mensagem for só um pedido pontual " +
+      "(o produto/promoção da vez, ou um 'faz um roteiro') SEM preferência de estilo, retorne preferencia=null. " +
+      "Quando houver, responda CURTO e imperativo (ex.: 'usar tom mais informal', 'ganchos mais curtos', " +
+      "'evitar falar preço', 'sempre fechar com CTA de WhatsApp').",
+    user: `Mensagem da equipe: "${mensagem}"\n\nQual a preferência durável de estilo de roteiro? (preferencia ou null)`,
+  });
+  const p = res.ok ? res.data?.preferencia : null;
+  return p && p.trim() && p.trim().toLowerCase() !== "null" ? p.trim() : null;
 }
 
 /** Formata um roteiro pro WhatsApp/UI no padrão de entrega ao social (Carlos/Pedro). */

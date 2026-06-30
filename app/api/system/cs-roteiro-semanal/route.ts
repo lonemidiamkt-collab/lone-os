@@ -8,6 +8,7 @@ import { csSendGroupDocument, csSendGroupText } from "@/lib/cs/notify";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { spNow } from "@/lib/cs/vigilancia";
 import { gerarRoteiros, type BriefingCliente } from "@/lib/cs/criativo";
+import { loadRoteiroPrefs } from "@/lib/cs/load-briefing";
 import { roteiroPdfHtml } from "@/lib/cs/roteiro-pdf";
 
 // POST /api/system/cs-roteiro-semanal — toda segunda: gera 1 roteiro por cliente de TESTE,
@@ -76,7 +77,8 @@ export async function POST(req: NextRequest) {
       concorrentesEvitar: (b?.concorrentes_evitar_mencionar as string[]) || undefined,
     };
 
-    const res = await gerarRoteiros({ briefing, estagioFunil: "meio" });
+    const preferencias = await loadRoteiroPrefs(c.id as string); // estilo aprendido do cliente
+    const res = await gerarRoteiros({ briefing, estagioFunil: "meio", preferencias });
     if (!res.ok || !res.data || res.data.precisa_briefing || res.data.roteiros.length === 0) {
       const motivo = res.data?.precisa_briefing ? "briefing fraco" : (res.error || "sem roteiro");
       // Sem briefing → em vez de pular calado, PEDE o briefing ao social (não inventa roteiro).
