@@ -379,8 +379,8 @@ export default function CardArtAttachments({
           onChange={handleFileChange}
         />
 
-        {/* Grid */}
-        <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(maxItems, 5)}, 1fr)` }}>
+        {/* Grid — 2 colunas: artes em formato maior (antes eram 5 col, ficava minúsculo) */}
+        <div className="grid grid-cols-2 gap-2">
           {/* Existing attachments */}
           {attachments.map((art, idx) => (
             <div
@@ -394,16 +394,33 @@ export default function CardArtAttachments({
                 alt={`Arte ${idx + 1}`}
                 className="w-full h-full object-cover"
               />
+              {/* Ações no hover: baixar + (ampliar via clique no card) */}
+              <a
+                href={art.url}
+                download={`arte-${idx + 1}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="absolute top-1 left-1 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary"
+                onClick={(e) => e.stopPropagation()}
+                aria-label="Baixar arte"
+                title="Baixar / abrir em tamanho grande"
+              >
+                <Download size={11} />
+              </a>
               {/* Remove button */}
               {!readOnly && (
                 <button
-                  className="absolute top-1 right-1 p-0.5 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/80"
+                  className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/80"
                   onClick={(e) => { e.stopPropagation(); setConfirmRemoveId(art.id); }}
                   aria-label="Remover arte"
                 >
                   <X size={11} />
                 </button>
               )}
+              {/* Dica de ampliar (canto inferior direito) */}
+              <span className="absolute bottom-1 right-1 text-[8px] bg-black/60 text-white rounded px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                🔍 ampliar
+              </span>
               {/* Position badge */}
               {art.id !== "legacy" && (
                 <span className="absolute bottom-1 left-1 text-[9px] bg-black/60 text-white rounded px-1 py-0.5">
@@ -460,6 +477,9 @@ export default function CardArtAttachments({
               ? "Cole com Ctrl+V · Arraste · ou clique em +"
               : "Foque aqui e cole com Ctrl+V (Cmd+V)"}
           </div>
+        )}
+        {attachments.length > 0 && (
+          <p className="mt-1 text-[10px] text-muted-foreground">💡 Clique na arte pra ver em <b>tamanho grande</b> · passe o mouse pra <b>baixar</b>.</p>
         )}
 
         {/* Global error */}
