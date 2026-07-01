@@ -15,10 +15,14 @@ export async function GET(req: NextRequest) {
 
   const d30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [demandasRes, regrasRes, onbRes, rotRes] = await Promise.all([
+  const [demandasRes, pendentesRes, regrasRes, onbRes, rotRes] = await Promise.all([
     supabaseAdmin.from("cs_demandas")
       .select("tipo, status, cliente_nome, resumo, created_at")
       .gte("created_at", d30).order("created_at", { ascending: false }),
+    // Pendentes acionáveis (precisam do ok/não da equipe) — cabeça do painel, dá pra decidir na tela.
+    supabaseAdmin.from("cs_demandas")
+      .select("id, cliente_nome, tipo, urgencia, resumo, responsavel, created_at")
+      .eq("status", "pendente").order("created_at", { ascending: false }).limit(50),
     supabaseAdmin.from("cs_client_rules")
       .select("texto, escopo, origem, created_at, clients(name, nome_fantasia)")
       .eq("ativo", true).order("created_at", { ascending: false }).limit(120),
@@ -48,6 +52,16 @@ export async function GET(req: NextRequest) {
     cliente: d.cliente_nome, tipo: d.tipo, status: d.status, resumo: d.resumo, created_at: d.created_at,
   }));
 
+  const pendentes = (pendentesRes.data ?? []).map((p) => ({
+    id: p.id as string,
+    cliente: p.cliente_nome as string,
+    tipo: p.tipo as string,
+    urgencia: p.urgencia as string,
+    resumo: p.resumo as string,
+    responsavel: (p.responsavel as string) || null,
+    created_at: p.created_at as string,
+  }));
+
   const pilot = (process.env.CS_PILOT_GROUP_JIDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const config = {
     iaOk: isOpenAIConfigured(),
@@ -61,6 +75,7 @@ export async function GET(req: NextRequest) {
     config,
     acuracia,
     aprendizado,
+    pendentes,
     recentes,
     onboardings: (onbRes.data ?? []),
     roteiros: (rotRes.data ?? []),

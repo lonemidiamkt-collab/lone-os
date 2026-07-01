@@ -25,6 +25,7 @@ import { spNow } from "@/lib/cs/vigilancia";
 import { loadBriefingForClient, loadRoteiroPrefs } from "@/lib/cs/load-briefing";
 import { ehComandoAusencia, parseAusencia } from "@/lib/cs/ausencia";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
+import { criarCardDemanda } from "@/lib/cs/card";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
 
 // Janela de coalescência (debounce): mensagens do mesmo autor+grupo dentro desta janela
@@ -49,9 +50,6 @@ const splitEnv = (v?: string) => (v ?? "").split(",").map((s) => s.trim()).filte
 const teamJids = () => splitEnv(process.env.CS_LONE_TEAM_JIDS);
 const pilotGroupAllowlist = () => splitEnv(process.env.CS_PILOT_GROUP_JIDS);
 const internalGroupJid = () => process.env.CS_INTERNAL_GROUP_JID || null;
-const isPilot = () => pilotGroupAllowlist().length > 0;
-
-const PRIO: Record<string, string> = { alta: "high", media: "medium", baixa: "low" };
 
 type ClientRow = Record<string, unknown>;
 const nomeOf = (c?: ClientRow | null) =>
@@ -172,37 +170,6 @@ async function acharDemanda(quotedMsgId?: string, codigo?: string) {
   }
   const { data } = await supabaseAdmin.from("cs_demandas").select("*").eq("status", "pendente").order("created_at", { ascending: false }).limit(1).maybeSingle();
   return data ?? null;
-}
-
-async function criarCard(opts: {
-  clientId: string; clienteNome: string; responsavel?: string | null;
-  titulo: string; urgencia: string; briefing: string;
-}): Promise<string | null> {
-  // O card é CONTEÚDO do cliente → o DONO (social_media) é o assigned_social, pra aparecer no
-  // board do social responsável pela carteira. O "responsável" da demanda (designer p/ arte) serve
-  // só pro @ na sugestão; o designer enxerga o card pelo board dele (filtra por assigned_designer),
-  // independente do social_media. Sem isso, card de arte ficava com social_media=designer e sumia
-  // do board do social dono do cliente.
-  const { data: cli } = await supabaseAdmin.from("clients").select("assigned_social").eq("id", opts.clientId).maybeSingle();
-  const dono = ((cli?.assigned_social as string) || opts.responsavel || "").trim() || null;
-  const { data: card, error } = await supabaseAdmin
-    .from("content_cards")
-    .insert({
-      title: (isPilot() ? "[TESTE] " : "") + opts.titulo,
-      client_id: opts.clientId,
-      client_name: opts.clienteNome,
-      social_media: dono,
-      status: "ideas",
-      priority: PRIO[opts.urgencia] ?? "medium",
-      briefing: opts.briefing,
-      requested_by_traffic: isPilot() ? "🤖 Agente CS (teste)" : "🤖 Agente CS",
-      status_changed_at: new Date().toISOString(),
-      column_entered_at: { ideas: new Date().toISOString() },
-    })
-    .select("id")
-    .maybeSingle();
-  if (error) { console.error("[CS] criar card:", error.message); return null; }
-  return (card?.id as string) ?? null;
 }
 
 // Onboarding: acha o cliente pelo nome ou cria um mínimo (clients só exige `name`), linkando o grupo.
@@ -550,7 +517,7 @@ export async function POST(req: NextRequest) {
       await csSendGroupText(msg.groupJid, `⚠️ Sem cliente pra criar o card de *${d.resumo}*.`, sug);
       return NextResponse.json({ ok: true, decision: "sem_cliente" });
     }
-    const cardId = await criarCard({
+    const cardId = await criarCardDemanda({
       clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null,
       titulo: (d.resumo as string) || (d.message_text as string), urgencia: d.urgencia as string,
       briefing: (d.briefing as string) || (d.message_text as string),
@@ -633,7 +600,7 @@ export async function POST(req: NextRequest) {
           const clientId = (alvo.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
           const tituloFinal = (i.titulo as string) || (alvo.resumo as string) || (alvo.message_text as string);
           let cardId: string | null = null;
-          if (clientId) cardId = await criarCard({
+          if (clientId) cardId = await criarCardDemanda({
             clientId, clienteNome: (alvo.cliente_nome as string) || "Cliente", responsavel: alvo.responsavel as string | null,
             titulo: tituloFinal, urgencia: alvo.urgencia as string,
             briefing: briefingFinal,

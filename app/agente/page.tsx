@@ -13,9 +13,20 @@ interface DashData {
     recorrentesCliente: { cliente: string; recusas: number }[];
   };
   aprendizado: { cliente: string; texto: string; escopo: string; origem: string; created_at: string }[];
+  pendentes: Pendente[];
   recentes: { cliente: string; tipo: string; status: string; resumo: string; created_at: string }[];
   onboardings: { cliente_nome: string; status: string; created_at: string }[];
   roteiros: { cliente_nome: string; scorecard: number | null; created_at: string }[];
+}
+
+interface Pendente {
+  id: string;
+  cliente: string;
+  tipo: string;
+  urgencia: string;
+  resumo: string;
+  responsavel: string | null;
+  created_at: string;
 }
 
 const FUNCOES = [
@@ -54,13 +65,39 @@ export default function AgentePage() {
   const [data, setData] = useState<DashData | null>(null);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
+  const [pendentes, setPendentes] = useState<Pendente[]>([]);
+  const [busy, setBusy] = useState<string | null>(null); // id da demanda sendo decidida
+  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     authedFetch("/api/cs/dashboard")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setData(d))
+      .then((d: DashData | null) => {
+        setData(d);
+        setPendentes(d?.pendentes ?? []);
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  // Decide uma pendência PELA PLATAFORMA (espelha o "ok/não" do WhatsApp): cria o card ou descarta,
+  // e some da lista na hora (otimista). O agente avisa o grupo interno pra manter os dois lados juntos.
+  async function decidir(id: string, acao: "confirmar" | "descartar") {
+    setBusy(id);
+    setErro(null);
+    try {
+      const r = await authedFetch("/api/cs/decide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, acao }),
+      });
+      if (r.ok) setPendentes((prev) => prev.filter((p) => p.id !== id));
+      else setErro("Não consegui registrar — tenta de novo.");
+    } catch {
+      setErro("Falha de conexão — tenta de novo.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   if (loading) return <div className="p-8 text-sm text-muted-foreground">Carregando o agente…</div>;
   if (!data?.ok) return <div className="p-8 text-sm text-destructive">Não consegui carregar o painel do agente.</div>;
@@ -87,6 +124,45 @@ export default function AgentePage() {
           <span className="rounded-full bg-muted px-2.5 py-1 text-muted-foreground">{config.gruposMonitorados} grupos monitorados</span>
         </div>
       </header>
+
+      {/* Pendentes — precisam do ok/não da equipe. Decidir aqui espelha o "ok" do WhatsApp. */}
+      {pendentes.length > 0 && (
+        <section className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-5">
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-foreground">⏳ Esperando você ({pendentes.length})</h2>
+            {erro && <span className="text-xs text-destructive">{erro}</span>}
+          </div>
+          <p className="mb-3 text-xs text-muted-foreground">Sugestões que o agente captou e ainda não viraram card. Criar aqui é o mesmo que responder <span className="font-medium">ok</span> no grupo.</p>
+          <div className="space-y-2">
+            {pendentes.map((p) => (
+              <div key={p.id} className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-medium text-foreground">{p.cliente}</span>
+                    {p.urgencia === "alta" && <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] text-destructive">urgente</span>}
+                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{p.tipo}</span>
+                  </div>
+                  <div className="mt-0.5 truncate text-xs text-muted-foreground">{p.resumo}{p.responsavel ? ` · ${p.responsavel}` : ""} · <span className="text-[10px]">{fmtData(p.created_at)}</span></div>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    onClick={() => decidir(p.id, "confirmar")}
+                    disabled={busy === p.id}
+                    className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-600 disabled:opacity-50">
+                    {busy === p.id ? "…" : "Criar card"}
+                  </button>
+                  <button
+                    onClick={() => decidir(p.id, "descartar")}
+                    disabled={busy === p.id}
+                    className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted disabled:opacity-50">
+                    Descartar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Acurácia */}
       <section>
