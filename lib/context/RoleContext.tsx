@@ -24,9 +24,8 @@ export const USER_PROFILES: UserProfile[] = [
   { id: "carlos",   name: "Carlos Augusto",  role: "social",   initials: "CA", color: "text-[#3b6ff5]", email: "carlos@lonemidia.com" },
   { id: "pedro",    name: "Pedro Henrique",  role: "social",   initials: "PH", color: "text-[#3b6ff5]", email: "pedro@lonemidia.com" },
   { id: "rodrigo",  name: "Rodrigo",         role: "designer", initials: "RD", color: "text-[#3b6ff5]", email: "rodrigo@lonemidia.com" },
-  // Comercial (SDR) — login escopado que vê SÓ o CRM. Trocar nome/e-mail pelo SDR real e criar
-  // o usuário no Supabase Auth com esse e-mail.
-  { id: "comercial", name: "Comercial",      role: "comercial", initials: "CM", color: "text-[#0d4af5]", email: "comercial@lonemidia.com" },
+  // Comercial (SDR) — login escopado que vê SÓ o CRM.
+  { id: "maria",    name: "Maria Luiza",     role: "comercial", initials: "ML", color: "text-[#0d4af5]", email: "marialuiza@lonemidia.com" },
 ];
 
 const ROLE_LABELS: Record<Role, string> = {
