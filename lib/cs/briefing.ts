@@ -32,12 +32,14 @@ export interface BriefingOutput {
   restricoes: string[];
   area: "designer" | "social" | "trafego";
   observacao: string | null; // o que falta perguntar ao cliente (null se nada)
+  /** Copy pronta pro designer usar/adaptar (gancho + apoio + CTA) — só em peça CLARA; senão null. */
+  sugestao_copy: string | null;
 }
 
 const A3_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  required: ["titulo", "briefing", "formato_sugerido", "prazo_sugerido", "restricoes", "area", "observacao"],
+  required: ["titulo", "briefing", "formato_sugerido", "prazo_sugerido", "restricoes", "area", "observacao", "sugestao_copy"],
   properties: {
     titulo: { type: "string" },
     briefing: { type: "string" },
@@ -46,6 +48,7 @@ const A3_SCHEMA: Record<string, unknown> = {
     restricoes: { type: "array", items: { type: "string" } },
     area: { type: "string", enum: ["designer", "social", "trafego"] },
     observacao: { type: ["string", "null"] },
+    sugestao_copy: { type: ["string", "null"] },
   },
 };
 
@@ -77,6 +80,18 @@ SE O PEDIDO ESTÁ CLARO:
   "somente à vista", "enquanto durar o estoque") só entram se o pedido FOR de promoção/preço.
   Um aviso de "mudança de horário" NÃO leva regra de promoção.
 - "observacao": null se não falta nada; senão, o que confirmar.
+
+# SUGESTÃO DE COPY (campo "sugestao_copy")
+Quando o pedido é uma PEÇA de comunicação (arte/post/story/vídeo) E está CLARO, escreva uma
+sugestão de copy pronta pro designer usar ou adaptar, no Método Lone:
+- GANCHO/headline (máx ~8 palavras): para a rolagem — dor, pergunta ou benefício ANTES do produto.
+  Nunca "Olá", "Somos", nome da empresa no gancho.
+- 1 linha de apoio (a oferta/benefício, específico: troque "muito" por número QUANDO o dado existir).
+- CTA única e específica ("Chame no WhatsApp", "Vem pra loja hoje").
+Formato: "Gancho: … · Apoio: … · CTA: …". Use SÓ dados do pedido/briefing/regras — preço/número
+apenas se informado; NUNCA invente oferta, condição ou depoimento.
+sugestao_copy = null quando: pedido VAGO, ou tipo que não é peça (cobrança, dúvida, feedback,
+reclamação, agendamento sem peça definida).
 
 # Sempre
 - Você NÃO cria a peça final (arte/legenda) — só o briefing que orienta quem cria.
@@ -131,6 +146,7 @@ export function formatBriefing(b: BriefingOutput): string {
   if (!/a definir/i.test(b.formato_sugerido)) {
     linhas.push(`*Formato:* ${b.formato_sugerido} · *Prazo:* ${b.prazo_sugerido}`);
   }
+  if (b.sugestao_copy) linhas.push(`\n✍️ *Sugestão de copy:* ${b.sugestao_copy}`);
   if (b.observacao) linhas.push(`\n⚠️ *Falta confirmar com o cliente:* ${b.observacao}`);
   return linhas.join("\n");
 }
