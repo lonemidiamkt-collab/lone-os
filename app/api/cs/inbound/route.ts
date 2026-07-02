@@ -141,6 +141,20 @@ const STOP_NOME = new Set([
   "oficial", "centro", "casa", "ribeiro", "bazar",
 ]);
 
+// Pergunta de STATUS ao Lone ("Lone, sabe me dizer se a demanda do Léo Carros foi feita?").
+// Sem isso o agente ficava MUDO: a pergunta não casa com nenhum comando e caía no skip do
+// grupo interno — a pessoa mandava "?" e nada. Resposta determinística, sem IA.
+function ehPerguntaStatus(text: string): boolean {
+  const t = text.toLowerCase();
+  if (!/\blone\b/.test(t)) return false;
+  return /\b(status|andamento|cad[êe]|foi feit[ao]|j[áa] foi|j[áa] fez|j[áa] saiu|j[áa] criou|j[áa] criaram|como (t[áa]|est[áa])|sabe (me )?dizer|ficou pront[oa]|t[áa] pront[oa]|entregue|entregaram|entregou)\b/.test(t);
+}
+
+const STATUS_CARD_LABEL: Record<string, string> = {
+  ideas: "Ideias (fila)", script: "Roteiro", in_production: "Produção", blocked: "Travado",
+  approval: "Aprovação interna", client_approval: "Aprovação do cliente", scheduled: "Agendado", published: "Publicado",
+};
+
 // Equipe pedindo pra CRIAR uma demanda ("Lone, cria uma demanda na [cliente] sobre X").
 // Roda DEPOIS do roteiro (roteiro tem precedência em "anúncio/criativo").
 function ehPedidoCriarDemanda(text: string): boolean {
@@ -166,7 +180,11 @@ async function resolveClientePorNome(text: string): Promise<{ id: string; nome: 
     const nome = (c.nome_fantasia as string) || (c.name as string) || "";
     const words = normNome(nome).split(/\s+/).filter((w) => w.length >= 4 && !STOP_NOME.has(w));
     let score = 0, maxw = 0;
-    for (const w of words) if (t.includes(w)) { score++; maxw = Math.max(maxw, w.length); }
+    for (const w of words) {
+      // Tolerância singular/plural: "Léo Carros" tem que casar com "leo carro mercedes".
+      const casa = t.includes(w) || (w.endsWith("s") && t.includes(w.slice(0, -1)));
+      if (casa) { score++; maxw = Math.max(maxw, w.length); }
+    }
     if (score > 0 && (!best || score > best.score || (score === best.score && maxw > best.maxw))) {
       best = { id: c.id as string, nome, nicho: (c.nicho as string) || (c.industry as string) || undefined, score, maxw };
     }
@@ -470,6 +488,56 @@ export async function POST(req: NextRequest) {
     }
     console.log(`[CS/inbound] roteiro on-demand → ${alvo.nome} (${r.data.roteiros.length} versões) p/ ${quem}`);
     return NextResponse.json({ ok: true, roteiro: "ok", cliente: alvo.nome, n: r.data.roteiros.length });
+  }
+
+  // ─── Agente "Lone": pergunta de STATUS ("Lone, a demanda do Léo Carros foi feita?") ───
+  // Acha o cliente + a demanda/card mais relacionados e reporta o estágio REAL. Determinístico.
+  if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPerguntaStatus(msg.text)) {
+    const alvoSt = await resolveClientePorNome(msg.text);
+    if (!alvoSt) {
+      await csSendGroupText(msg.groupJid, "De qual cliente? Me diz o nome que eu já te digo o status. 😉");
+      return NextResponse.json({ ok: true, status_cmd: "sem_cliente" });
+    }
+    const { data: dems } = await supabaseAdmin
+      .from("cs_demandas").select("resumo, status, content_card_id, responsavel, created_at")
+      .eq("client_id", alvoSt.id).order("created_at", { ascending: false }).limit(8);
+    // Prefere a demanda que casa com o TEMA da pergunta; senão, a mais recente.
+    const twSt = normNome(msg.text).split(/\s+/).filter((w) => w.length >= 4 && !STOP_NOME.has(w));
+    const dem = (dems ?? []).find((d) => {
+      const r = normNome((d.resumo as string) || "");
+      return twSt.filter((w) => r.includes(w)).length >= 2;
+    }) ?? (dems ?? [])[0];
+    if (!dem) {
+      await csSendGroupText(msg.groupJid, `Não achei nenhuma demanda registrada da *${alvoSt.nome}* por aqui. 🤔`);
+      return NextResponse.json({ ok: true, status_cmd: "sem_demanda" });
+    }
+    let respostaSt: string;
+    if (dem.status === "pendente") {
+      respostaSt = `A *${dem.resumo}* da *${alvoSt.nome}* ainda tá pendente esperando um ok/não (aqui ou no painel do Agente Lone).`;
+    } else if (dem.status === "descartada") {
+      respostaSt = `A *${dem.resumo}* da *${alvoSt.nome}* foi descartada — não virou card.`;
+    } else if (dem.content_card_id) {
+      const { data: cardSt } = await supabaseAdmin
+        .from("content_cards")
+        .select("title, status, designer_delivered_at, client_approved_at, due_date")
+        .eq("id", dem.content_card_id as string).maybeSingle();
+      if (cardSt) {
+        const etapa = cardSt.client_approved_at
+          ? "APROVADA pelo cliente 🎉 (falta agendar)"
+          : cardSt.designer_delivered_at
+          ? "com a arte ENTREGUE pelo designer — aguardando revisão/agendamento"
+          : `na coluna *${STATUS_CARD_LABEL[cardSt.status as string] ?? cardSt.status}*`;
+        const prazo = cardSt.due_date ? ` · prazo ${new Date(`${cardSt.due_date}T12:00:00`).toLocaleDateString("pt-BR")}` : "";
+        respostaSt = `Criei sim! O card *${cardSt.title}* da *${alvoSt.nome}* tá ${etapa}${dem.responsavel ? ` — responsável: ${dem.responsavel}` : ""}${prazo}.`;
+      } else {
+        respostaSt = `A *${dem.resumo}* foi confirmada, mas não achei mais o card (pode ter sido apagado) — vale conferir no board.`;
+      }
+    } else {
+      respostaSt = `A *${dem.resumo}* consta confirmada, mas sem card vinculado — vale conferir no board.`;
+    }
+    await csSendGroupText(msg.groupJid, respostaSt);
+    console.log(`[CS/inbound] status → ${alvoSt.nome}: ${dem.resumo} (${dem.status})`);
+    return NextResponse.json({ ok: true, status_cmd: "ok", cliente: alvoSt.nome });
   }
 
   // ─── Agente "Lone": equipe pede pra CRIAR uma demanda ("Lone, cria uma demanda na [cliente] sobre X").
