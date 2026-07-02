@@ -28,7 +28,7 @@ import type {
   MoodEntry, MoodType, CreativeAsset, SocialProofEntry, CrisisNote,
   Notice, QuinzReport, ClientAccess, TrafficMonthlyReport,
   TrafficRoutineCheck, SocialMonthlyReport, ContentApproval,
-  Role, CardAttachment, CsClientRule,
+  Role, CardAttachment, CsClientRule, CrmLead, CrmEstagio,
 } from "@/lib/types";
 
 // No servidor (API routes), supabase browser client não tem session → RLS bloqueia tudo.
@@ -929,6 +929,72 @@ export async function insertCardComment(cardId: string, author: string, text: st
   // NÃO engolir o erro: o comentário sumia em silêncio (API retornava ok, front achava que salvou,
   // mas nada ia pro banco — designer nunca via). Propaga pra API devolver 500 e o front reverter/avisar.
   if (error) { console.error("[DB] insertCardComment falhou:", error.message, { cardId, author }); throw new Error(error.message); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// CRM COMERCIAL (SDR)
+// ═══════════════════════════════════════════════════════════
+function snakeToCrmLead(r: Record<string, unknown>): CrmLead {
+  return {
+    id: r.id as string,
+    contatoNome: (r.contato_nome as string) ?? "",
+    empresa: (r.empresa as string) ?? null,
+    telefone: (r.telefone as string) ?? null,
+    email: (r.email as string) ?? null,
+    valorOrcamento: r.valor_orcamento != null ? Number(r.valor_orcamento) : null,
+    estagio: (r.estagio as CrmEstagio) ?? "lead",
+    origem: (r.origem as string) ?? null,
+    responsavel: (r.responsavel as string) ?? null,
+    reuniaoData: (r.reuniao_data as string) ?? null,
+    propostaEnviadaEm: (r.proposta_enviada_em as string) ?? null,
+    motivoPerda: (r.motivo_perda as string) ?? null,
+    observacoes: (r.observacoes as string) ?? null,
+    createdAt: (r.created_at as string) ?? "",
+    updatedAt: (r.updated_at as string) ?? "",
+  };
+}
+
+// Campos editáveis → coluna do banco (camel→snake), pra insert/update sem repetição.
+const CRM_FIELD_MAP: Record<string, string> = {
+  contatoNome: "contato_nome", empresa: "empresa", telefone: "telefone", email: "email",
+  valorOrcamento: "valor_orcamento", estagio: "estagio", origem: "origem", responsavel: "responsavel",
+  reuniaoData: "reuniao_data", propostaEnviadaEm: "proposta_enviada_em", motivoPerda: "motivo_perda",
+  observacoes: "observacoes",
+};
+
+function crmToRow(patch: Record<string, unknown>): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  for (const [k, col] of Object.entries(CRM_FIELD_MAP)) {
+    if (k in patch) row[col] = patch[k] === "" ? null : patch[k];
+  }
+  return row;
+}
+
+export async function fetchCrmLeads(): Promise<CrmLead[]> {
+  const { data, error } = await db.from("crm_leads").select("*").order("updated_at", { ascending: false });
+  if (error) { console.error("[DB] fetchCrmLeads:", error.message); return []; }
+  return (data ?? []).map(snakeToCrmLead);
+}
+
+export async function insertCrmLead(patch: Record<string, unknown>): Promise<CrmLead> {
+  const row = crmToRow(patch);
+  if (!row.contato_nome) throw new Error("contato_nome obrigatório");
+  const { data, error } = await db.from("crm_leads").insert(row).select("*").single();
+  if (error) { console.error("[DB] insertCrmLead falhou:", error.message); throw new Error(error.message); }
+  return snakeToCrmLead(data);
+}
+
+export async function updateCrmLead(id: string, patch: Record<string, unknown>): Promise<CrmLead> {
+  const row = crmToRow(patch);
+  row.updated_at = new Date().toISOString();
+  const { data, error } = await db.from("crm_leads").update(row).eq("id", id).select("*").single();
+  if (error) { console.error("[DB] updateCrmLead falhou:", error.message); throw new Error(error.message); }
+  return snakeToCrmLead(data);
+}
+
+export async function deleteCrmLead(id: string): Promise<void> {
+  const { error } = await db.from("crm_leads").delete().eq("id", id);
+  if (error) { console.error("[DB] deleteCrmLead falhou:", error.message); throw new Error(error.message); }
 }
 
 // ═══════════════════════════════════════════════════════════

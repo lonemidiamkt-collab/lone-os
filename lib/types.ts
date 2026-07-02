@@ -1,4 +1,27 @@
-export type Role = "admin" | "manager" | "traffic" | "social" | "designer";
+export type Role = "admin" | "manager" | "traffic" | "social" | "designer" | "comercial";
+
+// ── CRM comercial (SDR) ──────────────────────────────────────────────
+// Funil: Lead → Orçamento → Proposta → Reunião → Ganho/Perdido.
+export type CrmEstagio = "lead" | "orcamento" | "proposta" | "reuniao" | "ganho" | "perdido";
+export const CRM_ESTAGIOS: CrmEstagio[] = ["lead", "orcamento", "proposta", "reuniao", "ganho", "perdido"];
+
+export interface CrmLead {
+  id: string;
+  contatoNome: string;
+  empresa: string | null;
+  telefone: string | null;
+  email: string | null;
+  valorOrcamento: number | null;    // valor do orçamento em aberto (R$)
+  estagio: CrmEstagio;
+  origem: string | null;            // indicação, tráfego, prospecção…
+  responsavel: string | null;       // o SDR dono do lead
+  reuniaoData: string | null;       // YYYY-MM-DD (dia da reunião marcada)
+  propostaEnviadaEm: string | null; // YYYY-MM-DD
+  motivoPerda: string | null;       // quando estagio = perdido
+  observacoes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export type ClientStatus = "onboarding" | "good" | "average" | "at_risk";
 export type AttentionLevel = "low" | "medium" | "high" | "critical";
