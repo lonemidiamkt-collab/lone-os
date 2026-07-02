@@ -57,6 +57,11 @@ const splitEnv = (v?: string) => (v ?? "").split(",").map((s) => s.trim()).filte
 const teamJids = () => splitEnv(process.env.CS_LONE_TEAM_JIDS);
 const pilotGroupAllowlist = () => splitEnv(process.env.CS_PILOT_GROUP_JIDS);
 const internalGroupJid = () => process.env.CS_INTERNAL_GROUP_JID || null;
+// Grupos SANDBOX (fase de teste): ali o agente trata mensagem da EQUIPE como se fosse pedido de
+// cliente (ignora o filtro de equipe) e CLASSIFICA demanda mesmo sendo o grupo interno — pra o time
+// testar o fluxo inteiro (inclusive imagem) num grupo só. Vazio em produção real.
+const testGroupJids = () => splitEnv(process.env.CS_TEST_GROUP_JIDS);
+const ehSandbox = (jid: string) => testGroupJids().includes(jid);
 
 type ClientRow = Record<string, unknown>;
 const nomeOf = (c?: ClientRow | null) =>
@@ -333,6 +338,12 @@ export async function POST(req: NextRequest) {
     if (claimErr?.code === "23505") return NextResponse.json({ ok: true, skip: "message_id já processado (claim)" });
     if (claimErr) console.warn("[CS/inbound] claim indisponível (migration 058?):", claimErr.message);
   }
+
+  // Diagnóstico (fase de piloto): toda mensagem REALMENTE recebida do webhook fica visível no log —
+  // grupo, autor, se é imagem/áudio. Sem isso, mensagem descartada (allowlist/equipe) sumia sem
+  // rastro e a gente ficava adivinhando se o webhook entregou.
+  const naAllow = pilotGroupAllowlist();
+  console.log(`[CS/inbound] recv grupo=${msg.groupJid}${naAllow.length && !naAllow.includes(msg.groupJid) ? "(fora-allowlist)" : ""} autor="${msg.authorName || msg.authorJid}"${msg.isImage ? " [img]" : ""}${msg.isAudio ? " [audio]" : ""} texto="${msg.text.slice(0, 60)}"`);
 
   // ─── Onboarding em andamento neste grupo? A mensagem do cliente é uma RESPOSTA do onboarding. ───
   // Vem ANTES da allowlist: o grupo do cliente novo pode ainda não estar na allowlist.
@@ -857,15 +868,18 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── Mensagem de cliente: A0 → A1 → A3 → sugere ───
-  if (isLoneTeam(msg.authorJid, teamJids()) || ehNomeEquipeLone(msg.authorName)) return NextResponse.json({ ok: true, skip: "autor = equipe Lone" });
-  // O grupo INTERNO é coordenação da equipe — nada aqui é demanda de cliente. (Já passou pelos
-  // handlers internos: decisão/roteiro/comando/onboarding/interpretação.) Evita "alucinada".
-  if (msg.groupJid === internalGroupJid()) return NextResponse.json({ ok: true, skip: "grupo interno — não classifica demanda" });
+  // SANDBOX de teste: no grupo de teste, a msg da equipe É tratada como pedido (pra testar o fluxo).
+  const sandbox = ehSandbox(msg.groupJid);
+  if (!sandbox && (isLoneTeam(msg.authorJid, teamJids()) || ehNomeEquipeLone(msg.authorName))) return NextResponse.json({ ok: true, skip: "autor = equipe Lone" });
+  // O grupo INTERNO é coordenação da equipe — nada aqui é demanda de cliente (já passou pelos
+  // handlers internos: decisão/roteiro/comando/onboarding/interpretação). Evita "alucinada".
+  // Exceção: grupo sandbox classifica mesmo sendo o interno (é o modo de teste do fluxo completo).
+  if (msg.groupJid === internalGroupJid() && !sandbox) return NextResponse.json({ ok: true, skip: "grupo interno — não classifica demanda" });
 
-  // ─── Imagem do cliente: DESCREVE (visão gpt-4o-mini, detail low) e enriquece o texto → segue
-  // pro A1 como qualquer demanda. Só chega aqui foto de CLIENTE (equipe/interno já saíram), então
-  // a visão não é gasta à toa. Foto irrelevante (meme/pessoal) sem legenda → descrição null →
-  // cai no isTrivial abaixo e é descartada. ───
+  // ─── Imagem: DESCREVE (visão gpt-4o-mini, detail low) e enriquece o texto → segue pro A1 como
+  // qualquer demanda. Chega aqui foto de cliente (ou de qualquer um, no grupo sandbox), então a
+  // visão só roda no que vai mesmo ser classificado. Foto irrelevante (meme/pessoal) sem legenda →
+  // descrição null → cai no isTrivial abaixo e é descartada. ───
   if (msg.isImage && isOpenAIConfigured()) {
     const media = await csFetchMediaBase64(payload.data ?? {});
     if (media.base64 && media.base64.length <= 8_000_000) {
