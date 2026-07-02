@@ -1458,6 +1458,43 @@ export default function DesignPage() {
                 )}
               </div>
 
+              {/* Arte de REFERÊNCIA — anexos que o social pôs no card. Antes não apareciam aqui
+                  (a solicitação só mostrava as entregas), então o designer não via a referência. */}
+              {(() => {
+                const refCard = briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null;
+                const entregues = new Set(briefingReq.attachments ?? []); // não repetir o que já é entrega
+                const todos = refCard?.cardAttachments?.length
+                  ? refCard.cardAttachments.map((a) => a.url)
+                  : (refCard?.imageUrl ? [refCard.imageUrl] : []);
+                const refs = todos.filter((url) => !entregues.has(url));
+                if (refs.length === 0) return null;
+                return (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">🖼️ Arte de referência ({refs.length})</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {refs.map((url, i) => {
+                        const isImg = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
+                        return (
+                          <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                            className="group relative block rounded-lg overflow-hidden border border-border hover:border-primary/40 transition-colors">
+                            {isImg ? (
+                              <SignedImage src={url} alt={`Referência ${i + 1}`} className="w-full h-32 object-cover bg-muted" />
+                            ) : (
+                              <div className="flex h-32 items-center justify-center gap-1.5 bg-muted text-xs text-primary">
+                                <ExternalLink size={12} /> Abrir referência {i + 1}
+                              </div>
+                            )}
+                            <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/60 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Eye size={11} /> abrir
+                            </span>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Client brand guidelines */}
               {(() => {
                 const client = clients.find((c) => c.id === briefingReq.clientId);
