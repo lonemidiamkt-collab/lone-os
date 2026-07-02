@@ -18,10 +18,12 @@ export async function POST(req: NextRequest) {
 
   const d14 = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
 
-  // Clientes ativos (em operação), sem o cliente-teste.
+  // Clientes ativos (em operação), sem o cliente-teste. Filtro de `active` obrigatório: cliente
+  // arquivado/churnado mantém o status antigo e aparecia toda segunda como risco 🔴.
   const { data: clientsData } = await supabaseAdmin
-    .from("clients").select("id, name, nome_fantasia, status")
+    .from("clients").select("id, name, nome_fantasia, status, active")
     .in("status", ["good", "average", "at_risk"])
+    .or("active.is.null,active.eq.true")
     .not("name", "ilike", "%(teste)%");
   const clientes = clientsData ?? [];
 

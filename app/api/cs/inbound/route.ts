@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { randomBytes } from "crypto";
+import { randomBytes, timingSafeEqual } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { isOpenAIConfigured } from "@/lib/ai/openai";
 import { parseUpsert, isTrivial, isLoneTeam, ehNomeEquipeLone, type EvolutionUpsert } from "@/lib/cs/ingest";
@@ -30,7 +30,9 @@ import type { CsDemandType } from "@/lib/cs/taxonomy";
 
 // Janela de coalescência (debounce): mensagens do mesmo autor+grupo dentro desta janela
 // enriquecem a demanda pendente em vez de criar/postar uma nova (evita spam de rajada).
-const COALESCE_WINDOW_S = 90;
+// 30 min (decisão S10: ≤30min + mesmo tópico = ajuste) — 90s perdia o caso real de cliente que
+// manda o complemento minutos depois ("apagar o link" → 24 min → "eliminar a imagem").
+const COALESCE_WINDOW_S = 1800;
 
 // Webhook INBOUND do Agente CS — `messages.upsert` da Evolution (monitor[IA]). Suggest-only:
 // A0 filtra → A1 classifica → A3 redige o briefing (regras do cliente) → posta a sugestão no
@@ -42,8 +44,11 @@ const CLIENT_COLS =
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CS_INBOUND_SECRET;
   if (!secret) return false;
-  const got = req.headers.get("x-cs-secret") || req.nextUrl.searchParams.get("secret");
-  return got === secret;
+  // Query string aceita por compatibilidade (o webhook da Evolution está configurado com
+  // ?secret=) — migrar pro header x-cs-secret e aí remover o fallback. Comparação constant-time.
+  const got = req.headers.get("x-cs-secret") || req.nextUrl.searchParams.get("secret") || "";
+  const a = Buffer.from(got), b = Buffer.from(secret);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 const splitEnv = (v?: string) => (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -54,6 +59,18 @@ const internalGroupJid = () => process.env.CS_INTERNAL_GROUP_JID || null;
 type ClientRow = Record<string, unknown>;
 const nomeOf = (c?: ClientRow | null) =>
   ((c?.nome_fantasia as string) || (c?.name as string) || "Cliente");
+
+// Briefing do cliente pros prompts: FIXO (marca — regras duráveis) + CAMPANHA (o mês). O `||`
+// antigo descartava o fixed_briefing inteiro sempre que havia campaign_briefing — A1/A3 perdiam
+// "nunca usar vermelho / tom formal" etc. Slice defensivo por bloco (tokens do mini).
+const briefingCompleto = (c?: ClientRow | null): string | undefined => {
+  const fixo = ((c?.fixed_briefing as string) || "").trim();
+  const camp = ((c?.campaign_briefing as string) || "").trim();
+  return [
+    fixo && `FIXO (marca, sempre vale): ${fixo.slice(0, 1500)}`,
+    camp && `CAMPANHA ATUAL: ${camp.slice(0, 1500)}`,
+  ].filter(Boolean).join("\n\n") || undefined;
+};
 
 // T7: variações pra confirmação/descarte não parecerem script. T9: descarte admite aprendizado.
 const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
@@ -157,34 +174,59 @@ async function resolveClientePorNome(text: string): Promise<{ id: string; nome: 
   return best ? { id: best.id, nome: best.nome, nicho: best.nicho } : null;
 }
 
-// Acha a demanda PENDENTE alvo da resposta: 1) reply na sugestão (msg citada via quotedMsgId),
-// 2) código (se a pessoa digitar, legado), 3) a última pendente (fallback se não deu reply).
-async function acharDemanda(quotedMsgId?: string, codigo?: string) {
+// Acha a demanda alvo da resposta — SEM chute: 1) reply na sugestão (se já foi decidida, sinaliza
+// pro handler AVISAR em vez de agir — reply que não casa com sugestão nenhuma é conversa, não
+// comando); 2) código (legado); 3) sem reply/código, só quando existe EXATAMENTE 1 pendente
+// recente (<2h). O fallback antigo ("última pendente global") confirmava a demanda ERRADA quando
+// havia 2+ pendentes ou no retry do webhook — card criado que ninguém aprovou.
+interface AlvoDemanda {
+  demanda: Record<string, unknown> | null;
+  jaDecidida?: Record<string, unknown> | null;
+  ambiguas?: number;
+}
+async function acharDemanda(quotedMsgId?: string, codigo?: string): Promise<AlvoDemanda> {
   if (quotedMsgId) {
-    const { data } = await supabaseAdmin.from("cs_demandas").select("*").eq("msg_id_sugestao", quotedMsgId).eq("status", "pendente").maybeSingle();
-    if (data) return data;
+    const { data } = await supabaseAdmin.from("cs_demandas").select("*")
+      .eq("msg_id_sugestao", quotedMsgId).eq("status", "pendente").maybeSingle();
+    if (data) return { demanda: data };
+    const { data: dec } = await supabaseAdmin.from("cs_demandas").select("*")
+      .eq("msg_id_sugestao", quotedMsgId).neq("status", "pendente")
+      .order("decided_at", { ascending: false }).limit(1).maybeSingle();
+    return { demanda: null, jaDecidida: dec ?? null };
   }
   if (codigo) {
     const { data } = await supabaseAdmin.from("cs_demandas").select("*").eq("codigo", codigo).eq("status", "pendente").maybeSingle();
-    if (data) return data;
+    return { demanda: data ?? null };
   }
-  const { data } = await supabaseAdmin.from("cs_demandas").select("*").eq("status", "pendente").order("created_at", { ascending: false }).limit(1).maybeSingle();
-  return data ?? null;
+  const desde = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+  const { data: pend } = await supabaseAdmin.from("cs_demandas").select("*")
+    .eq("status", "pendente").gte("created_at", desde)
+    .order("created_at", { ascending: false }).limit(2);
+  if (pend && pend.length === 1) return { demanda: pend[0] };
+  return { demanda: null, ambiguas: pend?.length ?? 0 };
 }
 
 // Onboarding: acha o cliente pelo nome ou cria um mínimo (clients só exige `name`), linkando o grupo.
+// Match RÍGIDO (mín. 4 chars + proporção de tamanho): substring crua fazia "Casa Nova" casar com
+// "Nova" e REPONTAVA o grupo do cliente antigo — contaminação silenciosa de demandas/relatórios.
 async function ensureClienteOnboarding(nome: string, groupJid: string): Promise<{ id: string; nome: string } | null> {
   const t = (nome || "").trim();
   if (t) {
-    const { data: all } = await supabaseAdmin.from("clients").select("id, name, nome_fantasia").or("active.is.null,active.eq.true");
+    const { data: all } = await supabaseAdmin.from("clients").select("id, name, nome_fantasia, whatsapp_group_jid").or("active.is.null,active.eq.true");
     const nt = normNome(t);
-    const hit = (all ?? []).find((c) => {
-      const a = normNome((c.name as string) || ""), b = normNome((c.nome_fantasia as string) || "");
-      return (a.length >= 3 && (a.includes(nt) || nt.includes(a))) || (b.length >= 3 && (b.includes(nt) || nt.includes(b)));
-    });
+    const casa = (x: string) => x.length >= 4 && nt.length >= 4 &&
+      (x === nt || ((x.includes(nt) || nt.includes(x)) && Math.min(x.length, nt.length) / Math.max(x.length, nt.length) >= 0.5));
+    const hit = (all ?? []).find((c) => casa(normNome((c.name as string) || "")) || casa(normNome((c.nome_fantasia as string) || "")));
     if (hit) {
-      await supabaseAdmin.from("clients").update({ whatsapp_group_jid: groupJid }).eq("id", hit.id);
-      return { id: hit.id as string, nome: (hit.nome_fantasia as string) || (hit.name as string) };
+      const jidAtual = (hit.whatsapp_group_jid as string) || null;
+      if (jidAtual && jidAtual !== groupJid) {
+        // Homônimo JÁ mapeado em outro grupo — NÃO repontar (derrubaria o mapeamento do antigo).
+        // Provavelmente é cliente novo de nome parecido → cria novo.
+        console.warn(`[CS/onboarding] "${t}" casa com cliente já mapeado em outro grupo — criando cliente novo`);
+      } else {
+        await supabaseAdmin.from("clients").update({ whatsapp_group_jid: groupJid }).eq("id", hit.id);
+        return { id: hit.id as string, nome: (hit.nome_fantasia as string) || (hit.name as string) };
+      }
     }
   }
   const { data: novo, error } = await supabaseAdmin
@@ -211,6 +253,13 @@ async function salvarBriefingOnboarding(clientId: string, est: BriefingEstrutura
   });
   if (error) { console.error("[CS/onboarding] salvar briefing:", error.message); return false; }
   return true;
+}
+
+// Fato com prazo embutido ("semana que vem", "até dia 15") não pode virar regra ETERNA da memória
+// do cliente — ganha TTL de 14 dias. "a partir de hoje/amanhã" é mudança permanente, não casa.
+function ehFatoTemporario(texto: string): boolean {
+  if (/a partir de/i.test(texto)) return false;
+  return /semana que vem|essa semana|esta semana|este m[êe]s|esse m[êe]s|pr[óo]xim[ao]s? (semana|m[êe]s)|at[ée] (o )?dia \d|s[óo] (essa|esta) semana|f[ée]rias|recesso|balan[çc]o/i.test(texto);
 }
 
 // Pra cobrança/status: acha entre os cards recentes do cliente o mais relacionado ao tema
@@ -250,11 +299,35 @@ export async function POST(req: NextRequest) {
   if (!msg) return NextResponse.json({ ok: true, skip: "não é mensagem de grupo com texto" });
   if (msg.fromMe) return NextResponse.json({ ok: true, skip: "própria mensagem" });
 
+  // Cap defensivo: texto gigante (colado/encaminhado) viraria milhares de tokens em cada estágio.
+  if (msg.text.length > 4000) msg.text = msg.text.slice(0, 4000);
+
+  // ─── Claim ATÔMICO por message_id: a Evolution reenvia o webhook enquanto os handlers lentos
+  // (IA, 5-20s) ainda rodam — o check-then-insert antigo deixava passar duplicata (2 sugestões,
+  // 2 cards, tokens 2x). Insert-first: o reenvio conflita no PK (23505) e morre aqui, antes de
+  // gastar 1 token. Fail-open se a tabela não existir (migration 058 ainda não aplicada). ───
+  if (msg.messageId) {
+    const { error: claimErr } = await supabaseAdmin
+      .from("cs_processed_messages")
+      .insert({ message_id: msg.messageId, group_jid: msg.groupJid });
+    if (claimErr?.code === "23505") return NextResponse.json({ ok: true, skip: "message_id já processado (claim)" });
+    if (claimErr) console.warn("[CS/inbound] claim indisponível (migration 058?):", claimErr.message);
+  }
+
   // ─── Onboarding em andamento neste grupo? A mensagem do cliente é uma RESPOSTA do onboarding. ───
   // Vem ANTES da allowlist: o grupo do cliente novo pode ainda não estar na allowlist.
   {
     const { data: sess } = await supabaseAdmin
       .from("cs_onboarding_sessions").select("*").eq("group_jid", msg.groupJid).eq("status", "coletando").maybeSingle();
+    // Resposta de onboarding por NOTA DE VOZ (comum em briefing longo): transcreve AQUI — o bloco
+    // geral de transcrição roda depois da allowlist, e grupo em onboarding pode nem estar nela;
+    // sem isso o áudio sumia em silêncio e a sessão travava no mesmo passo.
+    if (sess && msg.isAudio && !msg.text && !isLoneTeam(msg.authorJid, teamJids()) && isOpenAIConfigured()) {
+      const media = await csFetchMediaBase64(payload.data ?? {});
+      if (media.base64 && media.base64.length <= 8_000_000) {
+        msg.text = await transcribeAudio(media.base64, media.mimetype);
+      }
+    }
     if (sess && !isLoneTeam(msg.authorJid, teamJids()) && !isTrivial(msg.text)) {
       const cliente = (sess.cliente_nome as string) || "cliente";
       const answers = ((sess.answers as Array<{ pergunta: string; resposta: string }>) ?? []);
@@ -293,16 +366,42 @@ export async function POST(req: NextRequest) {
       console.warn("[CS/inbound] áudio sem mídia:", media.error);
       return NextResponse.json({ ok: true, skip: "áudio sem mídia" });
     }
+    // Áudio de 1h+ estouraria memória e o limite do Whisper (~25MB) — demanda real é curta.
+    if (media.base64.length > 8_000_000) return NextResponse.json({ ok: true, skip: "áudio muito longo" });
     msg.text = await transcribeAudio(media.base64, media.mimetype);
     if (!msg.text) return NextResponse.json({ ok: true, skip: "áudio sem transcrição" });
     console.log(`[CS/inbound] 🎤 áudio transcrito (${msg.authorName || "?"}): "${msg.text.slice(0, 80)}"`);
   }
 
+  // ─── Reply direto numa SUGESTÃO do agente? Então é resposta de DEMANDA (ok/não/ajustar/
+  // linguagem natural) — nunca roteiro/comando. Sem esta guarda, "ajustar <instrução>" era
+  // sequestrado pelo handler de ajuste de roteiro (ehAjusteRoteiro casa ajusta/muda/troca em
+  // qualquer posição) e o ajuste da demanda se perdia em silêncio. ───
+  let demandaDaSugestao: Record<string, unknown> | null = null;
+  if (msg.quotedMsgId && msg.groupJid === internalGroupJid()) {
+    const { data } = await supabaseAdmin.from("cs_demandas").select("*")
+      .eq("msg_id_sugestao", msg.quotedMsgId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    demandaDaSugestao = data ?? null;
+  }
+
   // ─── Agente "Lone": pedido de ROTEIRO no grupo interno ("Lone, faz um roteiro pro [cliente]") ───
   // Reconhece o pedido, acha o cliente, lê o briefing e devolve os roteiros. Se faltar briefing, pede.
   // Cada pedido vira corpus (cs_roteiro_pedidos) p/ ir aprendendo o estilo de cada cliente.
-  const pedeRot = msg.groupJid === internalGroupJid() && ehPedidoRoteiro(msg.text);
-  const ajusteRot = msg.groupJid === internalGroupJid() && !pedeRot && ehAjusteRoteiro(msg.text);
+  const pedeRot = !demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPedidoRoteiro(msg.text);
+  // "ajusta/muda/troca…" só é ajuste de ROTEIRO se EXISTE roteiro recente (30 min). Checar ANTES
+  // de reivindicar a mensagem: sem contexto, o fluxo segue (antes: return silencioso que engolia
+  // respostas de demanda e poluía o corpus cs_roteiro_pedidos).
+  let roteiroRecente: { clientId: string; nome: string; pedido: string } | null = null;
+  if (!demandaDaSugestao && !pedeRot && msg.groupJid === internalGroupJid() && ehAjusteRoteiro(msg.text)) {
+    const desde30 = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data: ult } = await supabaseAdmin.from("cs_roteiro_pedidos")
+      .select("client_id, cliente_nome, pedido").not("client_id", "is", null).gte("created_at", desde30)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (ult?.client_id) {
+      roteiroRecente = { clientId: ult.client_id as string, nome: ult.cliente_nome as string, pedido: (ult.pedido as string) || "—" };
+    }
+  }
+  const ajusteRot = roteiroRecente != null;
   if (pedeRot || ajusteRot) {
     if (!isOpenAIConfigured()) {
       await csSendGroupText(msg.groupJid, "Tô sem acesso à IA agora pra montar roteiro 😕 já já volto.");
@@ -322,19 +421,12 @@ export async function POST(req: NextRequest) {
     }
     let alvo = pedeRot ? await resolveClientePorNome(msg.text) : null;
     let pedidoRoteiro = msg.text;
-    if (!alvo && ajusteRot) {
-      // Follow-up de ajuste sem nome de cliente → usa o roteiro recente (últimos 30 min) como contexto.
-      const desde30 = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-      const { data: ult } = await supabaseAdmin.from("cs_roteiro_pedidos")
-        .select("client_id, cliente_nome, pedido").not("client_id", "is", null).gte("created_at", desde30)
-        .order("created_at", { ascending: false }).limit(1).maybeSingle();
-      if (ult?.client_id) {
-        alvo = { id: ult.client_id as string, nome: ult.cliente_nome as string, nicho: undefined };
-        pedidoRoteiro = `O roteiro anterior era sobre: ${(ult.pedido as string) || "—"}. A equipe pediu este AJUSTE: ${msg.text}`;
-      }
+    if (!alvo && roteiroRecente) {
+      // Follow-up de ajuste: o roteiro recente (já validado lá em cima) é o contexto.
+      alvo = { id: roteiroRecente.clientId, nome: roteiroRecente.nome, nicho: undefined };
+      pedidoRoteiro = `O roteiro anterior era sobre: ${roteiroRecente.pedido}. A equipe pediu este AJUSTE: ${msg.text}`;
     }
     if (!alvo) {
-      if (ajusteRot) return NextResponse.json({ ok: true, roteiro: "ajuste_sem_contexto" }); // não sei qual roteiro — fico quieto
       await csSendGroupText(msg.groupJid, "Bora! 🎬 De qual cliente é o roteiro? Me diz o nome que eu já monto.");
       return NextResponse.json({ ok: true, roteiro: "sem_cliente" });
     }
@@ -382,7 +474,7 @@ export async function POST(req: NextRequest) {
 
   // ─── Agente "Lone": equipe pede pra CRIAR uma demanda ("Lone, cria uma demanda na [cliente] sobre X").
   // SUGERE (mesmo formato da demanda de cliente) e espera "ok" pra criar o card. ───
-  if (msg.groupJid === internalGroupJid() && ehPedidoCriarDemanda(msg.text)) {
+  if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPedidoCriarDemanda(msg.text)) {
     if (!isOpenAIConfigured()) {
       await csSendGroupText(msg.groupJid, "Tô sem acesso à IA agora pra montar a demanda 😕");
       return NextResponse.json({ ok: true, demanda_cmd: "sem_ia" });
@@ -400,9 +492,10 @@ export async function POST(req: NextRequest) {
     const { data: c } = await supabaseAdmin.from("clients").select(CLIENT_COLS).eq("id", alvo.id).maybeSingle();
     if (!c) return NextResponse.json({ ok: true, demanda_cmd: "cliente_sumiu" });
     const clienteNome = nomeOf(c);
-    const clienteBriefing = (c.campaign_briefing as string) || (c.fixed_briefing as string) || undefined;
+    const clienteBriefing = briefingCompleto(c);
     const csRules = await fetchClientCsRules(c.id as string);
-    const regrasFmt = csRules.map((rr) => `${rr.texto} (${rr.escopo})`);
+    // Preferência de ROTEIRO não é regra de arte — vazava pro A3 como "regra firme" e distorcia o briefing.
+    const regrasFmt = csRules.filter((rr) => rr.escopo !== "roteiro").map((rr) => `${rr.texto} (${rr.escopo})`);
     const assunto = extrairAssunto(msg.text);
     const tipo: CsDemandType = "arte_nova";
     const a3 = await gerarBriefing({
@@ -500,9 +593,32 @@ export async function POST(req: NextRequest) {
   // ─── Decisão humana (grupo interno): RESPONDA a sugestão com "ok" (cria) ou "não" (descarta) ───
   const decision = parseDecision(msg.text);
   if (decision && msg.groupJid === internalGroupJid()) {
-    const d = await acharDemanda(msg.quotedMsgId, decision.codigo);
+    const alvoDec: AlvoDemanda = demandaDaSugestao
+      ? (demandaDaSugestao.status === "pendente"
+          ? { demanda: demandaDaSugestao }
+          : { demanda: null, jaDecidida: demandaDaSugestao })
+      : await acharDemanda(msg.quotedMsgId, decision.codigo);
+    const d = alvoDec.demanda;
     if (!d) {
-      await csSendGroupText(msg.groupJid, `❓ Não achei a sugestão — responde *na própria mensagem* do agente (dá um "reply") que aí eu sei qual é. 😉`);
+      // Reply numa sugestão JÁ decidida (retry do webhook / segundo "ok") → avisa, não re-age.
+      if (alvoDec.jaDecidida) {
+        const jd = alvoDec.jaDecidida;
+        await csSendGroupText(msg.groupJid,
+          jd.status === "confirmada"
+            ? `Essa eu já tinha criado o card (*${jd.resumo}*) 😉`
+            : `Essa eu já tinha descartado (*${jd.resumo}*) 😉`,
+          (jd.msg_id_sugestao as string) || undefined);
+        return NextResponse.json({ ok: true, decision: "ja_decidida" });
+      }
+      if ((alvoDec.ambiguas ?? 0) >= 2) {
+        await csSendGroupText(msg.groupJid, `Tem mais de uma sugestão aberta — responde *na mensagem* da que você quer, que aí não tem erro. 😉`);
+        return NextResponse.json({ ok: true, decision: "ambigua" });
+      }
+      // "ok"/"não" solto sem pendente recente = papo da equipe → silêncio (responder "não achei"
+      // a todo "ok" viraria spam). Só ajuda se a pessoa citou um código explícito.
+      if (decision.codigo) {
+        await csSendGroupText(msg.groupJid, `❓ Não achei essa sugestão pendente — responde *na própria mensagem* do agente que aí eu sei qual é. 😉`);
+      }
       return NextResponse.json({ ok: true, decision: "not_found" });
     }
     const decidedBy = msg.authorName || msg.authorJid;
@@ -520,7 +636,7 @@ export async function POST(req: NextRequest) {
     const cardId = await criarCardDemanda({
       clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null,
       titulo: (d.resumo as string) || (d.message_text as string), urgencia: d.urgencia as string,
-      briefing: (d.briefing as string) || (d.message_text as string),
+      briefing: (d.briefing as string) || (d.message_text as string), tipo: d.tipo as string,
     });
     await supabaseAdmin.from("cs_demandas").update({
       status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: decidedBy,
@@ -535,9 +651,26 @@ export async function POST(req: NextRequest) {
   // ─── Ajuste humano: RESPONDA a sugestão com "ajustar <o que mudar>" → enriquece o briefing ───
   const ajuste = parseAjuste(msg.text);
   if (ajuste && msg.groupJid === internalGroupJid()) {
-    const d = await acharDemanda(msg.quotedMsgId);
+    const alvoAj: AlvoDemanda = demandaDaSugestao
+      ? (demandaDaSugestao.status === "pendente"
+          ? { demanda: demandaDaSugestao }
+          : { demanda: null, jaDecidida: demandaDaSugestao })
+      : await acharDemanda(msg.quotedMsgId);
+    const d = alvoAj.demanda;
     if (!d) {
-      await csSendGroupText(msg.groupJid, `❓ Não achei a sugestão pra ajustar — responde *na própria mensagem* do agente. 😉`);
+      if (alvoAj.jaDecidida) {
+        await csSendGroupText(msg.groupJid,
+          `Essa já foi decidida (*${alvoAj.jaDecidida.resumo}*) — se precisar mudar algo, edita o card na plataforma. 😉`,
+          (alvoAj.jaDecidida.msg_id_sugestao as string) || undefined);
+        return NextResponse.json({ ok: true, ajuste: "ja_decidida" });
+      }
+      if ((alvoAj.ambiguas ?? 0) >= 2) {
+        await csSendGroupText(msg.groupJid, `Tem mais de uma sugestão aberta — responde *na mensagem* da que você quer ajustar. 😉`);
+        return NextResponse.json({ ok: true, ajuste: "ambigua" });
+      }
+      if (!msg.quotedMsgId) {
+        await csSendGroupText(msg.groupJid, `❓ Não achei a sugestão pra ajustar — responde *na própria mensagem* do agente. 😉`);
+      }
       return NextResponse.json({ ok: true, ajuste: "not_found" });
     }
     const quem = msg.authorName || msg.authorJid;
@@ -558,8 +691,7 @@ export async function POST(req: NextRequest) {
   // casa com msg_id_sugestao). Sem isso, coordenação da equipe no grupo virava "confirmação" à toa
   // (alucinada). O "ok/não/ajustar" explícito (parseDecision/parseAjuste) segue funcionando sem reply.
   if (msg.groupJid === internalGroupJid() && !isTrivial(msg.text) && isOpenAIConfigured() && msg.quotedMsgId) {
-    const { data: alvo } = await supabaseAdmin.from("cs_demandas").select("*")
-      .eq("msg_id_sugestao", msg.quotedMsgId).eq("status", "pendente").maybeSingle();
+    const alvo = demandaDaSugestao?.status === "pendente" ? demandaDaSugestao : null;
     if (alvo) {
       const interp = await interpretarResposta({
         clienteNome: (alvo.cliente_nome as string) || "Cliente",
@@ -580,19 +712,23 @@ export async function POST(req: NextRequest) {
         // Memória do cliente: fato durável → vira REGRA estruturada (do's & don'ts), não texto
         // solto no fixed_briefing (que o A3 ignora quando há campaign_briefing). Dedup pelo texto.
         if (i.aprendizado && alvo.client_id) {
+          const textoRegra = i.aprendizado.trim().slice(0, 200);
           const { data: existentes } = await supabaseAdmin
             .from("cs_client_rules").select("id")
-            .eq("client_id", alvo.client_id as string).eq("texto", i.aprendizado).eq("ativo", true).limit(1);
+            .eq("client_id", alvo.client_id as string).eq("texto", textoRegra).eq("ativo", true).limit(1);
           if (!existentes || existentes.length === 0) {
             await supabaseAdmin.from("cs_client_rules").insert({
-              client_id: alvo.client_id as string, texto: i.aprendizado, escopo: "sempre", origem: "aprendido",
+              client_id: alvo.client_id as string, texto: textoRegra, escopo: "sempre", origem: "aprendido",
               source_message: msg.text, author: quem,
+              expires_at: ehFatoTemporario(textoRegra) ? new Date(Date.now() + 14 * 86400000).toISOString() : null,
             });
-            console.log(`[CS/inbound] aprendi (regra) sobre ${alvo.cliente_nome}: ${i.aprendizado}`);
+            console.log(`[CS/inbound] aprendi (regra) sobre ${alvo.cliente_nome}: ${textoRegra}`);
           }
         }
         if (i.acao === "descartar") {
-          await supabaseAdmin.from("cs_demandas").update({ status: "descartada", decided_at: new Date().toISOString(), decided_by: quem }).eq("id", alvo.id);
+          const MOTIVOS = ["nao_e_demanda", "equipe_resolve", "cliente_desistiu"];
+          const motivo = MOTIVOS.includes(i.motivo_descarte as string) ? i.motivo_descarte : null;
+          await supabaseAdmin.from("cs_demandas").update({ status: "descartada", decided_at: new Date().toISOString(), decided_by: quem, motivo_descarte: motivo }).eq("id", alvo.id);
           await csSendGroupText(msg.groupJid, i.resposta, sug);
           return NextResponse.json({ ok: true, interp: "descartada" });
         }
@@ -603,7 +739,7 @@ export async function POST(req: NextRequest) {
           if (clientId) cardId = await criarCardDemanda({
             clientId, clienteNome: (alvo.cliente_nome as string) || "Cliente", responsavel: alvo.responsavel as string | null,
             titulo: tituloFinal, urgencia: alvo.urgencia as string,
-            briefing: briefingFinal,
+            briefing: briefingFinal, tipo: alvo.tipo as string,
           });
           await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, resumo: tituloFinal, decided_at: new Date().toISOString(), decided_by: quem }).eq("id", alvo.id);
           await csSendGroupText(msg.groupJid, i.resposta, sug);
@@ -648,66 +784,151 @@ export async function POST(req: NextRequest) {
   const c = clients[0];
   if (c.agente_ativo === false) return NextResponse.json({ ok: true, skip: "agente pausado p/ este cliente" }); // S8
   const clienteNome = nomeOf(c);
-  const clienteBriefing = (c.campaign_briefing as string) || (c.fixed_briefing as string) || undefined;
+  const clienteBriefing = briefingCompleto(c);
   // Do's & don'ts estruturados do cliente → injetados no A3 (independem do texto livre).
+  // Preferência de ROTEIRO fica de fora (é do Criativo; como "regra firme" distorcia briefing de arte).
   const csRules = await fetchClientCsRules(c.id as string);
-  const regrasFmt = csRules.map((r) => `${r.texto} (${r.escopo})`);
+  const regrasFmt = csRules.filter((r) => r.escopo !== "roteiro").map((r) => `${r.texto} (${r.escopo})`);
 
-  // ─── S3: o cliente APROVOU uma arte entregue? Marca o card e avisa o time (não publica sozinho). ───
+  // ─── S3: o cliente APROVOU uma arte entregue? Marca o card e avisa o time (não publica sozinho).
+  // NÃO retorna cedo: "Aprovadíssimo! Ah, e faz um story pro sábado" SEGUE pro A1 — o story vira
+  // demanda em vez de morrer engolido pela aprovação. Cool-down de 15 min: rajada de aprovação
+  // genérica ("ficou top" + "pode postar") não pode marcar o PRÓXIMO card que o cliente nem viu.
+  // Update atômico (.is null): retry/corrida não re-aprova nem re-avisa. ───
+  let aprovacaoDetectada: string | null = null;
   if (isOpenAIConfigured()) {
-    const { data: cardAprov } = await supabaseAdmin
-      .from("content_cards")
-      .select("id, title")
-      .eq("client_id", c.id as string)
-      .is("client_approved_at", null)
-      .not("designer_delivered_at", "is", null)
-      .neq("status", "published")
-      .order("designer_delivered_at", { ascending: false })
-      .limit(1).maybeSingle();
-    if (cardAprov) {
-      const ap = await detectarAprovacao(msg.text, (cardAprov.title as string) || clienteNome);
-      if (ap.ok && ap.data?.aprovou) {
-        await supabaseAdmin.from("content_cards").update({ client_approved_at: new Date().toISOString() }).eq("id", cardAprov.id);
-        const jid = internalGroupJid();
-        if (jid) await csSendGroupText(jid, `🎉 O cliente *${clienteNome}* aprovou a arte *${cardAprov.title}*! Já pode agendar.`);
-        console.log(`[CS/inbound] cliente aprovou card ${cardAprov.id}`);
-        return NextResponse.json({ ok: true, aprovacao: cardAprov.id as string });
+    const desde15 = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const { data: aprovouRecem } = await supabaseAdmin
+      .from("content_cards").select("id")
+      .eq("client_id", c.id as string).gte("client_approved_at", desde15).limit(1);
+    if (!aprovouRecem || aprovouRecem.length === 0) {
+      const { data: cardAprov } = await supabaseAdmin
+        .from("content_cards")
+        .select("id, title")
+        .eq("client_id", c.id as string)
+        .is("client_approved_at", null)
+        .not("designer_delivered_at", "is", null)
+        .neq("status", "published")
+        .order("designer_delivered_at", { ascending: false })
+        .limit(1).maybeSingle();
+      if (cardAprov) {
+        const ap = await detectarAprovacao(msg.text, (cardAprov.title as string) || clienteNome);
+        if (ap.ok && ap.data?.aprovou) {
+          const { data: marcado } = await supabaseAdmin.from("content_cards")
+            .update({ client_approved_at: new Date().toISOString() })
+            .eq("id", cardAprov.id).is("client_approved_at", null).select("id");
+          if (marcado && marcado.length > 0) {
+            aprovacaoDetectada = cardAprov.id as string;
+            const jid = internalGroupJid();
+            if (jid) await csSendGroupText(jid, `🎉 O cliente *${clienteNome}* aprovou a arte *${cardAprov.title}*! Já pode agendar.`);
+            console.log(`[CS/inbound] cliente aprovou card ${cardAprov.id}`);
+          }
+        }
       }
     }
   }
 
-  // ─── Debounce (coalescência): rajada do mesmo autor+grupo numa janela curta enriquece a
-  // demanda pendente em vez de criar/postar outra — evita 1 sugestão por mensagem da rajada.
-  // A mensagem nova é anexada ao texto E ao briefing, então o card final terá o contexto todo. ───
+  // ─── Coalescência INTELIGENTE: complemento do mesmo autor+grupo em ≤30 min enriquece a demanda
+  // pendente — e não é só append: re-roda o A1 no bloco combinado (urgência/tipo/assunto podem
+  // mudar: "pra amanhã!!", "na verdade é Y"), re-redige o briefing (A3) e posta a atualização como
+  // REPLY da sugestão original, pra equipe decidir em cima de informação ATUAL. Se o A1 enxergar
+  // DUAS demandas distintas no combinado, NÃO coalesce — a msg nova segue o fluxo e vira demanda
+  // própria. Mensagem consumida como aprovação (S3) não coalesce. ───
   const autor = msg.authorName || msg.authorJid;
-  const desde = new Date(Date.now() - COALESCE_WINDOW_S * 1000).toISOString();
-  const { data: pendente } = await supabaseAdmin
-    .from("cs_demandas").select("id, codigo, message_text, briefing")
-    .eq("group_jid", msg.groupJid).eq("author", autor).eq("status", "pendente")
-    .gte("created_at", desde)
-    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  let pendente: Record<string, unknown> | null = null;
+  if (!aprovacaoDetectada) {
+    const desde = new Date(Date.now() - COALESCE_WINDOW_S * 1000).toISOString();
+    const { data } = await supabaseAdmin
+      .from("cs_demandas").select("id, codigo, message_text, briefing, tipo, urgencia, resumo, confianca, msg_id_sugestao")
+      .eq("group_jid", msg.groupJid).eq("author", autor).eq("status", "pendente")
+      .gte("created_at", desde)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    pendente = data ?? null;
+  }
   if (pendente) {
-    const combinado = `${(pendente.message_text as string) || ""}\n${msg.text}`.trim();
-    const novoBriefing = `${(pendente.briefing as string) || ""}\n\n+ (cliente complementou): ${msg.text}`.trim();
-    await supabaseAdmin.from("cs_demandas").update({ message_text: combinado, briefing: novoBriefing }).eq("id", pendente.id);
-    console.log(`[CS/inbound] coalesce → demanda ${pendente.codigo} (+"${msg.text.slice(0, 40)}")`);
-    return NextResponse.json({ ok: true, coalesced: pendente.codigo as string });
+    const textoAntigo = (pendente.message_text as string) || "";
+    const combinado = `${textoAntigo}\n${msg.text}`.trim();
+    let ehDemandaSeparada = false;
+    let reclassificou = false;
+    let updates: Record<string, unknown> = {
+      message_text: combinado,
+      briefing: `${(pendente.briefing as string) || ""}\n\n+ (cliente complementou): ${msg.text}`.trim(),
+    };
+    if (isOpenAIConfigured()) {
+      const re = await classifyBlock(
+        [{ author: autor, text: textoAntigo }, { author: autor, text: msg.text }],
+        {
+          clienteNome, clienteNicho: (c.nicho as string) || undefined, briefing: clienteBriefing,
+          nomesEquipeLone: teamJids(), clientesDoGrupo: clients.map(nomeOf),
+        },
+      );
+      const itens = re.ok && re.data ? re.data.itens.filter((i) => i.is_demanda && i.confianca >= 0.6) : [];
+      if (itens.length >= 2) {
+        ehDemandaSeparada = true; // assunto novo no meio da rajada → não mistura no mesmo card
+      } else if (itens.length === 1) {
+        const it = itens[0];
+        const urgOrd: Record<string, number> = { baixa: 0, media: 1, alta: 2 };
+        const urg = (urgOrd[it.urgencia] ?? 0) >= (urgOrd[pendente.urgencia as string] ?? 0)
+          ? it.urgencia : (pendente.urgencia as string);
+        const a3 = await gerarBriefing({
+          clienteNome, clienteNicho: c.nicho as string, clienteBriefing, regras: regrasFmt,
+          tipo: it.tipo, urgencia: urg, resumo: it.resumo, mensagemOriginal: combinado,
+        });
+        updates = {
+          message_text: combinado, tipo: it.tipo, urgencia: urg, confianca: it.confianca,
+          resumo: a3.ok && a3.data ? a3.data.titulo : it.resumo,
+          briefing: a3.ok && a3.data ? formatBriefing(a3.data) : (updates.briefing as string),
+        };
+        reclassificou = true;
+      }
+      // 0 itens (ex.: complemento retratou tudo) → mantém o append simples; humano decide.
+    }
+    if (!ehDemandaSeparada) {
+      await supabaseAdmin.from("cs_demandas").update(updates).eq("id", pendente.id);
+      const jidInt = internalGroupJid();
+      if (reclassificou && jidInt) {
+        const r = await csSendGroupText(jidInt,
+          `🔁 A *${clienteNome}* complementou o pedido — atualizei: *${updates.resumo as string}*${updates.urgencia === "alta" ? " (urgência alta)" : ""}. Vale o mesmo: *ok* · *não* · *ajustar*.`,
+          (pendente.msg_id_sugestao as string) || undefined);
+        if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", pendente.id);
+      }
+      console.log(`[CS/inbound] coalesce${reclassificou ? "+reclass" : ""} → demanda ${pendente.codigo} (+"${msg.text.slice(0, 40)}")`);
+      return NextResponse.json({ ok: true, coalesced: pendente.codigo as string, reclassificada: reclassificou });
+    }
+    console.log(`[CS/inbound] rajada com assunto novo → não coalesce, segue como demanda própria`);
   }
 
   if (!isOpenAIConfigured()) {
     return NextResponse.json({ ok: true, classified: false, reason: "A1 desligado (sem key)", cliente: clienteNome });
   }
 
-  // Autoaprendizado (Nível 2): carrega o que a equipe RECUSOU recentemente deste cliente, pra o A1
-  // evitar repetir o mesmo falso-positivo. Fecha o loop do Cap 7 sem eu editar o prompt na mão.
-  const { data: recusadas } = await supabaseAdmin
-    .from("cs_demandas").select("message_text, resumo")
-    .eq("client_id", c.id as string).eq("status", "descartada")
-    .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-    .order("created_at", { ascending: false }).limit(5);
+  // Autoaprendizado (Nível 2): recusas (falso-positivos a evitar) E confirmadas (padrão do que É
+  // demanda real DESTE cliente — pedido recorrente ganha confiança e poupa chamadas do A2 gpt-4o).
+  const d30iso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const [{ data: recusadas }, { data: confirmadas }] = await Promise.all([
+    // Só descartes "nao_e_demanda" ensinam o A1 — "não (você cuida)" descarta demanda REAL e
+    // contaminava o aprendizado (o A1 aprendia a silenciar pedidos legítimos parecidos).
+    supabaseAdmin.from("cs_demandas").select("message_text, resumo")
+      .eq("client_id", c.id as string).eq("status", "descartada").eq("motivo_descarte", "nao_e_demanda")
+      .gte("created_at", d30iso).order("created_at", { ascending: false }).limit(5),
+    supabaseAdmin.from("cs_demandas").select("message_text, tipo")
+      .eq("client_id", c.id as string).eq("status", "confirmada")
+      .gte("created_at", d30iso).order("created_at", { ascending: false }).limit(5),
+  ]);
   const recusasRecentes = (recusadas ?? [])
     .map((r) => ((r.message_text as string) || (r.resumo as string) || "").trim().slice(0, 120))
     .filter(Boolean);
+  const confirmadasRecentes = (confirmadas ?? [])
+    .map((r) => {
+      const t = ((r.message_text as string) || "").trim().slice(0, 120);
+      return t ? `"${t}" → ${r.tipo as string}` : "";
+    })
+    .filter(Boolean);
+
+  // Data/hora de SP no contexto: urgência e data comemorativa dependem de saber que dia é hoje.
+  const spAgora = spNow();
+  const DIAS_SEMANA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+  const dataHoraAtual = `${DIAS_SEMANA[spAgora.getDay()]}, ${String(spAgora.getDate()).padStart(2, "0")}/${String(spAgora.getMonth() + 1).padStart(2, "0")}/${spAgora.getFullYear()} ${String(spAgora.getHours()).padStart(2, "0")}:${String(spAgora.getMinutes()).padStart(2, "0")} (horário de Brasília)`;
 
   const ctx: ClassifierContext = {
     clienteNome,
@@ -716,6 +937,8 @@ export async function POST(req: NextRequest) {
     nomesEquipeLone: teamJids(),
     clientesDoGrupo: clients.map(nomeOf),
     recusasRecentes,
+    confirmadasRecentes,
+    dataHoraAtual,
   };
 
   const res = await classifyBlock([{ author: msg.authorName || "Cliente", text: msg.text }], ctx);
@@ -738,18 +961,31 @@ export async function POST(req: NextRequest) {
   };
 
   // info_operacional (KB): o cliente INFORMOU um fato durável (horário, contato, quem aprova…) →
-  // vira MEMÓRIA do cliente (cs_client_rules), NÃO card. Guarda fonte + autor (KB M1/M2).
+  // vira MEMÓRIA do cliente (cs_client_rules), NÃO card. Guard-rails anti-envenenamento: cap de
+  // texto (200), cap de 5 regras aprendidas/cliente/dia, e TTL de 14 dias quando o fato é
+  // claramente temporário ("semana que vem", "até dia 15") — senão viraria regra eterna.
   for (const it of res.data.itens.filter((i) => i.tipo === "info_operacional")) {
-    const texto = it.resumo?.trim();
+    const texto = it.resumo?.trim().slice(0, 200);
     if (!texto || !c.id) continue;
-    const { data: jaTem } = await supabaseAdmin.from("cs_client_rules")
-      .select("id").eq("client_id", c.id as string).eq("texto", texto).eq("ativo", true).limit(1);
+    const [{ data: jaTem }, { count: aprendidas24h }] = await Promise.all([
+      supabaseAdmin.from("cs_client_rules")
+        .select("id").eq("client_id", c.id as string).eq("texto", texto).eq("ativo", true).limit(1),
+      supabaseAdmin.from("cs_client_rules").select("id", { count: "exact", head: true })
+        .eq("client_id", c.id as string).eq("origem", "aprendido")
+        .gte("created_at", new Date(Date.now() - 24 * 3600 * 1000).toISOString()),
+    ]);
     if (jaTem && jaTem.length) continue;
+    if ((aprendidas24h ?? 0) >= 5) {
+      console.warn(`[CS/inbound] cap de aprendizado/dia atingido (${clienteNome}) — pulando: ${texto}`);
+      continue;
+    }
+    const temporario = ehFatoTemporario(texto);
     await supabaseAdmin.from("cs_client_rules").insert({
       client_id: c.id as string, texto, escopo: "sempre", origem: "aprendido",
       source_message: msg.text, author: msg.authorName || msg.authorJid,
+      expires_at: temporario ? new Date(Date.now() + 14 * 86400000).toISOString() : null,
     });
-    if (internalJid) await csSendGroupText(internalJid, `🧠 Anotei do *${clienteNome}*: _${texto}_ — vou lembrar disso.`);
+    if (internalJid) await csSendGroupText(internalJid, `🧠 Anotei do *${clienteNome}*: _${texto}_ — vou lembrar disso.${temporario ? " (por 2 semanas — parece coisa temporária)" : ""}`);
     console.log(`[CS/inbound] info_operacional → memória (${clienteNome}): ${texto}`);
   }
 
@@ -832,6 +1068,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  console.log(`[CS/inbound] ${clienteNome} "${msg.text.slice(0, 60)}" → ${sugeridas.join(", ") || "nenhuma demanda"}`);
-  return NextResponse.json({ ok: true, classified: true, cliente: clienteNome, sugeridas, multiCliente });
+  console.log(`[CS/inbound] ${clienteNome} "${msg.text.slice(0, 60)}" → ${sugeridas.join(", ") || "nenhuma demanda"}${aprovacaoDetectada ? " (+aprovação)" : ""}`);
+  return NextResponse.json({ ok: true, classified: true, cliente: clienteNome, sugeridas, multiCliente, aprovacao: aprovacaoDetectada });
 }

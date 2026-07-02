@@ -227,7 +227,7 @@ export interface CardAttachment {
 }
 
 // Do's & don'ts estruturados do Agente CS (tabela cs_client_rules).
-export type CsRuleEscopo = "sempre" | "promocao" | "arte" | "social" | "trafego";
+export type CsRuleEscopo = "sempre" | "promocao" | "arte" | "social" | "trafego" | "roteiro";
 export interface CsClientRule {
   id: string;
   clientId: string;

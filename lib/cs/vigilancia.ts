@@ -52,6 +52,14 @@ export function isFirmPostingDay(d = spNow()): boolean {
   return wd === 1 || wd === 5;
 }
 
+/** Próximo dia FIRME de postagem depois de `d`. Na sexta, a "véspera" é a SEGUNDA — olhar só
+ *  "amanhã" fazia a véspera de segunda nunca disparar (amanhã = sábado). */
+export function proximoDiaFirme(d = spNow()): Date {
+  let x = addDays(d, 1);
+  while (!isFirmPostingDay(x)) x = addDays(x, 1);
+  return x;
+}
+
 /** Dia útil = seg–sex E não-feriado nacional. Sem API de feriado → não bloqueia (fail-open). */
 export async function isBusinessDay(d = spNow()): Promise<boolean> {
   if (!isWeekday(d)) return false;
@@ -68,6 +76,8 @@ export async function isBusinessDay(d = spNow()): Promise<boolean> {
  * Horas ÚTEIS (8h–18h, seg–sex em SP) decorridas desde `fromISO` até `now`.
  * Usado pelos thresholds de "parado há X horas". Infinity se nulo; 0 se futuro.
  * Passo de 30min, com teto de 30 dias (card muito antigo → trata como "muito tempo").
+ * ⚠️ `now` deve ser o relógio REAL (new Date()) — NUNCA spNow(): o Date deslocado de spNow()
+ * desloca o getTime() em ~3h e subconta todos os thresholds (calendário SP já é tratado aqui dentro).
  */
 export function businessHoursSince(fromISO?: string | null, now = new Date()): number {
   if (!fromISO) return Infinity;

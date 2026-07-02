@@ -6,7 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 
-const ESCOPOS = new Set(["sempre", "promocao", "arte", "social", "trafego"]);
+const ESCOPOS = new Set(["sempre", "promocao", "arte", "social", "trafego", "roteiro"]);
 
 /**
  * CRUD das regras (do's & don'ts) do Agente CS por cliente — tabela cs_client_rules.

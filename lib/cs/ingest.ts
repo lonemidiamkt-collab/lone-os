@@ -8,7 +8,11 @@ export interface EvolutionUpsert {
   event?: string;
   instance?: string;
   data?: {
-    key?: { remoteJid?: string; fromMe?: boolean; id?: string; participant?: string };
+    key?: {
+      remoteJid?: string; fromMe?: boolean; id?: string; participant?: string;
+      /** Baileys/Evolution recentes: quando participant vem como @lid, o número real vem aqui. */
+      participantPn?: string; participantAlt?: string;
+    };
     pushName?: string;
     message?: Record<string, unknown> | null;
     messageType?: string;
@@ -30,7 +34,7 @@ export interface NormalizedInbound {
   isAudio?: boolean;
 }
 
-/** Extrai texto de conversation / extendedTextMessage / caption de imagem/vídeo. */
+/** Extrai texto de conversation / extendedTextMessage / caption de imagem/vídeo/documento. */
 export function extractText(message?: Record<string, unknown> | null): string {
   if (!message) return "";
   const conv = message.conversation;
@@ -41,7 +45,22 @@ export function extractText(message?: Record<string, unknown> | null): string {
   if (img?.caption) return img.caption.trim();
   const vid = message.videoMessage as { caption?: string } | undefined;
   if (vid?.caption) return vid.caption.trim();
+  const doc = message.documentMessage as { caption?: string } | undefined;
+  if (doc?.caption) return doc.caption.trim();
   return "";
+}
+
+/** Id da mensagem citada (reply). O contextInfo mora DENTRO do tipo da mensagem: em texto é
+ *  extendedTextMessage.contextInfo, mas em reply com mídia é imageMessage/videoMessage/
+ *  audioMessage/documentMessage.contextInfo — sem varrer todos, reply com foto/áudio perdia o
+ *  thread e a resposta caía no fallback de "última pendente" (demanda errada). */
+export function extractQuotedId(message?: Record<string, unknown> | null): string | undefined {
+  if (!message) return undefined;
+  for (const v of Object.values(message)) {
+    const ci = (v as { contextInfo?: { stanzaId?: string } } | null)?.contextInfo;
+    if (ci?.stanzaId) return ci.stanzaId;
+  }
+  return undefined;
 }
 
 /** Normaliza um upsert. Retorna null se não for mensagem de grupo com texto. */
@@ -56,12 +75,17 @@ export function parseUpsert(payload: EvolutionUpsert): NormalizedInbound | null 
   if (!text && !isAudio) return null; // sem texto e sem áudio (figurinha/etc) → ignora
   const messageId = d?.key?.id ?? "";
   if (!messageId) return null;
-  // Reply/citação: WhatsApp manda o id da msg citada em extendedTextMessage.contextInfo.stanzaId.
-  const ext = d?.message?.extendedTextMessage as { contextInfo?: { stanzaId?: string } } | undefined;
-  const quotedMsgId = ext?.contextInfo?.stanzaId || undefined;
+  const quotedMsgId = extractQuotedId(d?.message);
+  // Autor: quando o WhatsApp entrega o participant como @lid (id interno, dígitos sem relação com
+  // o telefone), prefere o número real (participantPn/participantAlt) — senão isLoneTeam falha e
+  // mensagem da equipe vira "demanda de cliente".
+  const participant = d?.key?.participant ?? remoteJid;
+  const participantReal = participant.endsWith("@lid")
+    ? (d?.key?.participantPn || d?.key?.participantAlt || participant)
+    : participant;
   return {
     groupJid: remoteJid,
-    authorJid: d?.key?.participant ?? remoteJid,
+    authorJid: participantReal,
     authorName: d?.pushName ?? "",
     text,
     messageId,
@@ -88,13 +112,27 @@ export function isTrivial(text: string): boolean {
   return TRIVIAL_PATTERNS.some((re) => re.test(t));
 }
 
+// Forma canônica de número BR: 55 + DDD + últimos 8 dígitos. O 9º dígito móvel aparece OU não
+// dependendo de quem gerou o jid (env com 9, WhatsApp sem, ou vice-versa) — e a diferença fica no
+// MEIO da string, então endsWith não salva. Não-BR/curto: devolve os dígitos como vieram.
+function brCanonical(digits: string): string {
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    return "55" + digits.slice(2, 4) + digits.slice(-8);
+  }
+  return digits;
+}
+
 /** Autor é da equipe Lone? (números/JIDs conhecidos). Mensagem da Lone nunca vira demanda. */
 export function isLoneTeam(authorJid: string, teamJids: string[]): boolean {
   if (!authorJid) return false;
   const digits = authorJid.replace(/[^0-9]/g, "");
+  if (!digits) return false;
+  const a = brCanonical(digits);
   return teamJids.some((j) => {
     const jd = j.replace(/[^0-9]/g, "");
-    return jd.length > 0 && (digits === jd || digits.endsWith(jd) || jd.endsWith(digits));
+    if (!jd) return false;
+    const b = brCanonical(jd);
+    return a === b || a.endsWith(b) || b.endsWith(a);
   });
 }
 

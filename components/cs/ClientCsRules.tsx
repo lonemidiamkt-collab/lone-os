@@ -14,7 +14,7 @@ const ESCOPOS: { value: CsRuleEscopo; label: string }[] = [
 ];
 
 const ESCOPO_LABEL: Record<CsRuleEscopo, string> = {
-  sempre: "Sempre", promocao: "Promoção", arte: "Arte", social: "Social", trafego: "Tráfego",
+  sempre: "Sempre", promocao: "Promoção", arte: "Arte", social: "Social", trafego: "Tráfego", roteiro: "Roteiro",
 };
 
 /**
