@@ -25,7 +25,8 @@ import { spNow } from "@/lib/cs/vigilancia";
 import { loadBriefingForClient, loadRoteiroPrefs } from "@/lib/cs/load-briefing";
 import { ehComandoAusencia, parseAusencia } from "@/lib/cs/ausencia";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
-import { criarCardDemanda } from "@/lib/cs/card";
+import { criarCardDemanda, criarCardsPauta } from "@/lib/cs/card";
+import { parsePautaItens } from "@/lib/cs/pauta";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
 
 // Janela de coalescência (debounce): mensagens do mesmo autor+grupo dentro desta janela
@@ -701,6 +702,27 @@ export async function POST(req: NextRequest) {
       await csSendGroupText(msg.groupJid, `⚠️ Sem cliente pra criar o card de *${d.resumo}*.`, sug);
       return NextResponse.json({ ok: true, decision: "sem_cliente" });
     }
+    // PAUTA SEMANAL: o "ok" cria UM card POR ITEM (com a data), não um card único.
+    if (d.tipo === "pauta_semanal") {
+      const itens = parsePautaItens((d.message_text as string) || "") ?? [];
+      if (!itens.length) {
+        await csSendGroupText(msg.groupJid, `Eita, não consegui recuperar os itens da pauta 😕 monta direto no board?`, sug);
+        return NextResponse.json({ ok: true, decision: "pauta_sem_itens" });
+      }
+      const nota = ((d.briefing as string) || "").split("---").slice(1).join(" ").replace(/✏️/g, "").trim() || null;
+      const ids = await criarCardsPauta({
+        clientId, clienteNome: (d.cliente_nome as string) || "Cliente",
+        responsavel: d.responsavel as string | null, itens, notaExtra: nota,
+      });
+      await supabaseAdmin.from("cs_demandas").update({
+        status: "confirmada", content_card_id: ids[0] ?? null, decided_at: new Date().toISOString(), decided_by: decidedBy,
+      }).eq("id", d.id);
+      await csSendGroupText(msg.groupJid, ids.length
+        ? `Fechou! Criei os ${ids.length} cards da pauta da *${d.cliente_nome}* no board, já com as datas. 📅`
+        : `Eita, deu ruim pra criar os cards da pauta — tenta de novo?`, sug);
+      console.log(`[CS/inbound] pauta ${d.codigo} confirmada → ${ids.length} cards`);
+      return NextResponse.json({ ok: true, decision: "pauta_confirmada", cards: ids.length });
+    }
     const cardId = await criarCardDemanda({
       clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null,
       titulo: (d.resumo as string) || (d.message_text as string), urgencia: d.urgencia as string,
@@ -804,7 +826,16 @@ export async function POST(req: NextRequest) {
           const clientId = (alvo.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
           const tituloFinal = (i.titulo as string) || (alvo.resumo as string) || (alvo.message_text as string);
           let cardId: string | null = null;
-          if (clientId) cardId = await criarCardDemanda({
+          if (clientId && alvo.tipo === "pauta_semanal") {
+            // Resposta natural confirmando uma PAUTA → cria um card por item.
+            const itensPauta = parsePautaItens((alvo.message_text as string) || "") ?? [];
+            const idsPauta = await criarCardsPauta({
+              clientId, clienteNome: (alvo.cliente_nome as string) || "Cliente",
+              responsavel: alvo.responsavel as string | null, itens: itensPauta,
+              notaExtra: i.complemento || null,
+            });
+            cardId = idsPauta[0] ?? null;
+          } else if (clientId) cardId = await criarCardDemanda({
             clientId, clienteNome: (alvo.cliente_nome as string) || "Cliente", responsavel: alvo.responsavel as string | null,
             titulo: tituloFinal, urgencia: alvo.urgencia as string,
             briefing: briefingFinal, tipo: alvo.tipo as string,

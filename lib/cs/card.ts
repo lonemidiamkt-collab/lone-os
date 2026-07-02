@@ -41,6 +41,8 @@ function dueDatePorUrgencia(tipo: string | undefined, urgencia: string): string 
 export async function criarCardDemanda(opts: {
   clientId: string; clienteNome: string; responsavel?: string | null;
   titulo: string; urgencia: string; briefing: string; tipo?: string;
+  /** Data de postagem explícita (YYYY-MM-DD) — ex.: item de pauta. Sobrepõe a heurística. */
+  dueDate?: string | null;
 }): Promise<string | null> {
   const pilot = csIsPilot();
   const { data: cli } = await supabaseAdmin.from("clients").select("assigned_social").eq("id", opts.clientId).maybeSingle();
@@ -54,7 +56,7 @@ export async function criarCardDemanda(opts: {
       social_media: dono,
       status: "ideas",
       priority: PRIO[opts.urgencia] ?? "medium",
-      due_date: dueDatePorUrgencia(opts.tipo, opts.urgencia),
+      due_date: opts.dueDate !== undefined ? opts.dueDate : dueDatePorUrgencia(opts.tipo, opts.urgencia),
       briefing: opts.briefing,
       requested_by_traffic: pilot ? "🤖 Agente CS (teste)" : "🤖 Agente CS",
       status_changed_at: new Date().toISOString(),
@@ -64,4 +66,23 @@ export async function criarCardDemanda(opts: {
     .maybeSingle();
   if (error) { console.error("[CS] criar card:", error.message); return null; }
   return (card?.id as string) ?? null;
+}
+
+/** Cria os cards de uma PAUTA confirmada (1 por item, com a data do item). Retorna os ids criados. */
+export async function criarCardsPauta(opts: {
+  clientId: string; clienteNome: string; responsavel?: string | null;
+  itens: Array<{ dia: string; titulo: string; descricao: string; formato: string }>;
+  /** Nota humana (ex.: ajuste da equipe) anexada ao briefing de cada card. */
+  notaExtra?: string | null;
+}): Promise<string[]> {
+  const ids: string[] = [];
+  for (const item of opts.itens) {
+    const briefing = `${item.descricao}\n\n_Formato: ${item.formato}_${opts.notaExtra ? `\n\n---\n✏️ ${opts.notaExtra}` : ""}`;
+    const id = await criarCardDemanda({
+      clientId: opts.clientId, clienteNome: opts.clienteNome, responsavel: opts.responsavel,
+      titulo: item.titulo, urgencia: "media", briefing, tipo: "arte_nova", dueDate: item.dia,
+    });
+    if (id) ids.push(id);
+  }
+  return ids;
 }
