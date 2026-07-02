@@ -10,6 +10,7 @@ import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 import { getHolidays } from "@/lib/holidays/brasil-api";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
+import { loadBriefingTexto } from "@/lib/cs/load-briefing";
 import {
   gerarPautaSemanal, datasProximaSemana, serializePauta, formatPauta, buildPautaSugestao, labelDia,
 } from "@/lib/cs/pauta";
@@ -56,8 +57,15 @@ export async function POST(req: NextRequest) {
   if (allowIds.length) {
     clientes = clientes.filter((c) => allowIds.includes(c.id as string));
   } else {
+    // Elegível = tem contexto de verdade: texto livre razoável OU briefing ESTRUTURADO
+    // (client_briefings is_current — na base real é onde o briefing mora; o texto livre é vazio).
+    const { data: comEstruturado } = await supabaseAdmin
+      .from("client_briefings").select("client_id").eq("is_current", true);
+    const estruturados = new Set((comEstruturado ?? []).map((r) => r.client_id as string));
     clientes = clientes
-      .filter((c) => (((c.fixed_briefing as string) || "") + ((c.campaign_briefing as string) || "")).trim().length >= 200)
+      .filter((c) =>
+        (((c.fixed_briefing as string) || "") + ((c.campaign_briefing as string) || "")).trim().length >= 200 ||
+        estruturados.has(c.id as string))
       .slice(0, PILOT_CAP);
   }
 
@@ -73,10 +81,10 @@ export async function POST(req: NextRequest) {
     const { data: ja } = await supabaseAdmin.from("cs_demandas").select("id").eq("message_id", messageId).limit(1).maybeSingle();
     if (ja) { resultados.push({ cliente: nome, skip: "já proposta" }); continue; }
 
-    const briefing = [
+    const briefing = ([
       (c.fixed_briefing as string) && `FIXO: ${(c.fixed_briefing as string).slice(0, 1200)}`,
       (c.campaign_briefing as string) && `CAMPANHA: ${(c.campaign_briefing as string).slice(0, 1200)}`,
-    ].filter(Boolean).join("\n\n") || undefined;
+    ].filter(Boolean).join("\n\n") || undefined) ?? (await loadBriefingTexto(c.id as string));
     const rules = await fetchClientCsRules(c.id as string);
     const regras = rules.filter((r) => r.escopo !== "roteiro").map((r) => `${r.texto} (${r.escopo})`);
     const { data: recentes } = await supabaseAdmin

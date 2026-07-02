@@ -17,6 +17,31 @@ export async function loadRoteiroPrefs(clientId: string): Promise<string[]> {
   return (data ?? []).map((r) => r.texto as string).filter(Boolean);
 }
 
+/** Briefing estruturado como TEXTO compacto pros prompts (A1/A3/pauta). Na base real os campos
+ *  de texto livre clients.fixed/campaign_briefing estão VAZIOS — o briefing vivo mora em
+ *  client_briefings (onboarding/ficha). Sem este loader, A3 e pauta rodavam sem contexto. */
+export async function loadBriefingTexto(clientId: string): Promise<string | undefined> {
+  const { data: b } = await supabaseAdmin
+    .from("client_briefings").select(BRIEFING_COLS)
+    .eq("client_id", clientId).eq("is_current", true).maybeSingle();
+  if (!b) return undefined;
+  const j = (a: unknown) => (Array.isArray(a) && a.length ? (a as string[]).join(", ") : null);
+  const linhas = [
+    b.resumo_estrategico && `Resumo: ${b.resumo_estrategico}`,
+    b.posicionamento && `Posicionamento: ${b.posicionamento}`,
+    j(b.produtos) && `Produtos: ${j(b.produtos)}`,
+    j(b.produtos_destaque_atual) && `Destaques do momento: ${j(b.produtos_destaque_atual)}`,
+    j(b.publico_alvo) && `Público: ${j(b.publico_alvo)}`,
+    j(b.dores) && `Dores do público: ${j(b.dores)}`,
+    b.tom_voz && `Tom de voz: ${b.tom_voz}`,
+    j(b.ganchos) && `Ganchos que funcionam: ${j(b.ganchos)}`,
+    j(b.ctas) && `CTAs: ${j(b.ctas)}`,
+    j(b.palavras_proibidas) && `NUNCA usar: ${j(b.palavras_proibidas)}`,
+    j(b.concorrentes_evitar_mencionar) && `Concorrentes a NÃO mencionar: ${j(b.concorrentes_evitar_mencionar)}`,
+  ].filter(Boolean) as string[];
+  return linhas.length ? linhas.join("\n").slice(0, 2000) : undefined;
+}
+
 export async function loadBriefingForClient(opts: {
   clientId: string; nome: string; nicho?: string;
 }): Promise<{ briefing: BriefingCliente; temBriefing: boolean }> {

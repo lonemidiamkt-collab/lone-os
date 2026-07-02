@@ -22,7 +22,7 @@ import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/c
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { spNow } from "@/lib/cs/vigilancia";
-import { loadBriefingForClient, loadRoteiroPrefs } from "@/lib/cs/load-briefing";
+import { loadBriefingForClient, loadRoteiroPrefs, loadBriefingTexto } from "@/lib/cs/load-briefing";
 import { ehComandoAusencia, parseAusencia } from "@/lib/cs/ausencia";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 import { criarCardDemanda, criarCardsPauta } from "@/lib/cs/card";
@@ -561,7 +561,9 @@ export async function POST(req: NextRequest) {
     const { data: c } = await supabaseAdmin.from("clients").select(CLIENT_COLS).eq("id", alvo.id).maybeSingle();
     if (!c) return NextResponse.json({ ok: true, demanda_cmd: "cliente_sumiu" });
     const clienteNome = nomeOf(c);
-    const clienteBriefing = briefingCompleto(c);
+    // Texto livre (fixed/campaign) OU o briefing estruturado (client_briefings) — na base real o
+    // texto livre está vazio e o briefing vivo mora no estruturado.
+    const clienteBriefing = briefingCompleto(c) ?? (await loadBriefingTexto(c.id as string));
     const csRules = await fetchClientCsRules(c.id as string);
     // Preferência de ROTEIRO não é regra de arte — vazava pro A3 como "regra firme" e distorcia o briefing.
     const regrasFmt = csRules.filter((rr) => rr.escopo !== "roteiro").map((rr) => `${rr.texto} (${rr.escopo})`);
@@ -883,7 +885,8 @@ export async function POST(req: NextRequest) {
   const c = clients[0];
   if (c.agente_ativo === false) return NextResponse.json({ ok: true, skip: "agente pausado p/ este cliente" }); // S8
   const clienteNome = nomeOf(c);
-  const clienteBriefing = briefingCompleto(c);
+  // Texto livre OU o briefing estruturado (client_briefings) — o texto livre está vazio na base real.
+  const clienteBriefing = briefingCompleto(c) ?? (await loadBriefingTexto(c.id as string));
   // Do's & don'ts estruturados do cliente → injetados no A3 (independem do texto livre).
   // Preferência de ROTEIRO fica de fora (é do Criativo; como "regra firme" distorcia briefing de arte).
   const csRules = await fetchClientCsRules(c.id as string);
