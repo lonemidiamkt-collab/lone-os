@@ -27,8 +27,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     case "addCardComment": {
-      await db.insertCardComment(body.cardId, body.author, body.text);
-      return NextResponse.json({ ok: true });
+      console.log("[mutations] addCardComment card=", body.cardId, "author=", body.author, "role=", body.role);
+      try {
+        await db.insertCardComment(body.cardId, body.author, body.text, body.role);
+        return NextResponse.json({ ok: true });
+      } catch (e) {
+        return NextResponse.json({ error: e instanceof Error ? e.message : "erro ao salvar comentário" }, { status: 500 });
+      }
     }
     default:
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });

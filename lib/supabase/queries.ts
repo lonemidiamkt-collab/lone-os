@@ -922,11 +922,13 @@ export async function upsertClientAccess(clientId: string, access: Partial<Clien
 // CARD COMMENTS
 // ═══════════════════════════════════════════════════════════
 
-export async function insertCardComment(cardId: string, author: string, text: string): Promise<void> {
+export async function insertCardComment(cardId: string, author: string, text: string, role?: string): Promise<void> {
   const { error } = await db.from("card_comments").insert({
-    card_id: cardId, author, text,
+    card_id: cardId, author, role: role ?? null, text,
   });
-  if (error) console.error("[DB] insertCardComment:", error);
+  // NÃO engolir o erro: o comentário sumia em silêncio (API retornava ok, front achava que salvou,
+  // mas nada ia pro banco — designer nunca via). Propaga pra API devolver 500 e o front reverter/avisar.
+  if (error) { console.error("[DB] insertCardComment falhou:", error.message, { cardId, author }); throw new Error(error.message); }
 }
 
 // ═══════════════════════════════════════════════════════════

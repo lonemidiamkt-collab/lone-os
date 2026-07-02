@@ -357,7 +357,7 @@ export const useContentStore = create<ContentState>()(
         }), false, "content/card/comment/add");
         const card = get().contentCards.find((c) => c.id === cardId);
         // Comentário não pode sumir em silêncio: notifica só em sucesso; em falha, desfaz e avisa.
-        authedFetch("/api/data/content/mutations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "addCardComment", cardId, author, text }) })
+        authedFetch("/api/data/content/mutations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "addCardComment", cardId, author, role, text }) })
           .then((res) => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             if (card) {
