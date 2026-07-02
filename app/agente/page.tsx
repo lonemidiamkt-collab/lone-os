@@ -30,7 +30,7 @@ interface Pendente {
 }
 
 const FUNCOES = [
-  ["👂", "Ouve os grupos", "Texto, áudio (transcreve) e legendas de imagem/vídeo"],
+  ["👂", "Ouve os grupos", "Texto, áudio (transcreve) e imagem/print (reconhece o conteúdo)"],
   ["🧠", "Classifica demandas", "4 filtros (origem/papel/contexto/coerência) + autoanálise; silêncio > falso-positivo"],
   ["📋", "Sugere e cria cards", "Posta no grupo; você responde ok / não / ajustar"],
   ["🎬", "Gera roteiros", "On-demand ('Lone, roteiro pro X') + proativo na segunda, em PDF"],

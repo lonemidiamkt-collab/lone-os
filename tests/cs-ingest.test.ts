@@ -37,10 +37,20 @@ describe("parseUpsert", () => {
     expect(n!.fromMe).toBe(false);
   });
 
-  it("ignora não-grupo (DM), evento errado e mensagem sem texto", () => {
+  it("ignora não-grupo (DM), evento errado e mensagem sem conteúdo", () => {
     expect(parseUpsert(upsert({ key: { remoteJid: "5522@s.whatsapp.net", id: "x" } }))).toBeNull();
     expect(parseUpsert({ event: "presence.update", data: {} })).toBeNull();
-    expect(parseUpsert(upsert({ message: { imageMessage: {} } }))).toBeNull();
+    expect(parseUpsert(upsert({ message: { stickerMessage: {} } }))).toBeNull(); // figurinha → ignora
+  });
+
+  it("reconhece imagem (mesmo sem legenda) → isImage p/ a camada de visão descrever", () => {
+    const semLegenda = parseUpsert(upsert({ message: { imageMessage: {} } }));
+    expect(semLegenda).not.toBeNull();
+    expect(semLegenda!.isImage).toBe(true);
+    expect(semLegenda!.text).toBe("");
+    const comLegenda = parseUpsert(upsert({ message: { imageMessage: { caption: "faz parecido com isso" } } }));
+    expect(comLegenda!.isImage).toBe(true);
+    expect(comLegenda!.text).toBe("faz parecido com isso");
   });
 });
 

@@ -9,6 +9,7 @@ import { parseUpsert, isTrivial, isLoneTeam, ehNomeEquipeLone, type EvolutionUps
 import { classifyBlock, type ClassifierContext } from "@/lib/cs/classifier";
 import { csSendGroupText, csSendGroupDocument, csFetchMediaBase64, csFindGroupByName } from "@/lib/cs/notify";
 import { transcribeAudio } from "@/lib/cs/transcribe";
+import { describeImage } from "@/lib/cs/vision";
 import {
   ehOnboardingTrigger, parseOnboardingTrigger, onboardingWelcome, onboardingQuestion,
   onboardingDone, estruturarBriefing, ONBOARDING_TOTAL, type BriefingEstruturado,
@@ -860,6 +861,26 @@ export async function POST(req: NextRequest) {
   // O grupo INTERNO é coordenação da equipe — nada aqui é demanda de cliente. (Já passou pelos
   // handlers internos: decisão/roteiro/comando/onboarding/interpretação.) Evita "alucinada".
   if (msg.groupJid === internalGroupJid()) return NextResponse.json({ ok: true, skip: "grupo interno — não classifica demanda" });
+
+  // ─── Imagem do cliente: DESCREVE (visão gpt-4o-mini, detail low) e enriquece o texto → segue
+  // pro A1 como qualquer demanda. Só chega aqui foto de CLIENTE (equipe/interno já saíram), então
+  // a visão não é gasta à toa. Foto irrelevante (meme/pessoal) sem legenda → descrição null →
+  // cai no isTrivial abaixo e é descartada. ───
+  if (msg.isImage && isOpenAIConfigured()) {
+    const media = await csFetchMediaBase64(payload.data ?? {});
+    if (media.base64 && media.base64.length <= 8_000_000) {
+      const v = await describeImage(media.base64, media.mimetype);
+      if (v.descricao) {
+        msg.text = msg.text
+          ? `${msg.text}\n[Imagem que o cliente enviou: ${v.descricao}]`
+          : `[Imagem que o cliente enviou: ${v.descricao}]`;
+        console.log(`[CS/inbound] 🖼️ imagem descrita (${msg.authorName || "?"}): "${v.descricao.slice(0, 80)}"`);
+      }
+    } else if (media.base64) {
+      console.warn("[CS/inbound] imagem muito grande — skip visão");
+    }
+  }
+
   if (isTrivial(msg.text)) return NextResponse.json({ ok: true, skip: "trivial" });
 
   // Dedup: a Evolution reenvia `messages.upsert`. Se este message_id já gerou demanda, ignora.

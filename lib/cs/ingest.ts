@@ -32,6 +32,8 @@ export interface NormalizedInbound {
   quotedMsgId?: string;
   /** Nota de voz sem texto — a camada de cima transcreve (Whisper) e preenche o text. */
   isAudio?: boolean;
+  /** Imagem (foto/print) — a camada de cima descreve (visão) e enriquece o text. */
+  isImage?: boolean;
 }
 
 /** Extrai texto de conversation / extendedTextMessage / caption de imagem/vídeo/documento. */
@@ -72,7 +74,10 @@ export function parseUpsert(payload: EvolutionUpsert): NormalizedInbound | null 
   const text = extractText(d?.message);
   // Nota de voz (audioMessage/PTT) não tem texto → marca isAudio p/ a camada de cima transcrever.
   const isAudio = !!(d?.message?.audioMessage);
-  if (!text && !isAudio) return null; // sem texto e sem áudio (figurinha/etc) → ignora
+  // Imagem (foto/print) → marca isImage p/ a camada de cima DESCREVER (visão). Antes, foto sem
+  // legenda era descartada aqui — muito pedido chega como "faz parecido" + print.
+  const isImage = !!(d?.message?.imageMessage);
+  if (!text && !isAudio && !isImage) return null; // sem texto/áudio/imagem (figurinha/etc) → ignora
   const messageId = d?.key?.id ?? "";
   if (!messageId) return null;
   const quotedMsgId = extractQuotedId(d?.message);
@@ -93,6 +98,7 @@ export function parseUpsert(payload: EvolutionUpsert): NormalizedInbound | null 
     fromMe: !!d?.key?.fromMe,
     quotedMsgId,
     isAudio,
+    isImage,
   };
 }
 
