@@ -947,6 +947,8 @@ function snakeToCrmLead(r: Record<string, unknown>): CrmLead {
     responsavel: (r.responsavel as string) ?? null,
     reuniaoData: (r.reuniao_data as string) ?? null,
     propostaEnviadaEm: (r.proposta_enviada_em as string) ?? null,
+    proximoContato: (r.proximo_contato as string) ?? null,
+    fechadoEm: (r.fechado_em as string) ?? null,
     motivoPerda: (r.motivo_perda as string) ?? null,
     observacoes: (r.observacoes as string) ?? null,
     createdAt: (r.created_at as string) ?? "",
@@ -959,8 +961,14 @@ const CRM_FIELD_MAP: Record<string, string> = {
   contatoNome: "contato_nome", empresa: "empresa", telefone: "telefone", email: "email",
   valorOrcamento: "valor_orcamento", estagio: "estagio", origem: "origem", responsavel: "responsavel",
   reuniaoData: "reuniao_data", propostaEnviadaEm: "proposta_enviada_em", motivoPerda: "motivo_perda",
-  observacoes: "observacoes",
+  observacoes: "observacoes", proximoContato: "proximo_contato", fechadoEm: "fechado_em",
 };
+
+export async function fetchCrmLeadById(id: string): Promise<CrmLead | null> {
+  const { data, error } = await db.from("crm_leads").select("*").eq("id", id).maybeSingle();
+  if (error || !data) return null;
+  return snakeToCrmLead(data);
+}
 
 function crmToRow(patch: Record<string, unknown>): Record<string, unknown> {
   const row: Record<string, unknown> = {};

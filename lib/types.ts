@@ -17,6 +17,8 @@ export interface CrmLead {
   responsavel: string | null;       // o SDR dono do lead
   reuniaoData: string | null;       // YYYY-MM-DD (dia da reunião marcada)
   propostaEnviadaEm: string | null; // YYYY-MM-DD
+  proximoContato: string | null;    // YYYY-MM-DD (follow-up do SDR)
+  fechadoEm: string | null;         // ISO — quando foi ganho/perdido (base do relatório mensal)
   motivoPerda: string | null;       // quando estagio = perdido
   observacoes: string | null;
   createdAt: string;

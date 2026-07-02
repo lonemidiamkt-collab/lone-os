@@ -39,6 +39,22 @@ export async function PATCH(req: NextRequest) {
   const { id, ...patch } = body ?? {};
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   try {
+    // Transições automáticas (no servidor, pra valer também no drag do Kanban):
+    // → ganho/perdido: carimba fechado_em (data REAL da venda — é a base do relatório mensal);
+    // → volta pra etapa aberta: limpa fechado_em (e motivo de perda, se saiu de perdido);
+    // → proposta: marca proposta_enviada_em (1ª vez).
+    if (typeof patch.estagio === "string") {
+      const atual = await db.fetchCrmLeadById(id);
+      const fechado = patch.estagio === "ganho" || patch.estagio === "perdido";
+      if (fechado && atual?.estagio !== patch.estagio) patch.fechadoEm = new Date().toISOString();
+      if (!fechado) {
+        patch.fechadoEm = null;
+        if (atual?.estagio === "perdido" && patch.motivoPerda === undefined) patch.motivoPerda = null;
+      }
+      if (patch.estagio === "proposta" && !atual?.propostaEnviadaEm && patch.propostaEnviadaEm === undefined) {
+        patch.propostaEnviadaEm = new Date().toISOString().slice(0, 10);
+      }
+    }
     const lead = await db.updateCrmLead(id, patch);
     return NextResponse.json({ lead });
   } catch (e) {
