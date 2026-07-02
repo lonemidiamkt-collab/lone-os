@@ -54,7 +54,7 @@ function mensagemAmigavel(vig: number, area: Area, cliente: string, pessoa: stri
     const oi = `${pessoa}, `;
     if (travado) return `${oi}o card do *${cliente}* segue travado faz uns dias. Tem algum impedimento? Me fala que a gente resolve junto.`;
     if (vig === 3) return `${oi}o card do *${cliente}* continua parado esperando produção. Tá rolando alguma coisa? Posso ajudar com algo.`;
-    if (vig === 4) return `${oi}a arte do *${cliente}* segue entregue e sem revisão. Consegue dar uma olhada hoje? Se travou em algo, me avisa.`;
+    if (vig === 4) return `${oi}a arte do *${cliente}* segue entregue e o card parado no board. Consegue revisar e mover hoje? Se travou em algo, me avisa.`;
     if (vig === 5) return `${oi}o cliente aprovou a arte do *${cliente}* e ela segue sem agendar — falta só esse passo. Precisa de ajuda?`;
     return `${oi}o *${cliente}* segue pendente: ${motivo}. Posso ajudar com algo?`;
   }
@@ -62,7 +62,7 @@ function mensagemAmigavel(vig: number, area: Area, cliente: string, pessoa: stri
     const oi = `${pessoa}, só passando de novo aqui — `;
     if (travado) return `${oi}o card do *${cliente}* ainda tá travado. Quando puder, dá uma olhada.`;
     if (vig === 3) return `${oi}o card do *${cliente}* segue esperando produção. Tá tudo certo com o briefing?`;
-    if (vig === 4) return `${oi}a arte do *${cliente}* ainda não foi revisada. Quando der, confirma se tá ok.`;
+    if (vig === 4) return `${oi}a arte do *${cliente}* ainda não andou no board. Quando der, revisa e move o card.`;
     if (vig === 5) return `${oi}o cliente já aprovou a arte do *${cliente}* e ainda falta agendar no Meta.`;
     return `${oi}o *${cliente}*: ${motivo}.`;
   }
@@ -70,7 +70,7 @@ function mensagemAmigavel(vig: number, area: Area, cliente: string, pessoa: stri
   if (vig === 2) return `${oi}a pauta do *${cliente}* ainda não foi pro designer. Quando puder, marca *"A fazer"* pra ela seguir — qualquer dúvida, tô aqui.`;
   if (travado) return `${oi}o card do *${cliente}* tá travado${motivo.replace(/^card travado/i, "")}. Consegue dar uma destravada? Se precisar de algo, me chama.`;
   if (vig === 3) return `${oi}tem um card do *${cliente}* esperando produção. Tá tudo certo com o briefing? Se faltar referência, é só falar. 🎨`;
-  if (vig === 4) return `${oi}o designer entregou a arte do *${cliente}*. Quando puder, dá uma olhada e confirma se tá ok pra seguir.`;
+  if (vig === 4) return `${oi}o designer entregou a arte do *${cliente}*! Dá uma revisada e move o card pra *Aprovação* no board — assim todo mundo enxerga o status real. 👀`;
   if (vig === 5) return `${oi}o cliente APROVOU a arte do *${cliente}* 🎉 — falta só agendar no Meta (mover pra *Agendado*). Consegue dar esse último passo?`;
   return `${oi}sobre o *${cliente}*: ${motivo}. Quando puder, dá uma olhada — tamo junto.`;
 }
@@ -88,11 +88,17 @@ function enteredAt(c: CardRow): string | null {
 function avaliarPipeline(c: CardRow): { vigilancia: number; area: Area; motivo: string } | null {
   if (c.status === "published" || c.status === "scheduled") return null; // fluxo completo
 
-  // Se o designer JÁ entregou (designer_delivered_at) ou a demanda está "done" → trabalho dele
-  // acabou: NUNCA cobrar o designer. E o que vem depois (revisar/agendar) depende de o board estar
-  // atualizado, o que não é confiável hoje → SILENCIA pra não gerar falso positivo.
-  // (Exceção confiável: aprovação do CLIENTE — vigilância 5, tratada à parte no POST.)
-  if (c.designer_delivered_at || c.design_request_status === "done") return null;
+  // Designer JÁ entregou (sinal de plataforma confiável) → o trabalho DELE acabou: nunca cobrar
+  // designer. Mas o CARD precisa andar no board (decisão do Roberto: o time TEM que usar o card,
+  // o board é a fonte de verdade) — entregue há >= TH_SOCIAL_VER h úteis e a coluna ainda atrás
+  // de Aprovação → cobra o social pra revisar E MOVER. (Agendar pós-aprovação do cliente = vig 5.)
+  if (c.designer_delivered_at || c.design_request_status === "done") {
+    if (c.status === "approval" || c.status === "client_approval") return null; // board em dia
+    const hEntrega = businessHoursSince(c.designer_delivered_at ?? enteredAt(c));
+    return hEntrega >= TH_SOCIAL_VER
+      ? { vigilancia: 4, area: "social", motivo: "arte entregue e o card parado no board — revisar e mover" }
+      : null;
+  }
 
   // Horas úteis com relógio REAL — passar spNow() aqui deslocava o getTime() e subcontava ~3h.
   const h = businessHoursSince(enteredAt(c));
@@ -198,7 +204,9 @@ export async function POST(req: NextRequest) {
     const v = avaliarPipeline(k);
     if (!v) continue;
     cobrancas.push({ vigilancia: v.vigilancia, area: v.area, client_id: k.client_id, card_id: k.id,
-      chave: `${v.vigilancia}-${k.id}-${hoje}`, motivo: v.motivo });
+      chave: `${v.vigilancia}-${k.id}-${hoje}`, motivo: v.motivo,
+      // vig 4 (entregue, card parado): ao vivo se a ENTREGA é recente — a criação do card não importa.
+      liveOverride: v.vigilancia === 4 ? (spDateKeyOf(k.designer_delivered_at) ?? "") >= ontem : undefined });
   }
 
   // ── C) PÓS-ENTREGA (vig 5) — o CLIENTE aprovou a arte (client_approved_at, marcado pelo
@@ -259,6 +267,35 @@ export async function POST(req: NextRequest) {
       if (r.ok) postadas++; else console.error("[cs-vigilancia] post falhou:", r.error);
     }
     detalhe.push({ vig: cob.vigilancia, cliente: nome, pessoa: pessoa || null, live, motivo: cob.motivo });
+  }
+
+  // ── DIGEST "SEM PAUTA" POR PESSOA (AO VIVO) — decisão do Roberto: ficar em cima pro time USAR
+  // O CARD. As linhas por cliente acima seguem só como registro (dry-run); aqui vai UMA mensagem
+  // por social em dia FIRME listando os clientes dele sem card pra hoje — cobrança de board sem
+  // spam. 1x/dia (chave `2d-<pessoa>-<dia>`), a partir das 10h (dá a manhã pra cardar). ──
+  if (VIGILANCIA_LIVE && firmeHoje && now.getHours() >= 10 && internalJid) {
+    const porPessoa = new Map<string, string[]>();
+    for (const cob of cobrancas) {
+      if (cob.vigilancia !== 2 || cob.card_id) continue; // só "sem pauta de hoje"
+      if (!cob.chave.endsWith(`-${hoje}`)) continue;
+      const cli = clientById.get(cob.client_id);
+      const pessoa = (cli?.assigned_social as string) || "";
+      const nome = (cli?.name as string) || "Cliente";
+      if (!pessoa || /\(teste\)/i.test(nome)) continue;
+      porPessoa.set(pessoa, [...(porPessoa.get(pessoa) ?? []), nome]);
+    }
+    for (const [pessoa, nomes] of porPessoa) {
+      const chave = `2d-${pessoa}-${hoje}`;
+      const lista = nomes.slice(0, 10).map((n) => `*${n}*`).join(", ") + (nomes.length > 10 ? ` e mais ${nomes.length - 10}` : "");
+      const msgDigest = `Oi ${pessoa}! 📋 Hoje é dia de postagem e ainda não vi card com a data de hoje pra: ${lista}. Consegue cardar no board? Se algum não vai postar hoje, de boa — me avisa que tá tudo certo.`;
+      const { error: insErr } = await supabaseAdmin.from("cs_cobrancas").insert({
+        vigilancia: 2, client_id: null, card_id: null, pessoa_cobrada: pessoa, chave, mensagem: msgDigest, dry_run: false,
+      });
+      if (!insErr) {
+        const r = await csSendGroupText(internalJid, msgDigest);
+        if (r.ok) postadas++; else console.error("[cs-vigilancia] digest pauta falhou:", r.error);
+      } else if (insErr.code !== "23505") console.error("[cs-vigilancia] digest insert:", insErr.message);
+    }
   }
 
   console.log(`[cs-vigilancia] live=${VIGILANCIA_LIVE} dia=${hoje} firme=${isFirmPostingDay(now)} cobrancas=${cobrancas.length} postadas=${postadas}`);
