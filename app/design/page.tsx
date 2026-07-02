@@ -14,7 +14,7 @@ import {
   Palette, Filter, Clock, CheckCircle, Loader, Paperclip, X,
   AlertTriangle, Zap, LayoutList, Columns3, Upload, Download,
   ImageIcon, Eye, ChevronDown, User, Users, FileText, FileWarning, FolderOpen,
-  ExternalLink, BarChart2, Plus, Calendar, ArrowRight, XCircle,
+  ExternalLink, BarChart2, Plus, Calendar, ArrowRight, XCircle, RotateCcw,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
@@ -360,6 +360,14 @@ export default function DesignPage() {
   const subClients = useClientsStore((s) => s.subscribeRealtime);
 
   const contentCards = useContentStore((s) => s.contentCards);
+  const contentApprovals = useContentStore((s) => s.contentApprovals);
+  // Alteração PENDENTE de um card: última avaliação = "rejected" E ainda não reentregue depois dela.
+  const alteracaoPendente = (c: ContentCard) => {
+    const rej = contentApprovals.find((a) => a.cardId === c.id && a.status === "rejected");
+    if (!rej) return null;
+    if (c.designerDeliveredAt && (rej.reviewedAt ?? "") <= c.designerDeliveredAt) return null; // já refez
+    return rej;
+  };
   const designRequests = useContentStore((s) => s.designRequests);
   const updateContentCard = useContentStore((s) => s.updateContentCard);
   const updateDesignRequest = useContentStore((s) => s.updateDesignRequest);
@@ -899,9 +907,18 @@ export default function DesignPage() {
 
                           {/* Handoff status */}
                           {(() => {
+                            const revisao = alteracaoPendente(fullCard);
                             return (
                               <>
-                                {fullCard.designerDeliveredAt && (
+                                {/* Alteração solicitada pelo social → o designer PRECISA refazer.
+                                    Substitui o "Entregue" (que enganava: parecia que já tinha ido). */}
+                                {revisao && (
+                                  <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[10px] text-destructive">
+                                    <div className="flex items-center gap-1 font-semibold"><RotateCcw size={10} /> Alteração solicitada</div>
+                                    {revisao.reason && <div className="mt-0.5 leading-snug text-destructive/90">{revisao.reason}</div>}
+                                  </div>
+                                )}
+                                {fullCard.designerDeliveredAt && !revisao && (
                                   <div className="flex items-center gap-1 text-[10px]">
                                     <CheckCircle size={9} className="text-primary" />
                                     <span className="text-primary">Entregue</span>
@@ -1420,6 +1437,19 @@ export default function DesignPage() {
               </button>
             </div>
             <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Alteração solicitada pelo social — no topo, pra o designer bater o olho e refazer. */}
+              {(() => {
+                const refCard = briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null;
+                const revisao = refCard ? alteracaoPendente(refCard) : null;
+                if (!revisao) return null;
+                return (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-destructive"><RotateCcw size={13} /> Alteração solicitada pelo social</div>
+                    {revisao.reason && <p className="mt-1 text-sm leading-relaxed text-destructive/90">{revisao.reason}</p>}
+                    {revisao.reviewedBy && <p className="mt-1 text-[10px] text-destructive/70">por {revisao.reviewedBy}</p>}
+                  </div>
+                );
+              })()}
               {/* Briefing Health Score */}
               {(() => {
                 const client = clients.find((c) => c.id === briefingReq.clientId);

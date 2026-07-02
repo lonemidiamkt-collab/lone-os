@@ -262,6 +262,13 @@ export const useContentStore = create<ContentState>()(
         authedFetch("/api/content-cards/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cardId, status: "in_production", contentApproval: { status: "rejected", reviewedBy: reviewer, reviewedAt: new Date().toISOString(), reason } }) })
           .then((res) => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            // Reabre a SOLICITAÇÃO de design → o designer vê que precisa refazer. Sem isso, a
+            // demanda ficava "Concluído" no board dele e o pedido de alteração passava batido.
+            const drId = card?.designRequestId;
+            if (drId) {
+              set((s) => ({ designRequests: s.designRequests.map((r) => r.id === drId ? { ...r, status: "in_progress" as const } : r) }), false, "content/reject/reopen-dr");
+              authedFetch("/api/design-requests/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: drId, status: "in_progress" }) }).catch(() => {});
+            }
             if (card) {
               import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
                 useNotificationsStore.getState().push("content", "Conteúdo reprovado", `"${card.title}" de ${card.clientName} foi reprovado: ${reason}`, card.clientId);
