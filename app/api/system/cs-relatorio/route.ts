@@ -79,7 +79,23 @@ export async function POST(req: NextRequest) {
     return key !== null && key >= segKey && key <= hojeKey;
   }).length;
 
-  const msg = buildDeliveryReport({ periodoLabel, entregas, emProducao: emProducao ?? 0, publicados });
+  // Demandas CRIADAS pelo social na semana (crédito de quem gerou o trabalho, não só a entrega).
+  const { data: drData } = await supabaseAdmin
+    .from("design_requests").select("requested_by, status, created_at").gte("created_at", desde);
+  const porSocial = new Map<string, { criadas: number; entregues: number }>();
+  for (const d of drData ?? []) {
+    const key = spDateKeyOf(d.created_at as string);
+    if (!key || key < segKey || key > hojeKey) continue; // só a semana corrente
+    const autor = (d.requested_by as string)?.trim() || "—";
+    const g = porSocial.get(autor) ?? { criadas: 0, entregues: 0 };
+    g.criadas++;
+    if (d.status === "done") g.entregues++;
+    porSocial.set(autor, g);
+  }
+  const demandasSocial = [...porSocial.entries()]
+    .map(([autor, g]) => ({ autor, ...g })).sort((a, b) => b.criadas - a.criadas);
+
+  const msg = buildDeliveryReport({ periodoLabel, entregas, emProducao: emProducao ?? 0, publicados, demandasSocial });
 
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let postada = false;

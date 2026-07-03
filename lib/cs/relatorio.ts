@@ -10,11 +10,18 @@ export interface EntregaItem {
   onTime: boolean;
 }
 
+export interface DemandaSocial {
+  autor: string;    // quem criou a demanda (social)
+  criadas: number;  // demandas criadas na semana
+  entregues: number; // dessas, quantas já foram entregues
+}
+
 export interface RelatorioInput {
   periodoLabel: string;   // ex.: "23/06 a 27/06"
   entregas: EntregaItem[]; // cards que o designer entregou na semana
   emProducao: number;     // cards em produção agora (snapshot)
   publicados: number;     // cards que foram ao ar na semana (best-effort: status published)
+  demandasSocial?: DemandaSocial[]; // demandas CRIADAS pelo social na semana (crédito do social)
 }
 
 /** Monta o texto do relatório semanal de entregas pro grupo interno. */
@@ -48,7 +55,16 @@ export function buildDeliveryReport(inp: RelatorioInput): string {
     linhas.push("", `*Total:* ${total} entregue${total > 1 ? "s" : ""} · ${noPrazo}/${total} no prazo`);
   }
 
-  if (publicados > 0) linhas.push(`📢 *Publicados:* ${publicados} no ar`);
+  // Crédito do SOCIAL: demandas que cada um CRIOU na semana (não só a entrega do designer).
+  const social = (inp.demandasSocial ?? []).filter((d) => d.criadas > 0);
+  if (social.length > 0) {
+    linhas.push("", "📋 *Demandas criadas (social)*");
+    for (const d of social) {
+      linhas.push(`• ${d.autor} — ${d.criadas} criada${d.criadas > 1 ? "s" : ""} (${d.entregues} já entregue${d.entregues !== 1 ? "s" : ""})`);
+    }
+  }
+
+  if (publicados > 0) linhas.push("", `📢 *Publicados:* ${publicados} no ar`);
   if (emProducao > 0) linhas.push(`⏳ *Em produção agora:* ${emProducao}`);
 
   linhas.push("", entregas.length > 0 ? "Mandaram bem, time! Bora pra próxima 🚀" : "Bora movimentar o board essa semana! 💪");
