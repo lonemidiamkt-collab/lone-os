@@ -90,7 +90,43 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [editingBriefing, setEditingBriefing] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [sendingDesign, setSendingDesign] = useState(false); // anti-duplo-clique no Solicitar Design
+  const [genLegenda, setGenLegenda] = useState(false);       // gerando legenda por IA
+  const [revisando, setRevisando] = useState(false);         // revisando a arte por IA
+  const [revisao, setRevisao] = useState<{ ok: boolean; problemas: string[]; resumo: string } | null>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
+
+  // ✍️ Legenda pronta por IA: usa o briefing do cliente pra escrever gancho+corpo+CTA+hashtags.
+  async function gerarLegendaIA() {
+    setGenLegenda(true);
+    try {
+      const r = await authedFetch("/api/cs/legenda", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: card.id }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.legenda) setCaption(d.legenda);
+        if (d.hashtags) setHashtags(d.hashtags);
+      } else {
+        const e = await r.json().catch(() => ({}));
+        pushNotification("system", "Não deu pra gerar a legenda", e.error || "Tente de novo.", card.clientId);
+      }
+    } catch { pushNotification("system", "Falha ao gerar a legenda", "Verifique a conexão.", card.clientId); }
+    finally { setGenLegenda(false); }
+  }
+
+  // 🔍 Revisão de arte por IA: confere a arte entregue contra o briefing antes de ir ao cliente.
+  async function revisarArteIA() {
+    setRevisando(true); setRevisao(null);
+    try {
+      const r = await authedFetch("/api/cs/revisar-arte", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: card.id }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) setRevisao(d);
+      else setRevisao({ ok: false, problemas: [d.error || "Não consegui revisar."], resumo: "Revisão indisponível" });
+    } catch { setRevisao({ ok: false, problemas: ["Falha de conexão."], resumo: "Revisão indisponível" }); }
+    finally { setRevisando(false); }
+  }
 
   const comments = card.comments ?? [];
 
@@ -352,15 +388,28 @@ export default function ContentCardModal({ card, onClose }: Props) {
 
             {/* Caption */}
             <div>
-              <Label className="flex items-center gap-1.5 mb-2">
-                <AlignLeft size={12} />
-                Legenda / Caption
-              </Label>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="flex items-center gap-1.5">
+                  <AlignLeft size={12} />
+                  Legenda / Caption
+                </Label>
+                {role !== "designer" && (
+                  <button
+                    type="button"
+                    onClick={gerarLegendaIA}
+                    disabled={genLegenda}
+                    className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors disabled:opacity-50"
+                    title="A IA escreve a legenda no tom do cliente, usando o briefing"
+                  >
+                    <MessageSquare size={11} /> {genLegenda ? "Gerando…" : "✍️ Gerar legenda (IA)"}
+                  </button>
+                )}
+              </div>
               <Textarea
                 value={caption}
                 onChange={(e) => setCaption(e.target.value)}
-                rows={3}
-                placeholder="Digite a legenda que será publicada..."
+                rows={4}
+                placeholder="Digite a legenda que será publicada… ou use o ✍️ Gerar legenda (IA)"
               />
             </div>
 
@@ -501,6 +550,32 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 <ExternalLink size={12} /> Abrir arte no Drive
               </a>
             )}
+
+            {/* 🔍 Revisão de arte por IA — confere contra o briefing antes de ir ao cliente. */}
+            <div>
+              <button
+                type="button"
+                onClick={revisarArteIA}
+                disabled={revisando}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary/[0.06] border border-primary/20 hover:border-primary/40 transition-all text-xs text-primary disabled:opacity-50"
+                title="A IA confere logo, preço legível, palavra proibida, erro de texto e aderência ao briefing"
+              >
+                <ImageIcon size={13} /> {revisando ? "Revisando a arte…" : "🔍 Revisar arte com IA"}
+              </button>
+              {revisao && (
+                <div className={`mt-2 rounded-lg border p-3 text-xs ${revisao.ok ? "border-lone-success-border/30 bg-lone-success-bg/10 text-lone-success" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>
+                  <div className="font-semibold flex items-center gap-1.5">
+                    {revisao.ok ? <CheckCircle size={13} /> : <XCircle size={13} />} {revisao.resumo}
+                  </div>
+                  {revisao.problemas.length > 0 && (
+                    <ul className="mt-1.5 space-y-1 list-disc list-inside text-foreground/90">
+                      {revisao.problemas.map((p, i) => <li key={i}>{p}</li>)}
+                    </ul>
+                  )}
+                  <p className="mt-1.5 text-[10px] text-muted-foreground">Sugestão da IA — a decisão é sua.</p>
+                </div>
+              )}
+            </div>
 
             {!showRejectInput ? (
               <div className="flex items-center gap-2">
