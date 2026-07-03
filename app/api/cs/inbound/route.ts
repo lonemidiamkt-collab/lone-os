@@ -19,6 +19,7 @@ import { gerarBriefing, formatBriefing } from "@/lib/cs/briefing";
 import { verificarDemanda, A2_TRUST_FROM } from "@/lib/cs/verifier";
 import { interpretarResposta } from "@/lib/cs/interpreter";
 import { detectarAprovacao } from "@/lib/cs/aprovacao";
+import { sugerirResposta } from "@/lib/cs/resposta";
 import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/cs/criativo";
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
@@ -1191,13 +1192,22 @@ export async function POST(req: NextRequest) {
       const acao = `É só responder *nesta mensagem*: *ok* (crio o card) · *não* (você cuida) · ou *ajustar* e me diz o que mudar.`;
       // Férias/ausência: se o responsável está fora, avisa pra alguém cobrir.
       const aviso = !ehReclamacao && estaAusente(responsavel) ? `⚠️ _Heads up: ${responsavel} tá fora (férias/ausência) — alguém cobre?_\n\n` : "";
+      // 💬 Rascunho de resposta pro CLIENTE (só onde ele espera resposta): social copia e envia.
+      let respostaSugerida = "";
+      if (["duvida", "cobranca_prazo", "reclamacao"].includes(it.tipo) && isOpenAIConfigured()) {
+        const rs = await sugerirResposta({
+          clienteNome, mensagemCliente: msg.text, tipo: it.tipo,
+          briefing: clienteBriefing, statusInfo: statusBriefing,
+        });
+        if (rs.ok && rs.data?.resposta) respostaSugerida = `\n\n💬 *Resposta pro cliente* (copie e envie, ou ajuste):\n_${rs.data.resposta}_`;
+      }
       const txt = aviso + (statusBriefing
         ? `Oi ${responsavel}! 👋 ${statusBriefing}\n\n_(É acompanhamento, não pedido novo — responde *não* se já tratou, ou *ok* se quer um card de follow-up.)_`
         : ehReclamacao
         ? `🔴 *RECLAMAÇÃO* da *${clienteNome}* — ${responsavel}, atenção:\n\n${a3d ? a3d.briefing.trim() : `"${msg.text}"`}\n\nResponde *aqui*: *ok* (registro como demanda) · *não* (vocês tratam direto).`
         : precisaConfirmar
         ? `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}* — mas o pedido tá meio vago. Antes de produzir, confirma com eles:\n${a3d?.observacao ?? ""}\n\n${acao}`
-        : `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}*.\n\n${a3d ? a3d.briefing.trim() : `Mensagem: "${msg.text}"`}${a3d ? `\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : ""}\n\n${acao}`);
+        : `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}*.\n\n${a3d ? a3d.briefing.trim() : `Mensagem: "${msg.text}"`}${a3d ? `\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : ""}\n\n${acao}`) + respostaSugerida;
       const r = await csSendGroupText(internalJid, txt);
       // Guarda o id da msg postada → o "reply" da equipe casa com esta demanda (sem código).
       if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", novaDem.id);
