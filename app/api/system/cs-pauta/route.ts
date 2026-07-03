@@ -10,7 +10,7 @@ import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 import { getHolidays } from "@/lib/holidays/brasil-api";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
-import { loadBriefingTexto } from "@/lib/cs/load-briefing";
+import { loadBriefingCombinado } from "@/lib/cs/load-briefing";
 import {
   gerarPautaSemanal, datasProximaSemana, serializePauta, formatPauta, buildPautaSugestao, labelDia,
 } from "@/lib/cs/pauta";
@@ -81,10 +81,10 @@ export async function POST(req: NextRequest) {
     const { data: ja } = await supabaseAdmin.from("cs_demandas").select("id").eq("message_id", messageId).limit(1).maybeSingle();
     if (ja) { resultados.push({ cliente: nome, skip: "já proposta" }); continue; }
 
-    const briefing = ([
+    const briefing = await loadBriefingCombinado(c.id as string, [
       (c.fixed_briefing as string) && `FIXO: ${(c.fixed_briefing as string).slice(0, 1200)}`,
       (c.campaign_briefing as string) && `CAMPANHA: ${(c.campaign_briefing as string).slice(0, 1200)}`,
-    ].filter(Boolean).join("\n\n") || undefined) ?? (await loadBriefingTexto(c.id as string));
+    ].filter(Boolean).join("\n\n"));
     const rules = await fetchClientCsRules(c.id as string);
     const regras = rules.filter((r) => r.escopo !== "roteiro").map((r) => `${r.texto} (${r.escopo})`);
     const { data: recentes } = await supabaseAdmin

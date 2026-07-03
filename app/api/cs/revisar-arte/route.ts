@@ -6,7 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { isOpenAIConfigured } from "@/lib/ai/openai";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
-import { loadBriefingTexto } from "@/lib/cs/load-briefing";
+import { loadBriefingCombinado } from "@/lib/cs/load-briefing";
 import { revisarArte } from "@/lib/cs/revisao-arte";
 
 const isImageUrl = (u: string) => /^https?:\/\//.test(u) && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u);
@@ -38,8 +38,7 @@ export async function POST(req: NextRequest) {
 
   const { data: cli } = await supabaseAdmin
     .from("clients").select("name, nome_fantasia, fixed_briefing, campaign_briefing").eq("id", card.client_id as string).maybeSingle();
-  const briefing = ((cli?.fixed_briefing as string) || (cli?.campaign_briefing as string) || "").trim()
-    || (await loadBriefingTexto(card.client_id as string));
+  const briefing = await loadBriefingCombinado(card.client_id as string, (cli?.fixed_briefing as string) || (cli?.campaign_briefing as string));
   const rules = (await fetchClientCsRules(card.client_id as string)).filter((r) => r.escopo !== "roteiro").map((r) => `${r.texto} (${r.escopo})`);
 
   const r = await revisarArte({

@@ -42,6 +42,14 @@ export async function loadBriefingTexto(clientId: string): Promise<string | unde
   return linhas.length ? linhas.join("\n").slice(0, 2000) : undefined;
 }
 
+/** Junta o texto livre (fixed/campaign) COM o estruturado (client_briefings). Antes o código usava
+ *  um OU outro (fixed sobrescrevia o estruturado) — então um contato/nota no fixed apagava o
+ *  briefing do onboarding. Agora SOMA os dois. `fixoInline` = o fixed/campaign já lido do cliente. */
+export async function loadBriefingCombinado(clientId: string, fixoInline?: string | null): Promise<string | undefined> {
+  const estruturado = await loadBriefingTexto(clientId);
+  return [fixoInline?.trim() || null, estruturado].filter(Boolean).join("\n\n") || undefined;
+}
+
 export async function loadBriefingForClient(opts: {
   clientId: string; nome: string; nicho?: string;
 }): Promise<{ briefing: BriefingCliente; temBriefing: boolean }> {
