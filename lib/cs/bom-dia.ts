@@ -38,7 +38,7 @@ export function buildBomDiaDigest(snap: SnapshotCS, now: Date): string {
   }
   if (snap.semPostsSemana.length) {
     const top = snap.semPostsSemana.slice(0, 5).map((c) => c.nome).join(", ");
-    l.push(`📭 *${snap.semPostsSemana.length}* sem nenhum post planejado essa semana — ${top}${snap.semPostsSemana.length > 5 ? "…" : ""} — ninguém fica pra trás!`);
+    l.push(`📭 *${snap.semPostsSemana.length}* sem nenhum post planejado ${snap.semPostsLabel} — ${top}${snap.semPostsSemana.length > 5 ? "…" : ""} — ninguém fica pra trás!`);
   }
   if (linhaData) l.push(linhaData);
 

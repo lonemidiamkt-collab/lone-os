@@ -5,7 +5,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
-import { clientesSemPostNaSemana } from "@/lib/cs/lacunas";
+import { clientesSemPostNaSemana, semanaAlvo } from "@/lib/cs/lacunas";
 import { proximasDatas, formatDataCurta } from "@/lib/cs/datas";
 
 const DIAS_QUIETO = 7; // igual ao cs-esfriando: cliente que falava e sumiu há >= N dias
@@ -19,7 +19,8 @@ export interface SnapshotCS {
   atrasados: { cliente: string; titulo: string; dias: number }[]; // prazo vencido há <= 30d (acionável)
   encalhados: number;        // cards vencidos há > 30d (parados no board → arquivar/fechar)
   esfriando: { cliente: string; dias: number }[];
-  semPostsSemana: { nome: string; social?: string | null }[]; // clientes de social SEM post planejado na semana
+  semPostsSemana: { nome: string; social?: string | null }[]; // clientes de social SEM post planejado na semana-alvo
+  semPostsLabel: string;     // "essa semana" (seg-qua) ou "semana que vem" (qui-dom)
   novosHoje: number;         // cards criados hoje
   texto: string;             // resumo factual compacto (p/ a IA ler e o bom-dia montar)
 }
@@ -101,10 +102,11 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
   const elegiveis = clients
     .filter((c) => c.assigned_social && !testeIds.has(c.id as string))
     .map((c) => ({ id: c.id as string, nome: nomeDe.get(c.id as string) || "Cliente", social: (c.assigned_social as string) || null }));
+  const semana = semanaAlvo(agora); // seg-qua: essa semana · qui-dom: a que vem (mais acionável)
   const semPostsSemana = clientesSemPostNaSemana(
     elegiveis,
     cards.map((k) => ({ clientId: (k.client_id as string) || null, dueDate: (k.due_date as string) || null })),
-    agora,
+    semana.segunda,
   );
 
   // Datas comemorativas chegando (14 dias, só as relevantes) — a Lone responde "que datas vêm aí?".
@@ -123,12 +125,12 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       ? `Esfriando (cliente sumiu do grupo): ${esfriando.length} — ${esfriando.slice(0, 6).map((e) => `${e.cliente} (${e.dias}d)`).join("; ")}`
       : `Esfriando: nenhum`,
     semPostsSemana.length
-      ? `Sem NENHUM post planejado nesta semana (seg-dom): ${semPostsSemana.length} — ${semPostsSemana.slice(0, 8).map((c) => c.nome).join("; ")}`
-      : `Todos os clientes de social têm post planejado nesta semana`,
+      ? `Sem NENHUM post planejado ${semana.label} (seg-dom): ${semPostsSemana.length} — ${semPostsSemana.slice(0, 8).map((c) => c.nome).join("; ")}`
+      : `Todos os clientes de social têm post planejado ${semana.label}`,
     datasProx.length
       ? `Datas comemorativas próximas (14d): ${datasProx.slice(0, 4).map((d) => formatDataCurta(d).replace(/\*/g, "")).join("; ")}`
       : "",
   ].filter(Boolean);
 
-  return { pendentes, emProducao, aguardandoAprovacao, atrasados, encalhados, esfriando, semPostsSemana, novosHoje, texto: linhas.join("\n") };
+  return { pendentes, emProducao, aguardandoAprovacao, atrasados, encalhados, esfriando, semPostsSemana, semPostsLabel: semana.label, novosHoje, texto: linhas.join("\n") };
 }
