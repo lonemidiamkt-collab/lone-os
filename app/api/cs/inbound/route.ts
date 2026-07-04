@@ -20,6 +20,7 @@ import { verificarDemanda, A2_TRUST_FROM } from "@/lib/cs/verifier";
 import { interpretarResposta } from "@/lib/cs/interpreter";
 import { detectarAprovacao } from "@/lib/cs/aprovacao";
 import { sugerirResposta } from "@/lib/cs/resposta";
+import { sincronizarBriefingAprendido } from "@/lib/cs/briefing-sync";
 import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/cs/criativo";
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
@@ -883,6 +884,7 @@ export async function POST(req: NextRequest) {
               expires_at: ehFatoTemporario(textoRegra) ? new Date(Date.now() + 14 * 86400000).toISOString() : null,
             });
             console.log(`[CS/inbound] aprendi (regra) sobre ${alvo.cliente_nome}: ${textoRegra}`);
+            await sincronizarBriefingAprendido(alvo.client_id as string); // enriquece o briefing visível
           }
         }
         if (i.acao === "descartar") {
@@ -1181,6 +1183,7 @@ export async function POST(req: NextRequest) {
       source_message: msg.text, author: msg.authorName || msg.authorJid,
       expires_at: temporario ? new Date(Date.now() + 14 * 86400000).toISOString() : null,
     });
+    if (!temporario) await sincronizarBriefingAprendido(c.id as string); // fato durável → enriquece o briefing
     if (internalJid) await csSendGroupText(internalJid, `🧠 Anotei do *${clienteNome}*: _${texto}_ — vou lembrar disso.${temporario ? " (por 2 semanas — parece coisa temporária)" : ""}`);
     console.log(`[CS/inbound] info_operacional → memória (${clienteNome}): ${texto}`);
   }

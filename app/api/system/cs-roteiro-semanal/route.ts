@@ -11,18 +11,11 @@ import { gerarRoteiros, type BriefingCliente } from "@/lib/cs/criativo";
 import { loadRoteiroPrefs } from "@/lib/cs/load-briefing";
 import { roteiroPdfHtml } from "@/lib/cs/roteiro-pdf";
 
-// POST /api/system/cs-roteiro-semanal — toda segunda: gera 1 roteiro por cliente de TESTE,
-// renderiza um PDF branded (Lone) e envia no grupo da Equipe pro social gravar com o cliente até
-// quarta. Suggest-only / backstage. Cron sugerido: segunda 9h BRT (`0 12 * * 1`).
-// Query: ?dry=1 (gera mas NÃO envia) · ?limit=N (processa só os N primeiros — p/ teste).
-//
-// FASE DE TESTE: só os clientes abaixo. Depois dos testes, abrir pra mais (ou todos de vídeo).
-const TEST_PATTERNS = [
-  "dijana", "madeirao mov", "imperio dos pisos", "tindaro",
-  "contele", "bazar ribeiro saquarema", "bazar ribeiro - maric",
-];
-
-const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+// POST /api/system/cs-roteiro-semanal — toda segunda: gera 1 roteiro por cliente em ROTAÇÃO
+// (N por semana, cobre a carteira ao longo das semanas SEM mandar 40 PDFs de uma vez), PDF branded
+// (Lone), envia no grupo da Equipe pro social gravar. Suggest-only / backstage. Cron: seg 9h BRT.
+// Query: ?dry=1 (gera mas NÃO envia) · ?limit=N (só os N primeiros — p/ teste).
+const POR_SEMANA = 6; // quantos roteiros por segunda (rotaciona pela carteira com briefing)
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req);
@@ -40,14 +33,21 @@ export async function POST(req: NextRequest) {
     if (r.ok) logoDataUri = `data:image/png;base64,${Buffer.from(await r.arrayBuffer()).toString("base64")}`;
   } catch { /* sem logo → header só com texto */ }
 
-  // Clientes de teste (match por nome normalizado).
+  // Elegíveis = ativos, COM social e COM briefing (estruturado OU texto >= 200 chars). Rotaciona
+  // POR_SEMANA por segunda pra cobrir a carteira sem floodar/gastar demais.
   const { data: clientsData } = await supabaseAdmin
-    .from("clients").select("id, name, nome_fantasia, nicho, industry, assigned_social")
-    .or("active.is.null,active.eq.true");
-  let alvos = (clientsData ?? []).filter((c) => {
-    const n = norm((c.name as string) || "");
-    return TEST_PATTERNS.some((p) => n.includes(p));
-  });
+    .from("clients").select("id, name, nome_fantasia, nicho, industry, assigned_social, fixed_briefing, campaign_briefing")
+    .or("active.is.null,active.eq.true").not("name", "ilike", "%(teste)%");
+  const { data: estrutData } = await supabaseAdmin.from("client_briefings").select("client_id").eq("is_current", true);
+  const estruturados = new Set((estrutData ?? []).map((r) => r.client_id as string));
+  const eligible = (clientsData ?? [])
+    .filter((c) => c.assigned_social)
+    .filter((c) => estruturados.has(c.id as string) || (((c.fixed_briefing as string) || "") + ((c.campaign_briefing as string) || "")).trim().length >= 200)
+    .sort((a, b) => (a.id as string).localeCompare(b.id as string)); // ordem estável p/ a rotação
+  const weekNum = Math.floor(Date.now() / (7 * 86400000));
+  const numGroups = Math.max(1, Math.ceil(eligible.length / POR_SEMANA));
+  const g = weekNum % numGroups;
+  let alvos = eligible.slice(g * POR_SEMANA, g * POR_SEMANA + POR_SEMANA);
   if (limit > 0) alvos = alvos.slice(0, limit);
 
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
     const briefing: BriefingCliente = {
       nome,
       nicho: (c.nicho as string) || (c.industry as string) || undefined,
-      resumoEstrategico: (b?.resumo_estrategico as string) || undefined,
+      // Sem briefing estruturado → usa o texto (fixed/campaign) como resumo, pra o roteiro ter contexto.
+      resumoEstrategico: (b?.resumo_estrategico as string) || ((c.fixed_briefing as string) || (c.campaign_briefing as string) || "").trim() || undefined,
       produtos: (b?.produtos as string[]) || undefined,
       publicoAlvo: (b?.publico_alvo as string[]) || undefined,
       posicionamento: (b?.posicionamento as string) || undefined,
