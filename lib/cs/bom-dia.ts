@@ -8,7 +8,7 @@ const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sáb
 
 export function buildBomDiaDigest(snap: SnapshotCS, now: Date): string {
   const data = `${DIAS[now.getDay()]}, ${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const temAlgo = snap.pendentes.length || snap.emProducao || snap.aguardandoAprovacao || snap.atrasados.length || snap.esfriando.length;
+  const temAlgo = snap.pendentes.length || snap.emProducao || snap.aguardandoAprovacao || snap.atrasados.length || snap.encalhados || snap.esfriando.length;
 
   if (!temAlgo) {
     return `☀️ *Bom dia, time!* (${data})\n\nDia limpo por aqui — nada pendente, nada atrasado, ninguém sumido. Bora fazer acontecer! 💪`;
@@ -25,7 +25,10 @@ export function buildBomDiaDigest(snap: SnapshotCS, now: Date): string {
   }
   if (snap.atrasados.length) {
     const top = snap.atrasados.slice(0, 3).map((a) => `${a.cliente} (${a.dias}d)`).join(", ");
-    l.push(`⏰ *${snap.atrasados.length}* com prazo vencido — ${top}${snap.atrasados.length > 3 ? "…" : ""} — vale priorizar hoje`);
+    l.push(`⏰ *${snap.atrasados.length}* com prazo vencido — ${top}${snap.atrasados.length > 3 ? "…" : ""} — dá pra priorizar hoje`);
+  }
+  if (snap.encalhados) {
+    l.push(`🧹 *${snap.encalhados}* cards encalhados (parados há +30d) — vale arquivar ou fechar pra limpar o board`);
   }
   if (snap.esfriando.length) {
     const top = snap.esfriando.slice(0, 3).map((e) => `${e.cliente} (${e.dias}d)`).join(", ");

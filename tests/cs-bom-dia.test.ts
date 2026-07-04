@@ -4,7 +4,7 @@ import { buildBomDiaDigest } from "@/lib/cs/bom-dia";
 import type { SnapshotCS } from "@/lib/cs/snapshot";
 
 const vazio: SnapshotCS = {
-  pendentes: [], emProducao: 0, aguardandoAprovacao: 0, atrasados: [], esfriando: [], novosHoje: 0, texto: "",
+  pendentes: [], emProducao: 0, aguardandoAprovacao: 0, atrasados: [], encalhados: 0, esfriando: [], novosHoje: 0, texto: "",
 };
 const dia = new Date(2026, 6, 1); // quarta, 01/07
 
@@ -24,6 +24,7 @@ describe("buildBomDiaDigest", () => {
       ],
       emProducao: 5, aguardandoAprovacao: 2,
       atrasados: [{ cliente: "Léo Carros", titulo: "arte feira", dias: 3 }],
+      encalhados: 12,
     };
     const m = buildBomDiaDigest(snap, dia);
     expect(m).toContain("*2* esperando seu ok/não");
@@ -31,6 +32,7 @@ describe("buildBomDiaDigest", () => {
     expect(m).toContain("*5* em produção");
     expect(m).toContain("prazo vencido");
     expect(m).toContain("Léo Carros");
+    expect(m).toContain("*12* cards encalhados"); // higiene de board separada do atraso
     expect(m).toContain("atrasados"); // fecho prioriza atrasados
   });
 
