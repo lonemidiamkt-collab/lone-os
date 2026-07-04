@@ -67,8 +67,11 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
   const emProducao = cards.filter((k) => k.status === "in_production").length;
   const aguardandoAprovacao = cards.filter((k) => ["approval", "client_approval"].includes(k.status as string)).length;
   const novosHoje = cards.filter((k) => (k.created_at as string) >= hojeISO).length;
+  // Só conta como atraso o trabalho COMPROMETIDO (roteiro/produção/aprovação). Card em "ideas" é
+  // backlog — prazo ali é aspiracional, não vira alarme; "scheduled"/"published" já saíram.
+  const COMPROMETIDO = ["script", "in_production", "approval", "client_approval"];
   const vencidos = cards
-    .filter((k) => k.due_date && (k.due_date as string) < hojeData && !["published", "done"].includes(k.status as string))
+    .filter((k) => k.due_date && (k.due_date as string) < hojeData && COMPROMETIDO.includes(k.status as string))
     .map((k) => ({
       cliente: nomeDe.get(k.client_id as string) || "Cliente",
       titulo: ((k.title as string) || "sem título").slice(0, 60),
