@@ -920,6 +920,9 @@ export async function POST(req: NextRequest) {
   const multiCliente = clients.length > 1;
   const c = clients[0];
   if (c.agente_ativo === false) return NextResponse.json({ ok: true, skip: "agente pausado p/ este cliente" }); // S8
+  // Carimba a última atividade do CLIENTE no grupo → detector de "cliente esfriando" (churn precoce).
+  // Best-effort, não bloqueia (só falha se a migration 063 não estiver aplicada).
+  if (c.id && !sandbox) void supabaseAdmin.from("clients").update({ last_client_msg_at: new Date().toISOString() }).eq("id", c.id as string).then(() => {});
   const clienteNome = nomeOf(c);
   // Texto livre OU o briefing estruturado (client_briefings) — o texto livre está vazio na base real.
   const clienteBriefing = await loadBriefingCombinado(c.id as string, briefingCompleto(c));
