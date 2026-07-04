@@ -16,7 +16,7 @@ export interface SnapshotCS {
   pendentes: { codigo: string; cliente: string; tipo: string; resumo: string; dias: number }[];
   emProducao: number;
   aguardandoAprovacao: number;
-  atrasados: { cliente: string; titulo: string; dias: number }[]; // prazo vencido há <= 30d (acionável)
+  atrasados: { cliente: string; titulo: string; dias: number; responsavel: string | null }[]; // prazo vencido <= 30d
   encalhados: number;        // cards vencidos há > 30d (parados no board → arquivar/fechar)
   esfriando: { cliente: string; dias: number }[];
   semPostsSemana: { nome: string; social?: string | null }[]; // clientes de social SEM post planejado na semana-alvo
@@ -47,9 +47,10 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       .select("codigo, cliente_nome, client_id, tipo, resumo, created_at")
       .eq("status", "pendente").order("created_at", { ascending: true }),
     supabaseAdmin.from("content_cards")
-      .select("client_id, status, title, due_date, created_at")
+      .select("client_id, status, title, due_date, created_at, social_media")
       .is("archived_at", null),
   ]);
+  const primeiroNome = (n?: string | null) => (n || "").trim().split(/\s+/)[0] || null;
 
   const clients = clientsRes.data ?? [];
   const nomeDe = new Map<string, string>();
@@ -84,6 +85,7 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       cliente: nomeDe.get(k.client_id as string) || "Cliente",
       titulo: ((k.title as string) || "sem título").slice(0, 60),
       dias: diasDesde(`${k.due_date}T00:00:00Z`),
+      responsavel: primeiroNome(k.social_media as string),
     }))
     .sort((a, b) => a.dias - b.dias); // prazo mais recente primeiro = ainda dá pra salvar
   const atrasados = vencidos.filter((v) => v.dias <= ATRASO_MAX);
@@ -118,7 +120,7 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       (pendentes.length ? ` — ${pendentes.slice(0, 8).map((p) => `${p.cliente} (${p.tipo}, há ${p.dias}d)`).join("; ")}` : ""),
     `Em produção: ${emProducao} · Aguardando aprovação: ${aguardandoAprovacao} · Novos cards hoje: ${novosHoje}`,
     atrasados.length
-      ? `Atrasados (prazo vencido, acionável): ${atrasados.length} — ${atrasados.slice(0, 6).map((a) => `${a.cliente}: ${a.titulo} (${a.dias}d)`).join("; ")}`
+      ? `Atrasados (prazo vencido, acionável) — cada um com o responsável: ${atrasados.length} — ${atrasados.slice(0, 10).map((a) => `${a.cliente}: ${a.titulo} (${a.dias}d${a.responsavel ? `, resp: ${a.responsavel}` : ""})`).join("; ")}`
       : `Atrasados: nenhum`,
     encalhados ? `Encalhados (cards parados há +${ATRASO_MAX}d — arquivar/fechar): ${encalhados}` : "",
     esfriando.length

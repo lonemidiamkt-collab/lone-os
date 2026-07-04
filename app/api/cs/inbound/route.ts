@@ -23,6 +23,7 @@ import { sugerirResposta } from "@/lib/cs/resposta";
 import { sincronizarBriefingAprendido } from "@/lib/cs/briefing-sync";
 import { conversarComEquipe } from "@/lib/cs/conversa";
 import { montarSnapshotCS } from "@/lib/cs/snapshot";
+import { ehPerguntaProLone } from "@/lib/cs/intent";
 import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/cs/criativo";
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
@@ -180,6 +181,17 @@ function ehPedidoRaioX(text: string): boolean {
 function ehFalaComAgente(text: string): boolean {
   const t = (text || "").toLowerCase();
   return /\blone\b/.test(t) && !/\blone\s*m[íi]dia\b/.test(t);
+}
+
+// Continuidade de conversa: quem a Lone respondeu e quando (memória do PROCESSO — o app é 1 container
+// long-running; some no deploy, ok). Numa conversa em andamento, o follow-up ("e do Pedro?") é
+// respondido mesmo sem "Lone" nem palavra operacional. Janela curta pra não virar tagarela.
+const conversaAtiva = new Map<string, number>(); // `${groupJid}|${authorJid}` → epoch ms do último papo
+const JANELA_CONVERSA_MS = 5 * 60 * 1000;
+const chaveConversa = (g: string, a?: string | null) => `${g}|${a || ""}`;
+function emConversa(groupJid: string, authorJid?: string | null): boolean {
+  const t = conversaAtiva.get(chaveConversa(groupJid, authorJid));
+  return !!t && Date.now() - t < JANELA_CONVERSA_MS;
 }
 
 // Radar de datas ("Lone, que datas vêm aí?" / "datas comemorativas do mês"). Determinístico.
@@ -1014,11 +1026,14 @@ export async function POST(req: NextRequest) {
   // ─── A Lone CONVERSA com a equipe: "Lone, [algo]" que não casou com nenhum comando → responde no
   // tom da casa (antes ficava MUDA — a msg da equipe caía no skip abaixo). Só no grupo interno, só
   // quando falam COM ela. Fica DEPOIS de todos os comandos (fallback). Responde quotando a msg. ───
-  if (msg.groupJid === internalGroupJid() && ehFalaComAgente(msg.text) && !isTrivial(msg.text) && isOpenAIConfigured()) {
+  const querPapo = msg.groupJid === internalGroupJid() && !isTrivial(msg.text) && isOpenAIConfigured();
+  const dispara = querPapo && (ehFalaComAgente(msg.text) || ehPerguntaProLone(msg.text) || emConversa(msg.groupJid, msg.authorJid));
+  if (dispara) {
     const snap = await montarSnapshotCS(); // fatos reais → ela responde com dados, sem inventar
     const conv = await conversarComEquipe({ mensagem: msg.text, autor: msg.authorName || "", contexto: snap.texto });
     const resp = (conv.ok && conv.data?.resposta) ? conv.data.resposta : "Opa! Tô por aqui 👋 me chama que eu ajudo.";
     await csSendGroupText(msg.groupJid, resp, msg.quotedMsgId || undefined);
+    conversaAtiva.set(chaveConversa(msg.groupJid, msg.authorJid), Date.now()); // mantém a conversa viva
     // Aprende conversando: o time ensinou uma regra durável de um cliente → vira regra aprendida.
     const ensino = conv.ok ? conv.data?.ensino : null;
     if (ensino?.cliente && ensino?.regra) {

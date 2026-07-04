@@ -23,7 +23,7 @@ describe("buildBomDiaDigest", () => {
         { codigo: "A2", cliente: "Nova União", tipo: "duvida", resumo: "y", dias: 2 },
       ],
       emProducao: 5, aguardandoAprovacao: 2,
-      atrasados: [{ cliente: "Léo Carros", titulo: "arte feira", dias: 3 }],
+      atrasados: [{ cliente: "Léo Carros", titulo: "arte feira", dias: 3, responsavel: "Carlos" }],
       encalhados: 12,
     };
     const m = buildBomDiaDigest(snap, dia);
