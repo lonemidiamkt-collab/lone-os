@@ -93,6 +93,15 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const [genLegenda, setGenLegenda] = useState(false);       // gerando legenda por IA
   const [revisando, setRevisando] = useState(false);         // revisando a arte por IA
   const [revisao, setRevisao] = useState<{ ok: boolean; problemas: string[]; resumo: string } | null>(null);
+  const [genBrief, setGenBrief] = useState(false);           // gerando briefing da arte pro designer
+  const [designBrief, setDesignBrief] = useState<string | null>(null); // briefing gerado (EDITÁVEL antes de enviar)
+  const [revisandoPost, setRevisandoPost] = useState(false); // revisão FINAL do post por IA
+  const [revisaoPost, setRevisaoPost] = useState<{
+    aprovado: boolean;
+    problemas: { gravidade: string; area: string; detalhe: string; sugestao: string | null }[];
+    resumo: string;
+    legenda_corrigida: string | null;
+  } | null>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
   // ✍️ Legenda pronta por IA: usa o briefing do cliente pra escrever gancho+corpo+CTA+hashtags.
@@ -126,6 +135,40 @@ export default function ContentCardModal({ card, onClose }: Props) {
       else setRevisao({ ok: false, problemas: [d.error || "Não consegui revisar."], resumo: "Revisão indisponível" });
     } catch { setRevisao({ ok: false, problemas: ["Falha de conexão."], resumo: "Revisão indisponível" }); }
     finally { setRevisando(false); }
+  }
+
+  // 🎨 Briefing da arte pro designer, por IA — gera e deixa EDITÁVEL; vai no pedido de design.
+  async function gerarBriefingDesignIA() {
+    setGenBrief(true);
+    try {
+      const r = await authedFetch("/api/cs/briefing-design", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: card.id }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.briefing) setDesignBrief(d.briefing);
+      } else {
+        const e = await r.json().catch(() => ({}));
+        pushNotification("system", "Não deu pra gerar o briefing da arte", e.error || "Tente de novo.", card.clientId);
+      }
+    } catch { pushNotification("system", "Falha ao gerar o briefing", "Verifique a conexão.", card.clientId); }
+    finally { setGenBrief(false); }
+  }
+
+  // ✅ Revisão FINAL do post (arte + legenda + hashtags) por IA — o pre-flight antes de ir ao cliente.
+  async function revisarPostIA() {
+    setRevisandoPost(true); setRevisaoPost(null);
+    try {
+      const r = await authedFetch("/api/cs/revisar-post", {
+        // Manda a legenda/hashtags ATUAIS do editor (podem não estar salvas ainda) — senão a IA
+        // revisaria a versão velha do banco e a "legenda corrigida" sobrescreveria a nova.
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: card.id, caption, hashtags }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) setRevisaoPost(d);
+      else setRevisaoPost({ aprovado: false, problemas: [{ gravidade: "alta", area: "legenda", detalhe: d.error || "Não consegui revisar.", sugestao: null }], resumo: "Revisão indisponível", legenda_corrigida: null });
+    } catch { setRevisaoPost({ aprovado: false, problemas: [{ gravidade: "alta", area: "legenda", detalhe: "Falha de conexão.", sugestao: null }], resumo: "Revisão indisponível", legenda_corrigida: null }); }
+    finally { setRevisandoPost(false); }
   }
 
   const comments = card.comments ?? [];
@@ -577,6 +620,48 @@ export default function ContentCardModal({ card, onClose }: Props) {
               )}
             </div>
 
+            {/* ✅ Revisão FINAL do post (arte + legenda) — o pre-flight: coerência legenda×arte,
+                preço inventado, palavra proibida, dado divergente, português. */}
+            <div>
+              <button
+                type="button"
+                onClick={revisarPostIA}
+                disabled={revisandoPost}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary/[0.06] border border-primary/20 hover:border-primary/40 transition-all text-xs text-primary disabled:opacity-50"
+                title="A IA revisa o post COMPLETO: a legenda bate com a arte? preço/claim inventado? palavra proibida? português?"
+              >
+                <CheckCircle size={13} /> {revisandoPost ? "Revisando o post…" : "✅ Revisão final do post (IA)"}
+              </button>
+              {revisaoPost && (
+                <div className={`mt-2 rounded-lg border p-3 text-xs ${revisaoPost.aprovado ? "border-lone-success-border/30 bg-lone-success-bg/10 text-lone-success" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>
+                  <div className="font-semibold flex items-center gap-1.5">
+                    {revisaoPost.aprovado ? <CheckCircle size={13} /> : <XCircle size={13} />} {revisaoPost.resumo}
+                  </div>
+                  {revisaoPost.problemas.length > 0 && (
+                    <ul className="mt-1.5 space-y-1 text-foreground/90">
+                      {revisaoPost.problemas.map((p, i) => (
+                        <li key={i}>
+                          <span className={`font-semibold uppercase text-[10px] ${p.gravidade === "alta" ? "text-destructive" : "text-lone-warning"}`}>[{p.gravidade}]</span>{" "}
+                          <span className="text-[10px] text-muted-foreground">({p.area})</span> {p.detalhe}
+                          {p.sugestao && <span className="block pl-4 text-muted-foreground">→ {p.sugestao}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {revisaoPost.legenda_corrigida && (
+                    <button
+                      type="button"
+                      onClick={() => { setCaption(revisaoPost.legenda_corrigida!); setRevisaoPost({ ...revisaoPost, legenda_corrigida: null }); }}
+                      className="mt-2 w-full px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[11px] font-medium hover:bg-primary/80 transition-all"
+                    >
+                      ✍️ Aplicar legenda corrigida (revise e salve)
+                    </button>
+                  )}
+                  <p className="mt-1.5 text-[10px] text-muted-foreground">Sugestão da IA — a decisão é sua.</p>
+                </div>
+              )}
+            </div>
+
             {!showRejectInput ? (
               <div className="flex items-center gap-2">
                 <button
@@ -646,13 +731,42 @@ export default function ContentCardModal({ card, onClose }: Props) {
           ) : null;
         })()}
 
+        {/* 🎨 Briefing da arte gerado pela IA — EDITÁVEL; ao Solicitar Design, vai no pedido. */}
+        {role !== "designer" && !card.designRequestId && !card.designerDeliveredAt && designBrief !== null && (
+          <div className="px-6 pb-3">
+            <div className="rounded-lg border border-primary/20 bg-primary/[0.04] p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-semibold text-primary">🎨 Briefing da arte (IA) — revise antes de enviar</span>
+                <button type="button" onClick={() => setDesignBrief(null)} className="text-[10px] text-muted-foreground hover:text-foreground">descartar</button>
+              </div>
+              <Textarea
+                value={designBrief}
+                onChange={(e) => setDesignBrief(e.target.value)}
+                rows={8}
+                className="text-xs font-mono"
+              />
+              <p className="mt-1 text-[10px] text-muted-foreground">Ao clicar em "Solicitar Design", ESTE texto vai como briefing pro designer.</p>
+            </div>
+          </div>
+        )}
+
         <DialogFooter className="px-6 py-4 border-t border-border">
           {/* Solicitar Design — only for social/traffic/admin, NOT for designer */}
           {role !== "designer" && !card.designRequestId && !card.designerDeliveredAt && (
+            <div className="mr-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              disabled={genBrief}
+              className="flex items-center gap-2 text-primary border-primary/30 hover:bg-primary/10"
+              title="A Lone monta o briefing da arte (objetivo, texto na arte, elementos visuais, o que não pode) pro designer executar sem perguntar nada"
+              onClick={gerarBriefingDesignIA}
+            >
+              {genBrief ? "Gerando…" : "🎨 Briefing pro designer (IA)"}
+            </Button>
             <Button
               variant="outline"
               disabled={sendingDesign}
-              className="mr-auto flex items-center gap-2 text-[var(--chart-4)] border-[var(--chart-4)]/30 hover:bg-[var(--chart-4)]/10"
+              className="flex items-center gap-2 text-[var(--chart-4)] border-[var(--chart-4)]/30 hover:bg-[var(--chart-4)]/10"
               onClick={() => {
                 if (sendingDesign) return;          // anti-duplo-clique: evita demanda duplicada
                 // Não manda pro designer sem data de postagem — toda demanda precisa de pauta datada.
@@ -669,7 +783,8 @@ export default function ContentCardModal({ card, onClose }: Props) {
                   priority: card.priority || "medium",
                   status: "queued",
                   format: card.format || "Post Feed",
-                  briefing: card.briefing || card.observations || `Criar arte para: ${card.title}`,
+                  // Briefing gerado pela Lone (revisado no textarea) tem prioridade; senão, o do card.
+                  briefing: (designBrief && designBrief.trim()) || card.briefing || card.observations || `Criar arte para: ${card.title}`,
                   contentCardId: card.id, // vincula a demanda ao card já na criação (link à prova de falha)
                 })
                   .then((req) => {
@@ -685,6 +800,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
               <Palette size={14} />
               {sendingDesign ? "Enviando..." : "Solicitar Design"}
             </Button>
+            </div>
           )}
           {/* Designer sees "Enviar Arte" instead */}
           {role === "designer" && !card.designerDeliveredAt && (

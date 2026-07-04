@@ -31,7 +31,8 @@ import { loadBriefingForClient, loadRoteiroPrefs, loadBriefingCombinado } from "
 import { ehComandoAusencia, parseAusencia } from "@/lib/cs/ausencia";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 import { criarCardDemanda, criarCardsPauta } from "@/lib/cs/card";
-import { parsePautaItens } from "@/lib/cs/pauta";
+import { parsePautaItens, gerarPautaSemanal, datasProximaSemana, formatPauta } from "@/lib/cs/pauta";
+import { proximasDatas, formatDataCurta, tagsDoNicho, dataEncaixa } from "@/lib/cs/datas";
 import type { CsDemandType } from "@/lib/cs/taxonomy";
 
 // Janela de coalescência (debounce): mensagens do mesmo autor+grupo dentro desta janela
@@ -179,6 +180,20 @@ function ehPedidoRaioX(text: string): boolean {
 function ehFalaComAgente(text: string): boolean {
   const t = (text || "").toLowerCase();
   return /\blone\b/.test(t) && !/\blone\s*m[íi]dia\b/.test(t);
+}
+
+// Radar de datas ("Lone, que datas vêm aí?" / "datas comemorativas do mês"). Determinístico.
+function ehPerguntaDatas(text: string): boolean {
+  const t = (text || "").toLowerCase();
+  if (!/\blone\b/.test(t)) return false;
+  return /(datas? comemorativ|que datas|datas (da semana|do m[eê]s|chegando|vindo|v[eê]m)|pr[oó]ximas? datas|calend[aá]rio de datas|alguma data (boa|chegando|vindo|a[ií]))/.test(t);
+}
+
+// Ideias de post ("Lone, me dá ideias de post pro Contele" / "o que postar na Farmácia?").
+function ehPedidoIdeias(text: string): boolean {
+  const t = (text || "").toLowerCase();
+  if (!/\blone\b/.test(t)) return false;
+  return /(ideias? (de|pra|para) (post|conte[uú]do)|me d[aá] (uma[s]? )?ideia|inspira[çc][aã]o|sugest([aã]o|[oõ]es) de (post|conte[uú]do)|o que postar)/.test(t);
 }
 
 // Equipe pedindo pra CRIAR uma demanda ("Lone, cria uma demanda na [cliente] sobre X").
@@ -621,7 +636,9 @@ export async function POST(req: NextRequest) {
 
   // ─── Agente "Lone": equipe pede pra CRIAR uma demanda ("Lone, cria uma demanda na [cliente] sobre X").
   // SUGERE (mesmo formato da demanda de cliente) e espera "ok" pra criar o card. ───
-  if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPedidoCriarDemanda(msg.text)) {
+  // Guarda: "Lone, cria umas ideias de post pro X" tem verbo de criação + "post", mas é pedido de
+  // IDEIAS (handler abaixo), não de abrir uma demanda. Deixa passar pro handler de ideias.
+  if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPedidoCriarDemanda(msg.text) && !ehPedidoIdeias(msg.text)) {
     if (!isOpenAIConfigured()) {
       await csSendGroupText(msg.groupJid, "Tô sem acesso à IA agora pra montar a demanda 😕");
       return NextResponse.json({ ok: true, demanda_cmd: "sem_ia" });
@@ -932,6 +949,66 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, interp: "ajustada" });
       }
     }
+  }
+
+  // ─── Agente "Lone": radar de DATAS ("Lone, que datas vêm aí?") — 30 dias × carteira. Determinístico. ───
+  if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPerguntaDatas(msg.text)) {
+    const prox = proximasDatas(spNow(), 30);
+    if (prox.length === 0) {
+      await csSendGroupText(msg.groupJid, "Os próximos 30 dias tão sem data comemorativa relevante no meu radar. 😌");
+      return NextResponse.json({ ok: true, datas: 0 });
+    }
+    const { data: cls } = await supabaseAdmin
+      .from("clients").select("name, nome_fantasia, nicho, industry, assigned_social")
+      .or("active.is.null,active.eq.true").not("assigned_social", "is", null).not("name", "ilike", "%(teste)%");
+    const carteira = (cls ?? []).map((c) => ({
+      nome: (c.nome_fantasia as string) || (c.name as string) || "Cliente",
+      tags: tagsDoNicho((c.nicho as string) || (c.industry as string)),
+    }));
+    const linhas = prox.slice(0, 10).map((d) => {
+      const enc = carteira.filter((c) => dataEncaixa(d, c.tags));
+      const quem = d.tags.includes("geral")
+        ? "todo mundo"
+        : `${enc.slice(0, 3).map((c) => c.nome).join(", ")}${enc.length > 3 ? ` +${enc.length - 3}` : ""}`;
+      return `• ${formatDataCurta(d)}${enc.length ? ` · encaixa: ${quem}` : ""}`;
+    });
+    await csSendGroupText(msg.groupJid, [`📅 *Próximas datas (30 dias):*`, ``, ...linhas, ``, `Quer ideias pra alguma? "Lone, ideias de post pro [cliente]" 😉`].join("\n"));
+    console.log(`[CS/inbound] datas → ${prox.length} datas listadas`);
+    return NextResponse.json({ ok: true, datas: prox.length });
+  }
+
+  // ─── Agente "Lone": IDEIAS de post ("Lone, me dá ideias de post pro Contele") ───
+  // Banco de ideias na hora: briefing + histórico (não repete) + datas chegando. Reusa o motor da pauta.
+  if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPedidoIdeias(msg.text) && isOpenAIConfigured()) {
+    const alvo = await resolveClientePorNome(msg.text);
+    if (!alvo) {
+      await csSendGroupText(msg.groupJid, "Pra qual cliente? Me fala o nome que eu mando as ideias. 😉");
+      return NextResponse.json({ ok: true, ideias: "sem_cliente" });
+    }
+    const [{ data: cliRow }, { data: hist }] = await Promise.all([
+      supabaseAdmin.from("clients").select("fixed_briefing, campaign_briefing").eq("id", alvo.id).maybeSingle(),
+      supabaseAdmin.from("content_cards").select("title").eq("client_id", alvo.id).is("archived_at", null).order("created_at", { ascending: false }).limit(10),
+    ]);
+    const briefingCli = await loadBriefingCombinado(alvo.id, (cliRow?.fixed_briefing as string) || (cliRow?.campaign_briefing as string));
+    const regrasCli = (await fetchClientCsRules(alvo.id)).filter((rr) => rr.escopo !== "roteiro").map((rr) => rr.texto);
+    const datasOferecidas = datasProximaSemana(spNow()).datas;
+    const rIde = await gerarPautaSemanal({
+      clienteNome: alvo.nome, clienteNicho: alvo.nicho,
+      briefing: briefingCli, regras: regrasCli,
+      historicoTitulos: (hist ?? []).map((h) => (h.title as string) || "").filter(Boolean),
+      datas: datasOferecidas,
+    });
+    // Guarda igual à cs-pauta: o modelo não pode inventar dia fora dos oferecidos.
+    const itensIde = (rIde.ok && rIde.data ? rIde.data.itens : []).filter((i) => datasOferecidas.includes(i.dia));
+    if (!rIde.ok || itensIde.length === 0) {
+      await csSendGroupText(msg.groupJid, `Não consegui montar ideias pro *${alvo.nome}* agora${briefingCli ? "" : " — ele tá sem briefing; preenche na plataforma que melhora MUITO"}. 😕`);
+      return NextResponse.json({ ok: true, ideias: "falhou", erro: rIde.error });
+    }
+    const datasCli = proximasDatas(spNow(), 21).filter((d) => dataEncaixa(d, tagsDoNicho(alvo.nicho)));
+    const extra = datasCli.length ? `\n\n📅 E vem aí: ${datasCli.slice(0, 2).map((d) => formatDataCurta(d)).join(" · ")} — boa deixa!` : "";
+    await csSendGroupText(msg.groupJid, `💡 *Ideias de post — ${alvo.nome}:*\n\n${formatPauta(itensIde)}${extra}\n\nCurtiu alguma? "Lone, cria uma demanda na ${alvo.nome} sobre [ideia]" que eu já abro o card. 😉`);
+    console.log(`[CS/inbound] ideias → ${alvo.nome} (${itensIde.length})`);
+    return NextResponse.json({ ok: true, ideias: itensIde.length, cliente: alvo.nome });
   }
 
   // ─── A Lone CONVERSA com a equipe: "Lone, [algo]" que não casou com nenhum comando → responde no

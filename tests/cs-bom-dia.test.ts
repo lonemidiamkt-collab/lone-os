@@ -4,9 +4,9 @@ import { buildBomDiaDigest } from "@/lib/cs/bom-dia";
 import type { SnapshotCS } from "@/lib/cs/snapshot";
 
 const vazio: SnapshotCS = {
-  pendentes: [], emProducao: 0, aguardandoAprovacao: 0, atrasados: [], encalhados: 0, esfriando: [], novosHoje: 0, texto: "",
+  pendentes: [], emProducao: 0, aguardandoAprovacao: 0, atrasados: [], encalhados: 0, esfriando: [], semPostsSemana: [], novosHoje: 0, texto: "",
 };
-const dia = new Date(2026, 6, 1); // quarta, 01/07
+const dia = new Date(2026, 6, 1); // quarta, 01/07 (sem data comemorativa perto)
 
 describe("buildBomDiaDigest", () => {
   it("dia sem nada → mensagem de dia limpo", () => {
@@ -41,5 +41,21 @@ describe("buildBomDiaDigest", () => {
     const m = buildBomDiaDigest(snap, dia);
     expect(m).toContain("esfriando");
     expect(m).toContain("Farmácia (9d)");
+  });
+
+  it("lacuna semanal → 'ninguém fica pra trás'", () => {
+    const snap: SnapshotCS = { ...vazio, semPostsSemana: [{ nome: "Contele", social: "Pedro" }, { nome: "CIIL", social: "Carlos" }] };
+    const m = buildBomDiaDigest(snap, dia);
+    expect(m).toContain("*2* sem nenhum post planejado essa semana");
+    expect(m).toContain("Contele");
+    expect(m).toContain("ninguém fica pra trás");
+  });
+
+  it("véspera de data comemorativa → lembra o time (mesmo em dia limpo)", () => {
+    const vesperaDiaCliente = new Date(2026, 8, 14); // 14/09 → amanhã é Dia do Cliente
+    const m = buildBomDiaDigest(vazio, vesperaDiaCliente);
+    expect(m).toContain("Dia limpo");
+    expect(m).toContain("Amanhã é");
+    expect(m).toContain("Dia do Cliente");
   });
 });

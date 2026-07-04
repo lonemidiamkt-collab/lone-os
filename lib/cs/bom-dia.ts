@@ -3,15 +3,17 @@
 // Voz da Lone via template. Fonte de dados: montarSnapshotCS().
 
 import type { SnapshotCS } from "@/lib/cs/snapshot";
+import { linhaDataBomDia } from "@/lib/cs/datas";
 
 const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 
 export function buildBomDiaDigest(snap: SnapshotCS, now: Date): string {
   const data = `${DIAS[now.getDay()]}, ${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const temAlgo = snap.pendentes.length || snap.emProducao || snap.aguardandoAprovacao || snap.atrasados.length || snap.encalhados || snap.esfriando.length;
+  const linhaData = linhaDataBomDia(now); // data comemorativa hoje/amanhã ("" se não tem)
+  const temAlgo = snap.pendentes.length || snap.emProducao || snap.aguardandoAprovacao || snap.atrasados.length || snap.encalhados || snap.esfriando.length || snap.semPostsSemana.length;
 
   if (!temAlgo) {
-    return `☀️ *Bom dia, time!* (${data})\n\nDia limpo por aqui — nada pendente, nada atrasado, ninguém sumido. Bora fazer acontecer! 💪`;
+    return `☀️ *Bom dia, time!* (${data})\n\nDia limpo por aqui — nada pendente, nada atrasado, ninguém sumido.${linhaData ? `\n\n${linhaData}` : ""} Bora fazer acontecer! 💪`;
   }
 
   const l: string[] = [`☀️ *Bom dia, time!* (${data})`, ``, `Como tá o dia:`];
@@ -34,10 +36,15 @@ export function buildBomDiaDigest(snap: SnapshotCS, now: Date): string {
     const top = snap.esfriando.slice(0, 3).map((e) => `${e.cliente} (${e.dias}d)`).join(", ");
     l.push(`👀 *${snap.esfriando.length}* esfriando (sumiram do grupo) — ${top}${snap.esfriando.length > 3 ? "…" : ""} — que tal um "oi"?`);
   }
+  if (snap.semPostsSemana.length) {
+    const top = snap.semPostsSemana.slice(0, 5).map((c) => c.nome).join(", ");
+    l.push(`📭 *${snap.semPostsSemana.length}* sem nenhum post planejado essa semana — ${top}${snap.semPostsSemana.length > 5 ? "…" : ""} — ninguém fica pra trás!`);
+  }
+  if (linhaData) l.push(linhaData);
 
   const fecho = snap.atrasados.length
     ? `\nComeça pelos atrasados que a gente fecha o dia tranquilo. Tamo junto! 🤝`
-    : `\nstá tudo caminhando bem — bora manter o ritmo! 🚀`;
+    : `\nTá tudo caminhando bem — bora manter o ritmo! 🚀`;
   l.push(fecho);
   return l.join("\n");
 }
