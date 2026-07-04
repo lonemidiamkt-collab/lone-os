@@ -163,6 +163,14 @@ const STATUS_CARD_LABEL: Record<string, string> = {
   approval: "Aprovação interna", client_approval: "Aprovação do cliente", scheduled: "Agendado", published: "Publicado",
 };
 
+// Raio-X do cliente ("Lone, me dá um raio-x do Contele" / "resumo do X" / "panorama da X").
+// Resumo completo do cliente (demandas, produção, entregas, reclamação, atividade). Determinístico.
+function ehPedidoRaioX(text: string): boolean {
+  const t = text.toLowerCase();
+  if (!/\blone\b/.test(t)) return false;
+  return /\b(raio-?x|panorama|resum[oã]|me (fala|conta|resume) (sobre|do|da)|como (anda|vai|est[áa] indo))\b/.test(t);
+}
+
 // Equipe pedindo pra CRIAR uma demanda ("Lone, cria uma demanda na [cliente] sobre X").
 // Roda DEPOIS do roteiro (roteiro tem precedência em "anúncio/criativo").
 function ehPedidoCriarDemanda(text: string): boolean {
@@ -502,6 +510,53 @@ export async function POST(req: NextRequest) {
     }
     console.log(`[CS/inbound] roteiro on-demand → ${alvo.nome} (${r.data.roteiros.length} versões) p/ ${quem}`);
     return NextResponse.json({ ok: true, roteiro: "ok", cliente: alvo.nome, n: r.data.roteiros.length });
+  }
+
+  // ─── Agente "Lone": RAIO-X do cliente ("Lone, me dá um raio-x do Contele") ───
+  // Resumo completo pro gestor/social bater o olho: demandas, produção, entregas, reclamação,
+  // atividade e regras aprendidas. Determinístico (sem IA).
+  if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPedidoRaioX(msg.text)) {
+    const alvo = await resolveClientePorNome(msg.text);
+    if (!alvo) {
+      await csSendGroupText(msg.groupJid, "De qual cliente é o raio-x? Me diz o nome. 😉");
+      return NextResponse.json({ ok: true, raiox: "sem_cliente" });
+    }
+    const d30 = new Date(Date.now() - 30 * 86400000).toISOString();
+    const d7 = new Date(Date.now() - 7 * 86400000).toISOString();
+    const [cliRow, dems, cards, ultReclam, regras] = await Promise.all([
+      supabaseAdmin.from("clients").select("assigned_social, last_client_msg_at, fixed_briefing").eq("id", alvo.id).maybeSingle(),
+      supabaseAdmin.from("cs_demandas").select("status").eq("client_id", alvo.id).gte("created_at", d30),
+      supabaseAdmin.from("content_cards").select("status, designer_delivered_at, client_approved_at").eq("client_id", alvo.id).is("archived_at", null),
+      supabaseAdmin.from("cs_demandas").select("resumo, created_at").eq("client_id", alvo.id).eq("tipo", "reclamacao").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      supabaseAdmin.from("cs_client_rules").select("id", { count: "exact", head: true }).eq("client_id", alvo.id).eq("ativo", true),
+    ]);
+    const demArr = dems.data ?? [];
+    const pend = demArr.filter((x) => x.status === "pendente").length;
+    const conf = demArr.filter((x) => x.status === "confirmada").length;
+    const cardArr = cards.data ?? [];
+    const emProd = cardArr.filter((k) => k.status === "in_production").length;
+    const entregues7 = cardArr.filter((k) => k.designer_delivered_at && (k.designer_delivered_at as string) >= d7).length;
+    const aguardando = cardArr.filter((k) => ["approval", "client_approval"].includes(k.status as string)).length;
+    const publicados = cardArr.filter((k) => k.status === "published").length;
+    const lastMsg = cliRow.data?.last_client_msg_at as string | undefined;
+    const diasQuieto = lastMsg ? Math.floor((Date.now() - new Date(lastMsg).getTime()) / 86400000) : null;
+    const temBriefing = !!(cliRow.data?.fixed_briefing as string)?.trim();
+    const social = (cliRow.data?.assigned_social as string) || "—";
+
+    const linhas = [
+      `📊 *Raio-X — ${alvo.nome}*`,
+      `👤 Social: ${social}${temBriefing ? " · briefing ✅" : " · *sem briefing* ⚠️"}`,
+      ``,
+      `*Últimos 30 dias:* ${demArr.length} demanda${demArr.length !== 1 ? "s" : ""}${pend ? ` · ${pend} pendente${pend > 1 ? "s" : ""}` : ""}${conf ? ` · ${conf} confirmada${conf > 1 ? "s" : ""}` : ""}`,
+      `*Produção agora:* ${emProd} em produção · ${aguardando} aguardando aprovação`,
+      `*Entregas (7d):* ${entregues7} · *Publicados:* ${publicados}`,
+      diasQuieto == null ? `*Atividade:* sem registro de mensagem do cliente ainda` : `*Última fala do cliente:* há ${diasQuieto} dia${diasQuieto !== 1 ? "s" : ""}${diasQuieto >= 7 ? " ⚠️ (esfriando)" : ""}`,
+      (regras.count ?? 0) > 0 ? `*Regras aprendidas:* ${regras.count}` : "",
+      ultReclam.data ? `\n🔴 *Última reclamação:* ${ultReclam.data.resumo} (${new Date(ultReclam.data.created_at as string).toLocaleDateString("pt-BR")})` : "",
+    ].filter(Boolean);
+    await csSendGroupText(msg.groupJid, linhas.join("\n"));
+    console.log(`[CS/inbound] raio-x → ${alvo.nome}`);
+    return NextResponse.json({ ok: true, raiox: "ok", cliente: alvo.nome });
   }
 
   // ─── Agente "Lone": pergunta de STATUS ("Lone, a demanda do Léo Carros foi feita?") ───
