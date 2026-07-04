@@ -9,16 +9,25 @@ export const CONVERSA_MODEL = "gpt-4o";
 export interface ConversaInput {
   mensagem: string;        // o que a equipe falou
   autor: string;           // quem falou
-  contexto?: string;       // fatos atuais (ex.: quantas demandas pendentes) — opcional
+  contexto?: string;       // fatos atuais (snapshot do CS: pendentes, produção, esfriando…) — opcional
 }
 
 export interface ConversaOutput {
   resposta: string;        // resposta no tom da Lone pro grupo interno
+  // Quando o time ENSINA uma regra durável sobre um cliente ("o Contele prefere gancho curto",
+  // "não usa a palavra X na Farmácia") → preenche pra virar regra aprendida. Só p/ ensino REAL.
+  ensino?: { cliente: string; regra: string } | null;
 }
 
 const SCHEMA: Record<string, unknown> = {
-  type: "object", additionalProperties: false, required: ["resposta"],
-  properties: { resposta: { type: "string" } },
+  type: "object", additionalProperties: false, required: ["resposta", "ensino"],
+  properties: {
+    resposta: { type: "string" },
+    ensino: {
+      type: ["object", "null"], additionalProperties: false, required: ["cliente", "regra"],
+      properties: { cliente: { type: "string" }, regra: { type: "string" } },
+    },
+  },
 };
 
 // A Lone conhece as próprias funções → consegue guiar o time e responder "o que você faz?".
@@ -42,13 +51,23 @@ emoji. Respostas CURTAS (1-3 frases), como no WhatsApp.
 - "Lone, cria uma demanda na [cliente] sobre [tema]" · "Lone, entrou o cliente [X] no grupo [Y]"
 - "Lone, o [pessoa] tá de férias até dia [Z]"
 
+# Responda com DADOS (quando o "Contexto agora" tiver)
+- Se te perguntarem números (quantas demandas pendentes, quem tá esfriando, o que tá em produção,
+  o que atrasou), RESPONDA com o que está no "Contexto agora" — cite cliente e número de verdade.
+- Se a resposta não estiver no contexto, NÃO invente: diga que pode dar o raio-x/status do cliente
+  se pedirem ("Lone, raio-x do [cliente]").
+
+# Quando o time te ENSINA algo (campo "ensino")
+- Se a fala for ENSINAR/CORRIGIR uma preferência durável de um cliente ("o Contele prefere gancho
+  curto", "não usa a palavra promoção na Farmácia", "o Léo gosta de emoji"), preencha "ensino"
+  com {cliente, regra} e confirme na "resposta" ("Anotado! Vou lembrar disso 📝").
+- Se for papo, pergunta, elogio ou pedido — "ensino" = null. Não force aprendizado.
+
 # Regras
 - Responda de verdade e seja útil. Se pedirem algo que você faz por comando, faça na hora ou
   explique como pedir. Se for elogio/agradecimento/papo, responda no clima.
-- NÃO invente dados (números de demanda, status, prazos) que não estejam no contexto. Se não sabe,
-  diga que pode dar o raio-x/status se pedirem.
 - Você fala SÓ no grupo interno. Nunca prometa falar com o cliente.
-Responda APENAS no JSON do schema (campo "resposta").`;
+Responda APENAS no JSON do schema (campos "resposta" e "ensino").`;
 
 export async function conversarComEquipe(inp: ConversaInput): Promise<OpenAiResult<ConversaOutput>> {
   const user = [

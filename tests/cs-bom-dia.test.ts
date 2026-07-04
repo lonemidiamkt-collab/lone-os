@@ -1,0 +1,43 @@
+// Teste OFFLINE do "bom dia" diário — só a lógica pura buildBomDiaDigest (sem banco/IA).
+import { describe, it, expect } from "vitest";
+import { buildBomDiaDigest } from "@/lib/cs/bom-dia";
+import type { SnapshotCS } from "@/lib/cs/snapshot";
+
+const vazio: SnapshotCS = {
+  pendentes: [], emProducao: 0, aguardandoAprovacao: 0, atrasados: [], esfriando: [], novosHoje: 0, texto: "",
+};
+const dia = new Date(2026, 6, 1); // quarta, 01/07
+
+describe("buildBomDiaDigest", () => {
+  it("dia sem nada → mensagem de dia limpo", () => {
+    const m = buildBomDiaDigest(vazio, dia);
+    expect(m).toContain("Bom dia, time!");
+    expect(m).toContain("Dia limpo");
+  });
+
+  it("com pendências e atrasados → cita números e prioriza atrasados", () => {
+    const snap: SnapshotCS = {
+      ...vazio,
+      pendentes: [
+        { codigo: "A1", cliente: "Contele", tipo: "arte_nova", resumo: "x", dias: 1 },
+        { codigo: "A2", cliente: "Nova União", tipo: "duvida", resumo: "y", dias: 2 },
+      ],
+      emProducao: 5, aguardandoAprovacao: 2,
+      atrasados: [{ cliente: "Léo Carros", titulo: "arte feira", dias: 3 }],
+    };
+    const m = buildBomDiaDigest(snap, dia);
+    expect(m).toContain("*2* esperando seu ok/não");
+    expect(m).toContain("Contele");
+    expect(m).toContain("*5* em produção");
+    expect(m).toContain("prazo vencido");
+    expect(m).toContain("Léo Carros");
+    expect(m).toContain("atrasados"); // fecho prioriza atrasados
+  });
+
+  it("só esfriando → sugere reengajar", () => {
+    const snap: SnapshotCS = { ...vazio, esfriando: [{ cliente: "Farmácia", dias: 9 }] };
+    const m = buildBomDiaDigest(snap, dia);
+    expect(m).toContain("esfriando");
+    expect(m).toContain("Farmácia (9d)");
+  });
+});

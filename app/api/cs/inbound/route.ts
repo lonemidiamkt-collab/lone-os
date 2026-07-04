@@ -22,6 +22,7 @@ import { detectarAprovacao } from "@/lib/cs/aprovacao";
 import { sugerirResposta } from "@/lib/cs/resposta";
 import { sincronizarBriefingAprendido } from "@/lib/cs/briefing-sync";
 import { conversarComEquipe } from "@/lib/cs/conversa";
+import { montarSnapshotCS } from "@/lib/cs/snapshot";
 import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/cs/criativo";
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
@@ -937,15 +938,31 @@ export async function POST(req: NextRequest) {
   // tom da casa (antes ficava MUDA — a msg da equipe caía no skip abaixo). Só no grupo interno, só
   // quando falam COM ela. Fica DEPOIS de todos os comandos (fallback). Responde quotando a msg. ───
   if (msg.groupJid === internalGroupJid() && ehFalaComAgente(msg.text) && !isTrivial(msg.text) && isOpenAIConfigured()) {
-    const { count: pend } = await supabaseAdmin.from("cs_demandas").select("id", { count: "exact", head: true }).eq("status", "pendente");
-    const conv = await conversarComEquipe({
-      mensagem: msg.text, autor: msg.authorName || "",
-      contexto: (pend ?? 0) > 0 ? `${pend} demanda(s) pendente(s) esperando ok/não no grupo` : "nenhuma demanda pendente agora",
-    });
+    const snap = await montarSnapshotCS(); // fatos reais → ela responde com dados, sem inventar
+    const conv = await conversarComEquipe({ mensagem: msg.text, autor: msg.authorName || "", contexto: snap.texto });
     const resp = (conv.ok && conv.data?.resposta) ? conv.data.resposta : "Opa! Tô por aqui 👋 me chama que eu ajudo.";
     await csSendGroupText(msg.groupJid, resp, msg.quotedMsgId || undefined);
+    // Aprende conversando: o time ensinou uma regra durável de um cliente → vira regra aprendida.
+    const ensino = conv.ok ? conv.data?.ensino : null;
+    if (ensino?.cliente && ensino?.regra) {
+      const alvo = await resolveClientePorNome(ensino.cliente);
+      if (alvo) {
+        const textoRegra = ensino.regra.trim().slice(0, 200);
+        const { data: ex } = await supabaseAdmin.from("cs_client_rules")
+          .select("id").eq("client_id", alvo.id).eq("texto", textoRegra).eq("ativo", true).limit(1);
+        if (!ex || ex.length === 0) {
+          await supabaseAdmin.from("cs_client_rules").insert({
+            client_id: alvo.id, texto: textoRegra, escopo: "sempre", origem: "aprendido",
+            source_message: msg.text, author: msg.authorName || msg.authorJid,
+            expires_at: ehFatoTemporario(textoRegra) ? new Date(Date.now() + 14 * 86400000).toISOString() : null,
+          });
+          await sincronizarBriefingAprendido(alvo.id); // enriquece o briefing visível
+          console.log(`[CS/inbound] aprendi conversando (${alvo.nome}): ${textoRegra}`);
+        }
+      }
+    }
     console.log(`[CS/inbound] conversa com ${msg.authorName || "equipe"}: "${msg.text.slice(0, 50)}"`);
-    return NextResponse.json({ ok: true, conversa: "ok" });
+    return NextResponse.json({ ok: true, conversa: "ok", ensino: ensino?.cliente ? "sim" : "nao" });
   }
 
   // ─── Mensagem de cliente: A0 → A1 → A3 → sugere ───
