@@ -1,0 +1,522 @@
+[
+{
+"id": "boleto-impulsionamento",
+"cliente": "Bella Moda",
+"nicho": "loja de roupa feminina",
+"msgs": [
+"gente bom diaa",
+"o boleto do impulsionamento venceu ontem 😩",
+"consigo pagar só amanha de manha, ta tudo certo? nao quero q corte a campanha no meio"
+],
+"demanda": false,
+"tipo": [
+"conversa"
+],
+"nota": "Vocabulário de marketing (impulsionamento/campanha) disfarça"
+},
+{
+"id": "escala-garcom-interna",
+"cliente": "Burg's Lanches",
+"nicho": "hamburgueria",
+"msgs": [
+"fala mano",
+"preciso divulgar a escala nova dos garçom pro fds",
+"manda la no grupo interno da equipe, 3 entra 18h e 2 as 19h"
+],
+"demanda": false,
+"tipo": [
+"conversa"
+],
+"nota": "'Divulgar' parece pedido de arte, mas é comunicado INTERNO d"
+},
+{
+"id": "verba-mais-500",
+"cliente": "Power Supps",
+"nicho": "e-commerce de suplementos",
+"msgs": [
+"fala pessoal, esse mes to querendo investir mais forte",
+"da pra jogar mais uns 500 no trafego? pode ser a partir de segunda"
+],
+"demanda": false,
+"tipo": [
+"conversa"
+],
+"nota": "Mexer em VERBA de anúncio: a regra trata valor/verba como as"
+},
+{
+"id": "arte-vaga-contratando",
+"cliente": "Serralheria Ferro & Arte",
+"nicho": "metalúrgica/serralheria",
+"msgs": [
+"roberto, abriu vaga de soldador aqui na firma",
+"monta aquela artezinha de 'estamos contratando' pfv, queria subir no story ainda hj"
+],
+"demanda": true,
+"tipo": [
+"arte_nova"
+],
+"nota": "Vocabulário de RH (abriu vaga/contratando) disfarça pedido d"
+},
+{
+"id": "mudanca-endereco-post",
+"cliente": "OdontoVida",
+"nicho": "clínica odontológica",
+"msgs": [
+"oi gente, novidade boa: mudamos de endereço",
+"agora é na Av. Brasil 1200, do lado do banco",
+"faz um post bonito avisando os pacientes pra essa semana"
+],
+"demanda": true,
+"tipo": [
+"arte_nova"
+],
+"nota": "Abre com fato durável (mudança de endereço = info_operaciona"
+},
+{
+"id": "tabela-precos-destaque",
+"cliente": "Studio Lash Bruna",
+"nicho": "estética/lash designer",
+"msgs": [
+"amiga o povo n para de perguntar preço no direct kkkk",
+"da pra fazer uma tabela de valores caprichada com a minha logo pra eu fixar nos destaque?"
+],
+"demanda": true,
+"tipo": [
+"arte_nova"
+],
+"nota": "'Tabela de valores/preço' soa financeiro, mas o pedido é DES"
+},
+{
+"id": "desconto-ou-brinde",
+"cliente": "Passo Certo Calçados",
+"nicho": "loja de calçados",
+"msgs": [
+"to na duvida do q fazer na black esse ano",
+"compensa mais dar 40% off ou dar um brinde? qual vc acha q converte mais no anuncio?"
+],
+"demanda": true,
+"tipo": [
+"duvida_estrategia"
+],
+"nota": "'Qual converte mais no anúncio' é pergunta estratégica de ma"
+},
+{
+"id": "admira-concorrente-reels",
+"cliente": "Cantinho da Roça",
+"nicho": "restaurante",
+"msgs": [
+"vi os reels de um restaurante concorrente aqui mano, q coisa mais linda",
+"como será q eles conseguem fazer aquele efeito da comida saindo fumacinha? 🤤 deve dar um trabalho"
+],
+"demanda": false,
+"tipo": [
+"conversa"
+],
+"nota": "Curiosidade retórica sobre um concorrente ('como será que fa"
+},
+{
+"id": "cor-berrante-implicito",
+"cliente": "Ateliê da Bia",
+"nicho": "moda feminina/boutique",
+"msgs": [
+"oi gente vi o post da coleção nova agora",
+"sei la, aquele rosa do fundo ficou meio berrante na minha tela viu... meio estranho pra marca"
+],
+"demanda": true,
+"tipo": [
+"ajuste_arte"
+],
+"nota": "Crítica implícita de cor numa peça já entregue ('rosa ficou "
+},
+{
+"id": "e-ai-saiu-story",
+"cliente": "Lar Ideal Imóveis",
+"nicho": "imobiliária",
+"msgs": [
+"e ai, saiu?",
+"o storyy daquele apê da zona sul q te mandei anteontem"
+],
+"demanda": true,
+"tipo": [
+"cobranca_prazo"
+],
+"nota": "'E aí, saiu?' isolado parece papo, mas a 2ª linha revela cob"
+},
+{
+"id": "se-um-dia-segunda-unidade",
+"cliente": "Brasa Burger",
+"nicho": "hamburgueria",
+"msgs": [
+"cara se um dia a gente abrir a segunda unidade vai dar um trabalho absurdo de divulgação né kkkk",
+"nem quero pensar nisso ainda"
+],
+"demanda": false,
+"tipo": [
+"conversa"
+],
+"nota": "Hipótese futura ('se um dia', 'nem quero pensar ainda', kkkk"
+},
+{
+"id": "ninguem-responde",
+"cliente": "Turbo Peças",
+"nicho": "autopeças",
+"msgs": [
+"ninguém viu minha msg de ontem? 👀",
+"to falando sozinho aqui já kkk"
+],
+"demanda": true,
+"tipo": [
+"reclamacao",
+"cobranca_prazo"
+],
+"nota": "Pergunta retórica com 'kkk' que soa papo leve, mas pode ser "
+},
+{
+"id": "promo-ou-portfolio",
+"cliente": "Studio Marina Hair",
+"nicho": "salão de beleza",
+"msgs": [
+"me tira uma duvida",
+"vale mais a pena eu focar em post de promoção ou em mostrar os trabalhos q eu faço? fico super na duvida nisso"
+],
+"demanda": true,
+"tipo": [
+"duvida_estrategia",
+"duvida"
+],
+"nota": "'Me tira uma dúvida: vale mais focar em post de promoção ou "
+},
+{
+"id": "novo-aprovador-recepcao",
+"cliente": "Sorriso & Cia Odontologia",
+"nicho": "clínica odontológica",
+"msgs": [
+"gente muda uma coisinha aqui no nosso processo",
+"n precisa mais mandar os post pra Dra Renata ver antes n",
+"agora quem aprova é a recepçao, a Bruna, qq arte joga direto pra ela"
+],
+"demanda": false,
+"tipo": [
+"info_operacional"
+],
+"nota": "Troca DURÁVEL de aprovador ('agora quem aprova é a Bruna') ="
+},
+{
+"id": "esquece-arte-liquida",
+"cliente": "Loja Vitrine Modas",
+"nicho": "loja de roupas femininas",
+"msgs": [
+"e aquela arte da liquida q pedi ontem?",
+"pode esquecer ela viu",
+"a gente resolveu n fazer a promoçao esse mes"
+],
+"demanda": true,
+"tipo": [
+"retracao"
+],
+"nota": "Cancelamento de peça ESPECÍFICA já pedida ('esquece a arte d"
+},
+{
+"id": "adia-post-sabado",
+"cliente": "Rodízio do Chef",
+"nicho": "restaurante/rodízio",
+"msgs": [
+"o post do rodizio de sabado",
+"segura ele ai pfv",
+"acho melhor soltar so semana q vem, essa semana ta uma correria aq e nem vai dar pra receber muita gente"
+],
+"demanda": true,
+"tipo": [
+"retracao",
+"agendamento"
+],
+"nota": "Adiar uma peça ESPECÍFICA agendada: 'segura o post de sábado"
+},
+{
+"id": "muda-horario-storys",
+"cliente": "Fit Prime Academia",
+"nicho": "academia/CrossFit",
+"msgs": [
+"ó daqui pra frente muda o horario dos storys",
+"posta sempre umas 6h da manha q é quando a galerada ta indo treinar",
+"meio dia ngm ta vendo mesmo"
+],
+"demanda": false,
+"tipo": [
+"info_operacional"
+],
+"nota": "Mudança DURÁVEL da janela de postagem ('posta sempre 6h') = "
+},
+{
+"id": "agendamento-filial-futura",
+"cliente": "Mundo Pet",
+"nicho": "pet shop",
+"msgs": [
+"gente mes q vem vamo abrir uma filial nova la no centro",
+"vo precisar de umas arte pra divulgar a inauguraçao",
+"mas ainda n tem data fechada n, depois eu confirmo certinho"
+],
+"demanda": true,
+"tipo": [
+"agendamento"
+],
+"nota": "Intenção FUTURA de marketing ('vou precisar de artes da inau"
+},
+{
+"id": "audio-combo-ruido",
+"cliente": "Cássio Burger",
+"nicho": "hamburgueria artesanal",
+"msgs": [
+"oi bom dia tudo bem então cara desculpa o audio to aqui na correria kkk é que ontem foi uma loucura sabe o movimento tava insano ainda bem né que depois daquele feriado tava morto agora voltou aa e minha filha entrou de ferias da escola então ta aqui do meu lado querendo atenção kkkk enfim ó eu queria ver com vocês o seguinte a gente vai lançar um combo novo o duplo bacon com fritas e refri por 39 e noventa e eu precisava de uma arte pra divulgar isso ai ja pro fim de semana pode ser sabado que eu ja to querendo postar aaa e outra coisa depois me lembra de te falar do negocio do cardapio novo mas isso ai a gente ve semana que vem sem pressa ta bom entao é isso qualquer coisa me chama abraço"
+],
+"demanda": true,
+"tipo": [
+"arte_nova"
+],
+"nota": "Áudio longo sem pontuação; o pedido real ('arte pra divulgar"
+},
+{
+"id": "foto-gato-humor",
+"cliente": "Patas & Cia",
+"nicho": "pet shop",
+"msgs": [
+"[Imagem que o cliente enviou: foto de um gato laranja gordo dormindo de barriga pra cima em cima do teclado de um notebook aberto] kkkkkk olha o estado desse aqui nao me deixa trabalhar de jeito nenhum"
+],
+"demanda": false,
+"tipo": [
+"conversa"
+],
+"nota": "Imagem presente (cliente costuma mandar foto de bicho pra vi"
+},
+{
+"id": "print-referencia-arte",
+"cliente": "Monstro Suplementos",
+"nicho": "suplementos / nutrição esportiva",
+"msgs": [
+"[Imagem que o cliente enviou: print de um story do Instagram de uma loja concorrente, fundo preto com detalhes em amarelo neon, texto grande 'BLACK WEEK ATÉ 60% OFF' e foto de potes de whey empilhados] entao ó aquele estilo assim sabe manda o pessoal fazer uma tipo essa daí que ta na foto mas com a nossa cara e com os nosso pote de whey"
+],
+"demanda": true,
+"tipo": [
+"arte_nova"
+],
+"nota": "Print de concorrente + 'faz uma tipo essa mas com a nossa ca"
+},
+{
+"id": "atualiza-tabela-precos",
+"cliente": "Studio Bella",
+"nicho": "salão de beleza / estética",
+"msgs": [
+"[Imagem que o cliente enviou: foto de uma folha de caderno pautada, escrita à mão a caneta, com uma lista de serviços e valores — 'escova 40 / progressiva 150 / luzes 200 / corte 35 / hidratação 60'] ó amor atualiza aquele post da tabela de preços com esses valores novo ai que reajustou tudo essa semana"
+],
+"demanda": true,
+"tipo": [
+"ajuste_arte",
+"arte_nova"
+],
+"nota": "Três iscas: (1) preços → tenta virar financeiro (mas preço é"
+},
+{
+"id": "cobranca-disfarcada-audio",
+"cliente": "OdontoLife",
+"nicho": "clínica odontológica",
+"msgs": [
+"oi gente bom dia tudo certo por ai espero que sim aa to passando so pra saber de uma coisinha aquele post do dia dos namorados que a gente combinou semana passada e voces ja tavam mexendo lembra sera que ja ficou pronto to perguntando pq eu queria muito postar ainda hoje se der pra adiantar me avisa ta bjs"
+],
+"demanda": true,
+"tipo": [
+"cobranca_prazo"
+],
+"nota": "Cobrança educada em áudio. 'Queria muito postar hoje' puxa p"
+},
+{
+"id": "devagar-print-concorrente",
+"cliente": "Forno & Cia",
+"nicho": "pizzaria / delivery",
+"msgs": [
+"[Imagem que o cliente enviou: print da grade do perfil do Instagram de uma pizzaria concorrente, mostrando 9 posts recentes bem produzidos numa grade colorida e organizada] ó isso aqui é a concorrencia postando todo santo dia e a gente aqui parado ja faz uns dez dias que nao sai post nenhum meu to achando tudo muito devagar viu assim nao da"
+],
+"demanda": true,
+"tipo": [
+"reclamacao",
+"cobranca_prazo"
+],
+"nota": "Print de concorrente (isca 'faz igual'), mas o conteúdo é in"
+},
+{
+"id": "autor-julio-criativo",
+"cliente": "Corpo em Foco Suplementos",
+"nicho": "e-commerce de suplementos (tráfego pago)",
+"msgs": [
+"gente preciso de um criativo novo pra ontem 😅",
+"aquele anuncio de conversao saturou, o ctr caiu pela metade essa semana",
+"consigo subir ainda hoje um video curtinho? senao a campanha morre"
+],
+"demanda": false,
+"tipo": [
+"conversa"
+],
+"autor": "Julio",
+"nota": "Autor = EQUIPE Lone (Julio, tráfego). A rajada é a forma per"
+},
+{
+"id": "guarda-roupa-defeito",
+"cliente": "Móveis Madeirão",
+"nicho": "loja de móveis planejados",
+"msgs": [
+"boa tarde, comprei um guarda roupa aqui mes passado e veio faltando uma peça",
+"ja liguei na loja umas 3x e ngm resolve",
+"que descaso viu, to muito insatisfeito"
+],
+"demanda": false,
+"tipo": [
+"conversa"
+],
+"nota": "Consumidor final no grupo errado. 'To muito insatisfeito/que"
+},
+{
+"id": "encomenda-bolo-brief",
+"cliente": "Doce Encanto Confeitaria",
+"nicho": "confeitaria / bolos artísticos",
+"msgs": [
+"oi bom dia! queria encomendar um bolo de 2 andares pra sabado",
+"tema realeza, dourado com azul, uns 40 pedaço",
+"consegue me passar quanto fica?"
+],
+"demanda": false,
+"tipo": [
+"conversa"
+],
+"nota": "Encomenda de PRODUTO (bolo) de consumidor final disfarçada d"
+},
+{
+"id": "pedido-para-terceiro",
+"cliente": "Studio Fit Personal",
+"nicho": "estúdio de personal trainer",
+"msgs": [
+"vcs são fera d+ no que fazem",
+"meu cunhado abriu uma barbearia agora no bairro",
+"dava pra fazer uma logo e uns post pra ele tbm? pagando claro rs"
+],
+"demanda": false,
+"tipo": [
+"conversa"
+],
+"nota": "Pedido 100% marketing (logo + posts) mas para o negócio do C"
+},
+{
+"id": "autor-cola-verbatim",
+"cliente": "Boutique da Marta",
+"nicho": "boutique de roupas",
+"msgs": [
+"olha o que a dona marta mandou agora no meu direct",
+"'preciso de um post de reabertura da loja pra quinta, com as fotos novas'",
+"eu ja passo pro designer ou vc quer ver antes?"
+],
+"demanda": false,
+"tipo": [
+"conversa"
+],
+"autor": "Pedro",
+"nota": "Autor = EQUIPE Lone (Pedro) cola verbatim uma demanda real d"
+},
+{
+"id": "demanda-cliente-vizinho",
+"cliente": "Padaria Pão Quente",
+"nicho": "padaria e açougue do mesmo dono (grupo compartilhado com o Açougue do Zé)",
+"msgs": [
+"a arte do açougue ficou massa vei, parabens",
+"agora faz uma do rodizio de costela do zé pro fim de semana"
+],
+"demanda": true,
+"tipo": [
+"arte_nova"
+],
+"nota": "Demanda válida de arte_nova ('faz arte do rodízio de costela"
+},
+{
+"id": "parabens-ironico",
+"cliente": "Brutus Burger",
+"nicho": "hamburgueria",
+"msgs": [
+"parabens hein 👏",
+"mais um post saindo DEPOIS do combinado, nota 10 pra vcs viu 👏👏"
+],
+"demanda": true,
+"tipo": [
+"reclamacao"
+],
+"nota": "Superfície de elogio (parabéns, nota 10, 👏) mas é ironia sob"
+},
+{
+"id": "elogio-whats-tocando",
+"cliente": "Mundo Pet Patas",
+"nicho": "pet shop",
+"msgs": [
+"gente ficou EScandaloso o video do banho e tosa 😭❤️",
+"meu whats nao parou de tocar hj",
+"vcs sao os melhor"
+],
+"demanda": false,
+"tipo": [
+"elogio"
+],
+"nota": "Elogio genuíno. 'Meu whats não parou' parece resultado de ca"
+},
+{
+"id": "insatisfacao-vaga",
+"cliente": "Studio Bella",
+"nicho": "salão de beleza",
+"msgs": [
+"oi carlos bom dia",
+"sei la, to achando que as coisa nao tao andando como eu esperava nao viu"
+],
+"demanda": true,
+"tipo": [
+"reclamacao"
+],
+"nota": "Insatisfação vaga com a Lone ('as coisas não tão andando com"
+},
+{
+"id": "elogio-raiva-hiperbole",
+"cliente": "Moda Cassia",
+"nicho": "loja de roupas femininas",
+"msgs": [
+"aiii que RAIVA de vcs",
+"toda arte que mandam eu quero postar na hora, num deixam eu trabalhar kkkkk 😍😍"
+],
+"demanda": false,
+"tipo": [
+"elogio"
+],
+"nota": "Palavras lexicalmente negativas ('raiva', 'não deixam eu tra"
+},
+{
+"id": "elogio-mais-pedido",
+"cliente": "Acai Tropical",
+"nicho": "açaiteria",
+"msgs": [
+"gente amei DEMAIS a arte do combo 😍😍",
+"ja que ficou tao boa faz uma igual pro copo de 500ml?"
+],
+"demanda": true,
+"tipo": [
+"arte_nova"
+],
+"nota": "Elogio genuíno + pedido NOVO embutido no fim ('já que ficou "
+},
+{
+"id": "autor-desabafo-ironia",
+"cliente": "Imob Prime",
+"nicho": "imobiliária",
+"msgs": [
+"kkkk o cliente respondeu 'aprovado' depois de 3 semana sumido",
+"milagre ne, agora quer tudo pra ontem"
+],
+"demanda": false,
+"tipo": [
+"conversa"
+],
+"autor": "Pedro",
+"nota": "Autor = EQUIPE Lone (Pedro) desabafando com ironia. Nunca vi"
+}
+]
