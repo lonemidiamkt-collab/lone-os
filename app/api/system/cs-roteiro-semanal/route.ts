@@ -15,7 +15,12 @@ import { roteiroPdfHtml } from "@/lib/cs/roteiro-pdf";
 // (N por semana, cobre a carteira ao longo das semanas SEM mandar 40 PDFs de uma vez), PDF branded
 // (Lone), envia no grupo da Equipe pro social gravar. Suggest-only / backstage. Cron: seg 9h BRT.
 // Query: ?dry=1 (gera mas NÃO envia) · ?limit=N (só os N primeiros — p/ teste).
-const POR_SEMANA = 6; // quantos roteiros por segunda (rotaciona pela carteira com briefing)
+// CARTEIRA_REAL=false → roda SÓ nos clientes de teste (Roberto: não testar nos clientes ainda).
+// Vire true quando quiser ligar pra carteira real (rotação de POR_SEMANA por segunda).
+const CARTEIRA_REAL = false;
+const POR_SEMANA = 6; // quantos roteiros por segunda quando na carteira real (rotaciona)
+const TEST_PATTERNS = ["dijana", "madeirao mov", "imperio dos pisos", "tindaro", "contele", "bazar ribeiro saquarema", "bazar ribeiro - maric"];
+const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req);
@@ -38,16 +43,21 @@ export async function POST(req: NextRequest) {
   const { data: clientsData } = await supabaseAdmin
     .from("clients").select("id, name, nome_fantasia, nicho, industry, assigned_social, fixed_briefing, campaign_briefing")
     .or("active.is.null,active.eq.true").not("name", "ilike", "%(teste)%");
-  const { data: estrutData } = await supabaseAdmin.from("client_briefings").select("client_id").eq("is_current", true);
-  const estruturados = new Set((estrutData ?? []).map((r) => r.client_id as string));
-  const eligible = (clientsData ?? [])
-    .filter((c) => c.assigned_social)
-    .filter((c) => estruturados.has(c.id as string) || (((c.fixed_briefing as string) || "") + ((c.campaign_briefing as string) || "")).trim().length >= 200)
-    .sort((a, b) => (a.id as string).localeCompare(b.id as string)); // ordem estável p/ a rotação
-  const weekNum = Math.floor(Date.now() / (7 * 86400000));
-  const numGroups = Math.max(1, Math.ceil(eligible.length / POR_SEMANA));
-  const g = weekNum % numGroups;
-  let alvos = eligible.slice(g * POR_SEMANA, g * POR_SEMANA + POR_SEMANA);
+  let alvos: NonNullable<typeof clientsData>;
+  if (!CARTEIRA_REAL) {
+    // Modo teste (padrão): só os clientes de teste.
+    alvos = (clientsData ?? []).filter((c) => TEST_PATTERNS.some((p) => norm((c.name as string) || "").includes(p)));
+  } else {
+    const { data: estrutData } = await supabaseAdmin.from("client_briefings").select("client_id").eq("is_current", true);
+    const estruturados = new Set((estrutData ?? []).map((r) => r.client_id as string));
+    const eligible = (clientsData ?? [])
+      .filter((c) => c.assigned_social)
+      .filter((c) => estruturados.has(c.id as string) || (((c.fixed_briefing as string) || "") + ((c.campaign_briefing as string) || "")).trim().length >= 200)
+      .sort((a, b) => (a.id as string).localeCompare(b.id as string)); // ordem estável p/ a rotação
+    const weekNum = Math.floor(Date.now() / (7 * 86400000));
+    const numGroups = Math.max(1, Math.ceil(eligible.length / POR_SEMANA));
+    alvos = eligible.slice((weekNum % numGroups) * POR_SEMANA, (weekNum % numGroups) * POR_SEMANA + POR_SEMANA);
+  }
   if (limit > 0) alvos = alvos.slice(0, limit);
 
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
