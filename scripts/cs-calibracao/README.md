@@ -30,9 +30,23 @@ As divergências restantes do adversarial são: filtro de autor (mascarado em pr
 determinístico `isLoneTeam` do inbound), casos debatíveis, ou `elogio`×`conversa` (ambos sem card).
 Os `ambiguos.json` saem do placar (pessoas razoáveis discordam mesmo conhecendo as regras).
 
+## Verificar a CONVERSA (Lone conversacional)
+
+`verificar-conversa.py` roda a persona real (`conversa.ts`) contra uma bateria de ~20 perguntas do
+dia a dia com um contexto de snapshot rico, e imprime a resposta + o esperado. Use quando aparecer
+um "a Lone não entendeu X": adicione o caso na `BATERIA`, rode, e veja se corrige.
+
+```bash
+OPENAI_API_KEY=sk-... python3 scripts/cs-calibracao/verificar-conversa.py
+```
+
+Baseline (04/jul): 20/20 — distingue designer×social, não inventa dado fora do contexto, não finge
+que executou comando, captura ensino, mantém continuidade. (1 correção aplicada: total de pendentes.)
+
 ## Arquivos
 
-- `calibrar-a1.py` — o runner.
+- `calibrar-a1.py` — o runner do classificador A1.
+- `verificar-conversa.py` — o runner da Lone conversacional.
 - `casos-padrao.json` — casos derivados do manual/exemplos (regressão).
 - `casos-adversarial.json` — casos-armadilha gerados por multi-agente (gap real).
 - `ambiguos.json` — ids do adversarial que são genuinamente ambíguos (fora do placar).

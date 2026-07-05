@@ -136,8 +136,8 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
 
   // Resumo factual compacto — a IA lê ISTO pra responder com números reais (não inventa).
   const linhas = [
-    `Demandas pendentes (esperando ok/não): ${pendentes.length}` +
-      (pendentes.length ? ` — ${pendentes.slice(0, 8).map((p) => `${p.cliente} (${p.tipo}, há ${p.dias}d)`).join("; ")}` : ""),
+    `Demandas pendentes esperando ok/não: ${pendentes.length} no total` +
+      (pendentes.length ? ` (algumas: ${pendentes.slice(0, 8).map((p) => `${p.cliente} (${p.tipo}, há ${p.dias}d)`).join("; ")})` : ""),
     `Em produção: ${emProducao} · Aguardando aprovação: ${aguardandoAprovacao} · Novos cards hoje: ${novosHoje}`,
     `Pipeline de produção: ${aguardandoDesigner} aguardando o DESIGNER entregar a arte; ${entreguesAguardandoSocial} já entregues pelo designer, aguardando o SOCIAL confirmar/postar. (resp = social/gestor da conta, NÃO é o designer)`,
     prontasPraPostar.length
