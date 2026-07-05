@@ -4,7 +4,8 @@ import { buildBomDiaDigest } from "@/lib/cs/bom-dia";
 import type { SnapshotCS } from "@/lib/cs/snapshot";
 
 const vazio: SnapshotCS = {
-  pendentes: [], emProducao: 0, aguardandoAprovacao: 0, atrasados: [], encalhados: 0, esfriando: [], semPostsSemana: [], semPostsLabel: "essa semana", novosHoje: 0, texto: "",
+  pendentes: [], emProducao: 0, aguardandoAprovacao: 0, aguardandoDesigner: 0, entreguesAguardandoSocial: 0,
+  atrasados: [], encalhados: 0, esfriando: [], semPostsSemana: [], semPostsLabel: "essa semana", novosHoje: 0, texto: "",
 };
 const dia = new Date(2026, 6, 1); // quarta, 01/07 (sem data comemorativa perto)
 
@@ -23,7 +24,7 @@ describe("buildBomDiaDigest", () => {
         { codigo: "A2", cliente: "Nova União", tipo: "duvida", resumo: "y", dias: 2 },
       ],
       emProducao: 5, aguardandoAprovacao: 2,
-      atrasados: [{ cliente: "Léo Carros", titulo: "arte feira", dias: 3, responsavel: "Carlos" }],
+      atrasados: [{ cliente: "Léo Carros", titulo: "arte feira", dias: 3, responsavel: "Carlos", designerEntregou: true }],
       encalhados: 12,
     };
     const m = buildBomDiaDigest(snap, dia);

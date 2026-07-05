@@ -16,7 +16,10 @@ export interface SnapshotCS {
   pendentes: { codigo: string; cliente: string; tipo: string; resumo: string; dias: number }[];
   emProducao: number;
   aguardandoAprovacao: number;
-  atrasados: { cliente: string; titulo: string; dias: number; responsavel: string | null }[]; // prazo vencido <= 30d
+  aguardandoDesigner: number;          // cards comprometidos onde o DESIGNER ainda não entregou a arte
+  entreguesAguardandoSocial: number;   // designer JÁ entregou; falta o SOCIAL confirmar/postar
+  // resp = SOCIAL/gestor da conta (não é o designer). designerEntregou = a arte já foi produzida.
+  atrasados: { cliente: string; titulo: string; dias: number; responsavel: string | null; designerEntregou: boolean }[];
   encalhados: number;        // cards vencidos há > 30d (parados no board → arquivar/fechar)
   esfriando: { cliente: string; dias: number }[];
   semPostsSemana: { nome: string; social?: string | null }[]; // clientes de social SEM post planejado na semana-alvo
@@ -47,7 +50,7 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       .select("codigo, cliente_nome, client_id, tipo, resumo, created_at")
       .eq("status", "pendente").order("created_at", { ascending: true }),
     supabaseAdmin.from("content_cards")
-      .select("client_id, status, title, due_date, created_at, social_media")
+      .select("client_id, status, title, due_date, created_at, social_media, designer_delivered_at, social_confirmed_at")
       .is("archived_at", null),
   ]);
   const primeiroNome = (n?: string | null) => (n || "").trim().split(/\s+/)[0] || null;
@@ -79,6 +82,11 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
   // Só conta como atraso o trabalho COMPROMETIDO (roteiro/produção/aprovação). Card em "ideas" é
   // backlog — prazo ali é aspiracional, não vira alarme; "scheduled"/"published" já saíram.
   const COMPROMETIDO = ["script", "in_production", "approval", "client_approval"];
+  // Gargalo do pipeline: onde a peça está TRAVADA — no designer (arte não produzida) ou no social
+  // (arte já entregue, falta confirmar/postar). designer_delivered_at é a fonte de verdade (o status
+  // nem sempre acompanha). Fora do "ideas"/"published"/"scheduled".
+  const aguardandoDesigner = cards.filter((k) => COMPROMETIDO.includes(k.status as string) && !k.designer_delivered_at).length;
+  const entreguesAguardandoSocial = cards.filter((k) => k.designer_delivered_at && !k.social_confirmed_at && !["published", "scheduled", "ideas"].includes(k.status as string)).length;
   const vencidos = cards
     .filter((k) => k.due_date && (k.due_date as string) < hojeData && COMPROMETIDO.includes(k.status as string))
     .map((k) => ({
@@ -86,6 +94,7 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       titulo: ((k.title as string) || "sem título").slice(0, 60),
       dias: diasDesde(`${k.due_date}T00:00:00Z`),
       responsavel: primeiroNome(k.social_media as string),
+      designerEntregou: !!k.designer_delivered_at,
     }))
     .sort((a, b) => a.dias - b.dias); // prazo mais recente primeiro = ainda dá pra salvar
   const atrasados = vencidos.filter((v) => v.dias <= ATRASO_MAX);
@@ -119,8 +128,9 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
     `Demandas pendentes (esperando ok/não): ${pendentes.length}` +
       (pendentes.length ? ` — ${pendentes.slice(0, 8).map((p) => `${p.cliente} (${p.tipo}, há ${p.dias}d)`).join("; ")}` : ""),
     `Em produção: ${emProducao} · Aguardando aprovação: ${aguardandoAprovacao} · Novos cards hoje: ${novosHoje}`,
+    `Pipeline de produção: ${aguardandoDesigner} aguardando o DESIGNER entregar a arte; ${entreguesAguardandoSocial} já entregues pelo designer, aguardando o SOCIAL confirmar/postar. (resp = social/gestor da conta, NÃO é o designer)`,
     atrasados.length
-      ? `Atrasados (prazo vencido, acionável) — cada um com o responsável: ${atrasados.length} — ${atrasados.slice(0, 10).map((a) => `${a.cliente}: ${a.titulo} (${a.dias}d${a.responsavel ? `, resp: ${a.responsavel}` : ""})`).join("; ")}`
+      ? `Atrasados (prazo vencido, acionável): ${atrasados.length} — ${atrasados.slice(0, 10).map((a) => `${a.cliente}: ${a.titulo} (${a.dias}d${a.responsavel ? `, resp: ${a.responsavel}` : ""}, designer: ${a.designerEntregou ? "entregue" : "pendente"})`).join("; ")}`
       : `Atrasados: nenhum`,
     encalhados ? `Encalhados (cards parados há +${ATRASO_MAX}d — arquivar/fechar): ${encalhados}` : "",
     esfriando.length
@@ -134,5 +144,5 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       : "",
   ].filter(Boolean);
 
-  return { pendentes, emProducao, aguardandoAprovacao, atrasados, encalhados, esfriando, semPostsSemana, semPostsLabel: semana.label, novosHoje, texto: linhas.join("\n") };
+  return { pendentes, emProducao, aguardandoAprovacao, aguardandoDesigner, entreguesAguardandoSocial, atrasados, encalhados, esfriando, semPostsSemana, semPostsLabel: semana.label, novosHoje, texto: linhas.join("\n") };
 }
