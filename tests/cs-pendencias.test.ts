@@ -32,6 +32,17 @@ describe("buildPendenciasDigest", () => {
     const itens = Array.from({ length: 11 }, (_, i) => ({ cliente: `Cliente ${i}`, resumo: "arte" }));
     const msg = buildPendenciasDigest(itens);
     expect(msg).toContain("*11 sugestões*");
-    expect(msg).toContain("…e mais 3."); // 11 - 8 listadas
+    expect(msg).toContain("…e mais 3"); // 11 - 8 listadas
+  });
+
+  it("com código → mostra [código] e ensina 'ok <código>' (decidir sem rolar a tela)", () => {
+    const msg = buildPendenciasDigest([
+      { codigo: "0b80", cliente: "Imperio dos Pisos", resumo: "Arte promocional", responsavel: "Rodrigo" },
+      { codigo: "5d64", cliente: "CIIL", resumo: "Pauta da semana", responsavel: "Carlos" },
+    ]);
+    expect(msg).toContain("*[0b80]*");
+    expect(msg).toContain("*[5d64]*");
+    expect(msg).toContain("ok 0b80");
+    expect(msg).toContain("não 0b80");
   });
 });

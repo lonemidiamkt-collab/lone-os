@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   const desde = new Date(Date.now() - JANELA_DIAS * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabaseAdmin
     .from("cs_demandas")
-    .select("cliente_nome, resumo, responsavel, urgencia, message_text")
+    .select("codigo, cliente_nome, resumo, responsavel, urgencia, message_text")
     .eq("status", "pendente")
     .not("msg_id_sugestao", "is", null) // só as que realmente foram sugeridas no grupo
     .gte("created_at", desde)
@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
   const itens: PendenciaItem[] = (data ?? [])
     .filter((d) => !/\(teste\)/i.test((d.cliente_nome as string) ?? ""))
     .map((d) => ({
+      codigo: (d.codigo as string) || null,
       cliente: (d.cliente_nome as string) || "Cliente",
       resumo: (d.resumo as string) || (d.message_text as string) || "demanda",
       responsavel: (d.responsavel as string) || null,

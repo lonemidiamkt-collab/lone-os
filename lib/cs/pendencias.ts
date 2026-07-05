@@ -8,6 +8,7 @@ export interface PendenciaItem {
   resumo: string;
   responsavel?: string | null;
   urgencia?: string;
+  codigo?: string | null;   // código curto da demanda → decidir por "ok <codigo>" sem rolar a tela
 }
 
 const MAX_LISTADAS = 8; // acima disso, resume o excedente pra não virar textão no zap
@@ -22,17 +23,22 @@ export function buildPendenciasDigest(itens: PendenciaItem[]): string {
     : `Opa, time! 👋 Ficaram *${n} sugestões* esperando um ok/não de vocês:`;
 
   const mostradas = itens.slice(0, MAX_LISTADAS);
+  const temCodigo = mostradas.some((p) => p.codigo);
   const linhas = mostradas.map((p) => {
     const urg = p.urgencia === "alta" ? " 🔴" : "";
     const resp = p.responsavel ? ` (${p.responsavel})` : "";
-    return `• *${p.cliente}* — ${p.resumo}${resp}${urg}`;
+    const cod = p.codigo ? `*[${p.codigo}]* ` : "";
+    return `• ${cod}*${p.cliente}* — ${p.resumo}${resp}${urg}`;
   });
   const resto = n - mostradas.length;
-  if (resto > 0) linhas.push(`• …e mais ${resto}.`);
+  if (resto > 0) linhas.push(`• …e mais ${resto} (decide no painel do Agente Lone).`);
 
-  const fecha = n === 1
-    ? `Responde *ok* (crio o card) ou *não* na mensagem dela aqui em cima — ou decide no painel do Agente Lone. Tamo junto!`
-    : `Responde *ok* / *não* na mensagem de cada uma aqui em cima — ou resolve tudo de uma vez no painel do Agente Lone. Tamo junto!`;
+  // Com código, dá pra decidir SEM rolar a tela: "ok <codigo>" / "não <codigo>" aqui mesmo.
+  const fecha = temCodigo
+    ? `Pra decidir é só responder aqui: *ok ${mostradas[0].codigo}* (crio o card) ou *não ${mostradas[0].codigo}* — trocando o código de cada uma. Ou resolve tudo no painel do Agente Lone. Tamo junto! 💪`
+    : n === 1
+      ? `Responde *ok* (crio o card) ou *não* na mensagem dela aqui em cima — ou decide no painel do Agente Lone. Tamo junto!`
+      : `Responde *ok* / *não* na mensagem de cada uma aqui em cima — ou resolve tudo de uma vez no painel do Agente Lone. Tamo junto!`;
 
   return `${abre}\n\n${linhas.join("\n")}\n\n${fecha}`;
 }

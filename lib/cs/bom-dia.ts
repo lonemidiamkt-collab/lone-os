@@ -10,7 +10,7 @@ const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sáb
 export function buildBomDiaDigest(snap: SnapshotCS, now: Date): string {
   const data = `${DIAS[now.getDay()]}, ${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}`;
   const linhaData = linhaDataBomDia(now); // data comemorativa hoje/amanhã ("" se não tem)
-  const temAlgo = snap.pendentes.length || snap.emProducao || snap.aguardandoAprovacao || snap.atrasados.length || snap.encalhados || snap.esfriando.length || snap.semPostsSemana.length;
+  const temAlgo = snap.pendentes.length || snap.emProducao || snap.aguardandoAprovacao || snap.prontasPraPostar.length || snap.atrasados.length || snap.encalhados || snap.esfriando.length || snap.semPostsSemana.length;
 
   if (!temAlgo) {
     return `☀️ *Bom dia, time!* (${data})\n\nDia limpo por aqui — nada pendente, nada atrasado, ninguém sumido.${linhaData ? `\n\n${linhaData}` : ""} Bora fazer acontecer! 💪`;
@@ -24,6 +24,11 @@ export function buildBomDiaDigest(snap: SnapshotCS, now: Date): string {
   }
   if (snap.emProducao || snap.aguardandoAprovacao) {
     l.push(`🎨 *${snap.emProducao}* em produção · *${snap.aguardandoAprovacao}* aguardando aprovação`);
+  }
+  if (snap.prontasPraPostar.length) {
+    // O designer já entregou — o gargalo é o social confirmar/postar. Cutuca com nome e dias.
+    const top = snap.prontasPraPostar.slice(0, 4).map((p) => `${p.cliente}${p.responsavel ? ` (${p.responsavel}, ${p.dias}d)` : ` (${p.dias}d)`}`).join(", ");
+    l.push(`✅ *${snap.prontasPraPostar.length}* arte(s) PRONTA(S) do designer só esperando vocês postarem — ${top}${snap.prontasPraPostar.length > 4 ? "…" : ""} — é confirmar e subir!`);
   }
   if (snap.atrasados.length) {
     const top = snap.atrasados.slice(0, 3).map((a) => `${a.cliente} (${a.dias}d)`).join(", ");
