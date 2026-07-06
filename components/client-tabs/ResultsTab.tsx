@@ -4,9 +4,9 @@ import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/lib/supabase/client";
 import type { Client } from "@/lib/types";
 import {
-  TrendingUp, Plus, Loader2, Check, X, DollarSign,
+  TrendingUp, TrendingDown, Minus, Plus, Loader2, Check, X, DollarSign,
   Calendar, MessageCircle, Zap, AlertTriangle, ArrowUp, ArrowDown,
-  PenLine, Star,
+  PenLine, Star, ShoppingBag,
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from "recharts";
 
@@ -18,6 +18,7 @@ interface Props {
 
 interface FinancialRecord {
   id: string; month: string; investment: number; revenue: number; roi: number | null;
+  vendas: number | null; ticket: number | null;
   strategyNote: string; recordedBy: string;
 }
 
@@ -38,6 +39,51 @@ function calcROI(revenue: number, investment: number): number | null {
   return Math.round(((revenue - investment) / investment) * 100);
 }
 
+/** Mapeia a linha crua de client_financial_results pro shape da UI (inclui vendas/ticket). */
+function mapFinancialRow(r: Record<string, unknown>): FinancialRecord {
+  const vendas = r.vendas != null ? Number(r.vendas) : null;
+  const revenue = Number(r.revenue);
+  // ticket é coluna gerada no banco; se vier null (linha antiga sem vendas) derivamos em JS.
+  const ticket = r.ticket != null ? Number(r.ticket) : vendas && vendas > 0 ? revenue / vendas : null;
+  return {
+    id: r.id as string, month: r.month as string,
+    investment: Number(r.investment), revenue,
+    roi: r.roi != null ? Number(r.roi) : null,
+    vendas, ticket,
+    strategyNote: (r.strategy_note as string) || "", recordedBy: r.recorded_by as string,
+  };
+}
+
+type GrowthLevel = "up" | "flat" | "down" | "unknown";
+interface GrowthHealth { level: GrowthLevel; label: string; pct: number | null; reading: string; }
+
+/**
+ * Saúde de crescimento a partir da tendência de FATURAMENTO (não do ROI de anúncio).
+ * Compara a média dos meses recentes com a dos meses anteriores (janela até 3+3).
+ * Robusto com poucos dados: < 2 meses de faturamento = "sem dados".
+ */
+function computeGrowthHealth(records: FinancialRecord[]): GrowthHealth {
+  const rev = records.filter((r) => r.revenue > 0); // records já vêm ordenados por mês (asc)
+  if (rev.length < 2) {
+    return { level: "unknown", label: "Sem dados", pct: null,
+      reading: "Registre pelo menos 2 meses de faturamento pra medir o crescimento." };
+  }
+  const n = Math.min(3, Math.floor(rev.length / 2));
+  const recent = rev.slice(-n);
+  const prior = rev.slice(-2 * n, -n);
+  const avg = (arr: FinancialRecord[]) => arr.reduce((s, r) => s + r.revenue, 0) / arr.length;
+  const pAvg = avg(prior);
+  if (pAvg <= 0) {
+    return { level: "unknown", label: "Sem base", pct: null,
+      reading: "Sem faturamento no período anterior pra comparar." };
+  }
+  const pct = Math.round(((avg(recent) - pAvg) / pAvg) * 100);
+  const janela = n > 1 ? `nos últimos ${n} meses vs. os ${n} anteriores` : "vs. o mês anterior";
+  if (pct >= 10) return { level: "up", label: "Crescendo", pct, reading: `Faturamento subiu ${pct}% ${janela}.` };
+  if (pct <= -8) return { level: "down", label: "Em queda", pct, reading: `Faturamento caiu ${Math.abs(pct)}% ${janela} — hora de agir.` };
+  return { level: "flat", label: "Estável", pct, reading: `Faturamento estável (${pct >= 0 ? "+" : ""}${pct}%) ${janela}.` };
+}
+
 export default function ResultsTab({ client, currentUser, role }: Props) {
   const isAdmin = role === "admin" || role === "manager";
   const [loading, setLoading] = useState(true);
@@ -51,7 +97,7 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
   const [saveError, setSaveError] = useState("");
 
   // Form state
-  const [form, setForm] = useState({ month: new Date().toISOString().slice(0, 7), investment: "", revenue: "", strategyNote: "" });
+  const [form, setForm] = useState({ month: new Date().toISOString().slice(0, 7), investment: "", revenue: "", vendas: "", strategyNote: "" });
   const [interactionForm, setInteractionForm] = useState({ type: "alinhamento", summary: "" });
   const [annotationForm, setAnnotationForm] = useState({ month: "", annotation: "", type: "neutral" });
 
@@ -76,10 +122,7 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
       supabase.from("strategy_annotations").select("*").eq("client_id", client.id).order("month"),
     ]).then(([fin, inter, ann]) => {
       if (!mounted) return;
-      setRecords((fin.data || []).map((r) => ({
-        id: r.id, month: r.month, investment: Number(r.investment), revenue: Number(r.revenue),
-        roi: r.roi !== null ? Number(r.roi) : null, strategyNote: r.strategy_note || "", recordedBy: r.recorded_by,
-      })));
+      setRecords((fin.data || []).map(mapFinancialRow));
       setInteractions((inter.data || []).map((r) => ({
         id: r.id, type: r.type, summary: r.summary || "", loggedBy: r.logged_by, loggedAt: r.logged_at,
       })));
@@ -97,12 +140,13 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
     setSaveError("");
     const inv = Number(form.investment);
     const rev = Number(form.revenue) || 0;
+    const vendas = form.vendas ? Number(form.vendas) : null; // ticket é gerado no banco (revenue/vendas)
     const roi = calcROI(rev, inv);
 
     try {
       const { error } = await supabase.from("client_financial_results").upsert({
         client_id: client.id, month: form.month,
-        investment: inv, revenue: rev, roi,
+        investment: inv, revenue: rev, roi, vendas,
         strategy_note: form.strategyNote, recorded_by: currentUser,
       }, { onConflict: "client_id,month" });
 
@@ -121,15 +165,12 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
       return;
     }
 
-    setForm({ month: new Date().toISOString().slice(0, 7), investment: "", revenue: "", strategyNote: "" });
+    setForm({ month: new Date().toISOString().slice(0, 7), investment: "", revenue: "", vendas: "", strategyNote: "" });
     setShowAddRecord(false);
     setSaving(false);
     // Reload
     const { data } = await supabase.from("client_financial_results").select("*").eq("client_id", client.id).order("month");
-    if (data) setRecords(data.map((r) => ({
-      id: r.id, month: r.month, investment: Number(r.investment), revenue: Number(r.revenue),
-      roi: r.roi !== null ? Number(r.roi) : null, strategyNote: r.strategy_note || "", recordedBy: r.recorded_by,
-    })));
+    if (data) setRecords(data.map(mapFinancialRow));
   };
 
   const handleAddInteraction = async () => {
@@ -191,6 +232,12 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
   const totalInvestment = records.reduce((s, r) => s + r.investment, 0);
   const totalRevenue = records.reduce((s, r) => s + r.revenue, 0);
   const avgROI = totalInvestment > 0 ? Math.round(((totalRevenue - totalInvestment) / totalInvestment) * 100) : 0;
+
+  // Crescimento do negócio (Ficha Viva — Fase 1)
+  const growth = computeGrowthHealth(records);
+  const lastRecord = records.length ? records[records.length - 1] : null; // records vêm ordenados por mês asc
+  const ticketChartData = records.filter((r) => r.ticket != null).map((r) => ({ month: r.month?.slice(5) ?? "N/A", Ticket: r.ticket }));
+
   const lastInteraction = interactions[0];
   const daysSinceInteraction = lastInteraction ? Math.ceil((Date.now() - new Date(lastInteraction.loggedAt).getTime()) / 86400000) : null;
 
@@ -248,6 +295,76 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Crescimento do negócio — Health de crescimento (tendência de faturamento) + ticket */}
+      {records.length > 0 && (
+        <div className="card space-y-4">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <TrendingUp size={14} className="text-primary" /> Crescimento do Negócio
+          </h3>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            {/* Selo de saúde de crescimento */}
+            <div className={`shrink-0 rounded-xl border px-4 py-3 flex items-center gap-3 ${
+              growth.level === "up" ? "bg-lone-success-bg border-lone-success-border" :
+              growth.level === "down" ? "bg-destructive/10 border-destructive/20" :
+              growth.level === "flat" ? "bg-lone-warning-bg border-lone-warning-border" :
+              "bg-muted/30 border-border"
+            }`}>
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                growth.level === "up" ? "bg-lone-success/15" :
+                growth.level === "down" ? "bg-destructive/15" :
+                growth.level === "flat" ? "bg-lone-warning/15" : "bg-muted"
+              }`}>
+                {growth.level === "up" ? <TrendingUp size={18} className="text-lone-success" /> :
+                 growth.level === "down" ? <TrendingDown size={18} className="text-destructive" /> :
+                 growth.level === "flat" ? <Minus size={18} className="text-lone-warning" /> :
+                 <AlertTriangle size={16} className="text-muted-foreground" />}
+              </div>
+              <div>
+                <p className={`text-sm font-bold ${
+                  growth.level === "up" ? "text-lone-success" :
+                  growth.level === "down" ? "text-destructive" :
+                  growth.level === "flat" ? "text-lone-warning" : "text-muted-foreground"
+                }`}>{growth.label}{growth.pct !== null ? ` · ${growth.pct >= 0 ? "+" : ""}${growth.pct}%` : ""}</p>
+                <p className="text-[10px] text-muted-foreground">Saúde de crescimento</p>
+              </div>
+            </div>
+            {/* Leitura + último mês */}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-foreground">{growth.reading}</p>
+              {lastRecord && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px]">
+                  <span className="text-muted-foreground">Último mês <span className="font-mono text-foreground">{lastRecord.month}</span></span>
+                  <span className="text-lone-success">Fat: {formatCurrency(lastRecord.revenue)}</span>
+                  {lastRecord.vendas != null && <span className="text-primary">Vendas: {lastRecord.vendas}</span>}
+                  {lastRecord.ticket != null && <span className="text-foreground">Ticket: {formatCurrency(lastRecord.ticket)}</span>}
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Tendência de ticket médio */}
+          {ticketChartData.length >= 2 && (
+            <div className="pt-3 border-t border-border">
+              <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><ShoppingBag size={10} /> Ticket médio por mês</p>
+              <div className="h-[160px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={ticketChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="month" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={{ stroke: "var(--border)" }} />
+                    <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={{ stroke: "var(--border)" }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "var(--border)", border: "1px solid var(--border)", borderRadius: 12, fontSize: 12 }}
+                      labelStyle={{ color: "var(--muted-foreground)" }}
+                      formatter={(v) => [formatCurrency(Number(v)), "Ticket"]}
+                    />
+                    <Line type="monotone" dataKey="Ticket" stroke="var(--primary)" strokeWidth={2} dot={{ fill: "var(--primary)", r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Aha! Moment button */}
       {waitingTTV && isAdmin && (
@@ -325,9 +442,11 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
                 <div key={r.id} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-muted/30 transition-colors">
                   <span className="text-xs text-muted-foreground w-16 shrink-0 font-mono">{r.month}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-4 text-xs">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                       <span className="text-primary">Inv: {formatCurrency(r.investment)}</span>
                       <span className="text-lone-success">Fat: {formatCurrency(r.revenue)}</span>
+                      {r.vendas != null && <span className="text-muted-foreground">Vendas: {r.vendas}</span>}
+                      {r.ticket != null && <span className="text-foreground">Ticket: {formatCurrency(r.ticket)}</span>}
                       <span className={`font-medium ${r.roi !== null && r.roi >= 0 ? "text-lone-success" : "text-destructive"}`}>
                         ROI: {r.roi !== null ? `${r.roi}%` : "—"}
                       </span>
@@ -401,6 +520,19 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
                   <label className="text-xs text-muted-foreground">Faturamento (R$)</label>
                   <input type="number" value={form.revenue} onChange={(e) => setForm((p) => ({ ...p, revenue: e.target.value }))}
                     placeholder="0.00" className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">Vendas (nº)</label>
+                  <input type="number" value={form.vendas} onChange={(e) => setForm((p) => ({ ...p, vendas: e.target.value }))}
+                    placeholder="0" className="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/50" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">Ticket médio</label>
+                  <div className="w-full bg-muted/30 border border-border rounded-lg px-3 py-2.5 text-sm text-muted-foreground">
+                    {form.revenue && form.vendas && Number(form.vendas) > 0 ? formatCurrency(Number(form.revenue) / Number(form.vendas)) : "—"}
+                  </div>
                 </div>
               </div>
               {form.investment && form.revenue && Number(form.investment) > 0 && (
