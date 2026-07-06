@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { USER_PROFILES } from "@/lib/context/RoleContext";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import MedievalAvatar, { AVATAR_OPTIONS, getUserAvatar, setUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
 import type { Role, Client } from "@/lib/types";
 import { fetchChurnedClients } from "@/lib/supabase/queries";
@@ -182,6 +183,7 @@ export default function CEOPage() {
     { value: "traffic", label: "Gestor de Tráfego" },
     { value: "social", label: "Social Media" },
     { value: "designer", label: "Designer" },
+    { value: "comercial", label: "Comercial (SDR)" },
   ];
 
   interface TeamMember {
@@ -259,15 +261,16 @@ export default function CEOPage() {
     setEditPassword(member.password);
   }, []);
 
-  const handleSaveEdit = useCallback(() => {
+  const handleSaveEdit = useCallback(async () => {
     if (!editingId || !editName.trim() || !editEmail.trim()) return;
+    const emailNorm = editEmail.trim().toLowerCase();
     setTeamMembers((prev) =>
       prev.map((m) =>
         m.id === editingId
           ? {
               ...m,
               name: editName.trim(),
-              email: editEmail.trim().toLowerCase(),
+              email: emailNorm,
               role: editRole,
               initials: generateInitials(editName),
               password: editPassword || m.password,
@@ -277,6 +280,20 @@ export default function CEOPage() {
     );
     // Save avatar
     setUserAvatar(editingId, editAvatar);
+    // Senha nova → atualiza DE VERDADE no Supabase Auth (o campo antes só mexia no estado local
+    // da lista e a troca "não pegava" no login).
+    if (editPassword.trim()) {
+      try {
+        const r = await authedFetch("/api/auth/set-password", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: emailNorm, password: editPassword }),
+        });
+        const d = await r.json().catch(() => ({}));
+        alert(r.ok ? "Senha atualizada no login ✓" : `Senha NÃO atualizada: ${d.error || `HTTP ${r.status}`}`);
+      } catch {
+        alert("Falha de conexão ao atualizar a senha.");
+      }
+    }
     setEditingId(null);
   }, [editingId, editName, editEmail, editRole, editPassword, editAvatar]);
 
