@@ -9,6 +9,7 @@ interface NotificationsState {
   initialized: boolean;
 
   init: () => Promise<void>;
+  refresh: () => Promise<void>;
   subscribeRealtime: () => () => void;
 
   push: (type: NotificationType, title: string, body: string, clientId?: string) => Promise<void>;
@@ -35,6 +36,22 @@ export const useNotificationsStore = create<NotificationsState>()(
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const { notifications } = await res.json();
           set({ notifications, initialized: true }, false, "notifs/init/done");
+        } catch {}
+      },
+
+      // Recarrega do banco (o init tem guard e só roda 1x). Usado no poll do AppShell pra que
+      // notificações de OUTROS usuários (ex: "Conteúdo reprovado" pelo social) cheguem sem F5.
+      refresh: async () => {
+        try {
+          const res = await authedFetch("/api/data/notifications");
+          if (!res.ok) return;
+          const { notifications } = await res.json();
+          set((s) => {
+            // Banco é a verdade; preserva locais recém-empurrados que ainda não voltaram dele.
+            const dbIds = new Set((notifications as AppNotification[]).map((n) => n.id));
+            const localOnly = s.notifications.filter((n) => !dbIds.has(n.id));
+            return { notifications: [...localOnly, ...notifications], initialized: true };
+          }, false, "notifs/refresh");
         } catch {}
       },
 

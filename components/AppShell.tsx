@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { RoleProvider, useRole } from "@/lib/context/RoleContext";
 import { AppStateProvider } from "@/lib/context/AppStateContext";
 import { NavProvider, useNav } from "@/lib/context/NavContext";
+import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import Sidebar from "@/components/Sidebar";
 import LoginScreen from "@/components/LoginScreen";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -43,6 +44,19 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { secondaryOpen, mobileOpen, setMobileOpen } = useNav();
   // Meta token expiry check is handled by useMetaConnection (Supabase-backed)
+
+  // Notificações do sino — ninguém carregava o histórico do banco, então cada usuário só via o
+  // que a própria sessão empurrava (ex: o designer nunca recebia "Conteúdo reprovado" do social).
+  // Carrega no login + refetch a cada 45s (aba visível) e ao voltar o foco. Realtime está OFF.
+  const initNotifs = useNotificationsStore((s) => s.init);
+  const refreshNotifs = useNotificationsStore((s) => s.refresh);
+  useEffect(() => {
+    initNotifs();
+    const tick = () => { if (document.visibilityState === "visible") refreshNotifs(); };
+    const interval = setInterval(tick, 45000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", tick); };
+  }, [initNotifs, refreshNotifs]);
 
   // Secondary sidebar is 240px; primary is 72px
   const hasSecondaryRoute = SECONDARY_ROUTES.some(

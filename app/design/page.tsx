@@ -403,6 +403,7 @@ export default function DesignPage() {
   const addDesignRequest = useContentStore((s) => s.addDesignRequest);
   const initContent = useContentStore((s) => s.init);
   const subContent = useContentStore((s) => s.subscribeRealtime);
+  const refreshContent = useContentStore((s) => s.refresh);
 
   const pushNotification = useNotificationsStore((s) => s.push);
 
@@ -415,6 +416,16 @@ export default function DesignPage() {
     const u2 = subContent();
     return () => { u1(); u2(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Polling leve — realtime OFF no servidor (RAM). Sem isso, o designer fica congelado no
+  // snapshot do load: uma alteração/reprovação pedida DEPOIS pelo social nunca aparecia
+  // (contentApprovals não atualizava). Refetch a cada 45s com a aba visível + ao voltar o foco.
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === "visible") refreshContent(); };
+    const interval = setInterval(tick, 45000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", tick); };
+  }, [refreshContent]);
   const [tab, setTab] = useState<TabView>("kanbans");
   const [kanbanGroupBy, setKanbanGroupBy] = useState<"person" | "client">("person"); // agrupar por pessoa ou por cliente (visão unificada)
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();
