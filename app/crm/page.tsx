@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useRole } from "@/lib/context/RoleContext";
+import { useNav } from "@/lib/context/NavContext";
 import KanbanBoard, { type KanbanColumn } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
 import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead, type CrmLeadActivity, type CrmAtividadeTipo, type CrmMeta } from "@/lib/types";
@@ -20,6 +21,9 @@ const ESTAGIO_META: Record<CrmEstagio, { title: string; color: string }> = {
   perdido:   { title: "Perdido",   color: "bg-lone-danger" },
 };
 const ABERTOS: CrmEstagio[] = ["lead", "orcamento", "proposta", "reuniao"];
+
+// Canais de venda (origem do lead) — padroniza o campo pra relatórios limpos por canal.
+const CANAIS = ["Indicação", "Tráfego pago", "Instagram", "Prospecção ativa", "Site / formulário", "WhatsApp", "Evento / networking", "Parceria", "Outro"];
 
 // ─── Formatação ──────────────────────────────────────────────────────
 const brl = (v: number | null | undefined) =>
@@ -111,6 +115,18 @@ export default function CrmPage() {
       .catch(() => {});
   }, [podeVer]);
 
+  // Sidebar secundária nativa: clicar num item seta pendingTab → troca a aba aqui;
+  // setCurrentTab mantém o item ativo destacado na sidebar.
+  const { pendingTab, setPendingTab, setCurrentTab } = useNav();
+  useEffect(() => { setCurrentTab(tab); }, [tab, setCurrentTab]);
+  useEffect(() => {
+    if (!pendingTab) return;
+    if (["hoje", "dashboard", "funil", "agenda", "relatorios"].includes(pendingTab)) {
+      setTab(pendingTab as typeof tab);
+    }
+    setPendingTab("");
+  }, [pendingTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function salvarMeta() {
     const val = metaInput.trim() === "" ? null : Number(metaInput);
     const r = await authedFetch("/api/crm/metas", {
@@ -152,6 +168,10 @@ export default function CrmPage() {
     });
     const maxValor = Math.max(1, ...porMes.map((m) => m.valor));
 
+    // Leads que ENTRARAM em cada mês (por created_at) — captação mês a mês, relatório separado.
+    const leadsPorMes = meses.map((ym) => ({ ym, qtd: leads.filter((l) => (l.createdAt || "").slice(0, 7) === ym).length }));
+    const maxLeadsMes = Math.max(1, ...leadsPorMes.map((m) => m.qtd));
+
     const agrupa = (chave: (l: CrmLead) => string | null) => {
       const grupos = new Map<string, { total: number; ganhos: number; valor: number }>();
       for (const l of leads) {
@@ -169,7 +189,7 @@ export default function CrmPage() {
       motivos.set(m, (motivos.get(m) ?? 0) + 1);
     }
     return {
-      porMes, maxValor,
+      porMes, maxValor, leadsPorMes, maxLeadsMes,
       porOrigem: agrupa((l) => l.origem),
       porResponsavel: agrupa((l) => l.responsavel),
       motivos: [...motivos.entries()].sort((a, b) => b[1] - a[1]),
@@ -346,32 +366,9 @@ export default function CrmPage() {
         </Button>
       </header>
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
-        {/* Sidebar (desktop) — nav agrupada */}
-        <aside className="hidden shrink-0 lg:block lg:w-48">
-          {([
-            { grupo: "Resultados", itens: [["hoje", "Hoje", Sun], ["dashboard", "Dashboard", LayoutDashboard]] },
-            { grupo: "Operação", itens: [["funil", "Funil", Columns3], ["agenda", "Agenda", CalendarDays]] },
-            { grupo: "Análise", itens: [["relatorios", "Relatórios", BarChart3]] },
-          ] as const).map((g) => (
-            <div key={g.grupo} className="mb-4">
-              <p className="mb-1.5 px-3 text-lone-eyebrow uppercase text-muted-foreground">{g.grupo}</p>
-              <div className="space-y-0.5">
-                {g.itens.map(([id, label, Icon]) => (
-                  <button key={id} onClick={() => setTab(id)}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-lone-body transition-colors ${tab === id ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}>
-                    <Icon size={16} /> {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </aside>
-
-        {/* Conteúdo */}
-        <div className="min-w-0 flex-1 space-y-5">
-          {/* Abas (mobile) */}
-          <div className="flex gap-1 overflow-x-auto border-b border-border lg:hidden">
+      {/* No desktop, a sidebar secundária NATIVA (Sidebar.tsx → SECONDARY_NAV["/crm"]) cuida da
+          navegação — fica colada no rail principal. No mobile, abas horizontais. */}
+      <div className="flex gap-1 overflow-x-auto border-b border-border lg:hidden">
             {([["hoje", "Hoje", Sun], ["dashboard", "Dashboard", LayoutDashboard], ["funil", "Funil", Columns3], ["agenda", "Agenda", CalendarDays], ["relatorios", "Relatórios", BarChart3]] as const).map(([id, label, Icon]) => (
               <button key={id} onClick={() => setTab(id)}
                 className={`flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2 text-lone-body font-medium transition-colors ${tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
@@ -735,6 +732,24 @@ export default function CrmPage() {
             </table>
           </section>
 
+          {/* Leads por mês (captação) */}
+          <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
+            <h2 className="text-lone-h2 text-foreground">Leads por mês</h2>
+            <p className="text-lone-caption text-muted-foreground">Quantos leads entraram em cada mês (pela data de cadastro) — últimos 6 meses</p>
+            <div className="mt-4 flex h-32 items-end gap-4 border-b border-border pb-px">
+              {relatorio.leadsPorMes.map((m) => {
+                const atual = m.ym === hoje.slice(0, 7);
+                return (
+                  <div key={m.ym} className="flex h-full flex-1 flex-col items-center justify-end gap-1" title={`${mesLabel(m.ym)}/${m.ym.slice(0, 4)} — ${m.qtd} lead(s)`}>
+                    {m.qtd > 0 && <span className={`text-lone-caption ${atual ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{m.qtd}</span>}
+                    <div className={`w-full max-w-12 rounded-t ${m.qtd > 0 ? "bg-primary" : "bg-muted"}`} style={{ height: m.qtd > 0 ? `${Math.max(6, (m.qtd / relatorio.maxLeadsMes) * 100)}%` : "3px" }} />
+                    <span className={`text-lone-caption capitalize ${atual ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{mesLabel(m.ym)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
           {/* Por origem */}
           <section className="rounded-xl border border-border bg-card p-5">
             <h2 className="mb-3 text-sm font-semibold text-foreground">Por origem</h2>
@@ -789,9 +804,6 @@ export default function CrmPage() {
         </div>
       )}
 
-        </div>
-      </div>
-
       {/* Modal add/editar */}
       {draft && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setDraft(null)}>
@@ -833,9 +845,12 @@ export default function CrmPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Origem</label>
-                  <input className={inputCls} value={draft.origem ?? ""} onChange={(e) => setDraft({ ...draft, origem: e.target.value })} placeholder="indicação, tráfego…" list="crm-origens" />
-                  <datalist id="crm-origens">{origens.map((o) => <option key={o} value={o} />)}</datalist>
+                  <label className="mb-1 block text-xs text-muted-foreground">Canal de venda</label>
+                  <select className={inputCls} value={draft.origem ?? ""} onChange={(e) => setDraft({ ...draft, origem: e.target.value || null })}>
+                    <option value="">Selecione o canal…</option>
+                    {CANAIS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    {draft.origem && !CANAIS.includes(draft.origem) && <option value={draft.origem}>{draft.origem} (antigo)</option>}
+                  </select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -862,8 +877,11 @@ export default function CrmPage() {
                 <label className="mb-1 block text-xs text-muted-foreground">Observações</label>
                 <textarea className={inputCls} rows={3} value={draft.observacoes ?? ""} onChange={(e) => setDraft({ ...draft, observacoes: e.target.value })} />
               </div>
+              {draft.createdAt && (
+                <p className="text-lone-caption text-muted-foreground">Entrou em {new Date(draft.createdAt).toLocaleDateString("pt-BR")} — usado no relatório de leads por mês.</p>
+              )}
               {draft.fechadoEm && (
-                <p className="text-[11px] text-muted-foreground">Fechado em {new Date(draft.fechadoEm).toLocaleDateString("pt-BR")} — conta no relatório desse mês.</p>
+                <p className="text-lone-caption text-muted-foreground">Fechado em {new Date(draft.fechadoEm).toLocaleDateString("pt-BR")} — conta no relatório desse mês.</p>
               )}
 
               {/* WhatsApp + Histórico do lead (só quando já existe — novo lead ainda não tem id) */}

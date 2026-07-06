@@ -38,7 +38,7 @@ const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/social",        icon: Instagram,       label: "Social",     roles: ["admin","manager","social","designer"],          hasSecondary: true },
   { href: "/design",        icon: Palette,         label: "Designer",   roles: ["admin","manager","designer","social"],          hasSecondary: true },
   { href: "/clients",       icon: Users,           label: "Clientes",   roles: ["admin","manager"],                              hasSecondary: true },
-  { href: "/crm",           icon: Handshake,       label: "Comercial",  roles: ["admin","manager","comercial"] },
+  { href: "/crm",           icon: Handshake,       label: "Comercial",  roles: ["admin","manager","comercial"], hasSecondary: true },
   { href: "/contratos",     icon: FileText,        label: "Contratos",  roles: ["admin","manager"] },
   { href: "/churn",         icon: Thermometer,     label: "Termômetro",  roles: ["admin","manager"] },
   { href: "/defesa",        icon: ShieldAlert,     label: "Defesa Ativa",roles: ["admin","manager","traffic"] },
@@ -144,6 +144,31 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
           { label: "Todos os Clientes", icon: Users,         href: "/clients" },
           { label: "Em Risco",          icon: AlertTriangle, href: "/clients?filter=at_risk", badgeKey: "atRisk" },
           { label: "Objetivos",         icon: Target,        href: "/clients?filter=goals" },
+        ],
+      },
+    ],
+  },
+  "/crm": {
+    title: "Comercial",
+    sections: [
+      {
+        title: "Resultados",
+        items: [
+          { label: "Hoje",       icon: Sun,             tab: "hoje" },
+          { label: "Dashboard",  icon: LayoutDashboard, tab: "dashboard" },
+        ],
+      },
+      {
+        title: "Operação",
+        items: [
+          { label: "Funil",   icon: Layers,   tab: "funil" },
+          { label: "Agenda",  icon: Calendar, tab: "agenda" },
+        ],
+      },
+      {
+        title: "Análise",
+        items: [
+          { label: "Relatórios", icon: BarChart2, tab: "relatorios" },
         ],
       },
     ],

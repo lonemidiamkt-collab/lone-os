@@ -21,7 +21,7 @@ import SessionTimeout from "@/components/SessionTimeout";
 import RealtimeToast from "@/components/RealtimeToast";
 
 // Routes that have a secondary sidebar (240px extra)
-const SECONDARY_ROUTES = ["/traffic", "/social", "/design", "/clients"];
+const SECONDARY_ROUTES = ["/traffic", "/social", "/design", "/clients", "/crm"];
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, hydrated } = useRole();
