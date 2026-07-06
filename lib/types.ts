@@ -37,6 +37,14 @@ export interface CrmLeadActivity {
   createdAt: string;
 }
 
+// Meta mensal do comercial (SDR) — norte + progresso no dashboard. Ver migration 067.
+export interface CrmMeta {
+  mes: string;              // YYYY-MM
+  metaValor: number | null; // meta de vendas (R$)
+  metaLeads: number | null; // meta de leads novos
+  updatedAt: string;
+}
+
 export type ClientStatus = "onboarding" | "good" | "average" | "at_risk";
 export type AttentionLevel = "low" | "medium" | "high" | "critical";
 export type Priority = "low" | "medium" | "high" | "critical";

@@ -5,7 +5,7 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useRole } from "@/lib/context/RoleContext";
 import KanbanBoard, { type KanbanColumn } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
-import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead, type CrmLeadActivity, type CrmAtividadeTipo } from "@/lib/types";
+import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead, type CrmLeadActivity, type CrmAtividadeTipo, type CrmMeta } from "@/lib/types";
 import { Plus, X, Search, TrendingUp, Wallet, Trophy, Percent, Receipt, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -91,8 +91,13 @@ export default function CrmPage() {
   const [loadingAtiv, setLoadingAtiv] = useState(false);
   const [novaTipo, setNovaTipo] = useState<CrmAtividadeTipo>("nota");
   const [novoTexto, setNovoTexto] = useState("");
+  // Meta mensal (dashboard).
+  const [meta, setMeta] = useState<CrmMeta | null>(null);
+  const [editMeta, setEditMeta] = useState(false);
+  const [metaInput, setMetaInput] = useState("");
 
   const podeVer = role === "admin" || role === "manager" || role === "comercial";
+  const mesAtualYm = hojeYmd().slice(0, 7);
 
   useEffect(() => {
     if (!podeVer) { setLoading(false); return; }
@@ -100,7 +105,20 @@ export default function CrmPage() {
       .then((r) => (r.ok ? r.json() : { leads: [] }))
       .then((d) => setLeads(d.leads ?? []))
       .finally(() => setLoading(false));
+    authedFetch(`/api/crm/metas?mes=${mesAtualYm}`)
+      .then((r) => (r.ok ? r.json() : { meta: null }))
+      .then((d) => setMeta(d.meta ?? null))
+      .catch(() => {});
   }, [podeVer]);
+
+  async function salvarMeta() {
+    const val = metaInput.trim() === "" ? null : Number(metaInput);
+    const r = await authedFetch("/api/crm/metas", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mes: mesAtualYm, metaValor: val, metaLeads: meta?.metaLeads ?? null }),
+    }).catch(() => null);
+    if (r?.ok) { const { meta: m } = await r.json(); setMeta(m); setEditMeta(false); }
+  }
 
   // ─── KPIs ──────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -375,6 +393,37 @@ export default function CrmPage() {
 
       {tab === "dashboard" && (
         <div className="space-y-5">
+          {/* Meta do mês */}
+          <section className="rounded-xl border border-border bg-card p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-lone-eyebrow uppercase text-muted-foreground">Meta do mês</p>
+                <p className="mt-1 text-lone-hero tracking-tight text-foreground">{brl(kpis.valorMes)} <span className="text-lone-body text-muted-foreground">/ {meta?.metaValor ? brl(meta.metaValor) : "sem meta"}</span></p>
+              </div>
+              {editMeta ? (
+                <div className="flex items-center gap-2">
+                  <input type="number" autoFocus value={metaInput} onChange={(e) => setMetaInput(e.target.value)} placeholder="Meta em R$" className={`${inputCls} w-36`} onKeyDown={(e) => { if (e.key === "Enter") salvarMeta(); }} />
+                  <Button size="sm" onClick={salvarMeta}>Salvar</Button>
+                  <button onClick={() => setEditMeta(false)} className="text-lone-caption text-muted-foreground hover:text-foreground">cancelar</button>
+                </div>
+              ) : (
+                <button onClick={() => { setEditMeta(true); setMetaInput(meta?.metaValor != null ? String(meta.metaValor) : ""); }} className="rounded-lg border border-border px-3 py-1.5 text-lone-caption text-muted-foreground transition-colors hover:text-foreground">
+                  {meta?.metaValor ? "Editar meta" : "Definir meta"}
+                </button>
+              )}
+            </div>
+            {meta?.metaValor ? (() => {
+              const pct = Math.min(100, Math.round((kpis.valorMes / meta.metaValor!) * 100));
+              const falta = Math.max(0, meta.metaValor! - kpis.valorMes);
+              return (
+                <div className="mt-4">
+                  <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} /></div>
+                  <p className="mt-2 text-lone-caption text-muted-foreground">{pct}% da meta{falta > 0 ? ` · faltam ${brl(falta)}` : " · meta batida!"}</p>
+                </div>
+              );
+            })() : null}
+          </section>
+
           {/* KPIs */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
             <Kpi icon={TrendingUp} label="Leads ativos" value={String(kpis.abertos)} sub="no funil agora" />

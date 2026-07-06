@@ -28,7 +28,7 @@ import type {
   MoodEntry, MoodType, CreativeAsset, SocialProofEntry, CrisisNote,
   Notice, QuinzReport, ClientAccess, TrafficMonthlyReport,
   TrafficRoutineCheck, SocialMonthlyReport, ContentApproval,
-  Role, CardAttachment, CsClientRule, CrmLead, CrmEstagio, CrmLeadActivity, CrmAtividadeTipo,
+  Role, CardAttachment, CsClientRule, CrmLead, CrmEstagio, CrmLeadActivity, CrmAtividadeTipo, CrmMeta,
 } from "@/lib/types";
 
 // No servidor (API routes), supabase browser client não tem session → RLS bloqueia tudo.
@@ -1030,6 +1030,30 @@ export async function insertLeadActivity(a: { leadId: string; tipo: string; text
     .select("*").single();
   if (error) { console.error("[DB] insertLeadActivity falhou:", error.message); throw new Error(error.message); }
   return snakeToCrmActivity(data);
+}
+
+// ── Meta mensal do comercial ──
+function snakeToCrmMeta(r: Record<string, unknown>): CrmMeta {
+  return {
+    mes: r.mes as string,
+    metaValor: (r.meta_valor as number) ?? null,
+    metaLeads: (r.meta_leads as number) ?? null,
+    updatedAt: (r.updated_at as string) ?? "",
+  };
+}
+
+export async function fetchCrmMeta(mes: string): Promise<CrmMeta | null> {
+  const { data, error } = await db.from("crm_metas").select("*").eq("mes", mes).maybeSingle();
+  if (error || !data) return null;
+  return snakeToCrmMeta(data);
+}
+
+export async function upsertCrmMeta(mes: string, metaValor: number | null, metaLeads: number | null): Promise<CrmMeta> {
+  const { data, error } = await db.from("crm_metas")
+    .upsert({ mes, meta_valor: metaValor, meta_leads: metaLeads, updated_at: new Date().toISOString() }, { onConflict: "mes" })
+    .select("*").single();
+  if (error) { console.error("[DB] upsertCrmMeta falhou:", error.message); throw new Error(error.message); }
+  return snakeToCrmMeta(data);
 }
 
 // ═══════════════════════════════════════════════════════════
