@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { cardsParados, formatRaioXGestor } from "@/lib/cs/gestor";
+import { cardsParados, formatRaioXGestor, retrabalhoPorSocial } from "@/lib/cs/gestor";
 import type { OperationalKpis } from "@/lib/kpis/operational";
 import type { ContentCard } from "@/lib/types";
 
@@ -61,5 +61,32 @@ describe("formatRaioXGestor", () => {
     expect(msg).toContain("Travados há +2 dias úteis* (3)");
     expect(msg).toMatch(/Carlos\*: 2 \(\+1\) — pior: "Panfleto"/);
     expect(msg).toContain('Pedro*: 1 — pior: "Reel"');
+  });
+});
+
+describe("retrabalhoPorSocial", () => {
+  it("agrupa e ordena por qtd desc; social vazio vira 'sem responsável'", () => {
+    const out = retrabalhoPorSocial([
+      { social_media: "Carlos" }, { social_media: "Carlos" }, { social_media: "Pedro" }, { social_media: null },
+    ]);
+    expect(out).toEqual([
+      { social: "Carlos", count: 2 },
+      { social: "Pedro", count: 1 },
+      { social: "sem responsável", count: 1 },
+    ]);
+  });
+});
+
+describe("formatRaioXGestor — retrabalho", () => {
+  it("total 0 → mensagem positiva", () => {
+    expect(formatRaioXGestor(KPIS, [], "06/07", [])).toContain("Retrabalho (7 dias)*: 0");
+  });
+  it("com reprovações → total + por social", () => {
+    const msg = formatRaioXGestor(KPIS, [], "06/07", [{ social: "Carlos", count: 3 }, { social: "Pedro", count: 1 }]);
+    expect(msg).toContain("Retrabalho (7 dias)*: 4 reprovações do social");
+    expect(msg).toContain("Carlos: 3 · Pedro: 1");
+  });
+  it("undefined → omite a seção (retrocompat)", () => {
+    expect(formatRaioXGestor(KPIS, [], "06/07")).not.toContain("Retrabalho");
   });
 });

@@ -31,8 +31,29 @@ export function cardsParados(
     .sort((a, b) => b.horasUteis - a.horasUteis);
 }
 
-/** Mensagem WhatsApp enxuta: fluxo (global) + travados agrupados por social (só o pior de cada). */
-export function formatRaioXGestor(kpis: OperationalKpis, parados: CardParado[], dataLabel: string): string {
+// ── Retrabalho (social reprova a arte do designer) — lido do log append-only cs_rework_events ──
+export interface ReworkEvent { social_media?: string | null; client_name?: string | null; }
+
+/** Reprovações agrupadas por social (mais reprovações primeiro). */
+export function retrabalhoPorSocial(events: ReworkEvent[]): { social: string; count: number }[] {
+  const map = new Map<string, number>();
+  for (const e of events) {
+    const s = e.social_media?.trim() || "sem responsável";
+    map.set(s, (map.get(s) ?? 0) + 1);
+  }
+  return [...map.entries()].map(([social, count]) => ({ social, count })).sort((a, b) => b.count - a.count);
+}
+
+/**
+ * Mensagem WhatsApp enxuta: fluxo (global) + travados por social (só o pior de cada) + retrabalho.
+ * `retrabalho` opcional: se passado (mesmo vazio) renderiza a seção; se undefined, omite.
+ */
+export function formatRaioXGestor(
+  kpis: OperationalKpis,
+  parados: CardParado[],
+  dataLabel: string,
+  retrabalho?: { social: string; count: number }[],
+): string {
   const linhas = [`🧭 *Raio-X do Gestor* — ${dataLabel}`, ``, `⏱️ *Fluxo*`];
 
   linhas.push(`Lead time: *${kpis.leadTimeDays ?? "—"}* dias (ideia → publicado)`);
@@ -60,6 +81,17 @@ export function formatRaioXGestor(kpis: OperationalKpis, parados: CardParado[], 
       const dias = Math.max(1, Math.round(pior.horasUteis / 8)); // horas úteis → dias úteis
       const extra = lista.length > 1 ? ` (+${lista.length - 1})` : "";
       linhas.push(`• *${social}*: ${lista.length}${extra} — pior: "${pior.titulo}" (${pior.etapa}, ${dias}d úteis parado)`);
+    }
+  }
+
+  if (retrabalho) {
+    const total = retrabalho.reduce((a, b) => a + b.count, 0);
+    linhas.push(``);
+    if (total === 0) {
+      linhas.push(`🔁 *Retrabalho (7 dias)*: 0 — ninguém precisou refazer 👏`);
+    } else {
+      linhas.push(`🔁 *Retrabalho (7 dias)*: ${total} reprovaç${total === 1 ? "ão" : "ões"} do social`);
+      linhas.push(retrabalho.map((r) => `${r.social}: ${r.count}`).join(" · "));
     }
   }
 

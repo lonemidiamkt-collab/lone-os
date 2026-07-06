@@ -64,6 +64,26 @@ export async function POST(req: NextRequest) {
         reason:      contentApproval.reason ?? null,
       });
       if (apprErr) return NextResponse.json({ error: apprErr.message }, { status: 500 });
+
+      // Log append-only de retrabalho: o delete acima apaga o histórico de reprovações, então
+      // cada reprovação é registrada à parte (denormalizada) pra medir taxa de retrabalho por
+      // social/cliente. Best-effort — não derruba a reprovação se o log falhar.
+      if (contentApproval.status === "rejected") {
+        try {
+          const { data: card } = await supabaseAdmin
+            .from("content_cards").select("client_id, client_name, social_media").eq("id", id as string).maybeSingle();
+          await supabaseAdmin.from("cs_rework_events").insert({
+            card_id:      id as string,
+            client_id:    card?.client_id ?? null,
+            client_name:  card?.client_name ?? null,
+            social_media: card?.social_media ?? null,
+            reviewed_by:  contentApproval.reviewedBy ?? null,
+            reason:       contentApproval.reason ?? null,
+          });
+        } catch (e) {
+          console.error("[content-cards/update] rework log falhou (ignorado):", e);
+        }
+      }
     }
 
     return NextResponse.json({ success: true });
