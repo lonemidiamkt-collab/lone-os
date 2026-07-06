@@ -294,7 +294,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 />
               )}
               <p className="text-[9px] text-muted-foreground text-center">
-                PNG, JPEG, WebP, GIF — até 10MB, máx 5 artes
+                PNG, JPEG, WebP, GIF — até 10MB, máx 10 artes
               </p>
             </div>
           </div>
@@ -786,6 +786,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
                   // Briefing gerado pela Lone (revisado no textarea) tem prioridade; senão, o do card.
                   briefing: (designBrief && designBrief.trim()) || card.briefing || card.observations || `Criar arte para: ${card.title}`,
                   contentCardId: card.id, // vincula a demanda ao card já na criação (link à prova de falha)
+                  deadline: dueDate,      // data de postagem do card = prazo da arte pro designer ver
                 })
                   .then((req) => {
                     updateContentCard(card.id, { designRequestId: req.id });

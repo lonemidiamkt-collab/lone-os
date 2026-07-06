@@ -175,7 +175,7 @@ export default function CardArtAttachments({
   existingAttachments,
   legacyImageUrl,
   onAttachmentsChange,
-  maxItems = 5,
+  maxItems = 10,
   readOnly = false,
 }: CardArtAttachmentsProps) {
   const [attachments, setAttachments] = useState<CardAttachment[]>(() =>

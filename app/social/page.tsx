@@ -2833,6 +2833,7 @@ export default function SocialPage() {
                   format: card.format || "Post Feed",
                   briefing: card.briefing || card.observations || `Criar arte para: ${card.title}`,
                   contentCardId: card.id,
+                  deadline: card.dueDate, // data de postagem = prazo da arte (designer precisa ver)
                 })
                   .then((req) => {
                     updateContentCard(card.id, { designRequestId: req.id });

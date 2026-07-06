@@ -97,6 +97,7 @@ function UploadArtModal({
     card.imageUrl && card.imageUrl.includes("drive.google.com") ? card.imageUrl : ""
   );
   const [attachments, setAttachments] = useState<CardAttachment[] | null>(null); // null = carregando
+  const [initialRefs, setInitialRefs] = useState<CardAttachment[]>([]); // artes já no card ao abrir = referência do social
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -109,7 +110,13 @@ function UploadArtModal({
     let alive = true;
     authedFetch(`/api/cards/${card.id}/attachments`)
       .then((r) => (r.ok ? r.json() : { attachments: [] }))
-      .then((d) => { if (alive) setAttachments((d.attachments as CardAttachment[]) ?? []); })
+      .then((d) => {
+        if (!alive) return;
+        const list = (d.attachments as CardAttachment[]) ?? [];
+        setAttachments(list);
+        // Só na 1ª carga: o que já está no card antes de eu entregar = referência do social.
+        setInitialRefs((prev) => (prev.length ? prev : list.filter((a) => a.id !== "legacy")));
+      })
       .catch(() => { if (alive) setAttachments([]); });
     return () => { alive = false; };
   }, [card.id]);
@@ -216,7 +223,7 @@ function UploadArtModal({
 
           {/* Artes (multi-arte) — upload direto, colar (Ctrl+V) ou arrastar */}
           <div className="space-y-1.5">
-            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Artes do card (até 5 · PNG, JPG, WebP, GIF · 10MB)</label>
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Artes do card (até 10 · PNG, JPG, WebP, GIF · 10MB)</label>
             {attachments === null ? (
               <div className="flex items-center justify-center py-6 text-muted-foreground">
                 <Upload size={16} className="animate-pulse" />
@@ -280,9 +287,29 @@ function UploadArtModal({
               <span className="text-muted-foreground">Formato:</span>
               <span className="text-foreground">{card.format}</span>
             </div>
+            {card.dueDate && (
+              <div className="flex items-center gap-2">
+                <Clock size={11} className="text-muted-foreground" />
+                <span className="text-muted-foreground">Data de entrega:</span>
+                <span className="text-foreground font-medium">{card.dueDate.slice(0, 10).split("-").reverse().join("/")}</span>
+              </div>
+            )}
             {card.briefing && (
               <div className="pt-1.5 border-t border-border mt-1.5">
                 <p className="text-muted-foreground leading-relaxed line-clamp-3">{markdownPlainText(card.briefing)}</p>
+              </div>
+            )}
+            {initialRefs.length > 0 && (
+              <div className="pt-1.5 border-t border-border mt-1.5 space-y-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">🖼️ Referência do social ({initialRefs.length})</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {initialRefs.map((ref, i) => (
+                    <a key={ref.id} href={ref.url} target="_blank" rel="noopener noreferrer"
+                       className="block rounded-lg overflow-hidden border border-border hover:border-primary/40 transition-colors" title="Abrir referência">
+                      <SignedImage src={ref.url} alt={`Referência ${i + 1}`} className="w-full h-16 object-cover bg-muted" />
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -439,11 +466,22 @@ export default function DesignPage() {
       return;
     }
 
+    const isDelivery = role === "designer";
+    // Entrega do designer sobe como ANEXO do card vinculado (card_attachments), não como upload
+    // avulso — assim o social vê TODAS as artes (carrossel), não só a última. Sem card vinculado,
+    // ou arquivo não-imagem (PDF/vídeo, que card_attachments não guarda) → cai no upload avulso.
+    const linkedCard = isDelivery
+      ? ((briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null) ??
+         contentCards.find((c) => c.designRequestId === briefingReq.id) ?? null)
+      : null;
+    const cardMimes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"];
+    const asCardAttachment = Boolean(linkedCard) && cardMimes.includes(file.type);
+
     setBriefingUploading(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("cardId", briefingReq.id);
+      formData.append("cardId", asCardAttachment ? linkedCard!.id : briefingReq.id);
       const { authedFetch } = await import("@/lib/supabase/authed-fetch");
       const res = await authedFetch("/api/upload-art", { method: "POST", body: formData });
       const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
@@ -452,22 +490,37 @@ export default function DesignPage() {
         console.error("[briefingReq upload]", { status: res.status, data });
         return;
       }
-      const artUrl = data.url as string;
+      // Modo card devolve { attachments: [row...] }; modo avulso devolve { url }.
+      const created = (Array.isArray(data.attachments) ? data.attachments : []) as CardAttachment[];
+      const artUrl = (data.url as string) ?? created[created.length - 1]?.url;
+      if (!artUrl) {
+        setBriefingUploadError("Resposta inesperada do upload — tente de novo.");
+        console.error("[briefingReq upload] resposta sem url", data);
+        return;
+      }
       const nextAttachments = [...(briefingReq.attachments ?? []), artUrl];
-      const isDelivery = role === "designer";
 
       if (isDelivery) {
         // Designer entrega arte final → marca como done + propaga para ContentCard
         updateDesignRequest(briefingReq.id, { attachments: nextAttachments, status: "done" });
         setBriefingReq({ ...briefingReq, attachments: nextAttachments, status: "done" });
-        const linkedCard =
-          (briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null) ??
-          contentCards.find((c) => c.designRequestId === briefingReq.id);
         if (linkedCard) {
+          const deliveredAt = new Date().toISOString();
+          // Modo card: a arte já entrou em card_attachments pela rota → reflete no store (capa +
+          // contagem no board social). Modo avulso (PDF/vídeo): cai no imageUrl legado.
+          if (created.length > 0) {
+            useContentStore.setState((s) => ({
+              contentCards: s.contentCards.map((c) =>
+                c.id === linkedCard.id
+                  ? { ...c, cardAttachments: [...(c.cardAttachments ?? []), ...created], imageUrl: c.imageUrl || created[0].url }
+                  : c,
+              ),
+            }));
+          }
           updateContentCard(linkedCard.id, {
-            imageUrl: artUrl,
-            designerDeliveredAt: new Date().toISOString(),
+            designerDeliveredAt: deliveredAt,
             designerDeliveredBy: currentUser,
+            ...(created.length === 0 ? { imageUrl: artUrl } : {}),
           }, { bypassWorkflow: true });
         }
         pushNotification("content", "Arte entregue pelo Designer", `"${briefingReq.title}" (${briefingReq.clientName}) — arte pronta para confirmação.`, briefingReq.clientId);
@@ -1453,10 +1506,13 @@ export default function DesignPage() {
               {/* Briefing Health Score */}
               {(() => {
                 const client = clients.find((c) => c.id === briefingReq.clientId);
+                // Fallback: demandas criadas antes do fix não têm deadline; usa a data de postagem do card.
+                const refCard = briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null;
+                const prazo = briefingReq.deadline || refCard?.dueDate;
                 const checks = [
                   { label: "Briefing preenchido", ok: !!(briefingReq.briefing && briefingReq.briefing.length > 10) },
                   { label: "Formato definido", ok: !!briefingReq.format },
-                  { label: "Prazo definido", ok: !!briefingReq.deadline },
+                  { label: "Prazo definido", ok: !!prazo },
                   { label: "Guidelines do cliente", ok: !!client?.fixedBriefing },
                 ];
                 const score = Math.round((checks.filter((c) => c.ok).length / checks.length) * 100);
@@ -1547,12 +1603,18 @@ export default function DesignPage() {
                   </>
                 );
               })()}
-              {briefingReq.deadline && (
-                <div className="flex items-center gap-2">
-                  <Clock size={13} className="text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Prazo: <span className="text-foreground font-medium">{briefingReq.deadline}</span></span>
-                </div>
-              )}
+              {(() => {
+                // Prazo = deadline da demanda OU, se nula (demanda antiga), a data de postagem do card vinculado.
+                const refCard = briefingReq.contentCardId ? contentCards.find((c) => c.id === briefingReq.contentCardId) : null;
+                const prazo = briefingReq.deadline || refCard?.dueDate;
+                if (!prazo) return null;
+                return (
+                  <div className="flex items-center gap-2">
+                    <Clock size={13} className="text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Data de entrega: <span className="text-foreground font-medium">{prazo.slice(0, 10).split("-").reverse().join("/")}</span></span>
+                  </div>
+                );
+              })()}
               <div className="flex items-center gap-2">
                 <Palette size={13} className="text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">Pedido por: <span className="text-foreground font-medium">{briefingReq.requestedBy}</span></span>
