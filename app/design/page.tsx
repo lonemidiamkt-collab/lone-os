@@ -1153,6 +1153,7 @@ export default function DesignPage() {
             designRequests={myDesignRequests}
             contentCards={myContentCards}
             updateDesignRequest={updateDesignRequest}
+            updateContentCard={updateContentCard}
             onBriefing={setBriefingReq}
             onDeleteRequest={setReqToDelete}
             currentUser={currentUser}
@@ -1814,6 +1815,7 @@ function RequestsView({
   designRequests,
   contentCards,
   updateDesignRequest,
+  updateContentCard,
   onBriefing,
   onDeleteRequest,
   currentUser,
@@ -1822,6 +1824,7 @@ function RequestsView({
   designRequests: DesignRequest[];
   contentCards: ContentCard[];
   updateDesignRequest: (id: string, updates: Partial<DesignRequest>) => void;
+  updateContentCard: (id: string, updates: Partial<ContentCard>, options?: { bypassWorkflow?: boolean }) => void;
   onBriefing: (req: DesignRequest) => void;
   onDeleteRequest?: (req: DesignRequest) => void;
   currentUser?: string;
@@ -1967,7 +1970,17 @@ function RequestsView({
             </div>
           )}
           onMove={(itemId, from, to) => {
-            if (to === "alteracoes" || from === "alteracoes") return; // coluna virtual, não é status real
+            if (to === "alteracoes") return; // não pode virar destino (coluna virtual)
+            if (from === "alteracoes") {
+              // Designer refez → tira da coluna Alterações: marca entregue de novo (limpa
+              // alteracaoPendente) + move a demanda pro destino (ex: Concluído). Antes o arraste
+              // pra fora era bloqueado e a arte ficava presa mesmo depois de refeita.
+              const req = designRequests.find((r) => r.id === itemId);
+              const card = req ? (contentCards.find((c) => c.id === req.contentCardId) ?? contentCards.find((c) => c.designRequestId === req.id)) : null;
+              if (card) updateContentCard(card.id, { designerDeliveredAt: new Date().toISOString(), designerDeliveredBy: currentUser }, { bypassWorkflow: true });
+              updateDesignRequest(itemId, { status: to as DesignRequest["status"] });
+              return;
+            }
             updateDesignRequest(itemId, { status: to as DesignRequest["status"] });
           }}
           onEdit={(item) => {
