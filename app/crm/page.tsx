@@ -346,15 +346,39 @@ export default function CrmPage() {
         </Button>
       </header>
 
-      {/* Abas */}
-      <div className="flex gap-1 border-b border-border">
-        {([["hoje", "Hoje", Sun], ["dashboard", "Dashboard", LayoutDashboard], ["funil", "Funil", Columns3], ["agenda", "Agenda", CalendarDays], ["relatorios", "Relatórios", BarChart3]] as const).map(([id, label, Icon]) => (
-          <button key={id} onClick={() => setTab(id)}
-            className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-lone-body font-medium transition-colors ${tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
-            <Icon size={15} /> {label}
-          </button>
-        ))}
-      </div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
+        {/* Sidebar (desktop) — nav agrupada */}
+        <aside className="hidden shrink-0 lg:block lg:w-48">
+          {([
+            { grupo: "Resultados", itens: [["hoje", "Hoje", Sun], ["dashboard", "Dashboard", LayoutDashboard]] },
+            { grupo: "Operação", itens: [["funil", "Funil", Columns3], ["agenda", "Agenda", CalendarDays]] },
+            { grupo: "Análise", itens: [["relatorios", "Relatórios", BarChart3]] },
+          ] as const).map((g) => (
+            <div key={g.grupo} className="mb-4">
+              <p className="mb-1.5 px-3 text-lone-eyebrow uppercase text-muted-foreground">{g.grupo}</p>
+              <div className="space-y-0.5">
+                {g.itens.map(([id, label, Icon]) => (
+                  <button key={id} onClick={() => setTab(id)}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-lone-body transition-colors ${tab === id ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}>
+                    <Icon size={16} /> {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </aside>
+
+        {/* Conteúdo */}
+        <div className="min-w-0 flex-1 space-y-5">
+          {/* Abas (mobile) */}
+          <div className="flex gap-1 overflow-x-auto border-b border-border lg:hidden">
+            {([["hoje", "Hoje", Sun], ["dashboard", "Dashboard", LayoutDashboard], ["funil", "Funil", Columns3], ["agenda", "Agenda", CalendarDays], ["relatorios", "Relatórios", BarChart3]] as const).map(([id, label, Icon]) => (
+              <button key={id} onClick={() => setTab(id)}
+                className={`flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2 text-lone-body font-medium transition-colors ${tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+                <Icon size={15} /> {label}
+              </button>
+            ))}
+          </div>
 
       {tab === "hoje" && (() => {
         const leadRow = (l: CrmLead, meta: string) => (
@@ -764,6 +788,9 @@ export default function CrmPage() {
           </section>
         </div>
       )}
+
+        </div>
+      </div>
 
       {/* Modal add/editar */}
       {draft && (
