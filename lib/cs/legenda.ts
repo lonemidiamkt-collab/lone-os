@@ -3,6 +3,7 @@
 // oferta ou claim — respeita os "⚠️ nunca fazer" do briefing. Provider: OpenAI gpt-4o (tom/copy).
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
+import { METODO_LEGENDA, fichaDoCliente } from "@/lib/cs/guia-legendas";
 
 export const LEGENDA_MODEL = "gpt-4o";
 
@@ -59,22 +60,24 @@ Responda APENAS no JSON do schema.`;
 
 export async function gerarLegenda(inp: LegendaInput): Promise<OpenAiResult<LegendaOutput>> {
   const regras = inp.regras?.length ? inp.regras.map((r) => `  - ${r}`).join("\n") : "  (nenhuma)";
+  const ficha = fichaDoCliente(inp.clienteNome); // voz + contato exato + condições + o que observar (guia)
   const user = [
     inp.arteDescricao
       ? `Arte (o que aparece na imagem — ESTE é o assunto do post): ${inp.arteDescricao.slice(0, 600)}`
       : `⚠️ Sem arte anexada — escreva a partir do tema/briefing (mais genérico).`,
     ``,
     `Cliente: ${inp.clienteNome}${inp.clienteNicho ? ` (${inp.clienteNicho})` : ""}`,
+    ficha ? `\n${ficha}\n` : "",
     `Briefing do cliente (tom/público/regras — NÃO troca o assunto da arte): ${inp.briefing?.trim().slice(0, 1800) || "(sem briefing cadastrado)"}`,
     `Do's & don'ts:\n${regras}`,
     `Tema/título do card: ${inp.titulo}`,
     inp.briefingCard ? `Briefing da arte: ${inp.briefingCard.slice(0, 800)}` : "",
     inp.formato ? `Formato: ${inp.formato}` : "",
     ``,
-    `Escreva a legenda pronta pra postar (no JSON) — sobre o que está na arte.`,
+    `Escreva a legenda pronta pra postar (no JSON), fechando SEMPRE com o contato da ficha.`,
   ].filter(Boolean).join("\n");
   return chatJson<LegendaOutput>({
     model: LEGENDA_MODEL, schemaName: "cs_legenda", schema: SCHEMA,
-    maxTokens: 600, temperature: 0.6, system: SYSTEM, user,
+    maxTokens: 700, temperature: 0.6, system: `${SYSTEM}\n\n${METODO_LEGENDA}`, user,
   });
 }
