@@ -6,7 +6,7 @@ import { useRole } from "@/lib/context/RoleContext";
 import KanbanBoard, { type KanbanColumn } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
 import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead, type CrmLeadActivity, type CrmAtividadeTipo } from "@/lib/types";
-import { Plus, X, Search, TrendingUp, Wallet, Trophy, Percent, Receipt, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3 } from "lucide-react";
+import { Plus, X, Search, TrendingUp, Wallet, Trophy, Percent, Receipt, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3, Sun } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 // ─── Metadados do funil ──────────────────────────────────────────────
@@ -31,13 +31,14 @@ const hojeYmd = () => new Date().toLocaleDateString("en-CA");
 const diasDesde = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 const iniciais = (nome: string) => nome.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
 
-// Link wa.me a partir do telefone (só dígitos; assume DDI Brasil se não vier).
+// Abre a conversa direto no WhatsApp Web logado no PC (send?phone= já cai na conversa; o wa.me
+// pedia um clique extra). Só dígitos; assume DDI Brasil se não vier.
 const waLink = (telefone: string | null | undefined): string | null => {
   if (!telefone) return null;
   let d = telefone.replace(/\D/g, "");
   if (!d) return null;
   if (!d.startsWith("55")) d = `55${d}`;
-  return `https://wa.me/${d}`;
+  return `https://web.whatsapp.com/send?phone=${d}`;
 };
 
 // Ícone + rótulo por tipo de atividade (timeline do lead).
@@ -79,7 +80,7 @@ export default function CrmPage() {
   const { role, currentUser } = useRole();
   const [leads, setLeads] = useState<CrmLead[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "funil" | "agenda" | "relatorios">("dashboard");
+  const [tab, setTab] = useState<"hoje" | "dashboard" | "funil" | "agenda" | "relatorios">("hoje");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [busca, setBusca] = useState("");
@@ -193,6 +194,20 @@ export default function CrmPage() {
     return { proximos, atrasados, porDia };
   }, [leads]);
 
+  // ─── Meus leads de hoje (a "home" do SDR) ──────────────────────────
+  const hojeData = useMemo(() => {
+    const hj = hojeYmd();
+    const reunioesHoje = leads.filter((l) => l.reuniaoData === hj);
+    const followsPendentes = leads
+      .filter((l) => l.proximoContato && l.proximoContato <= hj && ABERTOS.includes(l.estagio))
+      .sort((a, b) => (a.proximoContato || "").localeCompare(b.proximoContato || ""));
+    // Parados: em etapa aberta e sem atualização há 5+ dias.
+    const parados = leads
+      .filter((l) => ABERTOS.includes(l.estagio) && diasDesde(l.updatedAt) >= 5)
+      .sort((a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
+    return { reunioesHoje, followsPendentes, parados };
+  }, [leads]);
+
   // ─── Funil filtrado ────────────────────────────────────────────────
   const responsaveis = useMemo(() => [...new Set(leads.map((l) => l.responsavel).filter(Boolean))] as string[], [leads]);
   const origens = useMemo(() => [...new Set(leads.map((l) => l.origem).filter(Boolean))] as string[], [leads]);
@@ -302,8 +317,8 @@ export default function CrmPage() {
 
   return (
     <div className="space-y-5 p-6">
-      {/* Header */}
-      <header className="flex flex-wrap items-center justify-between gap-4">
+      {/* Header — pr-12 reserva o canto superior direito pro sino de notificações (fixo no AppShell). */}
+      <header className="flex flex-wrap items-center justify-between gap-4 pr-12">
         <div>
           <h1 className="text-lone-h1 tracking-tight text-foreground">Comercial</h1>
           <p className="text-lone-caption text-muted-foreground">Prospecção, agenda e vendas</p>
@@ -315,13 +330,48 @@ export default function CrmPage() {
 
       {/* Abas */}
       <div className="flex gap-1 border-b border-border">
-        {([["dashboard", "Dashboard", LayoutDashboard], ["funil", "Funil", Columns3], ["agenda", "Agenda", CalendarDays], ["relatorios", "Relatórios", BarChart3]] as const).map(([id, label, Icon]) => (
+        {([["hoje", "Hoje", Sun], ["dashboard", "Dashboard", LayoutDashboard], ["funil", "Funil", Columns3], ["agenda", "Agenda", CalendarDays], ["relatorios", "Relatórios", BarChart3]] as const).map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-lone-body font-medium transition-colors ${tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <Icon size={15} /> {label}
           </button>
         ))}
       </div>
+
+      {tab === "hoje" && (() => {
+        const leadRow = (l: CrmLead, meta: string) => (
+          <button key={l.id} onClick={() => setDraft({ ...l })} className="flex w-full items-center gap-3 rounded-lg border border-border bg-background p-3 text-left transition-colors hover:border-primary/40">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lone-caption font-semibold text-primary">{iniciais(l.contatoNome)}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-lone-body font-medium text-foreground">{l.contatoNome}</span>
+              <span className="block truncate text-lone-caption text-muted-foreground">{[l.empresa, meta].filter(Boolean).join(" · ")}</span>
+            </span>
+            {waLink(l.telefone) && (
+              <span role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); abrirWhatsApp(l.telefone, l.id); }} className="inline-flex shrink-0 items-center gap-1 rounded bg-lone-success-bg px-2 py-1 text-lone-caption font-medium text-lone-success transition-opacity hover:opacity-80">
+                <MessageCircle size={12} /> WhatsApp
+              </span>
+            )}
+          </button>
+        );
+        const cols: { titulo: string; lista: CrmLead[]; vazio: string; tone: string; meta: (l: CrmLead) => string }[] = [
+          { titulo: "Reuniões de hoje", lista: hojeData.reunioesHoje, vazio: "Nenhuma reunião marcada pra hoje.", tone: "bg-primary/10 text-primary", meta: () => "Reunião hoje" },
+          { titulo: "Follow-ups pra fazer", lista: hojeData.followsPendentes, vazio: "Nada pendente por agora.", tone: "bg-lone-warning-bg text-lone-warning", meta: (l) => `Contato ${fmtData(l.proximoContato)}` },
+          { titulo: "Leads parados", lista: hojeData.parados, vazio: "Nada parado — fluxo em dia.", tone: "bg-lone-danger-bg text-lone-danger", meta: (l) => `parado há ${diasDesde(l.updatedAt)}d` },
+        ];
+        return (
+          <div className="grid gap-4 lg:grid-cols-3">
+            {cols.map((c) => (
+              <section key={c.titulo} className="rounded-xl border border-border bg-card p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-lone-h2 text-foreground">{c.titulo}</h2>
+                  {c.lista.length > 0 && <span className={`rounded-full px-2 py-0.5 text-lone-eyebrow font-semibold ${c.tone}`}>{c.lista.length}</span>}
+                </div>
+                {c.lista.length === 0 ? <p className="text-lone-caption text-muted-foreground">{c.vazio}</p> : <div className="space-y-2">{c.lista.map((l) => leadRow(l, c.meta(l)))}</div>}
+              </section>
+            ))}
+          </div>
+        );
+      })()}
 
       {tab === "dashboard" && (
         <div className="space-y-5">
@@ -448,10 +498,12 @@ export default function CrmPage() {
               const reuniaoPassou = l.reuniaoData && l.reuniaoData < hoje && ABERTOS.includes(l.estagio);
               const followAtrasado = l.proximoContato && l.proximoContato < hoje && ABERTOS.includes(l.estagio);
               return (
-                <div className="rounded-lg border border-border bg-background p-3">
+                <div
+                  onClick={() => setDraft({ ...l })}
+                  className="cursor-pointer rounded-lg border border-border bg-background p-3 transition-colors hover:border-primary/40">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="truncate font-medium text-foreground">{l.contatoNome}</div>
+                      <div className="truncate text-lone-body font-medium text-foreground">{l.contatoNome}</div>
                       {l.empresa && <div className="truncate text-xs text-muted-foreground">{l.empresa}</div>}
                     </div>
                     {l.valorOrcamento != null && (

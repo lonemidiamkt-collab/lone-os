@@ -314,7 +314,7 @@ export default function Sidebar() {
         </button>
 
         {/* Nav icons */}
-        <nav className={cn("flex flex-col gap-0.5 flex-1 justify-center", expanded ? "w-full" : "items-center")}>
+        <nav className={cn("flex flex-col gap-0.5 flex-1 justify-start pt-1", expanded ? "w-full" : "items-center")}>
           {visibleItems.map((item) => {
             const isPage    = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             const isSection = activePrimary === item.href && secondaryOpen;
