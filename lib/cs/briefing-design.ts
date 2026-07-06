@@ -20,6 +20,7 @@ export interface BriefingDesignInput {
   palavrasProibidas?: string[];
   publicoAlvo?: string[];
   regras?: string[];         // cs_client_rules (do's & don'ts)
+  reprovacoesRecentes?: string[]; // motivos de reprovações anteriores do cliente (cs_rework_events) — evitar repetir
 }
 
 export interface BriefingDesignOutput {
@@ -60,6 +61,11 @@ que ser autossuficiente.
   cores/identidade se o briefing indicar). Nada vago tipo "imagem bonita".
 - nao_pode: proibições REAIS deste cliente/setor (palavras proibidas, claims, excesso de texto).
 
+# Aprender com o histórico (o que este cliente já reprovou)
+- Se vierem "REPROVAÇÕES ANTERIORES", é o que o cliente NÃO gosta (o social já mandou refazer por
+  isso). Trate como regra de ouro: NÃO repita esses erros e inclua os relevantes em "nao_pode".
+  É o que evita retrabalho e cansar o time.
+
 # Regras
 - NÃO invente preço, oferta, condição ou claim que não esteja no tema/briefing do card.
 - Respeite as palavras proibidas e os "⚠️ nunca fazer" do cliente.
@@ -82,6 +88,9 @@ export async function gerarBriefingDesign(inp: BriefingDesignInput): Promise<Ope
     inp.publicoAlvo?.length ? `Público-alvo: ${inp.publicoAlvo.join(", ")}` : "",
     inp.palavrasProibidas?.length ? `⚠️ Palavras PROIBIDAS: ${inp.palavrasProibidas.join(", ")}` : "",
     `Do's & don'ts:\n${regras}`,
+    inp.reprovacoesRecentes?.length
+      ? `\n⚠️ REPROVAÇÕES ANTERIORES deste cliente (o social já pediu pra REFAZER por isso — NÃO repita, reflita em "nao_pode"):\n${inp.reprovacoesRecentes.map((m) => `  - ${m}`).join("\n")}`
+      : "",
     ``,
     `Escreva o briefing da arte (no JSON).`,
   ].filter(Boolean).join("\n");

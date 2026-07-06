@@ -30,12 +30,20 @@ export async function POST(req: NextRequest) {
     .from("clients").select("name, nome_fantasia, nicho, industry, fixed_briefing, campaign_briefing")
     .eq("id", card.client_id as string).maybeSingle();
   const clienteNome = (cli?.nome_fantasia as string) || (cli?.name as string) || (card.client_name as string) || "Cliente";
-  const [briefing, estruturado, csRules] = await Promise.all([
+  const [briefing, estruturado, csRules, reworkRes] = await Promise.all([
     loadBriefingCombinado(card.client_id as string, (cli?.fixed_briefing as string) || (cli?.campaign_briefing as string)),
     loadBriefingForClient({ clientId: card.client_id as string, nome: clienteNome, nicho: (cli?.nicho as string) || undefined }),
     fetchClientCsRules(card.client_id as string),
+    // Reprovações anteriores deste cliente → o designer já evita repetir (menos retrabalho).
+    supabaseAdmin.from("cs_rework_events").select("reason")
+      .eq("client_id", card.client_id as string).not("reason", "is", null)
+      .order("created_at", { ascending: false }).limit(20),
   ]);
   const regras = csRules.filter((r) => r.escopo !== "roteiro").map((r) => `${r.texto} (${r.escopo})`);
+  // Dedup (motivos parecidos repetem) e teto de 8 pra não inchar o prompt.
+  const reprovacoesRecentes = [
+    ...new Set((reworkRes.data ?? []).map((r) => (r.reason as string)?.trim()).filter(Boolean)),
+  ].slice(0, 8);
   const b = estruturado.briefing;
 
   const r = await gerarBriefingDesign({
@@ -49,6 +57,7 @@ export async function POST(req: NextRequest) {
     tomVoz: b.tomVoz, produtosDestaque: b.produtosDestaque,
     palavrasProibidas: b.palavrasProibidas, publicoAlvo: b.publicoAlvo,
     regras,
+    reprovacoesRecentes,
   });
   if (!r.ok || !r.data) return NextResponse.json({ error: r.error || "falha ao gerar" }, { status: 500 });
   return NextResponse.json({
