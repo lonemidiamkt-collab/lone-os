@@ -65,6 +65,15 @@ export function formatAutoavaliacao(s: AutoavalStats, periodoLabel: string): str
     `${status(s.taxaAprovacao, 75, true)} Taxa de acerto: *${s.taxaAprovacao ?? "—"}%* (meta >75%)`,
     `${status(s.taxaFalsoPositivo, 10, false)} Falso positivo: *${s.taxaFalsoPositivo ?? "—"}%* (meta <10%)`,
   ];
+  // Leitura de gestor — traduz os números em uma frase acionável (o time reclamou que só número é seco).
+  const decididas = s.aprovadas + s.recusadas;
+  if (decididas < 4) {
+    linhas.push(``, `👉 *Leitura:* poucas decididas ainda (${decididas}) — me respondam "ok/não" que eu meço melhor.`);
+  } else if (s.taxaFalsoPositivo != null && s.taxaFalsoPositivo > 10) {
+    linhas.push(``, `👉 *Leitura:* tô sugerindo demanda demais que não vingou — preciso apertar o filtro. Continua me corrigindo com "não".`);
+  } else {
+    linhas.push(``, `👉 *Leitura:* tô calibrado — a maioria das sugestões virou card. 🎯`);
+  }
   if (s.recorrentesTipo.length || s.recorrentesCliente.length) {
     linhas.push(``, `⚠️ *Erros que se repetiram* (pra eu calibrar):`);
     s.recorrentesTipo.forEach((r) => linhas.push(`• tipo _${r.tipo}_: ${r.recusas} recusas`));
