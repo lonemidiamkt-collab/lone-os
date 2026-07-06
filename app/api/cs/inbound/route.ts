@@ -23,7 +23,7 @@ import { sugerirResposta } from "@/lib/cs/resposta";
 import { sincronizarBriefingAprendido } from "@/lib/cs/briefing-sync";
 import { conversarComEquipe } from "@/lib/cs/conversa";
 import { montarSnapshotCS } from "@/lib/cs/snapshot";
-import { ehPerguntaProLone } from "@/lib/cs/intent";
+import { ehPerguntaProLone, ehVisaoGeralDemandas } from "@/lib/cs/intent";
 import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/cs/criativo";
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
@@ -556,6 +556,7 @@ export async function POST(req: NextRequest) {
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) {
       await csSendGroupText(msg.groupJid, "De qual cliente é o raio-x? Me diz o nome. 😉");
+      conversaAtiva.set(chaveConversa(msg.groupJid, msg.authorJid), Date.now());
       return NextResponse.json({ ok: true, raiox: "sem_cliente" });
     }
     const d30 = new Date(Date.now() - 30 * 86400000).toISOString();
@@ -600,10 +601,15 @@ export async function POST(req: NextRequest) {
   // Acha o cliente + a demanda/card mais relacionados e reporta o estágio REAL. Determinístico.
   if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPerguntaStatus(msg.text)) {
     const alvoSt = await resolveClientePorNome(msg.text);
-    if (!alvoSt) {
+    // Sem cliente resolvido: se for VISÃO GERAL ("as demandas de hoje", "de todos"), NÃO pergunta
+    // "de qual cliente?" — deixa cair no conversacional abaixo, que dá o panorama (snapshot). Só
+    // pede o nome quando é status de UM cliente com o nome faltando ("lone, a arte já saiu?").
+    if (!alvoSt && !ehVisaoGeralDemandas(msg.text)) {
       await csSendGroupText(msg.groupJid, "De qual cliente? Me diz o nome que eu já te digo o status. 😉");
+      conversaAtiva.set(chaveConversa(msg.groupJid, msg.authorJid), Date.now()); // pro "do Contele" seguir
       return NextResponse.json({ ok: true, status_cmd: "sem_cliente" });
     }
+    if (alvoSt) {
     const { data: dems } = await supabaseAdmin
       .from("cs_demandas").select("resumo, status, content_card_id, responsavel, created_at")
       .eq("client_id", alvoSt.id).order("created_at", { ascending: false }).limit(8);
@@ -644,6 +650,7 @@ export async function POST(req: NextRequest) {
     await csSendGroupText(msg.groupJid, respostaSt);
     console.log(`[CS/inbound] status → ${alvoSt.nome}: ${dem.resumo} (${dem.status})`);
     return NextResponse.json({ ok: true, status_cmd: "ok", cliente: alvoSt.nome });
+    } // fim do if (alvoSt) — se não resolveu cliente e é visão geral, cai no conversacional abaixo
   }
 
   // ─── Agente "Lone": equipe pede pra CRIAR uma demanda ("Lone, cria uma demanda na [cliente] sobre X").
@@ -995,6 +1002,7 @@ export async function POST(req: NextRequest) {
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) {
       await csSendGroupText(msg.groupJid, "Pra qual cliente? Me fala o nome que eu mando as ideias. 😉");
+      conversaAtiva.set(chaveConversa(msg.groupJid, msg.authorJid), Date.now());
       return NextResponse.json({ ok: true, ideias: "sem_cliente" });
     }
     const [{ data: cliRow }, { data: hist }] = await Promise.all([
@@ -1368,6 +1376,31 @@ export async function POST(req: NextRequest) {
     const briefingTxt = statusBriefing ?? (a3?.ok && a3.data ? formatBriefing(a3.data) : `${it.resumo}\nMensagem: "${msg.text}"`);
     const titulo = statusTitulo ?? (a3?.ok && a3.data ? a3.data.titulo : it.resumo);
     const precisaConfirmar = !statusBriefing && !!(a3?.ok && a3.data?.observacao); // A3 achou o pedido vago
+
+    // Dedup: já existe uma pendente RECENTE do mesmo cliente com o MESMO resumo (mesma peça)? Ex.:
+    // o cliente manda 2 ajustes ao mesmo panfleto em mensagens seguidas → o A1 pode ver "2 demandas"
+    // (não coalesce), mas é a MESMA peça. Em vez de duplicar a sugestão, funde no pendente. Match
+    // EXATO do resumo pra não misturar peças diferentes (que teriam títulos diferentes).
+    if (c.id) {
+      const desdeDup = new Date(Date.now() - COALESCE_WINDOW_S * 1000).toISOString();
+      const { data: jaPend } = await supabaseAdmin
+        .from("cs_demandas").select("id, codigo, briefing, message_text, msg_id_sugestao")
+        .eq("group_jid", msg.groupJid).eq("client_id", c.id as string).eq("status", "pendente")
+        .eq("resumo", titulo).gte("created_at", desdeDup)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (jaPend) {
+        await supabaseAdmin.from("cs_demandas").update({
+          message_text: `${(jaPend.message_text as string) || ""}\n${msg.text}`.trim(),
+          briefing: `${(jaPend.briefing as string) || ""}\n\n+ (cliente complementou): ${msg.text}`.trim(),
+        }).eq("id", jaPend.id);
+        if (internalJid && (jaPend.msg_id_sugestao as string)) {
+          await csSendGroupText(internalJid, `🔁 A *${clienteNome}* mandou mais uma coisa sobre *${titulo}* — juntei no mesmo pedido. Vale o mesmo: *ok* · *não* · *ajustar*.`, jaPend.msg_id_sugestao as string);
+        }
+        console.log(`[CS/inbound] dedup → fundiu na pendente ${jaPend.codigo} (mesmo resumo "${titulo.slice(0, 40)}")`);
+        sugeridas.push(`dedup[${jaPend.codigo}]`);
+        continue; // NÃO cria sugestão nova
+      }
+    }
 
     const codigo = randomBytes(2).toString("hex"); // mantido só p/ auditoria — NÃO aparece na mensagem
     const { data: novaDem, error: insErr } = await supabaseAdmin.from("cs_demandas").insert({

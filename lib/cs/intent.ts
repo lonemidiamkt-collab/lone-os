@@ -16,3 +16,14 @@ export function ehPerguntaProLone(text: string): boolean {
     || /\bem atraso\b|\bpendent/.test(t);
   return perguntaOuPedido;
 }
+
+/**
+ * A pergunta é uma VISÃO GERAL (todos os clientes / o dia), não status de UM cliente? Ex.: "como
+ * estão as demandas de hoje?", "de todos", "no geral". Serve pro handler de status NÃO pedir "de
+ * qual cliente?" quando o certo é responder o panorama (que o snapshot conversacional tem).
+ */
+export function ehVisaoGeralDemandas(text: string): boolean {
+  const t = (text || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  return /\b(de todos|todos os|todas as|no geral|em geral|geral|tudo|panorama|resumo|do dia|de hoje|hoje)\b/.test(t)
+    || /\b(as demandas|os cards|as pendenci|as entregas|as artes|os atrasos)\b/.test(t);
+}
