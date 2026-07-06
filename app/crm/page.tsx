@@ -6,17 +6,18 @@ import { useRole } from "@/lib/context/RoleContext";
 import KanbanBoard, { type KanbanColumn } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
 import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead, type CrmLeadActivity, type CrmAtividadeTipo } from "@/lib/types";
-import { Plus, X, Search, TrendingUp, Wallet, Trophy, Percent, Receipt, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send } from "lucide-react";
+import { Plus, X, Search, TrendingUp, Wallet, Trophy, Percent, Receipt, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send, LayoutDashboard, Columns3, CalendarDays, BarChart3 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 // ─── Metadados do funil ──────────────────────────────────────────────
+// Cores = tokens do design system (sóbrio, sem neon). Sem emoji.
 const ESTAGIO_META: Record<CrmEstagio, { title: string; color: string }> = {
-  lead:      { title: "🆕 Novo lead", color: "bg-blue-500" },
-  orcamento: { title: "💰 Orçamento",  color: "bg-amber-500" },
-  proposta:  { title: "📄 Proposta",   color: "bg-violet-500" },
-  reuniao:   { title: "📅 Reunião",    color: "bg-cyan-500" },
-  ganho:     { title: "✅ Ganho",      color: "bg-emerald-500" },
-  perdido:   { title: "❌ Perdido",    color: "bg-rose-500" },
+  lead:      { title: "Novo lead", color: "bg-muted-foreground" },
+  orcamento: { title: "Orçamento", color: "bg-lone-warning" },
+  proposta:  { title: "Proposta",  color: "bg-lone-info" },
+  reuniao:   { title: "Reunião",   color: "bg-primary" },
+  ganho:     { title: "Ganho",     color: "bg-lone-success" },
+  perdido:   { title: "Perdido",   color: "bg-lone-danger" },
 };
 const ABERTOS: CrmEstagio[] = ["lead", "orcamento", "proposta", "reuniao"];
 
@@ -67,9 +68,9 @@ function Kpi({ icon: Icon, label, value, sub, tone }: {
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Icon size={13} /> {label}</div>
-      <div className={`mt-1 text-xl font-bold ${tone === "good" ? "text-emerald-500" : "text-foreground"}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-[11px] text-muted-foreground">{sub}</div>}
+      <div className="flex items-center gap-1.5 text-lone-caption text-muted-foreground"><Icon size={13} /> {label}</div>
+      <div className={`mt-1.5 text-lone-hero tracking-tight ${tone === "good" ? "text-lone-success" : "text-foreground"}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-lone-caption text-muted-foreground">{sub}</div>}
     </div>
   );
 }
@@ -304,8 +305,8 @@ export default function CrmPage() {
       {/* Header */}
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">🤝 Comercial</h1>
-          <p className="text-sm text-muted-foreground">Funil de prospecção e relatório de vendas</p>
+          <h1 className="text-lone-h1 tracking-tight text-foreground">Comercial</h1>
+          <p className="text-lone-caption text-muted-foreground">Prospecção, agenda e vendas</p>
         </div>
         <Button onClick={() => setDraft({ estagio: "lead", responsavel: currentUser ?? undefined })}>
           <Plus size={16} className="mr-1" /> Novo lead
@@ -314,10 +315,10 @@ export default function CrmPage() {
 
       {/* Abas */}
       <div className="flex gap-1 border-b border-border">
-        {([["dashboard", "📊 Dashboard"], ["funil", "🗂 Funil"], ["agenda", "📅 Agenda"], ["relatorios", "📈 Relatórios"]] as const).map(([id, label]) => (
+        {([["dashboard", "Dashboard", LayoutDashboard], ["funil", "Funil", Columns3], ["agenda", "Agenda", CalendarDays], ["relatorios", "Relatórios", BarChart3]] as const).map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${tab === id ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-            {label}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-lone-body font-medium transition-colors ${tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            <Icon size={15} /> {label}
           </button>
         ))}
       </div>
@@ -336,17 +337,19 @@ export default function CrmPage() {
           <div className="grid gap-4 lg:grid-cols-3">
             {/* Funil de conversão */}
             <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
-              <h2 className="text-sm font-semibold text-foreground">Funil de conversão</h2>
-              <p className="text-xs text-muted-foreground">Distribuição dos {dashboard.totalLeads} leads pelas etapas</p>
-              <div className="mt-4 space-y-2">
+              <h2 className="text-lone-h2 text-foreground">Funil de conversão</h2>
+              <p className="text-lone-caption text-muted-foreground">Distribuição dos {dashboard.totalLeads} leads pelas etapas</p>
+              <div className="mt-5 space-y-3">
                 {dashboard.funil.map((f) => (
                   <div key={f.estagio} className="flex items-center gap-3">
-                    <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">{ESTAGIO_META[f.estagio].title}</span>
-                    <div className="h-6 flex-1 overflow-hidden rounded-md bg-muted">
-                      <div className={`flex h-full items-center justify-end pr-2 ${ESTAGIO_META[f.estagio].color}`} style={{ width: `${Math.max(4, (f.n / dashboard.maxFunil) * 100)}%` }}>
-                        <span className="text-[10px] font-semibold text-white">{f.n}</span>
-                      </div>
+                    <span className="flex w-24 shrink-0 items-center gap-2 text-lone-caption text-muted-foreground">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${ESTAGIO_META[f.estagio].color}`} />
+                      <span className="truncate">{ESTAGIO_META[f.estagio].title}</span>
+                    </span>
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div className={`h-full rounded-full ${ESTAGIO_META[f.estagio].color}`} style={{ width: `${Math.max(2, (f.n / dashboard.maxFunil) * 100)}%` }} />
                     </div>
+                    <span className="w-6 shrink-0 text-right text-lone-body font-medium text-foreground">{f.n}</span>
                   </div>
                 ))}
               </div>
@@ -354,20 +357,20 @@ export default function CrmPage() {
 
             {/* Origem dos leads */}
             <section className="rounded-xl border border-border bg-card p-5">
-              <h2 className="text-sm font-semibold text-foreground">Origem dos leads</h2>
-              <p className="text-xs text-muted-foreground">De onde vieram</p>
-              <div className="mt-4 space-y-2.5">
-                {dashboard.origem.length === 0 ? <p className="text-xs text-muted-foreground">Sem leads ainda.</p> :
+              <h2 className="text-lone-h2 text-foreground">Origem dos leads</h2>
+              <p className="text-lone-caption text-muted-foreground">De onde vieram</p>
+              <div className="mt-5 space-y-3">
+                {dashboard.origem.length === 0 ? <p className="text-lone-caption text-muted-foreground">Sem leads ainda.</p> :
                   dashboard.origem.slice(0, 6).map((o, i) => {
                     const pct = dashboard.totalLeads ? Math.round((o.n / dashboard.totalLeads) * 100) : 0;
-                    const cores = ["bg-blue-500", "bg-emerald-500", "bg-violet-500", "bg-amber-500", "bg-cyan-500", "bg-rose-500"];
+                    const op = [1, 0.72, 0.54, 0.4, 0.3, 0.22][i] ?? 0.22;
                     return (
                       <div key={o.k}>
-                        <div className="mb-1 flex items-center justify-between text-xs">
-                          <span className="flex min-w-0 items-center gap-1.5 text-foreground"><span className={`h-2 w-2 shrink-0 rounded-full ${cores[i % cores.length]}`} /> <span className="truncate">{o.k}</span></span>
+                        <div className="mb-1 flex items-center justify-between text-lone-caption">
+                          <span className="min-w-0 truncate text-foreground">{o.k}</span>
                           <span className="shrink-0 text-muted-foreground">{o.n} · {pct}%</span>
                         </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className={`h-full ${cores[i % cores.length]}`} style={{ width: `${pct}%` }} /></div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${pct}%`, opacity: op }} /></div>
                       </div>
                     );
                   })}
@@ -378,33 +381,33 @@ export default function CrmPage() {
           <div className="grid gap-4 lg:grid-cols-3">
             {/* Leads por dia */}
             <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
-              <h2 className="text-sm font-semibold text-foreground">Leads por dia</h2>
-              <p className="text-xs text-muted-foreground">Últimos 14 dias</p>
-              <div className="mt-4 flex h-28 items-end gap-1.5">
+              <h2 className="text-lone-h2 text-foreground">Leads por dia</h2>
+              <p className="text-lone-caption text-muted-foreground">Últimos 14 dias</p>
+              <div className="mt-5 flex h-28 items-end gap-1.5">
                 {dashboard.dias.map((d) => (
                   <div key={d.d} className="flex flex-1 flex-col items-center justify-end" title={`${fmtData(d.d)} — ${d.n} lead(s)`}>
-                    <div className="w-full rounded-t bg-primary" style={{ height: d.n > 0 ? `${Math.max(6, (d.n / dashboard.maxDia) * 100)}%` : "2px", opacity: d.n > 0 ? 1 : 0.25 }} />
+                    <div className={`w-full rounded-t ${d.n > 0 ? "bg-primary" : "bg-muted"}`} style={{ height: d.n > 0 ? `${Math.max(8, (d.n / dashboard.maxDia) * 100)}%` : "3px" }} />
                   </div>
                 ))}
               </div>
-              <div className="mt-1 flex justify-between text-[10px] text-muted-foreground"><span>{fmtData(dashboard.dias[0].d)}</span><span>hoje</span></div>
+              <div className="mt-1.5 flex justify-between text-lone-caption text-muted-foreground"><span>{fmtData(dashboard.dias[0].d)}</span><span>hoje</span></div>
             </section>
 
             {/* Próximas reuniões */}
             <section className="rounded-xl border border-border bg-card p-5">
-              <h2 className="text-sm font-semibold text-foreground">Próximas reuniões</h2>
-              <div className="mt-3 space-y-2">
+              <h2 className="text-lone-h2 text-foreground">Próximas reuniões</h2>
+              <div className="mt-4 space-y-2">
                 {agenda.proximos.filter((e) => e.tipo === "reuniao").length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Nenhuma reunião marcada.</p>
+                  <p className="text-lone-caption text-muted-foreground">Nenhuma reunião marcada.</p>
                 ) : agenda.proximos.filter((e) => e.tipo === "reuniao").slice(0, 5).map((e) => (
-                  <button key={e.lead.id} onClick={() => setDraft({ ...e.lead })} className="flex w-full items-center gap-2 rounded-lg border border-border bg-background p-2 text-left transition-colors hover:border-primary/40">
-                    <span className="flex flex-col items-center rounded bg-cyan-500/10 px-2 py-1 text-cyan-500">
-                      <span className="text-xs font-bold leading-none">{e.data.slice(8, 10)}</span>
-                      <span className="text-[8px] uppercase">{mesLabel(e.data.slice(0, 7))}</span>
+                  <button key={e.lead.id} onClick={() => setDraft({ ...e.lead })} className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-background p-2 text-left transition-colors hover:border-primary/40">
+                    <span className="flex flex-col items-center rounded-md bg-primary/10 px-2 py-1 text-primary">
+                      <span className="text-lone-body font-semibold leading-none">{e.data.slice(8, 10)}</span>
+                      <span className="text-lone-eyebrow uppercase">{mesLabel(e.data.slice(0, 7))}</span>
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate text-xs font-medium text-foreground">{e.lead.contatoNome}</span>
-                      {e.lead.empresa && <span className="block truncate text-[10px] text-muted-foreground">{e.lead.empresa}</span>}
+                      <span className="block truncate text-lone-body font-medium text-foreground">{e.lead.contatoNome}</span>
+                      {e.lead.empresa && <span className="block truncate text-lone-caption text-muted-foreground">{e.lead.empresa}</span>}
                     </span>
                   </button>
                 ))}
@@ -452,18 +455,18 @@ export default function CrmPage() {
                       {l.empresa && <div className="truncate text-xs text-muted-foreground">{l.empresa}</div>}
                     </div>
                     {l.valorOrcamento != null && (
-                      <span className="shrink-0 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-500">{brlCompact(l.valorOrcamento)}</span>
+                      <span className="shrink-0 rounded-md bg-lone-success-bg px-1.5 py-0.5 text-lone-caption font-semibold text-lone-success">{brlCompact(l.valorOrcamento)}</span>
                     )}
                   </div>
                   {(l.reuniaoData || l.proximoContato || l.origem) && (
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                       {l.reuniaoData && (
-                        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] ${reuniaoPassou ? "bg-rose-500/10 text-rose-500" : "bg-cyan-500/10 text-cyan-500"}`}>
+                        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-lone-caption ${reuniaoPassou ? "bg-lone-danger-bg text-lone-danger" : "bg-lone-info-bg text-lone-info"}`}>
                           <CalendarClock size={10} /> {fmtData(l.reuniaoData)}{reuniaoPassou ? " (passou)" : ""}
                         </span>
                       )}
                       {followAtrasado && (
-                        <span className="inline-flex items-center gap-1 rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-500">
+                        <span className="inline-flex items-center gap-1 rounded bg-lone-danger-bg px-1.5 py-0.5 text-lone-caption text-lone-danger">
                           <AlertCircle size={10} /> follow-up atrasado
                         </span>
                       )}
@@ -482,15 +485,15 @@ export default function CrmPage() {
                         <button
                           onClick={(e) => { e.stopPropagation(); abrirWhatsApp(l.telefone, l.id); }}
                           title="Abrir conversa no WhatsApp"
-                          className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400">
+                          className="inline-flex items-center gap-1 rounded bg-lone-success-bg px-1.5 py-0.5 text-lone-caption font-medium text-lone-success transition-opacity hover:opacity-80">
                           <MessageCircle size={11} /> WhatsApp
                         </button>
                       )}
-                      <span className="text-[10px] text-muted-foreground" title="dias desde a última atualização">há {diasDesde(l.updatedAt)}d</span>
+                      <span className="text-lone-caption text-muted-foreground" title="dias desde a última atualização">há {diasDesde(l.updatedAt)}d</span>
                     </div>
                   </div>
                   {l.estagio === "perdido" && l.motivoPerda && (
-                    <div className="mt-1.5 truncate text-[10px] italic text-rose-500/80">✕ {l.motivoPerda}</div>
+                    <div className="mt-1.5 truncate text-lone-caption italic text-lone-danger">✕ {l.motivoPerda}</div>
                   )}
                 </div>
               );
@@ -509,23 +512,23 @@ export default function CrmPage() {
         for (let d = 1; d <= diasNoMes; d++) celulas.push(d);
         const ymdDe = (d: number) => `${ano}-${String(mes + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
         const evRow = (e: { lead: CrmLead; data: string; tipo: "reuniao" | "follow" }, i: number) => (
-          <button key={i} onClick={() => setDraft({ ...e.lead })} className="flex w-full items-center gap-2 rounded-lg border border-border bg-background p-2 text-left transition-colors hover:border-primary/40">
-            <span className={`flex flex-col items-center rounded px-2 py-1 ${e.tipo === "reuniao" ? "bg-cyan-500/10 text-cyan-500" : "bg-amber-500/10 text-amber-500"}`}>
-              <span className="text-xs font-bold leading-none">{e.data.slice(8, 10)}</span>
-              <span className="text-[8px] uppercase">{mesLabel(e.data.slice(0, 7))}</span>
+          <button key={i} onClick={() => setDraft({ ...e.lead })} className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-background p-2 text-left transition-colors hover:border-primary/40">
+            <span className={`flex flex-col items-center rounded-md px-2 py-1 ${e.tipo === "reuniao" ? "bg-primary/10 text-primary" : "bg-lone-warning-bg text-lone-warning"}`}>
+              <span className="text-lone-body font-semibold leading-none">{e.data.slice(8, 10)}</span>
+              <span className="text-lone-eyebrow uppercase">{mesLabel(e.data.slice(0, 7))}</span>
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs font-medium text-foreground">{e.lead.contatoNome}</span>
-              <span className="block truncate text-[10px] text-muted-foreground">{e.tipo === "reuniao" ? "Reunião" : "Follow-up"}{e.lead.empresa ? ` · ${e.lead.empresa}` : ""}</span>
+              <span className="block truncate text-lone-body font-medium text-foreground">{e.lead.contatoNome}</span>
+              <span className="block truncate text-lone-caption text-muted-foreground">{e.tipo === "reuniao" ? "Reunião" : "Follow-up"}{e.lead.empresa ? ` · ${e.lead.empresa}` : ""}</span>
             </span>
           </button>
         );
         return (
           <div className="grid gap-4 lg:grid-cols-3">
             <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
-              <h2 className="text-sm font-semibold capitalize text-foreground">{now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}</h2>
-              <div className="mt-4 grid grid-cols-7 gap-1 text-center">
-                {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d, i) => <div key={i} className="py-1 text-[10px] font-medium text-muted-foreground">{d}</div>)}
+              <h2 className="text-lone-h2 capitalize text-foreground">{now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}</h2>
+              <div className="mt-5 grid grid-cols-7 gap-1 text-center">
+                {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d, i) => <div key={i} className="py-1 text-lone-eyebrow uppercase text-muted-foreground">{d}</div>)}
                 {celulas.map((d, i) => {
                   if (d === null) return <div key={i} />;
                   const ymd = ymdDe(d);
@@ -533,29 +536,29 @@ export default function CrmPage() {
                   const isHoje = ymd === hoje;
                   return (
                     <div key={i} className={`aspect-square rounded-lg border p-1 ${isHoje ? "border-primary bg-primary/5" : "border-border"}`}>
-                      <div className={`text-xs ${isHoje ? "font-bold text-primary" : "text-foreground"}`}>{d}</div>
+                      <div className={`text-lone-caption ${isHoje ? "font-semibold text-primary" : "text-foreground"}`}>{d}</div>
                       <div className="mt-0.5 flex flex-wrap justify-center gap-0.5">
-                        {evs.slice(0, 3).map((e, j) => <span key={j} title={e.lead.contatoNome} className={`h-1.5 w-1.5 rounded-full ${e.tipo === "reuniao" ? "bg-cyan-500" : "bg-amber-500"}`} />)}
+                        {evs.slice(0, 3).map((e, j) => <span key={j} title={e.lead.contatoNome} className={`h-1.5 w-1.5 rounded-full ${e.tipo === "reuniao" ? "bg-primary" : "bg-lone-warning"}`} />)}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              <div className="mt-3 flex gap-4 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-cyan-500" /> Reunião</span>
-                <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Follow-up</span>
+              <div className="mt-4 flex gap-4 text-lone-caption text-muted-foreground">
+                <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-primary" /> Reunião</span>
+                <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-lone-warning" /> Follow-up</span>
               </div>
-              <p className="mt-3 text-[10px] text-muted-foreground">💡 Pra marcar uma reunião: abra o lead e preencha &quot;Data da reunião&quot;.</p>
+              <p className="mt-3 text-lone-caption text-muted-foreground">Para marcar uma reunião, abra o lead e preencha &quot;Data da reunião&quot;.</p>
             </section>
 
             <section className="rounded-xl border border-border bg-card p-5">
               {agenda.atrasados.length > 0 && (
                 <div className="mb-4">
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-rose-500">⚠ Atrasados ({agenda.atrasados.length})</p>
+                  <p className="mb-2 text-lone-eyebrow uppercase text-lone-danger">Atrasados ({agenda.atrasados.length})</p>
                   <div className="space-y-1.5">{agenda.atrasados.slice(0, 6).map(evRow)}</div>
                 </div>
               )}
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Próximos</p>
+              <p className="mb-2 text-lone-eyebrow uppercase text-muted-foreground">Próximos</p>
               <div className="space-y-1.5">
                 {agenda.proximos.length === 0 ? <p className="text-xs text-muted-foreground">Nada agendado.</p> : agenda.proximos.slice(0, 10).map(evRow)}
               </div>
@@ -648,11 +651,11 @@ export default function CrmPage() {
           {/* Motivos de perda */}
           <section className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
             <h2 className="mb-3 text-sm font-semibold text-foreground">Motivos de perda</h2>
-            {relatorio.motivos.length === 0 ? <p className="text-xs text-muted-foreground">Nenhum lead perdido — bora manter assim. 🎯</p> : (
+            {relatorio.motivos.length === 0 ? <p className="text-lone-caption text-muted-foreground">Nenhum lead perdido — bora manter assim.</p> : (
               <div className="flex flex-wrap gap-2">
                 {relatorio.motivos.map(([m, n]) => (
-                  <span key={m} className="rounded-lg border border-border bg-background px-2.5 py-1 text-xs text-foreground">
-                    {m} <span className="ml-1 rounded bg-rose-500/10 px-1.5 text-[10px] font-semibold text-rose-500">{n}</span>
+                  <span key={m} className="rounded-lg border border-border bg-background px-2.5 py-1 text-lone-caption text-foreground">
+                    {m} <span className="ml-1 rounded bg-lone-danger-bg px-1.5 text-lone-eyebrow font-semibold text-lone-danger">{n}</span>
                   </span>
                 ))}
               </div>
@@ -742,11 +745,11 @@ export default function CrmPage() {
                     <button
                       type="button"
                       onClick={() => abrirWhatsApp(draft.telefone, draft.id)}
-                      className="mb-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400">
+                      className="mb-3 inline-flex items-center gap-1.5 rounded-lg bg-lone-success-bg px-3 py-1.5 text-lone-caption font-medium text-lone-success transition-opacity hover:opacity-80">
                       <MessageCircle size={14} /> Abrir WhatsApp
                     </button>
                   )}
-                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">📋 Histórico</label>
+                  <label className="mb-1.5 block text-lone-caption font-medium text-muted-foreground">Histórico</label>
                   <div className="flex gap-2">
                     <select className={`${inputCls} w-auto shrink-0`} value={novaTipo} onChange={(e) => setNovaTipo(e.target.value as CrmAtividadeTipo)}>
                       {(["nota", "ligacao", "whatsapp", "email", "reuniao"] as CrmAtividadeTipo[]).map((t) => (
