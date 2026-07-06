@@ -4,6 +4,7 @@
 // no padrão da casa. Provider: OpenAI gpt-4o (é copy + direção de arte). Texto puro (sem imagem).
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
+import { fichaDoCliente } from "@/lib/cs/guia-legendas";
 
 export const BRIEFING_DESIGN_MODEL = "gpt-4o";
 
@@ -76,8 +77,10 @@ Responda APENAS no JSON do schema.`;
 
 export async function gerarBriefingDesign(inp: BriefingDesignInput): Promise<OpenAiResult<BriefingDesignOutput>> {
   const regras = inp.regras?.length ? inp.regras.map((r) => `  - ${r}`).join("\n") : "  (nenhuma)";
+  const ficha = fichaDoCliente(inp.clienteNome); // voz + o que observar (guia) — ajuda o designer a acertar o tom
   const user = [
     `Cliente: ${inp.clienteNome}${inp.clienteNicho ? ` (${inp.clienteNicho})` : ""}`,
+    ficha ? `\n${ficha}\n` : "",
     `Tema do post: ${inp.titulo}`,
     inp.briefingCard ? `O que o social já anotou no card: ${inp.briefingCard.slice(0, 900)}` : "",
     inp.formato ? `Formato: ${inp.formato}` : "",

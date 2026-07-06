@@ -4,6 +4,8 @@
 // contato divergente e erro de português — ANTES de sair. Provider: OpenAI gpt-4o (visão +
 // julgamento). Funciona com ou sem arte (sem arte revisa só a legenda). Nunca lança.
 
+import { fichaDoCliente } from "@/lib/cs/guia-legendas";
+
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
 export interface RevisaoPostInput {
@@ -73,6 +75,12 @@ Verifique NESTA ordem de importância:
 5. ARTE (area "arte", media): erro de texto visível na arte, informação ilegível. (Só se a arte
    estiver anexada — sem arte, ignore esta parte.)
 
+REGRA DE OURO DO GUIA — CONTATO (area "dados"): TODA legenda fecha com o contato do cliente
+(endereço e/ou telefone/WhatsApp), sem exceção. Se a legenda NÃO terminar com contato → problema
+gravidade ALTA, detalhe "falta o contato (endereço/telefone) no fim da legenda". Se vier a FICHA DO
+CLIENTE no contexto e o contato da legenda divergir dela → ALTA. Ao gerar legenda_corrigida, VOCÊ
+PODE acrescentar o contato da FICHA no fim (não é invenção — está na ficha).
+
 - aprovado = true quando NÃO há problema de gravidade alta ou media (só "baixa" não reprova).
 - legenda_corrigida: se TODOS os consertos necessários são na legenda (português, CTA, hashtag),
   escreva a legenda corrigida PRONTA (mantendo o estilo) — ENXUTA, sem reescrever hashtag que já
@@ -86,8 +94,10 @@ export async function revisarPost(inp: RevisaoPostInput): Promise<RevisaoPostRes
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { ok: false, data: null, error: "OPENAI_API_KEY não configurada" };
   const regras = inp.regras?.length ? inp.regras.map((r) => `- ${r}`).join("\n") : "(nenhuma)";
+  const ficha = fichaDoCliente(inp.clienteNome); // voz + CONTATO exato do guia — checar contra a legenda
   const contexto =
     `Cliente: ${inp.clienteNome}${inp.clienteNicho ? ` (${inp.clienteNicho})` : ""}\n` +
+    (ficha ? `${ficha}\n` : "") +
     `Tema do post: ${inp.titulo}${inp.formato ? ` · Formato: ${inp.formato}` : ""}\n` +
     `LEGENDA atual:\n"""\n${inp.legenda.slice(0, 1200) || "(sem legenda ainda — aponte como problema alta)"}\n"""\n` +
     (inp.hashtags ? `Hashtags: ${inp.hashtags.slice(0, 300)}\n` : "") +
