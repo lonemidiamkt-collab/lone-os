@@ -25,6 +25,18 @@ export interface CrmLead {
   updatedAt: string;
 }
 
+// Atividade/histórico de um lead (timeline do SDR): ligação, mensagem, nota, e-mail, reunião,
+// ou mudança de etapa (auto-registrada). Ver migration 066_crm_lead_activities.
+export type CrmAtividadeTipo = "nota" | "ligacao" | "whatsapp" | "email" | "reuniao" | "etapa";
+export interface CrmLeadActivity {
+  id: string;
+  leadId: string;
+  tipo: CrmAtividadeTipo;
+  texto: string;
+  autor: string | null;
+  createdAt: string;
+}
+
 export type ClientStatus = "onboarding" | "good" | "average" | "at_risk";
 export type AttentionLevel = "low" | "medium" | "high" | "critical";
 export type Priority = "low" | "medium" | "high" | "critical";

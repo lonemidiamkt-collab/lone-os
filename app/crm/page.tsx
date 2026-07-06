@@ -5,8 +5,8 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useRole } from "@/lib/context/RoleContext";
 import KanbanBoard, { type KanbanColumn } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
-import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead } from "@/lib/types";
-import { Plus, X, Search, TrendingUp, Wallet, Trophy, Percent, Receipt, CalendarClock, AlertCircle } from "lucide-react";
+import { CRM_ESTAGIOS, type CrmEstagio, type CrmLead, type CrmLeadActivity, type CrmAtividadeTipo } from "@/lib/types";
+import { Plus, X, Search, TrendingUp, Wallet, Trophy, Percent, Receipt, CalendarClock, AlertCircle, MessageCircle, Phone, Mail, StickyNote, ArrowRight, Send } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 // ─── Metadados do funil ──────────────────────────────────────────────
@@ -29,6 +29,25 @@ const fmtData = (d: string | null) => (d ? new Date(d.length === 10 ? `${d}T12:0
 const hojeYmd = () => new Date().toLocaleDateString("en-CA");
 const diasDesde = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 const iniciais = (nome: string) => nome.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
+
+// Link wa.me a partir do telefone (só dígitos; assume DDI Brasil se não vier).
+const waLink = (telefone: string | null | undefined): string | null => {
+  if (!telefone) return null;
+  let d = telefone.replace(/\D/g, "");
+  if (!d) return null;
+  if (!d.startsWith("55")) d = `55${d}`;
+  return `https://wa.me/${d}`;
+};
+
+// Ícone + rótulo por tipo de atividade (timeline do lead).
+const ATIVIDADE_META: Record<CrmAtividadeTipo, { label: string; icon: LucideIcon }> = {
+  nota:     { label: "Nota",     icon: StickyNote },
+  ligacao:  { label: "Ligação",  icon: Phone },
+  whatsapp: { label: "WhatsApp", icon: MessageCircle },
+  email:    { label: "E-mail",   icon: Mail },
+  reuniao:  { label: "Reunião",  icon: CalendarClock },
+  etapa:    { label: "Etapa",    icon: ArrowRight },
+};
 
 // Mês YYYY-MM de um ISO; rótulo pt-BR curto.
 const mesDe = (iso: string) => iso.slice(0, 7);
@@ -65,6 +84,11 @@ export default function CrmPage() {
   const [busca, setBusca] = useState("");
   const [fResp, setFResp] = useState("");
   const [fOrigem, setFOrigem] = useState("");
+  // Timeline do lead aberto no modal (histórico do SDR).
+  const [atividades, setAtividades] = useState<CrmLeadActivity[]>([]);
+  const [loadingAtiv, setLoadingAtiv] = useState(false);
+  const [novaTipo, setNovaTipo] = useState<CrmAtividadeTipo>("nota");
+  const [novoTexto, setNovoTexto] = useState("");
 
   const podeVer = role === "admin" || role === "manager" || role === "comercial";
 
@@ -159,7 +183,37 @@ export default function CrmPage() {
     [filtrados]
   );
 
+  // Carrega a timeline quando abre um lead EXISTENTE no modal (novo lead ainda não tem id).
+  useEffect(() => {
+    if (!draft?.id) { setAtividades([]); return; }
+    setLoadingAtiv(true);
+    authedFetch(`/api/crm/activities?leadId=${draft.id}`)
+      .then((r) => (r.ok ? r.json() : { atividades: [] }))
+      .then((d) => setAtividades(d.atividades ?? []))
+      .finally(() => setLoadingAtiv(false));
+  }, [draft?.id]);
+
   // ─── Ações ─────────────────────────────────────────────────────────
+  async function registrarAtividade(tipo: CrmAtividadeTipo, texto: string, leadId?: string) {
+    const id = leadId ?? draft?.id;
+    if (!id || !texto.trim()) return;
+    const r = await authedFetch("/api/crm/activities", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadId: id, tipo, texto: texto.trim(), autor: currentUser ?? null }),
+    }).catch(() => null);
+    if (r?.ok) {
+      const { atividade } = await r.json();
+      if (id === draft?.id) setAtividades((prev) => [atividade, ...prev]);
+    }
+  }
+
+  function abrirWhatsApp(telefone: string | null | undefined, leadId?: string) {
+    const link = waLink(telefone);
+    if (!link) return;
+    window.open(link, "_blank");
+    if (leadId) registrarAtividade("whatsapp", "WhatsApp iniciado", leadId); // registra na timeline
+  }
+
   async function moverEstagio(id: string, _from: string, to: string) {
     setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, estagio: to as CrmEstagio } : l)));
     const r = await authedFetch("/api/crm/leads", {
@@ -304,7 +358,17 @@ export default function CrmPage() {
                         {l.responsavel.split(" ")[0]}
                       </span>
                     ) : <span />}
-                    <span className="text-[10px] text-muted-foreground" title="dias desde a última atualização">há {diasDesde(l.updatedAt)}d</span>
+                    <div className="flex items-center gap-2">
+                      {waLink(l.telefone) && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); abrirWhatsApp(l.telefone, l.id); }}
+                          title="Abrir conversa no WhatsApp"
+                          className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400">
+                          <MessageCircle size={11} /> WhatsApp
+                        </button>
+                      )}
+                      <span className="text-[10px] text-muted-foreground" title="dias desde a última atualização">há {diasDesde(l.updatedAt)}d</span>
+                    </div>
                   </div>
                   {l.estagio === "perdido" && l.motivoPerda && (
                     <div className="mt-1.5 truncate text-[10px] italic text-rose-500/80">✕ {l.motivoPerda}</div>
@@ -485,6 +549,61 @@ export default function CrmPage() {
               </div>
               {draft.fechadoEm && (
                 <p className="text-[11px] text-muted-foreground">Fechado em {new Date(draft.fechadoEm).toLocaleDateString("pt-BR")} — conta no relatório desse mês.</p>
+              )}
+
+              {/* WhatsApp + Histórico do lead (só quando já existe — novo lead ainda não tem id) */}
+              {draft.id && (
+                <div className="border-t border-border pt-3">
+                  {waLink(draft.telefone) && (
+                    <button
+                      type="button"
+                      onClick={() => abrirWhatsApp(draft.telefone, draft.id)}
+                      className="mb-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400">
+                      <MessageCircle size={14} /> Abrir WhatsApp
+                    </button>
+                  )}
+                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">📋 Histórico</label>
+                  <div className="flex gap-2">
+                    <select className={`${inputCls} w-auto shrink-0`} value={novaTipo} onChange={(e) => setNovaTipo(e.target.value as CrmAtividadeTipo)}>
+                      {(["nota", "ligacao", "whatsapp", "email", "reuniao"] as CrmAtividadeTipo[]).map((t) => (
+                        <option key={t} value={t}>{ATIVIDADE_META[t].label}</option>
+                      ))}
+                    </select>
+                    <input
+                      className={inputCls}
+                      placeholder="Registrar (ex: liguei, caixa postal)"
+                      value={novoTexto}
+                      onChange={(e) => setNovoTexto(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && novoTexto.trim()) { registrarAtividade(novaTipo, novoTexto); setNovoTexto(""); } }}
+                    />
+                    <Button size="sm" disabled={!novoTexto.trim()} onClick={() => { registrarAtividade(novaTipo, novoTexto); setNovoTexto(""); }}>
+                      <Send size={14} />
+                    </Button>
+                  </div>
+                  <div className="mt-3 max-h-52 space-y-2 overflow-y-auto">
+                    {loadingAtiv ? (
+                      <p className="text-xs text-muted-foreground">Carregando…</p>
+                    ) : atividades.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">Sem histórico ainda — registre a primeira interação.</p>
+                    ) : (
+                      atividades.map((a) => {
+                        const Icon = ATIVIDADE_META[a.tipo]?.icon ?? StickyNote;
+                        return (
+                          <div key={a.id} className="flex gap-2 text-xs">
+                            <Icon size={13} className="mt-0.5 shrink-0 text-muted-foreground" />
+                            <div className="min-w-0">
+                              <div className="text-foreground">{a.texto}</div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {new Date(a.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                {a.autor ? ` · ${a.autor.split(" ")[0]}` : ""}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
               )}
             </div>
             <div className="mt-4 flex justify-end gap-2">

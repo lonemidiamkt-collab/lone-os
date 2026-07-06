@@ -28,7 +28,7 @@ import type {
   MoodEntry, MoodType, CreativeAsset, SocialProofEntry, CrisisNote,
   Notice, QuinzReport, ClientAccess, TrafficMonthlyReport,
   TrafficRoutineCheck, SocialMonthlyReport, ContentApproval,
-  Role, CardAttachment, CsClientRule, CrmLead, CrmEstagio,
+  Role, CardAttachment, CsClientRule, CrmLead, CrmEstagio, CrmLeadActivity, CrmAtividadeTipo,
 } from "@/lib/types";
 
 // No servidor (API routes), supabase browser client não tem session → RLS bloqueia tudo.
@@ -1003,6 +1003,33 @@ export async function updateCrmLead(id: string, patch: Record<string, unknown>):
 export async function deleteCrmLead(id: string): Promise<void> {
   const { error } = await db.from("crm_leads").delete().eq("id", id);
   if (error) { console.error("[DB] deleteCrmLead falhou:", error.message); throw new Error(error.message); }
+}
+
+// ── Atividades do lead (timeline do SDR) ──
+function snakeToCrmActivity(r: Record<string, unknown>): CrmLeadActivity {
+  return {
+    id: r.id as string,
+    leadId: r.lead_id as string,
+    tipo: (r.tipo as CrmAtividadeTipo) ?? "nota",
+    texto: (r.texto as string) ?? "",
+    autor: (r.autor as string) ?? null,
+    createdAt: (r.created_at as string) ?? "",
+  };
+}
+
+export async function fetchLeadActivities(leadId: string): Promise<CrmLeadActivity[]> {
+  const { data, error } = await db.from("crm_lead_activities")
+    .select("*").eq("lead_id", leadId).order("created_at", { ascending: false });
+  if (error) { console.error("[DB] fetchLeadActivities:", error.message); return []; }
+  return (data ?? []).map(snakeToCrmActivity);
+}
+
+export async function insertLeadActivity(a: { leadId: string; tipo: string; texto: string; autor?: string | null }): Promise<CrmLeadActivity> {
+  const { data, error } = await db.from("crm_lead_activities")
+    .insert({ lead_id: a.leadId, tipo: a.tipo, texto: a.texto, autor: a.autor ?? null })
+    .select("*").single();
+  if (error) { console.error("[DB] insertLeadActivity falhou:", error.message); throw new Error(error.message); }
+  return snakeToCrmActivity(data);
 }
 
 // ═══════════════════════════════════════════════════════════

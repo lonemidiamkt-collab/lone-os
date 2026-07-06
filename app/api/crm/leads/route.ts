@@ -43,6 +43,7 @@ export async function PATCH(req: NextRequest) {
     // → ganho/perdido: carimba fechado_em (data REAL da venda — é a base do relatório mensal);
     // → volta pra etapa aberta: limpa fechado_em (e motivo de perda, se saiu de perdido);
     // → proposta: marca proposta_enviada_em (1ª vez).
+    let etapaMudou: string | null = null;
     if (typeof patch.estagio === "string") {
       const atual = await db.fetchCrmLeadById(id);
       const fechado = patch.estagio === "ganho" || patch.estagio === "perdido";
@@ -54,8 +55,17 @@ export async function PATCH(req: NextRequest) {
       if (patch.estagio === "proposta" && !atual?.propostaEnviadaEm && patch.propostaEnviadaEm === undefined) {
         patch.propostaEnviadaEm = new Date().toISOString().slice(0, 10);
       }
+      if (atual && atual.estagio !== patch.estagio) etapaMudou = patch.estagio;
     }
     const lead = await db.updateCrmLead(id, patch);
+    // Auto-registra a mudança de etapa na timeline (best-effort — não derruba o update).
+    if (etapaMudou) {
+      const LABEL: Record<string, string> = {
+        lead: "Novo lead", orcamento: "Orçamento", proposta: "Proposta",
+        reuniao: "Reunião", ganho: "Ganho ✅", perdido: "Perdido ❌",
+      };
+      db.insertLeadActivity({ leadId: id, tipo: "etapa", texto: `Movido para ${LABEL[etapaMudou] ?? etapaMudou}`, autor: (patch.responsavel as string) ?? null }).catch(() => {});
+    }
     return NextResponse.json({ lead });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "erro" }, { status: 500 });
