@@ -622,6 +622,9 @@ export default function DesignPage() {
     const u = getDeadlineUrgency(c.dueDate);
     return u === "overdue" || u === "today";
   }).length;
+  // Alterações pendentes: card reprovado pelo social e ainda não refeito. Contador persistente
+  // (o toast some em segundos; assim o designer bate o olho e sabe que tem, sem depender da tela).
+  const alteracoesPendentes = myContentCards.filter((c) => alteracaoPendente(c)).length;
 
   return (
     <div className="flex flex-col flex-1 overflow-auto">
@@ -678,7 +681,7 @@ export default function DesignPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="card flex items-center gap-4">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${needsArt > 0 ? "bg-primary/15" : "bg-card"}`}>
               <ImageIcon size={18} className={needsArt > 0 ? "text-primary" : "text-muted-foreground"} />
@@ -713,6 +716,15 @@ export default function DesignPage() {
             <div>
               <p className={`text-2xl font-bold ${urgentCards > 0 ? "text-destructive" : "text-foreground"}`}>{urgentCards}</p>
               <p className="text-xs text-muted-foreground">Urgentes</p>
+            </div>
+          </div>
+          <div className="card flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${alteracoesPendentes > 0 ? "bg-destructive/15" : "bg-card"}`}>
+              <RotateCcw size={18} className={alteracoesPendentes > 0 ? "text-destructive" : "text-muted-foreground"} />
+            </div>
+            <div>
+              <p className={`text-2xl font-bold ${alteracoesPendentes > 0 ? "text-destructive" : "text-foreground"}`}>{alteracoesPendentes}</p>
+              <p className="text-xs text-muted-foreground">Alterações</p>
             </div>
           </div>
         </div>
@@ -1144,6 +1156,7 @@ export default function DesignPage() {
             onBriefing={setBriefingReq}
             onDeleteRequest={setReqToDelete}
             currentUser={currentUser}
+            alteracaoPendente={alteracaoPendente}
           />
         )}
 
@@ -1804,6 +1817,7 @@ function RequestsView({
   onBriefing,
   onDeleteRequest,
   currentUser,
+  alteracaoPendente,
 }: {
   designRequests: DesignRequest[];
   contentCards: ContentCard[];
@@ -1811,6 +1825,7 @@ function RequestsView({
   onBriefing: (req: DesignRequest) => void;
   onDeleteRequest?: (req: DesignRequest) => void;
   currentUser?: string;
+  alteracaoPendente: (c: ContentCard) => { reason?: string | null; reviewedBy?: string | null } | null;
 }) {
   const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
   const [statusFilter, setStatusFilter] = useState<"all" | "queued" | "in_progress" | "done">("all");
@@ -1828,6 +1843,12 @@ function RequestsView({
 
   const getLinkedCard = (req: DesignRequest) =>
     contentCards.find((c) => c.designRequestId === req.id);
+
+  // Alteração pedida pelo social no card vinculado a esta demanda (não é status do design_request).
+  const alteracaoDoReq = (req: DesignRequest) => {
+    const c = getLinkedCard(req);
+    return c ? alteracaoPendente(c) : null;
+  };
 
   return (
     <div className="space-y-4">
@@ -1880,26 +1901,45 @@ function RequestsView({
       {viewMode === "kanban" && (
         <KanbanErrorBoundary context="Kanban Design Requests">
         <KanbanBoard
-          columns={DESIGN_COLUMNS.map((col) => ({
-            ...col,
-            items: filtered
-              .filter((r) => r.status === col.id)
-              .map((r) => ({
-                id: r.id,
-                title: r.title,
-                clientName: r.clientName,
-                format: r.format,
-                priority: r.priority,
-                deadline: r.deadline,
-                requestedBy: r.requestedBy,
-                briefing: r.briefing,
-                _req: r,
+          columns={(() => {
+            const toItem = (r: DesignRequest) => ({
+              id: r.id,
+              title: r.title,
+              clientName: r.clientName,
+              format: r.format,
+              priority: r.priority,
+              deadline: r.deadline,
+              requestedBy: r.requestedBy,
+              briefing: r.briefing,
+              _req: r,
+              _alteracao: alteracaoDoReq(r),
+            });
+            return [
+              // Coluna VIRTUAL: cards com alteração pedida pelo social. Não é status real do
+              // design_request (ele volta pra in_progress ao reprovar) — some sozinha quando o
+              // designer reentrega (alteracaoPendente zera). Fica em 1º pra saltar aos olhos.
+              {
+                id: "alteracoes",
+                title: "🔄 Alterações",
+                color: "bg-destructive",
+                items: filtered.filter((r) => alteracaoDoReq(r)).map(toItem),
+              },
+              ...DESIGN_COLUMNS.map((col) => ({
+                ...col,
+                items: filtered.filter((r) => r.status === col.id && !alteracaoDoReq(r)).map(toItem),
               })),
-          }))}
+            ];
+          })()}
           renderCard={(item) => (
             <div
               onClick={() => onBriefing(item._req as DesignRequest)}
-              className="bg-card border border-border rounded-lg p-3 space-y-2 hover:border-primary/30 transition-colors cursor-pointer">
+              className={`bg-card border rounded-lg p-3 space-y-2 hover:border-primary/30 transition-colors cursor-pointer ${item._alteracao ? "border-destructive/40" : "border-border"}`}>
+              {item._alteracao && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[10px] text-destructive">
+                  <div className="flex items-center gap-1 font-semibold"><RotateCcw size={10} /> Alteração solicitada</div>
+                  {item._alteracao.reason && <div className="mt-0.5 leading-snug text-destructive/90 line-clamp-2">{item._alteracao.reason}</div>}
+                </div>
+              )}
               <p className="text-sm font-medium text-foreground">{item.title}</p>
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-primary">{item.clientName}</span>
@@ -1926,7 +1966,8 @@ function RequestsView({
               </div>
             </div>
           )}
-          onMove={(itemId, _from, to) => {
+          onMove={(itemId, from, to) => {
+            if (to === "alteracoes" || from === "alteracoes") return; // coluna virtual, não é status real
             updateDesignRequest(itemId, { status: to as DesignRequest["status"] });
           }}
           onEdit={(item) => {
