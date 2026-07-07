@@ -118,11 +118,11 @@ const config: Config = {
         "3xl": "1.5rem",
       },
       fontFamily: {
-        // UI/corpo = Inter (Sober Premium). Montserrat só na marca via `font-brand`.
-        sans: ["var(--font-inter)", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        // UI/corpo = Montserrat (pedido do Roberto: fonte da marca no sistema todo).
+        sans: ["var(--font-montserrat)", "Montserrat", "ui-sans-serif", "system-ui", "sans-serif"],
         brand: ["var(--font-montserrat)", "Montserrat", "ui-sans-serif", "sans-serif"],
-        // Design System v2
-        inter:      ["var(--font-inter)", "ui-sans-serif", "sans-serif"],
+        // `font-inter` também aponta pro Montserrat (telas antigas usam essa classe).
+        inter:      ["var(--font-montserrat)", "Montserrat", "ui-sans-serif", "sans-serif"],
         mono:       ["var(--font-jetbrains-mono)", "ui-monospace", "monospace"],
         jetbrains:  ["var(--font-jetbrains-mono)", "ui-monospace", "monospace"],
       },
