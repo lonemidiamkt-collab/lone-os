@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  ClipboardList, Copy, Check, X, Link2, MessageSquare, Sparkles, Loader2, RotateCcw, Pencil, Save,
+  ClipboardList, Copy, Check, X, Link2, MessageSquare, Sparkles, Loader2, RotateCcw, Pencil, Save, FileDown,
 } from "lucide-react";
 import type { Client } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
@@ -47,6 +47,7 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<DiagAnalise | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [pdfing, setPdfing] = useState(false);
   const autoRef = useRef(false);
 
   const token = client.fichaVivaToken;
@@ -139,6 +140,24 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
       setError(e instanceof Error ? e.message : "Erro ao salvar");
     } finally {
       setSavingEdit(false);
+    }
+  }
+
+  async function downloadPdf() {
+    setPdfing(true); setError("");
+    try {
+      const res = await authedFetch(`/api/clients/${client.id}/ficha-viva/pdf`);
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || "Falha ao gerar PDF"); }
+      const blob = await res.blob();
+      const u = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = u; link.download = "estrutura-comercial.pdf";
+      document.body.appendChild(link); link.click(); link.remove();
+      URL.revokeObjectURL(u);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Falha ao gerar PDF");
+    } finally {
+      setPdfing(false);
     }
   }
 
@@ -262,6 +281,9 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm text-foreground flex-1">{a.diagnostico}</p>
                   <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={downloadPdf} disabled={pdfing} className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1">
+                      {pdfing ? <Loader2 size={11} className="animate-spin" /> : <FileDown size={11} />} PDF
+                    </button>
                     <button onClick={startEdit} className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1"><Pencil size={11} /> Editar</button>
                     <button onClick={analyze} disabled={analyzing} className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1">
                       {analyzing ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />} Refazer
