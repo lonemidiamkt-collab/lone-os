@@ -3,14 +3,13 @@ export const dynamic = "force-dynamic";
 
 import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
+import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { buildSnapshot } from "@/lib/portal/buildSnapshot";
 
 export async function POST(req: NextRequest) {
-  const secret = req.headers.get("authorization")?.replace("Bearer ", "");
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  }
+  const denied = requireCron(req);
+  if (denied) return denied;
 
   const { data: clients } = await supabaseAdmin
     .from("clients")

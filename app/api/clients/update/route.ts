@@ -86,6 +86,20 @@ export async function POST(req: NextRequest) {
 
   const { id, ...updates } = parsed.data;
 
+  // Campos SENSÍVEIS (credenciais, financeiro/PII, lifecycle) só admin altera. Os operacionais
+  // (notes, conta Meta, briefings, posts, assigned…) seguem liberados — tráfego/design editam esses.
+  const SENSITIVE_FIELDS = new Set([
+    "facebookLogin", "googleAdsLogin", "instagramLogin",
+    "clientPixKey", "cpfCnpj", "clientFinancePhone", "monthlyBudget", "paymentMethod",
+    "contractEnd", "birthDate", "phone", "email", "status",
+  ]);
+  if (!user.isAdmin && Object.keys(updates).some((k) => SENSITIVE_FIELDS.has(k))) {
+    return NextResponse.json(
+      { error: "Só admin pode alterar credenciais, dados financeiros/PII ou o status do cliente." },
+      { status: 403 },
+    );
+  }
+
   const row: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(updates)) {
     if (val === undefined || val === null) continue;
