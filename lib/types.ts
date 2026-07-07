@@ -156,6 +156,11 @@ export interface Client {
   publicReportEnabled?: boolean;
   whatsappTeamPhone?: string;
   portalWelcomeMessage?: string;
+  // ─── Ficha Viva (link do cliente: crescimento + diagnóstico) ──────────
+  fichaVivaToken?: string;
+  fichaVivaTokenCreatedAt?: string;
+  fichaVivaTokenRevokedAt?: string;
+  fichaVivaEnabled?: boolean;
 }
 
 export interface MoodEntry {

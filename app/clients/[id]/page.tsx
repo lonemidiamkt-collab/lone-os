@@ -46,6 +46,7 @@ import WhatsAppTemplates from "@/components/WhatsAppTemplates";
 import MeetingScheduler from "@/components/MeetingScheduler";
 const ContractGenerator = dynamic(() => import("@/components/ContractGenerator"), { ssr: false });
 import PortalManagementCard from "@/components/PortalManagementCard";
+import FichaVivaManagementCard from "@/components/FichaVivaManagementCard";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { exportReportAsPdf } from "@/lib/exportPdf";
@@ -77,7 +78,7 @@ const ASSET_TYPE_CONFIG: Record<CreativeAsset["type"], { label: string; color: s
   logo:       { label: "Logo",       color: "text-primary",  icon: Star },
 };
 
-const TABS = ["overview", "dados", "resultados", "analise-ia", "briefing", "contratos", "chat", "historico", "tasks", "content", "onboarding", "wallet", "reports", "portal"] as const;
+const TABS = ["overview", "dados", "resultados", "analise-ia", "briefing", "contratos", "chat", "historico", "tasks", "content", "onboarding", "wallet", "reports", "portal", "ficha-viva"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -95,6 +96,7 @@ const TAB_LABELS: Record<Tab, string> = {
   wallet: "Creative Wallet",
   reports: "Relatórios",
   portal: "Portal",
+  "ficha-viva": "Ficha Viva",
 };
 
 export default function ClientDetailPage() {
@@ -416,7 +418,7 @@ export default function ClientDetailPage() {
 
   const isAdmin = role === "admin" || role === "manager";
   const visibleTabs = TABS.filter((tab) => {
-    if (tab === "reports" || tab === "wallet" || tab === "contratos" || tab === "portal") return isAdmin;
+    if (tab === "reports" || tab === "wallet" || tab === "contratos" || tab === "portal" || tab === "ficha-viva") return isAdmin;
     return true;
   });
 
@@ -1618,6 +1620,15 @@ export default function ClientDetailPage() {
           {activeTab === "portal" && isAdmin && (
             <div className="animate-fade-in max-w-xl">
               <PortalManagementCard
+                client={client}
+                onUpdate={(patch) => updateClientData(client.id, patch)}
+              />
+            </div>
+          )}
+
+          {activeTab === "ficha-viva" && isAdmin && (
+            <div className="animate-fade-in max-w-xl">
+              <FichaVivaManagementCard
                 client={client}
                 onUpdate={(patch) => updateClientData(client.id, patch)}
               />

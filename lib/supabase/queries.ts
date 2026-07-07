@@ -126,6 +126,11 @@ function snakeToClient(row: Record<string, unknown>): Client {
     publicReportTokenRevokedAt: (row.public_report_token_revoked_at as string) ?? undefined,
     publicReportEnabled: (row.public_report_enabled as boolean) ?? false,
     whatsappTeamPhone: (row.whatsapp_team_phone as string) ?? undefined,
+    // Ficha Viva (link do cliente)
+    fichaVivaToken: (row.ficha_viva_token as string) ?? undefined,
+    fichaVivaTokenCreatedAt: (row.ficha_viva_token_created_at as string) ?? undefined,
+    fichaVivaTokenRevokedAt: (row.ficha_viva_token_revoked_at as string) ?? undefined,
+    fichaVivaEnabled: (row.ficha_viva_enabled as boolean) ?? false,
   };
 }
 
