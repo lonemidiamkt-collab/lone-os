@@ -1,37 +1,35 @@
 "use client";
 
-// components/fichaviva/CrescimentoPanel.tsx — o "Painel de Crescimento" do cockpit Ficha Viva 360
-// (equivalente à aba 01 do protótipo). Grid EDITÁVEL mês a mês (faturamento + vendas; ticket é
-// calculado, como a coluna gerada no banco), com KPIs, gráficos que recalculam na hora
-// (faturamento em barras + ticket em linha) e o Health Score num medidor. Lê/escreve o
-// client_financial_results (mesma tabela da aba Resultados) — salva por mês no blur, preservando
-// investimento/ROI que já existirem na linha.
+// components/fichaviva/CrescimentoPanel.tsx — "Painel de Crescimento" do cockpit Ficha Viva 360.
+// Inspirado no relatório navy da Lone: rótulo de valor nas barras, "a leitura que importa"
+// (gerada dos dados), Health Score e grid editável. Lê/escreve client_financial_results (mesma
+// tabela da aba Resultados) — salva por mês no blur, preservando investimento/ROI já existentes.
+// Trimestre = trimestre de CALENDÁRIO (Jan–Mar, Abr–Jun), não 3 meses corridos.
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { TrendingUp, TrendingDown, Minus, Loader2, Check, Link2 } from "lucide-react";
 import {
-  TrendingUp, TrendingDown, Minus, Loader2, Check, Link2, FileText,
-} from "lucide-react";
-import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, LabelList, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, ReferenceLine, Cell,
 } from "recharts";
 import { supabase } from "@/lib/supabase/client";
 
 interface Props {
   clientId: string;
-  onGerarLink?: () => void;   // leva pra sub-aba Raio-X (onde mora a gestão do link)
+  onGerarLink?: () => void;
 }
 
 interface Row {
   month: string;              // "YYYY-MM"
   revenue: number;
   vendas: number | null;
-  investment: number;         // preservado (não editado aqui)
+  investment: number;
   roi: number | null;
   strategy_note: string;
 }
 
 type Period = "mes" | "tri" | "sem";
+interface Point { label: string; fat: number; vendas: number; ticket: number }
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const brl = (n: number) => "R$ " + (n || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
@@ -39,8 +37,13 @@ const brlk = (n: number) => "R$ " + (n / 1000).toFixed(0) + "k";
 const intBR = (n: number) => Math.round(n || 0).toLocaleString("pt-BR");
 const ticketOf = (r: Row) => (r.vendas && r.vendas > 0 ? r.revenue / r.vendas : null);
 const mLabel = (ym: string) => { const [y, m] = ym.split("-"); return `${MESES[+m - 1]}/${y.slice(2)}`; };
+/** Rótulo curto de valor pra cima da barra (R$ 1,05M / R$ 58k). */
+function brlBar(n: number): string {
+  if (n >= 1e6) return "R$ " + (n / 1e6).toFixed(2).replace(".", ",") + "M";
+  if (n >= 1000) return "R$ " + Math.round(n / 1000) + "k";
+  return brl(n);
+}
 
-/** Últimos n meses (YYYY-MM), do mais antigo pro atual. */
 function lastMonths(n: number): string[] {
   const now = new Date();
   const out: string[] = [];
@@ -51,6 +54,30 @@ function lastMonths(n: number): string[] {
   return out;
 }
 
+/** Agrupa por TRIMESTRE de calendário. Rótulo = faixa de meses presente (ex: "Jan–Mar 26"). */
+function toQuarters(rows: Row[]): Point[] {
+  const map = new Map<string, Row[]>();
+  rows.forEach((r) => {
+    const [y, m] = r.month.split("-").map(Number);
+    const key = `${y}-Q${Math.ceil(m / 3)}`;
+    (map.get(key) ?? map.set(key, []).get(key)!).push(r);
+  });
+  return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([, chunk]) => {
+    const fat = chunk.reduce((s, r) => s + r.revenue, 0);
+    const vendas = chunk.reduce((s, r) => s + (r.vendas || 0), 0);
+    const yy = chunk[0].month.slice(2, 4);
+    const first = MESES[+chunk[0].month.split("-")[1] - 1];
+    const last = MESES[+chunk[chunk.length - 1].month.split("-")[1] - 1];
+    return { label: first === last ? `${first} ${yy}` : `${first}–${last} ${yy}`, fat, vendas, ticket: vendas ? fat / vendas : 0 };
+  });
+}
+
+const TT = {
+  contentStyle: { backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12 },
+  labelStyle: { color: "var(--muted-foreground)", fontWeight: 600, marginBottom: 2 },
+  itemStyle: { color: "var(--foreground)", fontWeight: 600 },
+} as const;
+
 export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +85,6 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   const [savingMonth, setSavingMonth] = useState<string | null>(null);
   const [savedMonth, setSavedMonth] = useState<string | null>(null);
 
-  // Carrega + monta timeline contínua (últimos 12 meses ∪ meses com dado)
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -92,9 +118,8 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   const saveMonth = useCallback(async (month: string) => {
     const r = rows.find((x) => x.month === month);
     if (!r) return;
-    if (!r.revenue && r.vendas == null) return; // linha vazia — não grava
+    if (!r.revenue && r.vendas == null) return;
     setSavingMonth(month);
-    // Preserva investment/roi/strategy_note; ticket é gerado no banco.
     await supabase.from("client_financial_results").upsert({
       client_id: clientId, month,
       revenue: r.revenue, vendas: r.vendas,
@@ -105,7 +130,6 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
     setTimeout(() => setSavedMonth((m) => (m === month ? null : m)), 1500);
   }, [rows, clientId]);
 
-  // ---- dados com faturamento (base de KPIs/gráficos) ----
   const withData = useMemo(() => rows.filter((r) => r.revenue > 0), [rows]);
 
   const kpis = useMemo(() => {
@@ -114,24 +138,51 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
     return { fat, ven, ticket: ven ? fat / ven : 0, meses: withData.length };
   }, [withData]);
 
-  // ---- séries por período ----
-  const serie = useMemo(() => {
-    if (period === "mes") {
-      return withData.map((r) => ({ label: mLabel(r.month), fat: r.revenue, ticket: ticketOf(r) ?? 0 }));
-    }
-    const grupos: { label: string; fat: number; ven: number }[] = [];
-    const size = period === "tri" ? 3 : 6;
-    for (let i = 0; i < withData.length; i += size) {
-      const chunk = withData.slice(i, i + size);
-      const fat = chunk.reduce((s, r) => s + r.revenue, 0);
-      const ven = chunk.reduce((s, r) => s + (r.vendas || 0), 0);
-      const label = period === "tri" ? `${chunk[0] ? mLabel(chunk[0].month) : ""}–${chunk[chunk.length - 1] ? mLabel(chunk[chunk.length - 1].month) : ""}` : "Semestre";
-      grupos.push({ label, fat, ven });
-    }
-    return grupos.map((g) => ({ label: g.label, fat: g.fat, ticket: g.ven ? g.fat / g.ven : 0 }));
+  const serie: Point[] = useMemo(() => {
+    if (period === "mes") return withData.map((r) => ({ label: mLabel(r.month), fat: r.revenue, vendas: r.vendas || 0, ticket: ticketOf(r) ?? 0 }));
+    if (period === "tri") return toQuarters(withData);
+    const fat = withData.reduce((s, r) => s + r.revenue, 0);
+    const ven = withData.reduce((s, r) => s + (r.vendas || 0), 0);
+    return withData.length ? [{ label: "Semestre", fat, vendas: ven, ticket: ven ? fat / ven : 0 }] : [];
   }, [withData, period]);
 
-  // ---- health de crescimento (tendência de faturamento) ----
+  // "A leitura que importa" — comparação do trimestre atual vs. o anterior (ou tendência).
+  const insight = useMemo(() => {
+    const q = toQuarters(withData);
+    const pctFmt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")}%`;
+    if (q.length >= 2) {
+      const a = q[q.length - 2], b = q[q.length - 1];
+      const dFat = a.fat ? (b.fat / a.fat - 1) * 100 : 0;
+      const dVen = a.vendas ? (b.vendas / a.vendas - 1) * 100 : 0;
+      const dTkt = a.ticket ? (b.ticket / a.ticket - 1) * 100 : 0;
+      const tone: "up" | "flat" | "down" = dFat > 3 ? "up" : dFat < -3 ? "down" : "flat";
+      let headline: string;
+      if (dFat >= 1 && dVen < -1) headline = "Faturou mais vendendo menos";
+      else if (dFat > 3 && dVen > 1) headline = "Crescendo em faturamento e volume";
+      else if (dFat < -3) headline = "Faturamento recuou no período";
+      else headline = "Faturamento estável";
+      const detail = `Do trimestre anterior (${a.label}) pro atual (${b.label}), o faturamento fez ${pctFmt(dFat)} ` +
+        `com ${pctFmt(dVen)} de vendas — e o ticket médio ${dTkt >= 0 ? "subiu" : "caiu"} ${pctFmt(Math.abs(dTkt))}. ` +
+        (dVen < 0 && dTkt > 0 ? "Cada venda passou a valer mais, sustentando o faturamento com menos volume." :
+         dFat > 0 && dVen > 0 ? "Mais movimento e mais valor por venda ao mesmo tempo." :
+         dFat < 0 ? "Vale olhar oferta e ticket pra reverter." : "");
+      return { headline, detail, tone };
+    }
+    if (withData.length >= 2) {
+      const n = Math.min(3, Math.floor(withData.length / 2));
+      const recent = withData.slice(-n).reduce((s, r) => s + r.revenue, 0) / n;
+      const prior = withData.slice(-2 * n, -n).reduce((s, r) => s + r.revenue, 0) / n;
+      const d = prior ? (recent / prior - 1) * 100 : 0;
+      const tone: "up" | "flat" | "down" = d > 5 ? "up" : d < -3 ? "down" : "flat";
+      return {
+        headline: d > 5 ? "Faturamento em alta" : d < -3 ? "Faturamento recuando" : "Faturamento estável",
+        detail: `Média recente ${brl(recent)}/mês (${pctFmt(d)} vs. o período anterior). Ticket médio em ${brl(kpis.ticket)}.`,
+        tone,
+      };
+    }
+    return null;
+  }, [withData, kpis.ticket]);
+
   const health = useMemo(() => {
     const rev = withData.map((r) => r.revenue);
     if (rev.length < 2) return { score: 50, level: "unknown" as const, label: "Sem dados", why: "Registre pelo menos 2 meses de faturamento para medir o crescimento." };
@@ -149,21 +200,31 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
 
   const healthColor = health.level === "up" ? "var(--lone-success)" : health.level === "risk" ? "var(--destructive)" : health.level === "ok" ? "var(--primary)" : "var(--muted-foreground)";
   const maxFat = Math.max(...serie.map((s) => s.fat), 1);
-  const refFat = 1_000_000; // linha de referência R$ 1M (como o protótipo)
+  const refFat = 1_000_000;
+  const toneColor = insight?.tone === "up" ? "text-lone-success" : insight?.tone === "down" ? "text-destructive" : "text-primary";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fade-in">
       {/* KPIs */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        <Kpi label="Faturamento (registrado)" value={brl(kpis.fat)} foot={kpis.meses ? `Média ${brl(kpis.fat / kpis.meses)}/mês` : "—"} />
+        <Kpi label="Faturamento registrado" value={brl(kpis.fat)} foot={kpis.meses ? `Média ${brl(kpis.fat / kpis.meses)}/mês` : "—"} />
         <Kpi label="Vendas" value={intBR(kpis.ven)} foot={`${kpis.meses} ${kpis.meses === 1 ? "mês" : "meses"} com dado`} />
         <Kpi label="Ticket médio" value={brl(kpis.ticket)} foot="faturamento ÷ vendas" />
         <Kpi label="Health Score" value={`${health.score}`} foot={health.label} accent={healthColor} />
       </div>
 
-      {/* Toolbar: período + ações */}
+      {/* A leitura que importa */}
+      {insight && (
+        <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
+          <p className="text-lone-eyebrow text-primary mb-1.5">A leitura que importa</p>
+          <p className={`text-lone-h2 font-semibold ${toneColor}`}>{insight.headline}</p>
+          <p className="text-sm text-muted-foreground mt-1 max-w-prose">{insight.detail}</p>
+        </div>
+      )}
+
+      {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mr-1">Visão</span>
+        <span className="text-lone-eyebrow text-muted-foreground mr-1">Visão</span>
         <div className="flex bg-surface border border-border rounded-lg p-0.5">
           {([["mes", "Mês"], ["tri", "Trimestre"], ["sem", "Semestre"]] as [Period, string][]).map(([p, l]) => (
             <button key={p} onClick={() => setPeriod(p)}
@@ -178,25 +239,31 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
         )}
       </div>
 
-      {/* Faturamento (barras) + Health (medidor) */}
+      {/* Faturamento + Health */}
       <div className="grid lg:grid-cols-[1.4fr_1fr] gap-3">
-        <div className="card space-y-2">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2"><TrendingUp size={14} className="text-primary" /> Faturamento</h3>
+        <div className="card space-y-1">
+          <h3 className="text-lone-h2 font-semibold flex items-center gap-2"><TrendingUp size={15} className="text-primary" /> Faturamento</h3>
+          <p className="text-lone-caption text-muted-foreground">{period === "mes" ? "Por mês" : period === "tri" ? "Por trimestre (calendário)" : "Total do período"} · referência R$ 1M</p>
           {serie.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-8 text-center">Preencha o faturamento abaixo pra ver a curva.</p>
+            <p className="text-xs text-muted-foreground py-10 text-center">Preencha o faturamento abaixo pra ver a curva.</p>
           ) : (
-            <div className="h-[240px]">
+            <div className="h-[248px] pt-2">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={serie} margin={{ top: 16, right: 12, bottom: 0, left: 0 }}>
+                <BarChart data={serie} margin={{ top: 22, right: 12, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="fvFat" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stopColor="var(--primary)" stopOpacity={0.95} />
+                      <stop offset="1" stopColor="var(--primary)" stopOpacity={0.55} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={{ stroke: "var(--border)" }} tickLine={false} />
-                  <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => brlk(Number(v))} />
-                  <Tooltip cursor={{ fill: "var(--muted)", opacity: 0.15 }}
-                    contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, fontSize: 12 }}
-                    labelStyle={{ color: "var(--muted-foreground)" }} formatter={(v) => [brl(Number(v)), "Faturamento"]} />
-                  {maxFat >= refFat * 0.5 && <ReferenceLine y={refFat} stroke="var(--primary)" strokeDasharray="4 4" label={{ value: "R$ 1M", fill: "var(--primary)", fontSize: 10, position: "insideTopLeft" }} />}
-                  <Bar dataKey="fat" radius={[6, 6, 0, 0]} maxBarSize={56}>
-                    {serie.map((_, i) => <Cell key={i} fill="var(--primary)" />)}
+                  <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => brlk(Number(v))} width={44} />
+                  <Tooltip cursor={{ fill: "var(--muted)", opacity: 0.12 }} {...TT} formatter={(v) => [brl(Number(v)), "Faturamento"]} />
+                  {maxFat >= refFat * 0.5 && <ReferenceLine y={refFat} stroke="var(--primary)" strokeDasharray="4 4" strokeOpacity={0.7} label={{ value: "R$ 1M", fill: "var(--primary)", fontSize: 10, position: "insideTopLeft" }} />}
+                  <Bar dataKey="fat" radius={[6, 6, 0, 0]} maxBarSize={64}>
+                    {serie.map((_, i) => <Cell key={i} fill="url(#fvFat)" />)}
+                    <LabelList dataKey="fat" position="top" formatter={(v) => brlBar(Number(v))} fill="var(--foreground)" fontSize={10} fontWeight={700} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -205,11 +272,11 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
         </div>
 
         <div className="card space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Health Score</h3>
+          <h3 className="text-lone-h2 font-semibold">Health Score</h3>
           <div className="flex items-center gap-4">
             <Gauge score={health.score} color={healthColor} />
             <div className="min-w-0">
-              <div className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full ${
+              <div className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
                 health.level === "up" ? "bg-lone-success-bg text-lone-success" :
                 health.level === "risk" ? "bg-destructive/10 text-destructive" :
                 health.level === "ok" ? "bg-primary/10 text-primary" : "bg-muted/30 text-muted-foreground"}`}>
@@ -222,21 +289,23 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
         </div>
       </div>
 
-      {/* Ticket médio (linha) */}
-      <div className="card space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">Evolução do ticket médio</h3>
+      {/* Ticket médio */}
+      <div className="card space-y-1">
+        <h3 className="text-lone-h2 font-semibold">Evolução do ticket médio</h3>
+        <p className="text-lone-caption text-muted-foreground">Cada venda valendo mais ao longo do período</p>
         {serie.filter((s) => s.ticket > 0).length < 2 ? (
-          <p className="text-xs text-muted-foreground py-6 text-center">Precisa de vendas em 2+ meses pra traçar o ticket.</p>
+          <p className="text-xs text-muted-foreground py-6 text-center">Precisa de vendas em 2+ períodos pra traçar o ticket.</p>
         ) : (
-          <div className="h-[200px]">
+          <div className="h-[204px] pt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={serie} margin={{ top: 16, right: 16, bottom: 0, left: 0 }}>
+              <LineChart data={serie} margin={{ top: 22, right: 20, bottom: 0, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={{ stroke: "var(--border)" }} tickLine={false} />
-                <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => brl(Number(v))} />
-                <Tooltip contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, fontSize: 12 }}
-                  labelStyle={{ color: "var(--muted-foreground)" }} formatter={(v) => [brl(Number(v)), "Ticket"]} />
-                <Line type="monotone" dataKey="ticket" stroke="var(--primary)" strokeWidth={2.5} dot={{ fill: "var(--primary)", r: 3 }} />
+                <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => brl(Number(v))} width={56} />
+                <Tooltip {...TT} formatter={(v) => [brl(Number(v)), "Ticket"]} />
+                <Line type="monotone" dataKey="ticket" stroke="var(--primary)" strokeWidth={2.5} dot={{ fill: "var(--primary)", r: 3 }} activeDot={{ r: 5 }}>
+                  <LabelList dataKey="ticket" position="top" formatter={(v) => brl(Number(v))} fill="var(--foreground)" fontSize={10} fontWeight={700} />
+                </Line>
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -246,13 +315,13 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
       {/* Grid editável */}
       <div className="card space-y-3">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Dados mês a mês</h3>
-          <p className="text-[11px] text-muted-foreground">Digite faturamento e vendas — o ticket é calculado. Salva ao sair do campo.</p>
+          <h3 className="text-lone-h2 font-semibold">Dados mês a mês</h3>
+          <p className="text-lone-caption text-muted-foreground">Digite faturamento e vendas — o ticket é calculado. Salva ao sair do campo.</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <tr className="text-lone-eyebrow text-muted-foreground">
                 <th className="text-left font-medium py-2 pr-3">Mês</th>
                 <th className="text-right font-medium py-2 px-3">Faturamento (R$)</th>
                 <th className="text-right font-medium py-2 px-3">Vendas</th>
@@ -271,16 +340,12 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
                     </td>
                     <td className="py-1 px-3 text-right">
                       <input type="number" inputMode="decimal" defaultValue={r.revenue || ""}
-                        onChange={(e) => setField(r.month, "revenue", e.target.value)}
-                        onBlur={() => saveMonth(r.month)}
-                        placeholder="0"
+                        onChange={(e) => setField(r.month, "revenue", e.target.value)} onBlur={() => saveMonth(r.month)} placeholder="0"
                         className="w-28 text-right bg-surface border border-border rounded-md px-2 py-1.5 text-xs font-mono text-foreground outline-none focus:border-primary/50" />
                     </td>
                     <td className="py-1 px-3 text-right">
                       <input type="number" inputMode="numeric" defaultValue={r.vendas ?? ""}
-                        onChange={(e) => setField(r.month, "vendas", e.target.value)}
-                        onBlur={() => saveMonth(r.month)}
-                        placeholder="0"
+                        onChange={(e) => setField(r.month, "vendas", e.target.value)} onBlur={() => saveMonth(r.month)} placeholder="0"
                         className="w-24 text-right bg-surface border border-border rounded-md px-2 py-1.5 text-xs font-mono text-foreground outline-none focus:border-primary/50" />
                     </td>
                     <td className="py-1.5 pl-3 text-right">
@@ -292,7 +357,7 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
                 );
               })}
               <tr className="border-t border-border">
-                <td className="py-2.5 pr-3 font-semibold text-xs">Total (registrado)</td>
+                <td className="py-2.5 pr-3 font-semibold text-xs">Total registrado</td>
                 <td className="py-2.5 px-3 text-right font-mono font-semibold text-xs">{brl(kpis.fat)}</td>
                 <td className="py-2.5 px-3 text-right font-mono font-semibold text-xs">{intBR(kpis.ven)}</td>
                 <td className="py-2.5 pl-3 text-right font-mono font-semibold text-xs">{brl(kpis.ticket)}</td>
@@ -300,9 +365,6 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
             </tbody>
           </table>
         </div>
-        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-          <FileText size={11} /> Os mesmos números aparecem na aba Resultados e alimentam o link do cliente e a Carteira.
-        </p>
       </div>
     </div>
   );
@@ -310,10 +372,10 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
 
 function Kpi({ label, value, foot, accent }: { label: string; value: string; foot: string; accent?: string }) {
   return (
-    <div className="card">
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-1.5">{label}</p>
-      <p className="text-xl font-bold text-foreground" style={accent ? { color: accent } : undefined}>{value}</p>
-      <p className="text-[11px] text-muted-foreground mt-1">{foot}</p>
+    <div className="card border-l-2 border-l-primary/40">
+      <p className="text-lone-eyebrow text-muted-foreground mb-1.5">{label}</p>
+      <p className="text-lone-hero font-semibold tracking-tight text-foreground" style={accent ? { color: accent } : undefined}>{value}</p>
+      <p className="text-lone-caption text-muted-foreground mt-1">{foot}</p>
     </div>
   );
 }
