@@ -14,14 +14,38 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { DIAG_QUESTIONS } from "@/lib/fichaViva/questions";
 import type { GrowthSummary } from "@/lib/fichaViva/growth";
 
+interface SeriePonto { month: string; revenue: number; vendas: number | null; ticket: number | null }
 interface AccessData {
   clientName: string;
   whatsappPhone: string;
   welcomeMessage: string | null;
   growth: GrowthSummary;
+  series: SeriePonto[];
   alreadyAnswered: boolean;
 }
 type Sub = "crescimento" | "raiox";
+type Period = "mes" | "tri" | "sem";
+const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const mLabel = (ym: string) => { const [y, m] = ym.split("-"); return `${MESES[+m - 1]}/${y.slice(2)}`; };
+
+/** Agrega a série por Mês / Trimestre (calendário) / Semestre — ticket = ΣfatΣvendas. */
+function aggregate(series: SeriePonto[], period: Period): { label: string; fat: number; ticket: number | null }[] {
+  const data = series.filter((r) => r.revenue > 0);
+  if (period === "mes") return data.map((r) => ({ label: mLabel(r.month), fat: r.revenue, ticket: r.vendas ? r.revenue / r.vendas : null }));
+  if (period === "sem") {
+    const fat = data.reduce((s, r) => s + r.revenue, 0);
+    const ven = data.reduce((s, r) => s + (r.vendas || 0), 0);
+    return data.length ? [{ label: "Semestre", fat, ticket: ven ? fat / ven : null }] : [];
+  }
+  const map = new Map<string, SeriePonto[]>();
+  data.forEach((r) => { const [y, m] = r.month.split("-").map(Number); const k = `${y}-Q${Math.ceil(m / 3)}`; (map.get(k) ?? map.set(k, []).get(k)!).push(r); });
+  return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([, chunk]) => {
+    const fat = chunk.reduce((s, r) => s + r.revenue, 0);
+    const ven = chunk.reduce((s, r) => s + (r.vendas || 0), 0);
+    const first = MESES[+chunk[0].month.split("-")[1] - 1], last = MESES[+chunk[chunk.length - 1].month.split("-")[1] - 1];
+    return { label: first === last ? first : `${first}–${last}`, fat, ticket: ven ? fat / ven : null };
+  });
+}
 const fmtBRL = (v: number) => "R$ " + (v || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 const TT = {
   contentStyle: { backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12 },
@@ -73,11 +97,11 @@ export default function FichaVivaClient({ token }: { token: string }) {
           <div>
             <p className="text-lone-eyebrow text-primary">Lone Mídia</p>
             <h1 className="text-lone-h2 font-semibold mt-1">Acesso ao seu painel</h1>
-            <p className="text-sm text-muted-foreground mt-1">Digite seu código de acesso (o primeiro nome da sua loja).</p>
+            <p className="text-sm text-muted-foreground mt-1">Digite o código de acesso que a Lone enviou pra você.</p>
           </div>
           <input
-            value={code} onChange={(e) => setCode(e.target.value)} autoFocus
-            placeholder="Ex: reformar"
+            value={code} onChange={(e) => setCode(e.target.value)} autoFocus autoComplete="off"
+            placeholder="Código de acesso"
             className="w-full text-center bg-card border border-border rounded-xl px-4 py-3 text-base text-foreground outline-none focus:border-primary/60"
           />
           {gateError && <p className="text-xs text-destructive">{gateError}</p>}
@@ -117,7 +141,7 @@ export default function FichaVivaClient({ token }: { token: string }) {
         </div>
 
         {sub === "crescimento"
-          ? <Crescimento token={token} code={code} growth={data.growth} onSaved={refresh} />
+          ? <Crescimento token={token} code={code} growth={data.growth} series={data.series} onSaved={refresh} />
           : <RaioX token={token} code={code} alreadyAnswered={data.alreadyAnswered} whatsappPhone={data.whatsappPhone} />}
 
         <footer className="pt-2 text-center">
@@ -131,7 +155,7 @@ export default function FichaVivaClient({ token }: { token: string }) {
 }
 
 // ── 01 · Meu Crescimento ──────────────────────────────────────────────────
-function Crescimento({ token, code, growth, onSaved }: { token: string; code: string; growth: GrowthSummary; onSaved: () => void }) {
+function Crescimento({ token, code, growth, series, onSaved }: { token: string; code: string; growth: GrowthSummary; series: SeriePonto[]; onSaved: () => void }) {
   const now = new Date();
   const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
   const [fat, setFat] = useState("");
@@ -140,7 +164,9 @@ function Crescimento({ token, code, growth, onSaved }: { token: string; code: st
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
 
-  const chart = growth.series.map((p) => ({ month: p.month.slice(5), Faturamento: p.faturamento }));
+  const [period, setPeriod] = useState<Period>("mes");
+  const agg = aggregate(series, period);
+  const monthly = series.filter((r) => r.revenue > 0);
 
   async function save() {
     if (!fat.trim()) { setErr("Informe o faturamento do mês."); return; }
@@ -188,19 +214,72 @@ function Crescimento({ token, code, growth, onSaved }: { token: string; code: st
               <Mini label="Último mês" value={growth.last ? fmtBRL(growth.last.faturamento) : "—"} />
               <Mini label="Ticket médio" value={growth.last?.ticket ? fmtBRL(growth.last.ticket) : "—"} />
             </div>
-            {chart.length >= 2 && (
-              <div className="h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chart} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={{ stroke: "var(--border)" }} tickLine={false} />
-                    <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={40} />
-                    <Tooltip {...TT} formatter={(v) => [fmtBRL(Number(v)), "Faturamento"]} />
-                    <Line type="monotone" dataKey="Faturamento" stroke="var(--lone-success)" strokeWidth={2.5} dot={{ fill: "var(--lone-success)", r: 3 }} />
-                  </LineChart>
-                </ResponsiveContainer>
+            {/* Seletor de período */}
+            <div className="flex items-center gap-2">
+              <span className="text-lone-caption text-muted-foreground mr-1">Ver por</span>
+              <div className="flex bg-card border border-border rounded-lg p-0.5">
+                {([["mes", "Mês"], ["tri", "Trimestre"], ["sem", "Semestre"]] as [Period, string][]).map(([p, l]) => (
+                  <button key={p} onClick={() => setPeriod(p)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${period === p ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}>{l}</button>
+                ))}
+              </div>
+            </div>
+
+            {agg.length >= 1 && (
+              <div>
+                <p className="text-lone-caption text-muted-foreground mb-1">Faturamento</p>
+                <div className="h-[190px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={agg} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={{ stroke: "var(--border)" }} tickLine={false} />
+                      <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={40} />
+                      <Tooltip {...TT} formatter={(v) => [fmtBRL(Number(v)), "Faturamento"]} />
+                      <Line type="monotone" dataKey="fat" stroke="var(--lone-success)" strokeWidth={2.5} dot={{ fill: "var(--lone-success)", r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             )}
+
+            {agg.filter((a) => a.ticket).length >= 2 && (
+              <div>
+                <p className="text-lone-caption text-muted-foreground mb-1">Ticket médio</p>
+                <div className="h-[170px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={agg} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={{ stroke: "var(--border)" }} tickLine={false} />
+                      <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmtBRL(Number(v))} width={54} />
+                      <Tooltip {...TT} formatter={(v) => [fmtBRL(Number(v)), "Ticket"]} />
+                      <Line type="monotone" dataKey="ticket" stroke="var(--primary)" strokeWidth={2.5} dot={{ fill: "var(--primary)", r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* Tabela mês a mês */}
+            <div className="overflow-x-auto pt-1">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-lone-eyebrow text-muted-foreground">
+                    <th className="text-left font-medium py-2 pr-3">Mês</th>
+                    <th className="text-right font-medium py-2 px-3">Faturamento</th>
+                    <th className="text-right font-medium py-2 pl-3">Ticket médio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthly.map((r) => (
+                    <tr key={r.month} className="border-t border-border/50">
+                      <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">{mLabel(r.month)}</td>
+                      <td className="py-1.5 px-3 text-right font-medium">{fmtBRL(r.revenue)}</td>
+                      <td className="py-1.5 pl-3 text-right text-primary">{r.vendas ? fmtBRL(r.revenue / r.vendas) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </section>
