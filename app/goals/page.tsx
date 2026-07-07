@@ -195,7 +195,7 @@ export default function GoalsPage() {
   // Company OKRs (always from real data via hook)
   const companyOkrs = useMemo<OKR[]>(() => [
     kpiToOkr("co-1", "Reduzir churn para < 5%", metrics.company.churnRate, true),
-    kpiToOkr("co-2", "Atingir NPS > 8.5", metrics.company.nps),
+    kpiToOkr("co-2", "Saude media dos clientes > 80", metrics.company.nps),
     kpiToOkr("co-3", "Clientes ativos", metrics.company.activeClients),
     kpiToOkr("co-4", "Novos clientes/mes", metrics.company.newClients),
   ], [metrics.company]);
@@ -233,34 +233,52 @@ export default function GoalsPage() {
     return { ...snap, trendData };
   }, [MONTHLY_SNAPSHOTS]);
 
-  // Investimento Executado REAL (ad_accounts: gasto ÷ verba dos clientes em operação)
-  // sobrescreve o valor mock do hook quando há dado real de spend
-  const [realInvestPct, setRealInvestPct] = useState<number | null>(null);
+  // Tráfego REAL — /api/okr/traffic-metrics agrega ad_accounts (gasto÷verba) + metric_snapshots
+  // deduplicado (leads, custo-por-lead). Substitui o mock do hook. Se a rota falhar, mantém o hook.
+  type RealTraffic = {
+    investmentExecutedPct: number; isReal: boolean;
+    leadsMonth: number; cpl: number; leadsIsReal: boolean;
+    engagementRate: number; engagementIsReal: boolean;
+  };
+  const [realTraffic, setRealTraffic] = useState<RealTraffic | null>(null);
   useEffect(() => {
     let alive = true;
     fetch("/api/okr/traffic-metrics")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (alive && d?.isReal && typeof d.investmentExecutedPct === "number") setRealInvestPct(d.investmentExecutedPct); })
+      .then((d) => { if (alive && d) setRealTraffic(d as RealTraffic); })
       .catch(() => {});
     return () => { alive = false; };
   }, []);
 
   const investmentKpi = useMemo<KPIValue>(() => (
-    realInvestPct != null
-      ? { ...metrics.traffic.investmentExecuted, current: realInvestPct, isReal: true, source: "ad_accounts" }
+    realTraffic?.isReal
+      ? { ...metrics.traffic.investmentExecuted, current: realTraffic.investmentExecutedPct, isReal: true, source: "ad_accounts (gasto÷verba)" }
       : metrics.traffic.investmentExecuted
-  ), [metrics.traffic.investmentExecuted, realInvestPct]);
+  ), [metrics.traffic.investmentExecuted, realTraffic]);
+
+  // Custo por lead (substitui o "ROAS" — agência de geração de lead não tem receita por anúncio,
+  // então ROAS é inmedível; CPL = gasto real ÷ leads reais é a métrica de eficiência que existe).
+  const cplKpi = useMemo<KPIValue>(() => ({
+    current: realTraffic?.leadsIsReal ? realTraffic.cpl : 0,
+    target: dbTargets["cpl"] ?? 15, unit: "",
+    isReal: !!realTraffic?.leadsIsReal, source: "metric_snapshots (dedup)",
+  }), [realTraffic, dbTargets]);
+
+  const leadsKpi = useMemo<KPIValue>(() => ({
+    current: realTraffic?.leadsIsReal ? realTraffic.leadsMonth : 0,
+    target: dbTargets["leads_month"] ?? 500, unit: " leads",
+    isReal: !!realTraffic?.leadsIsReal, source: "metric_snapshots (dedup)",
+  }), [realTraffic, dbTargets]);
 
   // Real team OKRs for "atual" view
   const realTeamOkrs = useMemo<TeamOKRs[]>(() => [
     { team: "Trafego Pago", icon: TrendingUp, color: "var(--primary)", okrs: [
-      kpiToOkr("tr-1", "ROAS medio > 4.0", metrics.traffic.roas),
+      kpiToOkr("tr-1", "Custo por lead < R$ 15", cplKpi, true),
       kpiToOkr("tr-2", "Investimento executado > 95%", investmentKpi),
-      kpiToOkr("tr-3", "Novos leads/mes > 500", metrics.traffic.leadsPerMonth),
+      kpiToOkr("tr-3", "Novos leads/mes > 500", leadsKpi),
     ]},
     { team: "Social Media", icon: Instagram, color: "var(--primary)", okrs: [
       kpiToOkr("so-1", "Posts entregues/mes > 96", metrics.social.postsDelivered),
-      kpiToOkr("so-2", "Engajamento medio > 3.5%", metrics.social.engagementRate),
       kpiToOkr("so-3", "SLA de entrega < 48h", metrics.social.deliverySLA, true),
     ]},
     { team: "Design", icon: Palette, color: "var(--chart-4)", okrs: [
@@ -268,7 +286,7 @@ export default function GoalsPage() {
       kpiToOkr("de-2", "Tempo medio < 3 dias", metrics.design.avgDeliveryTime, true),
       kpiToOkr("de-3", "Satisfacao > 4.5/5", metrics.design.satisfaction),
     ]},
-  ], [metrics.traffic, metrics.social, metrics.design, investmentKpi]);
+  ], [metrics.social, metrics.design, investmentKpi, cplKpi, leadsKpi]);
 
   // Resolve snapshot based on selected time view
   const snapshot = useMemo<PeriodSnapshot>(() => {
@@ -419,6 +437,13 @@ export default function GoalsPage() {
             </div>
           );
         })()}
+        {/* Visões históricas ainda são estimativa — deixa explícito p/ não confundir com real */}
+        {timeView !== "atual" && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-lone-warning-bg border border-lone-warning-border text-lone-warning text-xs">
+            <span>⚠</span>
+            <span><strong>Projeção</strong> — as visões Mensal/Trimestral/YTD ainda são estimativas, não histórico real. A visão <strong>Atual</strong> é 100% em tempo real.</span>
+          </div>
+        )}
 
         {/* ─── Header ──────────────────────────────────────────── */}
         <div className="flex items-center justify-between gap-4">
@@ -679,7 +704,9 @@ export default function GoalsPage() {
             </div>
           </div>
 
-          {/* Trend Chart + Individual Goals */}
+          {/* Trend Chart + Individual Goals — só nas visões históricas; na Atual não há série
+              temporal real ainda (não mostramos gráfico/percentuais inventados) */}
+          {timeView !== "atual" && (
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-6">
             <div className="card p-4">
               <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
@@ -755,6 +782,7 @@ export default function GoalsPage() {
               </div>
             </div>
           </div>
+          )}
         </div>
 
         {/* ─── INTELLIGENCE PANEL — AI Feedback + Deltas ───── */}

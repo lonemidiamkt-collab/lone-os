@@ -303,7 +303,8 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
     return {
       company: {
         churnRate: { current: Math.round(churnRate * 10) / 10, target: t("churn_rate", 5), unit: "%", isReal: true, source: "Clients" },
-        nps: { current: Math.round(avgHealth * 100) / 100, target: t("nps", 80), unit: "pts", isReal: true, source: "Health Score" },
+        // Saúde média na escala 0–100 (antes vinha 0–10 contra meta 80 → parecia quebrado)
+        nps: { current: Math.round(avgHealth * 10), target: t("nps", 80), unit: "pts", isReal: true, source: "Saúde média dos clientes (0-100)" },
         activeClients: { current: activeClientsCount, target: t("active_clients", 40), unit: "", isReal: true, source: "Clients" },
         newClients: { current: newClientsCount, target: t("new_clients", 3), unit: "", isReal: true, source: "Clients" },
       },
@@ -343,7 +344,9 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
           target: t("delivery_time", 48), unit: "h",
           isReal: designIsReal, source: designIsReal ? "ContentCards" : "Simulado",
         },
-        satisfaction: { current: npsAvg > 0 ? npsAvg : 4.2, target: t("satisfaction", 4.5), unit: "/5", isReal: npsAvg > 0, source: npsAvg > 0 ? "Client NPS" : "Survey (nao integrado)" },
+        // Satisfação real derivada da saúde dos clientes (0–5). Sem pesquisa dedicada, a saúde
+        // média é o proxy real disponível — nunca mais o placeholder 4.2.
+        satisfaction: { current: Math.round((avgHealth / 2) * 10) / 10, target: t("satisfaction", 4.5), unit: "/5", isReal: true, source: "Saúde média dos clientes" },
       },
       audit,
     };

@@ -44,12 +44,25 @@ export async function GET(req: NextRequest) {
 
     const investmentExecutedPct = totalBudget > 0 ? Math.round((totalSpend / totalBudget) * 100) : 0;
 
+    // Leads / custo-por-lead / engajamento REAIS (função deduplicada — evita o bug do 95× de
+    // capturas por dia). Ver 074_okr_live_metrics_fn.sql. Se falhar, cai em zeros (não inventa).
+    const { data: live } = await supabaseAdmin.rpc("okr_live_metrics");
+    const l = (live ?? {}) as {
+      leadsMonth?: number; spendMonth?: number; cpl?: number; leadsIsReal?: boolean;
+      engagementRate?: number; engagementIsReal?: boolean;
+    };
+
     return NextResponse.json({
       investmentExecutedPct,
       totalBudget,
       totalSpend: Math.round(totalSpend),
       accountsCounted,
       isReal: hasRealSpend && totalBudget > 0,
+      leadsMonth: l.leadsMonth ?? 0,
+      cpl: l.cpl ?? 0,
+      leadsIsReal: l.leadsIsReal ?? false,
+      engagementRate: l.engagementRate ?? 0,
+      engagementIsReal: l.engagementIsReal ?? false,
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
