@@ -16,11 +16,12 @@ import type { GrowthSummary } from "@/lib/fichaViva/growth";
 
 interface SeriePonto { month: string; revenue: number; vendas: number | null; ticket: number | null }
 interface AccessData {
+  scope: "full" | "raiox";        // raiox = link do vendedor (sem financeiro)
   clientName: string;
   whatsappPhone: string;
   welcomeMessage: string | null;
-  growth: GrowthSummary;
-  series: SeriePonto[];
+  growth?: GrowthSummary;
+  series?: SeriePonto[];
   alreadyAnswered: boolean;
 }
 type Sub = "crescimento" | "raiox";
@@ -125,22 +126,26 @@ export default function FichaVivaClient({ token }: { token: string }) {
           <p className="text-lone-eyebrow text-primary">Lone Mídia</p>
           <h1 className="text-lone-h1 font-semibold">Olá, {data.clientName} 👋</h1>
           <p className="text-lone-body text-muted-foreground">
-            {data.welcomeMessage || "Acompanhe seu crescimento e nos ajude com um raio-x rápido do seu comercial."}
+            {data.welcomeMessage || (data.scope === "raiox"
+              ? "Responda o raio-x comercial rapidinho — leva uns 3 minutos."
+              : "Acompanhe seu crescimento e nos ajude com um raio-x rápido do seu comercial.")}
           </p>
         </header>
 
-        {/* Botões numerados */}
-        <div className="flex gap-1 bg-card border border-border rounded-xl p-1 w-fit">
-          {([["crescimento", "01", "Meu Crescimento", <LineIcon key="i" size={13} />],
-             ["raiox", "02", "Raio-X Comercial", <Sparkles key="i" size={13} />]] as [Sub, string, string, React.ReactNode][]).map(([id, num, label, icon]) => (
-            <button key={id} onClick={() => setSub(id)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${sub === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-              <span className={`text-[10px] font-bold ${sub === id ? "opacity-70" : "opacity-50"}`}>{num}</span>{icon}{label}
-            </button>
-          ))}
-        </div>
+        {/* Botões numerados — só o link do DONO mostra o crescimento */}
+        {data.scope === "full" && (
+          <div className="flex gap-1 bg-card border border-border rounded-xl p-1 w-fit">
+            {([["crescimento", "01", "Meu Crescimento", <LineIcon key="i" size={13} />],
+               ["raiox", "02", "Raio-X Comercial", <Sparkles key="i" size={13} />]] as [Sub, string, string, React.ReactNode][]).map(([id, num, label, icon]) => (
+              <button key={id} onClick={() => setSub(id)}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${sub === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                <span className={`text-[10px] font-bold ${sub === id ? "opacity-70" : "opacity-50"}`}>{num}</span>{icon}{label}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {sub === "crescimento"
+        {data.scope === "full" && sub === "crescimento" && data.growth && data.series
           ? <Crescimento token={token} code={code} growth={data.growth} series={data.series} onSaved={refresh} />
           : <RaioX token={token} code={code} alreadyAnswered={data.alreadyAnswered} whatsappPhone={data.whatsappPhone} />}
 

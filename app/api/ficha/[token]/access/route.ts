@@ -22,11 +22,15 @@ function limited(token: string): boolean {
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   if (limited(token)) return NextResponse.json({ error: "Muitas tentativas. Aguarde 1 minuto." }, { status: 429 });
+  // Token é sempre UUID (crypto.randomUUID) — valida o formato antes do .or() (evita injeção de filtro)
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
+    return NextResponse.json({ error: "Link inválido" }, { status: 404 });
+  }
 
   const { data: client } = await supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, ficha_viva_enabled, ficha_viva_token_revoked_at")
-    .eq("ficha_viva_token", token)
+    .select("id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, ficha_viva_enabled, ficha_viva_token_revoked_at, ficha_viva_token, ficha_viva_raiox_token")
+    .or(`ficha_viva_token.eq.${token},ficha_viva_raiox_token.eq.${token}`)
     .single();
   if (!client || !client.ficha_viva_enabled || client.ficha_viva_token_revoked_at) {
     return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
@@ -38,7 +42,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     return NextResponse.json({ error: "Código de acesso incorreto." }, { status: 401 });
   }
 
-  // Crescimento (só faturamento/vendas/ticket do NEGÓCIO do cliente)
+  // Escopo pelo token: link do vendedor (raiox) NÃO recebe nenhum dado financeiro.
+  const scope: "full" | "raiox" = client.ficha_viva_raiox_token === token ? "raiox" : "full";
+
+  const { count } = await supabaseAdmin
+    .from("client_diagnostics")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", client.id as string);
+
+  const base = {
+    ok: true,
+    scope,
+    clientName: nome,
+    whatsappPhone: (client.whatsapp_team_phone as string) || "5522981530700",
+    welcomeMessage: (client.portal_welcome_message as string) || null,
+    alreadyAnswered: (count ?? 0) > 0,
+  };
+
+  if (scope === "raiox") return NextResponse.json(base); // vendedor: sem crescimento/financeiro
+
+  // Dono: crescimento (faturamento/vendas/ticket do negócio)
   const { data: fin } = await supabaseAdmin
     .from("client_financial_results")
     .select("month, revenue, vendas, ticket")
@@ -51,18 +74,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     ticket: r.ticket != null ? Number(r.ticket) : null,
   }));
 
-  const { count } = await supabaseAdmin
-    .from("client_diagnostics")
-    .select("id", { count: "exact", head: true })
-    .eq("client_id", client.id as string);
-
   return NextResponse.json({
-    ok: true,
-    clientName: nome,
-    whatsappPhone: (client.whatsapp_team_phone as string) || "5522981530700",
-    welcomeMessage: (client.portal_welcome_message as string) || null,
+    ...base,
     growth: computeGrowth(rows),
     series: rows.map((r) => ({ month: r.month, revenue: r.revenue, vendas: r.vendas, ticket: r.ticket })),
-    alreadyAnswered: (count ?? 0) > 0,
   });
 }

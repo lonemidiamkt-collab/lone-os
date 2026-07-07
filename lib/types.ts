@@ -158,6 +158,7 @@ export interface Client {
   portalWelcomeMessage?: string;
   // ─── Ficha Viva (link do cliente: crescimento + diagnóstico) ──────────
   fichaVivaToken?: string;
+  fichaVivaRaioxToken?: string;
   fichaVivaTokenCreatedAt?: string;
   fichaVivaTokenRevokedAt?: string;
   fichaVivaEnabled?: boolean;

@@ -38,6 +38,7 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
   const [busy, setBusy] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedRaiox, setCopiedRaiox] = useState(false);
   const [copiedWa, setCopiedWa] = useState(false);
   const [error, setError] = useState("");
   const [diag, setDiag] = useState<DiagRow | null>(null);
@@ -54,6 +55,7 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
   const revoked = !!client.fichaVivaTokenRevokedAt;
   const active = !!token && !revoked;
   const url = token ? `${PORTAL_DOMAIN}/ficha/${token}` : null;
+  const raioxUrl = client.fichaVivaRaioxToken ? `${PORTAL_DOMAIN}/ficha/${client.fichaVivaRaioxToken}` : null;
 
   const loadDiag = useCallback(async () => {
     setLoadingDiag(true);
@@ -89,6 +91,7 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
       if (json.token) {
         onUpdate({
           fichaVivaToken: json.token,
+          fichaVivaRaioxToken: json.raioxToken,
           fichaVivaTokenCreatedAt: new Date().toISOString(),
           fichaVivaTokenRevokedAt: undefined,
           fichaVivaEnabled: true,
@@ -166,6 +169,11 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
     await navigator.clipboard.writeText(url);
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   }
+  async function copyRaiox() {
+    if (!raioxUrl) return;
+    await navigator.clipboard.writeText(raioxUrl);
+    setCopiedRaiox(true); setTimeout(() => setCopiedRaiox(false), 2000);
+  }
   async function copyWa() {
     if (!url) return;
     const phone = client.whatsappTeamPhone || "5522981530700";
@@ -204,13 +212,29 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
           <Link2 size={13} /> {busy ? "Gerando…" : revoked ? "Reativar com novo link" : "Ativar Ficha Viva"}
         </button>
       ) : (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <input readOnly value={url ?? ""} className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-3 py-1.5 text-xs text-muted-foreground font-mono truncate outline-none" />
-            <button onClick={copyUrl} className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface border border-border text-muted-foreground text-[11px] hover:text-foreground hover:border-primary/40 transition-colors">
-              {copied ? <Check size={12} className="text-lone-success" /> : <Copy size={12} />}{copied ? "Copiado!" : "Copiar"}
-            </button>
+        <div className="space-y-3">
+          {/* Link do DONO — vê tudo */}
+          <div className="space-y-1">
+            <p className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground">Link do dono <span className="text-lone-success">· crescimento + Raio-X</span></p>
+            <div className="flex items-center gap-2">
+              <input readOnly value={url ?? ""} className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-3 py-1.5 text-xs text-muted-foreground font-mono truncate outline-none" />
+              <button onClick={copyUrl} className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface border border-border text-muted-foreground text-[11px] hover:text-foreground hover:border-primary/40 transition-colors">
+                {copied ? <Check size={12} className="text-lone-success" /> : <Copy size={12} />}{copied ? "Copiado!" : "Copiar"}
+              </button>
+            </div>
           </div>
+          {/* Link do RAIO-X — vendedores, sem financeiro */}
+          {raioxUrl && (
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground">Link do Raio-X <span className="text-primary">· vendedores (sem faturamento)</span></p>
+              <div className="flex items-center gap-2">
+                <input readOnly value={raioxUrl} className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-3 py-1.5 text-xs text-muted-foreground font-mono truncate outline-none" />
+                <button onClick={copyRaiox} className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface border border-border text-muted-foreground text-[11px] hover:text-foreground hover:border-primary/40 transition-colors">
+                  {copiedRaiox ? <Check size={12} className="text-lone-success" /> : <Copy size={12} />}{copiedRaiox ? "Copiado!" : "Copiar"}
+                </button>
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={copyWa} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-lone-success-bg text-lone-success text-[11px] font-semibold hover:opacity-90 border border-lone-success-border transition-colors">
               {copiedWa ? <><Check size={12} /> Copiado!</> : <><MessageSquare size={12} /> Copiar mensagem WhatsApp</>}

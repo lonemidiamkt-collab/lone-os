@@ -19,10 +19,13 @@ export default async function FichaVivaPage({
   // Toca uma API dinâmica por request (com o not-found.tsx co-localizado, garante 404 real).
   await headers();
 
+  // Token é sempre UUID — valida antes do .or() (evita injeção de filtro no PostgREST)
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) notFound();
+
   const { data: client } = await supabaseAdmin
     .from("clients")
     .select("ficha_viva_enabled, ficha_viva_token_revoked_at")
-    .eq("ficha_viva_token", token)
+    .or(`ficha_viva_token.eq.${token},ficha_viva_raiox_token.eq.${token}`)
     .single();
 
   if (!client || !client.ficha_viva_enabled || client.ficha_viva_token_revoked_at) {

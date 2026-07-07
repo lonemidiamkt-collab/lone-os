@@ -37,12 +37,15 @@ export async function POST(
   if (!checkRateLimit(token)) {
     return NextResponse.json({ error: "Muitas tentativas. Tente em 1 minuto." }, { status: 429 });
   }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
+    return NextResponse.json({ error: "Link inválido" }, { status: 404 });
+  }
 
   // Valida token
   const { data: client } = await supabaseAdmin
     .from("clients")
     .select("id, name, nome_fantasia, ficha_viva_enabled, ficha_viva_token_revoked_at")
-    .eq("ficha_viva_token", token)
+    .or(`ficha_viva_token.eq.${token},ficha_viva_raiox_token.eq.${token}`)
     .single();
 
   if (!client || !client.ficha_viva_enabled || client.ficha_viva_token_revoked_at) {

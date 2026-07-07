@@ -26,11 +26,13 @@ export async function POST(
     return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
   }
 
-  const token = crypto.randomUUID();
+  const token = crypto.randomUUID();          // link do DONO (full)
+  const raioxToken = crypto.randomUUID();     // link do VENDEDOR (só Raio-X)
   const { error: updateErr } = await supabaseAdmin
     .from("clients")
     .update({
       ficha_viva_token: token,
+      ficha_viva_raiox_token: raioxToken,
       ficha_viva_token_created_at: new Date().toISOString(),
       ficha_viva_token_revoked_at: null,
       ficha_viva_enabled: true,
@@ -39,5 +41,10 @@ export async function POST(
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
 
-  return NextResponse.json({ success: true, token, full_url: `${BASE_URL}/ficha/${token}` });
+  return NextResponse.json({
+    success: true,
+    token, raioxToken,
+    full_url: `${BASE_URL}/ficha/${token}`,
+    raiox_url: `${BASE_URL}/ficha/${raioxToken}`,
+  });
 }
