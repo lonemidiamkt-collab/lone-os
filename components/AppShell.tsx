@@ -68,8 +68,8 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   const contentOffset = showSecondary ? "lg:pl-[312px]" : "lg:pl-[72px]";
 
   return (
-    <div className="flex min-h-screen bg-background relative">
-      {/* Ambient glows removed — sober premium aesthetic */}
+    <div className="flex min-h-screen bg-transparent relative">
+      {/* Fundo navy + glow azul vêm do body (html.dark body) — wrapper transparente deixa aparecer */}
 
       {/* Mobile hamburger */}
       <button

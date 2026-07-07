@@ -143,14 +143,14 @@
     --background-rgb: 250 250 250;
     --foreground-rgb: 24 24 27;
     --card-rgb: 255 255 255;
-    --primary-rgb: 13 74 245;
+    --primary-rgb: 43 60 255;
     --secondary-rgb: 244 244 245;
     --muted-rgb: 244 244 245;
     --destructive-rgb: 239 68 68;
     --card-foreground: #18181b;
     --popover: #ffffff;
     --popover-foreground: #18181b;
-    --primary: #0d4af5;
+    --primary: #2b3cff;
     --primary-foreground: #ffffff;
     --secondary: #f4f4f5;
     --secondary-foreground: #52525b;
@@ -163,20 +163,20 @@
     --border: rgba(0, 0, 0, 0.08);
     --border-glow: rgba(0, 0, 0, 0.12);
     --input: rgba(0, 0, 0, 0.06);
-    --ring: #0d4af5;
+    --ring: #2b3cff;
     --sidebar: #ffffff;
     --sidebar-foreground: #52525b;
-    --sidebar-primary: #0d4af5;
+    --sidebar-primary: #2b3cff;
     --sidebar-primary-foreground: #ffffff;
     --sidebar-accent: #f4f4f5;
     --sidebar-accent-foreground: #18181b;
     --sidebar-border: rgba(0, 0, 0, 0.06);
-    --sidebar-ring: #0d4af5;
-    --led-healthy: #0d4af5;
+    --sidebar-ring: #2b3cff;
+    --led-healthy: #2b3cff;
     --led-attention: #f59e0b;
     --led-critical: #ef4444;
-    --glow-primary: rgba(13, 74, 245, 0.04);
-    --glow-primary-strong: rgba(13, 74, 245, 0.08);
+    --glow-primary: rgba(43, 60, 255, 0.04);
+    --glow-primary-strong: rgba(43, 60, 255, 0.08);
 
     /* ── Design System v2 — tokens lone-* (variantes LIGHT) ──── */
     --lone-bg-primary:  #fafafa;
@@ -253,6 +253,16 @@
     letter-spacing: -0.011em;
   }
 
+  /* Brilho radial azul no tema escuro — dá o "azulado" navy do material da Lone
+     (o fundo chapado #060814 lê como quase-preto; o glow é o que faz parecer premium). */
+  html.dark body {
+    background-image:
+      radial-gradient(1100px 620px at 82% -8%, rgba(43, 60, 255, 0.16), transparent 58%),
+      radial-gradient(820px 560px at -6% 6%, rgba(43, 60, 255, 0.10), transparent 55%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+
   /* ─── Focus Ring ─── */
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--radius); }
   button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
@@ -295,7 +305,7 @@
   .light .card-glow::before { background: linear-gradient(90deg, transparent, rgba(0,0,0,0.04), transparent); }
 
   /* ─── CARD ACTIVE — subtle border only ──────────────────── */
-  .card-active { border-color: rgba(13, 74, 245, 0.3) !important; }
+  .card-active { border-color: rgba(43, 60, 255, 0.3) !important; }
 
   /* ─── BADGE ──────────────────────────────────────────────── */
   .badge { @apply inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium tracking-normal; }
@@ -303,12 +313,12 @@
   /* ─── BUTTONS — Solid, no glow, no gradient ─────────────── */
   .btn-primary {
     @apply px-5 py-2.5 rounded-xl text-sm font-semibold;
-    background: #0d4af5;
+    background: #2b3cff;
     color: white;
     border: none;
     transition: all 0.15s ease;
   }
-  .btn-primary:hover { background: #1a56ff; transform: translateY(-1px); }
+  .btn-primary:hover { background: #4553ff; transform: translateY(-1px); }
   .btn-primary:active { transform: translateY(0); }
   .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
@@ -327,20 +337,20 @@
   .btn-outline:hover { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.15); }
 
   /* ─── TAGS ──────────────────────────────────────────────── */
-  .tag-premium { @apply text-[#3b82f6] bg-[#0d4af5]/[0.08] border-[#0d4af5]/[0.12]; }
+  .tag-premium { @apply text-[#3b82f6] bg-[#2b3cff]/[0.08] border-[#2b3cff]/[0.12]; }
   .tag-risk    { @apply text-red-400 bg-red-500/[0.08] border-red-500/[0.12]; }
   .tag-matcon  { @apply text-zinc-400 bg-zinc-500/[0.08] border-zinc-500/[0.12]; }
 
   /* ─── LED STATUS — smaller, no heavy glow ───────────────── */
   .led { @apply w-2 h-2 rounded-full shrink-0; }
-  .led-healthy { background: #0d4af5; }
+  .led-healthy { background: #2b3cff; }
   .led-attention { background: #f59e0b; }
   .led-critical { background: #ef4444; animation: pulse 2s ease-in-out infinite; }
 
   /* ─── ATTENTION LEVELS ─────────────────────────────────── */
   .level-low      { @apply text-zinc-400 bg-zinc-500/[0.08] border-zinc-500/[0.12]; }
   .level-medium   { @apply text-amber-400 bg-amber-500/[0.08] border-amber-500/[0.12]; }
-  .level-high     { @apply text-[#3b6ff5] bg-[#0d4af5]/[0.08] border-[#0d4af5]/[0.12]; }
+  .level-high     { @apply text-[#3b6ff5] bg-[#2b3cff]/[0.08] border-[#2b3cff]/[0.12]; }
   .level-critical { @apply text-red-400 bg-red-500/[0.08] border-red-500/[0.12]; }
 
   /* ─── INPUT — solid background, no blur ─────────────────── */
@@ -353,7 +363,7 @@
   }
   .input-glass::placeholder { color: var(--muted-foreground); }
   .input-glass:hover { border-color: rgba(255,255,255,0.1); }
-  .input-glass:focus { border-color: #0d4af5; }
+  .input-glass:focus { border-color: #2b3cff; }
   .input-glass:disabled { opacity: 0.3; cursor: not-allowed; }
 
   /* ─── METRIC CARD — subtle top line ─────────────────────── */
@@ -371,7 +381,7 @@
   .light .metric-card::after { background: linear-gradient(90deg, transparent, rgba(0,0,0,0.03), transparent); }
 
   /* ─── KPI STATES — border color only, no shadow ─────────── */
-  .kpi-good { border-color: rgba(13, 74, 245, 0.2); }
+  .kpi-good { border-color: rgba(43, 60, 255, 0.2); }
   .kpi-warning { border-color: rgba(245, 158, 11, 0.2); }
   .kpi-danger { border-color: rgba(239, 68, 68, 0.25); animation: pulse-border 3s ease-in-out infinite; }
 
