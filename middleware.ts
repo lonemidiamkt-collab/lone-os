@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 // Public paths that don't require authentication
 // /api/cs/inbound: webhook da Evolution (sem cookie/JWT) — público no middleware, mas a rota
 // valida o segredo CS_INBOUND_SECRET (fail-closed se não configurado).
-const PUBLIC_PATHS = ["/api/auth", "/api/meta", "/api/ai", "/api/system", "/api/sync", "/api/onboarding", "/api/cs", "/api/emails", "/api/broadcasts", "/api/platform-updates", "/api/holidays", "/api/portal", "/onboarding", "/portal", "/monitoring", "/_next", "/favicon.ico", "/logo.png", "/icon-192.png", "/icon-512.png", "/manifest.json", "/sw.js", "/public"];
+const PUBLIC_PATHS = ["/api/auth", "/api/meta", "/api/ai", "/api/system", "/api/sync", "/api/onboarding", "/api/cs", "/api/emails", "/api/broadcasts", "/api/platform-updates", "/api/holidays", "/api/portal", "/api/ficha", "/onboarding", "/portal", "/ficha", "/monitoring", "/_next", "/favicon.ico", "/logo.png", "/icon-192.png", "/icon-512.png", "/manifest.json", "/sw.js", "/public"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -12,8 +12,8 @@ export function middleware(request: NextRequest) {
   // Allow public assets and API routes
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     const res = NextResponse.next();
-    // Portal público — não indexar
-    if (pathname.startsWith("/portal")) {
+    // Links públicos do cliente (portal de tráfego e Ficha Viva) — não indexar
+    if (pathname.startsWith("/portal") || pathname.startsWith("/ficha")) {
       res.headers.set("X-Robots-Tag", "noindex, nofollow");
     }
     return res;
