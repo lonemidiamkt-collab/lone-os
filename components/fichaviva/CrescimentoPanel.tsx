@@ -196,6 +196,18 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
     return { score, level: "ok" as const, label: "Saudável", why: "Performance estável. Manter a cadência e buscar a próxima alavanca de ticket." };
   }, [withData]);
 
+  // Saúde do ticket médio (tendência própria — cada venda valendo mais ou menos)
+  const ticketHealth = useMemo(() => {
+    const tk = withData.map((r) => ticketOf(r)).filter((v): v is number => v != null && v > 0);
+    if (tk.length < 2) return null;
+    const n = Math.min(3, Math.floor(tk.length / 2));
+    const recent = tk.slice(-n).reduce((s, v) => s + v, 0) / n;
+    const prior = tk.slice(-2 * n, -n).reduce((s, v) => s + v, 0) / n;
+    const pct = prior ? (recent / prior - 1) * 100 : 0;
+    const tone: "up" | "flat" | "down" = pct > 2 ? "up" : pct < -2 ? "down" : "flat";
+    return { tone, label: `${pct >= 0 ? "+" : ""}${pct.toFixed(1).replace(".", ",")}%` };
+  }, [withData]);
+
   if (loading) return <div className="flex justify-center py-10"><Loader2 size={20} className="text-primary animate-spin" /></div>;
 
   const healthColor = health.level === "up" ? "var(--lone-success)" : health.level === "risk" ? "var(--destructive)" : health.level === "ok" ? "var(--primary)" : "var(--muted-foreground)";
@@ -291,8 +303,20 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
 
       {/* Ticket médio */}
       <div className="card space-y-1">
-        <h3 className="text-lone-h2 font-semibold">Evolução do ticket médio</h3>
-        <p className="text-lone-caption text-muted-foreground">Cada venda valendo mais ao longo do período</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lone-h2 font-semibold">Evolução do ticket médio</h3>
+            <p className="text-lone-caption text-muted-foreground">Cada venda valendo mais ao longo do período</p>
+          </div>
+          {ticketHealth && (
+            <span className={`shrink-0 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
+              ticketHealth.tone === "up" ? "bg-lone-success-bg text-lone-success" :
+              ticketHealth.tone === "down" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"}`}>
+              {ticketHealth.tone === "up" ? <TrendingUp size={12} /> : ticketHealth.tone === "down" ? <TrendingDown size={12} /> : <Minus size={12} />}
+              {ticketHealth.label}
+            </span>
+          )}
+        </div>
         {serie.filter((s) => s.ticket > 0).length < 2 ? (
           <p className="text-xs text-muted-foreground py-6 text-center">Precisa de vendas em 2+ períodos pra traçar o ticket.</p>
         ) : (

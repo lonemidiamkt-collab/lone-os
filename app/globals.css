@@ -19,70 +19,70 @@
        Inspired by Vercel, Stripe, Linear
        Zero glow. Zero neon. Authority through restraint.
        ═══════════════════════════════════════════════════════════ */
-    --background: #09090b;
-    --foreground: #e4e4e7;
+    --background: #060814;
+    --foreground: #eef0f6;
 
-    --card: #111113;
-    --card-solid: #111113;
-    --card-foreground: #e4e4e7;
-    --popover: #111113;
-    --popover-foreground: #e4e4e7;
+    --card: #0b0e1e;
+    --card-solid: #0b0e1e;
+    --card-foreground: #eef0f6;
+    --popover: #0e1226;
+    --popover-foreground: #eef0f6;
 
-    --primary: #0d4af5;
+    --primary: #2b3cff;
     --primary-foreground: #ffffff;
 
-    --secondary: #0c0c0e;
-    --secondary-foreground: #a1a1aa;
+    --secondary: #0e1226;
+    --secondary-foreground: #c7cbd8;
 
-    --muted: #0c0c0e;
-    --muted-foreground: #52525b;
+    --muted: #0e1226;
+    --muted-foreground: #8b91a1;
 
-    --accent: #0c0c0e;
-    --accent-foreground: #e4e4e7;
+    --accent: #101638;
+    --accent-foreground: #eef0f6;
 
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
 
-    --border: rgba(255, 255, 255, 0.06);
-    --border-glow: rgba(255, 255, 255, 0.1);
-    --input: rgba(255, 255, 255, 0.06);
-    --ring: #0d4af5;
+    --border: #1a1f33;
+    --border-glow: rgba(90, 104, 255, 0.18);
+    --input: #1a1f33;
+    --ring: #2b3cff;
     --radius: 0.75rem;
 
     /* Canais RGB p/ opacidade (bg-primary/15 etc.) — companheiros dos hex acima */
-    --background-rgb: 9 9 11;
-    --foreground-rgb: 228 228 231;
-    --card-rgb: 17 17 19;
-    --primary-rgb: 13 74 245;
-    --secondary-rgb: 12 12 14;
-    --muted-rgb: 12 12 14;
+    --background-rgb: 6 8 20;
+    --foreground-rgb: 238 240 246;
+    --card-rgb: 11 14 30;
+    --primary-rgb: 43 60 255;
+    --secondary-rgb: 14 18 38;
+    --muted-rgb: 14 18 38;
     --destructive-rgb: 239 68 68;
 
     /* Charts */
-    --chart-1: #0d4af5;
-    --chart-2: #3b82f6;
+    --chart-1: #2b3cff;
+    --chart-2: #5a68ff;
     --chart-3: #06b6d4;
     --chart-4: #8b5cf6;
-    --chart-5: #10b981;
+    --chart-5: #26d07c;
 
     /* Sidebar */
-    --sidebar: #09090b;
-    --sidebar-foreground: #a1a1aa;
-    --sidebar-primary: #0d4af5;
+    --sidebar: #070a16;
+    --sidebar-foreground: #9aa1b5;
+    --sidebar-primary: #2b3cff;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #0c0c0e;
-    --sidebar-accent-foreground: #e4e4e7;
-    --sidebar-border: rgba(255, 255, 255, 0.04);
-    --sidebar-ring: #0d4af5;
+    --sidebar-accent: #0e1226;
+    --sidebar-accent-foreground: #eef0f6;
+    --sidebar-border: #161b2e;
+    --sidebar-ring: #2b3cff;
 
     /* LED system */
-    --led-healthy: #0d4af5;
+    --led-healthy: #2b3cff;
     --led-attention: #f59e0b;
     --led-critical: #ef4444;
 
     /* Glow — minimal */
-    --glow-primary: rgba(13, 74, 245, 0.06);
-    --glow-primary-strong: rgba(13, 74, 245, 0.1);
+    --glow-primary: rgba(43, 60, 255, 0.06);
+    --glow-primary-strong: rgba(43, 60, 255, 0.1);
 
     /* ── Design System v2 — tokens lone-* ──────────────────────
        Prefixo lone- garante coexistência com tokens existentes.
@@ -90,13 +90,13 @@
        ─────────────────────────────────────────────────────────── */
 
     /* Fundos */
-    --lone-bg-primary:  #13141A;
-    --lone-bg-card:     #1A1B23;
-    --lone-bg-elevated: #22242E;
+    --lone-bg-primary:  #0b0e1e;
+    --lone-bg-card:     #0e1226;
+    --lone-bg-elevated: #141a38;
 
     /* Bordas */
-    --lone-border-default: #2A2C36;
-    --lone-border-strong:  #3A3D48;
+    --lone-border-default: #1e2440;
+    --lone-border-strong:  #2a3255;
 
     /* Texto */
     --lone-text-primary:   #FFFFFF;
