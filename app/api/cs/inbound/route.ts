@@ -706,7 +706,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, demanda_cmd: "erro" });
     }
     const a3d = a3.ok ? a3.data : null;
-    const txt = `Oi ${responsavel}! 👋 ${quem} pediu pra criar uma demanda pra *${clienteNome}*: *${titulo}*.\n\n${a3d ? a3d.briefing.trim() : `Pedido: "${msg.text}"`}${a3d ? `\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : ""}\n\nResponde *nesta mensagem*: *ok* (crio o card) · *não* (deixa pra lá) · ou *ajustar* e me diz o que mudar.`;
+    const txt = `🆕 *NOVO PEDIDO — ${clienteNome}*\n👤 ${responsavel}${quem ? ` · pedido por ${quem}` : ""}\n\n📩 Pedido:\n*${titulo}*\n\n${a3d ? `📋 ${a3d.briefing.trim()}\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : `📋 _"${msg.text}"_`}\n\n👉 Responde aqui: *ok* (crio o card) · *não* (deixa pra lá) · *ajustar*`;
     const rsug = await csSendGroupText(msg.groupJid, txt);
     if (rsug.ok && rsug.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: rsug.id }).eq("id", novaDem.id);
     console.log(`[CS/inbound] demanda por comando → ${clienteNome}: ${titulo} (${codigo})`);
@@ -1226,7 +1226,7 @@ export async function POST(req: NextRequest) {
       const jidInt = internalGroupJid();
       if (reclassificou && jidInt) {
         const r = await csSendGroupText(jidInt,
-          `🔁 A *${clienteNome}* complementou o pedido — atualizei: *${updates.resumo as string}*${updates.urgencia === "alta" ? " (urgência alta)" : ""}. Vale o mesmo: *ok* · *não* · *ajustar*.`,
+          `🔁 *COMPLEMENTO — ${clienteNome}*\n\n📩 O cliente completou o pedido — agora é:\n*${updates.resumo as string}*${updates.urgencia === "alta" ? " · ⚡ urgência alta" : ""}\n\n👉 Vale o mesmo: *ok* · *não* · *ajustar*`,
           (pendente.msg_id_sugestao as string) || undefined);
         if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", pendente.id);
       }
@@ -1415,9 +1415,9 @@ export async function POST(req: NextRequest) {
     if (internalJid) {
       // Mensagem CURTA e humana, SEM código — a equipe RESPONDE (reply) nesta mensagem.
       const a3d = a3?.ok ? a3.data : null;
-      const acao = `É só responder *nesta mensagem*: *ok* (crio o card) · *não* (você cuida) · ou *ajustar* e me diz o que mudar.`;
+      const acao = `👉 Responde aqui: *ok* (crio o card) · *não* (você cuida) · *ajustar*`;
       // Férias/ausência: se o responsável está fora, avisa pra alguém cobrir.
-      const aviso = !ehReclamacao && estaAusente(responsavel) ? `⚠️ _Heads up: ${responsavel} tá fora (férias/ausência) — alguém cobre?_\n\n` : "";
+      const aviso = !ehReclamacao && estaAusente(responsavel) ? `⚠️ _${responsavel} tá fora (férias/ausência) — alguém cobre?_\n\n` : "";
       // 💬 Rascunho de resposta pro CLIENTE (só onde ele espera resposta): social copia e envia.
       let respostaSugerida = "";
       if (["duvida", "cobranca_prazo", "reclamacao"].includes(it.tipo) && isOpenAIConfigured()) {
@@ -1425,15 +1425,16 @@ export async function POST(req: NextRequest) {
           clienteNome, mensagemCliente: msg.text, tipo: it.tipo,
           briefing: clienteBriefing, statusInfo: statusBriefing,
         });
-        if (rs.ok && rs.data?.resposta) respostaSugerida = `\n\n💬 *Resposta pro cliente* (copie e envie, ou ajuste):\n_${rs.data.resposta}_`;
+        if (rs.ok && rs.data?.resposta) respostaSugerida = `\n\n━━━━━━━\n💬 *Resposta pro cliente* (copie e envie, ou ajuste):\n_${rs.data.resposta}_`;
       }
+      // Gramática visual fixa: cabeçalho (tipo — cliente) · 👤 responsável · 📩 fala do cliente · 👉 ação.
       const txt = aviso + (statusBriefing
-        ? `Oi ${responsavel}! 👋 ${statusBriefing}\n\n_(É acompanhamento, não pedido novo — responde *não* se já tratou, ou *ok* se quer um card de follow-up.)_`
+        ? `👀 *ACOMPANHAMENTO — ${clienteNome}*\n👤 ${responsavel}\n\n${statusBriefing}\n\n_Não é pedido novo._\n👉 *não* se já tratou · *ok* pra abrir um follow-up`
         : ehReclamacao
-        ? `🔴 *RECLAMAÇÃO* da *${clienteNome}* — ${responsavel}, atenção:\n\n${a3d ? a3d.briefing.trim() : `"${msg.text}"`}\n\nResponde *aqui*: *ok* (registro como demanda) · *não* (vocês tratam direto).`
+        ? `🔴 *RECLAMAÇÃO — ${clienteNome}*\n👤 ${responsavel}, atenção.\n\n📩 O cliente disse:\n_"${a3d ? a3d.briefing.trim() : msg.text}"_\n\n👉 Responde aqui: *ok* (registro como demanda) · *não* (vocês tratam direto)`
         : precisaConfirmar
-        ? `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}* — mas o pedido tá meio vago. Antes de produzir, confirma com eles:\n${a3d?.observacao ?? ""}\n\n${acao}`
-        : `Oi ${responsavel}! 👋 A *${clienteNome}* pediu: *${it.resumo}*.\n\n${a3d ? a3d.briefing.trim() : `Mensagem: "${msg.text}"`}${a3d ? `\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : ""}\n\n${acao}`) + respostaSugerida;
+        ? `✏️ *PEDIDO PRA CONFIRMAR — ${clienteNome}*\n👤 ${responsavel}\n\n📩 O cliente pediu:\n*${it.resumo}*\n\n❓ Tá meio vago — confirma com ele antes de produzir:\n${a3d?.observacao ?? ""}\n\n${acao}`
+        : `🆕 *NOVO PEDIDO — ${clienteNome}*\n👤 ${responsavel}\n\n📩 O cliente pediu:\n*${it.resumo}*\n\n${a3d ? `📋 ${a3d.briefing.trim()}\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : `📋 _"${msg.text}"_`}\n\n${acao}`) + respostaSugerida;
       const r = await csSendGroupText(internalJid, txt);
       // Guarda o id da msg postada → o "reply" da equipe casa com esta demanda (sem código).
       if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", novaDem.id);
