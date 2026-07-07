@@ -79,5 +79,20 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: "Não foi possível salvar. Tente de novo." }, { status: 500 });
 
+  // Notifica o time comercial (não bloqueia o envio do cliente se falhar)
+  try {
+    const { data: members } = await supabaseAdmin.from("team_members").select("id, role").eq("is_active", true);
+    const ROLES = new Set(["admin", "manager", "comercial"]);
+    const recipients = (members ?? []).filter((m) => ROLES.has((m.role as string)?.toLowerCase()));
+    if (recipients.length) {
+      await supabaseAdmin.from("notifications").insert(recipients.map((r) => ({
+        type: "system",
+        title: "Diagnóstico comercial respondido",
+        body: `${nome} respondeu o Raio-X comercial. Abra a Ficha Viva 360 do cliente pra revisar a estrutura gerada.`,
+        user_id: r.id,
+      })));
+    }
+  } catch { /* segue sem quebrar o envio */ }
+
   return NextResponse.json({ success: true });
 }

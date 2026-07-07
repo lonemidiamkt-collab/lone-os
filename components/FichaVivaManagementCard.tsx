@@ -4,9 +4,9 @@
 // Gera/copia/revoga o link do cliente (crescimento + diagnóstico) e mostra o diagnóstico que o
 // cliente respondeu + o botão "Analisar com IA" (SWOT / prioridades / scripts pro time comercial).
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  ClipboardList, Copy, Check, X, Link2, MessageSquare, Sparkles, Loader2, RotateCcw,
+  ClipboardList, Copy, Check, X, Link2, MessageSquare, Sparkles, Loader2, RotateCcw, Pencil, Save,
 } from "lucide-react";
 import type { Client } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
@@ -44,6 +44,10 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
   const [loadingDiag, setLoadingDiag] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [showAnswers, setShowAnswers] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<DiagAnalise | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const autoRef = useRef(false);
 
   const token = client.fichaVivaToken;
   const revoked = !!client.fichaVivaTokenRevokedAt;
@@ -64,6 +68,15 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
   }, [client.id]);
 
   useEffect(() => { loadDiag(); }, [loadDiag]);
+
+  // Auto-gera a estrutura quando o time abre e o cliente já respondeu (sem clicar).
+  useEffect(() => {
+    if (diag && diag.status === "respondido" && !diag.analise && !autoRef.current) {
+      autoRef.current = true;
+      analyze();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diag]);
 
   async function callAction(endpoint: string) {
     setBusy(true);
@@ -102,6 +115,30 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
       setError(e instanceof Error ? e.message : "Erro na análise");
     } finally {
       setAnalyzing(false);
+    }
+  }
+
+  function startEdit() {
+    if (!a) return;
+    setDraft(JSON.parse(JSON.stringify(a)) as DiagAnalise);
+    setEditing(true);
+  }
+  async function saveEdit() {
+    if (!draft) return;
+    setSavingEdit(true); setError("");
+    try {
+      const res = await authedFetch(`/api/clients/${client.id}/ficha-viva/analise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ analise: draft }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Erro ao salvar");
+      setDiag((d) => (d ? { ...d, analise: json.analise, status: "analisado" } : d));
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao salvar");
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -211,22 +248,25 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
               </div>
             )}
 
-            {/* Ação de análise */}
+            {/* Gerar estrutura (auto-dispara quando o cliente responde; botão = fallback/retry) */}
             {!a && (
               <button onClick={analyze} disabled={analyzing} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
                 {analyzing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                {analyzing ? "Analisando…" : "Analisar com IA"}
+                {analyzing ? "Gerando estrutura…" : "Gerar estrutura com IA"}
               </button>
             )}
 
-            {/* Resultado da IA */}
-            {a && (
+            {/* Estrutura — visualização */}
+            {a && !editing && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-foreground">{a.diagnostico}</p>
-                  <button onClick={analyze} disabled={analyzing} className="shrink-0 ml-2 text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1">
-                    {analyzing ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />} Refazer
-                  </button>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm text-foreground flex-1">{a.diagnostico}</p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={startEdit} className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1"><Pencil size={11} /> Editar</button>
+                    <button onClick={analyze} disabled={analyzing} className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1">
+                      {analyzing ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />} Refazer
+                    </button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {([
@@ -263,11 +303,45 @@ export default function FichaVivaManagementCard({ client, onUpdate }: Props) {
                 )}
               </div>
             )}
+
+            {/* Estrutura — edição (o time corrige falhas / atende pedido do cliente) */}
+            {editing && draft && (
+              <div className="space-y-3">
+                <EditTA label="Diagnóstico" rows={3} value={draft.diagnostico} onChange={(v) => setDraft({ ...draft, diagnostico: v })} />
+                <div className="grid grid-cols-2 gap-2">
+                  {([["Forças", "forcas"], ["Fraquezas", "fraquezas"], ["Oportunidades", "oportunidades"], ["Ameaças", "ameacas"]] as [string, keyof DiagAnalise["swot"]][]).map(([label, key]) => (
+                    <EditTA key={key} label={`${label} (1 por linha)`} rows={4} value={arrToText(draft.swot[key])}
+                      onChange={(v) => setDraft({ ...draft, swot: { ...draft.swot, [key]: textToArr(v) } })} />
+                  ))}
+                </div>
+                <EditTA label="Prioridades — 90 dias (1 por linha)" rows={4} value={arrToText(draft.prioridades)} onChange={(v) => setDraft({ ...draft, prioridades: textToArr(v) })} />
+                <EditTA label="Scripts pro time (1 por linha)" rows={5} value={arrToText(draft.scripts)} onChange={(v) => setDraft({ ...draft, scripts: textToArr(v) })} />
+                <div className="flex gap-2">
+                  <button onClick={saveEdit} disabled={savingEdit} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
+                    {savingEdit ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {savingEdit ? "Salvando…" : "Salvar estrutura"}
+                  </button>
+                  <button onClick={() => setEditing(false)} className="px-4 py-2 rounded-lg bg-surface border border-border text-muted-foreground text-xs hover:text-foreground transition-colors">Cancelar</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {error && <p className="text-[11px] text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+const arrToText = (arr: string[]) => (arr || []).join("\n");
+const textToArr = (t: string) => t.split("\n").map((s) => s.trim()).filter(Boolean);
+
+function EditTA({ label, value, onChange, rows }: { label: string; value: string; onChange: (v: string) => void; rows: number }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[11px] text-muted-foreground">{label}</label>
+      <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={rows}
+        className="w-full bg-surface border border-border rounded-lg px-2.5 py-2 text-xs text-foreground outline-none focus:border-primary/50 resize-none" />
     </div>
   );
 }
