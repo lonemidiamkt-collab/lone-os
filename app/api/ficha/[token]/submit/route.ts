@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { DIAG_QUESTIONS } from "@/lib/fichaViva/questions";
+import { checkAccessCode } from "@/lib/fichaViva/pin";
 
 // Rate-limit simples em memória por token (mesmo padrão da rota de snapshot do portal)
 const RATE_LIMIT = new Map<string, { count: number; reset: number }>();
@@ -40,7 +41,7 @@ export async function POST(
   // Valida token
   const { data: client } = await supabaseAdmin
     .from("clients")
-    .select("id, ficha_viva_enabled, ficha_viva_token_revoked_at")
+    .select("id, name, nome_fantasia, ficha_viva_enabled, ficha_viva_token_revoked_at")
     .eq("ficha_viva_token", token)
     .single();
 
@@ -48,8 +49,15 @@ export async function POST(
     return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
   }
 
-  // Sanitiza respostas: só ids conhecidos, string, com teto de tamanho
   const body = await req.json().catch(() => ({}));
+
+  // Revalida o PIN (1ª palavra do nome) antes de gravar
+  const nome = (client.nome_fantasia as string) || (client.name as string);
+  if (!checkAccessCode(nome, String(body?.code ?? ""))) {
+    return NextResponse.json({ error: "Código de acesso incorreto." }, { status: 401 });
+  }
+
+  // Sanitiza respostas: só ids conhecidos, string, com teto de tamanho
   const rawRespostas = (body?.respostas ?? {}) as Record<string, unknown>;
   const respostas: Record<string, string> = {};
   for (const [id, val] of Object.entries(rawRespostas)) {
