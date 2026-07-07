@@ -4,6 +4,7 @@
 // perguntas. Não expõe dado interno (investimento/ROI) — só o resultado do negócio do cliente.
 
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { computeGrowth, type GrowthRow } from "@/lib/fichaViva/growth";
 import FichaVivaClient from "@/components/fichaviva/FichaVivaClient";
@@ -16,6 +17,11 @@ export default async function FichaVivaPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+
+  // Toca uma API dinâmica por request (como o portal). Combinado com o not-found.tsx
+  // co-localizado, é o que faz o notFound() devolver HTTP 404 pra link inválido/revogado
+  // (no Next 15, sem isso, o not-found renderiza mas responde 200).
+  await headers();
 
   const { data: client } = await supabaseAdmin
     .from("clients")
