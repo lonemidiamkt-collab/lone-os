@@ -41,6 +41,7 @@ const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/crm",           icon: Handshake,       label: "Comercial",  roles: ["admin","manager","comercial"], hasSecondary: true },
   { href: "/contratos",     icon: FileText,        label: "Contratos",  roles: ["admin","manager"] },
   { href: "/churn",         icon: Thermometer,     label: "Termômetro",  roles: ["admin","manager"] },
+  { href: "/carteira",      icon: Layers,          label: "Carteira",    roles: ["admin","manager"] },
   { href: "/defesa",        icon: ShieldAlert,     label: "Defesa Ativa",roles: ["admin","manager","traffic"] },
   { href: "/calendar",      icon: Calendar,        label: "Calendário", roles: ["admin","manager","traffic","social","designer"] },
   { href: "/communications",icon: MessageCircle,   label: "Comunicação",roles: ["admin","manager","traffic","social","designer"] },

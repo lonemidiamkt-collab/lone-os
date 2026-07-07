@@ -46,7 +46,7 @@ import WhatsAppTemplates from "@/components/WhatsAppTemplates";
 import MeetingScheduler from "@/components/MeetingScheduler";
 const ContractGenerator = dynamic(() => import("@/components/ContractGenerator"), { ssr: false });
 import PortalManagementCard from "@/components/PortalManagementCard";
-import FichaVivaManagementCard from "@/components/FichaVivaManagementCard";
+import FichaViva360Tab from "@/components/fichaviva/FichaViva360Tab";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { exportReportAsPdf } from "@/lib/exportPdf";
@@ -96,7 +96,7 @@ const TAB_LABELS: Record<Tab, string> = {
   wallet: "Creative Wallet",
   reports: "Relatórios",
   portal: "Portal",
-  "ficha-viva": "Ficha Viva",
+  "ficha-viva": "Ficha Viva 360",
 };
 
 export default function ClientDetailPage() {
@@ -1627,12 +1627,10 @@ export default function ClientDetailPage() {
           )}
 
           {activeTab === "ficha-viva" && isAdmin && (
-            <div className="animate-fade-in max-w-xl">
-              <FichaVivaManagementCard
-                client={client}
-                onUpdate={(patch) => updateClientData(client.id, patch)}
-              />
-            </div>
+            <FichaViva360Tab
+              client={client}
+              onUpdate={(patch) => updateClientData(client.id, patch)}
+            />
           )}
         </div>
       </div>
