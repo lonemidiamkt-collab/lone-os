@@ -14,6 +14,8 @@ import { calcHealthScore } from "@/lib/utils";
 import { useOKRMetrics, type KPIValue } from "@/lib/hooks/useOKRMetrics";
 import { useSnapshots, type Delta } from "@/lib/hooks/useSnapshots";
 import { useOKRData } from "@/lib/hooks/useOKRData";
+import { useCollaboratorScores } from "@/lib/hooks/useCollaboratorScores";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useRole } from "@/lib/context/RoleContext";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
@@ -174,6 +176,7 @@ export default function GoalsPage() {
   }, [okrData.okrs]);
 
   const metrics = useOKRMetrics(Object.keys(dbTargets).length > 0 ? dbTargets : undefined);
+  const collaborators = useCollaboratorScores(teamMembers);
   const { currentSnapshot, previousSnapshot, deltas, feedback, churnAlerts, saveCurrentSnapshot } = useSnapshots();
   const pageRef = useRef<HTMLDivElement>(null);
   const [activeLayer, setActiveLayer] = useState<"strategy" | "operations">("strategy");
@@ -243,7 +246,9 @@ export default function GoalsPage() {
   const [realTraffic, setRealTraffic] = useState<RealTraffic | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch("/api/okr/traffic-metrics")
+    // authedFetch (não fetch puro): a rota usa getServerUser → exige o token no header,
+    // senão 401 e o tráfego cai pro mock. Ver [[loneos-authedfetch-nao-autorizado]].
+    authedFetch("/api/okr/traffic-metrics")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (alive && d) setRealTraffic(d as RealTraffic); })
       .catch(() => {});
@@ -703,6 +708,55 @@ export default function GoalsPage() {
               })}
             </div>
           </div>
+
+          {/* ─── Produção dos Colaboradores (real, por pessoa) ─── */}
+          {timeView === "atual" && collaborators.length > 0 && (
+            <div className="card p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Users size={14} className="text-primary" /> Produção dos Colaboradores
+                  <span className="text-[10px] text-muted-foreground font-normal">· mês atual</span>
+                </h3>
+                <span className="text-[10px] text-muted-foreground">Score = desempenho real</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {collaborators.map((p) => {
+                  const ring = p.tone === "success" ? "text-lone-success" : p.tone === "warning" ? "text-lone-warning" : p.tone === "danger" ? "text-destructive" : "text-muted-foreground";
+                  const barBg = p.tone === "success" ? "bg-lone-success" : p.tone === "warning" ? "bg-lone-warning" : p.tone === "danger" ? "bg-destructive" : "bg-muted";
+                  return (
+                    <div key={p.id} className="p-3.5 rounded-xl bg-surface border border-border">
+                      <div className="flex items-center justify-between mb-2.5">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{p.name}</p>
+                          <span className="text-[10px] text-muted-foreground">{p.roleLabel}</span>
+                        </div>
+                        <div className="text-right shrink-0 ml-2" title={`Score: ${p.scoreBasis}`}>
+                          <span className={`text-2xl font-bold tabular-nums ${ring}`}>{p.score == null ? "—" : p.score}</span>
+                          {p.score != null && <span className="text-[10px] text-muted-foreground">/100</span>}
+                        </div>
+                      </div>
+                      {p.score != null && (
+                        <div className="h-1.5 rounded-full bg-card overflow-hidden mb-3">
+                          <div className={`h-full rounded-full transition-all duration-500 ${barBg}`} style={{ width: `${Math.min(100, p.score)}%` }} />
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        {p.stats.map((s, i) => (
+                          <div key={i} className="flex items-center justify-between text-[11px]">
+                            <span className="text-muted-foreground">{s.label}</span>
+                            <span className="text-foreground font-medium tabular-nums">{s.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-3">
+                Design: score = % de entregas no prazo. Social/Tráfego: score = saúde média da carteira. Tudo do mês corrente, dados reais do sistema.
+              </p>
+            </div>
+          )}
 
           {/* Trend Chart + Individual Goals — só nas visões históricas; na Atual não há série
               temporal real ainda (não mostramos gráfico/percentuais inventados) */}
