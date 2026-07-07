@@ -39,7 +39,7 @@ import {
 import EditClientModal from "@/components/EditClientModal";
 import dynamic from "next/dynamic";
 import DadosTab from "@/components/client-tabs/DadosTab";
-import ResultsTab from "@/components/client-tabs/ResultsTab";
+import CrescimentoTab from "@/components/fichaviva/CrescimentoTab";
 import AIAuditsTab from "@/components/client-tabs/AIAuditsTab";
 import ClientNPS from "@/components/sector/ClientNPS";
 import WhatsAppTemplates from "@/components/WhatsAppTemplates";
@@ -84,7 +84,7 @@ type Tab = (typeof TABS)[number];
 const TAB_LABELS: Record<Tab, string> = {
   overview: "Visão Geral",
   dados: "Dados",
-  resultados: "Resultados",
+  resultados: "Crescimento",
   "analise-ia": "Análise IA",
   briefing: "Briefing",
   contratos: "Contratos",
@@ -96,7 +96,7 @@ const TAB_LABELS: Record<Tab, string> = {
   wallet: "Creative Wallet",
   reports: "Relatórios",
   portal: "Portal",
-  "ficha-viva": "Ficha Viva 360",
+  "ficha-viva": "Comercial",
 };
 
 export default function ClientDetailPage() {
@@ -672,7 +672,7 @@ export default function ClientDetailPage() {
 
           {/* ── RESULTADOS ──────────────────────────────────────────────────── */}
           {activeTab === "resultados" && (
-            <ResultsTab client={client} currentUser={currentUser} role={role} />
+            <CrescimentoTab client={client} currentUser={currentUser} />
           )}
 
           {/* ── ANALISE IA ──────────────────────────────────────────────────── */}
