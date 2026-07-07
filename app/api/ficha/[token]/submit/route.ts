@@ -44,7 +44,7 @@ export async function POST(
   // Valida token
   const { data: client } = await supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, ficha_viva_enabled, ficha_viva_token_revoked_at")
+    .select("id, name, nome_fantasia, ficha_viva_enabled, ficha_viva_token_revoked_at, ficha_viva_raiox_token")
     .or(`ficha_viva_token.eq.${token},ficha_viva_raiox_token.eq.${token}`)
     .single();
 
@@ -54,9 +54,10 @@ export async function POST(
 
   const body = await req.json().catch(() => ({}));
 
-  // Revalida o PIN (1ª palavra do nome) antes de gravar
+  // PIN só no link do DONO (full). Link do vendedor (raiox) grava sem código.
+  const scope: "full" | "raiox" = client.ficha_viva_raiox_token === token ? "raiox" : "full";
   const nome = (client.nome_fantasia as string) || (client.name as string);
-  if (!checkAccessCode(nome, String(body?.code ?? ""))) {
+  if (scope === "full" && !checkAccessCode(nome, String(body?.code ?? ""))) {
     return NextResponse.json({ error: "Código de acesso incorreto." }, { status: 401 });
   }
 

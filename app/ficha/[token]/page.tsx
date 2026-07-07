@@ -24,7 +24,7 @@ export default async function FichaVivaPage({
 
   const { data: client } = await supabaseAdmin
     .from("clients")
-    .select("ficha_viva_enabled, ficha_viva_token_revoked_at")
+    .select("ficha_viva_enabled, ficha_viva_token_revoked_at, ficha_viva_raiox_token")
     .or(`ficha_viva_token.eq.${token},ficha_viva_raiox_token.eq.${token}`)
     .single();
 
@@ -32,10 +32,12 @@ export default async function FichaVivaPage({
     notFound();
   }
 
+  const scope: "full" | "raiox" = client.ficha_viva_raiox_token === token ? "raiox" : "full";
+
   return (
     <>
       <meta name="robots" content="noindex, nofollow" />
-      <FichaVivaClient token={token} />
+      <FichaVivaClient token={token} scope={scope} />
     </>
   );
 }

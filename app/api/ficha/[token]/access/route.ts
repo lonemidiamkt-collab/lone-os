@@ -36,14 +36,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
   }
 
+  // Escopo pelo token: link do vendedor (raiox) NÃO recebe financeiro E não exige PIN.
+  const scope: "full" | "raiox" = client.ficha_viva_raiox_token === token ? "raiox" : "full";
+
   const body = await req.json().catch(() => ({}));
   const nome = (client.nome_fantasia as string) || (client.name as string);
-  if (!checkAccessCode(nome, String(body?.code ?? ""))) {
+  if (scope === "full" && !checkAccessCode(nome, String(body?.code ?? ""))) {
     return NextResponse.json({ error: "Código de acesso incorreto." }, { status: 401 });
   }
-
-  // Escopo pelo token: link do vendedor (raiox) NÃO recebe nenhum dado financeiro.
-  const scope: "full" | "raiox" = client.ficha_viva_raiox_token === token ? "raiox" : "full";
 
   const { count } = await supabaseAdmin
     .from("client_diagnostics")

@@ -6,7 +6,7 @@
 //   02 · Raio-X Comercial — responde o diagnóstico de 10 perguntas
 // Tudo revalida o PIN no servidor. Navy, tokens do design system.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Lock, Loader2, TrendingUp, TrendingDown, Minus, Check, Send, MessageCircle, Sparkles, LineChart as LineIcon,
 } from "lucide-react";
@@ -54,16 +54,22 @@ const TT = {
   itemStyle: { color: "var(--foreground)", fontWeight: 600 },
 } as const;
 
-export default function FichaVivaClient({ token }: { token: string }) {
+export default function FichaVivaClient({ token, scope }: { token: string; scope: "full" | "raiox" }) {
   const [code, setCode] = useState("");
   const [data, setData] = useState<AccessData | null>(null);
   const [unlocking, setUnlocking] = useState(false);
   const [gateError, setGateError] = useState("");
   const [sub, setSub] = useState<Sub>("crescimento");
 
+  // Link do vendedor (raiox): sem PIN — abre direto no formulário.
+  useEffect(() => {
+    if (scope === "raiox" && !data) unlock();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function unlock(e?: React.FormEvent) {
     e?.preventDefault();
-    if (!code.trim()) return;
+    if (scope === "full" && !code.trim()) return; // raiox não exige código
     setUnlocking(true); setGateError("");
     try {
       const res = await fetch(`/api/ficha/${token}/access`, {
@@ -87,8 +93,17 @@ export default function FichaVivaClient({ token }: { token: string }) {
     } catch { /* silencioso */ }
   }
 
-  // ── Portão de PIN ──────────────────────────────────────────────────────
+  // ── Sem dados ainda ────────────────────────────────────────────────────
   if (!data) {
+    // Vendedor (raiox): abre direto — sem PIN, só um loading enquanto carrega.
+    if (scope === "raiox") {
+      return (
+        <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
+          {gateError ? <p className="text-sm text-destructive">{gateError}</p> : <Loader2 size={22} className="text-primary animate-spin" />}
+        </div>
+      );
+    }
+    // Dono (full): portão de PIN.
     return (
       <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
         <form onSubmit={unlock} className="w-full max-w-sm text-center space-y-5">
