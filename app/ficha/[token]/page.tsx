@@ -4,6 +4,7 @@
 // perguntas. Não expõe dado interno (investimento/ROI) — só o resultado do negócio do cliente.
 
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { computeGrowth, type GrowthRow } from "@/lib/fichaViva/growth";
 import FichaVivaClient from "@/components/fichaviva/FichaVivaClient";
@@ -16,6 +17,11 @@ export default async function FichaVivaPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+
+  // Opta o render por REQUEST (como o portal de tráfego). Sem tocar numa API dinâmica,
+  // um token inválido cai no not-found mas responde HTTP 200 — com isto o notFound() abaixo
+  // devolve 404 de verdade pra link inválido/revogado.
+  await headers();
 
   const { data: client } = await supabaseAdmin
     .from("clients")
