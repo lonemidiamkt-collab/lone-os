@@ -1910,8 +1910,8 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                       </button>
                     )}
                     {card.socialConfirmedAt && (
-                      <span className="text-[10px] text-primary flex items-center gap-0.5">
-                        <CheckCircle size={9} /> Confirmado
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-lone-success-bg text-lone-success border border-lone-success-border flex items-center gap-0.5 font-medium">
+                        <CheckCircle size={9} /> Arte confirmada
                       </span>
                     )}
                     {card.nonDeliveryReason ? (

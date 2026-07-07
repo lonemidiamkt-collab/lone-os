@@ -826,6 +826,11 @@ export default function ContentCardModal({ card, onClose }: Props) {
               Confirmar Arte
             </Button>
           )}
+          {card.socialConfirmedAt && role !== "designer" && (
+            <span className="mr-auto flex items-center gap-1.5 text-sm font-medium text-lone-success px-2.5 py-1 rounded-lg bg-lone-success-bg border border-lone-success-border">
+              <CheckCircle size={14} /> Arte confirmada{card.socialConfirmedBy ? ` por ${card.socialConfirmedBy}` : ""}
+            </span>
+          )}
           {/* Arquivar demanda — soft-delete (some do quadro, fica recuperável). Não pro designer. */}
           {role !== "designer" && (
             <Button
