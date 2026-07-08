@@ -3,6 +3,7 @@
 import Header from "@/components/Header";
 import SignedImage from "@/components/shared/SignedImage";
 import KanbanBoard from "@/components/KanbanBoard";
+import CsAgentInbox from "@/components/cs/CsAgentInbox";
 import ContentCardModal from "@/components/ContentCardModal";
 import CardArtAttachments from "@/components/kanban/CardArtAttachments";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
@@ -762,6 +763,8 @@ export default function DesignPage() {
                 Por cliente (unificada)
               </button>
             </div>
+
+            <CsAgentInbox cards={myContentCards} onOpen={setDetailCard} titulo="CS Agente — pra produzir" />
 
             {/* Pending deadlines strip */}
             {(() => {

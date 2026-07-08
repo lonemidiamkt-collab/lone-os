@@ -3,6 +3,7 @@
 import Header from "@/components/Header";
 import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
+import CsAgentInbox from "@/components/cs/CsAgentInbox";
 import ArchivedDemandsModal from "@/components/ArchivedDemandsModal";
 import SignedImage from "@/components/shared/SignedImage";
 import ContentIdeasModal from "@/components/ContentIdeasModal";
@@ -2782,6 +2783,8 @@ export default function SocialPage() {
                 <Archive size={13} /> Arquivadas
               </button>
             </div>
+
+            <CsAgentInbox cards={filteredCards} onOpen={setSelectedCard} />
 
             <KanbanErrorBoundary context="Kanban Social Media">
             <KanbanByClient
