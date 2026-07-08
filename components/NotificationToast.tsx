@@ -45,6 +45,39 @@ function playPremiumPing() {
   } catch {}
 }
 
+// Chime agradável (3 notas ascendentes) p/ quando entra ARTE — designer entregou ou social adicionou.
+// Pedido do Roberto: som obrigatório tipo WhatsApp nesses eventos.
+function playArtChime() {
+  try {
+    const ctx = new AudioContext();
+    const notas = [
+      { f: 659.25, t: 0.0 },   // E5
+      { f: 830.61, t: 0.10 },  // G#5
+      { f: 987.77, t: 0.20 },  // B5
+    ];
+    for (const n of notas) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(n.f, ctx.currentTime + n.t);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + n.t);
+      gain.gain.exponentialRampToValueAtTime(0.16, ctx.currentTime + n.t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + n.t + 0.28);
+      osc.start(ctx.currentTime + n.t);
+      osc.stop(ctx.currentTime + n.t + 0.3);
+    }
+    setTimeout(() => ctx.close().catch(() => {}), 800);
+  } catch {}
+}
+
+// Notificação é sobre ARTE entrando (entrega do designer / arte adicionada pelo social)?
+function ehEventoDeArte(n: AppNotification): boolean {
+  if (n.type !== "content") return false;
+  const t = `${n.title} ${n.body}`.toLowerCase();
+  return /arte (entregue|pronta|adicionad|nova)|entregou a arte|nova arte|arte do designer|designer entregou/.test(t);
+}
+
 export default function NotificationToast() {
   const notifications = useNotificationsStore((s) => s.notifications);
   const markNotificationRead = useNotificationsStore((s) => s.markRead);
@@ -107,8 +140,10 @@ export default function NotificationToast() {
       }
     });
 
-    // Play sound only for critical
-    if (newToasts.some((t) => t.isCritical)) {
+    // Som: chime de ARTE quando designer entrega / social adiciona arte; ping premium p/ crítico.
+    if (newOnes.some(ehEventoDeArte)) {
+      playArtChime();
+    } else if (newToasts.some((t) => t.isCritical)) {
       playPremiumPing();
     }
 

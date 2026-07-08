@@ -80,6 +80,8 @@ export default function ContentCardModal({ card, onClose }: Props) {
   // Briefing é salvo/editado como Markdown. Dados legacy (HTML do contentEditable
   // anterior) são convertidos no carregamento via htmlToMarkdown.
   const [briefing, setBriefing] = useState(htmlToMarkdown(card.briefing ?? ""));
+  const [title, setTitle] = useState(card.title ?? "");
+  const [editingTitle, setEditingTitle] = useState(false);
   const [caption, setCaption] = useState(card.caption ?? "");
   const [hashtags, setHashtags] = useState(card.hashtags ?? "");
   const [dueDate, setDueDate] = useState(card.dueDate ?? "");
@@ -268,7 +270,30 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 {getPriorityLabel(card.priority)}
               </Badge>
             </div>
-            <DialogTitle className="text-lg leading-tight">{card.title}</DialogTitle>
+            {editingTitle ? (
+              <div className="flex items-center gap-2">
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { const t = title.trim(); if (t && t !== card.title) updateContentCard(card.id, { title: t }); setEditingTitle(false); }
+                    if (e.key === "Escape") { setTitle(card.title ?? ""); setEditingTitle(false); }
+                  }}
+                  className="flex-1 text-lg font-semibold bg-surface border border-primary/40 rounded-lg px-2 py-1 text-foreground outline-none"
+                />
+                <button type="button" onClick={() => { const t = title.trim(); if (t && t !== card.title) updateContentCard(card.id, { title: t }); setEditingTitle(false); }}
+                  className="text-[11px] px-2.5 py-1 rounded-md bg-primary text-primary-foreground font-medium">Salvar</button>
+                <button type="button" onClick={() => { setTitle(card.title ?? ""); setEditingTitle(false); }}
+                  className="text-[11px] px-2.5 py-1 rounded-md bg-muted border border-border text-muted-foreground">Cancelar</button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 group/title">
+                <DialogTitle className="text-lg leading-tight">{title || card.title}</DialogTitle>
+                <button type="button" onClick={() => { setTitle(card.title ?? ""); setEditingTitle(true); }}
+                  className="shrink-0 text-[11px] px-2 py-0.5 rounded-md bg-muted border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 opacity-0 group-hover/title:opacity-100 transition-all">Editar</button>
+              </div>
+            )}
             <p className="text-sm text-primary mt-0.5">{card.clientName}</p>
           </div>
         </DialogHeader>
