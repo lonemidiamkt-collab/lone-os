@@ -986,8 +986,19 @@ export async function POST(req: NextRequest) {
   // Só interpreta como resposta natural se for um REPLY à PRÓPRIA sugestão do agente (quotedMsgId
   // casa com msg_id_sugestao). Sem isso, coordenação da equipe no grupo virava "confirmação" à toa
   // (alucinada). O "ok/não/ajustar" explícito (parseDecision/parseAjuste) segue funcionando sem reply.
-  if (msg.groupJid === internalGroupJid() && !isTrivial(msg.text) && isOpenAIConfigured() && msg.quotedMsgId) {
-    const alvo = demandaDaSugestao?.status === "pendente" ? demandaDaSugestao : null;
+  if (msg.groupJid === internalGroupJid() && !isTrivial(msg.text) && isOpenAIConfigured() && (msg.quotedMsgId || ehConfirmacaoLivre(msg.text))) {
+    let alvo = demandaDaSugestao?.status === "pendente" ? demandaDaSugestao : null;
+    // Sem reply, mas a mensagem parece confirmação ("cria o card", "pode criar", "tá certo"):
+    // interpreta se houver EXATAMENTE 1 demanda pendente recente (com 2+ o bloco de desambiguação
+    // acima já cuidou; com 0 não há o que confirmar). O próprio interpretador filtra papo à toa
+    // (devolve "ignorar"), então não vira confirmação alucinada.
+    if (!alvo && !msg.quotedMsgId) {
+      const desde1 = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+      const { data: p1 } = await supabaseAdmin.from("cs_demandas").select("*")
+        .eq("status", "pendente").gte("created_at", desde1)
+        .order("created_at", { ascending: false }).limit(2);
+      if (p1 && p1.length === 1) alvo = p1[0];
+    }
     if (alvo) {
       const interp = await interpretarResposta({
         clienteNome: (alvo.cliente_nome as string) || "Cliente",
