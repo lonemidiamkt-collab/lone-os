@@ -35,16 +35,17 @@ export const FRIDAY_SOCIAL_MESSAGE =
   "queiram que a gente prepare pro fim de semana ou pra próxima? É só chamar aqui que a gente " +
   "cuida. 🎨";
 
-/** Quarta: acompanhamento de meio de semana. */
+/** Quarta: meio de semana — mostra disponibilidade/suporte (NÃO pergunta resultado). */
 export const WEDNESDAY_MESSAGE =
-  "Olá, pessoal! Ótima quarta-feira para a gente, ótimo meio de semana. Vamos para cima hoje, " +
-  "vamos buscar os resultados! Como está sendo por aí? Como foi o dia de ontem?";
+  "Olá, pessoal! Ótima quarta-feira pra vocês! 🚀 Passando pra reforçar que seguimos acompanhando " +
+  "as campanhas de perto por aqui. Qualquer dúvida, ajuste ou novidade que queiram divulgar, é só " +
+  "chamar — estamos à disposição pra dar todo o suporte. 💪";
 
-/** Sexta: fechamento da semana. */
+/** Sexta: fechamento de semana — mostra disponibilidade/suporte (NÃO pergunta resultado). */
 export const FRIDAY_MESSAGE =
-  "Olá, pessoal! Ótima sexta-feira para a gente. Já estamos finalizando a semana. Como está sendo " +
-  "o resultado da semana no geral? Conseguimos gerar mais resultados de vendas na loja? Vamos atrás " +
-  "hoje buscando o melhor resultado possível!";
+  "Olá, pessoal! Sextou! 🎉 Fechando a semana com tudo por aqui e seguimos monitorando as campanhas " +
+  "de perto. Se precisarem de qualquer coisa — um ajuste, uma arte ou tirar uma dúvida — é só chamar. " +
+  "Estamos à disposição pra ajudar no que for preciso! 🚀";
 
 /** Texto de suporte (tráfego) para os dias sem relatório (qua/sex). */
 export function supportMessageFor(kind: ClientMsgKind): string {
