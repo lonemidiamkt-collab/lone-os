@@ -254,6 +254,7 @@ interface AlvoDemanda {
   demanda: Record<string, unknown> | null;
   jaDecidida?: Record<string, unknown> | null;
   ambiguas?: number;
+  candidatas?: Record<string, unknown>[];
 }
 async function acharDemanda(quotedMsgId?: string, codigo?: string): Promise<AlvoDemanda> {
   if (quotedMsgId) {
@@ -272,9 +273,51 @@ async function acharDemanda(quotedMsgId?: string, codigo?: string): Promise<Alvo
   const desde = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
   const { data: pend } = await supabaseAdmin.from("cs_demandas").select("*")
     .eq("status", "pendente").gte("created_at", desde)
-    .order("created_at", { ascending: false }).limit(2);
+    .order("created_at", { ascending: false }).limit(5);
   if (pend && pend.length === 1) return { demanda: pend[0] };
-  return { demanda: null, ambiguas: pend?.length ?? 0 };
+  return { demanda: null, ambiguas: pend?.length ?? 0, candidatas: pend ?? [] };
+}
+
+// ─── Desambiguação humana: quando há VÁRIOS pedidos abertos, em vez de "responde na mensagem"
+// (seco/robótico), o agente LISTA por nome e aceita número / nome / "todas". ───
+function listarPendentes(cands: Record<string, unknown>[]): string {
+  const linhas = cands.slice(0, 5)
+    .map((d, i) => `*${i + 1})* ${(d.resumo as string) || (d.message_text as string) || "pedido"} _(${(d.cliente_nome as string) || "cliente"})_`)
+    .join("\n");
+  return `Tenho *${cands.length}* pedidos abertos aqui:\n${linhas}\n\nResponde o *número*, o *nome*, ou *todas* — que eu já crio o card certinho. 😉`;
+}
+
+// Retorna as demandas escolhidas na mensagem: "todas"/"as duas" → todas; "1"/"1 e 2" → índices;
+// nome (palavra ≥4 chars que aparece no resumo/cliente) → as que casam; null se não deu pra saber.
+function selecionarDemandas(text: string, cands: Record<string, unknown>[]): Record<string, unknown>[] | "todas" | null {
+  const t = text.trim().toLowerCase();
+  if (/\b(todas|todos|as\s+duas|os\s+dois|ambas|ambos|as\s+2|os\s+2|tudo)\b/.test(t)) return "todas";
+  const nums = [...new Set((t.match(/\b[1-9]\b/g) || []).map(Number))].filter((n) => n >= 1 && n <= cands.length);
+  if (nums.length) return nums.map((n) => cands[n - 1]);
+  const STOP = new Set(["card", "cria", "criar", "crie", "arte", "post", "pra", "para", "com", "que", "esse", "essa", "isso", "aquele", "aquela", "pedido", "cliente", "fazer", "faz", "manda", "pode", "quero", "esses", "essas"]);
+  const palavras = t.split(/[\s,.!?]+/).filter((w) => w.length >= 4 && !STOP.has(w));
+  if (palavras.length) {
+    const hits = cands.filter((d) => {
+      const alvo = `${(d.resumo as string) || ""} ${(d.cliente_nome as string) || ""}`.toLowerCase();
+      return palavras.some((w) => alvo.includes(w));
+    });
+    if (hits.length) return hits;
+  }
+  return null;
+}
+
+// A mensagem parece uma CONFIRMAÇÃO livre (sem ser o "ok" exato do parseDecision)?
+function ehConfirmacaoLivre(text: string): boolean {
+  if (parseDecision(text)?.acao === "confirmar") return true;
+  const t = text.trim().toLowerCase();
+  return /\b(pode criar|cria(r)? o card|crie o card|cria esse|cria isso|pode fazer|manda ver|t[aá] certo|est[aá] tudo certo|tudo certo|fechou|pode mandar|aprovad[oa]|pode ir)\b/.test(t);
+}
+
+// A mensagem parece SÓ uma seleção (pós-listagem): "1", "1 e 2", "as duas", "todas".
+function pareceSelecao(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (/^\s*[1-9]([\s,e]+[1-9])*\s*$/.test(t)) return true;
+  return /\b(todas|todos|as\s+duas|os\s+dois|ambas|ambos|as\s+2|os\s+2)\b/.test(t);
 }
 
 // Onboarding: acha o cliente pelo nome ou cria um mínimo (clients só exige `name`), linkando o grupo.
@@ -775,6 +818,53 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ausencia: disponivel ? "voltou" : "fora", membro: membro.name });
   }
 
+  // ─── Desambiguação: 2+ pedidos abertos + confirmação/seleção SEM reply → cria os escolhidos ou
+  // LISTA por nome (fim do "responde na mensagem" seco). Só age com 2+ pendentes; o caso de 1
+  // pendente e os replies citados seguem pelo fluxo robusto abaixo (evita card duplicado no retry). ─
+  if (msg.groupJid === internalGroupJid() && !demandaDaSugestao && (ehConfirmacaoLivre(msg.text) || pareceSelecao(msg.text))) {
+    const desdeAmb = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+    const { data: pend } = await supabaseAdmin.from("cs_demandas").select("*")
+      .eq("status", "pendente").gte("created_at", desdeAmb)
+      .order("created_at", { ascending: false }).limit(5);
+    if (pend && pend.length >= 2) {
+      const sel = selecionarDemandas(msg.text, pend);
+      const escolhidas = sel === "todas" ? pend : (Array.isArray(sel) ? sel : []);
+      if (escolhidas.length) {
+        const decidedBy = msg.authorName || msg.authorJid;
+        const criados: string[] = [];
+        for (const d of escolhidas) {
+          const clientId = (d.client_id as string) || process.env.CS_TEST_CLIENT_ID || null;
+          if (!clientId) continue;
+          let cardId: string | null = null;
+          if (d.tipo === "pauta_semanal") {
+            const itens = parsePautaItens((d.message_text as string) || "") ?? [];
+            const ids = await criarCardsPauta({ clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null, itens });
+            cardId = ids[0] ?? null;
+          } else {
+            cardId = await criarCardDemanda({
+              clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null,
+              titulo: (d.resumo as string) || (d.message_text as string), urgencia: d.urgencia as string,
+              briefing: (d.briefing as string) || (d.message_text as string), tipo: d.tipo as string,
+            });
+          }
+          await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: decidedBy }).eq("id", d.id);
+          if (cardId) criados.push((d.resumo as string) || "card");
+        }
+        await csSendGroupText(msg.groupJid, criados.length === 1
+          ? ackCriado(criados[0], null)
+          : criados.length
+            ? `Fechou! Criei ${criados.length} cards: ${criados.map((r) => `*${r}*`).join(", ")}. 🚀`
+            : `Eita, não consegui criar os cards — algum sem cliente vinculado? Confere aí 🤔`);
+        console.log(`[CS/inbound] multi-confirm → ${criados.length} cards`);
+        return NextResponse.json({ ok: true, decision: "multi_confirmada", cards: criados.length });
+      }
+      if (ehConfirmacaoLivre(msg.text)) {
+        await csSendGroupText(msg.groupJid, listarPendentes(pend));
+        return NextResponse.json({ ok: true, decision: "listou_pendentes" });
+      }
+    }
+  }
+
   // ─── Decisão humana (grupo interno): RESPONDA a sugestão com "ok" (cria) ou "não" (descarta) ───
   const decision = parseDecision(msg.text);
   if (decision && msg.groupJid === internalGroupJid()) {
@@ -1224,7 +1314,13 @@ export async function POST(req: NextRequest) {
     if (!ehDemandaSeparada) {
       await supabaseAdmin.from("cs_demandas").update(updates).eq("id", pendente.id);
       const jidInt = internalGroupJid();
-      if (reclassificou && jidInt) {
+      // Só reposta o COMPLEMENTO se o pedido MUDOU de verdade (resumo diferente ou urgência subiu) —
+      // reescrita cosmética do A3 vira update SILENCIOSO, sem empilhar vários COMPLEMENTOs no grupo.
+      const resumoAntigo = ((pendente.resumo as string) || "").trim().toLowerCase();
+      const resumoNovo = ((updates.resumo as string) || "").trim().toLowerCase();
+      const urgenciaSubiu = updates.urgencia === "alta" && pendente.urgencia !== "alta";
+      const mudouMaterial = (!!resumoNovo && resumoNovo !== resumoAntigo) || urgenciaSubiu;
+      if (reclassificou && jidInt && mudouMaterial) {
         const r = await csSendGroupText(jidInt,
           `🔁 *COMPLEMENTO — ${clienteNome}*\n\n📩 O cliente completou o pedido — agora é:\n*${updates.resumo as string}*${updates.urgencia === "alta" ? " · ⚡ urgência alta" : ""}\n\n👉 Vale o mesmo: *ok* · *não* · *ajustar*`,
           (pendente.msg_id_sugestao as string) || undefined);
