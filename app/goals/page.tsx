@@ -195,13 +195,61 @@ export default function GoalsPage() {
   // Animated transition key
   const [transitionKey, setTransitionKey] = useState(0);
 
+  // Métricas REAIS do servidor (/api/okr/traffic-metrics): tráfego (ad_accounts + metric_snapshots
+  // deduplicado), churn real (churned_at), qualidade de tráfego e relacionamento. Substituem os
+  // valores do hook. authedFetch (não fetch puro): a rota usa getServerUser e exige o token no
+  // header — senão 401 e cai pro mock. Ver [[loneos-authedfetch-nao-autorizado]].
+  type RealTraffic = {
+    investmentExecutedPct: number; isReal: boolean; accountsWithinBudgetPct: number; accountsCounted: number;
+    leadsMonth: number; cpl: number; leadsIsReal: boolean;
+    ctrPct: number; impressionsMonth: number; trafficQualIsReal: boolean;
+    engagementRate: number; engagementIsReal: boolean;
+    activeClients: number; churnedMonth: number; churnRate: number; churnIsReal: boolean; staleContacts: number;
+  };
+  const [realTraffic, setRealTraffic] = useState<RealTraffic | null>(null);
+  useEffect(() => {
+    let alive = true;
+    authedFetch("/api/okr/traffic-metrics")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d) setRealTraffic(d as RealTraffic); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const investmentKpi = useMemo<KPIValue>(() => (
+    realTraffic?.isReal
+      ? { ...metrics.traffic.investmentExecuted, current: realTraffic.investmentExecutedPct, isReal: true, source: "ad_accounts (gasto÷verba)" }
+      : metrics.traffic.investmentExecuted
+  ), [metrics.traffic.investmentExecuted, realTraffic]);
+
+  // Custo por lead (substitui o "ROAS" — agência de geração de lead não tem receita por anúncio,
+  // então ROAS é inmedível; CPL = gasto real ÷ leads reais é a métrica de eficiência que existe).
+  const cplKpi = useMemo<KPIValue>(() => ({
+    current: realTraffic?.leadsIsReal ? realTraffic.cpl : 0,
+    target: dbTargets["cpl"] ?? 15, unit: "",
+    isReal: !!realTraffic?.leadsIsReal, source: "metric_snapshots (dedup)",
+  }), [realTraffic, dbTargets]);
+
+  const leadsKpi = useMemo<KPIValue>(() => ({
+    current: realTraffic?.leadsIsReal ? realTraffic.leadsMonth : 0,
+    target: dbTargets["leads_month"] ?? 500, unit: " leads",
+    isReal: !!realTraffic?.leadsIsReal, source: "metric_snapshots (dedup)",
+  }), [realTraffic, dbTargets]);
+
+  // Churn REAL (churned_at) — substitui o proxy "clientes em risco" do hook.
+  const churnKpi = useMemo<KPIValue>(() => (
+    realTraffic?.churnIsReal
+      ? { ...metrics.company.churnRate, current: realTraffic.churnRate, isReal: true, source: `churned_at · ${realTraffic.churnedMonth} cancelado(s) no mês` }
+      : metrics.company.churnRate
+  ), [metrics.company.churnRate, realTraffic]);
+
   // Company OKRs (always from real data via hook)
   const companyOkrs = useMemo<OKR[]>(() => [
-    kpiToOkr("co-1", "Reduzir churn para < 5%", metrics.company.churnRate, true),
+    kpiToOkr("co-1", "Reduzir churn para < 5%", churnKpi, true),
     kpiToOkr("co-2", "Saude media dos clientes > 80", metrics.company.nps),
     kpiToOkr("co-3", "Clientes ativos", metrics.company.activeClients),
     kpiToOkr("co-4", "Novos clientes/mes", metrics.company.newClients),
-  ], [metrics.company]);
+  ], [metrics.company, churnKpi]);
 
   // Generate monthly snapshots using real team data
   const MONTHLY_SNAPSHOTS = useMemo(() => {
@@ -235,45 +283,6 @@ export default function GoalsPage() {
     }
     return { ...snap, trendData };
   }, [MONTHLY_SNAPSHOTS]);
-
-  // Tráfego REAL — /api/okr/traffic-metrics agrega ad_accounts (gasto÷verba) + metric_snapshots
-  // deduplicado (leads, custo-por-lead). Substitui o mock do hook. Se a rota falhar, mantém o hook.
-  type RealTraffic = {
-    investmentExecutedPct: number; isReal: boolean;
-    leadsMonth: number; cpl: number; leadsIsReal: boolean;
-    engagementRate: number; engagementIsReal: boolean;
-  };
-  const [realTraffic, setRealTraffic] = useState<RealTraffic | null>(null);
-  useEffect(() => {
-    let alive = true;
-    // authedFetch (não fetch puro): a rota usa getServerUser → exige o token no header,
-    // senão 401 e o tráfego cai pro mock. Ver [[loneos-authedfetch-nao-autorizado]].
-    authedFetch("/api/okr/traffic-metrics")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (alive && d) setRealTraffic(d as RealTraffic); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, []);
-
-  const investmentKpi = useMemo<KPIValue>(() => (
-    realTraffic?.isReal
-      ? { ...metrics.traffic.investmentExecuted, current: realTraffic.investmentExecutedPct, isReal: true, source: "ad_accounts (gasto÷verba)" }
-      : metrics.traffic.investmentExecuted
-  ), [metrics.traffic.investmentExecuted, realTraffic]);
-
-  // Custo por lead (substitui o "ROAS" — agência de geração de lead não tem receita por anúncio,
-  // então ROAS é inmedível; CPL = gasto real ÷ leads reais é a métrica de eficiência que existe).
-  const cplKpi = useMemo<KPIValue>(() => ({
-    current: realTraffic?.leadsIsReal ? realTraffic.cpl : 0,
-    target: dbTargets["cpl"] ?? 15, unit: "",
-    isReal: !!realTraffic?.leadsIsReal, source: "metric_snapshots (dedup)",
-  }), [realTraffic, dbTargets]);
-
-  const leadsKpi = useMemo<KPIValue>(() => ({
-    current: realTraffic?.leadsIsReal ? realTraffic.leadsMonth : 0,
-    target: dbTargets["leads_month"] ?? 500, unit: " leads",
-    isReal: !!realTraffic?.leadsIsReal, source: "metric_snapshots (dedup)",
-  }), [realTraffic, dbTargets]);
 
   // Real team OKRs for "atual" view
   const realTeamOkrs = useMemo<TeamOKRs[]>(() => [
@@ -708,6 +717,30 @@ export default function GoalsPage() {
               })}
             </div>
           </div>
+
+          {/* ─── Indicadores em tempo real (qualidade de tráfego + relacionamento) ─── */}
+          {timeView === "atual" && realTraffic && (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {(() => {
+                const staleRatio = realTraffic.activeClients > 0 ? realTraffic.staleContacts / realTraffic.activeClients : 0;
+                const staleTone = staleRatio >= 0.5 ? "text-destructive" : staleRatio >= 0.25 ? "text-lone-warning" : "text-lone-success";
+                const budgetTone = realTraffic.accountsWithinBudgetPct >= 90 ? "text-lone-success" : realTraffic.accountsWithinBudgetPct >= 70 ? "text-lone-warning" : "text-destructive";
+                const tiles = [
+                  { label: "CTR médio", value: realTraffic.trafficQualIsReal ? `${realTraffic.ctrPct}%` : "—", sub: "cliques ÷ impressões · mês", tone: "text-foreground" },
+                  { label: "Alcance (impressões)", value: realTraffic.trafficQualIsReal ? realTraffic.impressionsMonth.toLocaleString("pt-BR") : "—", sub: "mês, deduplicado", tone: "text-foreground" },
+                  { label: "Contas no orçamento", value: `${realTraffic.accountsWithinBudgetPct}%`, sub: `${realTraffic.accountsCounted} contas ativas`, tone: budgetTone },
+                  { label: "Sem contato +15d", value: String(realTraffic.staleContacts), sub: `de ${realTraffic.activeClients} clientes ativos`, tone: staleTone },
+                ];
+                return tiles.map((t) => (
+                  <div key={t.label} className="rounded-xl bg-surface border border-border p-3.5">
+                    <p className="text-[10px] text-muted-foreground mb-1">{t.label}</p>
+                    <p className={`text-xl font-bold tabular-nums ${t.tone}`}>{t.value}</p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5">{t.sub}</p>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
 
           {/* ─── Produção dos Colaboradores (real, por pessoa) ─── */}
           {timeView === "atual" && collaborators.length > 0 && (
