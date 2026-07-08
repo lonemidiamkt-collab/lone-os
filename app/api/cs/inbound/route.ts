@@ -805,6 +805,43 @@ export async function POST(req: NextRequest) {
     }
     const { data: c } = await supabaseAdmin.from("clients").select(CLIENT_COLS).eq("id", alvo.id).maybeSingle();
     if (!c) return NextResponse.json({ ok: true, demanda_cmd: "cliente_sumiu" });
+    const clienteNome = nomeOf(c);
+    // "cria a demanda que a X pediu" (REFERÊNCIA curta, sem conteúdo colado) → em vez de inventar um
+    // genérico, uso o que EU JÁ PEGUEI do grupo da X (as demandas pendentes que classifiquei). Se veio
+    // conteúdo colado (msg longa), monto a partir dele.
+    const temConteudoColado = msg.text.trim().length >= 80;
+    if (!temConteudoColado) {
+      const d7 = new Date(Date.now() - 7 * 864e5).toISOString();
+      const { data: jaPend } = await supabaseAdmin.from("cs_demandas")
+        .select("id, resumo, tipo, urgencia, briefing, message_text, responsavel")
+        .eq("client_id", c.id as string).eq("status", "pendente")
+        .gte("created_at", d7).order("created_at", { ascending: false }).limit(6);
+      if (jaPend && jaPend.length > 0) {
+        const criados: string[] = [];
+        for (const d of jaPend) {
+          let cardId: string | null = null;
+          if (d.tipo === "pauta_semanal") {
+            const itens = parsePautaItens((d.message_text as string) || "") ?? [];
+            const ids = await criarCardsPauta({ clientId: c.id as string, clienteNome, responsavel: d.responsavel as string | null, itens });
+            cardId = ids[0] ?? null;
+          } else {
+            cardId = await criarCardDemanda({
+              clientId: c.id as string, clienteNome, responsavel: d.responsavel as string | null,
+              titulo: (d.resumo as string) || (d.message_text as string), urgencia: d.urgencia as string,
+              briefing: (d.briefing as string) || (d.message_text as string), tipo: d.tipo as string,
+            });
+          }
+          await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: quem }).eq("id", d.id as string);
+          if (cardId) criados.push((d.resumo as string) || "card");
+        }
+        await csSendGroupText(msg.groupJid,
+          `Boa! A *${clienteNome}* tinha ${criados.length} pedido(s) que peguei do grupo — criei ${criados.length === 1 ? "o card" : `os ${criados.length} cards`}:\n${criados.map((x) => `• ${x}`).join("\n")}\n\nSe algum não era pra criar, me fala que eu arquivo. 🚀`);
+        console.log(`[CS/inbound] comando "que a X pediu" → criou ${criados.length} cards capturados de ${clienteNome}`);
+        return NextResponse.json({ ok: true, demanda_cmd: "criou_capturadas", cliente: clienteNome, cards: criados.length });
+      }
+      await csSendGroupText(msg.groupJid, `Não achei nenhum pedido aberto da *${clienteNome}* que eu tenha pego do grupo. Me cola aqui o que ela pediu que eu monto certinho. 😉`);
+      return NextResponse.json({ ok: true, demanda_cmd: "sem_pedido_capturado", cliente: clienteNome });
+    }
     const r = await montarDemandaComando(c, msg.text, quem, msg.messageId, msg.groupJid);
     return NextResponse.json({ ok: true, demanda_cmd: r ? "sugerida" : "erro", cliente: r?.cliente, titulo: r?.titulo });
   }

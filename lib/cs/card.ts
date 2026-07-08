@@ -65,6 +65,16 @@ export async function criarCardDemanda(opts: {
     .select("id")
     .maybeSingle();
   if (error) { console.error("[CS] criar card:", error.message); return null; }
+  // Deixa o RESPONSÁVEL do cliente ciente: notificação por client_id (quem atende o cliente vê no
+  // painel/sino). Ex.: card da WT → Carlos; card da Farmácia → Pedro. Falha aqui não quebra o card.
+  if (card?.id) {
+    await supabaseAdmin.from("notifications").insert({
+      type: "content",
+      title: "🤖 Nova demanda do Agente CS",
+      body: `"${opts.titulo.slice(0, 60)}" (${opts.clienteNome}) já está no seu board.`,
+      client_id: opts.clientId,
+    });
+  }
   return (card?.id as string) ?? null;
 }
 
