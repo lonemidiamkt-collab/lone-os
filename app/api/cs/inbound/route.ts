@@ -238,11 +238,60 @@ async function resolveClientePorNome(text: string): Promise<{ id: string; nome: 
       const casa = t.includes(w) || (w.endsWith("s") && t.includes(w.slice(0, -1)));
       if (casa) { score++; maxw = Math.max(maxw, w.length); }
     }
+    // Tokens CURTOS distintivos (2-3 chars, ex.: "WT", "PH") só casam como PALAVRA INTEIRA (\bwt\b)
+    // e apenas quando nada mais longo casou — resolve "da wt" → "WT Shopping" sem falso-positivo.
+    if (score === 0) {
+      const curtos = normNome(nome).split(/\s+/).filter((w) => w.length >= 2 && w.length <= 3 && !STOP_NOME.has(w));
+      for (const w of curtos) {
+        const re = new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+        if (re.test(t)) { score++; maxw = Math.max(maxw, w.length); }
+      }
+    }
     if (score > 0 && (!best || score > best.score || (score === best.score && maxw > best.maxw))) {
       best = { id: c.id as string, nome, nicho: (c.nicho as string) || (c.industry as string) || undefined, score, maxw };
     }
   }
   return best ? { id: best.id, nome: best.nome, nicho: best.nicho } : null;
+}
+
+// Monta a demanda a partir do PEDIDO da equipe (texto livre) + cliente já resolvido: roda o A3,
+// insere a demanda pendente e posta o "NOVO PEDIDO" no grupo. Reusado pelo comando direto e pela
+// conclusão do "aguardando_cliente" (quando o time responde o nome depois). Retorna null se falhou.
+async function montarDemandaComando(
+  c: Record<string, unknown>, requestText: string, quem: string, messageId: string | undefined, groupJid: string,
+): Promise<{ titulo: string; cliente: string } | null> {
+  const clienteNome = nomeOf(c);
+  const clienteBriefing = await loadBriefingCombinado(c.id as string, briefingCompleto(c));
+  const csRules = await fetchClientCsRules(c.id as string);
+  const regrasFmt = csRules.filter((rr) => rr.escopo !== "roteiro").map((rr) => `${rr.texto} (${rr.escopo})`);
+  const assunto = extrairAssunto(requestText);
+  const tipo: CsDemandType = "arte_nova";
+  const a3 = await gerarBriefing({
+    clienteNome, clienteNicho: c.nicho as string, clienteBriefing, regras: regrasFmt,
+    tipo, urgencia: "media", resumo: assunto, mensagemOriginal: requestText,
+  });
+  const briefingTxt = a3.ok && a3.data ? formatBriefing(a3.data) : `${assunto}\nPedido da equipe: "${requestText}"`;
+  const titulo = a3.ok && a3.data ? a3.data.titulo : assunto;
+  const responsavel = resolveResponsavel(tipoToArea(tipo), {
+    assigned_social: c.assigned_social as string, assigned_designer: c.assigned_designer as string, assigned_traffic: c.assigned_traffic as string,
+  });
+  const codigo = randomBytes(2).toString("hex");
+  const { data: novaDem, error: insErr } = await supabaseAdmin.from("cs_demandas").insert({
+    codigo, group_jid: groupJid, client_id: c.id as string, cliente_nome: clienteNome,
+    author: quem, message_id: messageId, message_text: requestText,
+    tipo, urgencia: "media", confianca: 1, resumo: titulo, briefing: briefingTxt, responsavel, status: "pendente",
+  }).select("id").single();
+  if (insErr || !novaDem) {
+    console.error("[CS/inbound] montarDemandaComando:", insErr?.message);
+    await csSendGroupText(groupJid, `Eita, não consegui montar a demanda do *${clienteNome}* agora 😕 tenta de novo?`);
+    return null;
+  }
+  const a3d = a3.ok ? a3.data : null;
+  const txt = `🆕 *NOVO PEDIDO — ${clienteNome}*\n👤 ${responsavel}${quem ? ` · pedido por ${quem}` : ""}\n\n📩 Pedido:\n*${titulo}*\n\n${a3d ? `📋 ${a3d.briefing.trim()}\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : `📋 _"${requestText}"_`}\n\n👉 Responde aqui: *ok* (crio o card) · *não* (deixa pra lá) · *ajustar*`;
+  const rsug = await csSendGroupText(groupJid, txt);
+  if (rsug.ok && rsug.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: rsug.id }).eq("id", novaDem.id);
+  console.log(`[CS/inbound] demanda montada → ${clienteNome}: ${titulo} (${codigo})`);
+  return { titulo, cliente: clienteNome };
 }
 
 // Acha a demanda alvo da resposta — SEM chute: 1) reply na sugestão (se já foi decidida, sinaliza
@@ -700,6 +749,30 @@ export async function POST(req: NextRequest) {
   // SUGERE (mesmo formato da demanda de cliente) e espera "ok" pra criar o card. ───
   // Guarda: "Lone, cria umas ideias de post pro X" tem verbo de criação + "post", mas é pedido de
   // IDEIAS (handler abaixo), não de abrir uma demanda. Deixa passar pro handler de ideias.
+  // ─── Conclusão de "aguardando_cliente": o time pediu "cria a demanda" mas eu não sabia de qual
+  // cliente; guardei o pedido e perguntei o nome. A PRÓXIMA msg da mesma pessoa que resolver um
+  // cliente completa a demanda usando o TEXTO ORIGINAL guardado (não a resposta do nome). ───
+  if (msg.groupJid === internalGroupJid() && !demandaDaSugestao && isOpenAIConfigured()
+      && !ehPedidoCriarDemanda(msg.text) && !isTrivial(msg.text)) {
+    const quemAg = msg.authorName || msg.authorJid;
+    const desdeAg = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data: ag } = await supabaseAdmin.from("cs_demandas").select("*")
+      .eq("group_jid", msg.groupJid).eq("author", quemAg).eq("status", "aguardando_cliente")
+      .gte("created_at", desdeAg).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (ag) {
+      const alvoAg = await resolveClientePorNome(msg.text);
+      if (alvoAg) {
+        const { data: cAg } = await supabaseAdmin.from("clients").select(CLIENT_COLS).eq("id", alvoAg.id).maybeSingle();
+        if (cAg) {
+          const r = await montarDemandaComando(cAg, (ag.message_text as string) || msg.text, quemAg, msg.messageId, msg.groupJid);
+          if (r) await supabaseAdmin.from("cs_demandas").delete().eq("id", ag.id as string);
+          return NextResponse.json({ ok: true, demanda_cmd: r ? "completada" : "erro", cliente: r?.cliente });
+        }
+      }
+      // Ainda não deu pra saber o cliente pelo nome — não trava; deixa a msg seguir o fluxo normal.
+    }
+  }
+
   if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPedidoCriarDemanda(msg.text) && !ehPedidoIdeias(msg.text)) {
     if (!isOpenAIConfigured()) {
       await csSendGroupText(msg.groupJid, "Tô sem acesso à IA agora pra montar a demanda 😕");
@@ -710,50 +783,23 @@ export async function POST(req: NextRequest) {
       const { data: ja } = await supabaseAdmin.from("cs_demandas").select("id").eq("message_id", msg.messageId).limit(1).maybeSingle();
       if (ja) return NextResponse.json({ ok: true, demanda_cmd: "dedup" });
     }
+    const quem = msg.authorName || msg.authorJid;
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) {
+      // Não sei o cliente ainda — GUARDA o pedido (texto original) como "aguardando_cliente" e
+      // pergunta. A próxima msg da pessoa que resolver um cliente completa a demanda (bloco acima).
+      await supabaseAdmin.from("cs_demandas").insert({
+        codigo: randomBytes(2).toString("hex"), group_jid: msg.groupJid, author: quem,
+        message_id: msg.messageId, message_text: msg.text, tipo: "arte_nova", urgencia: "media",
+        confianca: 0, resumo: "(aguardando cliente)", status: "aguardando_cliente",
+      });
       await csSendGroupText(msg.groupJid, "Pode deixar! 📝 De qual cliente é a demanda? Me diz o nome que eu monto.");
-      return NextResponse.json({ ok: true, demanda_cmd: "sem_cliente" });
+      return NextResponse.json({ ok: true, demanda_cmd: "aguardando_cliente" });
     }
     const { data: c } = await supabaseAdmin.from("clients").select(CLIENT_COLS).eq("id", alvo.id).maybeSingle();
     if (!c) return NextResponse.json({ ok: true, demanda_cmd: "cliente_sumiu" });
-    const clienteNome = nomeOf(c);
-    // Texto livre (fixed/campaign) OU o briefing estruturado (client_briefings) — na base real o
-    // texto livre está vazio e o briefing vivo mora no estruturado.
-    const clienteBriefing = await loadBriefingCombinado(c.id as string, briefingCompleto(c));
-    const csRules = await fetchClientCsRules(c.id as string);
-    // Preferência de ROTEIRO não é regra de arte — vazava pro A3 como "regra firme" e distorcia o briefing.
-    const regrasFmt = csRules.filter((rr) => rr.escopo !== "roteiro").map((rr) => `${rr.texto} (${rr.escopo})`);
-    const assunto = extrairAssunto(msg.text);
-    const tipo: CsDemandType = "arte_nova";
-    const a3 = await gerarBriefing({
-      clienteNome, clienteNicho: c.nicho as string, clienteBriefing, regras: regrasFmt,
-      tipo, urgencia: "media", resumo: assunto, mensagemOriginal: msg.text,
-    });
-    const briefingTxt = a3.ok && a3.data ? formatBriefing(a3.data) : `${assunto}\nPedido da equipe: "${msg.text}"`;
-    const titulo = a3.ok && a3.data ? a3.data.titulo : assunto;
-    const area = tipoToArea(tipo);
-    const responsavel = resolveResponsavel(area, {
-      assigned_social: c.assigned_social as string, assigned_designer: c.assigned_designer as string, assigned_traffic: c.assigned_traffic as string,
-    });
-    const quem = msg.authorName || msg.authorJid;
-    const codigo = randomBytes(2).toString("hex");
-    const { data: novaDem, error: insErr } = await supabaseAdmin.from("cs_demandas").insert({
-      codigo, group_jid: msg.groupJid, client_id: c.id as string, cliente_nome: clienteNome,
-      author: quem, message_id: msg.messageId, message_text: msg.text,
-      tipo, urgencia: "media", confianca: 1, resumo: titulo, briefing: briefingTxt, responsavel, status: "pendente",
-    }).select("id").single();
-    if (insErr || !novaDem) {
-      console.error("[CS/inbound] criar demanda (cmd):", insErr?.message);
-      await csSendGroupText(msg.groupJid, `Eita, não consegui montar a demanda do *${clienteNome}* agora 😕 tenta de novo?`);
-      return NextResponse.json({ ok: true, demanda_cmd: "erro" });
-    }
-    const a3d = a3.ok ? a3.data : null;
-    const txt = `🆕 *NOVO PEDIDO — ${clienteNome}*\n👤 ${responsavel}${quem ? ` · pedido por ${quem}` : ""}\n\n📩 Pedido:\n*${titulo}*\n\n${a3d ? `📋 ${a3d.briefing.trim()}\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : `📋 _"${msg.text}"_`}\n\n👉 Responde aqui: *ok* (crio o card) · *não* (deixa pra lá) · *ajustar*`;
-    const rsug = await csSendGroupText(msg.groupJid, txt);
-    if (rsug.ok && rsug.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: rsug.id }).eq("id", novaDem.id);
-    console.log(`[CS/inbound] demanda por comando → ${clienteNome}: ${titulo} (${codigo})`);
-    return NextResponse.json({ ok: true, demanda_cmd: "sugerida", cliente: clienteNome, titulo });
+    const r = await montarDemandaComando(c, msg.text, quem, msg.messageId, msg.groupJid);
+    return NextResponse.json({ ok: true, demanda_cmd: r ? "sugerida" : "erro", cliente: r?.cliente, titulo: r?.titulo });
   }
 
   // ─── Onboarding: equipe avisa "Lone, entrou um novo cliente X no grupo Y" → o Lone CONDUZ lá. ───
