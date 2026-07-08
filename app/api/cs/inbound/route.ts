@@ -152,6 +152,13 @@ const STOP_NOME = new Set([
   "solar", "energia", "material", "materiais", "construcao", "construcoes", "pisos", "piso",
   "moveis", "loja", "lojas", "ltda", "comercio", "distribuidora", "grupo", "store", "shop",
   "oficial", "centro", "casa", "ribeiro", "bazar",
+  // Palavras GENÉRICAS do dia a dia da agência que também aparecem em NOME de cliente
+  // (ex.: "Farmácia - Arte em Manipulação") — não podem identificar cliente, senão qualquer
+  // pedido com "arte"/"post"/"vídeo" vaza pro cliente errado. Erro crítico observado 08/jul.
+  "arte", "artes", "post", "posts", "video", "videos", "design", "studio", "estudio",
+  "midia", "social", "marketing", "digital", "agencia", "cartaz", "banner", "promocao",
+  "promocoes", "criativo", "conteudo", "reels", "stories", "story", "feed", "anuncio",
+  "anuncios", "panfleto", "flyer",
 ]);
 
 // Pergunta de STATUS ao Lone ("Lone, sabe me dizer se a demanda do Léo Carros foi feita?").
