@@ -600,7 +600,11 @@ export async function POST(req: NextRequest) {
   // de reivindicar a mensagem: sem contexto, o fluxo segue (antes: return silencioso que engolia
   // respostas de demanda e poluía o corpus cs_roteiro_pedidos).
   let roteiroRecente: { clientId: string; nome: string; pedido: string } | null = null;
-  if (!demandaDaSugestao && !pedeRot && msg.groupJid === internalGroupJid() && ehAjusteRoteiro(msg.text)) {
+  // Veto: "ajusta/muda" que fala de ARTE/CARD/LOGO/DESIGNER ou REATRIBUI pra alguém ("muda pro
+  // Pedro") é ajuste de DEMANDA, não de roteiro — não pode ser sequestrado como ajuste de roteiro.
+  const pareceOpDeDemanda = /\b(arte|artes|card|cards|design|designer|demanda|logo|banner|panfleto|flyer)\b/i.test(msg.text)
+    || /\b(pro|pra|para\s+[oa])\s+[A-ZÀ-Ú]/.test(msg.text);
+  if (!demandaDaSugestao && !pedeRot && !pareceOpDeDemanda && msg.groupJid === internalGroupJid() && ehAjusteRoteiro(msg.text)) {
     const desde30 = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const { data: ult } = await supabaseAdmin.from("cs_roteiro_pedidos")
       .select("client_id, cliente_nome, pedido").not("client_id", "is", null).gte("created_at", desde30)
@@ -830,6 +834,10 @@ export async function POST(req: NextRequest) {
     if (!alvo) {
       // Não sei o cliente ainda — GUARDA o pedido (texto original) como "aguardando_cliente" e
       // pergunta. A próxima msg da pessoa que resolver um cliente completa a demanda (bloco acima).
+      // Só um "aguardando_cliente" por autor/grupo: limpa os anteriores (evita acúmulo e evita que
+      // uma resposta de nome complete um rascunho velho que a pessoa já abandonou).
+      await supabaseAdmin.from("cs_demandas").delete()
+        .eq("group_jid", msg.groupJid).eq("author", quem).eq("status", "aguardando_cliente");
       await supabaseAdmin.from("cs_demandas").insert({
         codigo: randomBytes(2).toString("hex"), group_jid: msg.groupJid, author: quem,
         message_id: msg.messageId, message_text: msg.text, tipo: "arte_nova", urgencia: "media",
@@ -852,7 +860,7 @@ export async function POST(req: NextRequest) {
       && !msg.text.includes("\n") && msg.text.trim().length < 200;
     const temConteudoColado = !ehReferencia && msg.text.trim().length >= 80;
     if (!temConteudoColado) {
-      const d7 = new Date(Date.now() - 7 * 864e5).toISOString();
+      const d7 = new Date(Date.now() - 2 * 864e5).toISOString(); // 2 dias: pega o que a X pediu recente, sem confirmar pendente velho
       const { data: jaPend } = await supabaseAdmin.from("cs_demandas")
         .select("id, resumo, tipo, urgencia, briefing, message_text, responsavel")
         .eq("client_id", c.id as string).eq("status", "pendente")
@@ -1414,8 +1422,11 @@ export async function POST(req: NextRequest) {
       .from("cs_demandas").select("id, codigo, message_text, briefing, tipo, urgencia, resumo, confianca, msg_id_sugestao")
       .eq("group_jid", msg.groupJid).eq("author", autor).eq("status", "pendente")
       .gte("created_at", desde)
-      .order("created_at", { ascending: false }).limit(1).maybeSingle();
-    pendente = data ?? null;
+      .order("created_at", { ascending: false }).limit(2);
+    // Só coalesce quando há EXATAMENTE 1 pendente do autor (alvo inequívoco). Com 2+, não dá pra
+    // saber a qual o complemento pertence — mesclar no mais recente colava no card ERRADO. Deixa
+    // virar demanda própria (a equipe decide) em vez de contaminar outro pedido.
+    pendente = data && data.length === 1 ? data[0] : null;
   }
   if (pendente) {
     const textoAntigo = (pendente.message_text as string) || "";
@@ -1584,12 +1595,26 @@ export async function POST(req: NextRequest) {
     const ehReclamacao = it.tipo === "reclamacao";
     const area = tipoToArea(it.tipo as CsDemandType);
 
+    // Grupo com JID compartilhado por 2+ clientes (ex.: Bazar Ribeiro Maricá vs Saquarema): atribui
+    // ao cliente que o A1 identificou (it.cliente), não sempre a clients[0]. Sem isso a demanda de
+    // uma filial virava card da outra. Se o A1 não distinguir, mantém clients[0].
+    let cItem = c;
+    if (multiCliente && it.cliente) {
+      const alvoN = normNome(it.cliente);
+      const match = (clients ?? []).find((cl) => {
+        const n = normNome(nomeOf(cl));
+        return n === alvoN || (n.length >= 4 && alvoN.length >= 4 && (n.includes(alvoN) || alvoN.includes(n)));
+      });
+      if (match) cItem = match;
+    }
+    const clienteNomeItem = nomeOf(cItem);
+
     // COBRANÇA/STATUS: o cliente pode estar perguntando por algo JÁ em andamento. Antes de cobrar,
     // checa os cards do cliente. Se achar o tema, REPORTA o status (entregue? com quem?) em vez de
     // cobrar do zero — e pula o A3 (economiza tokens).
     let statusBriefing: string | null = null, statusTitulo: string | null = null, statusResp: string | null = null;
     if (it.tipo === "cobranca_prazo") {
-      const card = await acharCardRelacionado(c.id as string, `${it.resumo} ${it.trecho_origem}`);
+      const card = await acharCardRelacionado(cItem.id as string, `${it.resumo} ${it.trecho_origem}`);
       if (card) {
         const entregue = !!card.designer_delivered_at;
         statusResp = card.social_media;
@@ -1605,12 +1630,12 @@ export async function POST(req: NextRequest) {
     const responsavel = ehReclamacao
       ? (process.env.CS_ESCALATION_NAMES || "Julio e Roberto")
       : statusResp || resolveResponsavel(area, {
-          assigned_social: c.assigned_social as string, assigned_designer: c.assigned_designer as string, assigned_traffic: c.assigned_traffic as string,
+          assigned_social: cItem.assigned_social as string, assigned_designer: cItem.assigned_designer as string, assigned_traffic: cItem.assigned_traffic as string,
         });
 
     // A3 só quando NÃO é status conhecido (redige o briefing; não inventa, pede o que falta).
     const a3 = statusBriefing ? null : await gerarBriefing({
-      clienteNome, clienteNicho: c.nicho as string, clienteBriefing, regras: regrasFmt,
+      clienteNome: clienteNomeItem, clienteNicho: cItem.nicho as string, clienteBriefing, regras: regrasFmt,
       tipo: it.tipo, urgencia: it.urgencia, resumo: it.resumo, mensagemOriginal: msg.text,
     });
     const briefingTxt = statusBriefing ?? (a3?.ok && a3.data ? formatBriefing(a3.data) : `${it.resumo}\nMensagem: "${msg.text}"`);
@@ -1621,11 +1646,11 @@ export async function POST(req: NextRequest) {
     // o cliente manda 2 ajustes ao mesmo panfleto em mensagens seguidas → o A1 pode ver "2 demandas"
     // (não coalesce), mas é a MESMA peça. Em vez de duplicar a sugestão, funde no pendente. Match
     // EXATO do resumo pra não misturar peças diferentes (que teriam títulos diferentes).
-    if (c.id) {
+    if (cItem.id) {
       const desdeDup = new Date(Date.now() - COALESCE_WINDOW_S * 1000).toISOString();
       const { data: jaPend } = await supabaseAdmin
         .from("cs_demandas").select("id, codigo, briefing, message_text, msg_id_sugestao")
-        .eq("group_jid", msg.groupJid).eq("client_id", c.id as string).eq("status", "pendente")
+        .eq("group_jid", msg.groupJid).eq("client_id", cItem.id as string).eq("status", "pendente")
         .eq("resumo", titulo).gte("created_at", desdeDup)
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (jaPend) {
@@ -1634,7 +1659,7 @@ export async function POST(req: NextRequest) {
           briefing: `${(jaPend.briefing as string) || ""}\n\n+ (cliente complementou): ${msg.text}`.trim(),
         }).eq("id", jaPend.id);
         if (internalJid && (jaPend.msg_id_sugestao as string)) {
-          await csSendGroupText(internalJid, `🔁 A *${clienteNome}* mandou mais uma coisa sobre *${titulo}* — juntei no mesmo pedido. Vale o mesmo: *ok* · *não* · *ajustar*.`, jaPend.msg_id_sugestao as string);
+          await csSendGroupText(internalJid, `🔁 A *${clienteNomeItem}* mandou mais uma coisa sobre *${titulo}* — juntei no mesmo pedido. Vale o mesmo: *ok* · *não* · *ajustar*.`, jaPend.msg_id_sugestao as string);
         }
         console.log(`[CS/inbound] dedup → fundiu na pendente ${jaPend.codigo} (mesmo resumo "${titulo.slice(0, 40)}")`);
         sugeridas.push(`dedup[${jaPend.codigo}]`);
@@ -1644,7 +1669,7 @@ export async function POST(req: NextRequest) {
 
     const codigo = randomBytes(2).toString("hex"); // mantido só p/ auditoria — NÃO aparece na mensagem
     const { data: novaDem, error: insErr } = await supabaseAdmin.from("cs_demandas").insert({
-      codigo, group_jid: msg.groupJid, client_id: (c.id as string) ?? null, cliente_nome: clienteNome,
+      codigo, group_jid: msg.groupJid, client_id: (cItem.id as string) ?? null, cliente_nome: clienteNomeItem,
       author: msg.authorName || msg.authorJid, message_id: msg.messageId, message_text: msg.text,
       tipo: it.tipo, urgencia: it.urgencia, confianca: it.confianca, resumo: titulo,
       briefing: briefingTxt, responsavel, status: "pendente",
@@ -1662,19 +1687,19 @@ export async function POST(req: NextRequest) {
       let respostaSugerida = "";
       if (["duvida", "cobranca_prazo", "reclamacao"].includes(it.tipo) && isOpenAIConfigured()) {
         const rs = await sugerirResposta({
-          clienteNome, mensagemCliente: msg.text, tipo: it.tipo,
+          clienteNome: clienteNomeItem, mensagemCliente: msg.text, tipo: it.tipo,
           briefing: clienteBriefing, statusInfo: statusBriefing,
         });
         if (rs.ok && rs.data?.resposta) respostaSugerida = `\n\n━━━━━━━\n💬 *Resposta pro cliente* (copie e envie, ou ajuste):\n_${rs.data.resposta}_`;
       }
       // Gramática visual fixa: cabeçalho (tipo — cliente) · 👤 responsável · 📩 fala do cliente · 👉 ação.
       const txt = aviso + (statusBriefing
-        ? `👀 *ACOMPANHAMENTO — ${clienteNome}*\n👤 ${responsavel}\n\n${statusBriefing}\n\n_Não é pedido novo._\n👉 *não* se já tratou · *ok* pra abrir um follow-up`
+        ? `👀 *ACOMPANHAMENTO — ${clienteNomeItem}*\n👤 ${responsavel}\n\n${statusBriefing}\n\n_Não é pedido novo._\n👉 *não* se já tratou · *ok* pra abrir um follow-up`
         : ehReclamacao
-        ? `🔴 *RECLAMAÇÃO — ${clienteNome}*\n👤 ${responsavel}, atenção.\n\n📩 O cliente disse:\n_"${a3d ? a3d.briefing.trim() : msg.text}"_\n\n👉 Responde aqui: *ok* (registro como demanda) · *não* (vocês tratam direto)`
+        ? `🔴 *RECLAMAÇÃO — ${clienteNomeItem}*\n👤 ${responsavel}, atenção.\n\n📩 O cliente disse:\n_"${a3d ? a3d.briefing.trim() : msg.text}"_\n\n👉 Responde aqui: *ok* (registro como demanda) · *não* (vocês tratam direto)`
         : precisaConfirmar
-        ? `✏️ *PEDIDO PRA CONFIRMAR — ${clienteNome}*\n👤 ${responsavel}\n\n📩 O cliente pediu:\n*${it.resumo}*\n\n❓ Tá meio vago — confirma com ele antes de produzir:\n${a3d?.observacao ?? ""}\n\n${acao}`
-        : `🆕 *NOVO PEDIDO — ${clienteNome}*\n👤 ${responsavel}\n\n📩 O cliente pediu:\n*${it.resumo}*\n\n${a3d ? `📋 ${a3d.briefing.trim()}\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : `📋 _"${msg.text}"_`}\n\n${acao}`) + respostaSugerida;
+        ? `✏️ *PEDIDO PRA CONFIRMAR — ${clienteNomeItem}*\n👤 ${responsavel}\n\n📩 O cliente pediu:\n*${it.resumo}*\n\n❓ Tá meio vago — confirma com ele antes de produzir:\n${a3d?.observacao ?? ""}\n\n${acao}`
+        : `🆕 *NOVO PEDIDO — ${clienteNomeItem}*\n👤 ${responsavel}\n\n📩 O cliente pediu:\n*${it.resumo}*\n\n${a3d ? `📋 ${a3d.briefing.trim()}\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : `📋 _"${msg.text}"_`}\n\n${acao}`) + respostaSugerida;
       const r = await csSendGroupText(internalJid, txt);
       // Guarda o id da msg postada → o "reply" da equipe casa com esta demanda (sem código).
       if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", novaDem.id);
