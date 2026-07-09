@@ -135,25 +135,20 @@ export default function LoginScreen() {
         <source src="/login-video.mp4" type="video/mp4" />
       </video>
       <div className="pointer-events-none absolute inset-0 hidden bg-primary opacity-40 mix-blend-color lg:block" />
-      {/* Escurecimento do vídeo: mais forte à direita (onde fica o card) pro texto ter contraste e o
-          logo de vidro não competir/parecer "fantasma". */}
-      <div className="pointer-events-none absolute inset-0 hidden bg-gradient-to-r from-background/40 via-background/45 to-background/70 lg:block" />
-      {/* Mobile: gradiente da marca de fundo (o vídeo vira o hero do card). */}
+      {/* Escurecimento do vídeo, mais forte à direita (lado do card) pro texto ter contraste. */}
+      <div className="pointer-events-none absolute inset-0 hidden bg-gradient-to-r from-background/30 via-background/45 to-background/80 lg:block" />
+      {/* Mobile: gradiente da marca (o vídeo é só desktop). */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/[0.1] via-background to-background lg:hidden" />
 
-      {/* Conteúdo: coluna no mobile, split no desktop — CONTIDO num bloco centralizado de largura
-          máxima. Sem isso, no ultrawide o header pegava flex-1 e colava o card na borda direita,
-          deixando um vazio enorme no meio. */}
-      <div className="relative z-10 flex min-h-screen flex-col p-4 sm:p-6 lg:justify-center lg:p-10">
-        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col lg:flex-none lg:flex-row lg:items-center lg:gap-10">
-        {/* HEADER: topo no mobile, esquerda no desktop */}
-        <header className="flex items-center gap-2.5 px-1 py-2 lg:flex-1 lg:px-2">
-          <Logo className="h-9 w-9" priority />
-          <span className="font-brand text-base font-semibold tracking-tight text-foreground">Lone Mídia Assessoria</span>
-        </header>
+      {/* Marca no canto superior esquerdo — fixa, fora do fluxo, pra NÃO sobrepor o logo do vídeo. */}
+      <header className="absolute left-5 top-5 z-20 flex items-center gap-2.5 sm:left-8 sm:top-7">
+        <Logo className="h-8 w-8" priority />
+        <span className="font-brand text-base font-semibold tracking-tight text-foreground">Lone Mídia Assessoria</span>
+      </header>
 
-        {/* CARD: centralizado vertical, largura limitada */}
-        <div className="flex flex-1 items-center justify-center lg:flex-none">
+      {/* Card: centralizado no mobile; encostado à direita no desktop (o logo do vídeo fica visível
+          à esquerda). max-w-md + padding lateral responsivo — nada de esticar/colar na borda. */}
+      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-24 sm:px-6 lg:justify-end lg:py-10 lg:pr-[7vw]">
           <section
             className={`flex w-full max-w-md flex-col gap-6 rounded-3xl border border-border bg-card/85 p-6 shadow-2xl backdrop-blur-2xl transition-all duration-700 sm:gap-7 sm:p-8 lg:p-12 ${
               mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
@@ -169,7 +164,7 @@ export default function LoginScreen() {
         <div className="animate-fade-in space-y-6">
           <div>
             <h1 className="font-brand text-3xl font-bold leading-tight tracking-tight text-foreground">Bem-vindo de volta</h1>
-            <p className="mt-2 text-[15px] text-muted-foreground">Selecione seu perfil e entre no hub.</p>
+            <p className="mt-2 text-[15px] text-muted-foreground">Selecione seu perfil e entre no Lone OS.</p>
           </div>
 
           {/* Usuário */}
@@ -267,8 +262,6 @@ export default function LoginScreen() {
           Lone Mídia Assessoria © 2026
         </p>
           </section>
-        </div>
-        </div>
       </div>
     </div>
   );

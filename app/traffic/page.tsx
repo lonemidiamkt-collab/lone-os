@@ -1864,13 +1864,18 @@ function TrafficReportTab({ clients }: { clients: Client[] }) {
                 {saved[client.id] && <span className="text-xs text-primary font-medium animate-fade-in">Salvo!</span>}
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const fd = new FormData(e.currentTarget);
                   const notes = fd.get("notes") as string;
-                  updateClientData(client.id, { notes: notes || undefined });
-                  setSaved((prev) => ({ ...prev, [client.id]: true }));
-                  setTimeout(() => setSaved((prev) => ({ ...prev, [client.id]: false })), 1500);
+                  try {
+                    // await + trata erro: antes era fire-and-forget e mostrava "Salvo!" mesmo se o banco recusasse.
+                    await updateClientData(client.id, { notes: notes || undefined });
+                    setSaved((prev) => ({ ...prev, [client.id]: true }));
+                    setTimeout(() => setSaved((prev) => ({ ...prev, [client.id]: false })), 1500);
+                  } catch {
+                    toast.error("Não foi possível salvar. Tente de novo.");
+                  }
                 }}
                 className="space-y-2"
               >
