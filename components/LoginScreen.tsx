@@ -136,48 +136,55 @@ export default function LoginScreen() {
 
   // ─── Login (split-screen) ───
   return (
-    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[1.05fr_1fr]">
+    <div className="min-h-screen bg-background lg:grid lg:grid-cols-2">
       {/* ── PAINEL DE MARCA (esquerda) ── */}
-      <div className="relative hidden lg:flex flex-col justify-between overflow-hidden p-14 bg-gradient-to-br from-primary/[0.16] via-primary/[0.04] to-background">
-        {/* Ambiência suave (gradiente, sem neon) */}
-        <div className="pointer-events-none absolute -top-40 -right-24 h-[30rem] w-[30rem] rounded-full bg-gradient-to-br from-primary/20 to-transparent blur-[130px]" />
-        {/* Anéis concêntricos — profundidade geométrica com borda em token */}
-        <div className="pointer-events-none absolute left-1/2 top-[46%] -translate-x-1/2 -translate-y-1/2">
-          {[600, 440, 290, 160].map((s) => (
-            <div key={s} className="absolute rounded-full border border-primary/[0.09]" style={{ width: s, height: s, left: -s / 2, top: -s / 2 }} />
-          ))}
-        </div>
+      <div className="relative hidden lg:flex flex-col items-center justify-center overflow-hidden p-16 bg-gradient-to-br from-primary/[0.18] via-primary/[0.05] to-background">
+        {/* Aurora + brilho ambiente */}
+        <div className="pointer-events-none absolute -top-1/3 left-1/4 h-[42rem] w-[42rem] rounded-full bg-primary/25 blur-[170px] animate-aurora" />
+        <div className="pointer-events-none absolute bottom-[-12rem] left-[-10rem] h-[28rem] w-[28rem] rounded-full bg-primary/[0.12] blur-[140px]" />
+        {/* Textura de grade sutil */}
+        <div className="pointer-events-none absolute inset-0 bg-grid opacity-50" />
 
-        {/* Topo: wordmark */}
-        <div className="relative z-10 flex items-center gap-2.5">
+        {/* Wordmark topo-esquerda */}
+        <div className="absolute left-16 top-14 z-10 flex items-center gap-2.5">
           <Logo className="w-7 h-7" priority />
           <span className="font-brand text-base font-semibold tracking-tight text-foreground">Lone<span className="text-primary">OS</span></span>
         </div>
 
-        {/* Hero: logo em moldura glass + headline */}
-        <div className="relative z-10 flex flex-col items-start gap-9">
-          <div className="grid h-36 w-36 place-items-center rounded-[2rem] border border-primary/20 bg-primary/[0.07] backdrop-blur-xl shadow-sm">
-            <Logo className="w-[5.5rem] h-[5.5rem]" priority />
+        {/* Hero: logo com brilho + anéis de radar */}
+        <div className="relative z-10 flex flex-col items-center text-center">
+          <div className="relative animate-float-y">
+            {/* Anéis de radar pulsando */}
+            <div className="absolute inset-0 rounded-[2.5rem] border border-primary/30 animate-ring-pulse" />
+            <div className="absolute inset-0 rounded-[2.5rem] border border-primary/30 animate-ring-pulse" style={{ animationDelay: "1.2s" }} />
+            <div className="absolute inset-0 rounded-[2.5rem] border border-primary/30 animate-ring-pulse" style={{ animationDelay: "2.4s" }} />
+            {/* Brilho por trás */}
+            <div className="pointer-events-none absolute inset-0 -z-10 scale-150 rounded-full bg-primary/[0.35] blur-[60px]" />
+            {/* Moldura glass */}
+            <div className="grid h-44 w-44 place-items-center rounded-[2.5rem] border border-primary/25 bg-gradient-to-br from-primary/25 via-primary/10 to-transparent backdrop-blur-xl shadow-lg">
+              <Logo className="w-28 h-28" priority />
+            </div>
           </div>
-          <div className="space-y-3 max-w-md">
-            <h2 className="font-brand text-[2rem] font-bold leading-[1.15] tracking-tight text-foreground">
-              O hub de operação<br />da sua assessoria.
-            </h2>
-            <p className="text-sm leading-relaxed text-muted-foreground max-w-sm">
-              Tráfego, social, design e resultados dos clientes — tudo num lugar só, em tempo real.
-            </p>
-          </div>
+
+          <h2 className="mt-16 font-brand text-[2.15rem] font-bold leading-[1.12] tracking-tight text-foreground">
+            O hub de operação<br />da sua assessoria.
+          </h2>
+          <p className="mt-3.5 max-w-sm text-sm leading-relaxed text-muted-foreground">
+            Tráfego, social, design e resultados dos clientes — tudo num lugar só, em tempo real.
+          </p>
         </div>
 
         {/* Rodapé */}
-        <p className="relative z-10 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+        <p className="absolute bottom-14 left-16 z-10 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
           Lone Mídia Assessoria © 2026
         </p>
       </div>
 
       {/* ── PAINEL DO FORM (direita) ── */}
-      <div className="flex min-h-screen items-center justify-center p-6 sm:p-10 lg:min-h-0">
-        <div className={`w-full max-w-sm transition-all duration-700 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden border-l border-border bg-background p-6 sm:p-10 lg:min-h-0">
+        {/* profundidade sutil no topo */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-primary/[0.05] to-transparent" />
+        <div className={`relative w-full max-w-sm transition-all duration-700 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
 
           {/* Marca compacta (só no mobile) */}
           <div className="mb-10 flex flex-col items-center text-center lg:hidden">
