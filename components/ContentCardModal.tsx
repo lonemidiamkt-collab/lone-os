@@ -255,8 +255,24 @@ export default function ContentCardModal({ card, onClose }: Props) {
 
   const currentStatus = STATUS_OPTIONS.find((s) => s.value === status);
 
+  // Tem edição não salva? (os campos que só persistem no "Salvar alterações".) Se sim, confirmar
+  // antes de fechar — senão fechar/ESC/clique-fora descartava legenda/briefing digitados em silêncio.
+  const isDirty =
+    observations !== (card.observations ?? "") ||
+    briefing !== htmlToMarkdown(card.briefing ?? "") ||
+    title !== (card.title ?? "") ||
+    caption !== (card.caption ?? "") ||
+    hashtags !== (card.hashtags ?? "") ||
+    dueDate !== (card.dueDate ?? "") ||
+    status !== card.status;
+
+  const requestClose = () => {
+    if (isDirty && !window.confirm("Você tem alterações não salvas neste card. Descartar e fechar?")) return;
+    onClose();
+  };
+
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && requestClose()}>
       <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col overflow-hidden p-0">
         <DialogHeader className="flex-row items-start px-6 py-5 border-b border-border shrink-0 space-y-0">
           <div className="flex-1 min-w-0 pr-4">
@@ -868,7 +884,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
               <Archive size={14} /> {archiving ? "Arquivando..." : "Arquivar"}
             </Button>
           )}
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={requestClose}>
             Fechar
           </Button>
           <Button

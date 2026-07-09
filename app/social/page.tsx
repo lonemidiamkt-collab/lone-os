@@ -23,7 +23,7 @@ import {
   TrendingUp, Hash, Check, Plus, ChevronDown,
   Key, MessageCircle, Send, Eye, EyeOff, Save,
   Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle, Layers, Trash2, Copy, Archive,
-  Palette,
+  Palette, Search,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
@@ -2069,6 +2069,7 @@ export default function SocialPage() {
   const [client360, setClient360] = useState<Client | null>(null);
   const [campaignClient, setCampaignClient] = useState<Client | null>(null);
   const [healthFilter, setHealthFilter] = useState<string>("all");
+  const [boardSearch, setBoardSearch] = useState("");
   const [onboardingCompleteClient, setOnboardingCompleteClient] = useState<Client | null>(null);
   const [calendarSelectedDay, setCalendarSelectedDay] = useState<number | null>(null);
   const [newCardDate, setNewCardDate] = useState<string | null>(null);
@@ -2207,9 +2208,16 @@ export default function SocialPage() {
     return matchWorkspace && matchHealth;
   });
 
-  const filteredCards = contentCards.filter((c) =>
-    !c.archivedAt && (activeWorkspace === "Todos" ? true : c.socialMedia === activeWorkspace)
-  );
+  const boardQuery = boardSearch.trim().toLowerCase();
+  const filteredCards = contentCards.filter((c) => {
+    if (c.archivedAt) return false;
+    if (activeWorkspace !== "Todos" && c.socialMedia !== activeWorkspace) return false;
+    if (boardQuery) {
+      const hay = `${c.title ?? ""} ${c.clientName ?? ""} ${c.format ?? ""}`.toLowerCase();
+      if (!hay.includes(boardQuery)) return false;
+    }
+    return true;
+  });
 
   const onboardingClients = filteredClients.filter((c) => c.status === "onboarding");
   const moodClientName = moodClientId ? clients.find((c) => c.id === moodClientId)?.name ?? "" : "";
@@ -2539,6 +2547,26 @@ export default function SocialPage() {
               </span>
             </div>
           )}
+
+          {/* Busca no board: filtra por título, cliente ou formato do card */}
+          <div className="relative shrink-0">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              value={boardSearch}
+              onChange={(e) => setBoardSearch(e.target.value)}
+              placeholder="Buscar card..."
+              className="h-9 w-44 rounded-lg border border-border bg-card pl-8 pr-7 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/40 sm:w-52"
+            />
+            {boardSearch && (
+              <button
+                onClick={() => setBoardSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Limpar busca"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
 
           {/* CTA: criar novo conteúdo (escondido pra designer em modo leitura) */}
           {!isReadOnly && (

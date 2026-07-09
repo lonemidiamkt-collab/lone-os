@@ -15,7 +15,7 @@ import {
   Palette, Filter, Clock, CheckCircle, Loader, Paperclip, X,
   AlertTriangle, Zap, LayoutList, Columns3, Upload, Download,
   ImageIcon, Eye, ChevronDown, User, Users, FileText, FileWarning, FolderOpen,
-  ExternalLink, BarChart2, Plus, Calendar, ArrowRight, XCircle, RotateCcw,
+  ExternalLink, BarChart2, Plus, Calendar, ArrowRight, XCircle, RotateCcw, Search,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
@@ -578,6 +578,14 @@ export default function DesignPage() {
   const [newTaskClient, setNewTaskClient] = useState<Client | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
 
+  // Busca no board (título/cliente/formato)
+  const [boardSearch, setBoardSearch] = useState("");
+  const boardQuery = boardSearch.trim().toLowerCase();
+  const matchesBoardQuery = (title?: string, clientName?: string, format?: string) => {
+    if (!boardQuery) return true;
+    return `${title ?? ""} ${clientName ?? ""} ${format ?? ""}`.toLowerCase().includes(boardQuery);
+  };
+
   // Filter content cards to only show clients assigned to this designer
   const myClientIds = useMemo(() => {
     if (role === "designer") {
@@ -587,9 +595,10 @@ export default function DesignPage() {
   }, [clients, role, currentUser]);
 
   const myContentCards = useMemo(() => {
-    if (!myClientIds) return contentCards;
-    return contentCards.filter((c) => myClientIds.has(c.clientId));
-  }, [contentCards, myClientIds]);
+    let list = myClientIds ? contentCards.filter((c) => myClientIds.has(c.clientId)) : contentCards;
+    if (boardQuery) list = list.filter((c) => matchesBoardQuery(c.title, c.clientName, c.format));
+    return list;
+  }, [contentCards, myClientIds, boardQuery]);
 
   // Designer vê TODAS as demandas — não filtra por clientes atribuídos,
   // pois o designer da agência atende todos os clientes.
@@ -771,6 +780,26 @@ export default function DesignPage() {
               >
                 Por cliente (unificada)
               </button>
+
+              {/* Busca no board (título/cliente/formato) */}
+              <div className="relative ml-1">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <input
+                  value={boardSearch}
+                  onChange={(e) => setBoardSearch(e.target.value)}
+                  placeholder="Buscar arte..."
+                  className="h-8 w-40 rounded-md border border-border bg-background pl-7 pr-6 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/40"
+                />
+                {boardSearch && (
+                  <button
+                    onClick={() => setBoardSearch("")}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label="Limpar busca"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
             </div>
 
             <CsAgentInbox cards={myContentCards} onOpen={setDetailCard} titulo="CS Agente — pra produzir" />
