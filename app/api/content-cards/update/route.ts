@@ -53,6 +53,24 @@ export async function POST(req: NextRequest) {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Sincroniza o briefing pro card do DESIGNER: ele lê design_requests.briefing (uma CÓPIA feita
+    // quando a arte foi solicitada). Sem isso, o social edita o briefing e o designer continua vendo
+    // o texto antigo — foi o bug reportado. Best-effort: não derruba o save do card se falhar.
+    if (row.briefing !== undefined) {
+      try {
+        const { data: card } = await supabaseAdmin
+          .from("content_cards").select("design_request_id").eq("id", id as string).maybeSingle();
+        const drId = (card?.design_request_id as string) || null;
+        if (drId) {
+          await supabaseAdmin.from("design_requests").update({ briefing: row.briefing }).eq("id", drId);
+        } else {
+          await supabaseAdmin.from("design_requests").update({ briefing: row.briefing }).eq("content_card_id", id as string);
+        }
+      } catch (e) {
+        console.error("[content-cards/update] sync briefing→design_request falhou (ignorado):", e);
+      }
+    }
+
     if (contentApproval) {
       // Uma aprovação vigente por card: limpa as anteriores e grava a atual.
       await supabaseAdmin.from("content_approvals").delete().eq("card_id", id as string);

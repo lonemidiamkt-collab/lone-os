@@ -1563,13 +1563,21 @@ export default function DesignPage() {
 
               <div>
                 <p className="text-xs text-muted-foreground font-medium mb-1.5">Briefing Completo</p>
-                {briefingReq.briefing ? (
-                  <div className="bg-muted border border-border rounded-lg p-4">
-                    <MarkdownView source={briefingReq.briefing} />
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground leading-relaxed bg-muted border border-border rounded-lg p-4">Sem briefing detalhado.</p>
-                )}
+                {(() => {
+                  // Briefing VIVO do card (o que o social editou) — a design_request guarda uma cópia
+                  // que ficava velha. Prefere o card ligado; cai na cópia se não achar.
+                  const rc = briefingReq.contentCardId
+                    ? contentCards.find((c) => c.id === briefingReq.contentCardId)
+                    : contentCards.find((c) => c.designRequestId === briefingReq.id);
+                  const brief = rc?.briefing || briefingReq.briefing;
+                  return brief ? (
+                    <div className="bg-muted border border-border rounded-lg p-4">
+                      <MarkdownView source={brief} />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground leading-relaxed bg-muted border border-border rounded-lg p-4">Sem briefing detalhado.</p>
+                  );
+                })()}
               </div>
 
               {/* Arte de REFERÊNCIA — anexos que o social pôs no card. Antes não apareciam aqui
