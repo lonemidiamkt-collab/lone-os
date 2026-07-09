@@ -129,16 +129,14 @@ export default function LoginScreen() {
   // ─── Login (vídeo de fundo + card) ───
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
-      {/* Vídeo SÓ no desktop — o render é paisagem e no mobile o object-cover corta ele torto
-          (virava uma faixa azul na lateral). No mobile usamos um gradiente da marca. */}
-      <video className="pointer-events-none absolute inset-0 hidden h-full w-full object-cover lg:block" autoPlay muted loop playsInline aria-hidden>
+      {/* Vídeo de fundo — a logo Lone em vidro girando, EM QUALQUER TELA. object-center pega o
+          centro do render (a logo), não a lateral, então no mobile aparece a logo girando. */}
+      <video className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center" autoPlay muted loop playsInline aria-hidden>
         <source src="/login-video.mp4" type="video/mp4" />
       </video>
-      {/* Coloração (mix-blend pro primary) + scrim — sobre o vídeo, só no desktop. */}
-      <div className="pointer-events-none absolute inset-0 hidden bg-primary opacity-40 mix-blend-color lg:block" />
-      <div className="pointer-events-none absolute inset-0 hidden bg-gradient-to-b from-background/70 via-background/25 to-background/55 lg:block" />
-      {/* Mobile: fundo com gradiente sutil da marca, sem o vídeo (evita o crop torto). */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.12] via-primary/[0.04] to-background lg:hidden" />
+      {/* Nossa coloração (mix-blend pro primary) + scrim leve de legibilidade. */}
+      <div className="pointer-events-none absolute inset-0 bg-primary opacity-40 mix-blend-color" />
+      <div className="pointer-events-none absolute inset-0 bg-background/45" />
 
       {/* Conteúdo: coluna no mobile, split no desktop. Card SEMPRE centralizado e com largura
           MÁXIMA — some a faixa lateral do mobile e o esticão do ultrawide. */}
