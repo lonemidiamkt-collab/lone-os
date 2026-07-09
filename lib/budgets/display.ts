@@ -56,7 +56,10 @@ export function getBalanceDisplay(a: AccountForDisplay): BalanceDisplay {
 
   // 1.5. CARTÃO DE CRÉDITO: a Meta cobra direto no cartão — a conta não "esvazia" saldo, então
   // saldo baixo NÃO é alerta. Sobrepõe a lógica de saldo (mostra gasto, sem severidade crítica).
-  if (a.payment_method === "cartao") {
+  // Guard `!is_prepaid`: se a conta é pré-paga (fonte dos alertas de WhatsApp), NÃO silenciar aqui —
+  // senão a tela diria "sem alerta" enquanto o motor de saldo dispara "saldo baixo/zerado". A fonte
+  // de verdade do alerta é is_prepaid; a tela precisa concordar com ela.
+  if (a.payment_method === "cartao" && !a.is_prepaid) {
     const temVerba = a.monthly_budget !== null && a.current_month_spend !== null;
     const estourou = temVerba && (a.current_month_spend as number) > (a.monthly_budget as number);
     return {

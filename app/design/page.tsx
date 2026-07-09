@@ -170,7 +170,10 @@ function UploadArtModal({
       // URLs entregues: as artes anexadas (multi) OU o link do Drive (legado)
       const deliveredUrls = real.length > 0 ? real.map((a) => a.url) : [link];
 
-      updateContentCard(card.id, {
+      // AWAIT: se o servidor recusar, o store dá rollback e cai no catch — assim "Entregue!" só
+      // aparece se realmente gravou. Sem await, a UI marcava entregue e fechava mesmo em falha,
+      // e o social nunca recebia a arte (a ação mais crítica do designer falhava em silêncio).
+      await updateContentCard(card.id, {
         designerDeliveredAt: new Date().toISOString(),
         designerDeliveredBy: currentUser,
         // Só grava imageUrl no caminho legado (link). Com anexos, a capa vem de card_attachments.
@@ -180,7 +183,7 @@ function UploadArtModal({
       if (card.designRequestId) {
         const dr = designRequests.find((r) => r.id === card.designRequestId);
         const nextAttachments = [...(dr?.attachments ?? []), ...deliveredUrls];
-        updateDesignRequest(card.designRequestId, { attachments: nextAttachments, status: "done" });
+        await updateDesignRequest(card.designRequestId, { attachments: nextAttachments, status: "done" });
       }
       pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmação.`, card.clientId);
       import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});

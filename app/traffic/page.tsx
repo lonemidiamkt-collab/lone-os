@@ -32,6 +32,7 @@ import { mockAdAccounts, mockAdCampaigns } from "@/lib/mockData";
 import { fetchClientGroupMessageLog, type ClientGroupMessageLogRow } from "@/lib/supabase/queries";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useMetaConnection, fetchAdAccounts, fetchCampaignInsights, fetchAccountDemographics, TokenExpiredError } from "@/lib/meta/useMetaAds";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { exportReportAsPdf } from "@/lib/exportPdf";
@@ -183,6 +184,28 @@ export default function TrafficPage() {
   const [sharedRealCampaigns, setSharedRealCampaigns] = useState<AdCampaign[]>([]);
   const [sharedIsUsingRealData, setSharedIsUsingRealData] = useState(false);
 
+  // Gasto do mês por cliente (servidor, sincronizado em BRT via sync-balances) — fonte real
+  // do pacing no Controle de Investimento, independente do preset de datas da aba Anúncios.
+  const [monthSpendByClient, setMonthSpendByClient] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    let alive = true;
+    authedFetch("/api/traffic/sync-balances")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!alive || !json?.accounts) return;
+        const m = new Map<string, number>();
+        for (const a of json.accounts as Array<{ current_month_spend: number | null; clients?: { id?: string } }>) {
+          const cid = a.clients?.id;
+          if (cid && a.current_month_spend != null) {
+            m.set(cid, (m.get(cid) ?? 0) + a.current_month_spend);
+          }
+        }
+        setMonthSpendByClient(m);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   // Workspace filter
   const trafficManagers = [...new Set(clients.map((c) => c.assignedTraffic))];
   const [workspaceFilter, setWorkspaceFilter] = useState("all");
@@ -217,6 +240,7 @@ export default function TrafficPage() {
     { key: "relatorios", label: "Relatorios Mensais", icon: <BarChart2 size={14} /> },
     { key: "report", label: "Analise" },
     { key: "anuncios", label: "Anuncios", icon: <Megaphone size={14} /> },
+    { key: "investimento", label: "Investimento", icon: <Wallet size={14} /> },
   ];
 
   return (
@@ -467,6 +491,8 @@ export default function TrafficPage() {
             <MonthlyReportsTab
               clients={filteredClients}
               reports={trafficReports}
+              realCampaigns={sharedIsUsingRealData ? sharedRealCampaigns : []}
+              monthSpendByClient={monthSpendByClient}
               onAddReport={addTrafficReport}
               onUpdateReport={updateTrafficReport}
               currentUser={currentUser}
@@ -502,6 +528,7 @@ export default function TrafficPage() {
               clients={filteredClients}
               adCampaigns={sharedIsUsingRealData ? sharedRealCampaigns : mockAdCampaigns}
               investmentData={investmentData}
+              monthSpendByClient={monthSpendByClient}
               onSave={updateInvestmentData}
               isUsingRealData={sharedIsUsingRealData}
               currentUser={currentUser}
@@ -1364,6 +1391,8 @@ function RoutineTab({
 function MonthlyReportsTab({
   clients,
   reports,
+  realCampaigns,
+  monthSpendByClient,
   onAddReport,
   onUpdateReport,
   currentUser,
@@ -1371,6 +1400,8 @@ function MonthlyReportsTab({
 }: {
   clients: Client[];
   reports: TrafficMonthlyReport[];
+  realCampaigns: AdCampaign[];
+  monthSpendByClient: Map<string, number>;
   onAddReport: (r: Omit<TrafficMonthlyReport, "id" | "createdAt">) => TrafficMonthlyReport | Promise<TrafficMonthlyReport>;
   onUpdateReport: (id: string, updates: Partial<TrafficMonthlyReport>) => void | Promise<void>;
   currentUser: string;
@@ -1429,16 +1460,22 @@ function MonthlyReportsTab({
           ))}
         </div>
         <div className="flex items-center gap-2 ml-auto">
+          {(() => {
+            const clientCampaigns = realCampaigns.filter((c) => c.clientId === selectedClient);
+            const hasReal = clientCampaigns.length > 0;
+            return (
           <button
+            disabled={!hasReal}
             onClick={() => {
-              if (!selectedClientData) return;
-              const now = new Date();
-              const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-              // Auto-generate from mock campaign data
-              const clientCampaigns = mockAdCampaigns.filter((c) => c.clientId === selectedClient);
-              const totalSpend = clientCampaigns.reduce((s, c) => s + c.dailyMetrics.reduce((ds, m) => ds + m.spend, 0), 0);
-              const totalImpressions = clientCampaigns.reduce((s, c) => s + c.dailyMetrics.reduce((ds, m) => ds + m.impressions, 0), 0);
-              const totalMessages = clientCampaigns.reduce((s, c) => s + c.dailyMetrics.reduce((ds, m) => ds + (m.messages ?? m.leads ?? 0), 0), 0);
+              if (!selectedClientData || !hasReal) return;
+              const [yy, mm] = todaySP().split("-");
+              const month = `${yy}-${mm}`;
+              // Auto-gera a partir dos dados REAIS da Meta (a aba Anúncios precisa ter carregado a conta).
+              const sumMetric = (pick: (m: NonNullable<AdCampaign["dailyMetrics"]>[number]) => number) =>
+                clientCampaigns.reduce((s, c) => s + (c.dailyMetrics ?? []).reduce((ds, m) => ds + pick(m), 0), 0);
+              const totalSpend = monthSpendByClient.get(selectedClient) ?? sumMetric((m) => m.spend ?? 0);
+              const totalImpressions = sumMetric((m) => m.impressions ?? 0);
+              const totalMessages = sumMetric((m) => m.messages ?? m.leads ?? 0);
               const costPerMsg = totalMessages > 0 ? totalSpend / totalMessages : 0;
               onAddReport({
                 clientId: selectedClient,
@@ -1448,15 +1485,18 @@ function MonthlyReportsTab({
                 messages: totalMessages,
                 messageCost: Math.round(costPerMsg * 100) / 100,
                 impressions: totalImpressions,
-                observations: `Relatorio auto-gerado. ${clientCampaigns.length} campanha(s), investimento total R$ ${totalSpend.toFixed(2)}.`,
+                observations: `Relatorio auto-gerado da Meta. ${clientCampaigns.length} campanha(s), investimento total R$ ${totalSpend.toFixed(2)}.`,
               });
+              toast.success("Relatório gerado a partir dos dados da Meta.");
             }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-lone-success-bg text-lone-success border border-lone-success-border hover:bg-lone-success-bg transition-all"
-            title="Gerar relatorio automaticamente a partir dos dados de campanha"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-lone-success-bg text-lone-success border border-lone-success-border hover:bg-lone-success-bg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            title={hasReal ? "Gerar relatorio a partir dos dados reais da Meta" : "Abra a aba Anúncios e carregue a conta deste cliente para habilitar"}
           >
             <Zap size={13} />
             Auto-gerar
           </button>
+            );
+          })()}
           <button
             onClick={() => { setShowForm(!showForm); setEditingReport(null); }}
             className="btn-primary text-xs flex items-center gap-1.5"
@@ -2165,13 +2205,15 @@ function AdAnalyticsTab({
         customDateFrom || undefined,
         customDateTo || undefined,
       );
+      // Resolve o cliente REAL (UUID) dono desta conta, senão o Investimento/pacing filtra por clientId e nunca casa (gasto R$0).
+      const ownerClient = clients.find((cl) => cl.metaAdAccountId === accountId);
       const mapped: AdCampaign[] = camps
         .filter((c: any) => !c.error)
         .map((c: any) => ({
           id: c.id,
           accountId,
-          clientId: accountId,
-          clientName: metaAccounts.find((a) => a.id === accountId)?.name ?? accountId,
+          clientId: ownerClient?.id ?? accountId,
+          clientName: ownerClient?.name ?? metaAccounts.find((a) => a.id === accountId)?.name ?? accountId,
           name: c.name,
           objective: mapMetaObjective(c.objective),
           status: (c.status === "active" || c.status === "paused" || c.status === "completed") ? c.status : "active" as any,
@@ -2211,7 +2253,7 @@ function AdAnalyticsTab({
       }
     }
     setLoadingCampaigns(false);
-  }, [meta.token, meta.handleTokenError, metaAccounts, dateRange, customDateFrom, customDateTo]);
+  }, [meta.token, meta.handleTokenError, metaAccounts, clients, dateRange, customDateFrom, customDateTo]);
 
   // Refresh data when date range or custom dates change (if account already selected)
   useEffect(() => {
@@ -3899,6 +3941,7 @@ function InvestmentControlTab({
   clients,
   adCampaigns,
   investmentData,
+  monthSpendByClient,
   onSave,
   isUsingRealData,
   currentUser,
@@ -3906,6 +3949,7 @@ function InvestmentControlTab({
   clients: Client[];
   adCampaigns: AdCampaign[];
   investmentData: Record<string, ClientInvestmentData>;
+  monthSpendByClient: Map<string, number>;
   onSave: (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => Promise<{ ok: boolean; error?: string }>;
   isUsingRealData: boolean;
   currentUser: string;
@@ -3914,11 +3958,9 @@ function InvestmentControlTab({
   const [forms, setForms] = useState<Record<string, InvestmentForm>>({});
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
 
-  // Compute days in current month
-  const daysInMonth = useMemo(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  }, []);
+  // Dia de hoje e total de dias do mês — em São Paulo (não UTC), pra bater com o gasto do servidor.
+  const [spYear, spMonth, spDay] = todaySP().split("-").map(Number);
+  const daysInMonth = useMemo(() => new Date(spYear, spMonth, 0).getDate(), [spYear, spMonth]);
 
   // Initialize forms from investmentData whenever it changes
   useEffect(() => {
@@ -3947,16 +3989,21 @@ function InvestmentControlTab({
   const form = forms[selectedId];
   const selectedClient = clients.find((c) => c.id === selectedId);
 
-  // Get total monthly spend from campaigns
+  // Gasto do mês: prioriza o valor sincronizado no servidor (current_month_spend, janela
+  // "this_month" da Meta em BRT). Só cai pro somatório das campanhas (janela do preset da aba
+  // Anúncios, ~7d) se o servidor ainda não sincronizou — senão o pacing compararia 7 dias de
+  // gasto contra o orçamento do mês inteiro e mentiria ("campanha travada").
   const getMonthlySpend = useCallback((clientId: string): number => {
+    const server = monthSpendByClient.get(clientId);
+    if (server != null) return server;
     return adCampaigns
       .filter((c) => c.clientId === clientId)
       .reduce((sum, c) => sum + (c.spend ?? 0), 0);
-  }, [adCampaigns]);
+  }, [adCampaigns, monthSpendByClient]);
 
-  // Get today's spend
+  // Get today's spend (data de hoje em São Paulo, não UTC)
   const getTodaySpend = useCallback((clientId: string): number => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todaySP();
     return adCampaigns
       .filter((c) => c.clientId === clientId)
       .flatMap((c) => c.dailyMetrics ?? [])
@@ -4026,7 +4073,7 @@ function InvestmentControlTab({
   const monthlySpend = getMonthlySpend(selectedId);
   const todaySpend = getTodaySpend(selectedId);
   const remaining = Math.max(0, monthlyBudget - monthlySpend);
-  const currentDay = new Date().getDate();
+  const currentDay = spDay;
   const daysLeft = daysInMonth - currentDay;
 
   // ── Pacing logic ──────────────────────────────────────────────

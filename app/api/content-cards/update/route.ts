@@ -11,7 +11,7 @@ const KEY_MAP: Record<string, string> = {
   designRequestId: "design_request_id", designerDeliveredAt: "designer_delivered_at",
   designerDeliveredBy: "designer_delivered_by", socialConfirmedAt: "social_confirmed_at",
   socialConfirmedBy: "social_confirmed_by", caption: "caption", hashtags: "hashtags",
-  observations: "observations", platform: "platform", dueDate: "due_date",
+  observations: "observations", platform: "platform", dueDate: "due_date", dueTime: "due_time",
   nonDeliveryReason: "non_delivery_reason", nonDeliveryReportedBy: "non_delivery_reported_by",
   nonDeliveryReportedAt: "non_delivery_reported_at", workStartedAt: "work_started_at",
   totalTimeSpentMs: "total_time_spent_ms", publishVerifiedAt: "publish_verified_at",
@@ -53,21 +53,25 @@ export async function POST(req: NextRequest) {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Sincroniza o briefing pro card do DESIGNER: ele lê design_requests.briefing (uma CÓPIA feita
-    // quando a arte foi solicitada). Sem isso, o social edita o briefing e o designer continua vendo
-    // o texto antigo — foi o bug reportado. Best-effort: não derruba o save do card se falhar.
-    if (row.briefing !== undefined) {
+    // Sincroniza briefing E prazo pro card do DESIGNER: ele lê design_requests.briefing/deadline
+    // (uma CÓPIA feita quando a arte foi solicitada). Sem isso, o social edita o briefing ou remarca
+    // a data e o designer continua vendo o texto/prazo antigo — foi o bug reportado. O card mostra a
+    // data nova e a fila do designer a antiga → duas datas divergentes. Best-effort: não derruba o save.
+    if (row.briefing !== undefined || row.due_date !== undefined) {
       try {
+        const drUpdate: Record<string, unknown> = {};
+        if (row.briefing !== undefined) drUpdate.briefing = row.briefing;
+        if (row.due_date !== undefined) drUpdate.deadline = row.due_date;
         const { data: card } = await supabaseAdmin
           .from("content_cards").select("design_request_id").eq("id", id as string).maybeSingle();
         const drId = (card?.design_request_id as string) || null;
         if (drId) {
-          await supabaseAdmin.from("design_requests").update({ briefing: row.briefing }).eq("id", drId);
+          await supabaseAdmin.from("design_requests").update(drUpdate).eq("id", drId);
         } else {
-          await supabaseAdmin.from("design_requests").update({ briefing: row.briefing }).eq("content_card_id", id as string);
+          await supabaseAdmin.from("design_requests").update(drUpdate).eq("content_card_id", id as string);
         }
       } catch (e) {
-        console.error("[content-cards/update] sync briefing→design_request falhou (ignorado):", e);
+        console.error("[content-cards/update] sync briefing/prazo→design_request falhou (ignorado):", e);
       }
     }
 

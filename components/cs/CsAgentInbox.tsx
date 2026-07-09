@@ -5,6 +5,7 @@
 // agendados) — um inbox do que o agente criou, pra não se perder no meio do board. Clique abre o card.
 
 import type { ContentCard } from "@/lib/types";
+import { todaySP } from "@/lib/utils";
 import { Bot, Clock } from "lucide-react";
 
 const ABERTOS = new Set(["ideas", "script", "in_production", "blocked", "approval", "client_approval"]);
@@ -28,7 +29,7 @@ export default function CsAgentInbox({
 
   if (doAgente.length === 0) return null;
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = todaySP(); // data de hoje em São Paulo (não UTC), pra não marcar card do dia como atrasado à noite
 
   return (
     <div className="rounded-xl border border-primary/25 bg-primary/[0.04] p-4 mb-4 animate-fade-in">

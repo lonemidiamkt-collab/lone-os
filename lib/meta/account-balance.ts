@@ -2,6 +2,7 @@
 // Funções puras de cálculo de saldo + fetch batch da Meta API
 
 import { META_CONFIG } from "./config";
+import { toBRTDateStr } from "./timezone";
 import {
   evaluateAccount,
   DEFAULT_ALERT_CONFIG,
@@ -299,7 +300,7 @@ export async function fetchBatchMonthlySpend(
   const result = new Map<string, number>();
   if (accountIds.length === 0) return result;
 
-  const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const today = toBRTDateStr(new Date()); // "YYYY-MM-DD" em BRT (não UTC — evita virar o mês às 21h)
   const firstDay = today.slice(0, 8) + "01"; // "YYYY-MM-01"
   const timeRange = encodeURIComponent(JSON.stringify({ since: firstDay, until: today }));
 

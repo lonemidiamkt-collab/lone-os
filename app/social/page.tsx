@@ -225,7 +225,7 @@ function OnboardingCompleteModal({ client, onMoveActive, onMoveActiveAndIdeas, o
 
 interface CalendarViewProps {
   cards: ContentCard[];
-  onDayClick?: (day: number, cards: ContentCard[]) => void;
+  onDayClick?: (day: number, cards: ContentCard[], year: number, month: number) => void; // month é 0-based
 }
 
 function CalendarView({ cards, onDayClick }: CalendarViewProps) {
@@ -255,7 +255,7 @@ function CalendarView({ cards, onDayClick }: CalendarViewProps) {
 
   const handleDayClick = (day: number) => {
     setSelectedDay(selectedDay === day ? null : day);
-    if (onDayClick) onDayClick(day, cardsByDay[day] ?? []);
+    if (onDayClick) onDayClick(day, cardsByDay[day] ?? [], year, month);
   };
 
   const selectedDayCards = selectedDay ? (cardsByDay[selectedDay] ?? []) : [];
@@ -335,7 +335,7 @@ function CalendarView({ cards, onDayClick }: CalendarViewProps) {
           ) : (
             <button
               className="text-xs text-primary hover:underline"
-              onClick={() => onDayClick && onDayClick(selectedDay, [])}
+              onClick={() => onDayClick && onDayClick(selectedDay, [], year, month)}
             >
               Nenhum conteúdo — clique para criar
             </button>
@@ -365,32 +365,19 @@ interface PersonalDashboardProps {
 }
 
 function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDashboardProps) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const dayAfter = new Date(today);
-  dayAfter.setDate(dayAfter.getDate() + 2);
-
   const myCards = cards.filter((c) => c.socialMedia === userName);
   const activeCards = myCards.filter((c) => c.status !== "published");
   const publishedCards = myCards.filter((c) => c.status === "published");
 
-  // Cards due today/tomorrow
+  // Cards vencendo hoje/amanhã e vencidos — usa getDeadlineUrgency (parse LOCAL de "YYYY-MM-DD"),
+  // senão new Date() cru lê UTC 00:00 e marca o card que vence HOJE como vencido o dia todo.
   const dueSoon = activeCards.filter((c) => {
-    if (!c.dueDate) return false;
-    const d = new Date(c.dueDate);
-    d.setHours(0, 0, 0, 0);
-    return d <= tomorrow;
+    const u = getDeadlineUrgency(c.dueDate);
+    return u === "overdue" || u === "today" || u === "tomorrow";
   });
 
   // Overdue cards
-  const overdue = activeCards.filter((c) => {
-    if (!c.dueDate) return false;
-    const d = new Date(c.dueDate);
-    d.setHours(0, 0, 0, 0);
-    return d < today;
-  });
+  const overdue = activeCards.filter((c) => getDeadlineUrgency(c.dueDate) === "overdue");
 
   // SLA alerts: cards stuck 24h+
   const slaAlerts = activeCards.filter((c) => {
@@ -962,11 +949,13 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
     return Array.from({ length: 5 }, (_, i) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
+      // Formata a data LOCAL (não toISOString, que desloca pro UTC e pode pular o dia).
+      const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       return {
         id: `batch-${i}`,
         title: "",
         format: "Post",
-        dueDate: d.toISOString().slice(0, 10),
+        dueDate: ds,
         dueTime: "10:00",
       };
     });
@@ -979,7 +968,8 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
     const lastDate = rows[rows.length - 1]?.dueDate ?? todaySP();
     const next = new Date(lastDate + "T00:00:00");
     next.setDate(next.getDate() + 1);
-    setRows([...rows, { id: `batch-${Date.now()}`, title: "", format: "Post", dueDate: next.toISOString().slice(0, 10), dueTime: "10:00" }]);
+    const ds = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+    setRows([...rows, { id: `batch-${Date.now()}`, title: "", format: "Post", dueDate: ds, dueTime: "10:00" }]);
   };
 
   const removeRow = (id: string) => {
@@ -2553,7 +2543,7 @@ export default function SocialPage() {
           {/* CTA: criar novo conteúdo (escondido pra designer em modo leitura) */}
           {!isReadOnly && (
             <button
-              onClick={() => setNewCardDate(new Date().toISOString().slice(0, 10))}
+              onClick={() => setNewCardDate(todaySP())}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground text-sm font-medium transition-all shrink-0"
             >
               <Plus size={14} /> Novo Conteúdo
@@ -2872,11 +2862,12 @@ export default function SocialPage() {
           <div className="animate-fade-in max-w-lg">
             <CalendarView
               cards={filteredCards}
-              onDayClick={(day, dayCards) => {
+              onDayClick={(day, dayCards, year, month) => {
                 setCalendarSelectedDay(day);
                 if (dayCards.length === 0) {
-                  const ref = new Date();
-                  const dateStr = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                  // Usa o mês/ano navegado no calendário (month é 0-based) — não o mês atual,
+                  // senão planejar agosto criava o card em julho.
+                  const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
                   setNewCardDate(dateStr);
                 }
               }}
