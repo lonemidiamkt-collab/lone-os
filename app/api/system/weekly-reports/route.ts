@@ -123,6 +123,12 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < clients.length; i++) {
       const c = clients[i];
       const clientName = c.nome_fantasia || c.name;
+      const clientKey = `${dateKey}:${c.id}`;
+      // Dedup POR CLIENTE (nao so por execucao): num retry, quem JA recebeu nao recebe o PDF de novo.
+      if (!force && !onlyClientId) {
+        const { data: jaEnviou } = await supabaseAdmin.from("weekly_report_log").select("id").eq("week_key", clientKey).eq("status", "sent").limit(1);
+        if (jaEnviou && jaEnviou.length > 0) continue;
+      }
       try {
         const pdf = await buildClientPdf(token, c);
         if (!pdf.ok || !pdf.buffer) { failed++; errors.push(`${clientName}: ${pdf.error}`); continue; }
@@ -130,7 +136,7 @@ export async function POST(req: NextRequest) {
         const caption = `📊 *Relatório 7 dias — ${clientName}*\nPeríodo: ${period}`;
         const fileName = `relatorio-${slug(clientName)}-${dateKey}.pdf`;
         const res = await sendMediaDocument(settings.groupJid, pdf.buffer.toString("base64"), fileName, caption);
-        if (res.ok) sent++; else { failed++; errors.push(`${clientName}: envio ${res.error}`); }
+        if (res.ok) { sent++; await supabaseAdmin.from("weekly_report_log").insert({ week_key: clientKey, status: "sent", message: clientName }).then(() => {}, () => {}); } else { failed++; errors.push(`${clientName}: envio ${res.error}`); }
       } catch (e) {
         failed++; errors.push(`${clientName}: ${e instanceof Error ? e.message : String(e)}`);
       }

@@ -135,15 +135,21 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // 4. Alerta urgente se < 7 dias (sempre dispara, mesmo com draft ja existente)
+      // 4. Alerta urgente se < 7 dias. DEDUP: só dispara se não houve alerta urgente desse cliente
+      // nos últimos 6 dias — antes repetia TODO DIA (7 notificações idênticas enterravam o resto).
       if (daysLeft <= DAYS_AHEAD_URGENT) {
-        await supabaseAdmin.from("notifications").insert({
-          type: "system",
-          title: `🚨 URGENTE: contrato vence em ${daysLeft} ${daysLeft === 1 ? "dia" : "dias"}`,
-          body: `${clientName} — envie o contrato de renovacao o quanto antes.`,
-          client_id: clientId,
-        });
-        alerts_sent.push(clientName);
+        const desdeUrg = new Date(Date.now() - 6 * 864e5).toISOString();
+        const { data: jaAlertou } = await supabaseAdmin.from("notifications")
+          .select("id").eq("client_id", clientId).ilike("title", "🚨 URGENTE%").gte("created_at", desdeUrg).limit(1);
+        if (!jaAlertou || jaAlertou.length === 0) {
+          await supabaseAdmin.from("notifications").insert({
+            type: "system",
+            title: `🚨 URGENTE: contrato vence em ${daysLeft} ${daysLeft === 1 ? "dia" : "dias"}`,
+            body: `${clientName} — envie o contrato de renovacao o quanto antes.`,
+            client_id: clientId,
+          });
+          alerts_sent.push(clientName);
+        }
       }
     }
 

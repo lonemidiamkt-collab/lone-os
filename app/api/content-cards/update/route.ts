@@ -72,16 +72,20 @@ export async function POST(req: NextRequest) {
     }
 
     if (contentApproval) {
-      // Uma aprovação vigente por card: limpa as anteriores e grava a atual.
-      await supabaseAdmin.from("content_approvals").delete().eq("card_id", id as string);
-      const { error: apprErr } = await supabaseAdmin.from("content_approvals").insert({
+      // Uma aprovação vigente por card. INSERT-FIRST (não delete-first): grava a nova e SÓ ENTÃO
+      // apaga as anteriores. Antes o delete vinha primeiro — se o insert falhasse, o card ficava
+      // SEM aprovação nenhuma; e 2 revisores juntos geravam 2 linhas. Assim nunca fica sem, nem dupla.
+      const { data: novaAppr, error: apprErr } = await supabaseAdmin.from("content_approvals").insert({
         card_id:     id as string,
         status:      contentApproval.status,
         reviewed_by: contentApproval.reviewedBy ?? null,
         reviewed_at: contentApproval.reviewedAt ?? null,
         reason:      contentApproval.reason ?? null,
-      });
+      }).select("id").single();
       if (apprErr) return NextResponse.json({ error: apprErr.message }, { status: 500 });
+      if (novaAppr?.id) {
+        await supabaseAdmin.from("content_approvals").delete().eq("card_id", id as string).neq("id", novaAppr.id as string);
+      }
 
       // Log append-only de retrabalho: o delete acima apaga o histórico de reprovações, então
       // cada reprovação é registrada à parte (denormalizada) pra medir taxa de retrabalho por

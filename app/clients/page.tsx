@@ -28,14 +28,15 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 // Health score: uses shared calcHealthScore from lib/utils.ts
 
 function HealthBar({ score }: { score: number }) {
+  // Cor por faixa (antes era sempre azul → um cliente com 22 parecia igual a um com 90).
+  const bar = score >= 70 ? "bg-lone-success" : score >= 40 ? "bg-lone-warning" : "bg-destructive";
+  const txt = score >= 70 ? "text-lone-success" : score >= 40 ? "text-lone-warning" : "text-destructive";
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all bg-primary" style={{ width: `${score}%` }} />
+        <div className={`h-full rounded-full transition-all ${bar}`} style={{ width: `${score}%` }} />
       </div>
-      <span className="text-xs font-medium tabular-nums text-muted-foreground">
-        {score}
-      </span>
+      <span className={`text-xs font-medium tabular-nums ${txt}`}>{score}</span>
     </div>
   );
 }
