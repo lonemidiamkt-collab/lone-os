@@ -107,9 +107,11 @@ function ackDescartado(resumo: string): string {
 // Sem código nas mensagens: a equipe RESPONDE (reply) a sugestão com "ok"/"não". Código vira
 // opcional só por legado/hábito.
 function parseDecision(text: string): { acao: "confirmar" | "descartar"; codigo?: string } | null {
-  const m = text.trim().match(/^(ok|sim|confirmar|confirma|nao|não|descartar|descarta)(?:\s+([a-z0-9]{3,8}))?$/i);
+  // Tolera pontuação/variantes ("Ok!", "okay", "sim.", "confirmado"). Código é hex de 4 chars
+  // (randomBytes(2)) — antes [a-z0-9]{3,8} pegava "ok pode" como código "pode" (nunca casava).
+  const m = text.trim().match(/^(ok|okay|sim|confirmar|confirma|confirmado|nao|não|descartar|descarta|descartado)(?:\s+([a-f0-9]{4}))?[\s!.,;…]*$/i);
   if (!m) return null;
-  const acao = /^(ok|sim|confirm)/i.test(m[1]) ? "confirmar" : "descartar";
+  const acao = /^(ok|okay|sim|confirm)/i.test(m[1]) ? "confirmar" : "descartar";
   return { acao, codigo: m[2]?.toLowerCase() };
 }
 
@@ -230,35 +232,34 @@ function extrairAssunto(text: string): string {
   return (m?.[1] || text).trim().slice(0, 140);
 }
 
-// Acha o cliente citado na mensagem: pontua por quantas palavras distintivas do nome aparecem.
+// Preposições/artigos que NÃO distinguem cliente (evita "em"/"de" casarem palavra do nome).
+const PREP_NOME = new Set(["em", "de", "da", "do", "das", "dos", "e", "a", "o", "as", "os", "no", "na", "com", "para", "pra", "pro", "por"]);
+
+// Acha o cliente citado na mensagem por PALAVRA INTEIRA (não substring — "vida" não casa
+// "atividade", "wt" não casa no meio de outra palavra). Pontua por nº de palavras distintivas do
+// nome que aparecem como PALAVRA no texto (tolerando singular/plural). Retorna null se NENHUM casar
+// OU se houver EMPATE no topo entre 2 clientes (ambíguo → o chamador pergunta "de qual cliente?",
+// melhor que chutar o errado — era a raiz do vazamento WT→Farmácia).
 async function resolveClientePorNome(text: string): Promise<{ id: string; nome: string; nicho?: string } | null> {
   const { data: clients } = await supabaseAdmin
     .from("clients").select("id, name, nome_fantasia, nicho, industry").or("active.is.null,active.eq.true");
-  const t = normNome(text);
-  let best: { id: string; nome: string; nicho?: string; score: number; maxw: number } | null = null;
+  const palavras = new Set(normNome(text).split(/\s+/).filter(Boolean));
+  const casa = (w: string) =>
+    palavras.has(w) || (w.endsWith("s") && palavras.has(w.slice(0, -1))) || palavras.has(w + "s");
+  const scored: { id: string; nome: string; nicho?: string; score: number; chars: number }[] = [];
   for (const c of clients ?? []) {
     const nome = (c.nome_fantasia as string) || (c.name as string) || "";
-    const words = normNome(nome).split(/\s+/).filter((w) => w.length >= 4 && !STOP_NOME.has(w));
-    let score = 0, maxw = 0;
-    for (const w of words) {
-      // Tolerância singular/plural: "Léo Carros" tem que casar com "leo carro mercedes".
-      const casa = t.includes(w) || (w.endsWith("s") && t.includes(w.slice(0, -1)));
-      if (casa) { score++; maxw = Math.max(maxw, w.length); }
-    }
-    // Tokens CURTOS distintivos (2-3 chars, ex.: "WT", "PH") só casam como PALAVRA INTEIRA (\bwt\b)
-    // e apenas quando nada mais longo casou — resolve "da wt" → "WT Shopping" sem falso-positivo.
-    if (score === 0) {
-      const curtos = normNome(nome).split(/\s+/).filter((w) => w.length >= 2 && w.length <= 3 && !STOP_NOME.has(w));
-      for (const w of curtos) {
-        const re = new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
-        if (re.test(t)) { score++; maxw = Math.max(maxw, w.length); }
-      }
-    }
-    if (score > 0 && (!best || score > best.score || (score === best.score && maxw > best.maxw))) {
-      best = { id: c.id as string, nome, nicho: (c.nicho as string) || (c.industry as string) || undefined, score, maxw };
-    }
+    const words = normNome(nome).split(/\s+/).filter((w) => w.length >= 2 && !STOP_NOME.has(w) && !PREP_NOME.has(w));
+    let score = 0, chars = 0;
+    for (const w of words) if (casa(w)) { score++; chars += w.length; }
+    if (score > 0) scored.push({ id: c.id as string, nome, nicho: (c.nicho as string) || (c.industry as string) || undefined, score, chars });
   }
-  return best ? { id: best.id, nome: best.nome, nicho: best.nicho } : null;
+  if (!scored.length) return null;
+  scored.sort((a, b) => b.score - a.score || b.chars - a.chars);
+  // Empate no topo (mesmo nº de palavras) → ambíguo: pergunta em vez de arriscar o cliente errado.
+  if (scored.length > 1 && scored[1].score === scored[0].score) return null;
+  const top = scored[0];
+  return { id: top.id, nome: top.nome, nicho: top.nicho };
 }
 
 // Monta a demanda a partir do PEDIDO da equipe (texto livre) + cliente já resolvido: roda o A3,
@@ -508,6 +509,7 @@ export async function POST(req: NextRequest) {
     if (claimErr) console.warn("[CS/inbound] claim indisponível (migration 058?):", claimErr.message);
   }
 
+  try {
   // Diagnóstico (fase de piloto): toda mensagem REALMENTE recebida do webhook fica visível no log —
   // grupo, autor, se é imagem/áudio. Sem isso, mensagem descartada (allowlist/equipe) sumia sem
   // rastro e a gente ficava adivinhando se o webhook entregou.
@@ -789,8 +791,11 @@ export async function POST(req: NextRequest) {
   // ─── Conclusão de "aguardando_cliente": o time pediu "cria a demanda" mas eu não sabia de qual
   // cliente; guardei o pedido e perguntei o nome. A PRÓXIMA msg da mesma pessoa que resolver um
   // cliente completa a demanda usando o TEXTO ORIGINAL guardado (não a resposta do nome). ───
+  // Guarda: só completa se a resposta for CURTA (o nome do cliente — ex.: "WT Shopping", "a da wt").
+  // Sem isso, qualquer papo posterior que mencione um cliente por acaso completava a demanda errada.
+  const respostaCurtaAg = msg.text.trim().split(/\s+/).length <= 6;
   if (msg.groupJid === internalGroupJid() && !demandaDaSugestao && isOpenAIConfigured()
-      && !ehPedidoCriarDemanda(msg.text) && !isTrivial(msg.text)) {
+      && !ehPedidoCriarDemanda(msg.text) && !isTrivial(msg.text) && respostaCurtaAg) {
     const quemAg = msg.authorName || msg.authorJid;
     const desdeAg = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const { data: ag } = await supabaseAdmin.from("cs_demandas").select("*")
@@ -839,7 +844,13 @@ export async function POST(req: NextRequest) {
     // "cria a demanda que a X pediu" (REFERÊNCIA curta, sem conteúdo colado) → em vez de inventar um
     // genérico, uso o que EU JÁ PEGUEI do grupo da X (as demandas pendentes que classifiquei). Se veio
     // conteúdo colado (msg longa), monto a partir dele.
-    const temConteudoColado = msg.text.trim().length >= 80;
+    // "REFERÊNCIA" (usar pedidos capturados do grupo) vs "CONTEÚDO COLADO" (montar do texto): não dá
+    // pra decidir só por tamanho — "cria a demanda que o Complexo Vida pediu lá no grupo, obrigado"
+    // é longo mas é referência. É referência se cita o cliente PEDINDO (pediu/mandou/solicitou/quer)
+    // e NÃO traz um bloco colado (sem quebra de linha e curto). Senão, é conteúdo pra montar.
+    const ehReferencia = /\b(pediu|pediram|mandou|mandaram|solicit\w*|falou|quer|queria|pedido)\b/i.test(msg.text)
+      && !msg.text.includes("\n") && msg.text.trim().length < 200;
+    const temConteudoColado = !ehReferencia && msg.text.trim().length >= 80;
     if (!temConteudoColado) {
       const d7 = new Date(Date.now() - 7 * 864e5).toISOString();
       const { data: jaPend } = await supabaseAdmin.from("cs_demandas")
@@ -1106,7 +1117,9 @@ export async function POST(req: NextRequest) {
   // Só interpreta como resposta natural se for um REPLY à PRÓPRIA sugestão do agente (quotedMsgId
   // casa com msg_id_sugestao). Sem isso, coordenação da equipe no grupo virava "confirmação" à toa
   // (alucinada). O "ok/não/ajustar" explícito (parseDecision/parseAjuste) segue funcionando sem reply.
-  if (msg.groupJid === internalGroupJid() && !isTrivial(msg.text) && isOpenAIConfigured() && (msg.quotedMsgId || ehConfirmacaoLivre(msg.text))) {
+  // NÃO gateia por !isTrivial: uma confirmação trivial ("beleza", "show", "Ok!") respondendo (reply)
+  // a uma sugestão DEVE ser interpretada — antes o isTrivial engolia e o card nunca era criado.
+  if (msg.groupJid === internalGroupJid() && isOpenAIConfigured() && (msg.quotedMsgId || ehConfirmacaoLivre(msg.text))) {
     let alvo = demandaDaSugestao?.status === "pendente" ? demandaDaSugestao : null;
     // Sem reply, mas a mensagem parece confirmação ("cria o card", "pode criar", "tá certo"):
     // interpreta se houver EXATAMENTE 1 demanda pendente recente (com 2+ o bloco de desambiguação
@@ -1671,4 +1684,11 @@ export async function POST(req: NextRequest) {
 
   console.log(`[CS/inbound] ${clienteNome} "${msg.text.slice(0, 60)}" → ${sugeridas.join(", ") || "nenhuma demanda"}${aprovacaoDetectada ? " (+aprovação)" : ""}`);
   return NextResponse.json({ ok: true, classified: true, cliente: clienteNome, sugeridas, multiCliente, aprovacao: aprovacaoDetectada });
+  } catch (e) {
+    // Falha no meio do processamento (ex.: IA 500, DB): LIBERA o claim pra o retry do Evolution poder
+    // reprocessar. Sem isso, a mensagem ficava "processada" e a demanda se perdia pra sempre.
+    if (msg.messageId) { try { await supabaseAdmin.from("cs_processed_messages").delete().eq("message_id", msg.messageId); } catch { /* ignore */ } }
+    console.error("[CS/inbound] erro no processamento — claim liberado p/ retry:", e);
+    return NextResponse.json({ ok: false, error: "erro interno no CS" }, { status: 500 });
+  }
 }
