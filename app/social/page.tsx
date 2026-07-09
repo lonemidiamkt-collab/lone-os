@@ -15,7 +15,7 @@ import { MarkdownEditor } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import type { ContentCard, Client, MoodType, Priority, SocialMonthlyReport, MonthlyDeliveryReport, SocialPerformanceScore, MoodEntry, OnboardingItem, PerformanceLevel } from "@/lib/types";
-import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
+import { getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS, spDateStr, todaySP } from "@/lib/utils";
 import {
   AlertTriangle, Calendar, Instagram, ImageIcon,
   Smile, UserPlus, X, ExternalLink,
@@ -60,10 +60,13 @@ function getInactivityLevel(client: Client): "none" | "warning" | "urgent" {
 
 function getDeadlineUrgency(dueDate?: string): "overdue" | "today" | "tomorrow" | "soon" | "ok" | "none" {
   if (!dueDate) return "none";
-  const due = new Date(dueDate);
+  // dueDate é "YYYY-MM-DD" — new Date() disso lê UTC 00:00 (= dia anterior no BRT), fazendo o card
+  // que vence HOJE aparecer como "vencido" o dia todo. Parse como data LOCAL corrige.
+  const [y, m, d] = dueDate.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return "none";
+  const due = new Date(y, m - 1, d);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  due.setHours(0, 0, 0, 0);
   const diff = Math.floor((due.getTime() - today.getTime()) / 86400000);
   if (diff < 0) return "overdue";
   if (diff === 0) return "today";
@@ -963,7 +966,7 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
   const filledRows = rows.filter((r) => r.title.trim());
 
   const addRow = () => {
-    const lastDate = rows[rows.length - 1]?.dueDate ?? new Date().toISOString().slice(0, 10);
+    const lastDate = rows[rows.length - 1]?.dueDate ?? todaySP();
     const next = new Date(lastDate + "T00:00:00");
     next.setDate(next.getDate() + 1);
     setRows([...rows, { id: `batch-${Date.now()}`, title: "", format: "Post", dueDate: next.toISOString().slice(0, 10), dueTime: "10:00" }]);
@@ -2173,7 +2176,7 @@ export default function SocialPage() {
   const pathname = usePathname();
   useEffect(() => {
     if (searchParams.get("action") === "new-content") {
-      setNewCardDate(new Date().toISOString().slice(0, 10));
+      setNewCardDate(todaySP());
       router.replace(pathname, { scroll: false });
     }
     // Atalho ?card=<id> (vindo do bloco "Artes prontas" da Home): abre o card direto.
@@ -2244,7 +2247,7 @@ export default function SocialPage() {
         const clientCards = contentCards.filter((c) => c.clientId === client.id && c.dueDate?.startsWith(month));
         const publishedThisMonth = contentCards.filter(
           (c) => c.clientId === client.id && c.status === "published" &&
-            (c.dueDate?.startsWith(month) || c.statusChangedAt?.startsWith(month))
+            (c.statusChangedAt ? spDateStr(c.statusChangedAt).startsWith(month) : c.dueDate?.startsWith(month))
         );
         const goal = client.postsGoal ?? 12;
         const delivered = publishedThisMonth.length;
@@ -2567,7 +2570,7 @@ export default function SocialPage() {
             };
             // Live badge counts per tab
             const pendingKanban = filteredCards.filter((c) => !["scheduled","published"].includes(c.status)).length;
-            const approvalCount = filteredCards.filter((c) => c.status === "approval" || c.status === "client_approval").length;
+            const approvalCount = filteredCards.filter((c) => c.status === "client_approval").length; // alinhado com a fila da aba
             const badgeMap: Partial<Record<typeof tab, number>> = {
               carteira:   filteredClients.length,
               kanban:     pendingKanban,

@@ -26,7 +26,7 @@ import {
   Brain, ShieldAlert, Sparkles, CircleDot, Bell, FolderDown, Loader2, Facebook, Send,
   Wallet, CreditCard, Banknote, AlertOctagon, Info, Palette,
 } from "lucide-react";
-import { getAttentionColor, getAttentionLabel, getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
+import { getAttentionColor, getAttentionLabel, getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS, todaySP } from "@/lib/utils";
 import type { Client, Task, TrafficMonthlyReport, AdCampaign, AdAccount, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
 import { mockAdAccounts, mockAdCampaigns } from "@/lib/mockData";
 import { fetchClientGroupMessageLog, type ClientGroupMessageLogRow } from "@/lib/supabase/queries";
@@ -56,7 +56,7 @@ const TASK_COLUMNS = [
 type TabType = "rotina" | "status" | "kanban" | "relatorios" | "report" | "anuncios" | "investimento";
 
 function getTodayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return todaySP();
 }
 
 function getDayOfWeek(): number {
@@ -148,8 +148,9 @@ export default function TrafficPage() {
   const [messageLog, setMessageLog] = useState<ClientGroupMessageLogRow[]>([]);
   useEffect(() => {
     const ws = new Date();
-    ws.setDate(ws.getDate() - ws.getDay() + 1); // segunda desta semana
-    fetchClientGroupMessageLog(ws.toISOString().slice(0, 10)).then(setMessageLog);
+    ws.setDate(ws.getDate() + (ws.getDay() === 0 ? -6 : 1 - ws.getDay())); // segunda desta semana (domingo NÃO pula p/ a próxima)
+    const wsStr = `${ws.getFullYear()}-${String(ws.getMonth()+1).padStart(2,"0")}-${String(ws.getDate()).padStart(2,"0")}`;
+    fetchClientGroupMessageLog(wsStr).then(setMessageLog);
   }, []);
 
   // Creative request modal state
@@ -997,8 +998,8 @@ function RoutineTab({
 
   // Weekly checks
   const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
-  const weekStartStr = weekStart.toISOString().slice(0, 10);
+  weekStart.setDate(weekStart.getDate() + (weekStart.getDay() === 0 ? -6 : 1 - weekStart.getDay()));
+  const weekStartStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth()+1).padStart(2,"0")}-${String(weekStart.getDate()).padStart(2,"0")}`;
   const weekChecks = routineChecks.filter(
     (c) => c.date >= weekStartStr && (effectiveFilter === "all" || c.completedBy === effectiveFilter)
   );

@@ -218,7 +218,7 @@ export default function PendingClientsPage() {
     const clientName = editForm.nomeFantasia || editForm.razaoSocial || "Cliente";
 
     // Update client fields + clear draft_status
-    await supabase.from("clients").update({
+    const { error: updErr } = await supabase.from("clients").update({
       name: clientName,
       nome_fantasia: editForm.nomeFantasia || null,
       razao_social: editForm.razaoSocial || null,
@@ -235,6 +235,14 @@ export default function PendingClientsPage() {
       assigned_designer: needsDesigner ? editForm.assignedDesigner : "",
       draft_status: null, // This makes the client visible in the main list
     }).eq("id", selected.id);
+
+    // ANTES: não checava o erro → dizia "aprovado", sumia dos Pendentes, mas o cliente NUNCA entrava
+    // na carteira (perda silenciosa). Agora só confirma/remove se realmente salvou.
+    if (updErr) {
+      pushNotification("system", "Erro ao aprovar", `Não deu pra ativar ${clientName}: ${updErr.message}. Tente de novo.`, selected.id);
+      setApproving(false);
+      return;
+    }
 
     pushNotification("system", "Cliente aprovado", `${clientName} foi ativado. Equipe pode iniciar o setup.`);
 

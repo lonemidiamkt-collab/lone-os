@@ -88,6 +88,19 @@ export function daysSince(dateStr: string) {
   return Math.floor((now.getTime() - then.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+/** "YYYY-MM-DD" no fuso de São Paulo (BRT). Use pra comparar datas/entregas sem drift de UTC —
+ *  `iso.slice(0,10)` ou `new Date().toISOString()` dão a data em UTC e "pulam o dia" à noite no BRT. */
+export function spDateStr(iso?: string | number | Date): string {
+  const d = iso ? new Date(iso) : new Date();
+  if (isNaN(d.getTime())) return typeof iso === "string" ? iso.slice(0, 10) : "";
+  return d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+/** "Hoje" em São Paulo como "YYYY-MM-DD". */
+export function todaySP(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
 /** Format date consistently across the app */
 export function formatDate(dateStr: string, style: "short" | "long" | "relative" = "short"): string {
   const date = new Date(dateStr);

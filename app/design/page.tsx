@@ -10,7 +10,7 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
-import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
+import { getPriorityColor, getPriorityLabel, spDateStr } from "@/lib/utils";
 import {
   Palette, Filter, Clock, CheckCircle, Loader, Paperclip, X,
   AlertTriangle, Zap, LayoutList, Columns3, Upload, Download,
@@ -65,9 +65,15 @@ type TabView = "kanbans" | "requests" | "performance" | "history" | "clientes";
 
 function getDeadlineUrgency(dueDate?: string): "overdue" | "today" | "soon" | "ok" | null {
   if (!dueDate) return null;
-  const diff = (new Date(dueDate).getTime() - Date.now()) / 86400000;
+  // "YYYY-MM-DD" via new Date() = UTC 00:00 (dia anterior no BRT) → card que vence HOJE virava
+  // "vencido" o dia todo. Parse LOCAL + compara com hoje local.
+  const [y, m, d] = dueDate.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const due = new Date(y, m - 1, d).getTime();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.floor((due - today.getTime()) / 86400000);
   if (diff < 0) return "overdue";
-  if (diff < 1) return "today";
+  if (diff === 0) return "today";
   if (diff <= 3) return "soon";
   return "ok";
 }
@@ -1188,14 +1194,14 @@ export default function DesignPage() {
             <div className="card">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">No Prazo</p>
               <p className="text-2xl font-bold text-primary">
-                {myContentCards.filter((c) => c.designerDeliveredAt && c.dueDate && c.designerDeliveredAt.slice(0, 10) <= c.dueDate).length}
+                {myContentCards.filter((c) => c.designerDeliveredAt && c.dueDate && spDateStr(c.designerDeliveredAt) <= c.dueDate).length}
               </p>
               <p className="text-xs text-muted-foreground">entregas antes do deadline</p>
             </div>
             <div className="card">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Atrasadas</p>
               <p className="text-2xl font-bold text-destructive">
-                {myContentCards.filter((c) => c.designerDeliveredAt && c.dueDate && c.designerDeliveredAt.slice(0, 10) > c.dueDate).length}
+                {myContentCards.filter((c) => c.designerDeliveredAt && c.dueDate && spDateStr(c.designerDeliveredAt) > c.dueDate).length}
               </p>
               <p className="text-xs text-muted-foreground">entregas após deadline</p>
             </div>
@@ -1245,7 +1251,7 @@ export default function DesignPage() {
                   .sort((a, b) => (b.designerDeliveredAt ?? "").localeCompare(a.designerDeliveredAt ?? ""))
                   .slice(0, 10)
                   .map((c) => {
-                    const onTime = c.dueDate && c.designerDeliveredAt && c.designerDeliveredAt.slice(0, 10) <= c.dueDate;
+                    const onTime = c.dueDate && c.designerDeliveredAt && spDateStr(c.designerDeliveredAt) <= c.dueDate;
                     return (
                       <div key={c.id} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0">
                         <span className={`w-2 h-2 rounded-full shrink-0 ${onTime ? "bg-primary" : "bg-destructive"}`} />
@@ -1275,7 +1281,7 @@ export default function DesignPage() {
               .sort((a, b) => (b.designerDeliveredAt ?? b.statusChangedAt ?? "").localeCompare(a.designerDeliveredAt ?? a.statusChangedAt ?? ""))
               .map((card) => {
                 const client = clients.find((cl) => cl.id === card.clientId);
-                const onTime = card.dueDate && card.designerDeliveredAt && card.designerDeliveredAt.slice(0, 10) <= card.dueDate;
+                const onTime = card.dueDate && card.designerDeliveredAt && spDateStr(card.designerDeliveredAt) <= card.dueDate;
                 return (
                   <div key={card.id} onClick={() => setDetailCard(card)}
                     className="card p-4 flex items-center gap-4 cursor-pointer hover:border-primary/20 transition-all">

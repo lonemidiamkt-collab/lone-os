@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useAppState } from "@/lib/context/AppStateContext";
-import { calcHealthScore } from "@/lib/utils";
+import { calcHealthScore, spDateStr } from "@/lib/utils";
 import { mockAdCampaigns } from "@/lib/mockData";
 import type { ContentCard, DesignRequest, AdCampaign } from "@/lib/types";
 
@@ -247,7 +247,7 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
       // On-time: delivered before dueDate
       onTimeCount = deliveredCards.filter((c) => {
         if (!c.dueDate || !c.designerDeliveredAt) return false;
-        return c.designerDeliveredAt.slice(0, 10) <= c.dueDate;
+        return spDateStr(c.designerDeliveredAt) <= c.dueDate;
       }).length;
     }
 

@@ -6,7 +6,7 @@ import { useContentStore } from "@/stores/useContentStore";
 import { OperationalKpisPanel } from "@/components/ceo/OperationalKpisPanel";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
-import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS } from "@/lib/utils";
+import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS, todaySP } from "@/lib/utils";
 import { exportReportAsPdf } from "@/lib/exportPdf";
 import {
   Lock, Unlock, BarChart2, TrendingUp, TrendingDown, FileText, Clock, AlertTriangle,
@@ -32,6 +32,26 @@ function isCeoSessionValid(): boolean {
   const ts = sessionStorage.getItem(PIN_SESSION_KEY);
   if (!ts) return false;
   return Date.now() - parseInt(ts, 10) < CEO_SESSION_TIMEOUT_MS;
+}
+
+// Score de risco de churn (0-100, maior = pior) — extraído pra dar pra ORDENAR a lista.
+function churnRiskScore(client: Client): number {
+  let score = 0;
+  if (client.status === "at_risk") score += 35;
+  else if (client.status === "average") score += 15;
+  const kanbanHoursAgo = client.lastKanbanActivity ? (Date.now() - new Date(client.lastKanbanActivity).getTime()) / 3600000 : 999;
+  if (kanbanHoursAgo > 168) score += 25;
+  else if (kanbanHoursAgo > 72) score += 10;
+  const postRatio = client.postsGoal ? (client.postsThisMonth ?? 0) / client.postsGoal : 0.5;
+  if (postRatio < 0.3) score += 20;
+  else if (postRatio < 0.6) score += 8;
+  if (!client.lastPostDate) score += 10;
+  else {
+    const daysSincePost = (Date.now() - new Date(client.lastPostDate).getTime()) / 86400000;
+    if (daysSincePost > 14) score += 15;
+    else if (daysSincePost > 7) score += 5;
+  }
+  return Math.min(100, score);
 }
 
 export default function CEOPage() {
@@ -68,7 +88,7 @@ export default function CEOPage() {
     const newThisMonth = clients.filter((c) => createdIn(c, cur)).length + churnedClients.filter((c) => createdIn(c, cur)).length;
     const churnedThisMonth = churnedClients.filter((c) => churnedIn(c, cur)).length;
     const netThisMonth = newThisMonth - churnedThisMonth;
-    const churnBase = activeCount + churnedThisMonth;
+    const churnBase = Math.max(0, activeCount - newThisMonth) + churnedThisMonth; // ativos no INÍCIO do mês (não infla com quem entrou no mês)
     const churnRate = churnBase > 0 ? (churnedThisMonth / churnBase) * 100 : 0;
 
     const months: { label: string; novos: number; churn: number; net: number }[] = [];
@@ -133,12 +153,14 @@ export default function CEOPage() {
       }
 
       if (profile.role === "designer") {
-        designTotal = designRequests.length;
-        designDone = designRequests.filter((r) => r.status === "done").length;
+        const myClientIds = new Set(clients.filter((c) => c.assignedDesigner === profile.name).map((c) => c.id));
+        const myReqs = designRequests.filter((r) => myClientIds.has(r.clientId));
+        designTotal = myReqs.length;
+        designDone = myReqs.filter((r) => r.status === "done").length;
       }
 
       if (profile.role === "traffic") {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = todaySP();
         const memberClients = clients.filter((c) => c.assignedTraffic === profile.name && c.status !== "onboarding");
         supportTotal = memberClients.length;
         supportDone = trafficRoutineChecks.filter((c) => c.date === today && c.completedBy === profile.name && c.type === "support").length;
@@ -1582,7 +1604,7 @@ export default function CEOPage() {
                 <p className="text-muted-foreground text-sm">Análise preditiva de risco de cancelamento baseada em atividade, comunicação e satisfação.</p>
               </div>
               <div className="space-y-3">
-                {clients.filter((c) => c.status !== "onboarding").map((client) => {
+                {clients.filter((c) => c.status !== "onboarding").sort((a, b) => churnRiskScore(b) - churnRiskScore(a)).map((client) => {
                   // Churn score: 0-100 (higher = more risk)
                   let score = 0;
                   // Status
@@ -1654,9 +1676,6 @@ export default function CEOPage() {
                       )}
                     </div>
                   );
-                }).sort((a, b) => {
-                  // This sort won't work on JSX directly, so we'll sort the data before mapping
-                  return 0;
                 })}
               </div>
             </div>

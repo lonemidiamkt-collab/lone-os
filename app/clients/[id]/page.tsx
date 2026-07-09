@@ -347,7 +347,7 @@ export default function ClientDetailPage() {
   const chats = clientChats[clientId] ?? [];
   const entries = timeline[clientId] ?? [];
   const obItems = onboarding[clientId] ?? [];
-  const clientTasks = mockTasks.filter((t) => t.clientId === clientId);
+  const clientTasks = tasks.filter((t) => t.clientId === clientId); // era mockTasks (vazio) → aba/tile sempre 0
   const clientContent = contentCards.filter((c) => c.clientId === clientId);
   const clientReports = quinzReports.filter((r) => r.clientId === clientId);
   const clientAssets = creativeAssets[clientId] ?? [];
