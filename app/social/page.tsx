@@ -230,11 +230,14 @@ interface CalendarViewProps {
 
 function CalendarView({ cards, onDayClick }: CalendarViewProps) {
   const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
+  // Mês navegável (antes travava no mês atual — impossível planejar o mês que vem).
+  const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const goMonth = (delta: number) => { setViewDate(new Date(year, month + delta, 1)); setSelectedDay(null); };
 
   const cardsByDay: Record<number, ContentCard[]> = {};
   cards.forEach((c) => {
@@ -260,10 +263,17 @@ function CalendarView({ cards, onDayClick }: CalendarViewProps) {
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-foreground flex items-center gap-2">
-          <Calendar size={16} className="text-primary" />
-          Calendário — {MONTHS[month]} {year}
-        </h3>
+        <div className="flex items-center gap-3">
+          <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <Calendar size={16} className="text-primary" />
+            {MONTHS[month]} {year}
+          </h3>
+          <div className="flex items-center gap-1">
+            <button onClick={() => goMonth(-1)} aria-label="Mês anterior" className="grid h-7 w-7 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground">‹</button>
+            <button onClick={() => { setViewDate(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDay(null); }} className="h-7 rounded-lg border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground">Hoje</button>
+            <button onClick={() => goMonth(1)} aria-label="Próximo mês" className="grid h-7 w-7 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground">›</button>
+          </div>
+        </div>
         <span className="text-xs text-muted-foreground">
           {Object.values(cardsByDay).flat().length} posts agendados
         </span>
@@ -274,7 +284,7 @@ function CalendarView({ cards, onDayClick }: CalendarViewProps) {
         ))}
         {cells.map((day, i) => {
           const dayCards = day ? (cardsByDay[day] ?? []) : [];
-          const isToday = day === today.getDate();
+          const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
           const isSelected = day === selectedDay;
           return (
             <div

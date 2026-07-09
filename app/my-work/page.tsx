@@ -43,7 +43,8 @@ export default function MyWorkPage() {
   // Content cards: Admin/Manager = ALL unpublished, Social = my assigned
   const myCards = useMemo(() =>
     contentCards
-      .filter((c) => c.status !== "published" && (isAdmin || c.socialMedia === currentUser))
+      // exclui os em aprovação (já contam em "Aprovações") — evita contar/renderizar 2x
+      .filter((c) => c.status !== "published" && !["approval", "client_approval"].includes(c.status) && (isAdmin || c.socialMedia === currentUser))
       .sort(pSort),
     [contentCards, currentUser, isAdmin]
   );
@@ -318,7 +319,7 @@ function CardRow({ card, isApproval }: { card: ContentCard; isApproval?: boolean
   };
 
   return (
-    <Link href="/social" className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${
+    <Link href={`/social?card=${card.id}`} className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${
       isApproval
         ? "bg-lone-warning-bg/[0.03] border-lone-warning-border hover:border-lone-warning-border"
         : "bg-muted/30 border-border/50 hover:border-primary/20"

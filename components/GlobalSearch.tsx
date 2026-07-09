@@ -153,7 +153,7 @@ export default function GlobalSearch() {
           type: "content",
           title: c.title,
           subtitle: `${c.clientName} · ${c.format}`,
-          href: "/social",
+          href: `/social?card=${c.id}`, // abre o card direto (o social já trata ?card=<id>)
           icon: Instagram,
         });
       }

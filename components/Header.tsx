@@ -117,7 +117,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
               <>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-[0.15em] px-3 pt-2 pb-1 font-medium border-t border-border mt-1">Conteudos</p>
                 {cardResults.map((c) => (
-                  <Link key={c.id} href="/social" onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-primary/5 transition-colors">
+                  <Link key={c.id} href={`/social?card=${c.id}`} onClick={() => setSearchQuery("")} className="flex items-center gap-2.5 px-3 py-2 hover:bg-primary/5 transition-colors">
                     <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">C</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate">{c.title}</p>
