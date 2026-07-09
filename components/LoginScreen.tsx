@@ -133,15 +133,19 @@ export default function LoginScreen() {
       <video className="pointer-events-none absolute inset-0 h-full w-full object-cover" autoPlay muted loop playsInline aria-hidden>
         <source src="/login-video.mp4" type="video/mp4" />
       </video>
+      {/* Casa o azul do vídeo (cyan) com o azul do SISTEMA (#2b3cff = primary): recolore o tom
+          mantendo o brilho, pra a tela de login ter o mesmo azul da tela de trabalho. */}
+      <div className="pointer-events-none absolute inset-0 bg-primary opacity-70 mix-blend-color" />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-background/50 via-background/10 to-transparent" />
 
       {/* ── HEADER (esquerda): logo Lone ── */}
       <header className="relative z-10 flex items-start px-2 py-3 lg:flex-1 lg:px-4 lg:py-4">
         <div className="flex items-center gap-2.5">
           <Logo className="h-9 w-9" priority />
-          <span className="font-brand text-base font-semibold tracking-tight text-foreground">
-            Lone<span className="text-primary">OS</span>
-          </span>
+          <div className="leading-none">
+            <p className="font-brand text-base font-semibold tracking-tight text-foreground">Lone Mídia</p>
+            <p className="mt-1 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Assessoria</p>
+          </div>
         </div>
       </header>
 
@@ -155,8 +159,8 @@ export default function LoginScreen() {
         <div className="flex items-center gap-3">
           <Logo className="h-11 w-11" priority />
           <div className="leading-none">
-            <p className="font-brand text-lg font-bold tracking-tight text-foreground">LONE MÍDIA</p>
-            <p className="mt-1.5 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Assessoria Digital</p>
+            <p className="font-brand text-lg font-bold tracking-tight text-foreground">LONE OS</p>
+            <p className="mt-1.5 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Hub de operação</p>
           </div>
         </div>
 
