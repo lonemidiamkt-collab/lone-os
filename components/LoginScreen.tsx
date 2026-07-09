@@ -142,10 +142,7 @@ export default function LoginScreen() {
       <header className="relative z-10 flex items-start px-2 py-3 lg:flex-1 lg:px-4 lg:py-4">
         <div className="flex items-center gap-2.5">
           <Logo className="h-9 w-9" priority />
-          <div className="leading-none">
-            <p className="font-brand text-base font-semibold tracking-tight text-foreground">Lone Mídia</p>
-            <p className="mt-1 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Assessoria</p>
-          </div>
+          <span className="font-brand text-base font-semibold tracking-tight text-foreground">Lone Mídia Assessoria</span>
         </div>
       </header>
 
@@ -158,10 +155,7 @@ export default function LoginScreen() {
         {/* Marca: logo (PNG) + nome */}
         <div className="flex items-center gap-3">
           <Logo className="h-11 w-11" priority />
-          <div className="leading-none">
-            <p className="font-brand text-lg font-bold tracking-tight text-foreground">LONE OS</p>
-            <p className="mt-1.5 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Hub de operação</p>
-          </div>
+          <p className="font-brand text-xl font-bold tracking-tight text-foreground">Lone OS</p>
         </div>
 
         {/* Form — usuário + senha na MESMA tela */}
