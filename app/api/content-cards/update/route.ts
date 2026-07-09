@@ -57,11 +57,13 @@ export async function POST(req: NextRequest) {
     // (uma CÓPIA feita quando a arte foi solicitada). Sem isso, o social edita o briefing ou remarca
     // a data e o designer continua vendo o texto/prazo antigo — foi o bug reportado. O card mostra a
     // data nova e a fila do designer a antiga → duas datas divergentes. Best-effort: não derruba o save.
-    if (row.briefing !== undefined || row.due_date !== undefined) {
+    if (row.briefing !== undefined || row.due_date !== undefined || row.title !== undefined) {
       try {
         const drUpdate: Record<string, unknown> = {};
         if (row.briefing !== undefined) drUpdate.briefing = row.briefing;
         if (row.due_date !== undefined) drUpdate.deadline = row.due_date;
+        // O design_request guarda o título como "Arte: <título do card>" — espelha ao renomear.
+        if (row.title !== undefined) drUpdate.title = `Arte: ${row.title}`;
         const { data: card } = await supabaseAdmin
           .from("content_cards").select("design_request_id").eq("id", id as string).maybeSingle();
         const drId = (card?.design_request_id as string) || null;

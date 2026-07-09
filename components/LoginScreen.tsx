@@ -135,15 +135,19 @@ export default function LoginScreen() {
         <source src="/login-video.mp4" type="video/mp4" />
       </video>
       <div className="pointer-events-none absolute inset-0 hidden bg-primary opacity-40 mix-blend-color lg:block" />
-      <div className="pointer-events-none absolute inset-0 hidden bg-background/45 lg:block" />
+      {/* Escurecimento do vídeo: mais forte à direita (onde fica o card) pro texto ter contraste e o
+          logo de vidro não competir/parecer "fantasma". */}
+      <div className="pointer-events-none absolute inset-0 hidden bg-gradient-to-r from-background/40 via-background/45 to-background/70 lg:block" />
       {/* Mobile: gradiente da marca de fundo (o vídeo vira o hero do card). */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/[0.1] via-background to-background lg:hidden" />
 
-      {/* Conteúdo: coluna no mobile, split no desktop. Card SEMPRE centralizado e com largura
-          MÁXIMA — some a faixa lateral do mobile e o esticão do ultrawide. */}
-      <div className="relative z-10 flex min-h-screen flex-col p-4 sm:p-6 lg:flex-row lg:items-center lg:gap-6 lg:p-10">
+      {/* Conteúdo: coluna no mobile, split no desktop — CONTIDO num bloco centralizado de largura
+          máxima. Sem isso, no ultrawide o header pegava flex-1 e colava o card na borda direita,
+          deixando um vazio enorme no meio. */}
+      <div className="relative z-10 flex min-h-screen flex-col p-4 sm:p-6 lg:justify-center lg:p-10">
+        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col lg:flex-none lg:flex-row lg:items-center lg:gap-10">
         {/* HEADER: topo no mobile, esquerda no desktop */}
-        <header className="flex items-center gap-2.5 px-1 py-2 lg:flex-1 lg:px-6">
+        <header className="flex items-center gap-2.5 px-1 py-2 lg:flex-1 lg:px-2">
           <Logo className="h-9 w-9" priority />
           <span className="font-brand text-base font-semibold tracking-tight text-foreground">Lone Mídia Assessoria</span>
         </header>
@@ -263,6 +267,7 @@ export default function LoginScreen() {
           Lone Mídia Assessoria © 2026
         </p>
           </section>
+        </div>
         </div>
       </div>
     </div>
