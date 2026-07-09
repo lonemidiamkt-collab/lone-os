@@ -1273,6 +1273,51 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ideias: itensIde.length, cliente: alvo.nome });
   }
 
+  // ─── Enriquecimento no grupo INTERNO: o time mandou um comando/áudio que JÁ virou demanda (ex.:
+  // "Lone, cria a arte que o Mercadão pediu") e LOGO DEPOIS mandou o CONTEÚDO (produtos, texto, o
+  // pedido completo). Esse follow-up deve COMPLETAR a demanda pendente — antes caía no "grupo sem
+  // cliente" e se perdia, então a demanda ficava só com o áudio. Gate apertado: grupo interno,
+  // conteúdo real, 1 pendente recente do MESMO autor, e não é pergunta/papo com a Lone nem comando. ───
+  if (msg.groupJid === internalGroupJid() && !demandaDaSugestao && isOpenAIConfigured()
+      && !isTrivial(msg.text) && msg.text.trim().length >= 15
+      && !ehPedidoCriarDemanda(msg.text) && !ehFalaComAgente(msg.text) && !ehPerguntaProLone(msg.text)) {
+    const quemEnr = msg.authorName || msg.authorJid;
+    const desdeEnr = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data: pendEnr } = await supabaseAdmin.from("cs_demandas").select("*")
+      .eq("group_jid", msg.groupJid).eq("author", quemEnr).eq("status", "pendente")
+      .gte("created_at", desdeEnr).order("created_at", { ascending: false }).limit(2);
+    if (pendEnr && pendEnr.length === 1) {
+      const d = pendEnr[0];
+      const combinado = `${(d.message_text as string) || ""}\n${msg.text}`.trim();
+      let briefingNovo = `${(d.briefing as string) || ""}\n\n---\n✏️ ${quemEnr} complementou: ${msg.text}`.trim();
+      let resumoNovo = (d.resumo as string) || msg.text.slice(0, 60);
+      const { data: cEnr } = d.client_id
+        ? await supabaseAdmin.from("clients").select(CLIENT_COLS).eq("id", d.client_id as string).maybeSingle()
+        : { data: null };
+      if (cEnr) {
+        const clienteBriefing = await loadBriefingCombinado(cEnr.id as string, briefingCompleto(cEnr));
+        const csRules = await fetchClientCsRules(cEnr.id as string);
+        const regras = csRules.filter((r) => r.escopo !== "roteiro").map((r) => `${r.texto} (${r.escopo})`);
+        const a3 = await gerarBriefing({
+          clienteNome: nomeOf(cEnr), clienteNicho: cEnr.nicho as string, clienteBriefing, regras,
+          tipo: (d.tipo as CsDemandType) || "arte_nova", urgencia: (d.urgencia as string) || "media",
+          resumo: (d.resumo as string) || msg.text.slice(0, 80), mensagemOriginal: combinado,
+        });
+        if (a3.ok && a3.data) { briefingNovo = formatBriefing(a3.data); resumoNovo = a3.data.titulo; }
+      }
+      const mudou = resumoNovo.trim().toLowerCase() !== ((d.resumo as string) || "").trim().toLowerCase();
+      await supabaseAdmin.from("cs_demandas").update({ message_text: combinado, briefing: briefingNovo, resumo: resumoNovo }).eq("id", d.id);
+      if (mudou || briefingNovo.length > ((d.briefing as string) || "").length + 20) {
+        const r = await csSendGroupText(msg.groupJid,
+          `🔁 *COMPLEMENTO — ${d.cliente_nome}*\n\n📩 Completei o pedido com o que você mandou agora:\n*${resumoNovo}*\n\n👉 Vale o mesmo: *ok* · *não* · *ajustar*`,
+          (d.msg_id_sugestao as string) || undefined);
+        if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", d.id);
+      }
+      console.log(`[CS/inbound] enriqueci demanda interna ${d.codigo} com follow-up ("${msg.text.slice(0, 40)}")`);
+      return NextResponse.json({ ok: true, enriquecida: d.codigo as string });
+    }
+  }
+
   // ─── A Lone CONVERSA com a equipe: "Lone, [algo]" que não casou com nenhum comando → responde no
   // tom da casa (antes ficava MUDA — a msg da equipe caía no skip abaixo). Só no grupo interno, só
   // quando falam COM ela. Fica DEPOIS de todos os comandos (fallback). Responde quotando a msg. ───
