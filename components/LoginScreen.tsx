@@ -3,11 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useRole, USER_PROFILES } from "@/lib/context/RoleContext";
 import { Logo } from "@/components/ui/Logo";
-import { Eye, EyeOff, ArrowRight, ArrowLeft, ChevronDown, Check, Loader2 } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, ChevronDown, Check, Loader2 } from "lucide-react";
 
-// Login inspirado no handoff do LoneHub (vídeo de fundo + card de vidro). Regras da Lone
-// PRESERVADAS: fonte Montserrat (não Helvetica), auth por seletor de perfil → senha (não
-// email/senha), e a marca Lone Mídia. Tela dark-committed (o vídeo é o fundo).
+// Login: vídeo de fundo (handoff LoneHub) + card. Regras da Lone PRESERVADAS: fonte Montserrat,
+// auth por seletor de perfil + senha (numa tela só), marca Lone Mídia, e CORES do design system
+// interno (card/secondary/input/border/primary — navy), não o vidro branco.
 
 const WELCOME_MESSAGES: Record<string, string> = {
   admin: "Tudo sob controle.",
@@ -32,7 +32,6 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<"select" | "password">("select");
   const [showDropdown, setShowDropdown] = useState(false);
   const [welcomeState, setWelcomeState] = useState<{ show: boolean; name: string; role: string } | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -55,13 +54,8 @@ export default function LoginScreen() {
     setSelectedUser(userId);
     setShowDropdown(false);
     setError("");
-  };
-
-  const handleContinue = () => {
-    if (!selectedUser) return;
-    setStep("password");
-    setError("");
-    setTimeout(() => passwordRef.current?.focus(), 100);
+    // Foca a senha na hora — tudo na mesma tela
+    setTimeout(() => passwordRef.current?.focus(), 60);
   };
 
   const handleLogin = async () => {
@@ -90,16 +84,7 @@ export default function LoginScreen() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      if (step === "select") handleContinue();
-      else void handleLogin();
-    }
-  };
-
-  const handleBack = () => {
-    setStep("select");
-    setPassword("");
-    setError("");
+    if (e.key === "Enter") void handleLogin();
   };
 
   useEffect(() => {
@@ -116,9 +101,9 @@ export default function LoginScreen() {
         <video className="absolute inset-0 h-full w-full object-cover opacity-60" autoPlay muted loop playsInline aria-hidden>
           <source src="/login-video.mp4" type="video/mp4" />
         </video>
-        <div className="absolute inset-0 bg-background/40" />
+        <div className="absolute inset-0 bg-background/50" />
         <div className="relative z-10 space-y-6 text-center animate-fade-in">
-          <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border border-white/10 bg-card/70 backdrop-blur-xl">
+          <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border border-border bg-card/80 backdrop-blur-xl">
             <Logo className="h-12 w-12" priority />
           </div>
           <div className="space-y-3">
@@ -130,7 +115,7 @@ export default function LoginScreen() {
             </p>
           </div>
           <div className="flex justify-center">
-            <div className="h-0.5 w-32 overflow-hidden rounded-full bg-white/10">
+            <div className="h-0.5 w-32 overflow-hidden rounded-full bg-muted">
               <div className="h-full rounded-full bg-primary animate-[progress_2.5s_ease-in-out]" />
             </div>
           </div>
@@ -139,25 +124,19 @@ export default function LoginScreen() {
     );
   }
 
-  // ─── Login (vídeo de fundo + blocos flutuando) ───
+  const canLogin = !!selectedUser && !!password && !loading;
+
+  // ─── Login (vídeo de fundo + card) ───
   return (
     <div className="relative flex min-h-screen flex-col gap-5 overflow-hidden bg-background p-5 lg:flex-row lg:items-stretch">
-      {/* Vídeo de fundo — cobre a viewport toda */}
-      <video
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-        autoPlay
-        muted
-        loop
-        playsInline
-        aria-hidden
-      >
+      {/* Vídeo de fundo */}
+      <video className="pointer-events-none absolute inset-0 h-full w-full object-cover" autoPlay muted loop playsInline aria-hidden>
         <source src="/login-video.mp4" type="video/mp4" />
       </video>
-      {/* Leve escurecida à esquerda pra legibilidade do header sobre o vídeo */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-background/50 via-background/10 to-transparent" />
 
-      {/* ── HEADER (esquerda) ── */}
-      <header className="relative z-10 flex items-start justify-between px-2 py-3 lg:flex-1 lg:px-4 lg:py-4">
+      {/* ── HEADER (esquerda): logo Lone ── */}
+      <header className="relative z-10 flex items-start px-2 py-3 lg:flex-1 lg:px-4 lg:py-4">
         <div className="flex items-center gap-2.5">
           <Logo className="h-9 w-9" priority />
           <span className="font-brand text-base font-semibold tracking-tight text-foreground">
@@ -166,151 +145,117 @@ export default function LoginScreen() {
         </div>
       </header>
 
-      {/* ── CARD DE VIDRO (direita) ── */}
+      {/* ── CARD (direita) — cores do design system interno ── */}
       <section
-        className={`relative z-10 flex w-full flex-col justify-between gap-7 overflow-y-auto rounded-3xl border border-white/[0.07] bg-card/70 p-8 shadow-2xl backdrop-blur-2xl backdrop-saturate-150 transition-all duration-700 lg:w-[40%] lg:max-w-xl lg:p-14 ${
+        className={`relative z-10 flex w-full flex-col justify-between gap-7 overflow-y-auto rounded-3xl border border-border bg-card/85 p-8 shadow-2xl backdrop-blur-2xl transition-all duration-700 lg:w-[40%] lg:max-w-xl lg:p-14 ${
           mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
         }`}
       >
-        {/* Marca */}
-        <div className="flex items-center gap-2.5">
-          <div className="grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-primary/10">
-            <Logo className="h-7 w-7" priority />
-          </div>
+        {/* Marca: logo (PNG) + nome */}
+        <div className="flex items-center gap-3">
+          <Logo className="h-11 w-11" priority />
           <div className="leading-none">
             <p className="font-brand text-lg font-bold tracking-tight text-foreground">LONE MÍDIA</p>
-            <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Assessoria Digital</p>
+            <p className="mt-1.5 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Assessoria Digital</p>
           </div>
         </div>
 
-        {/* Passo 1: escolher perfil */}
-        {step === "select" && (
-          <div className="animate-fade-in space-y-7">
-            <div>
-              <h1 className="font-brand text-3xl font-bold leading-tight tracking-tight text-foreground">Bem-vindo de volta</h1>
-              <p className="mt-2 text-[15px] text-muted-foreground">Selecione seu perfil para entrar no hub.</p>
-            </div>
+        {/* Form — usuário + senha na MESMA tela */}
+        <div className="animate-fade-in space-y-6">
+          <div>
+            <h1 className="font-brand text-3xl font-bold leading-tight tracking-tight text-foreground">Bem-vindo de volta</h1>
+            <p className="mt-2 text-[15px] text-muted-foreground">Selecione seu perfil e entre no hub.</p>
+          </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-muted-foreground">Usuário</label>
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  onClick={() => setShowDropdown(!showDropdown)}
-                  onKeyDown={handleKeyDown}
-                  className={`flex h-[54px] w-full items-center justify-between rounded-xl border bg-white/[0.02] px-4 text-left text-[15px] outline-none backdrop-blur-md transition-all ${
-                    showDropdown ? "border-primary/60 ring-4 ring-primary/10" : "border-white/10 hover:border-white/20"
-                  }`}
-                >
-                  {selectedProfile ? (
-                    <div className="flex items-center gap-3">
-                      <div className="grid h-9 w-9 place-items-center rounded-lg border border-primary/20 bg-primary/15">
-                        <span className="text-[11px] font-semibold text-primary">{selectedProfile.initials}</span>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{selectedProfile.name}</p>
-                        <p className="text-[11px] text-muted-foreground">{ROLE_LABELS[selectedProfile.role]}</p>
-                      </div>
+          {/* Usuário */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-muted-foreground">Usuário</label>
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setShowDropdown(!showDropdown)}
+                className={`flex h-[54px] w-full items-center justify-between rounded-xl border bg-secondary px-4 text-left text-[15px] outline-none transition-all ${
+                  showDropdown ? "border-primary ring-2 ring-primary/20" : "border-input hover:border-primary/40"
+                }`}
+              >
+                {selectedProfile ? (
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-9 w-9 place-items-center rounded-lg border border-primary/20 bg-primary/15">
+                      <span className="text-[11px] font-semibold text-primary">{selectedProfile.initials}</span>
                     </div>
-                  ) : (
-                    <span className="text-muted-foreground">Selecione um usuário...</span>
-                  )}
-                  <ChevronDown size={18} className={`shrink-0 text-muted-foreground transition-transform ${showDropdown ? "rotate-180" : ""}`} />
-                </button>
-
-                {showDropdown && (
-                  <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-card/95 py-1.5 shadow-2xl backdrop-blur-2xl animate-fade-in">
-                    {USER_PROFILES.map((profile) => {
-                      const active = selectedUser === profile.id;
-                      return (
-                        <button
-                          key={profile.id}
-                          onClick={() => handleSelectUser(profile.id)}
-                          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05] ${active ? "bg-primary/10" : ""}`}
-                        >
-                          <div className={`grid h-9 w-9 place-items-center rounded-lg border ${active ? "border-primary/30 bg-primary/15" : "border-white/10 bg-white/[0.03]"}`}>
-                            <span className={`text-[11px] font-semibold ${active ? "text-primary" : "text-muted-foreground"}`}>{profile.initials}</span>
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className={`text-sm font-medium ${active ? "text-primary" : "text-foreground"}`}>{profile.name}</p>
-                            <p className="text-[11px] text-muted-foreground">{ROLE_LABELS[profile.role]}</p>
-                          </div>
-                          {active && <Check size={15} className="shrink-0 text-primary" />}
-                        </button>
-                      );
-                    })}
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{selectedProfile.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{ROLE_LABELS[selectedProfile.role]}</p>
+                    </div>
                   </div>
+                ) : (
+                  <span className="text-muted-foreground">Selecione um usuário...</span>
                 )}
-              </div>
-              {error && <p className="animate-shake text-sm text-destructive">{error}</p>}
-            </div>
-
-            <button
-              onClick={handleContinue}
-              disabled={!selectedUser}
-              className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-semibold uppercase tracking-[0.08em] text-primary-foreground transition-all hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Continuar <ArrowRight size={16} />
-            </button>
-          </div>
-        )}
-
-        {/* Passo 2: senha */}
-        {step === "password" && selectedProfile && (
-          <div className="animate-fade-in space-y-7">
-            <div>
-              <button onClick={handleBack} className="mb-5 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
-                <ArrowLeft size={13} /> Trocar conta
+                <ChevronDown size={18} className={`shrink-0 text-muted-foreground transition-transform ${showDropdown ? "rotate-180" : ""}`} />
               </button>
-              <div className="flex items-center gap-3">
-                <div className="grid h-12 w-12 place-items-center rounded-xl border border-primary/20 bg-primary/15">
-                  <span className="text-xs font-semibold text-primary">{selectedProfile.initials}</span>
+
+              {showDropdown && (
+                <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-60 overflow-y-auto rounded-xl border border-border bg-popover py-1.5 shadow-2xl animate-fade-in">
+                  {USER_PROFILES.map((profile) => {
+                    const active = selectedUser === profile.id;
+                    return (
+                      <button
+                        key={profile.id}
+                        onClick={() => handleSelectUser(profile.id)}
+                        className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent ${active ? "bg-primary/10" : ""}`}
+                      >
+                        <div className={`grid h-9 w-9 place-items-center rounded-lg border ${active ? "border-primary/30 bg-primary/15" : "border-border bg-secondary"}`}>
+                          <span className={`text-[11px] font-semibold ${active ? "text-primary" : "text-muted-foreground"}`}>{profile.initials}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm font-medium ${active ? "text-primary" : "text-foreground"}`}>{profile.name}</p>
+                          <p className="text-[11px] text-muted-foreground">{ROLE_LABELS[profile.role]}</p>
+                        </div>
+                        {active && <Check size={15} className="shrink-0 text-primary" />}
+                      </button>
+                    );
+                  })}
                 </div>
-                <div>
-                  <h1 className="font-brand text-2xl font-bold tracking-tight text-foreground">
-                    Olá, <span className="text-primary">{selectedProfile.name.split(" ")[0]}</span>
-                  </h1>
-                  <p className="text-sm text-muted-foreground">{ROLE_LABELS[selectedProfile.role]}</p>
-                </div>
-              </div>
+              )}
             </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-muted-foreground">Senha</label>
-              <div className="relative flex items-center">
-                <input
-                  ref={passwordRef}
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Sua senha"
-                  autoComplete="off"
-                  className={`h-[54px] w-full rounded-xl border bg-white/[0.02] px-4 pr-12 text-[15px] text-foreground outline-none backdrop-blur-md transition-all placeholder:text-muted-foreground ${
-                    error ? "border-destructive/50 animate-shake" : "border-white/10 focus:ring-4 focus:ring-primary/10"
-                  }`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 grid h-8 w-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground"
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {error && <p className="animate-fade-in text-sm text-destructive">{error}</p>}
-            </div>
-
-            <button
-              onClick={handleLogin}
-              disabled={!password || loading}
-              className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-semibold uppercase tracking-[0.08em] text-primary-foreground transition-all hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? (<><Loader2 size={16} className="animate-spin" /> Entrando...</>) : (<>Entrar <ArrowRight size={16} /></>)}
-            </button>
-
-            <p className="text-center text-xs text-muted-foreground">Esqueceu a senha? Fale com o administrador.</p>
           </div>
-        )}
+
+          {/* Senha — sempre visível, na mesma tela */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-muted-foreground">Senha</label>
+            <div className="relative flex items-center">
+              <input
+                ref={passwordRef}
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                onKeyDown={handleKeyDown}
+                placeholder="Sua senha"
+                autoComplete="off"
+                className={`h-[54px] w-full rounded-xl border bg-secondary px-4 pr-12 text-[15px] text-foreground outline-none transition-all placeholder:text-muted-foreground ${
+                  error ? "border-destructive/60 animate-shake" : "border-input focus:border-primary focus:ring-2 focus:ring-primary/20"
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 grid h-8 w-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {error && <p className="animate-fade-in text-sm text-destructive">{error}</p>}
+          </div>
+
+          <button
+            onClick={handleLogin}
+            disabled={!canLogin}
+            className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-semibold uppercase tracking-[0.08em] text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {loading ? (<><Loader2 size={16} className="animate-spin" /> Entrando...</>) : (<>Entrar <ArrowRight size={16} /></>)}
+          </button>
+
+          <p className="text-center text-xs text-muted-foreground">Esqueceu a senha? Fale com o administrador.</p>
+        </div>
 
         {/* Rodapé */}
         <p className="text-center text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
