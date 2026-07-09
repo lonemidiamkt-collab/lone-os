@@ -148,15 +148,8 @@ export default function LoginScreen() {
           <span className="font-brand text-base font-semibold tracking-tight text-foreground">Lone Mídia Assessoria</span>
         </header>
 
-        {/* CARD: centralizado vertical, largura limitada. No mobile, a logo girando vem acima. */}
-        <div className="flex flex-1 flex-col items-center justify-center gap-6 lg:flex-none">
-          {/* Hero mobile: a logo Lone em vidro girando num quadrado (inteira, sem crop torto). */}
-          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-3xl border border-primary/20 shadow-2xl sm:h-28 sm:w-28 lg:hidden">
-            <video className="h-full w-full object-cover object-center" autoPlay muted loop playsInline aria-hidden>
-              <source src="/login-video.mp4" type="video/mp4" />
-            </video>
-            <div className="pointer-events-none absolute inset-0 bg-primary opacity-40 mix-blend-color" />
-          </div>
+        {/* CARD: centralizado vertical, largura limitada */}
+        <div className="flex flex-1 items-center justify-center lg:flex-none">
           <section
             className={`flex w-full max-w-md flex-col gap-6 rounded-3xl border border-border bg-card/85 p-6 shadow-2xl backdrop-blur-2xl transition-all duration-700 sm:gap-7 sm:p-8 lg:p-12 ${
               mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
