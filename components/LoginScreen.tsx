@@ -128,30 +128,31 @@ export default function LoginScreen() {
 
   // ─── Login (vídeo de fundo + card) ───
   return (
-    <div className="relative flex min-h-screen flex-col gap-5 overflow-hidden bg-background p-5 lg:flex-row lg:items-stretch">
-      {/* Vídeo de fundo */}
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      {/* Vídeo de fundo — full-bleed em qualquer tela (mobile → ultrawide) */}
       <video className="pointer-events-none absolute inset-0 h-full w-full object-cover" autoPlay muted loop playsInline aria-hidden>
         <source src="/login-video.mp4" type="video/mp4" />
       </video>
-      {/* Casa o azul do vídeo (cyan) com o azul do SISTEMA (#2b3cff = primary): recolore o tom
-          mantendo o brilho, pra a tela de login ter o mesmo azul da tela de trabalho. */}
+      {/* Nossa coloração (mix-blend pro primary) + scrim uniforme de legibilidade sobre o vídeo. */}
       <div className="pointer-events-none absolute inset-0 bg-primary opacity-40 mix-blend-color" />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-background/50 via-background/10 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/70 via-background/25 to-background/55" />
 
-      {/* ── HEADER (esquerda): logo Lone ── */}
-      <header className="relative z-10 flex items-start px-2 py-3 lg:flex-1 lg:px-4 lg:py-4">
-        <div className="flex items-center gap-2.5">
+      {/* Conteúdo: coluna no mobile, split no desktop. Card SEMPRE centralizado e com largura
+          MÁXIMA — some a faixa lateral do mobile e o esticão do ultrawide. */}
+      <div className="relative z-10 flex min-h-screen flex-col p-4 sm:p-6 lg:flex-row lg:items-center lg:gap-6 lg:p-10">
+        {/* HEADER: topo no mobile, esquerda no desktop */}
+        <header className="flex items-center gap-2.5 px-1 py-2 lg:flex-1 lg:px-6">
           <Logo className="h-9 w-9" priority />
           <span className="font-brand text-base font-semibold tracking-tight text-foreground">Lone Mídia Assessoria</span>
-        </div>
-      </header>
+        </header>
 
-      {/* ── CARD (direita) — cores do design system interno ── */}
-      <section
-        className={`relative z-10 flex w-full flex-col justify-between gap-7 overflow-y-auto rounded-3xl border border-border bg-card/85 p-8 shadow-2xl backdrop-blur-2xl transition-all duration-700 lg:w-[40%] lg:max-w-xl lg:p-14 ${
-          mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-        }`}
-      >
+        {/* CARD: centralizado vertical, largura limitada */}
+        <div className="flex flex-1 items-center justify-center lg:flex-none">
+          <section
+            className={`flex w-full max-w-md flex-col gap-6 rounded-3xl border border-border bg-card/85 p-6 shadow-2xl backdrop-blur-2xl transition-all duration-700 sm:gap-7 sm:p-8 lg:p-12 ${
+              mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+            }`}
+          >
         {/* Marca: logo (PNG) + nome */}
         <div className="flex items-center gap-3">
           <Logo className="h-11 w-11" priority />
@@ -259,7 +260,9 @@ export default function LoginScreen() {
         <p className="text-center text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
           Lone Mídia Assessoria © 2026
         </p>
-      </section>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }
