@@ -21,7 +21,7 @@ import {
   ClipboardCheck, BarChart2,
   MessageCircle, FileText, Star, ArrowUpRight, ArrowDownRight, Minus,
   Check, Megaphone, Eye, MousePointerClick, DollarSign, Target,
-  Pause, AlertCircle, Download, ChevronDown, ChevronUp,
+  Pause, Play, AlertCircle, Download, ChevronDown, ChevronUp,
   Settings2, GripVertical, Zap, Activity, TrendingDown,
   Brain, ShieldAlert, Sparkles, CircleDot, Bell, FolderDown, Loader2, Facebook, Send,
   Wallet, CreditCard, Banknote, AlertOctagon, Info, Palette,
@@ -2068,6 +2068,112 @@ const ALL_METRICS: { key: MetricKey; label: string; icon: typeof DollarSign; col
 
 const DEFAULT_VISIBLE_METRICS: MetricKey[] = ["spend", "impressions", "clicks", "leads", "messages", "costPerLead", "costPerMessage", "ctr"];
 
+// Controles de ESCRITA na Meta direto do card da campanha: pausar/ativar e ajustar orçamento diário.
+// Chama /api/meta/campaign (server-side, token com escopo ads_management). Só aparece pra quem gere
+// tráfego (admin/manager/traffic). Orçamento só é editável quando o budget está na campanha (CBO);
+// se estiver no conjunto (dailyBudget=0), mostra aviso.
+function CampaignControls({ camp, onUpdated }: { camp: AdCampaign; onUpdated: (patch: Partial<AdCampaign>) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [budgetVal, setBudgetVal] = useState<string>(camp.dailyBudget > 0 ? camp.dailyBudget.toFixed(2) : "");
+  const hasCampaignBudget = camp.dailyBudget > 0;
+  const isPaused = camp.status === "paused";
+
+  function errMsg(d: { needsReconnect?: boolean; error?: string }) {
+    return d.needsReconnect
+      ? "Sem permissão de gestão nesta conta — reconecte o Meta Ads concedendo gestão."
+      : (d.error || "Não foi possível concluir a ação.");
+  }
+
+  async function act(action: "pause" | "activate") {
+    setBusy(true);
+    try {
+      const r = await authedFetch("/api/meta/campaign", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId: camp.id, action }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        onUpdated({ status: action === "pause" ? "paused" : "active" });
+        toast.success(action === "pause" ? "Campanha pausada na Meta." : "Campanha ativada na Meta.");
+      } else { toast.error(errMsg(d)); }
+    } catch { toast.error("Falha de conexão com a Meta."); }
+    finally { setBusy(false); }
+  }
+
+  async function saveBudget() {
+    const val = parseFloat(budgetVal);
+    if (!(val > 0)) { toast.error("Informe um orçamento diário válido."); return; }
+    setBusy(true);
+    try {
+      const r = await authedFetch("/api/meta/campaign", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId: camp.id, dailyBudget: val }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        onUpdated({ dailyBudget: val });
+        setEditingBudget(false);
+        toast.success(`Orçamento diário atualizado para R$ ${val.toFixed(2)}.`);
+      } else { toast.error(errMsg(d)); }
+    } catch { toast.error("Falha de conexão com a Meta."); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-3 space-y-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Gerenciar na Meta</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Pausar / Ativar */}
+        {isPaused ? (
+          <button
+            disabled={busy}
+            onClick={() => act("activate")}
+            className="flex items-center gap-1.5 rounded-lg border border-lone-success-border bg-lone-success-bg px-3 py-1.5 text-xs font-medium text-lone-success transition-colors hover:opacity-90 disabled:opacity-40"
+          >
+            <Play size={12} /> Ativar campanha
+          </button>
+        ) : (
+          <button
+            disabled={busy}
+            onClick={() => act("pause")}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/70 disabled:opacity-40"
+          >
+            <Pause size={12} /> Pausar campanha
+          </button>
+        )}
+
+        {/* Orçamento diário */}
+        {hasCampaignBudget ? (
+          editingBudget ? (
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">R$</span>
+              <input
+                type="number" step="0.01" min="0" value={budgetVal}
+                onChange={(e) => setBudgetVal(e.target.value)}
+                className="h-8 w-24 rounded-lg border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-primary/40"
+                autoFocus
+              />
+              <button disabled={busy} onClick={saveBudget} className="rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40">Salvar</button>
+              <button disabled={busy} onClick={() => { setEditingBudget(false); setBudgetVal(camp.dailyBudget.toFixed(2)); }} className="rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+            </div>
+          ) : (
+            <button
+              disabled={busy}
+              onClick={() => setEditingBudget(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/70 disabled:opacity-40"
+            >
+              <Wallet size={12} /> Ajustar orçamento (R$ {formatCurrency(camp.dailyBudget)}/dia)
+            </button>
+          )
+        ) : (
+          <span className="text-[11px] text-muted-foreground">Orçamento no conjunto de anúncios (edite no Gerenciador)</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AdAnalyticsTab({
   clients,
   accounts,
@@ -2089,6 +2195,7 @@ function AdAnalyticsTab({
 }) {
   const { role } = useRole();
   const isAdmin = role === "admin" || role === "manager";
+  const canManageAds = isAdmin || role === "traffic"; // quem pode pausar/ativar e mexer no orçamento na Meta
   const OBJECTIVE_LABELS: Record<string, string> = {
     messages: "Mensagens", traffic: "Tráfego", conversions: "Conversões",
     reach: "Alcance", engagement: "Engajamento", leads: "Leads",
@@ -3880,6 +3987,13 @@ function AdAnalyticsTab({
                           visibleMetrics={["spend"]}
                         />
                       </div>
+                    )}
+                    {/* Ações de escrita na Meta (pausar/ativar + orçamento) — só dados reais e quem gere tráfego */}
+                    {canManageAds && isUsingRealData && (
+                      <CampaignControls
+                        camp={camp}
+                        onUpdated={(patch) => setMetaCampaigns((prev) => prev.map((c) => c.id === camp.id ? { ...c, ...patch } : c))}
+                      />
                     )}
                     {/* Request new creative from Designer */}
                     <button
