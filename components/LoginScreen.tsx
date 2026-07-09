@@ -135,7 +135,7 @@ export default function LoginScreen() {
       </video>
       {/* Casa o azul do vídeo (cyan) com o azul do SISTEMA (#2b3cff = primary): recolore o tom
           mantendo o brilho, pra a tela de login ter o mesmo azul da tela de trabalho. */}
-      <div className="pointer-events-none absolute inset-0 bg-primary opacity-70 mix-blend-color" />
+      <div className="pointer-events-none absolute inset-0 bg-primary opacity-40 mix-blend-color" />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-background/50 via-background/10 to-transparent" />
 
       {/* ── HEADER (esquerda): logo Lone ── */}
