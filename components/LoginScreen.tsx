@@ -128,7 +128,7 @@ export default function LoginScreen() {
 
   // ─── Login (vídeo de fundo + card) ───
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background">
+    <div className="relative min-h-screen overflow-x-hidden bg-background">
       {/* Vídeo full-bleed SÓ no desktop — o render é paisagem e crop mal em tela vertical. No mobile
           a logo aparece num quadrado no topo (hero), inteira e sem crop torto. */}
       <video className="pointer-events-none absolute inset-0 hidden h-full w-full object-cover object-center lg:block" autoPlay muted loop playsInline aria-hidden>
@@ -151,7 +151,7 @@ export default function LoginScreen() {
         {/* CARD: centralizado vertical, largura limitada. No mobile, a logo girando vem acima. */}
         <div className="flex flex-1 flex-col items-center justify-center gap-6 lg:flex-none">
           {/* Hero mobile: a logo Lone em vidro girando num quadrado (inteira, sem crop torto). */}
-          <div className="relative h-32 w-32 shrink-0 overflow-hidden rounded-3xl border border-primary/20 shadow-2xl lg:hidden">
+          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-3xl border border-primary/20 shadow-2xl sm:h-28 sm:w-28 lg:hidden">
             <video className="h-full w-full object-cover object-center" autoPlay muted loop playsInline aria-hidden>
               <source src="/login-video.mp4" type="video/mp4" />
             </video>
