@@ -5,6 +5,10 @@ import { useRole, USER_PROFILES } from "@/lib/context/RoleContext";
 import { Logo } from "@/components/ui/Logo";
 import { Eye, EyeOff, ArrowRight, ArrowLeft, ChevronDown, Check, Loader2 } from "lucide-react";
 
+// Login inspirado no handoff do LoneHub (vídeo de fundo + card de vidro). Regras da Lone
+// PRESERVADAS: fonte Montserrat (não Helvetica), auth por seletor de perfil → senha (não
+// email/senha), e a marca Lone Mídia. Tela dark-committed (o vídeo é o fundo).
+
 const WELCOME_MESSAGES: Record<string, string> = {
   admin: "Tudo sob controle.",
   manager: "Vamos organizar o dia.",
@@ -37,7 +41,6 @@ export default function LoginScreen() {
 
   useEffect(() => setMounted(true), []);
 
-  // Fecha o dropdown ao clicar fora
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setShowDropdown(false);
@@ -99,7 +102,6 @@ export default function LoginScreen() {
     setError("");
   };
 
-  // Auto-dismiss da tela de boas-vindas
   useEffect(() => {
     if (welcomeState?.show) {
       const timer = setTimeout(() => setWelcomeState(null), 2500);
@@ -110,23 +112,26 @@ export default function LoginScreen() {
   // ─── Boas-vindas ───
   if (welcomeState?.show) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.12] via-transparent to-transparent" />
-        <div className="text-center animate-fade-in space-y-6 relative z-10">
-          <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border border-primary/20 bg-primary/[0.08]">
-            <Logo className="w-12 h-12" priority />
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4">
+        <video className="absolute inset-0 h-full w-full object-cover opacity-60" autoPlay muted loop playsInline aria-hidden>
+          <source src="/login-video.mp4" type="video/mp4" />
+        </video>
+        <div className="absolute inset-0 bg-background/40" />
+        <div className="relative z-10 space-y-6 text-center animate-fade-in">
+          <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border border-white/10 bg-card/70 backdrop-blur-xl">
+            <Logo className="h-12 w-12" priority />
           </div>
           <div className="space-y-3">
-            <h1 className="font-brand text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
+            <h1 className="font-brand text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               Seja bem-vindo, <span className="text-primary">{welcomeState.name}</span>
             </h1>
-            <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+            <p className="mx-auto max-w-xs text-sm text-muted-foreground">
               {WELCOME_MESSAGES[welcomeState.role] ?? "Bem-vindo ao Lone OS."}
             </p>
           </div>
           <div className="flex justify-center">
-            <div className="h-0.5 w-32 bg-border rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full animate-[progress_2.5s_ease-in-out]" />
+            <div className="h-0.5 w-32 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-primary animate-[progress_2.5s_ease-in-out]" />
             </div>
           </div>
         </div>
@@ -134,206 +139,184 @@ export default function LoginScreen() {
     );
   }
 
-  // ─── Login (split-screen) ───
+  // ─── Login (vídeo de fundo + blocos flutuando) ───
   return (
-    <div className="min-h-screen bg-background lg:grid lg:grid-cols-2">
-      {/* ── PAINEL DE MARCA (esquerda) ── */}
-      <div className="relative hidden lg:flex flex-col items-center justify-center overflow-hidden p-16 bg-gradient-to-br from-primary/[0.18] via-primary/[0.05] to-background">
-        {/* Aurora + brilho ambiente */}
-        <div className="pointer-events-none absolute -top-1/3 left-1/4 h-[42rem] w-[42rem] rounded-full bg-primary/25 blur-[170px] animate-aurora" />
-        <div className="pointer-events-none absolute bottom-[-12rem] left-[-10rem] h-[28rem] w-[28rem] rounded-full bg-primary/[0.12] blur-[140px]" />
-        {/* Textura de grade sutil */}
-        <div className="pointer-events-none absolute inset-0 bg-grid opacity-50" />
+    <div className="relative flex min-h-screen flex-col gap-5 overflow-hidden bg-background p-5 lg:flex-row lg:items-stretch">
+      {/* Vídeo de fundo — cobre a viewport toda */}
+      <video
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+        autoPlay
+        muted
+        loop
+        playsInline
+        aria-hidden
+      >
+        <source src="/login-video.mp4" type="video/mp4" />
+      </video>
+      {/* Leve escurecida à esquerda pra legibilidade do header sobre o vídeo */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-background/50 via-background/10 to-transparent" />
 
-        {/* Wordmark topo-esquerda */}
-        <div className="absolute left-16 top-14 z-10 flex items-center gap-2.5">
-          <Logo className="w-7 h-7" priority />
-          <span className="font-brand text-base font-semibold tracking-tight text-foreground">Lone<span className="text-primary">OS</span></span>
+      {/* ── HEADER (esquerda) ── */}
+      <header className="relative z-10 flex items-start justify-between px-2 py-3 lg:flex-1 lg:px-4 lg:py-4">
+        <div className="flex items-center gap-2.5">
+          <Logo className="h-9 w-9" priority />
+          <span className="font-brand text-base font-semibold tracking-tight text-foreground">
+            Lone<span className="text-primary">OS</span>
+          </span>
         </div>
+      </header>
 
-        {/* Hero: logo com brilho + anéis de radar */}
-        <div className="relative z-10 flex flex-col items-center text-center">
-          <div className="relative animate-float-y">
-            {/* Anéis de radar pulsando */}
-            <div className="absolute inset-0 rounded-[2.5rem] border border-primary/30 animate-ring-pulse" />
-            <div className="absolute inset-0 rounded-[2.5rem] border border-primary/30 animate-ring-pulse" style={{ animationDelay: "1.2s" }} />
-            <div className="absolute inset-0 rounded-[2.5rem] border border-primary/30 animate-ring-pulse" style={{ animationDelay: "2.4s" }} />
-            {/* Brilho por trás */}
-            <div className="pointer-events-none absolute inset-0 -z-10 scale-150 rounded-full bg-primary/[0.35] blur-[60px]" />
-            {/* Moldura glass */}
-            <div className="grid h-44 w-44 place-items-center rounded-[2.5rem] border border-primary/25 bg-gradient-to-br from-primary/25 via-primary/10 to-transparent backdrop-blur-xl shadow-lg">
-              <Logo className="w-28 h-28" priority />
-            </div>
+      {/* ── CARD DE VIDRO (direita) ── */}
+      <section
+        className={`relative z-10 flex w-full flex-col justify-between gap-7 overflow-y-auto rounded-3xl border border-white/[0.07] bg-card/70 p-8 shadow-2xl backdrop-blur-2xl backdrop-saturate-150 transition-all duration-700 lg:w-[40%] lg:max-w-xl lg:p-14 ${
+          mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+        }`}
+      >
+        {/* Marca */}
+        <div className="flex items-center gap-2.5">
+          <div className="grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-primary/10">
+            <Logo className="h-7 w-7" priority />
           </div>
-
-          <h2 className="mt-16 font-brand text-[2.15rem] font-bold leading-[1.12] tracking-tight text-foreground">
-            O hub de operação<br />da sua assessoria.
-          </h2>
-          <p className="mt-3.5 max-w-sm text-sm leading-relaxed text-muted-foreground">
-            Tráfego, social, design e resultados dos clientes — tudo num lugar só, em tempo real.
-          </p>
-        </div>
-
-        {/* Rodapé */}
-        <p className="absolute bottom-14 left-16 z-10 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-          Lone Mídia Assessoria © 2026
-        </p>
-      </div>
-
-      {/* ── PAINEL DO FORM (direita) ── */}
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden border-l border-border bg-background p-6 sm:p-10 lg:min-h-0">
-        {/* profundidade sutil no topo */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-primary/[0.05] to-transparent" />
-        <div className={`relative w-full max-w-sm transition-all duration-700 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
-
-          {/* Marca compacta (só no mobile) */}
-          <div className="mb-10 flex flex-col items-center text-center lg:hidden">
-            <div className="grid h-14 w-14 place-items-center rounded-xl border border-primary/20 bg-primary/[0.08]">
-              <Logo className="w-8 h-8" priority />
-            </div>
-            <h1 className="mt-4 font-brand text-lg font-bold tracking-tight text-foreground">LONE MÍDIA</h1>
+          <div className="leading-none">
+            <p className="font-brand text-lg font-bold tracking-tight text-foreground">LONE MÍDIA</p>
             <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-muted-foreground">Assessoria Digital</p>
           </div>
-
-          {/* Passo 1: escolher perfil */}
-          {step === "select" && (
-            <div className="animate-fade-in space-y-7">
-              <div>
-                <h2 className="text-2xl font-bold tracking-tight text-foreground">Bem-vindo de volta</h2>
-                <p className="mt-1.5 text-sm text-muted-foreground">Selecione seu perfil pra entrar no hub.</p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-muted-foreground">Usuário</label>
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => setShowDropdown(!showDropdown)}
-                    onKeyDown={handleKeyDown}
-                    className={`flex w-full items-center justify-between rounded-xl border bg-card px-4 py-3.5 text-left text-sm outline-none transition-all ${
-                      showDropdown ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-primary/40"
-                    }`}
-                  >
-                    {selectedProfile ? (
-                      <div className="flex items-center gap-3">
-                        <div className="grid h-9 w-9 place-items-center rounded-lg border border-primary/20 bg-primary/10">
-                          <span className="text-[11px] font-semibold text-primary">{selectedProfile.initials}</span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{selectedProfile.name}</p>
-                          <p className="text-[11px] text-muted-foreground">{ROLE_LABELS[selectedProfile.role]}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">Selecione um usuário...</span>
-                    )}
-                    <ChevronDown size={16} className={`shrink-0 text-muted-foreground transition-transform ${showDropdown ? "rotate-180" : ""}`} />
-                  </button>
-
-                  {showDropdown && (
-                    <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover py-1.5 shadow-lg animate-fade-in">
-                      {USER_PROFILES.map((profile) => {
-                        const active = selectedUser === profile.id;
-                        return (
-                          <button
-                            key={profile.id}
-                            onClick={() => handleSelectUser(profile.id)}
-                            className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-primary/[0.06] ${active ? "bg-primary/[0.05]" : ""}`}
-                          >
-                            <div className={`grid h-9 w-9 place-items-center rounded-lg border ${active ? "border-primary/30 bg-primary/15" : "border-border bg-card"}`}>
-                              <span className={`text-[11px] font-semibold ${active ? "text-primary" : "text-muted-foreground"}`}>{profile.initials}</span>
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className={`text-sm font-medium ${active ? "text-primary" : "text-foreground"}`}>{profile.name}</p>
-                              <p className="text-[11px] text-muted-foreground">{ROLE_LABELS[profile.role]}</p>
-                            </div>
-                            {active && <Check size={15} className="shrink-0 text-primary" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                {error && <p className="animate-fade-in text-xs text-destructive">{error}</p>}
-              </div>
-
-              <button
-                onClick={handleContinue}
-                disabled={!selectedUser}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-all hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                Continuar
-                <ArrowRight size={15} />
-              </button>
-            </div>
-          )}
-
-          {/* Passo 2: senha */}
-          {step === "password" && selectedProfile && (
-            <div className="animate-fade-in space-y-7">
-              <div>
-                <button
-                  onClick={handleBack}
-                  className="mb-5 flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-primary"
-                >
-                  <ArrowLeft size={12} /> Trocar conta
-                </button>
-                <div className="flex items-center gap-3">
-                  <div className="grid h-11 w-11 place-items-center rounded-xl border border-primary/20 bg-primary/10">
-                    <span className="text-xs font-semibold text-primary">{selectedProfile.initials}</span>
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold tracking-tight text-foreground">
-                      Olá, <span className="text-primary">{selectedProfile.name.split(" ")[0]}</span>
-                    </h2>
-                    <p className="text-xs text-muted-foreground">{ROLE_LABELS[selectedProfile.role]}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-muted-foreground">Senha</label>
-                <div className="relative">
-                  <input
-                    ref={passwordRef}
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Digite sua senha"
-                    autoComplete="off"
-                    className={`w-full rounded-xl border bg-card px-4 py-3.5 pr-11 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground ${
-                      error ? "border-destructive/50" : "border-border focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
-                </div>
-                {error && <p className="animate-fade-in text-xs text-destructive">{error}</p>}
-              </div>
-
-              <button
-                onClick={handleLogin}
-                disabled={!password || loading}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-all hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                {loading ? (<><Loader2 size={15} className="animate-spin" /> Entrando...</>) : (<>Entrar <ArrowRight size={15} /></>)}
-              </button>
-
-              <p className="text-center text-[11px] text-muted-foreground">Esqueceu a senha? Fale com o administrador.</p>
-            </div>
-          )}
-
-          {/* Rodapé (mobile) */}
-          <p className="mt-10 text-center text-[10px] uppercase tracking-[0.2em] text-muted-foreground lg:hidden">
-            Lone Mídia Assessoria © 2026
-          </p>
         </div>
-      </div>
+
+        {/* Passo 1: escolher perfil */}
+        {step === "select" && (
+          <div className="animate-fade-in space-y-7">
+            <div>
+              <h1 className="font-brand text-3xl font-bold leading-tight tracking-tight text-foreground">Bem-vindo de volta</h1>
+              <p className="mt-2 text-[15px] text-muted-foreground">Selecione seu perfil para entrar no hub.</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-muted-foreground">Usuário</label>
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setShowDropdown(!showDropdown)}
+                  onKeyDown={handleKeyDown}
+                  className={`flex h-[54px] w-full items-center justify-between rounded-xl border bg-white/[0.02] px-4 text-left text-[15px] outline-none backdrop-blur-md transition-all ${
+                    showDropdown ? "border-primary/60 ring-4 ring-primary/10" : "border-white/10 hover:border-white/20"
+                  }`}
+                >
+                  {selectedProfile ? (
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-9 w-9 place-items-center rounded-lg border border-primary/20 bg-primary/15">
+                        <span className="text-[11px] font-semibold text-primary">{selectedProfile.initials}</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{selectedProfile.name}</p>
+                        <p className="text-[11px] text-muted-foreground">{ROLE_LABELS[selectedProfile.role]}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">Selecione um usuário...</span>
+                  )}
+                  <ChevronDown size={18} className={`shrink-0 text-muted-foreground transition-transform ${showDropdown ? "rotate-180" : ""}`} />
+                </button>
+
+                {showDropdown && (
+                  <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-card/95 py-1.5 shadow-2xl backdrop-blur-2xl animate-fade-in">
+                    {USER_PROFILES.map((profile) => {
+                      const active = selectedUser === profile.id;
+                      return (
+                        <button
+                          key={profile.id}
+                          onClick={() => handleSelectUser(profile.id)}
+                          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05] ${active ? "bg-primary/10" : ""}`}
+                        >
+                          <div className={`grid h-9 w-9 place-items-center rounded-lg border ${active ? "border-primary/30 bg-primary/15" : "border-white/10 bg-white/[0.03]"}`}>
+                            <span className={`text-[11px] font-semibold ${active ? "text-primary" : "text-muted-foreground"}`}>{profile.initials}</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-sm font-medium ${active ? "text-primary" : "text-foreground"}`}>{profile.name}</p>
+                            <p className="text-[11px] text-muted-foreground">{ROLE_LABELS[profile.role]}</p>
+                          </div>
+                          {active && <Check size={15} className="shrink-0 text-primary" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {error && <p className="animate-shake text-sm text-destructive">{error}</p>}
+            </div>
+
+            <button
+              onClick={handleContinue}
+              disabled={!selectedUser}
+              className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-semibold uppercase tracking-[0.08em] text-primary-foreground transition-all hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Continuar <ArrowRight size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* Passo 2: senha */}
+        {step === "password" && selectedProfile && (
+          <div className="animate-fade-in space-y-7">
+            <div>
+              <button onClick={handleBack} className="mb-5 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
+                <ArrowLeft size={13} /> Trocar conta
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="grid h-12 w-12 place-items-center rounded-xl border border-primary/20 bg-primary/15">
+                  <span className="text-xs font-semibold text-primary">{selectedProfile.initials}</span>
+                </div>
+                <div>
+                  <h1 className="font-brand text-2xl font-bold tracking-tight text-foreground">
+                    Olá, <span className="text-primary">{selectedProfile.name.split(" ")[0]}</span>
+                  </h1>
+                  <p className="text-sm text-muted-foreground">{ROLE_LABELS[selectedProfile.role]}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-muted-foreground">Senha</label>
+              <div className="relative flex items-center">
+                <input
+                  ref={passwordRef}
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Sua senha"
+                  autoComplete="off"
+                  className={`h-[54px] w-full rounded-xl border bg-white/[0.02] px-4 pr-12 text-[15px] text-foreground outline-none backdrop-blur-md transition-all placeholder:text-muted-foreground ${
+                    error ? "border-destructive/50 animate-shake" : "border-white/10 focus:ring-4 focus:ring-primary/10"
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 grid h-8 w-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {error && <p className="animate-fade-in text-sm text-destructive">{error}</p>}
+            </div>
+
+            <button
+              onClick={handleLogin}
+              disabled={!password || loading}
+              className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-semibold uppercase tracking-[0.08em] text-primary-foreground transition-all hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? (<><Loader2 size={16} className="animate-spin" /> Entrando...</>) : (<>Entrar <ArrowRight size={16} /></>)}
+            </button>
+
+            <p className="text-center text-xs text-muted-foreground">Esqueceu a senha? Fale com o administrador.</p>
+          </div>
+        )}
+
+        {/* Rodapé */}
+        <p className="text-center text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+          Lone Mídia Assessoria © 2026
+        </p>
+      </section>
     </div>
   );
 }
