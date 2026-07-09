@@ -118,7 +118,7 @@ const CONTENT_COLUMNS = [
   { id: "script",         title: "Roteiro",            color: "bg-muted" },
   { id: "in_production",  title: "Em Producao",        color: "bg-primary" },
   { id: "blocked",        title: "Bloqueado (Design)", color: "bg-destructive" },
-  { id: "approval",       title: "Aprovacao Interna",  color: "bg-muted" },
+  { id: "approval",       title: "Aprovação Social Media",  color: "bg-muted" },
   { id: "client_approval",title: "Aprovacao Cliente",  color: "bg-muted" },
   { id: "scheduled",      title: "Agendado",           color: "bg-muted" },
   { id: "published",      title: "Publicado",          color: "bg-primary" },

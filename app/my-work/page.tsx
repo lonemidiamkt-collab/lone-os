@@ -313,7 +313,7 @@ function TaskRow({ task }: { task: Task }) {
 function CardRow({ card, isApproval }: { card: ContentCard; isApproval?: boolean }) {
   const STATUS_LABELS: Record<string, string> = {
     ideas: "Ideia", script: "Roteiro", in_production: "Produção",
-    approval: "Aprovação", client_approval: "Aprov. Cliente",
+    approval: "Aprovação Social Media", client_approval: "Aprov. Cliente",
     scheduled: "Agendado", published: "Publicado",
   };
 

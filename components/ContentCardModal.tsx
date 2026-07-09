@@ -33,7 +33,7 @@ const STATUS_OPTIONS: { value: ContentCard["status"]; label: string; color: stri
   { value: "ideas", label: "Ideias", color: "bg-muted" },
   { value: "script", label: "Roteiro", color: "bg-muted" },
   { value: "in_production", label: "Em Produção", color: "bg-primary" },
-  { value: "approval", label: "Aprovação", color: "bg-muted" },
+  { value: "approval", label: "Aprovação Social Media", color: "bg-muted" },
   { value: "client_approval", label: "Aprovação Cliente", color: "bg-muted" },
   { value: "scheduled", label: "Agendado", color: "bg-muted" },
   { value: "published", label: "Publicado", color: "bg-primary" },
@@ -603,7 +603,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-semibold text-foreground">Ação de Aprovação</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-medium">
-                {card.status === "approval" ? "Aprovação Interna" : "Aprovação Cliente"}
+                {card.status === "approval" ? "Aprovação Social Media" : "Aprovação Cliente"}
               </span>
             </div>
 

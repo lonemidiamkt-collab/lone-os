@@ -174,7 +174,7 @@ function ehPerguntaStatus(text: string): boolean {
 
 const STATUS_CARD_LABEL: Record<string, string> = {
   ideas: "Ideias (fila)", script: "Roteiro", in_production: "Produção", blocked: "Travado",
-  approval: "Aprovação interna", client_approval: "Aprovação do cliente", scheduled: "Agendado", published: "Publicado",
+  approval: "Aprovação Social Media", client_approval: "Aprovação do cliente", scheduled: "Agendado", published: "Publicado",
 };
 
 // Raio-X do cliente ("Lone, me dá um raio-x do Contele" / "resumo do X" / "panorama da X").
