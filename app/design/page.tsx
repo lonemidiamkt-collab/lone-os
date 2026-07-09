@@ -1580,6 +1580,41 @@ export default function DesignPage() {
                 })()}
               </div>
 
+              {/* Status do card — o DESIGNER também move a etiqueta (ex.: ao terminar a arte →
+                  "Aprovação Social Media"), igual o social faz no board dele. Pedido do Rodrigo. */}
+              {(() => {
+                const rc = briefingReq.contentCardId
+                  ? contentCards.find((c) => c.id === briefingReq.contentCardId)
+                  : contentCards.find((c) => c.designRequestId === briefingReq.id);
+                if (!rc) return null;
+                const STATUS: { v: ContentCard["status"]; l: string }[] = [
+                  { v: "ideas", l: "Ideias" }, { v: "script", l: "Roteiro" }, { v: "in_production", l: "Em Produção" },
+                  { v: "approval", l: "Aprovação Social Media" }, { v: "client_approval", l: "Aprovação Cliente" },
+                  { v: "scheduled", l: "Agendado" }, { v: "published", l: "Publicado" },
+                ];
+                return (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Status do card</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {STATUS.map((s) => (
+                        <button
+                          key={s.v}
+                          onClick={() => {
+                            if (rc.status === s.v) return;
+                            updateContentCard(rc.id, { status: s.v, statusChangedAt: new Date().toISOString() }).catch(() => {});
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            rc.status === s.v ? "bg-primary/20 text-primary border border-primary/30" : "bg-muted text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {s.l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Arte de REFERÊNCIA — anexos que o social pôs no card. Antes não apareciam aqui
                   (a solicitação só mostrava as entregas), então o designer não via a referência. */}
               {(() => {
