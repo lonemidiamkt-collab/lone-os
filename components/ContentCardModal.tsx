@@ -201,22 +201,22 @@ export default function ContentCardModal({ card, onClose }: Props) {
   };
 
   const handleSave = () => {
-    // Data de postagem é OBRIGATÓRIA: o agente CS acompanha a pauta por ela (quem tem/não tem
-    // post no dia). Sem data, a demanda fica invisível pro acompanhamento. Pedido do Roberto.
-    if (!dueDate) {
-      pushNotification("system", "Falta a data de postagem", `Defina quando "${card.title}" vai ao ar — é obrigatório pra equipe e pro agente acompanharem a pauta.`, card.clientId);
-      return;
-    }
+    // A data de postagem NÃO bloqueia mais o save — travar tudo fazia o social PERDER a edição
+    // (briefing, legenda etc.). Salva o que foi editado e, se faltar a data, apenas AVISA: sem ela o
+    // card fica invisível pro acompanhamento de pauta do agente CS. (Pedido do Roberto: não travar.)
     updateContentCard(card.id, {
       observations,
       briefing: briefing || undefined,
       caption: caption || undefined,
       hashtags: hashtags || undefined,
-      dueDate,
+      dueDate: dueDate || undefined,
       status,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+    if (!dueDate) {
+      pushNotification("system", "Salvei — só falta a data de postagem", `Defina quando "${card.title}" vai ao ar pra ele entrar no acompanhamento da pauta.`, card.clientId);
+    }
   };
 
   const handleSaveBriefing = () => {
