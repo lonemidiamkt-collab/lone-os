@@ -30,6 +30,8 @@ export interface NormalizedInbound {
   fromMe: boolean;
   /** Se for um REPLY: id da mensagem citada (pra casar a resposta com a sugestão do agente). */
   quotedMsgId?: string;
+  /** Texto da mensagem citada — fallback p/ reencontrar a demanda quando o id não bate. */
+  quotedText?: string;
   /** Nota de voz sem texto — a camada de cima transcreve (Whisper) e preenche o text. */
   isAudio?: boolean;
   /** Imagem (foto/print) — a camada de cima descreve (visão) e enriquece o text. */
@@ -65,6 +67,21 @@ export function extractQuotedId(message?: Record<string, unknown> | null): strin
   return undefined;
 }
 
+/** Texto da mensagem CITADA (reply). Fallback robusto p/ achar a demanda quando o id do quote não
+ *  bate com o msg_id_sugestao (o COMPLEMENTO reposta e sobrescreve o id). O texto citado carrega
+ *  "NOVO PEDIDO — {cliente}" + o resumo, então dá pra reencontrar a demanda pelo conteúdo. */
+export function extractQuotedText(message?: Record<string, unknown> | null): string | undefined {
+  if (!message) return undefined;
+  for (const v of Object.values(message)) {
+    const ci = (v as { contextInfo?: { quotedMessage?: Record<string, unknown> } } | null)?.contextInfo;
+    if (ci?.quotedMessage) {
+      const t = extractText(ci.quotedMessage);
+      if (t) return t;
+    }
+  }
+  return undefined;
+}
+
 /** Normaliza um upsert. Retorna null se não for mensagem de grupo com texto. */
 export function parseUpsert(payload: EvolutionUpsert): NormalizedInbound | null {
   if (payload.event && payload.event !== "messages.upsert") return null;
@@ -81,6 +98,7 @@ export function parseUpsert(payload: EvolutionUpsert): NormalizedInbound | null 
   const messageId = d?.key?.id ?? "";
   if (!messageId) return null;
   const quotedMsgId = extractQuotedId(d?.message);
+  const quotedText = extractQuotedText(d?.message);
   // Autor: quando o WhatsApp entrega o participant como @lid (id interno, dígitos sem relação com
   // o telefone), prefere o número real (participantPn/participantAlt) — senão isLoneTeam falha e
   // mensagem da equipe vira "demanda de cliente".
@@ -97,6 +115,7 @@ export function parseUpsert(payload: EvolutionUpsert): NormalizedInbound | null 
     timestamp: d?.messageTimestamp ?? 0,
     fromMe: !!d?.key?.fromMe,
     quotedMsgId,
+    quotedText,
     isAudio,
     isImage,
   };

@@ -334,6 +334,30 @@ async function acharDemanda(quotedMsgId?: string, codigo?: string): Promise<Alvo
   return { demanda: null, ambiguas: pend?.length ?? 0, candidatas: pend ?? [] };
 }
 
+// Reencontra a demanda PENDENTE citada num reply pelo TEXTO citado — usado quando o id do quote NÃO
+// bate com o msg_id_sugestao (o COMPLEMENTO reposta e sobrescreve o id, ou o formato do id difere
+// entre envio e reply). Corrige o "dei ok num reply e ele ignorou". O texto citado tem
+// "NOVO PEDIDO — {cliente}" / "COMPLEMENTO — {cliente}" + o resumo.
+async function acharDemandaPorTexto(quotedText: string): Promise<Record<string, unknown> | null> {
+  const q = quotedText.toLowerCase();
+  const { data: pend } = await supabaseAdmin.from("cs_demandas").select("*")
+    .eq("status", "pendente").order("created_at", { ascending: false }).limit(40);
+  if (!pend?.length) return null;
+  // 1) o RESUMO da demanda aparece no texto citado (sinal forte e específico).
+  const porResumo = pend.filter((d) => {
+    const r = ((d.resumo as string) || "").trim().toLowerCase();
+    return r.length >= 6 && q.includes(r);
+  });
+  if (porResumo.length) return porResumo[0];
+  // 2) senão, o cliente_nome aparece E é o ÚNICO pendente desse cliente (evita ambiguidade).
+  const porCliente = pend.filter((d) => {
+    const cn = ((d.cliente_nome as string) || "").trim().toLowerCase();
+    return cn.length >= 4 && q.includes(cn);
+  });
+  if (porCliente.length === 1) return porCliente[0];
+  return null;
+}
+
 // ─── Desambiguação humana: quando há VÁRIOS pedidos abertos, em vez de "responde na mensagem"
 // (seco/robótico), o agente LISTA por nome e aceita número / nome / "todas". ───
 function listarPendentes(cands: Record<string, unknown>[]): string {
@@ -558,6 +582,12 @@ export async function POST(req: NextRequest) {
     const { data } = await supabaseAdmin.from("cs_demandas").select("*")
       .eq("msg_id_sugestao", msg.quotedMsgId).order("created_at", { ascending: false }).limit(1).maybeSingle();
     demandaDaSugestao = data ?? null;
+  }
+  // Fallback por TEXTO citado: o id do quote MUITAS vezes não bate (COMPLEMENTO troca o
+  // msg_id_sugestao; ou o id de envio difere do stanzaId do reply). Reencontra a demanda pendente
+  // pelo cliente/resumo citado — corrige "dei ok num reply de ontem e ele ignorou".
+  if (!demandaDaSugestao && msg.quotedText && msg.groupJid === internalGroupJid()) {
+    demandaDaSugestao = await acharDemandaPorTexto(msg.quotedText);
   }
 
   // ─── Agente "Lone": pedido de ROTEIRO no grupo interno ("Lone, faz um roteiro pro [cliente]") ───
