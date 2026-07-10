@@ -9,6 +9,7 @@ import { ImageIcon } from "lucide-react";
 import type { SnapshotData, PeriodKind } from "@/lib/portal/types";
 import MobileFAB from "./MobileFAB";
 import PortalContent from "./PortalContent";
+import PortalInstagram from "./PortalInstagram";
 
 const WA_NUMBER = "5522981530700";
 
@@ -107,15 +108,16 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
 
 interface Props {
   token: string;
+  clientId: string;
   clientName: string;
   whatsappPhone: string;
   welcomeMessage: string | null;
   initialData: SnapshotData | null;
   hasAds?: boolean;    // pacote inclui anúncios → mostra tráfego
-  hasSocial?: boolean; // pacote inclui social/design → mostra artes entregues
+  hasSocial?: boolean; // pacote inclui social/design → mostra artes entregues + Instagram orgânico
 }
 
-export default function PortalDashboard({ token, clientName, whatsappPhone, welcomeMessage, initialData, hasAds = true, hasSocial = false }: Props) {
+export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, hasAds = true, hasSocial = false }: Props) {
   const [period, setPeriod]         = useState<PeriodKind>("last_week");
   const [data, setData]             = useState<SnapshotData | null>(initialData);
   const [loading, setLoading]       = useState(false);
@@ -237,7 +239,8 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
           </div>
         )}
 
-        {/* Conteúdo entregue (pacote social/design) — antes do tráfego */}
+        {/* Instagram orgânico + Conteúdo entregue (pacote social/design) — antes do tráfego */}
+        {hasSocial && <PortalInstagram token={token} clientId={clientId} />}
         {hasSocial && <PortalContent token={token} />}
 
         {/* Bloco de TRÁFEGO — só pra pacote que tem anúncios */}

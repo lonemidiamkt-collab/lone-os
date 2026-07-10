@@ -70,6 +70,7 @@ export default async function PortalPage({
       <meta name="robots" content="noindex, nofollow" />
       <PortalDashboard
         token={token}
+        clientId={client.id as string}
         clientName={(client.nome_fantasia as string) || (client.name as string)}
         whatsappPhone={(client.whatsapp_team_phone as string) || "5522981530700"}
         welcomeMessage={(client.portal_welcome_message as string) || null}
