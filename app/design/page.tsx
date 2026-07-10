@@ -186,6 +186,12 @@ function UploadArtModal({
         await updateDesignRequest(card.designRequestId, { attachments: nextAttachments, status: "done" });
       }
       pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmação.`, card.clientId);
+      // Verificação automática contra as REGRAS do cliente (só roda se o cliente tiver regras — sem
+      // custo de IA pra quem não tem). Se violar, o endpoint cria a notificação pro time. Best-effort.
+      authedFetch("/api/cs/verificar-arte-regras", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardId: card.id }),
+      }).catch(() => {});
       import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
       setSaved(true);
       setTimeout(() => { setSaved(false); onClose(); }, 800);
