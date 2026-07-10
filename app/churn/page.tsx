@@ -49,7 +49,9 @@ export default function ChurnRiskPage() {
     setLoading(true);
     setErr("");
     try {
-      const res = await fetch("/api/health");
+      // /api/health é só o liveness probe ({status:ok}); os scores reais vivem em /api/health/clients
+      // (protegido → authedFetch). Antes batia no probe e o Termômetro ficava sempre vazio.
+      const res = await authedFetch("/api/health/clients");
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: "Erro desconhecido" }));
         setErr(data.error || "Falha ao carregar");

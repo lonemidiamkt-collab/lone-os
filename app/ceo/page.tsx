@@ -12,16 +12,16 @@ import {
   Lock, Unlock, BarChart2, TrendingUp, TrendingDown, FileText, Clock, AlertTriangle,
   Eye, EyeOff, Shield, Download, Users, CheckCircle, Target,
   Instagram, Palette, Zap, UserPlus, Trash2, Edit3, Save, X,
-  KeyRound, Mail, UserCog, AlertCircle, ChevronRight, ZapOff,
+  KeyRound, Mail, UserCog, AlertCircle, ChevronRight,
   Calendar as CalendarIcon, ShieldCheck,
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { USER_PROFILES } from "@/lib/context/RoleContext";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import MedievalAvatar, { AVATAR_OPTIONS, getUserAvatar, setUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
 import type { Role, Client } from "@/lib/types";
 import { fetchChurnedClients } from "@/lib/supabase/queries";
-import { mockAdCampaigns } from "@/lib/mockData";
 
 const CORRECT_PIN = "8822";
 const PIN_SESSION_KEY = "lone-os-ceo-unlocked";
@@ -55,6 +55,7 @@ function churnRiskScore(client: Client): number {
 }
 
 export default function CEOPage() {
+  const router = useRouter();
   const clients = useClientsStore((s) => s.clients);
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
@@ -425,11 +426,11 @@ export default function CEOPage() {
     );
   }
 
-  const LEVEL_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-    excellent: { color: "text-primary", bg: "bg-primary", label: "Excelente" },
-    good:      { color: "text-primary",     bg: "bg-primary",     label: "Bom" },
-    warning:   { color: "text-primary",  bg: "bg-primary",  label: "Atenção" },
-    critical:  { color: "text-destructive",     bg: "bg-destructive",     label: "Crítico" },
+  const LEVEL_CONFIG: Record<string, { color: string; bg: string; ring: string; label: string }> = {
+    excellent: { color: "text-lone-success", bg: "bg-lone-success", ring: "var(--lone-success)", label: "Excelente" },
+    good:      { color: "text-primary",      bg: "bg-primary",      ring: "var(--primary)",      label: "Bom" },
+    warning:   { color: "text-lone-warning", bg: "bg-lone-warning", ring: "var(--lone-warning)", label: "Atenção" },
+    critical:  { color: "text-destructive",  bg: "bg-destructive",  ring: "var(--destructive)",  label: "Crítico" },
   };
 
   const ROLE_ICON: Record<string, typeof Users> = {
@@ -484,7 +485,7 @@ export default function CEOPage() {
 
         {/* Tabs */}
         <div>
-          <div className="flex gap-1 mb-5 border-b border-border">
+          <div className="flex gap-1 mb-5 border-b border-border overflow-x-auto">
             {(["overview", "operacao", "team", "manage", "timesheet", "workload", "churn", "reports", "ltv"] as const).map((tab) => (
               <button
                 key={tab}
@@ -511,35 +512,6 @@ export default function CEOPage() {
 
           {activeSection === "overview" && (
             <div className="space-y-4 animate-fade-in">
-              {/* Ad Rejection Alert */}
-              {mockAdCampaigns.filter((c) => c.status === "error").length > 0 && (
-                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 kpi-danger animate-fade-in">
-                  <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-destructive/15 flex items-center justify-center shrink-0">
-                      <AlertCircle size={18} className="text-destructive" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="text-sm font-bold text-destructive">Anúncios com Erro / Rejeitados</h4>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive border border-destructive/20 font-bold">
-                          {mockAdCampaigns.filter((c) => c.status === "error").length}
-                        </span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {mockAdCampaigns.filter((c) => c.status === "error").map((camp) => (
-                          <div key={camp.id} className="flex items-center gap-2 text-xs">
-                            <ZapOff size={12} className="text-destructive shrink-0" />
-                            <span className="text-foreground font-medium">{camp.name}</span>
-                            <span className="text-muted-foreground">·</span>
-                            <span className="text-muted-foreground">{camp.clientName}</span>
-                            <span className="text-muted-foreground">· Gasto: R$ {camp.spend.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -551,7 +523,11 @@ export default function CEOPage() {
                   </thead>
                   <tbody>
                     {clients.map((client) => (
-                      <tr key={client.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                      <tr
+                        key={client.id}
+                        onClick={() => router.push(`/clients/${client.id}`)}
+                        className="border-b border-border/50 hover:bg-muted/50 transition-colors cursor-pointer"
+                      >
                         <td className="py-3 px-3 font-medium text-foreground">{client.name}</td>
                         <td className="py-3 px-3 text-muted-foreground text-xs">{client.industry}</td>
                         <td className="py-3 px-3">
@@ -884,7 +860,11 @@ export default function CEOPage() {
                               const enteredAt = card.columnEnteredAt?.[card.status] ?? card.statusChangedAt!;
                               const days = Math.round((Date.now() - new Date(enteredAt).getTime()) / 86400000);
                               return (
-                                <div key={card.id} className="flex items-center gap-3 bg-muted rounded-lg p-2.5">
+                                <div
+                                  key={card.id}
+                                  onClick={() => router.push(`/social?card=${card.id}`)}
+                                  className="flex items-center gap-3 bg-muted rounded-lg p-2.5 cursor-pointer transition-colors hover:bg-muted/70"
+                                >
                                   <div className="w-2 h-2 rounded-full bg-destructive shrink-0" />
                                   <div className="flex-1 min-w-0">
                                     <p className="text-xs font-medium text-foreground truncate">{card.title}</p>
@@ -954,7 +934,7 @@ export default function CEOPage() {
                               <circle cx="50" cy="50" r="42" fill="none" stroke="var(--muted)" strokeWidth="6" />
                               <circle
                                 cx="50" cy="50" r="42" fill="none"
-                                stroke={levelConfig.bg === "bg-primary" ? "var(--primary)" : levelConfig.bg === "bg-primary" ? "var(--primary)" : levelConfig.bg === "bg-primary" ? "var(--primary)" : "var(--destructive)"}
+                                stroke={levelConfig.ring}
                                 strokeWidth="6"
                                 strokeLinecap="round"
                                 strokeDasharray={`${member.overallScore * 2.64} 264`}
@@ -1353,12 +1333,12 @@ export default function CEOPage() {
                 })}
               </div>
 
-              {/* Info note */}
-              <div className="flex items-start gap-3 bg-primary/5 border border-primary/15 rounded-xl px-4 py-3">
-                <Shield size={16} className="text-primary mt-0.5 shrink-0" />
+              {/* Aviso honesto: só a senha persiste hoje. Adicionar/remover/editar é só nesta sessão. */}
+              <div className="flex items-start gap-3 bg-lone-warning-bg border border-lone-warning-border rounded-xl px-4 py-3">
+                <AlertTriangle size={16} className="text-lone-warning mt-0.5 shrink-0" />
                 <div className="text-xs text-muted-foreground space-y-1">
-                  <p><strong className="text-foreground">Nota sobre persistência:</strong> Alterações feitas aqui são salvas na sessão atual. Com Supabase ativo, os dados persistem no banco de dados.</p>
-                  <p>Para alterar a senha de um funcionário no Supabase, use a aba de edição acima ou acesse o painel do Supabase diretamente.</p>
+                  <p><strong className="text-foreground">Atenção — só a senha é salva de verdade.</strong> Adicionar, remover, desativar ou editar nome/função aqui vale <strong>apenas nesta sessão</strong>: ao recarregar a página, volta ao estado do banco. Só a troca de senha persiste (via Supabase Auth).</p>
+                  <p>Para alterar a equipe de forma permanente, é preciso ligar essas ações a um endpoint real de <code>team_members</code> (ainda não existe).</p>
                 </div>
               </div>
             </div>
@@ -1641,7 +1621,11 @@ export default function CEOPage() {
                   if (!client.lastPostDate) signals.push("Nenhum post registrado");
 
                   return (
-                    <div key={client.id} className={`card border ${riskConfig.border}`}>
+                    <div
+                      key={client.id}
+                      onClick={() => router.push(`/clients/${client.id}`)}
+                      className={`card border ${riskConfig.border} cursor-pointer transition-colors hover:border-primary/40`}
+                    >
                       <div className="flex items-center gap-4">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${riskConfig.bg} ${riskConfig.color}`}>
                           {client.name[0]}
@@ -1695,7 +1679,7 @@ export default function CEOPage() {
                     const monthsActive = Math.max(1, Math.floor(
                       (new Date().getTime() - new Date(client.joinDate).getTime()) / (1000 * 60 * 60 * 24 * 30)
                     ));
-                    const maxMonths = Math.max(...clients.map((c) => Math.floor((new Date().getTime() - new Date(c.joinDate).getTime()) / (1000 * 60 * 60 * 24 * 30))));
+                    const maxMonths = Math.max(1, ...clients.map((c) => Math.floor((new Date().getTime() - new Date(c.joinDate).getTime()) / (1000 * 60 * 60 * 24 * 30))));
                     const barPct = Math.min(100, (monthsActive / maxMonths) * 100);
 
                     return (

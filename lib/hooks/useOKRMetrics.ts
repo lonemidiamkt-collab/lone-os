@@ -340,8 +340,10 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
           isReal: designIsReal, source: designIsReal ? "DesignRequests" : "Simulado",
         },
         avgDeliveryTime: {
+          // current está em DIAS (avgDeliveryDays) — o target/unit também precisam ser em dias, senão
+          // comparava 2.8 dias contra "48h" e o KPI ficava sempre verde (nunca acusava atraso).
           current: designIsReal ? Math.round(avgDeliveryDays * 10) / 10 : 2.8,
-          target: t("delivery_time", 48), unit: "h",
+          target: t("delivery_time", 3), unit: "dias",
           isReal: designIsReal, source: designIsReal ? "ContentCards" : "Simulado",
         },
         // Satisfação real derivada da saúde dos clientes (0–5). Sem pesquisa dedicada, a saúde
