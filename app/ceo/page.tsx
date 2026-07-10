@@ -76,12 +76,11 @@ export default function CEOPage() {
     fetchChurnedClients().then(setChurnedClients).catch(() => {});
   }, [unlocked]);
 
-  // Cockpit: MRR (receita real dos contratos) + anomalias de Meta abertas.
-  const [mrr, setMrr] = useState<{ mrrActive: number; mrrChurnedThisMonth: number; ticketMedio: number; coverage: { withContract: number; totalActive: number } } | null>(null);
+  // Cockpit: anomalias de Meta abertas. (Métricas financeiras da agência — MRR/ticket — removidas
+  // a pedido; a rota /api/ceo/mrr fica dormante pra quando o Roberto quiser reativar.)
   const [openAnomalies, setOpenAnomalies] = useState<number | null>(null);
   useEffect(() => {
     if (!unlocked) return;
-    authedFetch("/api/ceo/mrr").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setMrr(d); }).catch(() => {});
     authedFetch("/api/defense/alerts").then((r) => (r.ok ? r.json() : null)).then((d) => {
       if (d?.summary) setOpenAnomalies(d.summary.open ?? d.summary.total ?? (Array.isArray(d.alerts) ? d.alerts.length : 0));
       else if (Array.isArray(d?.alerts)) setOpenAnomalies(d.alerts.length);
@@ -526,7 +525,6 @@ export default function CEOPage() {
             <div className="space-y-4 animate-fade-in">
               {/* ── COCKPIT: resumo do dia (dinheiro + sinais críticos, tudo num lugar) ── */}
               {(() => {
-                const fmt = (n: number) => `R$ ${Math.round(n).toLocaleString("pt-BR")}`;
                 const stuckCount = contentCards.filter((c) => {
                   if (["scheduled", "published"].includes(c.status)) return false;
                   const enteredAt = c.columnEnteredAt?.[c.status] ?? c.statusChangedAt;
@@ -539,28 +537,14 @@ export default function CEOPage() {
                   .filter((x) => x.score >= 45)
                   .sort((a, b) => b.score - a.score)
                   .slice(0, 3);
-                const coveragePartial = mrr && mrr.coverage.withContract < mrr.coverage.totalActive;
                 return (
                   <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
                     <div className="flex items-center justify-between">
                       <h3 className="text-base font-semibold text-foreground">Resumo do dia</h3>
                       <span className="text-[11px] text-muted-foreground">Atualizado agora</span>
                     </div>
-                    {/* Tiles de dinheiro + carteira */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
-                      <div className="rounded-xl border border-border bg-background p-3">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">MRR ativo</p>
-                        <p className="text-lg font-bold text-foreground tabular-nums mt-0.5">{mrr ? fmt(mrr.mrrActive) : "—"}</p>
-                        {coveragePartial && <p className="text-[9px] text-lone-warning mt-0.5">{mrr!.coverage.withContract}/{mrr!.coverage.totalActive} c/ contrato</p>}
-                      </div>
-                      <div className="rounded-xl border border-border bg-background p-3">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">MRR perdido (mês)</p>
-                        <p className={`text-lg font-bold tabular-nums mt-0.5 ${mrr && mrr.mrrChurnedThisMonth > 0 ? "text-destructive" : "text-foreground"}`}>{mrr ? fmt(mrr.mrrChurnedThisMonth) : "—"}</p>
-                      </div>
-                      <div className="rounded-xl border border-border bg-background p-3">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Ticket médio</p>
-                        <p className="text-lg font-bold text-foreground tabular-nums mt-0.5">{mrr ? fmt(mrr.ticketMedio) : "—"}</p>
-                      </div>
+                    {/* Tiles da carteira (sem financeiro da agência — removido a pedido) */}
+                    <div className="grid grid-cols-3 gap-2.5">
                       <div className="rounded-xl border border-border bg-background p-3">
                         <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Novos no mês</p>
                         <p className="text-lg font-bold text-primary tabular-nums mt-0.5">{churnMetrics.newThisMonth}</p>
@@ -574,11 +558,6 @@ export default function CEOPage() {
                         <p className={`text-lg font-bold tabular-nums mt-0.5 ${openAnomalies ? "text-destructive" : "text-foreground"}`}>{openAnomalies ?? "—"}</p>
                       </button>
                     </div>
-                    {coveragePartial && (
-                      <p className="text-[11px] text-muted-foreground">
-                        MRR parcial: só {mrr!.coverage.withContract} de {mrr!.coverage.totalActive} clientes ativos têm contrato com mensalidade cadastrada. Cadastre os contratos pra ter a receita real.
-                      </p>
-                    )}
                     {/* Ação: quem está em risco agora */}
                     {topRisk.length > 0 && (
                       <div>
