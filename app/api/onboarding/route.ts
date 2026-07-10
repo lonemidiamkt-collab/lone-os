@@ -397,6 +397,74 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   }
 
+  // ─── Provision setup (checklist + notificação + e-mail) SEM tocar nos campos do cliente ───
+  // Usado pela tela de revisão "Pendentes", que já salva os campos editados pelo admin e NÃO pode
+  // ter esses valores sobrescritos pela submissão (como o approve faz). Aqui só rodam os efeitos.
+  if (body.action === "provision") {
+    const { clientId } = body;
+    if (!clientId) return NextResponse.json({ error: "clientId obrigatório" }, { status: 400 });
+
+    const { data: clientRow } = await supabase
+      .from("clients")
+      .select("name, nome_fantasia, service_type, assigned_traffic, assigned_social, assigned_designer")
+      .eq("id", clientId).maybeSingle();
+    const clientName = clientRow?.nome_fantasia || clientRow?.name || "Cliente";
+    const serviceType = clientRow?.service_type ?? "lone_growth";
+
+    const allItems = [
+      { label: "Pixel de rastreamento instalado", department: "traffic", sort_order: 0 },
+      { label: "Contas de anuncios configuradas", department: "traffic", sort_order: 1 },
+      { label: "Estrategia inicial de campanhas definida", department: "traffic", sort_order: 2 },
+      { label: "Paleta de cores e fontes definidas", department: "design", sort_order: 3 },
+      { label: "Briefing de marca preenchido", department: "design", sort_order: 4 },
+      { label: "Assets organizados no Drive", department: "design", sort_order: 5 },
+      { label: "Acessos as redes sociais recebidos", department: "social", sort_order: 6 },
+      { label: "Tom de voz e persona definidos", department: "social", sort_order: 7 },
+      { label: "Calendario inicial criado", department: "social", sort_order: 8 },
+      { label: "Primeira reuniao de alinhamento realizada", department: "social", sort_order: 9 },
+    ];
+    const deptMap: Record<string, string[]> = {
+      lone_growth: ["traffic", "design", "social"],
+      assessoria_trafego: ["traffic"],
+      assessoria_social: ["social"],
+      assessoria_design: ["design"],
+    };
+    const allowedDepts = new Set(deptMap[serviceType] ?? ["traffic", "design", "social"]);
+    const items = allItems.filter((i) => allowedDepts.has(i.department));
+
+    const { data: existing } = await supabase.from("onboarding_items").select("id").eq("client_id", clientId).limit(1);
+    if (!existing || existing.length === 0) {
+      await supabase.from("onboarding_items").insert(
+        items.map((item) => ({ client_id: clientId, label: item.label, department: item.department, sort_order: item.sort_order, completed: false }))
+      );
+    }
+
+    const assigned = [clientRow?.assigned_traffic, clientRow?.assigned_social, clientRow?.assigned_designer].filter(Boolean);
+    if (assigned.length > 0) {
+      await supabase.from("notifications").insert({
+        type: "system", title: "Novo Projeto",
+        body: `Voce foi escalado para a conta ${clientName}. Verifique o onboarding e inicie o setup.`,
+        client_id: clientId,
+      });
+    }
+
+    try {
+      const { data: verifyEmail } = await supabase.from("clients").select("email, email_corporativo").eq("id", clientId).maybeSingle();
+      const persistedEmail = verifyEmail?.email || verifyEmail?.email_corporativo;
+      if (persistedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(persistedEmail)) {
+        const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace("/supabase", "") || "http://localhost:3000";
+        await fetch(`${baseUrl.startsWith("http") ? "" : "https://"}${baseUrl}/api/emails`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "send_welcome", clientId }),
+        }).catch(() => {});
+      }
+    } catch {
+      console.error("[Onboarding] provision welcome email falhou (não crítico)");
+    }
+
+    return NextResponse.json({ success: true });
+  }
+
   // ─── Reject/delete draft (admin action) ───
   if (body.action === "reject") {
     const { clientId } = body;

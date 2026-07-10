@@ -190,7 +190,9 @@ export const useClientsStore = create<ClientsState>()(
           id: `temp-msg-${Date.now()}`,
           user,
           text,
-          timestamp: new Date().toISOString(),
+          // Mesmo formato "dd/mm hh:mm" (SP) do que é persistido — senão a msg otimista aparecia
+          // como ISO cru (2026-07-10T16:45:00.000Z) até dar reload.
+          timestamp: new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
         };
         set((s) => ({
           clientChats: {

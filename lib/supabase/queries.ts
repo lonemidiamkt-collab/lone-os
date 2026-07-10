@@ -580,7 +580,8 @@ export async function fetchClientChats(): Promise<Record<string, ChatMessage[]>>
 }
 
 export async function insertClientChatMessage(clientId: string, user: string, text: string): Promise<void> {
-  const timestamp = new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  // timeZone SP explícito: sem isso, se rodar no servidor (VPS UTC) o horário sai 3h adiantado.
+  const timestamp = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   const { error } = await db.from("client_chats").insert({
     client_id: clientId, user, text, timestamp,
   });

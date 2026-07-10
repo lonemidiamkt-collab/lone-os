@@ -11,6 +11,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // - contrato_social, identidade → legal-docs (private, served via signed URL from /api/storage/signed-url)
 const BUCKET_BY_DOC_TYPE: Record<string, "brand-assets" | "legal-docs"> = {
   logo: "brand-assets",
+  wallet: "brand-assets", // referências/paleta/logo do Creative Wallet — público, sem sobrescrever coluna do cliente
   contrato_social: "legal-docs",
   identidade: "legal-docs",
 };

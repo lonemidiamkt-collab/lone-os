@@ -244,6 +244,20 @@ export default function PendingClientsPage() {
       return;
     }
 
+    // Dispara o SETUP (checklist de onboarding + notifica o time escalado + e-mail de boas-vindas).
+    // Antes a aprovação por esta tela pulava tudo isso (só o botão rápido da lista provisionava) —
+    // cliente entrava com onboarding vazio e ninguém era avisado. 'provision' não mexe nos campos
+    // que acabamos de salvar (diferente do 'approve', que re-sincroniza a submissão por cima).
+    try {
+      await authedFetch("/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "provision", clientId: selected.id }),
+      });
+    } catch {
+      // setup é best-effort: o cliente já está ativo; se falhar, dá pra reprovisionar
+    }
+
     pushNotification("system", "Cliente aprovado", `${clientName} foi ativado. Equipe pode iniciar o setup.`);
 
     // Remove from local list without reload

@@ -185,14 +185,20 @@ export default function ClientsPage() {
     return "";
   };
 
-  // Collect unique responsible names for the dropdown (for operator roles)
+  // Collect unique responsible names for the dropdown (for operator roles) — sem vazios nem arquivados
   const responsibleNames = isOperator
-    ? [...new Set(clients.map(getAssignedField))].sort()
+    ? [...new Set(clients.filter((c) => c.active !== false).map(getAssignedField).filter(Boolean))].sort()
     : [];
 
   const filtered = clients.filter((c) => {
     if (c.active === false) return false; // arquivados (churn) não aparecem na carteira ativa
-    const matchSearch = c.name.toLowerCase().includes(search.toLowerCase());
+    // Busca por nome, nome fantasia, nicho/segmento, contato e cidade (não só nome) — o header
+    // mostra o nome fantasia, então procurar por ele tem que achar.
+    const q = search.toLowerCase();
+    const extra = c as { nomeFantasia?: string; nicho?: string; contactName?: string; cidade?: string };
+    const haystack = [c.name, extra.nomeFantasia, c.industry, extra.nicho, extra.contactName, extra.cidade]
+      .filter(Boolean).join(" ").toLowerCase();
+    const matchSearch = !q || haystack.includes(q);
     const matchStatus = statusFilter === "all" || c.status === statusFilter;
     // Role-based filter: operators see only their clients by default
     const matchResponsible =

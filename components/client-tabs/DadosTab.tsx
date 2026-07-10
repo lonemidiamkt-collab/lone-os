@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import type { Client, Role, ServiceType, ContentProfile } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import {
@@ -145,7 +146,9 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
     try {
       // Separamos campos não-sensíveis (via updateClientData, caminho normal)
       // de senhas (via /api/client-vault que criptografa server-side).
-      updateClientData(client.id, {
+      // await: o store dá throw se o banco recusar → cai no catch com toast (antes salvava
+      // otimista e não avisava nada em caso de falha).
+      await updateClientData(client.id, {
         nomeFantasia: form.nomeFantasia || undefined, razaoSocial: form.razaoSocial || undefined,
         cnpj: form.cnpj || undefined, nicho: form.nicho || undefined,
         contactName: form.contactName || undefined,
@@ -183,6 +186,9 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       }
 
       setEditing(false);
+      toast.success("Dados do cliente salvos.");
+    } catch {
+      toast.error("Não foi possível salvar. Tente de novo.");
     } finally { setSaving(false); }
   };
 

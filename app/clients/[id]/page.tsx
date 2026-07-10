@@ -24,6 +24,7 @@ import {
   getPriorityLabel,
   daysSince,
   calcHealthScore,
+  todaySP,
 } from "@/lib/utils";
 import type { TimelineEntryType, ClientStatus, CreativeAsset, SocialProofEntry } from "@/lib/types";
 import {
@@ -408,8 +409,10 @@ export default function ClientDetailPage() {
   }
 
   const health = calcHealth(client);
-  const healthColor = health >= 70 ? "text-primary" : health >= 45 ? "text-muted-foreground" : "text-destructive";
-  const healthBar = health >= 70 ? "bg-primary" : health >= 45 ? "bg-muted" : "bg-destructive";
+  // Mesmas faixas/cores da lista de clientes (70/40, success/warning/danger) — antes divergia
+  // (70/45 + primary/muted), então o mesmo cliente aparecia amarelo na lista e cinza/vermelho na ficha.
+  const healthColor = health >= 70 ? "text-lone-success" : health >= 40 ? "text-lone-warning" : "text-destructive";
+  const healthBar = health >= 70 ? "bg-lone-success" : health >= 40 ? "bg-lone-warning" : "bg-destructive";
 
   const daysWithUs = Math.floor((Date.now() - new Date(client.joinDate).getTime()) / 86400000);
 
@@ -423,12 +426,29 @@ export default function ClientDetailPage() {
   });
 
 
-  const handleWalletUpload = (e: React.ChangeEvent<HTMLInputElement>, type: CreativeAsset["type"]) => {
+  const handleWalletUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: CreativeAsset["type"]) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    addCreativeAsset({ clientId, type, url, label: file.name.replace(/\.[^.]+$/, ""), uploadedBy: currentUser, uploadedAt: new Date().toISOString().split("T")[0] });
     e.target.value = "";
+    // Faz upload REAL pro storage (bucket público) e persiste a URL definitiva. Antes gravava um
+    // blob: efêmero (URL.createObjectURL) que só valia naquela aba — no reload/pra outro membro a
+    // imagem quebrava, deixando o banco de referências inutilizável.
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("clientId", clientId);
+      fd.append("docType", "wallet");
+      const res = await authedFetch("/api/onboarding/upload", { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.url) {
+        addCreativeAsset({ clientId, type, url: data.url, label: file.name.replace(/\.[^.]+$/, ""), uploadedBy: currentUser, uploadedAt: todaySP() });
+        toast.success("Referência salva.");
+      } else {
+        toast.error(data.error || "Não foi possível subir o arquivo.");
+      }
+    } catch {
+      toast.error("Falha no upload. Verifique a conexão.");
+    }
   };
 
   const handleSendChat = () => {
