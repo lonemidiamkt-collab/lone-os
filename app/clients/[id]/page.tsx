@@ -7,6 +7,7 @@ import HolidaysPdfButton from "@/components/HolidaysPdfButton";
 import { MarkdownEditor } from "@/components/Markdown";
 import BriefingTab from "./BriefingTab";
 import ClientCsRules from "@/components/cs/ClientCsRules";
+import FeedbackCliente from "@/components/client-tabs/FeedbackCliente";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
@@ -678,7 +679,10 @@ export default function ClientDetailPage() {
 
           {/* ── RESULTADOS ──────────────────────────────────────────────────── */}
           {activeTab === "resultados" && (
-            <CrescimentoTab client={client} currentUser={currentUser} />
+            <div className="space-y-4">
+              <FeedbackCliente clientId={clientId} />
+              <CrescimentoTab client={client} currentUser={currentUser} />
+            </div>
           )}
 
           {/* ── ANALISE IA ──────────────────────────────────────────────────── */}
