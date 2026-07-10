@@ -11,12 +11,12 @@ export const META_CONFIG = {
     "ads_management",
     "read_insights",
     "business_management",
-    // Orgânico (Instagram/Facebook): seguidores, alcance, curtidas, views de post. Exige App Review
-    // da Meta (Advanced Access) pra rodar em contas de cliente, e reconectar o login concedendo estes.
-    "instagram_basic",
-    "instagram_manage_insights",
-    "pages_read_engagement",
-    "pages_show_list",
+    // Orgânico (Instagram): SÓ funciona depois que o app do Facebook tiver o produto "Instagram
+    // Graph API" adicionado no painel de desenvolvedor — senão a Meta rejeita ("Invalid Scopes") e
+    // trava o reconectar pra desenvolvedor. Ative via META_IG_SCOPES=1 quando o produto estiver no app.
+    ...(process.env.NEXT_PUBLIC_META_IG_SCOPES === "1"
+      ? ["instagram_basic", "instagram_manage_insights", "pages_read_engagement", "pages_show_list"]
+      : []),
   ],
 };
 
