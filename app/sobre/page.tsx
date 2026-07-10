@@ -504,6 +504,7 @@ const MODULES: Module[] = [
       "Kanban de tarefas de tráfego + rotina diária",
       "Smart Handoff Tráfego → Design com IA sugerindo criativos",
       "Seletor de conta filtrado (só mostra contas dos clientes da carteira)",
+      "Relatório semanal automático em PDF — combina anúncios + Instagram orgânico num arquivo só quando o cliente tem os dois pacotes (só-tráfego recebe só tráfego; só-social recebe só Instagram)",
     ],
     tips: [
       "Rode análise IA pelo menos 1x por semana por cliente — o histórico de scores mostra se está evoluindo.",
@@ -534,6 +535,8 @@ const MODULES: Module[] = [
       "Detecção de cards parados >48h (SLA violado)",
       "Banco de hashtags reutilizável",
       "Criação em lote de conteúdo mensal (20 cards de uma vez)",
+      "Agente CS (monitor[IA]) lê os grupos e abre card automático — fotos enviadas em sequência (ex: vários produtos) viram UM card só, sem fragmentar nem perder nenhuma",
+      "Relatório semanal de Instagram orgânico (seguidores, alcance, curtidas, comentários e destaques) no PDF do cliente",
     ],
     tips: [
       "Use 'criação em lote' no começo do mês pra já deixar o calendário montado.",
