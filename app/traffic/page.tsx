@@ -2262,13 +2262,23 @@ function AdAnalyticsTab({
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
   const [metaError, setMetaError] = useState<string | null>(null);
-  const [hiddenAccounts, setHiddenAccounts] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try {
-      const stored = localStorage.getItem("hidden_ad_accounts");
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch { return new Set(); }
-  });
+  // Contas ocultas — agora compartilhadas pelo time (banco), não mais por navegador (localStorage).
+  const [hiddenAccounts, setHiddenAccounts] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let alive = true;
+    authedFetch("/api/traffic/hidden-accounts")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && Array.isArray(d?.ids)) setHiddenAccounts(new Set(d.ids)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const persistHidden = (next: Set<string>) => {
+    authedFetch("/api/traffic/hidden-accounts", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [...next] }),
+    }).catch(() => {});
+  };
   const [dateRange, setDateRange] = useState<number>(7);
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
@@ -2287,7 +2297,7 @@ function AdAnalyticsTab({
     setHiddenAccounts((prev) => {
       const next = new Set(prev);
       next.add(accId);
-      localStorage.setItem("hidden_ad_accounts", JSON.stringify([...next]));
+      persistHidden(next);
       return next;
     });
   };
@@ -2296,7 +2306,7 @@ function AdAnalyticsTab({
     setHiddenAccounts((prev) => {
       const next = new Set(prev);
       next.delete(accId);
-      localStorage.setItem("hidden_ad_accounts", JSON.stringify([...next]));
+      persistHidden(next);
       return next;
     });
   };
