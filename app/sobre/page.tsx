@@ -10,7 +10,7 @@ import NewPlatformUpdateModal from "@/components/NewPlatformUpdateModal";
 import {
   Brain, Users, TrendingUp, Instagram, Palette, FileText, Megaphone, Zap, Lock,
   Settings, Printer, Sparkles, ChevronDown, ChevronUp, Rocket, Package,
-  GitBranch, Lightbulb, HelpCircle, PlayCircle, Plus,
+  GitBranch, Lightbulb, HelpCircle, PlayCircle, Plus, RefreshCw,
 } from "lucide-react";
 
 interface PlatformUpdate {
@@ -107,6 +107,14 @@ export default function SobrePage() {
 
         {/* Módulos — Accordion */}
         <Section title="Módulos do Sistema" icon={Package}>
+          <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+            <RefreshCw size={15} className="text-primary mt-0.5 shrink-0" />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <strong className="text-foreground">Manual vivo.</strong> Este manual é atualizado a cada mudança do sistema —
+              toda função nova ou alterada é refletida aqui e registrada no changelog (Histórico de Atualizações) acima.
+              Se algo estiver diferente do que você vê na tela, avise que corrigimos.
+            </p>
+          </div>
           <p className="text-sm text-muted-foreground mb-4">
             Clique em cada módulo pra expandir e ver o manual detalhado.
           </p>
