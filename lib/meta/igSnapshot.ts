@@ -91,7 +91,7 @@ async function buildAudiencia(igId: string, token: string): Promise<IgAudiencia 
   let cidades: { nome: string; pct: number }[] = [];
   if (cityBd) {
     const tot = cityBd.reduce((s, x) => s + x.value, 0);
-    if (tot > 0) cidades = cityBd.slice().sort((a, b) => b.value - a.value).slice(0, 3).map((x) => ({ nome: x.key, pct: Math.round((x.value / tot) * 1000) / 10 }));
+    if (tot > 0) cidades = cityBd.slice().sort((a, b) => b.value - a.value).slice(0, 3).map((x) => ({ nome: x.key.replace(/\s*\(state\)/gi, "").trim(), pct: Math.round((x.value / tot) * 1000) / 10 }));
   }
 
   return { generoMascPct, generoFemPct, idades, cidades };
