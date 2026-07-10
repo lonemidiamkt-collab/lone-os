@@ -18,11 +18,15 @@ import {
   CartesianGrid, ReferenceLine, Cell,
 } from "recharts";
 import { supabase } from "@/lib/supabase/client";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { Target } from "lucide-react";
 
 interface Props {
   clientId: string;
   onGerarLink?: () => void;
 }
+
+interface Goal { value: number; month: string } // "bater R$ value até month (YYYY-MM)"
 
 interface Row {
   month: string;              // "YYYY-MM"
@@ -100,6 +104,11 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [savingMonth, setSavingMonth] = useState<string | null>(null);
   const [savedMonth, setSavedMonth] = useState<string | null>(null);
+  const [goal, setGoal] = useState<Goal | null>(null);
+  const [goalOpen, setGoalOpen] = useState(false);
+  const [goalVal, setGoalVal] = useState("");
+  const [goalMonth, setGoalMonth] = useState("");
+  const [goalSaving, setGoalSaving] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -127,6 +136,30 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
     })();
     return () => { alive = false; };
   }, [clientId]);
+
+  // Meta de faturamento do cliente ("bater R$ X até mês Y").
+  useEffect(() => {
+    let alive = true;
+    authedFetch(`/api/clients/${clientId}/growth-goal`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d?.goal) { setGoal(d.goal); setGoalVal(intBR(d.goal.value)); setGoalMonth(d.goal.month); } })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [clientId]);
+
+  const salvarMeta = async () => {
+    setGoalSaving(true);
+    const value = parseFatBR(goalVal);
+    try {
+      const r = await authedFetch(`/api/clients/${clientId}/growth-goal`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: value > 0 ? value : null, month: goalMonth || null }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) { setGoal(d.goal ?? null); setGoalOpen(false); }
+    } catch { /* silencioso */ }
+    setGoalSaving(false);
+  };
 
   // Anos disponíveis pro seletor (dados + ano atual), crescente.
   const years = useMemo(() => {
@@ -279,8 +312,20 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
 
   const healthColor = health.level === "up" ? "var(--lone-success)" : health.level === "risk" ? "var(--destructive)" : health.level === "ok" ? "var(--primary)" : "var(--muted-foreground)";
   const maxFat = Math.max(...serie.map((s) => s.fat), 1);
-  const refFat = 1_000_000;
+  const refFat = goal?.value ?? 1_000_000;
+  const refLabel = goal ? "Meta " + brlBar(goal.value) : "R$ 1M";
   const toneColor = insight?.tone === "up" ? "text-lone-success" : insight?.tone === "down" ? "text-destructive" : "text-primary";
+
+  // Progresso da meta: último mês COM dado (série contínua) vs a meta + meses restantes até o prazo.
+  const goalProgress = (() => {
+    if (!goal) return null;
+    const latest = allWithData.length ? allWithData[allWithData.length - 1].revenue : 0;
+    const pct = goal.value > 0 ? Math.round((latest / goal.value) * 100) : 0;
+    const [gy, gm] = goal.month.split("-").map(Number);
+    const now = new Date();
+    const monthsLeft = (gy - now.getFullYear()) * 12 + (gm - (now.getMonth() + 1));
+    return { latest, pct, monthsLeft, batido: latest >= goal.value };
+  })();
   const growthCls = growth == null ? "" : growth > 0 ? "bg-lone-success-bg text-lone-success" : growth < 0 ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
 
   return (
@@ -301,6 +346,56 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
           <p className="text-sm text-muted-foreground mt-1 max-w-prose">{insight.detail}</p>
         </div>
       )}
+
+      {/* Meta de faturamento do cliente */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Target size={15} className="text-primary" />
+            <h3 className="text-lone-h2 font-semibold">Meta de faturamento</h3>
+          </div>
+          <button onClick={() => setGoalOpen((o) => !o)} className="text-xs font-medium text-primary hover:underline">
+            {goal ? "Editar meta" : "Definir meta"}
+          </button>
+        </div>
+
+        {goalOpen ? (
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-[11px] text-muted-foreground mb-1">Faturamento-alvo (mensal)</label>
+              <input value={goalVal} onChange={(e) => setGoalVal(e.target.value)} placeholder="1.500.000"
+                className="w-40 bg-surface border border-border rounded-md px-2.5 py-1.5 text-xs font-mono text-foreground outline-none focus:border-primary/50" />
+            </div>
+            <div>
+              <label className="block text-[11px] text-muted-foreground mb-1">Até o mês</label>
+              <input type="month" value={goalMonth} onChange={(e) => setGoalMonth(e.target.value)}
+                className="bg-surface border border-border rounded-md px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/50" />
+            </div>
+            <button onClick={salvarMeta} disabled={goalSaving} className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40">{goalSaving ? "Salvando…" : "Salvar"}</button>
+            {goal && <button onClick={() => { setGoalVal(""); setGoalMonth(""); salvarMeta(); }} className="rounded-md px-2 py-1.5 text-xs text-destructive hover:underline">Remover</button>}
+          </div>
+        ) : goal && goalProgress ? (
+          <div className="mt-3">
+            <div className="flex items-baseline justify-between gap-2 mb-1.5">
+              <p className="text-sm text-foreground">
+                Bater <span className="font-semibold">{brl(goal.value)}</span>/mês até <span className="font-semibold">{mLabel(goal.month)}</span>
+                {goalProgress.monthsLeft > 0 ? <span className="text-muted-foreground"> · faltam {goalProgress.monthsLeft} {goalProgress.monthsLeft === 1 ? "mês" : "meses"}</span>
+                 : goalProgress.monthsLeft === 0 ? <span className="text-lone-warning"> · é este mês</span>
+                 : <span className="text-destructive"> · prazo passou</span>}
+              </p>
+              <span className={`text-sm font-bold ${goalProgress.batido ? "text-lone-success" : "text-primary"}`}>{goalProgress.pct}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div className={`h-full rounded-full ${goalProgress.batido ? "bg-lone-success" : "bg-primary"}`} style={{ width: `${Math.min(100, goalProgress.pct)}%` }} />
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              {goalProgress.batido ? "Meta batida! 🎉 Hora de propor um novo patamar." : `Último mês registrado: ${brl(goalProgress.latest)}.`}
+            </p>
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-muted-foreground">Defina o faturamento que o cliente quer bater e até quando — vira a linha de referência do gráfico e o progresso aqui.</p>
+        )}
+      </div>
 
       {/* Toolbar: ANO + visão */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -359,7 +454,7 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
                   <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={{ stroke: "var(--border)" }} tickLine={false} />
                   <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => brlk(Number(v))} width={44} />
                   <Tooltip cursor={{ fill: "var(--muted)", opacity: 0.12 }} {...TT} formatter={(v) => [brl(Number(v)), "Faturamento"]} />
-                  {maxFat >= refFat * 0.5 && <ReferenceLine y={refFat} stroke="var(--primary)" strokeDasharray="4 4" strokeOpacity={0.7} label={{ value: "R$ 1M", fill: "var(--primary)", fontSize: 10, position: "insideTopLeft" }} />}
+                  {maxFat >= refFat * 0.5 && <ReferenceLine y={refFat} stroke="var(--primary)" strokeDasharray="4 4" strokeOpacity={0.7} label={{ value: refLabel, fill: "var(--primary)", fontSize: 10, position: "insideTopLeft" }} />}
                   <Bar dataKey="fat" radius={[6, 6, 0, 0]} maxBarSize={64}>
                     {serie.map((_, i) => <Cell key={i} fill="url(#fvFat)" />)}
                     <LabelList dataKey="fat" position="top" formatter={(v) => brlBar(Number(v))} fill="var(--foreground)" fontSize={10} fontWeight={700} />

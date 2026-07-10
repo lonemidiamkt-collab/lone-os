@@ -96,6 +96,22 @@ async function buildSignalsFor(clientRow: Record<string, unknown>): Promise<Heal
     .maybeSingle();
   const postsGoal = (socialReport?.posts_goal as number) ?? 12;
 
+  // Crescimento de faturamento do cliente (Ficha Viva) — média recente vs anterior. Alimenta o
+  // sinal financeiro do churn: cliente crescendo = menos risco.
+  const { data: fin } = await supabaseAdmin
+    .from("client_financial_results")
+    .select("month, revenue")
+    .eq("client_id", clientId)
+    .order("month", { ascending: true });
+  let revenueGrowthPct: number | null = null;
+  const rev = (fin ?? []).map((r) => Number(r.revenue) || 0).filter((v) => v > 0);
+  if (rev.length >= 2) {
+    const n = Math.min(3, Math.floor(rev.length / 2));
+    const recent = rev.slice(-n).reduce((s, v) => s + v, 0) / n;
+    const prior = rev.slice(-2 * n, -n).reduce((s, v) => s + v, 0) / n;
+    revenueGrowthPct = prior > 0 ? ((recent - prior) / prior) * 100 : null;
+  }
+
   return {
     status: (clientRow.status as string) ?? "average",
     attentionLevel: (clientRow.attention_level as string) ?? "medium",
@@ -109,6 +125,7 @@ async function buildSignalsFor(clientRow: Record<string, unknown>): Promise<Heal
     contractEndsInDays,
     hasRenewalDraft,
     negativeMoodRecent,
+    revenueGrowthPct,
   };
 }
 

@@ -28,6 +28,7 @@ export interface HealthSignals {
   contractEndsInDays: number | null;    // menor distância em dias do end_date mais próximo; null se sem contrato ativo
   hasRenewalDraft: boolean;             // há draft de renovação?
   negativeMoodRecent: boolean;          // mood_entries últimos 14d tem sentiment ruim?
+  revenueGrowthPct: number | null;      // crescimento % do faturamento do cliente (Ficha Viva): recente vs anterior; null se <2 meses
 }
 
 export interface HealthBreakdown {
@@ -157,6 +158,16 @@ export function computeChurnRiskScore(signals: HealthSignals): HealthResult {
     score += 10;
   }
 
+  // 11. Crescimento do faturamento do cliente (Ficha Viva). Se o cliente VENDE MAIS a cada mês, o
+  // risco de churn cai (peso negativo = fator protetor); se o faturamento despenca, sobe. É o sinal
+  // financeiro mais direto de "o marketing está dando resultado pra ele".
+  if (signals.revenueGrowthPct !== null) {
+    if (signals.revenueGrowthPct >= 8) { b.revenue_growing = -12; score -= 12; }
+    else if (signals.revenueGrowthPct >= 2) { b.revenue_growing = -6; score -= 6; }
+    else if (signals.revenueGrowthPct <= -10) { b.revenue_declining = 15; score += 15; }
+    else if (signals.revenueGrowthPct <= -3) { b.revenue_declining = 8; score += 8; }
+  }
+
   score = Math.max(0, Math.min(100, score));
   return { score, level: levelFor(score), breakdown: b };
 }
@@ -178,6 +189,8 @@ export function signalLabel(key: string): string {
     overdue_design: "Fila de design atrasada",
     contract_expiring_no_draft: "Contrato vence em ≤30d sem renovação",
     mood_negative: "Sentiment negativo recente",
+    revenue_growing: "Faturamento do cliente crescendo (protege)",
+    revenue_declining: "Faturamento do cliente em queda",
   };
   return map[key] ?? key;
 }
