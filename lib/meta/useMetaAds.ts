@@ -13,7 +13,7 @@ export class TokenExpiredError extends Error {
 
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID ?? "";
 const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}/traffic` : "";
-const SCOPES = "ads_read,ads_management,business_management";
+const SCOPES = "ads_read,ads_management,business_management,instagram_basic,instagram_manage_insights,pages_read_engagement,pages_show_list";
 
 // ─── Supabase-backed global token storage ─────────────────────────────────
 

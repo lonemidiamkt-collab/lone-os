@@ -11,6 +11,12 @@ export const META_CONFIG = {
     "ads_management",
     "read_insights",
     "business_management",
+    // Orgânico (Instagram/Facebook): seguidores, alcance, curtidas, views de post. Exige App Review
+    // da Meta (Advanced Access) pra rodar em contas de cliente, e reconectar o login concedendo estes.
+    "instagram_basic",
+    "instagram_manage_insights",
+    "pages_read_engagement",
+    "pages_show_list",
   ],
 };
 
