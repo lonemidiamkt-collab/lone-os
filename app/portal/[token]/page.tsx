@@ -24,9 +24,12 @@ export default async function PortalPage({
     notFound();
   }
 
-  // Pacote do cliente decide as seções do portal: só-anúncio vê tráfego; só-social vê artes; etc.
+  // Pacote do cliente decide as seções do portal. Anúncios aparecem POR PADRÃO (retrocompatível e à
+  // prova de valores legados/desconhecidos como "trafego_pago") — só escondemos o tráfego pra pacote
+  // 100% social/design. Social/artes aparece pra quem tem social ou design no pacote.
   const st = (client.service_type as string) || "lone_growth";
-  const hasAds = ["lone_growth", "assessoria_trafego", "trafego_social_site"].includes(st);
+  const socialOnly = ["assessoria_social", "assessoria_design"].includes(st);
+  const hasAds = !socialOnly;
   const hasSocial = ["lone_growth", "assessoria_social", "assessoria_design", "trafego_social_site"].includes(st);
 
   // Log de acesso
