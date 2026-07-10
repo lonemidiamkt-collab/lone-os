@@ -44,25 +44,25 @@ export default function KanbanBoard<T extends { id: string }>({
     setDragging({ itemId, fromCol });
   };
 
-  const handleDrop = (toCol: string) => {
-    if (!dragging || dragging.fromCol === toCol) {
-      setDragging(null);
-      setDragOver(null);
-      return;
-    }
-    const fromColumn = columns.find((c) => c.id === dragging.fromCol);
-    const toColumn = columns.find((c) => c.id === toCol);
-    if (!fromColumn || !toColumn) return;
-    const item = fromColumn.items.find((i: T) => i.id === dragging.itemId);
+  // Move um item de coluna (usado pelo drag E pelo menu "Mover para" — este funciona no touch,
+  // onde o drag HTML5 não existe). Atualização otimista + callback.
+  const moveItem = (itemId: string, fromCol: string, toCol: string) => {
+    if (fromCol === toCol) return;
+    const fromColumn = columns.find((c) => c.id === fromCol);
+    const item = fromColumn?.items.find((i: T) => i.id === itemId);
     if (!item) return;
     setColumns((prev) =>
       prev.map((col) => {
-        if (col.id === dragging.fromCol) return { ...col, items: col.items.filter((i: T) => i.id !== dragging.itemId) };
+        if (col.id === fromCol) return { ...col, items: col.items.filter((i: T) => i.id !== itemId) };
         if (col.id === toCol) return { ...col, items: [...col.items, item] };
         return col;
       })
     );
-    onMove?.(dragging.itemId, dragging.fromCol, toCol);
+    onMove?.(itemId, fromCol, toCol);
+  };
+
+  const handleDrop = (toCol: string) => {
+    if (dragging && dragging.fromCol !== toCol) moveItem(dragging.itemId, dragging.fromCol, toCol);
     setDragging(null);
     setDragOver(null);
   };
@@ -108,9 +108,11 @@ export default function KanbanBoard<T extends { id: string }>({
               >
                 {renderCard(item, col.id)}
 
-                {/* Context menu (3 dots) — appears on hover */}
-                {(onEdit || onDelete) && (
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                {/* Menu (3 pontinhos). No desktop aparece no hover; no touch fica sempre visível
+                    (group-hover não dispara no toque). Inclui "Mover para" — o jeito de mover card
+                    no celular/tablet, onde o drag HTML5 não funciona. */}
+                {(onEdit || onDelete || (onMove && columns.length > 1)) && (
+                  <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10">
                     <button
                       onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === item.id ? null : item.id); }}
                       className="w-6 h-6 rounded-md flex items-center justify-center bg-black/60 backdrop-blur-sm text-muted-foreground hover:text-foreground transition-all"
@@ -121,7 +123,23 @@ export default function KanbanBoard<T extends { id: string }>({
                     {menuOpen === item.id && (
                       <>
                         <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(null)} />
-                        <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-30 py-1 min-w-[120px] animate-fade-in">
+                        <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-30 py-1 min-w-[150px] max-h-72 overflow-y-auto animate-fade-in">
+                          {onMove && columns.length > 1 && (
+                            <>
+                              <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Mover para</p>
+                              {columns.filter((c) => c.id !== col.id).map((target) => (
+                                <button
+                                  key={target.id}
+                                  onClick={(e) => { e.stopPropagation(); moveItem(item.id, col.id, target.id); setMenuOpen(null); }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-card/[0.04] hover:text-foreground transition-all"
+                                >
+                                  <span className={cn("w-2 h-2 rounded-full shrink-0", target.color)} />
+                                  <span className="truncate">{target.title}</span>
+                                </button>
+                              ))}
+                              {(onEdit || onDelete) && <div className="my-1 border-t border-border" />}
+                            </>
+                          )}
                           {onEdit && (
                             <button
                               onClick={(e) => { e.stopPropagation(); onEdit(item); setMenuOpen(null); }}

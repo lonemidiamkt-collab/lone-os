@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "sonner";
 import Header from "@/components/Header";
 import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
@@ -2824,7 +2825,16 @@ export default function SocialPage() {
               contentCards={filteredCards}
               designRequests={designRequests}
               onCardClick={setSelectedCard}
-              onConfirmArt={(card) => updateContentCard(card.id, { socialConfirmedAt: new Date().toISOString(), socialConfirmedBy: currentUser })}
+              onConfirmArt={(card) => {
+                // Confirmar a arte já avança pra Aprovação (Social Media) se ainda estava em produção.
+                const advance = ["ideas", "script", "in_production", "blocked"].includes(card.status);
+                updateContentCard(card.id, {
+                  socialConfirmedAt: new Date().toISOString(),
+                  socialConfirmedBy: currentUser,
+                  ...(advance ? { status: "approval" } : {}),
+                });
+                toast.success(advance ? "Arte confirmada — movida para Aprovação Social Media." : "Arte confirmada.");
+              }}
               onNonDelivery={setNonDeliveryCard}
               onMoveCard={(cardId, toStatus) => {
                 // Designer read-only: cannot move cards

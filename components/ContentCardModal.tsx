@@ -15,6 +15,7 @@ import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import type { ContentCard, CardAttachment } from "@/lib/types";
 import CardArtAttachments from "@/components/kanban/CardArtAttachments";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -860,7 +861,16 @@ export default function ContentCardModal({ card, onClose }: Props) {
               variant="outline"
               className="mr-auto flex items-center gap-2 text-lone-success border-lone-success-border hover:bg-lone-success-bg"
               onClick={() => {
-                updateContentCard(card.id, { socialConfirmedAt: new Date().toISOString(), socialConfirmedBy: currentUser });
+                // Confirmar a arte já AVANÇA o card pra Aprovação (Social Media) se ainda estiver em
+                // produção — antes só marcava confirmado e o card ficava parado na mesma coluna.
+                const advance = ["ideas", "script", "in_production", "blocked"].includes(status);
+                updateContentCard(card.id, {
+                  socialConfirmedAt: new Date().toISOString(),
+                  socialConfirmedBy: currentUser,
+                  ...(advance ? { status: "approval" } : {}),
+                });
+                if (advance) setStatus("approval");
+                toast.success(advance ? "Arte confirmada — card movido para Aprovação Social Media." : "Arte confirmada.");
               }}
             >
               <CheckCircle size={14} />

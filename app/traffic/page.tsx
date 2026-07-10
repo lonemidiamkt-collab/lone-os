@@ -1512,6 +1512,8 @@ function MonthlyReportsTab({
         <NewReportForm
           client={selectedClientData}
           currentUser={currentUser}
+          realCampaigns={realCampaigns}
+          monthSpend={monthSpendByClient.get(selectedClientData.id)}
           onSubmit={(data) => { onAddReport(data); setShowForm(false); }}
           onCancel={() => setShowForm(false)}
         />
@@ -1683,22 +1685,42 @@ function formatMonthLabel(month: string): string {
 function NewReportForm({
   client,
   currentUser,
+  realCampaigns,
+  monthSpend,
   onSubmit,
   onCancel,
 }: {
   client: Client;
   currentUser: string;
+  realCampaigns: AdCampaign[];
+  monthSpend?: number;
   onSubmit: (data: Omit<TrafficMonthlyReport, "id" | "createdAt">) => void;
   onCancel: () => void;
 }) {
-  const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const [yy, mm] = todaySP().split("-");
+  const defaultMonth = `${yy}-${mm}`;
 
   const [month, setMonth] = useState(defaultMonth);
   const [messages, setMessages] = useState("");
   const [messageCost, setMessageCost] = useState("");
   const [impressions, setImpressions] = useState("");
   const [observations, setObservations] = useState("");
+
+  const clientCampaigns = realCampaigns.filter((c) => c.clientId === client.id);
+  const hasReal = clientCampaigns.length > 0;
+
+  // Pré-preenche os campos a partir dos dados reais da Meta (a aba Anúncios precisa ter carregado a conta).
+  const puxarDaMeta = () => {
+    const sum = (pick: (m: NonNullable<AdCampaign["dailyMetrics"]>[number]) => number) =>
+      clientCampaigns.reduce((s, c) => s + (c.dailyMetrics ?? []).reduce((ds, m) => ds + pick(m), 0), 0);
+    const totalMsgs = sum((m) => m.messages ?? m.leads ?? 0);
+    const totalImpr = sum((m) => m.impressions ?? 0);
+    const totalSpend = monthSpend ?? sum((m) => m.spend ?? 0);
+    setMessages(String(totalMsgs));
+    setImpressions(String(totalImpr));
+    setMessageCost(totalMsgs > 0 ? (totalSpend / totalMsgs).toFixed(2) : "");
+    toast.success("Preenchi com os dados da Meta — confira e ajuste se precisar.");
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1719,7 +1741,18 @@ function NewReportForm({
     <div className="card border border-primary/20">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-foreground">Novo Relatorio — {client.name}</h3>
-        <button onClick={onCancel} className="text-muted-foreground hover:text-foreground p-1"><X size={16} /></button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={puxarDaMeta}
+            disabled={!hasReal}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title={hasReal ? "Preencher com os números reais da Meta" : "Abra a aba Anúncios e carregue a conta deste cliente para habilitar"}
+          >
+            <Zap size={13} /> Puxar da Meta
+          </button>
+          <button onClick={onCancel} className="text-muted-foreground hover:text-foreground p-1"><X size={16} /></button>
+        </div>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
