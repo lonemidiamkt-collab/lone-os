@@ -432,9 +432,10 @@ export default function DesignPage() {
   // (contentApprovals não atualizava). Refetch a cada 45s com a aba visível + ao voltar o foco.
   useEffect(() => {
     const tick = () => { if (document.visibilityState === "visible") refreshContent(); };
-    const interval = setInterval(tick, 45000);
+    const interval = setInterval(tick, 20000); // ~20s: mudança de status/arte do social aparece "sozinha" mais rápido
     document.addEventListener("visibilitychange", tick);
-    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", tick); };
+    window.addEventListener("focus", tick);
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); };
   }, [refreshContent]);
   const [tab, setTab] = useState<TabView>("kanbans");
   const [kanbanGroupBy, setKanbanGroupBy] = useState<"person" | "client">("person"); // agrupar por pessoa ou por cliente (visão unificada)

@@ -2136,9 +2136,10 @@ export default function SocialPage() {
   // baixo no VPS (1 GET, sem flicker).
   useEffect(() => {
     const tick = () => { if (document.visibilityState === "visible") refreshContent(); };
-    const interval = setInterval(tick, 45000);
+    const interval = setInterval(tick, 20000); // ~20s: status/imagem de outra pessoa aparecem "sozinhos" mais rápido
     document.addEventListener("visibilitychange", tick);
-    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", tick); };
+    window.addEventListener("focus", tick); // refetch ao voltar pra janela
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); };
   }, [refreshContent]);
 
   // ── NavContext: secondary sidebar tab navigation ──────────────
