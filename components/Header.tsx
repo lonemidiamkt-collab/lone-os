@@ -169,7 +169,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
               <FileText size={14} className="text-primary" />Novo Conteúdo
             </Link>
             <Link href="/communications" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-primary/5 transition-colors text-sm text-foreground">
-              <Smile size={14} className="text-primary" />Chat da Equipe
+              <Smile size={14} className="text-primary" />Comunicação
             </Link>
           </div>
           </>
