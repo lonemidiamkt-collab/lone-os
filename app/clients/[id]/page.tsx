@@ -682,7 +682,6 @@ export default function ClientDetailPage() {
           {activeTab === "resultados" && (
             <div className="space-y-4">
               <FeedbackCliente clientId={clientId} />
-              <InstagramOrganico clientId={clientId} />
               <CrescimentoTab client={client} currentUser={currentUser} />
             </div>
           )}
@@ -1283,6 +1282,9 @@ export default function ClientDetailPage() {
           {/* ── CONTENT ──────────────────────────────────────────────────────── */}
           {activeTab === "content" && (
             <div className="animate-fade-in space-y-3">
+              {/* Crescimento nas redes (Instagram orgânico) — fica aqui, no espaço de conteúdo/social,
+                  e não na aba Crescimento (que é faturamento/comercial). */}
+              <InstagramOrganico clientId={clientId} />
               {clientContent.length === 0 && (
                 <div className="card text-center py-10 text-muted-foreground">Nenhum conteúdo para este cliente.</div>
               )}

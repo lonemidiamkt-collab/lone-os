@@ -125,9 +125,9 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
       {/* Posts mais engajados do período */}
       {(data?.posts?.length ?? 0) > 0 && (
         <>
-          <p className="text-xs font-semibold mb-2" style={{ color: "#8b91a1" }}>Posts com mais engajamento</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {(data!.posts ?? []).slice(0, 8).map((p) => (
+          <p className="text-xs font-semibold mb-2" style={{ color: "#8b91a1" }}>5 melhores posts</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {(data!.posts ?? []).slice(0, 5).map((p) => (
               <a key={p.id} href={p.permalink ?? "#"} target="_blank" rel="noopener noreferrer" className="rounded-xl overflow-hidden block" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
                 {p.thumb
                   ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={p.thumb} alt="" className="w-full aspect-square object-cover" loading="lazy" />

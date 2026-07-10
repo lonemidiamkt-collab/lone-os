@@ -127,6 +127,11 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   const [hideGrid, setHideGrid]           = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
 
+  // Cliente escolhe o que ver: Anúncios (tráfego) ou Crescimento nas redes (Instagram orgânico).
+  // Só mostra o seletor quando o pacote tem os dois; senão abre direto no que existe.
+  const showToggle = hasAds && hasSocial;
+  const [view, setView] = useState<"ads" | "social">(hasAds ? "ads" : "social");
+
   const phone = whatsappPhone || WA_NUMBER;
 
   useEffect(() => {
@@ -239,12 +244,27 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           </div>
         )}
 
-        {/* Instagram orgânico + Conteúdo entregue (pacote social/design) — antes do tráfego */}
-        {hasSocial && <PortalInstagram token={token} clientId={clientId} />}
-        {hasSocial && <PortalContent token={token} />}
+        {/* Seletor: Anúncios × Crescimento nas redes (só quando o pacote tem os dois) */}
+        {showToggle && (
+          <div className="flex gap-1.5 mb-6 p-1.5 rounded-2xl" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
+            {([["ads", "📊", "Anúncios"], ["social", "📈", "Crescimento nas redes"]] as const).map(([v, ic, l]) => (
+              <button key={v} onClick={() => setView(v)}
+                className="flex-1 rounded-xl py-3 px-2 text-sm font-semibold transition-all flex items-center justify-center gap-2 min-h-[48px]"
+                style={view === v ? { background: "#2B3CFF", color: "#fff" } : { color: "#8b91a1" }}>
+                <span>{ic}</span><span className="whitespace-nowrap">{l}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Crescimento nas redes (Instagram orgânico + Conteúdo entregue) */}
+        {hasSocial && view === "social" && (<>
+          <PortalInstagram token={token} clientId={clientId} />
+          <PortalContent token={token} />
+        </>)}
 
         {/* Bloco de TRÁFEGO — só pra pacote que tem anúncios */}
-        {hasAds && (<>
+        {hasAds && view === "ads" && (<>
         {/* Tabs de período */}
         <div className={`${scrollRow} mb-5 lg:mb-7`}>
           {PERIODS.map((p) => (
@@ -349,22 +369,22 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
             {(loading || demo?.gender || (demo?.age_ranges?.length ?? 0) > 0) && (
               <div>
                 <SectionHeader title="Quem está vendo seus anúncios" />
-                <div className="rounded-xl p-4 lg:p-5" style={{ background: "#FFFFFF", color: "#0B0E1E" }}>
+                <div className="rounded-xl p-4 lg:p-5" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
                   {loading ? (
-                    <div className={`h-28 rounded-lg ${pulse}`} style={{ background: "#F3F4F6" }} />
+                    <div className={`h-28 rounded-lg ${pulse}`} style={{ background: "#1A1F33" }} />
                   ) : (
                     <div className="space-y-4">
                       {demo?.gender && (
                         <div>
-                          <p className="text-xs font-semibold mb-3" style={{ color: "#374151" }}>Gênero</p>
+                          <p className="text-xs font-semibold mb-3" style={{ color: "#8b91a1" }}>Gênero</p>
                           <div className="flex gap-3">
                             {[
                               { label: "Mulheres", pct: demo.gender.female_pct, color: "#E879F9" },
-                              { label: "Homens",   pct: demo.gender.male_pct,   color: "#2B3CFF" },
+                              { label: "Homens",   pct: demo.gender.male_pct,   color: "#5B7CFF" },
                             ].map((g) => (
-                              <div key={g.label} className="flex-1 rounded-xl p-3 text-center" style={{ background: "#F9FAFB" }}>
+                              <div key={g.label} className="flex-1 rounded-xl p-3 text-center" style={{ background: "#060814", border: "1px solid #1A1F33" }}>
                                 <p className="text-2xl font-bold" style={{ color: g.color }}>{g.pct}%</p>
-                                <p className="text-xs mt-1" style={{ color: "#6B7280" }}>{g.label}</p>
+                                <p className="text-xs mt-1" style={{ color: "#8b91a1" }}>{g.label}</p>
                               </div>
                             ))}
                           </div>
@@ -372,18 +392,18 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                       )}
                       {demo?.age_ranges && demo.age_ranges.length > 0 && (
                         <div>
-                          <p className="text-xs font-semibold mb-3" style={{ color: "#374151" }}>Faixa etária</p>
+                          <p className="text-xs font-semibold mb-3" style={{ color: "#8b91a1" }}>Faixa etária</p>
                           <ResponsiveContainer width="100%" height={110}>
                             <BarChart data={demo.age_ranges} margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
-                              <XAxis dataKey="label" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} />
-                              <YAxis tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} unit="%" width={28} />
+                              <XAxis dataKey="label" tick={{ fill: "#8b91a1", fontSize: 10 }} axisLine={false} tickLine={false} />
+                              <YAxis tick={{ fill: "#8b91a1", fontSize: 10 }} axisLine={false} tickLine={false} unit="%" width={28} />
                               <Tooltip
-                                contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, color: "#111" }}
+                                contentStyle={{ background: "#0B0E1E", border: "1px solid #1A1F33", borderRadius: 8, color: "#fff" }}
                                 formatter={(v) => [`${v}%`, "Alcance"]}
                               />
                               <Bar dataKey="pct" radius={[4, 4, 0, 0]} maxBarSize={40}>
                                 {demo.age_ranges.map((_, i) => (
-                                  <Cell key={i} fill={i === 0 ? "#2B3CFF" : "#93C5FD"} />
+                                  <Cell key={i} fill={i === 0 ? "#2B3CFF" : "#3A4A8F"} />
                                 ))}
                               </Bar>
                             </BarChart>
