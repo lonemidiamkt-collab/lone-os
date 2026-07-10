@@ -509,6 +509,20 @@ export async function POST(req: NextRequest) {
     if (claimErr) console.warn("[CS/inbound] claim indisponível (migration 058?):", claimErr.message);
   }
 
+  // ─── Corpus de estilo (passo 1 do aprendizado de estilo do CS) ───
+  // Guarda uma amostra das mensagens de texto dos grupos pra depois a IA aprender o TOM de cada
+  // grupo/cliente e do time da Lone. Fire-and-forget (não bloqueia o webhook). RLS ligado: só o
+  // service_role lê (conversa de cliente é sensível). Retenção/poda vem numa próxima etapa.
+  if (msg.text && msg.text.trim().length >= 3) {
+    void supabaseAdmin.from("cs_message_corpus").insert({
+      group_jid: msg.groupJid,
+      is_team: isLoneTeam(msg.authorJid, teamJids()),
+      author_jid: msg.authorJid ?? null,
+      author_name: msg.authorName ?? null,
+      text: msg.text.slice(0, 2000),
+    }).then(() => {}, () => {});
+  }
+
   try {
   // Diagnóstico (fase de piloto): toda mensagem REALMENTE recebida do webhook fica visível no log —
   // grupo, autor, se é imagem/áudio. Sem isso, mensagem descartada (allowlist/equipe) sumia sem
