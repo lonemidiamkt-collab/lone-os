@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
-import { getIgSnapshotCached, type IgPeriod } from "@/lib/meta/igSnapshot";
+import { getIgSnapshotCached, normalizeIgPeriod } from "@/lib/meta/igSnapshot";
 
 // GET /api/meta/instagram/[clientId]?period=week|month — relatório orgânico do Instagram do cliente
 // (seguidores + alcance do período + posts com curtidas/comentários/views). CACHEADO (6h) pra não
@@ -12,7 +12,7 @@ import { getIgSnapshotCached, type IgPeriod } from "@/lib/meta/igSnapshot";
 export async function GET(req: NextRequest, { params }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = await params;
   const portalToken = req.nextUrl.searchParams.get("token");
-  const period = (req.nextUrl.searchParams.get("period") === "week" ? "week" : "month") as IgPeriod;
+  const period = normalizeIgPeriod(req.nextUrl.searchParams.get("period"));
   const force = req.nextUrl.searchParams.get("force") !== null && !portalToken; // portal nunca força (evita rate limit)
 
   let ok = false;

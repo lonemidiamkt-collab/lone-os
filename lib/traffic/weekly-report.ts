@@ -24,16 +24,21 @@ export function clientDisplayName(c: { nome_fantasia: string | null; name: strin
   return c.nome_fantasia || c.name;
 }
 
-export function periodLabel7d(): string {
-  // O last_7d da Meta NÃO inclui hoje: cobre os 7 dias que terminam ONTEM.
-  // Rodando na segunda, isso é exatamente segunda → domingo da semana passada.
+export function periodLabelDays(n: number): string {
+  // A janela da Meta NÃO inclui hoje: cobre os N dias que terminam ONTEM.
   const now = new Date();
   const until = new Date(now);
-  until.setDate(until.getDate() - 1); // domingo (último dia fechado)
+  until.setDate(until.getDate() - 1); // último dia fechado
   const since = new Date(now);
-  since.setDate(since.getDate() - 7); // segunda
+  since.setDate(since.getDate() - n);
   return `${since.toLocaleDateString("pt-BR")} – ${until.toLocaleDateString("pt-BR")}`;
 }
+export function periodLabel7d(): string {
+  // Rodando na segunda, isso é exatamente segunda → domingo da semana passada.
+  return periodLabelDays(7);
+}
+// Períodos do relatório automático: 7 (semanal) e 30 (mensal). O 14 fica pro seletor do portal.
+export const IG_PERIOD_FOR_DAYS: Record<number, "7d" | "14d" | "30d"> = { 7: "7d", 14: "14d", 30: "30d" };
 
 export function slug(s: string): string {
   return s
@@ -88,16 +93,18 @@ export async function selectActiveClientsWithGroup(onlyClientId?: string | null)
 export async function buildClientPdf(
   token: string,
   client: ReportClientRow,
+  periodDays = 7,
 ): Promise<{ ok: boolean; buffer?: Buffer; error?: string }> {
   const accountId = client.meta_ad_account_id;
   const clientName = clientDisplayName(client);
-  const periodo = periodLabel7d();
+  const periodo = periodLabelDays(periodDays);
+  const igPeriodo = IG_PERIOD_FOR_DAYS[periodDays] ?? "7d";
 
   // ── Instagram orgânico (do cache; não bate na Meta ao vivo) ──
   let igSnap: IgSnapshot | null = null;
   if (client.ig_business_account_id && client.id) {
     try {
-      const s = await getIgSnapshotCached(client.id, "week", false);
+      const s = await getIgSnapshotCached(client.id, igPeriodo, false);
       if (s.mapped && !s.error && s.conta) igSnap = s;
     } catch { /* IG é best-effort — se falhar, sai só o tráfego */ }
   }
@@ -105,17 +112,17 @@ export async function buildClientPdf(
   // ── Tráfego (anúncios) ──
   let trafficHtml: string | null = null;
   if (accountId) {
-    const raw = await fetchCampaignInsights(token, accountId, 7);
+    const raw = await fetchCampaignInsights(token, accountId, periodDays);
     const campaigns = (raw as Array<{ error?: boolean }>).filter((c) => !c.error) as unknown as AdCampaign[];
     if (campaigns.length > 0) {
       let demographics: ReturnType<typeof buildTrafficReportData>["demographics"] | undefined;
       try {
-        const demo = await fetchAccountDemographics(token, accountId, 7);
+        const demo = await fetchAccountDemographics(token, accountId, periodDays);
         demographics = demo ?? undefined;
       } catch { /* demografia é opcional */ }
       // Alcance deduplicado no nível da conta (não somar campanha a campanha).
-      const accountReach = await fetchAccountReach(token, accountId, 7);
-      const reportData = buildTrafficReportData(clientName, campaigns, periodo, undefined, demographics, undefined, 7, accountReach ?? undefined);
+      const accountReach = await fetchAccountReach(token, accountId, periodDays);
+      const reportData = buildTrafficReportData(clientName, campaigns, periodo, undefined, demographics, undefined, periodDays, accountReach ?? undefined);
       trafficHtml = buildClientReportHtml(reportData);
     }
   }

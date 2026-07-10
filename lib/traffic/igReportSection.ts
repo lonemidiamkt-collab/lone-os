@@ -1,5 +1,6 @@
-// lib/traffic/igReportSection.ts — HTML do relatório de Instagram orgânico (seguidores + alcance/
-// curtidas/comentários do período + destaques). Dois formatos, mesmo visual do relatório de tráfego:
+// lib/traffic/igReportSection.ts — HTML do relatório de Instagram orgânico (seguidores + seguidores
+// ganhos + alcance + visualizações + engajamento do período + posts mais engajados). Dois formatos,
+// mesmo visual do relatório de tráfego:
 //   igSectionHtml(snap)  → só os blocos internos, pra ENCAIXAR no PDF de tráfego (cliente com os dois).
 //   buildIgOnlyHtml(...)  → documento completo, pro cliente que é SÓ social mídia.
 
@@ -13,27 +14,33 @@ function reportBaseUrl(): string {
 }
 
 const fmtBR = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleString("pt-BR"));
+const fmtSigned = (n: number | null | undefined) => (n == null ? "—" : (n > 0 ? "+" : "") + n.toLocaleString("pt-BR"));
 
 function igKpiCards(snap: IgSnapshot): string {
+  const r = snap.resumo;
   const kpis: [string, string, boolean][] = [
     ["Seguidores", fmtBR(snap.conta?.seguidores), true],
-    ["Alcance (7 dias)", fmtBR(snap.resumo?.alcance ?? null), false],
-    ["Curtidas no período", fmtBR(snap.resumo?.curtidas), false],
-    ["Comentários", fmtBR(snap.resumo?.comentarios), false],
+    ["Seguidores ganhos", fmtSigned(r?.seguidoresGanhos ?? null), false],
+    ["Alcance", fmtBR(r?.alcance ?? null), false],
+    ["Visualizações", fmtBR(r?.visualizacoes ?? null), false],
+    ["Curtidas", fmtBR(r?.curtidas ?? null), false],
+    ["Comentários", fmtBR(r?.comentarios ?? null), false],
+    ["Engajamento total", fmtBR(r?.engajamento ?? null), false],
+    ["Posts no período", fmtBR(r?.postsNoPeriodo ?? null), false],
   ];
   return kpis.map(([label, value, accent]) => `
-    <div style="flex:1;background:#0d0d10;border:1px solid ${accent ? IG : "#1a1a2e"};border-radius:10px;padding:14px 16px;">
-      <div style="font-size:10px;color:#52525b;margin-bottom:7px;line-height:1.3;">${label}</div>
-      <div style="font-size:${accent ? "26px" : "20px"};font-weight:${accent ? "900" : "800"};color:${accent ? "#fff" : "#d4d4d8"};letter-spacing:-.02em;line-height:1;">${value}</div>
+    <div style="width:calc(25% - 8px);background:#0d0d10;border:1px solid ${accent ? IG : "#1a1a2e"};border-radius:10px;padding:12px 14px;">
+      <div style="font-size:9.5px;color:#52525b;margin-bottom:6px;line-height:1.3;">${label}</div>
+      <div style="font-size:${accent ? "24px" : "19px"};font-weight:${accent ? "900" : "800"};color:${accent ? "#fff" : "#d4d4d8"};letter-spacing:-.02em;line-height:1;">${value}</div>
     </div>`).join("");
 }
 
 function igPostsGrid(snap: IgSnapshot): string {
-  const posts = (snap.posts ?? []).slice(0, 4);
+  const posts = (snap.posts ?? []).slice(0, 4); // já vêm ordenados por engajamento
   if (posts.length === 0) return "";
   return `
   <div style="padding:0 32px;margin-bottom:20px;">
-    <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:${IG};margin-bottom:10px;">Destaques do período</div>
+    <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:${IG};margin-bottom:10px;">Posts com mais engajamento</div>
     <div style="display:flex;gap:10px;">
       ${posts.map((p) => `
       <div style="flex:1;background:#0a0a0d;border:1px solid #1a1a2e;border-radius:10px;overflow:hidden;">
@@ -49,14 +56,15 @@ function igPostsGrid(snap: IgSnapshot): string {
 /** Só os blocos internos (título + KPIs + destaques) pra encaixar no relatório de tráfego. */
 export function igSectionHtml(snap: IgSnapshot): string {
   if (!snap.mapped || snap.error || !snap.conta) return "";
+  const label = snap.periodoLabel || "período";
   return `
   <div style="margin:8px 32px 16px;height:2px;background:linear-gradient(90deg,${IG} 0%,#1a1a2e 65%);border-radius:1px;"></div>
   <div style="padding:0 32px 2px;">
-    <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:${IG};margin-bottom:5px;">Instagram Orgânico</div>
+    <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:${IG};margin-bottom:5px;">Instagram Orgânico · ${label}</div>
     <div style="font-size:18px;font-weight:900;letter-spacing:-.02em;color:#fff;line-height:1;">@${snap.conta.username}</div>
-    <div style="font-size:11px;color:#52525b;margin-top:4px;">Alcance, curtidas e comentários dos seus posts nos últimos 7 dias</div>
+    <div style="font-size:11px;color:#52525b;margin-top:4px;">Alcance, visualizações, seguidores e engajamento dos seus posts nos últimos ${label}</div>
   </div>
-  <div style="padding:12px 32px 0;display:flex;gap:10px;margin-bottom:16px;">
+  <div style="padding:12px 32px 0;display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
     ${igKpiCards(snap)}
   </div>
   ${igPostsGrid(snap)}`;
@@ -65,6 +73,8 @@ export function igSectionHtml(snap: IgSnapshot): string {
 /** Documento completo (cliente só-social): header + seção de IG + rodapé, no mesmo tema. */
 export function buildIgOnlyHtml(clientName: string, period: string, snap: IgSnapshot): string {
   const logoUrl = `${reportBaseUrl()}/logo.png`;
+  const label = snap.periodoLabel || "período";
+  const periodTitle = label === "7 dias" ? "Resultado Semanal" : label === "30 dias" ? "Resultado Mensal" : `Resultado — ${label}`;
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -97,7 +107,7 @@ export function buildIgOnlyHtml(clientName: string, period: string, snap: IgSnap
 
   <!-- HERO -->
   <div style="padding:22px 32px 0;">
-    <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:${IG};margin-bottom:5px;">Resultado Semanal</div>
+    <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:${IG};margin-bottom:5px;">${periodTitle}</div>
     <div style="font-size:28px;font-weight:900;letter-spacing:-.025em;color:#fff;line-height:1;">${clientName}</div>
     <div style="font-size:11px;color:#52525b;margin-top:4px;">Resultado do seu Instagram no período selecionado</div>
   </div>

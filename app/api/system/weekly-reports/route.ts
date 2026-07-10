@@ -21,7 +21,7 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { getMetaToken, getAlertSettings } from "@/lib/traffic/sync-core";
 import { sendMediaDocument } from "@/lib/whatsapp/evolution";
 import {
-  buildClientPdf, selectActiveMetaClients, periodLabel7d, slug,
+  buildClientPdf, selectActiveMetaClients, periodLabelDays, slug,
 } from "@/lib/traffic/weekly-report";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
@@ -55,7 +55,11 @@ export async function POST(req: NextRequest) {
   const dryRun = url.searchParams.get("dryRun") === "1";
   const force = url.searchParams.get("force") === "1";
   const onlyClientId = url.searchParams.get("clientId");
-  const dateKey = todayKeyBRT();
+  // ?period=month → relatório de 30 dias (mensal); padrão = 7 dias (semanal).
+  const periodDays = url.searchParams.get("period") === "month" ? 30 : 7;
+  const escopoLabel = periodDays === 30 ? "30 dias" : "7 dias";
+  // Chave de idempotência separada por escopo — semanal e mensal não colidem no mesmo dia.
+  const dateKey = todayKeyBRT() + (periodDays === 30 ? ":m" : "");
 
   try {
     const settings = await getAlertSettings();
@@ -82,7 +86,7 @@ export async function POST(req: NextRequest) {
     // Preview de 1 cliente: gera o PDF e salva no Storage, devolve a URL (não envia no grupo).
     if (dryRun && onlyClientId) {
       const c = clients[0];
-      const pdf = await buildClientPdf(token, c);
+      const pdf = await buildClientPdf(token, c, periodDays);
       if (!pdf.ok || !pdf.buffer) {
         return NextResponse.json({ ok: false, status: "failed", client: c.nome_fantasia || c.name, error: pdf.error }, { status: 200 });
       }
@@ -116,7 +120,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const period = periodLabel7d();
+    const period = periodLabelDays(periodDays);
     let sent = 0, failed = 0;
     const errors: string[] = [];
 
@@ -130,10 +134,10 @@ export async function POST(req: NextRequest) {
         if (jaEnviou && jaEnviou.length > 0) continue;
       }
       try {
-        const pdf = await buildClientPdf(token, c);
+        const pdf = await buildClientPdf(token, c, periodDays);
         if (!pdf.ok || !pdf.buffer) { failed++; errors.push(`${clientName}: ${pdf.error}`); continue; }
 
-        const caption = `📊 *Relatório 7 dias — ${clientName}*\nPeríodo: ${period}`;
+        const caption = `📊 *Relatório ${escopoLabel} — ${clientName}*\nPeríodo: ${period}`;
         const fileName = `relatorio-${slug(clientName)}-${dateKey}.pdf`;
         const res = await sendMediaDocument(settings.groupJid, pdf.buffer.toString("base64"), fileName, caption);
         if (res.ok) { sent++; await supabaseAdmin.from("weekly_report_log").insert({ week_key: clientKey, status: "sent", message: clientName }).then(() => {}, () => {}); } else { failed++; errors.push(`${clientName}: envio ${res.error}`); }
