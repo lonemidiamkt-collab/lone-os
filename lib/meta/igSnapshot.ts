@@ -109,18 +109,22 @@ async function somaInsightDiario(igId: string, metric: string, since: string, un
   } catch { return null; }
 }
 
-// Alcance DEDUPLICADO do período (pessoas únicas). Somar o reach diário conta a mesma pessoa em vários
-// dias e infla o número — o correto é o total_value do intervalo. Fallback: soma diária (impreciso).
-async function reachTotal(igId: string, since: string, until: string, token: string): Promise<number | null> {
+// Alcance DEDUPLICADO (pessoas únicas). Somar o reach diário conta a mesma pessoa em vários dias e
+// infla (dava 108k p/ conta de 2,5k seguidores). A Meta só entrega reach dedup em janela ROLANTE de
+// 7d (period=week) ou 28d (period=days_28) — pego o ÚLTIMO valor da série (janela terminando hoje).
+// Não tem janela de 14d nativa → uso a de 28d como aproximação. Sem fallback pra soma (que mentia).
+async function reachDedup(igId: string, dias: number, token: string): Promise<number | null> {
+  const period = dias <= 7 ? "week" : "days_28";
   try {
-    const r = await fetch(`${GRAPH}/${igId}/insights?metric=reach&period=day&metric_type=total_value&since=${since}&until=${until}&access_token=${token}`);
+    const r = await fetch(`${GRAPH}/${igId}/insights?metric=reach&period=${period}&access_token=${token}`);
     const j = await r.json().catch(() => ({}));
     if (!j?.error) {
-      const tv = j.data?.[0]?.total_value?.value;
-      if (typeof tv === "number") return tv;
+      const vals = (j.data?.[0]?.values ?? []) as { value: number }[];
+      const last = vals.length ? vals[vals.length - 1]?.value : undefined;
+      if (typeof last === "number") return last;
     }
-  } catch { /* cai no fallback */ }
-  return somaInsightDiario(igId, "reach", since, until, token);
+  } catch { /* indisponível → null */ }
+  return null;
 }
 
 export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Promise<IgSnapshot> {
@@ -146,7 +150,7 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
   // Insights de conta no período (best-effort): alcance (reach) e seguidores ganhos (follower_count).
   // + demografia do público (gênero/idade/cidades) — lifetime, não depende do período.
   const [alcance, seguidoresGanhos, audiencia] = await Promise.all([
-    somaInsightDiario(igId, "reach", sinceStr, untilStr, token),
+    reachDedup(igId, dias, token),
     somaInsightDiario(igId, "follower_count", sinceStr, untilStr, token),
     buildAudiencia(igId, token),
   ]);
