@@ -20,6 +20,23 @@ interface Update {
  * Shows unread platform updates on the home dashboard.
  * User can dismiss/mark as read, or go to /sobre for full changelog.
  */
+// Lidos guardados NO DISPOSITIVO (fallback) — garante que "marcar como lido" faça a novidade
+// sumir mesmo se o round-trip pro servidor falhar. O servidor continua sendo a fonte cross-device,
+// mas o localStorage evita o bug de "marquei e voltou".
+const LS_KEY = "lone_read_updates";
+function localReadIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try { return new Set(JSON.parse(localStorage.getItem(LS_KEY) || "[]")); } catch { return new Set(); }
+}
+function addLocalRead(ids: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    const cur = localReadIds();
+    ids.forEach((id) => cur.add(id));
+    localStorage.setItem(LS_KEY, JSON.stringify([...cur]));
+  } catch { /* ignore */ }
+}
+
 export default function PlatformUpdatesWidget() {
   const { currentProfile } = useRole();
   const userEmail = (currentProfile?.email || "").toLowerCase();
@@ -32,7 +49,12 @@ export default function PlatformUpdatesWidget() {
     // GET usa session do Authorization header pra derivar user_email
     authedFetch("/api/platform-updates")
       .then((r) => r.json())
-      .then((data) => { setUpdates(data.updates ?? []); })
+      .then((data) => {
+        // Read = servidor OU já marcado localmente neste dispositivo (fallback anti "voltou").
+        const local = localReadIds();
+        setUpdates((data.updates ?? []).map((u: Update) => ({ ...u, read: u.read || local.has(u.id) })));
+      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [userEmail]);
 
@@ -40,16 +62,16 @@ export default function PlatformUpdatesWidget() {
 
   const markAllRead = async () => {
     if (unread.length === 0) return;
-    await authedFetch("/api/platform-updates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "mark_read",
-        update_ids: unread.map((u) => u.id),
-      }),
-    });
+    const ids = unread.map((u) => u.id);
+    // 1) grava local NA HORA (garante que suma) 2) some da tela 3) tenta persistir no servidor
+    addLocalRead(ids);
     setUpdates((prev) => prev.map((u) => ({ ...u, read: true })));
     setDismissed(true);
+    authedFetch("/api/platform-updates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mark_read", update_ids: ids }),
+    }).catch(() => { /* já está marcado local; servidor é best-effort */ });
   };
 
   if (loading || dismissed || unread.length === 0) return null;

@@ -38,7 +38,7 @@ interface Row {
 }
 
 type Period = "mes" | "tri" | "sem";
-interface Point { label: string; fat: number; vendas: number; ticket: number }
+interface Point { label: string; fat: number; vendas: number; ticket: number; sub?: string }
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const brl = (n: number) => "R$ " + (n || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
@@ -222,12 +222,13 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
       return yearWithData.map((r) => ({ label: mLabel(r.month), fat: r.revenue, vendas: r.vendas || 0, ticket: ticketOf(r) ?? 0 }));
     }
     if (period === "tri") {
-      const labels = ["Jan–Mar", "Abr–Jun", "Jul–Set", "Out–Dez"];
+      const ord = ["1º Tri", "2º Tri", "3º Tri", "4º Tri"];
+      const faixa = ["Jan–Mar", "Abr–Jun", "Jul–Set", "Out–Dez"];
       return [0, 1, 2, 3].map((q) => {
         const ms = yearRows.filter((r) => Math.floor((+r.month.split("-")[1] - 1) / 3) === q);
         const fat = ms.reduce((s, r) => s + r.revenue, 0);
         const vendas = ms.reduce((s, r) => s + (r.vendas || 0), 0);
-        return { label: `${labels[q]} ${String(year).slice(2)}`, fat, vendas, ticket: vendas ? fat / vendas : 0 };
+        return { label: `${ord[q]} ${String(year).slice(2)}`, sub: faixa[q], fat, vendas, ticket: vendas ? fat / vendas : 0 };
       }).filter((p) => p.fat > 0);
     }
     // semestre: S1 Jan–Jun, S2 Jul–Dez
@@ -235,9 +236,15 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
       const ms = yearRows.filter((r) => (+r.month.split("-")[1] <= 6 ? 0 : 1) === s);
       const fat = ms.reduce((acc, r) => acc + r.revenue, 0);
       const vendas = ms.reduce((acc, r) => acc + (r.vendas || 0), 0);
-      return { label: `${s === 0 ? "1º sem" : "2º sem"} ${String(year).slice(2)}`, fat, vendas, ticket: vendas ? fat / vendas : 0 };
+      return { label: `${s === 0 ? "1º sem" : "2º sem"} ${String(year).slice(2)}`, sub: s === 0 ? "Jan–Jun" : "Jul–Dez", fat, vendas, ticket: vendas ? fat / vendas : 0 };
     }).filter((p) => p.fat > 0);
   }, [yearWithData, yearRows, period, year]);
+
+  // Crescimento de cada período vs o anterior (pros chips por trimestre/semestre).
+  const serieGrowth = useMemo(() => serie.map((p, i) => {
+    const prev = serie[i - 1];
+    return { ...p, mom: i > 0 && prev.fat > 0 ? (p.fat / prev.fat - 1) * 100 : null };
+  }), [serie]);
 
   // Crescimento % do último ponto vs o anterior, na visão atual (pro badge "aumento de faturamento").
   const growth = useMemo(() => {
@@ -461,6 +468,24 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+          )}
+          {/* Crescimento por período (trimestre/semestre) — cada bloco vs o anterior */}
+          {period !== "mes" && serieGrowth.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {serieGrowth.map((p) => (
+                <div key={p.label} className="flex items-center gap-2 rounded-lg border border-border bg-surface px-2.5 py-1.5">
+                  <div className="leading-tight">
+                    <p className="text-[11px] font-semibold text-foreground">{p.label}{p.sub ? <span className="font-normal text-muted-foreground"> · {p.sub}</span> : null}</p>
+                    <p className="text-[11px] font-mono text-foreground">{brl(p.fat)}</p>
+                  </div>
+                  {p.mom != null && (
+                    <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${p.mom > 0 ? "bg-lone-success-bg text-lone-success" : p.mom < 0 ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"}`}>
+                      {p.mom > 0 ? <TrendingUp size={10} /> : p.mom < 0 ? <TrendingDown size={10} /> : <Minus size={10} />}{pctFmt(p.mom)}
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
