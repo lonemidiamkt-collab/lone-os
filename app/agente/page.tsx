@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import EstiloPerfis from "@/components/agente/EstiloPerfis";
 
 interface DashData {
   ok: boolean;
@@ -235,6 +236,9 @@ export default function AgentePage() {
           )}
         </section>
       </div>
+
+      {/* Estilo de comunicação aprendido (passo 2 — revisar antes de ligar no agente) */}
+      <EstiloPerfis />
 
       {/* Funções */}
       <section>
