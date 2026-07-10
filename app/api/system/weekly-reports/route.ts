@@ -59,7 +59,8 @@ export async function POST(req: NextRequest) {
   const periodDays = url.searchParams.get("period") === "month" ? 30 : 7;
   const escopoLabel = periodDays === 30 ? "30 dias" : "7 dias";
   // Chave de idempotência separada por escopo — semanal e mensal não colidem no mesmo dia.
-  const dateKey = todayKeyBRT() + (periodDays === 30 ? ":m" : "");
+  // Sufixo com hífen (não ":") — dois-pontos quebra o nome do arquivo no Storage/URL.
+  const dateKey = todayKeyBRT() + (periodDays === 30 ? "-mensal" : "");
 
   try {
     const settings = await getAlertSettings();

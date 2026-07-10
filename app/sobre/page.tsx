@@ -536,7 +536,7 @@ const MODULES: Module[] = [
       "Banco de hashtags reutilizável",
       "Criação em lote de conteúdo mensal (20 cards de uma vez)",
       "Agente CS (monitor[IA]) lê os grupos e abre card automático — fotos enviadas em sequência (ex: vários produtos) viram UM card só, sem fragmentar nem perder nenhuma",
-      "Relatório de Instagram orgânico (seguidores, seguidores ganhos, alcance, visualizações, engajamento e posts mais engajados) em 7/14/30 dias — no portal do cliente e no PDF semanal/mensal",
+      "Relatório de Instagram orgânico (seguidores, seguidores ganhos, alcance, engajamento, público — gênero/idade/cidades — e posts mais engajados) em 7/14/30 dias — no portal e no PDF semanal/mensal, com anúncios e Instagram em páginas separadas",
     ],
     tips: [
       "Use 'criação em lote' no começo do mês pra já deixar o calendário montado.",
