@@ -13,10 +13,8 @@ export class TokenExpiredError extends Error {
 
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID ?? "";
 const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}/traffic` : "";
-// Escopos de Instagram só entram quando o app tiver o produto "Instagram Graph API" (senão a Meta
-// rejeita e trava o reconectar). Liga via NEXT_PUBLIC_META_IG_SCOPES=1.
-const SCOPES = "ads_read,ads_management,business_management" +
-  (process.env.NEXT_PUBLIC_META_IG_SCOPES === "1" ? ",instagram_basic,instagram_manage_insights,pages_read_engagement,pages_show_list" : "");
+// Inclui Instagram orgânico (permissões já adicionadas ao app na Meta em 10/jul).
+const SCOPES = "ads_read,ads_management,business_management,instagram_basic,instagram_manage_insights,pages_read_engagement,pages_show_list";
 
 // ─── Supabase-backed global token storage ─────────────────────────────────
 
