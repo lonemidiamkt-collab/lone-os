@@ -16,13 +16,18 @@ export default async function PortalPage({
   // Valida token
   const { data: client } = await supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, public_report_enabled, public_report_token_revoked_at")
+    .select("id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, public_report_enabled, public_report_token_revoked_at, service_type")
     .eq("public_report_token", token)
     .single();
 
   if (!client || !client.public_report_enabled || client.public_report_token_revoked_at) {
     notFound();
   }
+
+  // Pacote do cliente decide as seções do portal: só-anúncio vê tráfego; só-social vê artes; etc.
+  const st = (client.service_type as string) || "lone_growth";
+  const hasAds = ["lone_growth", "assessoria_trafego", "trafego_social_site"].includes(st);
+  const hasSocial = ["lone_growth", "assessoria_social", "assessoria_design", "trafego_social_site"].includes(st);
 
   // Log de acesso
   const hdrs = await headers();
@@ -66,6 +71,8 @@ export default async function PortalPage({
         whatsappPhone={(client.whatsapp_team_phone as string) || "5522981530700"}
         welcomeMessage={(client.portal_welcome_message as string) || null}
         initialData={initialData}
+        hasAds={hasAds}
+        hasSocial={hasSocial}
       />
     </>
   );

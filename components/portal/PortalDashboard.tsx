@@ -8,6 +8,7 @@ import {
 import { ImageIcon } from "lucide-react";
 import type { SnapshotData, PeriodKind } from "@/lib/portal/types";
 import MobileFAB from "./MobileFAB";
+import PortalContent from "./PortalContent";
 
 const WA_NUMBER = "5522981530700";
 
@@ -110,9 +111,11 @@ interface Props {
   whatsappPhone: string;
   welcomeMessage: string | null;
   initialData: SnapshotData | null;
+  hasAds?: boolean;    // pacote inclui anúncios → mostra tráfego
+  hasSocial?: boolean; // pacote inclui social/design → mostra artes entregues
 }
 
-export default function PortalDashboard({ token, clientName, whatsappPhone, welcomeMessage, initialData }: Props) {
+export default function PortalDashboard({ token, clientName, whatsappPhone, welcomeMessage, initialData, hasAds = true, hasSocial = false }: Props) {
   const [period, setPeriod]         = useState<PeriodKind>("last_week");
   const [data, setData]             = useState<SnapshotData | null>(initialData);
   const [loading, setLoading]       = useState(false);
@@ -234,6 +237,11 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
           </div>
         )}
 
+        {/* Conteúdo entregue (pacote social/design) — antes do tráfego */}
+        {hasSocial && <PortalContent token={token} />}
+
+        {/* Bloco de TRÁFEGO — só pra pacote que tem anúncios */}
+        {hasAds && (<>
         {/* Tabs de período */}
         <div className={`${scrollRow} mb-5 lg:mb-7`}>
           {PERIODS.map((p) => (
@@ -481,6 +489,7 @@ export default function PortalDashboard({ token, clientName, whatsappPhone, welc
             )}
           </div>
         </div>
+        </>)}
 
         {/* ── Footer ───────────────────────────────────────────────────── */}
         <div className="text-center mt-10 pb-20 lg:pb-10 space-y-2">
