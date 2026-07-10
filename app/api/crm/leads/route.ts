@@ -46,14 +46,17 @@ export async function PATCH(req: NextRequest) {
     let etapaMudou: string | null = null;
     if (typeof patch.estagio === "string") {
       const atual = await db.fetchCrmLeadById(id);
+      // Data em São Paulo (não UTC): o relatório agrupa por mês de fechado_em; à noite no fim do mês,
+      // o ISO UTC (UTC-3 → +3h) jogava a venda pro mês seguinte e ela sumia do "Vendas no mês".
+      const hojeSP = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // "YYYY-MM-DD"
       const fechado = patch.estagio === "ganho" || patch.estagio === "perdido";
-      if (fechado && atual?.estagio !== patch.estagio) patch.fechadoEm = new Date().toISOString();
+      if (fechado && atual?.estagio !== patch.estagio) patch.fechadoEm = hojeSP;
       if (!fechado) {
         patch.fechadoEm = null;
         if (atual?.estagio === "perdido" && patch.motivoPerda === undefined) patch.motivoPerda = null;
       }
       if (patch.estagio === "proposta" && !atual?.propostaEnviadaEm && patch.propostaEnviadaEm === undefined) {
-        patch.propostaEnviadaEm = new Date().toISOString().slice(0, 10);
+        patch.propostaEnviadaEm = hojeSP;
       }
       if (atual && atual.estagio !== patch.estagio) etapaMudou = patch.estagio;
     }

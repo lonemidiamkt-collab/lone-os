@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
@@ -87,6 +88,7 @@ export default function CrmPage() {
   const [tab, setTab] = useState<"hoje" | "dashboard" | "funil" | "agenda" | "relatorios">("hoje");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [convertendo, setConvertendo] = useState(false);
   const [busca, setBusca] = useState("");
   const [fResp, setFResp] = useState("");
   const [fOrigem, setFOrigem] = useState("");
@@ -305,27 +307,45 @@ export default function CrmPage() {
   }
 
   async function moverEstagio(id: string, _from: string, to: string) {
+    const snapshot = leads; // pra reverter se o banco recusar
     setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, estagio: to as CrmEstagio } : l)));
-    const r = await authedFetch("/api/crm/leads", {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, estagio: to }),
-    }).catch(() => null);
-    if (r?.ok) {
+    try {
+      const r = await authedFetch("/api/crm/leads", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, estagio: to }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const { lead } = await r.json();
       setLeads((prev) => prev.map((l) => (l.id === lead.id ? lead : l)));
       // Caiu em "perdido" sem motivo → abre o modal pra registrar o porquê (alimenta o relatório).
       if (to === "perdido" && !lead.motivoPerda) setDraft({ ...lead });
+    } catch {
+      setLeads(snapshot); // reverte: o card não muda de coluna se o banco não confirmou
+      toast.error("Não foi possível mover o lead. Tente de novo.");
     }
   }
 
   async function excluir(id: string) {
     if (!confirm("Excluir este lead? Essa ação não tem volta.")) return;
+    const snapshot = leads;
     setLeads((prev) => prev.filter((l) => l.id !== id));
-    await authedFetch(`/api/crm/leads?id=${id}`, { method: "DELETE" }).catch(() => {});
+    try {
+      const r = await authedFetch(`/api/crm/leads?id=${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      toast.success("Lead excluído.");
+    } catch {
+      setLeads(snapshot); // volta o lead pra lista se o delete falhou
+      toast.error("Não foi possível excluir. Tente de novo.");
+    }
   }
 
   async function salvar() {
-    if (!draft?.contatoNome?.trim()) return;
+    if (!draft?.contatoNome?.trim()) { toast.error("Informe o nome do contato."); return; }
+    // Motivo da perda é obrigatório ao fechar como perdido (senão o relatório de perda esvazia).
+    if (draft.estagio === "perdido" && !draft.motivoPerda?.trim()) {
+      toast.error("Informe o motivo da perda antes de salvar.");
+      return;
+    }
     setSaving(true);
     const editando = !!draft.id;
     const payload = {
@@ -336,16 +356,57 @@ export default function CrmPage() {
       reuniaoData: draft.reuniaoData ?? null, proximoContato: draft.proximoContato ?? null,
       observacoes: draft.observacoes ?? null, motivoPerda: draft.motivoPerda ?? null,
     };
-    const r = await authedFetch("/api/crm/leads", {
-      method: editando ? "PATCH" : "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (r.ok) {
+    try {
+      const r = await authedFetch("/api/crm/leads", {
+        method: editando ? "PATCH" : "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const { lead } = await r.json();
       setLeads((prev) => (editando ? prev.map((l) => (l.id === lead.id ? lead : l)) : [lead, ...prev]));
       setDraft(null);
+      toast.success(editando ? "Lead atualizado." : "Lead criado.");
+    } catch {
+      toast.error("Não foi possível salvar o lead. Tente de novo.");
+    } finally {
+      setSaving(false); // sempre libera o botão — antes, um erro deixava preso em 'Salvando…'
     }
-    setSaving(false);
+  }
+
+  // Ganho → vira cliente: cria o cliente rascunho + link de onboarding a partir dos dados do lead,
+  // registra na timeline e já abre o WhatsApp do lead com o link. Antes, ao ganhar, o SDR tinha que
+  // recadastrar tudo do zero em outro lugar.
+  async function converterEmCliente() {
+    if (!draft?.id || convertendo) return;
+    setConvertendo(true);
+    try {
+      const res = await authedFetch("/api/onboarding", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "generate_link_with_draft",
+          name: (draft.empresa?.trim() || draft.contatoNome || "Cliente"),
+          contactName: draft.contatoNome ?? null,
+          industry: "Outro",
+          serviceType: "lone_growth",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.clientId) {
+        await registrarAtividade("nota", "Convertido em cliente — link de onboarding gerado.", draft.id);
+        const url = `${window.location.origin}${data.url}`;
+        navigator.clipboard?.writeText(url).catch(() => {});
+        toast.success("Cliente criado! Link de onboarding copiado.");
+        const wa = waLink(draft.telefone);
+        if (wa) window.open(`${wa}${wa.includes("?") ? "&" : "?"}text=${encodeURIComponent("Boas-vindas! Pra começarmos, preencha seu onboarding: " + url)}`, "_blank");
+        setDraft(null);
+      } else {
+        toast.error(data.error || "Não foi possível converter em cliente.");
+      }
+    } catch {
+      toast.error("Falha ao converter em cliente.");
+    } finally {
+      setConvertendo(false);
+    }
   }
 
   if (!podeVer) return <div className="p-8 text-sm text-destructive">Esta área é do time comercial.</div>;
@@ -939,7 +1000,17 @@ export default function CrmPage() {
                 </div>
               )}
             </div>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              {draft.id && draft.estagio === "ganho" && (
+                <Button
+                  variant="outline"
+                  onClick={converterEmCliente}
+                  disabled={convertendo}
+                  className="mr-auto flex items-center gap-1.5 border-lone-success-border text-lone-success hover:bg-lone-success-bg"
+                >
+                  <Trophy size={14} /> {convertendo ? "Convertendo…" : "Converter em cliente"}
+                </Button>
+              )}
               <Button variant="ghost" onClick={() => setDraft(null)}>Cancelar</Button>
               <Button onClick={salvar} disabled={saving || !draft.contatoNome?.trim()}>{saving ? "Salvando…" : draft.id ? "Salvar" : "Criar lead"}</Button>
             </div>

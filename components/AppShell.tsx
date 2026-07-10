@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { RoleProvider, useRole } from "@/lib/context/RoleContext";
 import { AppStateProvider } from "@/lib/context/AppStateContext";
 import { NavProvider, useNav } from "@/lib/context/NavContext";
@@ -42,7 +42,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { role } = useRole();
   const { secondaryOpen, mobileOpen, setMobileOpen } = useNav();
+
+  // O comercial (SDR) só trabalha no /crm e nem tem item de menu na Home. Ao cair em '/'
+  // (login/atalho), manda direto pro funil — antes aterrissava numa dashboard que não é dele.
+  useEffect(() => {
+    if (role === "comercial" && pathname === "/") router.replace("/crm");
+  }, [role, pathname, router]);
   // Meta token expiry check is handled by useMetaConnection (Supabase-backed)
 
   // Notificações do sino — ninguém carregava o histórico do banco, então cada usuário só via o
