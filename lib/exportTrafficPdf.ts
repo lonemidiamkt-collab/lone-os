@@ -79,7 +79,7 @@ function toDayLabel(dateStr: string, periodDays: number): string {
 
 function buildDailyChart(daily: { date: string; messages: number }[], periodDays: number): string {
   if (daily.length < 2) return "";
-  const W = 740, H = 190, padL = 34, padR = 12, padT = 32, padB = 38;
+  const W = 740, H = 156, padL = 34, padR = 12, padT = 32, padB = 38;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
   const n = daily.length;
@@ -495,7 +495,7 @@ function buildWeeklyEvolutionSection(daily: { date: string; messages: number }[]
     </div>`;
   }).join("");
   return `
-<div data-pb style="padding:0 32px;margin-bottom:20px;">
+<div data-pb style="padding:0 32px;margin-bottom:13px;">
   <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:10px;">
     <div>
       <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#2b3cff;">Crescimento</div>
@@ -526,7 +526,7 @@ function buildClientDemographicsSection(demographics: TrafficReportData["demogra
       <span style="font-size:10px;font-weight:700;color:#eef0f6;width:42px;text-align:right;">${a.percentage.toFixed(1)}%</span>
     </div>`).join("");
   return `
-<div data-pb style="padding:0 32px;margin-bottom:20px;">
+<div data-pb style="padding:0 32px;margin-bottom:13px;">
   <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#2b3cff;margin-bottom:10px;">Público dos Anúncios</div>
   <div style="background:#0b0e1e;border-radius:12px;padding:18px 22px;border:1px solid #1a1f33;">
     <div style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;">
@@ -650,7 +650,7 @@ ${actionBar}
   </div>
 
   <!-- HERO -->
-  <div style="padding:22px 32px 0;">
+  <div style="padding:15px 32px 0;">
     <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#2b3cff;margin-bottom:5px;">${periodTitle}</div>
     <div style="font-size:28px;font-weight:900;letter-spacing:-.025em;color:#fff;line-height:1;">${data.clientName}</div>
     <div style="font-size:11px;color:#5b6172;margin-top:4px;">Resultado dos seus anúncios no período selecionado</div>
@@ -663,13 +663,13 @@ ${actionBar}
   </div>
 
   <!-- KPIs -->
-  <div style="padding:0 32px;display:flex;gap:10px;margin-bottom:20px;">
+  <div style="padding:0 32px;display:flex;gap:10px;margin-bottom:13px;">
     ${kpiCards}
   </div>
 
   <!-- CHART -->
   ${hasChart ? `
-  <div style="padding:0 32px;margin-bottom:20px;">
+  <div style="padding:0 32px;margin-bottom:13px;">
     <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:10px;">
       <div>
         <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#2b3cff;">Evolução</div>
@@ -690,7 +690,7 @@ ${actionBar}
   ${periodDays >= 14 ? buildWeeklyEvolutionSection(daily) : ""}
 
   <!-- CHAMPION + SUMMARY -->
-  <div data-pb style="padding:0 32px;display:flex;gap:12px;margin-bottom:20px;">
+  <div data-pb style="padding:0 32px;display:flex;gap:12px;margin-bottom:13px;">
     ${hasBestAdset ? `
     <div style="flex:1;background:#0b0e1e;border:1px solid #1a1f33;border-radius:10px;padding:14px 16px;display:flex;align-items:flex-start;gap:10px;">
       <div style="width:32px;height:32px;background:#2b3cff15;border:1px solid #2b3cff30;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">

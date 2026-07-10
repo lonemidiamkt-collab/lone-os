@@ -97,7 +97,7 @@ async function buildAudiencia(igId: string, token: string): Promise<IgAudiencia 
   return { generoMascPct, generoFemPct, idades, cidades };
 }
 
-// Soma uma série diária de insight (reach, follower_count…) num intervalo. Best-effort → null se falhar.
+// Soma uma série diária de insight (follower_count…) num intervalo. Best-effort → null se falhar.
 async function somaInsightDiario(igId: string, metric: string, since: string, until: string, token: string): Promise<number | null> {
   try {
     const r = await fetch(`${GRAPH}/${igId}/insights?metric=${metric}&period=day&since=${since}&until=${until}&access_token=${token}`);
@@ -107,6 +107,20 @@ async function somaInsightDiario(igId: string, metric: string, since: string, un
     if (!vals.length) return null;
     return vals.reduce((s, v) => s + (v.value || 0), 0);
   } catch { return null; }
+}
+
+// Alcance DEDUPLICADO do período (pessoas únicas). Somar o reach diário conta a mesma pessoa em vários
+// dias e infla o número — o correto é o total_value do intervalo. Fallback: soma diária (impreciso).
+async function reachTotal(igId: string, since: string, until: string, token: string): Promise<number | null> {
+  try {
+    const r = await fetch(`${GRAPH}/${igId}/insights?metric=reach&period=day&metric_type=total_value&since=${since}&until=${until}&access_token=${token}`);
+    const j = await r.json().catch(() => ({}));
+    if (!j?.error) {
+      const tv = j.data?.[0]?.total_value?.value;
+      if (typeof tv === "number") return tv;
+    }
+  } catch { /* cai no fallback */ }
+  return somaInsightDiario(igId, "reach", since, until, token);
 }
 
 export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Promise<IgSnapshot> {

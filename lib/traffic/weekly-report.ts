@@ -130,8 +130,9 @@ export async function buildClientPdf(
   // ── Combina: tráfego + (IG encaixado antes do rodapé) / só um / nenhum ──
   let html: string;
   if (trafficHtml) {
+    // Combinado: Instagram SEMPRE numa página nova (page 1 = anúncios, page 2 = Instagram) — não mistura.
     html = igSnap
-      ? trafficHtml.replace("<!-- FOOTER -->", `${igSectionHtml(igSnap)}\n\n  <!-- FOOTER -->`)
+      ? trafficHtml.replace("<!-- FOOTER -->", `<div style="break-before:page;page-break-before:always;">${igSectionHtml(igSnap)}</div>\n  <!-- FOOTER -->`)
       : trafficHtml;
   } else if (igSnap) {
     html = buildIgOnlyHtml(clientName, periodo, igSnap);
