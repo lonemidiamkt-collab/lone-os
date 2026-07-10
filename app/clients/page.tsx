@@ -16,8 +16,8 @@ import {
   calcHealthScore,
 } from "@/lib/utils";
 import {
-  Search, UserPlus, ChevronRight, MessageSquare,
-  ExternalLink, Activity, MoreHorizontal, Facebook, AlertTriangle, Zap,
+  Search, UserPlus, ChevronRight,
+  ExternalLink, MoreHorizontal, Facebook, AlertTriangle, Zap,
   Check, X, Loader2, Clock, Send, Archive, RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
@@ -44,8 +44,6 @@ function HealthBar({ score }: { score: number }) {
 export default function ClientsPage() {
   const router = useRouter();
   const clients = useClientsStore((s) => s.clients);
-  const clientChats = useClientsStore((s) => s.clientChats);
-  const sendClientMessage = useClientsStore((s) => s.sendClientMessage);
   const init = useClientsStore((s) => s.init);
   const subscribeRealtime = useClientsStore((s) => s.subscribeRealtime);
   const { role, currentUser } = useRole();
@@ -69,8 +67,6 @@ export default function ClientsPage() {
       setResponsibleFilter("all");
     }
   }, []);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [chatInput, setChatInput] = useState("");
   const [showNewModal, setShowNewModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
@@ -209,14 +205,6 @@ export default function ClientsPage() {
           : getAssignedField(c) === responsibleFilter;
     return matchSearch && matchStatus && matchResponsible;
   });
-
-  const handleSend = () => {
-    if (!chatInput.trim() || !selectedClient) return;
-    sendClientMessage(selectedClient.id, currentUser, chatInput.trim());
-    setChatInput("");
-  };
-
-  const selectedChats = selectedClient ? (clientChats[selectedClient.id] ?? []) : [];
 
   return (
     <>
@@ -464,8 +452,8 @@ export default function ClientsPage() {
                   <div
                     key={client.id}
                     className={`card cursor-pointer transition-all select-none hover:border-primary/40 hover:bg-zinc-800/50 hover:shadow-lg ${
-                      selectedClient?.id === client.id ? "border-primary/60 bg-primary/5" : ""
-                    } ${client.status === "at_risk" ? "border-red-500/20" : ""} ${
+                      client.status === "at_risk" ? "border-red-500/20" : ""
+                    } ${
                       hasMetaLinked ? "ring-1 ring-[#0d4af5]/30" : ""
                     } ${hasAdError ? "ring-1 ring-red-500/40" : ""}`}
                     onClick={() => {
@@ -527,17 +515,6 @@ export default function ClientsPage() {
                           <>
                             <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setMenuOpen(null); }} />
                             <div className="absolute right-0 top-full mt-1 w-40 bg-card border border-border rounded-lg shadow-xl z-50 py-1 animate-fade-in">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedClient(client === selectedClient ? null : client);
-                                  setMenuOpen(null);
-                                }}
-                                className="w-full text-left px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors flex items-center gap-2"
-                              >
-                                <MessageSquare size={12} />
-                                Chat
-                              </button>
                               <Link
                                 href={`/clients/${client.id}`}
                                 onClick={(e) => { e.stopPropagation(); setMenuOpen(null); }}
@@ -579,75 +556,6 @@ export default function ClientsPage() {
             )}
           </div>
 
-          {/* Client Quick-Chat Panel */}
-          {selectedClient && (
-            <div className="w-80 border-l border-border flex flex-col animate-slide-up shrink-0">
-              <div className="p-4 border-b border-border">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-sm font-bold text-primary">
-                      {selectedClient.name[0]}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground leading-none">{selectedClient.name}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Chat interno da equipe</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Link
-                      href={`/clients/${selectedClient.id}`}
-                      className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <Activity size={14} />
-                    </Link>
-                    <button
-                      onClick={() => setSelectedClient(null)}
-                      className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-                <div className="text-xs text-muted-foreground flex items-center gap-1">
-                  <MessageSquare size={11} />
-                  <span>Cada mensagem é salva no histórico do cliente</span>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-auto p-3 space-y-3">
-                {selectedChats.length === 0 && (
-                  <p className="text-xs text-muted-foreground/50 text-center pt-6">
-                    Sem mensagens ainda. Seja o primeiro!
-                  </p>
-                )}
-                {selectedChats.map((msg) => (
-                  <div key={msg.id} className={`flex flex-col ${msg.user === currentUser ? "items-end" : "items-start"}`}>
-                    <span className="text-xs text-muted-foreground mb-0.5">{msg.user} · {msg.timestamp}</span>
-                    <div className={`rounded-xl px-3 py-2 text-xs max-w-[85%] ${
-                      msg.user === currentUser
-                        ? "bg-primary/30 text-primary"
-                        : "bg-muted text-foreground"
-                    }`}>
-                      {msg.text}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="p-3 border-t border-border flex gap-2">
-                <input
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                  placeholder="Mensagem..."
-                  className="flex-1 bg-muted rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary"
-                />
-                <button onClick={handleSend} className="btn-primary px-3 text-xs">
-                  →
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </>

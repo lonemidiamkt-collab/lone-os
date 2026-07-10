@@ -89,7 +89,7 @@ const TAB_LABELS: Record<Tab, string> = {
   "analise-ia": "Análise IA",
   briefing: "Briefing",
   contratos: "Contratos",
-  chat: "Chat",
+  chat: "Reuniões",
   historico: "Histórico Operacional",
   tasks: "Tarefas",
   content: "Conteúdo",
@@ -107,8 +107,6 @@ export default function ClientDetailPage() {
   const { role, currentUser } = useRole();
   // ── Zustand stores (migrado de AppStateContext) ───────────────────────────
   const clients = useClientsStore((s) => s.clients);
-  const clientChats = useClientsStore((s) => s.clientChats);
-  const sendClientMessage = useClientsStore((s) => s.sendClientMessage);
   const updateClientStatus = useClientsStore((s) => s.updateClientStatus);
   const updateClientData = useClientsStore((s) => s.updateClient);
 
@@ -156,10 +154,8 @@ export default function ClientDetailPage() {
       .then((d) => setHasBriefing(!!d.briefing))
       .catch(() => {});
   }, [clientId]);
-  const [chatInput, setChatInput] = useState("");
   const [manualNote, setManualNote] = useState("");
   const [showNoteInput, setShowNoteInput] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
   const [showProofForm, setShowProofForm] = useState(false);
   const [proofForm, setProofForm] = useState({ m1l: "Novos Seguidores", m1v: "", m2l: "Leads no Direct", m2v: "", m3l: "Engajamento", m3v: "", period: "" });
   const [crisisInput, setCrisisInput] = useState("");
@@ -346,17 +342,12 @@ export default function ClientDetailPage() {
       )
     : adAccounts;
 
-  const chats = clientChats[clientId] ?? [];
   const entries = timeline[clientId] ?? [];
   const obItems = onboarding[clientId] ?? [];
   const clientTasks = tasks.filter((t) => t.clientId === clientId); // era mockTasks (vazio) → aba/tile sempre 0
   const clientContent = contentCards.filter((c) => c.clientId === clientId);
   const clientReports = quinzReports.filter((r) => r.clientId === clientId);
   const clientAssets = creativeAssets[clientId] ?? [];
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chats.length]);
 
   // Skeleton loading state — handles race condition after new client creation
   const [waitingForClient, setWaitingForClient] = useState(!client);
@@ -450,12 +441,6 @@ export default function ClientDetailPage() {
     } catch {
       toast.error("Falha no upload. Verifique a conexão.");
     }
-  };
-
-  const handleSendChat = () => {
-    if (!chatInput.trim()) return;
-    sendClientMessage(clientId, currentUser, chatInput.trim());
-    setChatInput("");
   };
 
   const handleAddNote = () => {
@@ -1151,52 +1136,9 @@ export default function ClientDetailPage() {
           {/* ── CHAT ─────────────────────────────────────────────────────────── */}
           {activeTab === "chat" && (
             <div className="animate-fade-in max-w-2xl space-y-6">
-              {/* Meetings */}
+              {/* Reuniões (o chat interno por cliente foi removido a pedido — só agendamento + templates) */}
               <MeetingScheduler client={client} currentUser={currentUser} />
-
-              {/* WhatsApp Templates */}
               <WhatsAppTemplates client={client} />
-              <div className="card flex flex-col" style={{ height: "500px" }}>
-                <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border">
-                  <MessageSquare size={16} className="text-primary" />
-                  <h3 className="font-semibold text-foreground">Chat Interno — {client.name}</h3>
-                  <span className="ml-auto text-xs text-muted-foreground bg-muted px-2 py-1 rounded-lg">
-                    Cada mensagem é salva no histórico operacional
-                  </span>
-                </div>
-
-                <div className="flex-1 overflow-auto space-y-4 pr-1">
-                  {chats.length === 0 && (
-                    <p className="text-muted-foreground/50 text-sm text-center pt-8">Nenhuma mensagem ainda.</p>
-                  )}
-                  {chats.map((msg) => (
-                    <div key={msg.id} className={`flex flex-col ${msg.user === currentUser ? "items-end" : "items-start"}`}>
-                      <span className="text-xs text-muted-foreground mb-1">{msg.user} · {msg.timestamp}</span>
-                      <div className={`rounded-xl px-4 py-2.5 text-sm max-w-[80%] ${
-                        msg.user === currentUser
-                          ? "bg-primary/30 text-primary"
-                          : "bg-muted text-foreground"
-                      }`}>
-                        {msg.text}
-                      </div>
-                    </div>
-                  ))}
-                  <div ref={chatEndRef} />
-                </div>
-
-                <div className="flex gap-2 mt-4 pt-4 border-t border-border">
-                  <input
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSendChat()}
-                    placeholder="Escreva para a equipe... (salvo automaticamente no histórico)"
-                    className="flex-1 bg-muted rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary"
-                  />
-                  <button onClick={handleSendChat} className="btn-primary px-4 flex items-center gap-2">
-                    <Send size={14} />
-                  </button>
-                </div>
-              </div>
             </div>
           )}
 
