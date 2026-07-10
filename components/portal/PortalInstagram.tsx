@@ -7,8 +7,21 @@
 import { useState, useEffect } from "react";
 
 interface Post { id: string; tipo: string; thumb: string | null; permalink: string | null; curtidas: number | null; comentarios: number | null; views: number | null; alcance: number | null; engajamento: number }
-interface Resumo { alcance: number | null; visualizacoes: number; seguidoresGanhos: number | null; curtidas: number; comentarios: number; engajamento: number; postsNoPeriodo: number }
-interface Snap { conta?: { username: string; seguidores: number | null; posts: number | null }; resumo?: Resumo; posts?: Post[] }
+interface Resumo { alcance: number | null; seguidoresGanhos: number | null; curtidas: number; comentarios: number; engajamento: number; postsNoPeriodo: number }
+interface Audiencia { generoMascPct: number | null; generoFemPct: number | null; idades: { faixa: string; pct: number }[]; cidades: { nome: string; pct: number }[] }
+interface Snap { conta?: { username: string; seguidores: number | null; posts: number | null }; resumo?: Resumo; audiencia?: Audiencia; posts?: Post[] }
+
+function Bar({ label, pct, color, max = 100 }: { label: string; pct: number; color: string; max?: number }) {
+  return (
+    <div className="flex items-center gap-2 mb-1.5">
+      <span className="text-[11px] shrink-0" style={{ width: 58, color: "#8b91a1" }}>{label}</span>
+      <div className="flex-1 rounded-full overflow-hidden" style={{ height: 6, background: "#1A1F33" }}>
+        <div className="h-full rounded-full" style={{ width: `${Math.max(Math.round((pct / max) * 100), 3)}%`, background: color }} />
+      </div>
+      <span className="text-[11px] font-bold text-right" style={{ width: 42 }}>{pct.toFixed(1)}%</span>
+    </div>
+  );
+}
 
 type Period = "7d" | "14d" | "30d";
 const nf = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleString("pt-BR"));
@@ -35,16 +48,17 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
   if (hide) return null;
 
   const r = data?.resumo;
+  const a = data?.audiencia;
   const cards = [
     { l: "Seguidores", v: nf(data?.conta?.seguidores ?? null) },
     { l: "Seguidores ganhos", v: nfSigned(r?.seguidoresGanhos ?? null) },
     { l: "Alcance", v: nf(r?.alcance ?? null) },
-    { l: "Visualizações", v: nf(r?.visualizacoes ?? null) },
+    { l: "Engajamento", v: nf(r?.engajamento ?? null) },
     { l: "Curtidas", v: nf(r?.curtidas ?? null) },
     { l: "Comentários", v: nf(r?.comentarios ?? null) },
-    { l: "Engajamento", v: nf(r?.engajamento ?? null) },
     { l: "Posts no período", v: nf(r?.postsNoPeriodo ?? null) },
   ];
+  const temAudiencia = !!a && (a.generoMascPct != null || a.idades.length > 0 || a.cidades.length > 0);
 
   return (
     <div className="mb-6 lg:mb-8">
@@ -71,6 +85,42 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
           </div>
         ))}
       </div>
+
+      {/* Público do perfil (gênero / idade / cidades) */}
+      {temAudiencia && (
+        <div className="rounded-xl p-4 mb-3" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
+          <p className="text-xs font-semibold mb-3" style={{ color: "#8b91a1" }}>Público do perfil</p>
+          <div className="grid gap-5 sm:grid-cols-3">
+            {a!.generoMascPct != null && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide mb-2" style={{ color: "#6B7280" }}>Gênero</p>
+                <Bar label="Homens" pct={a!.generoMascPct} color="#2B3CFF" />
+                {a!.generoFemPct != null && <Bar label="Mulheres" pct={a!.generoFemPct} color="#c13584" />}
+              </div>
+            )}
+            {a!.idades.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide mb-2" style={{ color: "#6B7280" }}>Faixa etária</p>
+                {a!.idades.slice(0, 5).map((x) => (
+                  <Bar key={x.faixa} label={x.faixa} pct={x.pct} color="#2B3CFF" max={Math.max(...a!.idades.map((i) => i.pct), 1)} />
+                ))}
+              </div>
+            )}
+            {a!.cidades.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide mb-2" style={{ color: "#6B7280" }}>Principais cidades</p>
+                {a!.cidades.map((c, i) => (
+                  <div key={c.nome} className="flex items-center gap-2 mb-2">
+                    <span className="flex items-center justify-center text-[9px] font-bold rounded-full shrink-0" style={{ width: 16, height: 16, background: "#c1358422", color: "#c13584" }}>{i + 1}</span>
+                    <span className="flex-1 text-xs truncate">{c.nome}</span>
+                    <span className="text-[11px] font-semibold" style={{ color: "#8b91a1" }}>{c.pct.toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Posts mais engajados do período */}
       {(data?.posts?.length ?? 0) > 0 && (

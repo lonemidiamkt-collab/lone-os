@@ -102,40 +102,40 @@ function buildDailyChart(daily: { date: string; messages: number }[], periodDays
   const gridLines = [0.33, 0.66, 1.0].map(pct => {
     const y = (padT + (1 - pct) * plotH).toFixed(1);
     return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#1c1c28" stroke-width="1" stroke-dasharray="3,5"/>
-      <text x="${padL - 5}" y="${(+y + 3.5).toFixed(1)}" font-size="8" fill="#3f3f46" text-anchor="end">${Math.round(maxVal * pct)}</text>`;
+      <text x="${padL - 5}" y="${(+y + 3.5).toFixed(1)}" font-size="8" fill="#5b6172" text-anchor="end">${Math.round(maxVal * pct)}</text>`;
   }).join("");
 
   const labelEvery = Math.max(1, Math.ceil(n / 8));
   const xLabels = pts.map((p, i) => {
     if (i % labelEvery !== 0 && i !== n - 1) return "";
     const isPeak = i === peakIdx;
-    return `<text x="${p.x.toFixed(1)}" y="${H - padB + 18}" font-size="${isPeak ? 9 : 8.5}" fill="${isPeak ? "#4d7af7" : "#52525b"}" font-weight="${isPeak ? "700" : "400"}" text-anchor="middle">${toDayLabel(p.date, periodDays)}</text>`;
+    return `<text x="${p.x.toFixed(1)}" y="${H - padB + 18}" font-size="${isPeak ? 9 : 8.5}" fill="${isPeak ? "#4d7af7" : "#5b6172"}" font-weight="${isPeak ? "700" : "400"}" text-anchor="middle">${toDayLabel(p.date, periodDays)}</text>`;
   }).join("");
 
   const dots = pts.map((p, i) =>
-    i === peakIdx ? "" : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#3b6ff5" opacity="0.7"/>`
+    i === peakIdx ? "" : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2b3cff" opacity="0.7"/>`
   ).join("");
 
   const cw = 70;
   const cx = Math.min(Math.max(peak.x - cw / 2, padL), W - padR - cw);
   const cy = peak.y - 34;
   const peakEl = `
-    <line x1="${peak.x.toFixed(1)}" y1="${(cy + 20).toFixed(1)}" x2="${peak.x.toFixed(1)}" y2="${(peak.y - 8).toFixed(1)}" stroke="#0d4af5" stroke-width="1" stroke-dasharray="2,3" opacity="0.5"/>
-    <rect x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" width="${cw}" height="20" rx="10" fill="#0d4af5"/>
+    <line x1="${peak.x.toFixed(1)}" y1="${(cy + 20).toFixed(1)}" x2="${peak.x.toFixed(1)}" y2="${(peak.y - 8).toFixed(1)}" stroke="#2b3cff" stroke-width="1" stroke-dasharray="2,3" opacity="0.5"/>
+    <rect x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" width="${cw}" height="20" rx="10" fill="#2b3cff"/>
     <text x="${(cx + cw / 2).toFixed(1)}" y="${(cy + 13.5).toFixed(1)}" font-size="9.5" font-weight="700" fill="#fff" text-anchor="middle">${fmtNum(peak.messages)} msgs</text>
-    <circle cx="${peak.x.toFixed(1)}" cy="${peak.y.toFixed(1)}" r="8" fill="#09090b" stroke="#0d4af5" stroke-width="2"/>
+    <circle cx="${peak.x.toFixed(1)}" cy="${peak.y.toFixed(1)}" r="8" fill="#060814" stroke="#2b3cff" stroke-width="2"/>
     <circle cx="${peak.x.toFixed(1)}" cy="${peak.y.toFixed(1)}" r="3.5" fill="#ffffff"/>`;
 
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:${H}px;display:block;overflow:visible;">
   <defs>
     <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#0d4af5" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="#0d4af5" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#2b3cff" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#2b3cff" stop-opacity="0"/>
     </linearGradient>
   </defs>
   ${gridLines}
   <path d="${areaPath}" fill="url(#cg)"/>
-  <path d="${linePath}" fill="none" stroke="#0d4af5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="${linePath}" fill="none" stroke="#2b3cff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
   ${dots}
   ${peakEl}
   ${xLabels}
@@ -171,14 +171,14 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
   }
 
   const kpiRows = kpiItems.map((item, i) => `
-    <div data-pb style="display:flex;align-items:flex-start;gap:0;${item.champion ? "border-left:3px solid #0d4af5;" : "border-left:3px solid transparent;"}${i < kpiItems.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}">
-      <div style="min-width:52px;padding:14px 12px;font-size:11px;font-weight:800;color:#3b6ff5;flex-shrink:0;">${pad2(i + 1)}</div>
-      <div style="flex:1;padding:14px 0;border-left:1px solid #1a1a2e;">
+    <div data-pb style="display:flex;align-items:flex-start;gap:0;${item.champion ? "border-left:3px solid #2b3cff;" : "border-left:3px solid transparent;"}${i < kpiItems.length - 1 ? "border-bottom:1px solid #1a1f33;" : ""}">
+      <div style="min-width:52px;padding:14px 12px;font-size:11px;font-weight:800;color:#2b3cff;flex-shrink:0;">${pad2(i + 1)}</div>
+      <div style="flex:1;padding:14px 0;border-left:1px solid #1a1f33;">
         <div style="padding-left:16px;">
-          <span style="font-size:11px;color:#a1a1aa;">${item.label}</span>
-          <span style="font-size:11px;color:#1a1a2e;"> · </span>
-          <span style="font-size:13px;font-weight:700;color:${item.champion ? "#3b6ff5" : "#ffffff"};">${item.value}</span>
-          ${item.sub ? `<div style="font-size:9px;color:#52525b;margin-top:2px;">${item.sub}</div>` : ""}
+          <span style="font-size:11px;color:#8b91a1;">${item.label}</span>
+          <span style="font-size:11px;color:#1a1f33;"> · </span>
+          <span style="font-size:13px;font-weight:700;color:${item.champion ? "#2b3cff" : "#ffffff"};">${item.value}</span>
+          ${item.sub ? `<div style="font-size:9px;color:#5b6172;margin-top:2px;">${item.sub}</div>` : ""}
         </div>
       </div>
     </div>`).join("");
@@ -197,27 +197,27 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
     const isChamp = isCampaignChampion(c);
     const isLast = i === activeCampaigns.length - 1;
     return `
-    <div data-pb style="display:flex;align-items:flex-start;gap:0;${isChamp ? "border-left:3px solid #0d4af5;" : "border-left:3px solid transparent;"}${!isLast ? "border-bottom:1px solid #1a1a2e;" : ""}">
-      <div style="min-width:52px;padding:12px;font-size:11px;font-weight:800;color:#3b6ff5;flex-shrink:0;">${pad2(i + 1)}</div>
-      <div style="flex:1;padding:12px 0 12px 16px;border-left:1px solid #1a1a2e;">
+    <div data-pb style="display:flex;align-items:flex-start;gap:0;${isChamp ? "border-left:3px solid #2b3cff;" : "border-left:3px solid transparent;"}${!isLast ? "border-bottom:1px solid #1a1f33;" : ""}">
+      <div style="min-width:52px;padding:12px;font-size:11px;font-weight:800;color:#2b3cff;flex-shrink:0;">${pad2(i + 1)}</div>
+      <div style="flex:1;padding:12px 0 12px 16px;border-left:1px solid #1a1f33;">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;">
           <div style="flex:1;min-width:0;">
-            <span style="font-size:11px;font-weight:${isChamp ? "700" : "500"};color:#e4e4e7;">${c.name}</span>
-            ${isChamp ? `<span style="display:inline-block;background:#0d4af5;color:#fff;font-size:8px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;vertical-align:middle;letter-spacing:.04em;">CAMPEÃO</span>` : ""}
-            ${c.cheapestAdSetName ? `<div style="font-size:9px;color:#52525b;margin-top:2px;">↳ ${c.cheapestAdSetName}${c.cheapestAdSetCostPerMessage ? ` · ${fmt(c.cheapestAdSetCostPerMessage)}/msg` : ""}</div>` : ""}
+            <span style="font-size:11px;font-weight:${isChamp ? "700" : "500"};color:#eef0f6;">${c.name}</span>
+            ${isChamp ? `<span style="display:inline-block;background:#2b3cff;color:#fff;font-size:8px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;vertical-align:middle;letter-spacing:.04em;">CAMPEÃO</span>` : ""}
+            ${c.cheapestAdSetName ? `<div style="font-size:9px;color:#5b6172;margin-top:2px;">↳ ${c.cheapestAdSetName}${c.cheapestAdSetCostPerMessage ? ` · ${fmt(c.cheapestAdSetCostPerMessage)}/msg` : ""}</div>` : ""}
           </div>
           <div style="display:flex;gap:16px;flex-shrink:0;">
             <div style="text-align:right;">
-              <div style="font-size:8px;color:#52525b;text-transform:uppercase;letter-spacing:.06em;">Invest.</div>
-              <div style="font-size:11px;font-weight:600;color:#a1a1aa;">${fmt(c.spend)}</div>
+              <div style="font-size:8px;color:#5b6172;text-transform:uppercase;letter-spacing:.06em;">Invest.</div>
+              <div style="font-size:11px;font-weight:600;color:#8b91a1;">${fmt(c.spend)}</div>
             </div>
             <div style="text-align:right;">
-              <div style="font-size:8px;color:#52525b;text-transform:uppercase;letter-spacing:.06em;">Mensagens</div>
-              <div style="font-size:11px;font-weight:700;color:#3b6ff5;">${fmtNum(c.messages)}</div>
+              <div style="font-size:8px;color:#5b6172;text-transform:uppercase;letter-spacing:.06em;">Mensagens</div>
+              <div style="font-size:11px;font-weight:700;color:#2b3cff;">${fmtNum(c.messages)}</div>
             </div>
             <div style="text-align:right;padding-right:12px;">
-              <div style="font-size:8px;color:#52525b;text-transform:uppercase;letter-spacing:.06em;">C./Msg</div>
-              <div style="font-size:11px;font-weight:600;color:${isChamp ? "#3b6ff5" : "#a1a1aa"};">${c.messages > 0 ? fmt(c.costPerMessage) : "—"}</div>
+              <div style="font-size:8px;color:#5b6172;text-transform:uppercase;letter-spacing:.06em;">C./Msg</div>
+              <div style="font-size:11px;font-weight:600;color:${isChamp ? "#2b3cff" : "#8b91a1"};">${c.messages > 0 ? fmt(c.costPerMessage) : "—"}</div>
             </div>
           </div>
         </div>
@@ -235,45 +235,45 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
     const womenArc = (d.genderSplit.women / 100) * circumference;
     const ageBars = d.ageRanges.map((a) => `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-        <span style="width:34px;font-size:10px;color:#52525b;flex-shrink:0;font-weight:500;">${a.range}</span>
-        <div style="flex:1;height:6px;background:#efefef;border-radius:3px;overflow:hidden;">
-          <div style="width:${Math.max(Math.round((a.percentage / maxAgePct) * 100), 5)}%;height:100%;background:#0d4af5;border-radius:3px;"></div>
+        <span style="width:34px;font-size:10px;color:#8b91a1;flex-shrink:0;font-weight:500;">${a.range}</span>
+        <div style="flex:1;height:6px;background:#1a1f33;border-radius:3px;overflow:hidden;">
+          <div style="width:${Math.max(Math.round((a.percentage / maxAgePct) * 100), 5)}%;height:100%;background:#2b3cff;border-radius:3px;"></div>
         </div>
-        <span style="font-size:10px;font-weight:700;color:#1a1a2e;width:38px;text-align:right;">${a.percentage.toFixed(1)}%</span>
+        <span style="font-size:10px;font-weight:700;color:#eef0f6;width:38px;text-align:right;">${a.percentage.toFixed(1)}%</span>
       </div>`).join("");
     return `
     <section data-pb style="margin-bottom:24px;">
       <div class="sec-label">Público — Dados Demográficos</div>
       <div class="sec-title">Perfil do Público</div>
-      <div style="background:#ffffff;border-radius:10px;padding:20px 24px;border:1px solid #e4e4e7;">
+      <div style="background:#0b0e1e;border-radius:10px;padding:20px 24px;border:1px solid #1a1f33;">
         <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
           <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:12px;min-width:110px;">
-            <div style="font-size:9px;font-weight:700;color:#52525b;letter-spacing:.06em;text-transform:uppercase;">Gênero</div>
+            <div style="font-size:9px;font-weight:700;color:#5b6172;letter-spacing:.06em;text-transform:uppercase;">Gênero</div>
             <div style="position:relative;width:88px;height:88px;">
               <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
-                <circle cx="50" cy="50" r="${r}" fill="none" stroke="#efefef" stroke-width="14"/>
-                <circle cx="50" cy="50" r="${r}" fill="none" stroke="#0d4af5" stroke-width="14"
+                <circle cx="50" cy="50" r="${r}" fill="none" stroke="#1a1f33" stroke-width="14"/>
+                <circle cx="50" cy="50" r="${r}" fill="none" stroke="#2b3cff" stroke-width="14"
                   stroke-dasharray="${menArc.toFixed(2)} ${circumference.toFixed(2)}"/>
-                <circle cx="50" cy="50" r="${r}" fill="none" stroke="#3f3f46" stroke-width="14"
+                <circle cx="50" cy="50" r="${r}" fill="none" stroke="#8b91a1" stroke-width="14"
                   stroke-dasharray="${womenArc.toFixed(2)} ${circumference.toFixed(2)}"
                   stroke-dashoffset="${(-menArc).toFixed(2)}"/>
               </svg>
             </div>
             <div style="display:flex;flex-direction:column;gap:5px;align-self:stretch;">
               <div style="display:flex;align-items:center;gap:6px;">
-                <div style="width:9px;height:9px;border-radius:50%;background:#0d4af5;flex-shrink:0;"></div>
-                <span style="font-size:10px;color:#1a1a2e;flex:1;">Homens</span>
-                <span style="font-size:11px;font-weight:700;color:#1a1a2e;">${d.genderSplit.men.toFixed(1)}%</span>
+                <div style="width:9px;height:9px;border-radius:50%;background:#2b3cff;flex-shrink:0;"></div>
+                <span style="font-size:10px;color:#8b91a1;flex:1;">Homens</span>
+                <span style="font-size:11px;font-weight:700;color:#eef0f6;">${d.genderSplit.men.toFixed(1)}%</span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;">
-                <div style="width:9px;height:9px;border-radius:50%;background:#3f3f46;flex-shrink:0;"></div>
-                <span style="font-size:10px;color:#1a1a2e;flex:1;">Mulheres</span>
-                <span style="font-size:11px;font-weight:700;color:#1a1a2e;">${d.genderSplit.women.toFixed(1)}%</span>
+                <div style="width:9px;height:9px;border-radius:50%;background:#8b91a1;flex-shrink:0;"></div>
+                <span style="font-size:10px;color:#8b91a1;flex:1;">Mulheres</span>
+                <span style="font-size:11px;font-weight:700;color:#eef0f6;">${d.genderSplit.women.toFixed(1)}%</span>
               </div>
             </div>
           </div>
           <div style="flex:1;min-width:180px;">
-            <div style="font-size:9px;font-weight:700;color:#52525b;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px;">Faixa Etária</div>
+            <div style="font-size:9px;font-weight:700;color:#5b6172;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px;">Faixa Etária</div>
             ${ageBars}
           </div>
         </div>
@@ -293,12 +293,12 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
           { pct: "75%", val: data.videoViews75! },
           { pct: "95%", val: data.videoViews95! },
         ].map((r, i, arr) => `
-        <div data-pb style="display:flex;align-items:center;gap:0;${i < arr.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}border-left:3px solid transparent;">
-          <div style="min-width:52px;padding:12px;font-size:11px;font-weight:800;color:#3b6ff5;">${r.pct}</div>
-          <div style="flex:1;padding:12px 16px;border-left:1px solid #1a1a2e;display:flex;align-items:center;gap:10px;">
-            <span style="font-size:12px;font-weight:600;color:#e4e4e7;width:60px;">${fmtNum(r.val)}</span>
+        <div data-pb style="display:flex;align-items:center;gap:0;${i < arr.length - 1 ? "border-bottom:1px solid #1a1f33;" : ""}border-left:3px solid transparent;">
+          <div style="min-width:52px;padding:12px;font-size:11px;font-weight:800;color:#2b3cff;">${r.pct}</div>
+          <div style="flex:1;padding:12px 16px;border-left:1px solid #1a1f33;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:12px;font-weight:600;color:#eef0f6;width:60px;">${fmtNum(r.val)}</span>
             <div style="flex:1;height:10px;background:#0f0f14;border-radius:3px;overflow:hidden;">
-              <div style="width:${[100, 78, 58, 38][i]}%;height:100%;background:linear-gradient(90deg,#0d4af5,#3b6ff7);border-radius:3px;"></div>
+              <div style="width:${[100, 78, 58, 38][i]}%;height:100%;background:linear-gradient(90deg,#2b3cff,#3b6ff7);border-radius:3px;"></div>
             </div>
           </div>
         </div>`).join("")}
@@ -310,8 +310,8 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
     <section style="margin-bottom:24px;">
       <div class="sec-label">Observações</div>
       <div class="sec-title">Análise do Gestor</div>
-      <div style="border-left:3px solid #0d4af5;padding:14px 16px;background:#0f0f14;border-radius:0 8px 8px 0;border:1px solid #1a1a2e;border-left:3px solid #0d4af5;">
-        <p style="font-size:11px;line-height:1.8;color:#a1a1aa;">${data.observations.replace(/\n/g, "<br/>")}</p>
+      <div style="border-left:3px solid #2b3cff;padding:14px 16px;background:#0f0f14;border-radius:0 8px 8px 0;border:1px solid #1a1f33;border-left:3px solid #2b3cff;">
+        <p style="font-size:11px;line-height:1.8;color:#8b91a1;">${data.observations.replace(/\n/g, "<br/>")}</p>
       </div>
     </section>` : "";
 
@@ -323,14 +323,14 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
     * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-    html, body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:#09090b; color:#e4e4e7; }
+    html, body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:#060814; color:#eef0f6; }
     .page { max-width:820px; margin:0 auto; padding:0 0 40px; }
-    .sec-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:#3b6ff5; margin-bottom:4px; }
+    .sec-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:#2b3cff; margin-bottom:4px; }
     .sec-title { font-size:18px; font-weight:800; color:#ffffff; margin-bottom:10px; letter-spacing:-.01em; }
-    .table-block { border:1px solid #1a1a2e; border-radius:8px; overflow:hidden; }
+    .table-block { border:1px solid #1a1f33; border-radius:8px; overflow:hidden; }
     section { padding:0 32px; }
     @media print {
-      html,body { background:#09090b !important; }
+      html,body { background:#060814 !important; }
       .no-print { display:none !important; }
       .page { padding-bottom:20px; }
     }
@@ -339,9 +339,9 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
 <body>
 
 ${autoPrint ? "" : `
-<div class="no-print" style="position:sticky;top:0;z-index:999;display:flex;align-items:center;justify-content:space-between;padding:10px 24px;background:#09090b;border-bottom:1px solid #1a1a2e;">
-  <span style="font-size:11px;color:#52525b;">Lone Mídia — Relatório de Performance</span>
-  <button onclick="window.print()" style="display:flex;align-items:center;gap:7px;padding:7px 18px;background:#0d4af5;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.01em;">
+<div class="no-print" style="position:sticky;top:0;z-index:999;display:flex;align-items:center;justify-content:space-between;padding:10px 24px;background:#060814;border-bottom:1px solid #1a1f33;">
+  <span style="font-size:11px;color:#5b6172;">Lone Mídia — Relatório de Performance</span>
+  <button onclick="window.print()" style="display:flex;align-items:center;gap:7px;padding:7px 18px;background:#2b3cff;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.01em;">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     Baixar PDF
   </button>
@@ -350,14 +350,14 @@ ${autoPrint ? "" : `
 <div class="page">
 
   <!-- ══ HEADER ══════════════════════════════════════════════════════════ -->
-  <div style="border-top:3px solid #0d4af5;background:#09090b;padding:16px 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1a1a2e;margin-bottom:32px;">
+  <div style="border-top:3px solid #2b3cff;background:#060814;padding:16px 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1a1f33;margin-bottom:32px;">
     <div style="display:flex;align-items:center;gap:10px;">
       <div style="width:36px;height:36px;background:#000;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">
         <img src="${logoUrl}" alt="Lone" style="width:28px;height:28px;object-fit:contain;"/>
       </div>
       <span style="font-size:14px;font-weight:800;color:#fff;letter-spacing:-.01em;">LONE MÍDIA</span>
     </div>
-    <span style="font-size:11px;color:#52525b;">Relatório de Performance — ${data.clientName}</span>
+    <span style="font-size:11px;color:#5b6172;">Relatório de Performance — ${data.clientName}</span>
   </div>
 
   <!-- ══ TITLE BLOCK ═══════════════════════════════════════════════════════ -->
@@ -366,16 +366,16 @@ ${autoPrint ? "" : `
     <div style="font-size:28px;font-weight:900;letter-spacing:-.02em;margin-bottom:6px;">
       <span style="color:#ffffff;">${data.clientName}</span>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;font-size:10px;color:#52525b;margin-bottom:14px;">
+    <div style="display:flex;align-items:center;gap:8px;font-size:10px;color:#5b6172;margin-bottom:14px;">
       <span>${data.period}</span>
       <span>·</span>
       <span>Meta Ads</span>
       <span>·</span>
       <span>${activeCampaigns.length} campanha${activeCampaigns.length !== 1 ? "s" : ""} ativa${activeCampaigns.length !== 1 ? "s" : ""}</span>
-      ${hasBestAdset ? `<span>·</span><span style="color:#3b6ff5;font-weight:600;">Custo Campeão ${fmt(data.bestAdsetCpa)}</span>` : ""}
-      ${isCompact ? `<span>·</span><span style="color:#52525b;font-style:italic;">Versão compacta</span>` : ""}
+      ${hasBestAdset ? `<span>·</span><span style="color:#2b3cff;font-weight:600;">Custo Campeão ${fmt(data.bestAdsetCpa)}</span>` : ""}
+      ${isCompact ? `<span>·</span><span style="color:#5b6172;font-style:italic;">Versão compacta</span>` : ""}
     </div>
-    <div style="height:2px;background:#0d4af5;border-radius:1px;"></div>
+    <div style="height:2px;background:#2b3cff;border-radius:1px;"></div>
   </section>
 
   <!-- ══ MÉTRICAS GERAIS ════════════════════════════════════════════════ -->
@@ -383,9 +383,9 @@ ${autoPrint ? "" : `
     <div class="sec-label">Métricas Gerais</div>
     <div class="sec-title">Resultados do Período</div>
     <div class="table-block">
-      <div style="display:flex;padding:8px 0 8px 52px;border-bottom:1px solid #1a1a2e;background:#0f0f14;">
-        <div style="flex:1;padding:0 16px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#3b6ff5;">Indicador</div>
-        <div style="min-width:160px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#3b6ff5;padding-right:12px;text-align:right;">Valor</div>
+      <div style="display:flex;padding:8px 0 8px 52px;border-bottom:1px solid #1a1f33;background:#0f0f14;">
+        <div style="flex:1;padding:0 16px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#2b3cff;">Indicador</div>
+        <div style="min-width:160px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#2b3cff;padding-right:12px;text-align:right;">Valor</div>
       </div>
       ${kpiRows}
     </div>
@@ -422,11 +422,11 @@ ${autoPrint ? "" : `
         ["Frequência", "Média de exibições por pessoa"],
         ["Conjunto Campeão", "O adset com menor custo por mensagem no período"],
       ].map(([k, v], i, arr) => `
-        <div data-pb style="display:flex;align-items:flex-start;gap:0;border-left:3px solid transparent;${i < arr.length - 1 ? "border-bottom:1px solid #1a1a2e;" : ""}">
-          <div style="min-width:52px;padding:10px 12px;font-size:11px;font-weight:800;color:#3b6ff5;">${pad2(i + 1)}</div>
-          <div style="flex:1;padding:10px 16px;border-left:1px solid #1a1a2e;">
-            <span style="font-size:11px;font-weight:700;color:#e4e4e7;">${k}</span>
-            <span style="font-size:11px;color:#52525b;"> — ${v}</span>
+        <div data-pb style="display:flex;align-items:flex-start;gap:0;border-left:3px solid transparent;${i < arr.length - 1 ? "border-bottom:1px solid #1a1f33;" : ""}">
+          <div style="min-width:52px;padding:10px 12px;font-size:11px;font-weight:800;color:#2b3cff;">${pad2(i + 1)}</div>
+          <div style="flex:1;padding:10px 16px;border-left:1px solid #1a1f33;">
+            <span style="font-size:11px;font-weight:700;color:#eef0f6;">${k}</span>
+            <span style="font-size:11px;color:#5b6172;"> — ${v}</span>
           </div>
         </div>`).join("")}
     </div>
@@ -435,9 +435,9 @@ ${autoPrint ? "" : `
 
   <!-- ══ DISCLAIMER ════════════════════════════════════════════════════ -->
   <section style="margin-bottom:28px;">
-    <div style="border-left:3px solid #0d4af5;padding:10px 14px;background:#0f0f14;border-radius:0 6px 6px 0;border:1px solid #1a1a2e;border-left:3px solid #0d4af5;">
-      <p style="font-size:9px;line-height:1.7;color:#52525b;">
-        <strong style="color:#3b6ff5;">Nota:</strong>
+    <div style="border-left:3px solid #2b3cff;padding:10px 14px;background:#0f0f14;border-radius:0 6px 6px 0;border:1px solid #1a1f33;border-left:3px solid #2b3cff;">
+      <p style="font-size:9px;line-height:1.7;color:#5b6172;">
+        <strong style="color:#2b3cff;">Nota:</strong>
         Valores extraídos diretamente da API do Meta Ads Manager. Pode haver variação de até 15%
         em relação ao Gerenciador de Anúncios devido a janelas de atribuição e delays de processamento.
       </p>
@@ -445,15 +445,15 @@ ${autoPrint ? "" : `
   </section>
 
   <!-- ══ FOOTER ═════════════════════════════════════════════════════════ -->
-  <div style="padding:16px 32px 0;border-top:1px solid #1a1a2e;display:flex;align-items:center;justify-content:space-between;">
-    <span style="font-size:9px;color:#3f3f46;">Relatório — ${data.clientName} / ${data.period}</span>
+  <div style="padding:16px 32px 0;border-top:1px solid #1a1f33;display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-size:9px;color:#5b6172;">Relatório — ${data.clientName} / ${data.period}</span>
     <div style="display:flex;align-items:center;gap:8px;">
       <div style="width:28px;height:28px;background:#000;border-radius:6px;display:flex;align-items:center;justify-content:center;overflow:hidden;">
         <img src="${logoUrl}" alt="Lone" style="width:22px;height:22px;object-fit:contain;"/>
       </div>
       <span style="font-size:12px;font-weight:800;color:#ffffff;">LONE MÍDIA</span>
     </div>
-    <span style="font-size:9px;color:#3f3f46;">Lone Mídia / Relatório de Performance</span>
+    <span style="font-size:9px;color:#5b6172;">Lone Mídia / Relatório de Performance</span>
   </div>
 
 </div>
@@ -487,23 +487,23 @@ function buildWeeklyEvolutionSection(daily: { date: string; messages: number }[]
     const heightPct = Math.max(Math.round((w.messages / maxMsgs) * 100), 4);
     const isBest = w.messages === maxMsgs;
     return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;">
-      <div style="font-size:9px;font-weight:${isBest ? "700" : "500"};color:${isBest ? "#e4e4e7" : "#71717a"};">${fmtNum(w.messages)}</div>
+      <div style="font-size:9px;font-weight:${isBest ? "700" : "500"};color:${isBest ? "#eef0f6" : "#8b91a1"};">${fmtNum(w.messages)}</div>
       <div style="width:100%;height:64px;display:flex;align-items:flex-end;">
-        <div style="width:100%;height:${heightPct}%;background:${isBest ? "linear-gradient(180deg,#0d4af5,#1a5fff)" : "#1c1c28"};border-radius:4px 4px 0 0;min-height:4px;"></div>
+        <div style="width:100%;height:${heightPct}%;background:${isBest ? "linear-gradient(180deg,#2b3cff,#1a5fff)" : "#1c1c28"};border-radius:4px 4px 0 0;min-height:4px;"></div>
       </div>
-      <div style="font-size:9px;color:#52525b;white-space:nowrap;">${w.label}</div>
+      <div style="font-size:9px;color:#5b6172;white-space:nowrap;">${w.label}</div>
     </div>`;
   }).join("");
   return `
 <div data-pb style="padding:0 32px;margin-bottom:20px;">
   <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:10px;">
     <div>
-      <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#3b6ff5;">Crescimento</div>
+      <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#2b3cff;">Crescimento</div>
       <div style="font-size:15px;font-weight:800;color:#fff;letter-spacing:-.01em;">Evolução Semanal</div>
     </div>
-    <div style="font-size:9px;color:#52525b;">${weeks.length} semanas · ${daily.length} dias</div>
+    <div style="font-size:9px;color:#5b6172;">${weeks.length} semanas · ${daily.length} dias</div>
   </div>
-  <div style="background:#0a0a0d;border:1px solid #1a1a2e;border-radius:10px;padding:16px 12px 10px;">
+  <div style="background:#0b0e1e;border:1px solid #1a1f33;border-radius:10px;padding:16px 12px 10px;">
     <div style="display:flex;gap:6px;align-items:flex-end;">${bars}</div>
   </div>
 </div>`;
@@ -519,45 +519,44 @@ function buildClientDemographicsSection(demographics: TrafficReportData["demogra
   const maxAgePct = Math.max(...d.ageRanges.map((a) => a.percentage), 1);
   const ageBars = d.ageRanges.map((a) => `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;">
-      <span style="width:34px;font-size:10px;color:#52525b;flex-shrink:0;font-weight:500;">${a.range}</span>
-      <div style="flex:1;height:6px;background:#efefef;border-radius:3px;overflow:hidden;">
-        <div style="width:${Math.max(Math.round((a.percentage / maxAgePct) * 100), 5)}%;height:100%;background:#0d4af5;border-radius:3px;"></div>
+      <span style="width:44px;font-size:10px;color:#8b91a1;flex-shrink:0;font-weight:500;">${a.range}</span>
+      <div style="flex:1;height:6px;background:#1a1f33;border-radius:3px;overflow:hidden;">
+        <div style="width:${Math.max(Math.round((a.percentage / maxAgePct) * 100), 5)}%;height:100%;background:#2b3cff;border-radius:3px;"></div>
       </div>
-      <span style="font-size:10px;font-weight:700;color:#1a1a2e;width:38px;text-align:right;">${a.percentage.toFixed(1)}%</span>
+      <span style="font-size:10px;font-weight:700;color:#eef0f6;width:42px;text-align:right;">${a.percentage.toFixed(1)}%</span>
     </div>`).join("");
   return `
 <div data-pb style="padding:0 32px;margin-bottom:20px;">
-  <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#3b6ff5;margin-bottom:6px;">Público Alcançado</div>
-  <div style="font-size:15px;font-weight:800;color:#fff;letter-spacing:-.01em;margin-bottom:12px;">Dados Demográficos</div>
-  <div style="background:#ffffff;border-radius:12px;padding:20px 24px;border:1px solid #e4e4e7;">
-    <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
-      <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:12px;min-width:110px;">
-        <div style="font-size:9px;font-weight:700;color:#52525b;letter-spacing:.06em;text-transform:uppercase;">Gênero</div>
+  <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#2b3cff;margin-bottom:10px;">Público dos Anúncios</div>
+  <div style="background:#0b0e1e;border-radius:12px;padding:18px 22px;border:1px solid #1a1f33;">
+    <div style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;">
+      <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:12px;min-width:120px;">
+        <div style="font-size:9px;font-weight:700;color:#5b6172;letter-spacing:.06em;text-transform:uppercase;">Gênero</div>
         <div style="position:relative;width:88px;height:88px;">
           <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
-            <circle cx="50" cy="50" r="${r}" fill="none" stroke="#efefef" stroke-width="14"/>
-            <circle cx="50" cy="50" r="${r}" fill="none" stroke="#0d4af5" stroke-width="14"
+            <circle cx="50" cy="50" r="${r}" fill="none" stroke="#1a1f33" stroke-width="14"/>
+            <circle cx="50" cy="50" r="${r}" fill="none" stroke="#2b3cff" stroke-width="14"
               stroke-dasharray="${menArc.toFixed(2)} ${circumference.toFixed(2)}"/>
-            <circle cx="50" cy="50" r="${r}" fill="none" stroke="#3f3f46" stroke-width="14"
+            <circle cx="50" cy="50" r="${r}" fill="none" stroke="#8b91a1" stroke-width="14"
               stroke-dasharray="${womenArc.toFixed(2)} ${circumference.toFixed(2)}"
               stroke-dashoffset="${(-menArc).toFixed(2)}"/>
           </svg>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-self:stretch;">
           <div style="display:flex;align-items:center;gap:6px;">
-            <div style="width:9px;height:9px;border-radius:50%;background:#0d4af5;flex-shrink:0;"></div>
-            <span style="font-size:10px;color:#1a1a2e;flex:1;">Homens</span>
-            <span style="font-size:11px;font-weight:700;color:#1a1a2e;">${d.genderSplit.men.toFixed(1)}%</span>
+            <div style="width:9px;height:9px;border-radius:50%;background:#2b3cff;flex-shrink:0;"></div>
+            <span style="font-size:10px;color:#8b91a1;flex:1;">Homens</span>
+            <span style="font-size:11px;font-weight:700;color:#eef0f6;">${d.genderSplit.men.toFixed(1)}%</span>
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
-            <div style="width:9px;height:9px;border-radius:50%;background:#3f3f46;flex-shrink:0;"></div>
-            <span style="font-size:10px;color:#1a1a2e;flex:1;">Mulheres</span>
-            <span style="font-size:11px;font-weight:700;color:#1a1a2e;">${d.genderSplit.women.toFixed(1)}%</span>
+            <div style="width:9px;height:9px;border-radius:50%;background:#8b91a1;flex-shrink:0;"></div>
+            <span style="font-size:10px;color:#8b91a1;flex:1;">Mulheres</span>
+            <span style="font-size:11px;font-weight:700;color:#eef0f6;">${d.genderSplit.women.toFixed(1)}%</span>
           </div>
         </div>
       </div>
-      <div style="flex:1;min-width:180px;">
-        <div style="font-size:9px;font-weight:700;color:#52525b;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px;">Faixa Etária</div>
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:9px;font-weight:700;color:#5b6172;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px;">Faixa Etária</div>
         ${ageBars}
       </div>
     </div>
@@ -584,9 +583,9 @@ export function buildClientReportHtml(data: TrafficReportData, autoPrint = false
     : `Resultado — ${periodDays} dias`;
 
   const actionBar = autoPrint ? "" : `
-<div class="no-print" style="position:sticky;top:0;z-index:999;display:flex;align-items:center;justify-content:space-between;padding:10px 24px;background:#09090b;border-bottom:1px solid #1a1a2e;">
-  <span style="font-size:11px;color:#52525b;">Lone Mídia — Relatório do Cliente</span>
-  <button onclick="window.print()" style="display:flex;align-items:center;gap:7px;padding:7px 18px;background:#0d4af5;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">
+<div class="no-print" style="position:sticky;top:0;z-index:999;display:flex;align-items:center;justify-content:space-between;padding:10px 24px;background:#060814;border-bottom:1px solid #1a1f33;">
+  <span style="font-size:11px;color:#5b6172;">Lone Mídia — Relatório do Cliente</span>
+  <button onclick="window.print()" style="display:flex;align-items:center;gap:7px;padding:7px 18px;background:#2b3cff;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     Baixar PDF
   </button>
@@ -600,9 +599,9 @@ export function buildClientReportHtml(data: TrafficReportData, autoPrint = false
   ];
 
   const kpiCards = kpis.map(k => `
-    <div style="flex:1;background:#0d0d10;border:1px solid ${k.accent ? "#0d4af5" : "#1a1a2e"};border-radius:10px;padding:14px 16px;">
-      <div style="font-size:10px;color:#52525b;margin-bottom:7px;line-height:1.3;">${k.label}</div>
-      <div style="font-size:${k.accent ? "26px" : "20px"};font-weight:${k.accent ? "900" : "800"};color:${k.accent ? "#fff" : "#d4d4d8"};letter-spacing:-.02em;line-height:1;">${k.value}</div>
+    <div style="flex:1;background:#0b0e1e;border:1px solid ${k.accent ? "#2b3cff" : "#1a1f33"};border-radius:10px;padding:14px 16px;">
+      <div style="font-size:10px;color:#5b6172;margin-bottom:7px;line-height:1.3;">${k.label}</div>
+      <div style="font-size:${k.accent ? "26px" : "20px"};font-weight:${k.accent ? "900" : "800"};color:${k.accent ? "#fff" : "#c7cbd8"};letter-spacing:-.02em;line-height:1;">${k.value}</div>
     </div>`).join("");
 
   const summaryRows = [
@@ -610,9 +609,9 @@ export function buildClientReportHtml(data: TrafficReportData, autoPrint = false
     ["Total de impressões", fmtNum(data.impressions)],
     ...(peakDay ? [["Pico de mensagens", `${fmtNum(peakDay.messages)} (${peakLabel})`]] : []),
   ].map(([label, value]) => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1a1a2e;">
-      <span style="font-size:10px;color:#52525b;">${label}</span>
-      <span style="font-size:11px;font-weight:600;color:#a1a1aa;">${value}</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1a1f33;">
+      <span style="font-size:10px;color:#5b6172;">${label}</span>
+      <span style="font-size:11px;font-weight:600;color:#8b91a1;">${value}</span>
     </div>`).join("");
 
   return `<!DOCTYPE html>
@@ -623,10 +622,10 @@ export function buildClientReportHtml(data: TrafficReportData, autoPrint = false
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
     * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-    html, body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:#09090b; color:#e4e4e7; }
+    html, body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:#060814; color:#eef0f6; }
     .page { max-width:820px; margin:0 auto; padding-bottom:32px; }
     @media print {
-      html, body { background:#09090b !important; }
+      html, body { background:#060814 !important; }
       .no-print { display:none !important; }
       @page { margin:0; size:A4; }
     }
@@ -637,7 +636,7 @@ ${actionBar}
 <div class="page">
 
   <!-- HEADER -->
-  <div style="border-top:3px solid #0d4af5;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1a1a2e;">
+  <div style="border-top:3px solid #2b3cff;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1a1f33;">
     <div style="display:flex;align-items:center;gap:8px;">
       <div style="width:28px;height:28px;background:#000;border-radius:6px;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
         <img src="${logoUrl}" style="width:22px;height:22px;object-fit:contain;" alt=""/>
@@ -645,19 +644,23 @@ ${actionBar}
       <span style="font-size:12px;font-weight:800;color:#fff;letter-spacing:-.01em;">LONE MÍDIA</span>
     </div>
     <div style="text-align:right;">
-      <div style="font-size:11px;font-weight:600;color:#a1a1aa;">${data.clientName}</div>
-      <div style="font-size:9px;color:#52525b;margin-top:1px;">${data.period}</div>
+      <div style="font-size:11px;font-weight:600;color:#8b91a1;">${data.clientName}</div>
+      <div style="font-size:9px;color:#5b6172;margin-top:1px;">${data.period}</div>
     </div>
   </div>
 
   <!-- HERO -->
   <div style="padding:22px 32px 0;">
-    <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#3b6ff5;margin-bottom:5px;">${periodTitle}</div>
+    <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#2b3cff;margin-bottom:5px;">${periodTitle}</div>
     <div style="font-size:28px;font-weight:900;letter-spacing:-.025em;color:#fff;line-height:1;">${data.clientName}</div>
-    <div style="font-size:11px;color:#52525b;margin-top:4px;">Resultado dos seus anúncios no período selecionado</div>
+    <div style="font-size:11px;color:#5b6172;margin-top:4px;">Resultado dos seus anúncios no período selecionado</div>
   </div>
 
-  <div style="margin:16px 32px;height:2px;background:linear-gradient(90deg,#0d4af5 0%,#1a1a2e 65%);border-radius:1px;"></div>
+  <!-- SEÇÃO: ANÚNCIOS -->
+  <div style="margin:16px 32px 14px;height:2px;background:linear-gradient(90deg,#2b3cff 0%,#1a1f33 62%);border-radius:1px;"></div>
+  <div style="padding:0 32px 8px;">
+    <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#2b3cff;">Anúncios · Meta Ads</div>
+  </div>
 
   <!-- KPIs -->
   <div style="padding:0 32px;display:flex;gap:10px;margin-bottom:20px;">
@@ -669,16 +672,16 @@ ${actionBar}
   <div style="padding:0 32px;margin-bottom:20px;">
     <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:10px;">
       <div>
-        <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#3b6ff5;">Evolução</div>
+        <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#2b3cff;">Evolução</div>
         <div style="font-size:15px;font-weight:800;color:#fff;letter-spacing:-.01em;">Mensagens por Dia</div>
       </div>
       ${peakDay ? `
-      <div style="display:flex;align-items:center;gap:6px;background:#0d4af515;border:1px solid #0d4af530;border-radius:20px;padding:5px 12px;margin-bottom:2px;">
-        <div style="width:6px;height:6px;border-radius:50%;background:#0d4af5;flex-shrink:0;"></div>
-        <span style="font-size:10px;color:#71717a;">Pico: <strong style="color:#e4e4e7;">${peakLabel} · ${fmtNum(peakDay.messages)} mensagens</strong></span>
+      <div style="display:flex;align-items:center;gap:6px;background:#2b3cff15;border:1px solid #2b3cff30;border-radius:20px;padding:5px 12px;margin-bottom:2px;">
+        <div style="width:6px;height:6px;border-radius:50%;background:#2b3cff;flex-shrink:0;"></div>
+        <span style="font-size:10px;color:#8b91a1;">Pico: <strong style="color:#eef0f6;">${peakLabel} · ${fmtNum(peakDay.messages)} mensagens</strong></span>
       </div>` : ""}
     </div>
-    <div style="background:#0a0a0d;border:1px solid #1a1a2e;border-radius:10px;padding:16px 10px 4px;overflow:hidden;">
+    <div style="background:#0b0e1e;border:1px solid #1a1f33;border-radius:10px;padding:16px 10px 4px;overflow:hidden;">
       ${chart}
     </div>
   </div>` : ""}
@@ -689,18 +692,18 @@ ${actionBar}
   <!-- CHAMPION + SUMMARY -->
   <div data-pb style="padding:0 32px;display:flex;gap:12px;margin-bottom:20px;">
     ${hasBestAdset ? `
-    <div style="flex:1;background:#0d0d10;border:1px solid #1a1a2e;border-radius:10px;padding:14px 16px;display:flex;align-items:flex-start;gap:10px;">
-      <div style="width:32px;height:32px;background:#0d4af515;border:1px solid #0d4af530;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0d4af5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+    <div style="flex:1;background:#0b0e1e;border:1px solid #1a1f33;border-radius:10px;padding:14px 16px;display:flex;align-items:flex-start;gap:10px;">
+      <div style="width:32px;height:32px;background:#2b3cff15;border:1px solid #2b3cff30;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2b3cff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
       </div>
       <div style="min-width:0;flex:1;">
-        <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#3b6ff5;margin-bottom:4px;">Conjunto com Melhor Resultado</div>
+        <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#2b3cff;margin-bottom:4px;">Conjunto com Melhor Resultado</div>
         <div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;">${data.bestAdsetName ?? "—"}</div>
-        <div style="font-size:11px;color:#71717a;">${fmt(data.bestAdsetCpa)} por conversa</div>
+        <div style="font-size:11px;color:#8b91a1;">${fmt(data.bestAdsetCpa)} por conversa</div>
       </div>
     </div>` : ""}
-    <div style="flex:1;background:#0d0d10;border:1px solid #1a1a2e;border-radius:10px;padding:14px 16px;">
-      <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#3b6ff5;margin-bottom:10px;">Resumo do Período</div>
+    <div style="flex:1;background:#0b0e1e;border:1px solid #1a1f33;border-radius:10px;padding:14px 16px;">
+      <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#2b3cff;margin-bottom:10px;">Resumo do Período</div>
       ${summaryRows}
     </div>
   </div>
@@ -709,15 +712,15 @@ ${actionBar}
   ${buildClientDemographicsSection(data.demographics)}
 
   <!-- FOOTER -->
-  <div style="margin:0 32px;padding-top:12px;border-top:1px solid #1a1a2e;display:flex;align-items:center;justify-content:space-between;">
-    <span style="font-size:9px;color:#3f3f46;">Gerado via Lone OS · lonemidia.com</span>
+  <div style="margin:0 32px;padding-top:12px;border-top:1px solid #1a1f33;display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-size:9px;color:#5b6172;">Gerado via Lone OS · lonemidia.com</span>
     <div style="display:flex;align-items:center;gap:6px;">
       <div style="width:20px;height:20px;background:#000;border-radius:4px;overflow:hidden;display:flex;align-items:center;justify-content:center;">
         <img src="${logoUrl}" style="width:16px;height:16px;object-fit:contain;" alt=""/>
       </div>
       <span style="font-size:10px;font-weight:800;color:#fff;letter-spacing:-.01em;">LONE MÍDIA</span>
     </div>
-    <span style="font-size:9px;color:#3f3f46;">${data.clientName} · ${data.period}</span>
+    <span style="font-size:9px;color:#5b6172;">${data.clientName} · ${data.period}</span>
   </div>
 
 </div>

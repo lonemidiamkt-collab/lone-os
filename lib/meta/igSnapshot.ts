@@ -28,6 +28,12 @@ export interface IgPost {
   curtidas: number | null; comentarios: number | null; views: number | null;
   alcance: number | null; engajamento: number; data: string | null;
 }
+export interface IgAudiencia {
+  generoMascPct: number | null;
+  generoFemPct: number | null;
+  idades: { faixa: string; pct: number }[]; // ordenado desc
+  cidades: { nome: string; pct: number }[]; // top 3
+}
 export interface IgSnapshot {
   mapped: boolean;
   error?: string;
@@ -37,14 +43,58 @@ export interface IgSnapshot {
   conta?: { username: string; seguidores: number | null; posts: number | null };
   resumo?: {
     alcance: number | null;
-    visualizacoes: number;
     seguidoresGanhos: number | null;
     curtidas: number;
     comentarios: number;
     engajamento: number;
     postsNoPeriodo: number;
   };
+  audiencia?: IgAudiencia;
   posts?: IgPost[];
+}
+
+// Demografia dos seguidores por breakdown (city | age | gender). follower_demographics é lifetime,
+// metric_type=total_value. Best-effort → null se a conta não libera (ex.: <100 seguidores) ou erro.
+async function fetchFollowerBreakdown(igId: string, breakdown: string, token: string): Promise<{ key: string; value: number }[] | null> {
+  try {
+    const r = await fetch(`${GRAPH}/${igId}/insights?metric=follower_demographics&period=lifetime&metric_type=total_value&breakdown=${breakdown}&access_token=${token}`);
+    const j = await r.json().catch(() => ({}));
+    if (j?.error) return null;
+    const results = j.data?.[0]?.total_value?.breakdowns?.[0]?.results;
+    if (!Array.isArray(results)) return null;
+    return results.map((x: { dimension_values?: string[]; value?: number }) => ({ key: (x.dimension_values || [])[0] || "?", value: x.value || 0 }));
+  } catch { return null; }
+}
+
+async function buildAudiencia(igId: string, token: string): Promise<IgAudiencia | undefined> {
+  const [cityBd, ageBd, genderBd] = await Promise.all([
+    fetchFollowerBreakdown(igId, "city", token),
+    fetchFollowerBreakdown(igId, "age", token),
+    fetchFollowerBreakdown(igId, "gender", token),
+  ]);
+  if (!cityBd && !ageBd && !genderBd) return undefined;
+
+  let generoMascPct: number | null = null, generoFemPct: number | null = null;
+  if (genderBd) {
+    const m = genderBd.find((x) => x.key === "M")?.value || 0;
+    const f = genderBd.find((x) => x.key === "F")?.value || 0;
+    const tot = m + f;
+    if (tot > 0) { generoMascPct = Math.round((m / tot) * 1000) / 10; generoFemPct = Math.round((f / tot) * 1000) / 10; }
+  }
+
+  let idades: { faixa: string; pct: number }[] = [];
+  if (ageBd) {
+    const tot = ageBd.reduce((s, x) => s + x.value, 0);
+    if (tot > 0) idades = ageBd.slice().sort((a, b) => b.value - a.value).map((x) => ({ faixa: x.key, pct: Math.round((x.value / tot) * 1000) / 10 }));
+  }
+
+  let cidades: { nome: string; pct: number }[] = [];
+  if (cityBd) {
+    const tot = cityBd.reduce((s, x) => s + x.value, 0);
+    if (tot > 0) cidades = cityBd.slice().sort((a, b) => b.value - a.value).slice(0, 3).map((x) => ({ nome: x.key, pct: Math.round((x.value / tot) * 1000) / 10 }));
+  }
+
+  return { generoMascPct, generoFemPct, idades, cidades };
 }
 
 // Soma uma série diária de insight (reach, follower_count…) num intervalo. Best-effort → null se falhar.
@@ -80,9 +130,11 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
   const untilStr = new Date().toISOString().slice(0, 10);
 
   // Insights de conta no período (best-effort): alcance (reach) e seguidores ganhos (follower_count).
-  const [alcance, seguidoresGanhos] = await Promise.all([
+  // + demografia do público (gênero/idade/cidades) — lifetime, não depende do período.
+  const [alcance, seguidoresGanhos, audiencia] = await Promise.all([
     somaInsightDiario(igId, "reach", sinceStr, untilStr, token),
     somaInsightDiario(igId, "follower_count", sinceStr, untilStr, token),
+    buildAudiencia(igId, token),
   ]);
 
   // Posts do período.
@@ -122,7 +174,6 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
 
   const resumo = {
     alcance,
-    visualizacoes: posts.reduce((s, p) => s + (p.views || 0), 0),
     seguidoresGanhos,
     curtidas: posts.reduce((s, p) => s + (p.curtidas || 0), 0),
     comentarios: posts.reduce((s, p) => s + (p.comentarios || 0), 0),
@@ -133,7 +184,7 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
   return {
     mapped: true, periodo, periodoLabel: IG_PERIOD_LABEL[periodo],
     conta: { username: acct.username as string, seguidores: (acct.followers_count as number) ?? null, posts: (acct.media_count as number) ?? null },
-    resumo, posts,
+    resumo, audiencia, posts,
   };
 }
 
