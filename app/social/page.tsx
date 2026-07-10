@@ -2190,7 +2190,16 @@ export default function SocialPage() {
         router.replace(pathname, { scroll: false });
       }
     }
-  }, [searchParams, router, pathname, contentCards]);
+    // Atalho ?client=<id> (vindo da ficha do cliente): filtra o board por esse cliente (seta a busca).
+    const clientId = searchParams.get("client");
+    if (clientId) {
+      const cl = clients.find((c) => c.id === clientId);
+      if (cl) {
+        setBoardSearch(cl.name);
+        router.replace(pathname, { scroll: false });
+      }
+    }
+  }, [searchParams, router, pathname, contentCards, clients]);
 
   // Auth: use global session (no secondary login needed)
   const isDesigner = role === "designer";

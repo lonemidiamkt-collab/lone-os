@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import HolidaysPdfButton from "@/components/HolidaysPdfButton";
@@ -102,6 +102,7 @@ const TAB_LABELS: Record<Tab, string> = {
 
 export default function ClientDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const clientId = params.id as string;
   const { role, currentUser } = useRole();
   // ── Zustand stores (migrado de AppStateContext) ───────────────────────────
@@ -929,17 +930,34 @@ export default function ClientDetailPage() {
                 <div className="card">
                   <h3 className="font-semibold text-foreground mb-3">Resumo de Atividade</h3>
                   <div className="grid grid-cols-4 gap-2 text-center">
-                    {[
-                      { label: "Tarefas", value: clientTasks.length },
-                      { label: "Conteúdos", value: clientContent.length },
-                      { label: "No histórico", value: entries.length },
-                      { label: "Relatórios", value: clientReports.length },
-                    ].map(({ label, value }) => (
-                      <div key={label}>
+                    {([
+                      { label: "Tarefas", value: clientTasks.length, tab: "tasks" as Tab },
+                      { label: "Conteúdos", value: clientContent.length, tab: "content" as Tab },
+                      { label: "No histórico", value: entries.length, tab: "historico" as Tab },
+                      { label: "Relatórios", value: clientReports.length, tab: "reports" as Tab },
+                    ]).map(({ label, value, tab }) => (
+                      <button
+                        key={label}
+                        onClick={() => setActiveTab(tab)}
+                        className="rounded-lg py-1 transition-colors hover:bg-muted/50"
+                        title={`Ver ${label.toLowerCase()} deste cliente`}
+                      >
                         <p className="text-xl font-bold text-foreground">{value}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
-                      </div>
+                      </button>
                     ))}
+                  </div>
+                  {/* Ações rápidas: abrir os boards já neste cliente */}
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+                    <button onClick={() => router.push(`/social?client=${clientId}`)} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground transition-colors hover:border-primary/40">
+                      <Instagram size={12} /> Board Social
+                    </button>
+                    <button onClick={() => router.push(`/traffic`)} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground transition-colors hover:border-primary/40">
+                      <TrendingUp size={12} /> Tráfego
+                    </button>
+                    <button onClick={() => setActiveTab("content")} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground transition-colors hover:border-primary/40">
+                      <Palette size={12} /> Demandas
+                    </button>
                   </div>
                 </div>
               </div>
