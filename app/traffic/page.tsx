@@ -2897,6 +2897,10 @@ function AdAnalyticsTab({
                   Trocar Conta
                 </button>
               )}
+              {/* Reconectar concedendo NOVOS escopos (ex.: Instagram orgânico) — sem esperar o token expirar */}
+              <button onClick={meta.connect} className="btn-ghost text-xs border border-primary/30 text-primary hover:bg-primary/10" title="Refaz o login da Meta pedindo as permissões atualizadas (Instagram, etc.)">
+                Reconectar (novas permissões)
+              </button>
               <button onClick={meta.disconnect} className="btn-ghost text-xs border border-destructive/30 text-destructive hover:bg-destructive/10">
                 Desconectar
               </button>
