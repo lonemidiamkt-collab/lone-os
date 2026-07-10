@@ -7,7 +7,7 @@ import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import {
   Search, Users, FileText, TrendingUp, Instagram,
-  Palette, MessageCircle, Calendar, Lock, Inbox,
+  Palette, Calendar, Lock, Inbox,
   LayoutDashboard, Thermometer, ShieldAlert, Megaphone,
   Zap, Target, UserPlus, Plus,
 } from "lucide-react";
@@ -32,7 +32,6 @@ const PAGES: SearchResult[] = [
   { id: "p-churn", type: "page", title: "Termômetro de Churn", subtitle: "Score preditivo de risco", href: "/churn", icon: Thermometer },
   { id: "p-defesa", type: "page", title: "Defesa Ativa", subtitle: "Anomalias em Meta Ads", href: "/defesa", icon: ShieldAlert },
   { id: "p-calendar", type: "page", title: "Calendário", subtitle: "Agenda de publicações", href: "/calendar", icon: Calendar },
-  { id: "p-comms", type: "page", title: "Comunicação", subtitle: "Chats por cliente", href: "/communications", icon: MessageCircle },
   { id: "p-broadcasts", type: "page", title: "Comunicados", subtitle: "Mensagens em massa", href: "/broadcasts", icon: Megaphone },
   { id: "p-automations", type: "page", title: "Automações", subtitle: "Regras e gatilhos do sistema", href: "/automations", icon: Zap },
   { id: "p-goals", type: "page", title: "Metas & OKRs", subtitle: "Objetivos do time", href: "/goals", icon: Target },

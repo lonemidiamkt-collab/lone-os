@@ -9,7 +9,6 @@ const SHORTCUTS = [
   { keys: ["g", "t"], label: "Tráfego Pago", href: "/traffic" },
   { keys: ["g", "s"], label: "Social Media", href: "/social" },
   { keys: ["g", "c"], label: "Clientes", href: "/clients" },
-  { keys: ["g", "m"], label: "Comunicação", href: "/communications" },
 ];
 
 export default function KeyboardShortcuts() {

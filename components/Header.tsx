@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, ChevronDown, Plus, X, UserPlus, FileText, Smile, Search, ChevronRight, LogIn } from "lucide-react";
+import { Bell, ChevronDown, Plus, X, UserPlus, FileText, Search, ChevronRight, LogIn } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useRole } from "@/lib/context/RoleContext";
 import MedievalAvatar, { getUserAvatar } from "@/components/MedievalAvatars";
@@ -167,9 +167,6 @@ export default function Header({ title, subtitle }: HeaderProps) {
             </Link>
             <Link href="/social?action=new-content" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-primary/5 transition-colors text-sm text-foreground">
               <FileText size={14} className="text-primary" />Novo Conteúdo
-            </Link>
-            <Link href="/communications" onClick={() => setShowQuick(false)} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-primary/5 transition-colors text-sm text-foreground">
-              <Smile size={14} className="text-primary" />Comunicação
             </Link>
           </div>
           </>
