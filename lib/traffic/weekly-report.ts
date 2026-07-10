@@ -6,6 +6,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { fetchCampaignInsights, fetchAccountDemographics, fetchAccountReach } from "@/lib/meta/insights-server";
 import { buildTrafficReportData, buildClientReportHtml } from "@/lib/exportTrafficPdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
+import { getIgSnapshotCached, type IgSnapshot } from "@/lib/meta/igSnapshot";
+import { igSectionHtml, buildIgOnlyHtml } from "@/lib/traffic/igReportSection";
 import type { AdCampaign } from "@/lib/types";
 
 export interface ReportClientRow {
@@ -13,6 +15,7 @@ export interface ReportClientRow {
   name: string;
   nome_fantasia: string | null;
   meta_ad_account_id: string | null;
+  ig_business_account_id?: string | null;
   whatsapp_group_jid?: string | null;
   whatsapp_group_name?: string | null;
 }
@@ -41,12 +44,13 @@ export function slug(s: string): string {
     .toLowerCase();
 }
 
-/** Clientes ativos com conta Meta vinculada (mesma noção de "ativo" dos broadcasts). */
+/** Clientes ativos com conta Meta de ANÚNCIO **ou** Instagram orgânico vinculado (mesma noção de
+ *  "ativo" dos broadcasts). O relatório monta o que o cliente tiver: tráfego, IG, ou os dois juntos. */
 export async function selectActiveMetaClients(onlyClientId?: string | null): Promise<ReportClientRow[]> {
   let q = supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, meta_ad_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
-    .not("meta_ad_account_id", "is", null)
+    .select("id, name, nome_fantasia, meta_ad_account_id, ig_business_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
+    .or("meta_ad_account_id.not.is.null,ig_business_account_id.not.is.null")
     .in("status", ["good", "average", "onboarding"])
     .is("draft_status", null)
     .order("nome_fantasia");
@@ -76,31 +80,58 @@ export async function selectActiveClientsWithGroup(onlyClientId?: string | null)
   return (data ?? []) as ReportClientRow[];
 }
 
-/** Gera o PDF (Buffer) do relatório de 7 dias de UM cliente. Nunca lança. */
+/**
+ * Gera o PDF (Buffer) do relatório de 7 dias de UM cliente. Nunca lança. Monta o que o cliente
+ * tiver: tráfego (anúncios Meta) + Instagram orgânico. Se tem os dois → UM PDF com as duas seções.
+ * Só tráfego → só tráfego. Só social → só Instagram. O IG vem do cache (evita rate limit).
+ */
 export async function buildClientPdf(
   token: string,
   client: ReportClientRow,
 ): Promise<{ ok: boolean; buffer?: Buffer; error?: string }> {
   const accountId = client.meta_ad_account_id;
   const clientName = clientDisplayName(client);
+  const periodo = periodLabel7d();
 
-  if (!accountId) return { ok: false, error: "cliente sem conta de anúncio" };
+  // ── Instagram orgânico (do cache; não bate na Meta ao vivo) ──
+  let igSnap: IgSnapshot | null = null;
+  if (client.ig_business_account_id && client.id) {
+    try {
+      const s = await getIgSnapshotCached(client.id, "week", false);
+      if (s.mapped && !s.error && s.conta) igSnap = s;
+    } catch { /* IG é best-effort — se falhar, sai só o tráfego */ }
+  }
 
-  const raw = await fetchCampaignInsights(token, accountId, 7);
-  const campaigns = (raw as Array<{ error?: boolean }>).filter((c) => !c.error) as unknown as AdCampaign[];
-  if (campaigns.length === 0) return { ok: false, error: "sem campanhas no período" };
+  // ── Tráfego (anúncios) ──
+  let trafficHtml: string | null = null;
+  if (accountId) {
+    const raw = await fetchCampaignInsights(token, accountId, 7);
+    const campaigns = (raw as Array<{ error?: boolean }>).filter((c) => !c.error) as unknown as AdCampaign[];
+    if (campaigns.length > 0) {
+      let demographics: ReturnType<typeof buildTrafficReportData>["demographics"] | undefined;
+      try {
+        const demo = await fetchAccountDemographics(token, accountId, 7);
+        demographics = demo ?? undefined;
+      } catch { /* demografia é opcional */ }
+      // Alcance deduplicado no nível da conta (não somar campanha a campanha).
+      const accountReach = await fetchAccountReach(token, accountId, 7);
+      const reportData = buildTrafficReportData(clientName, campaigns, periodo, undefined, demographics, undefined, 7, accountReach ?? undefined);
+      trafficHtml = buildClientReportHtml(reportData);
+    }
+  }
 
-  let demographics: ReturnType<typeof buildTrafficReportData>["demographics"] | undefined;
-  try {
-    const demo = await fetchAccountDemographics(token, accountId, 7);
-    demographics = demo ?? undefined;
-  } catch { /* demografia é opcional */ }
+  // ── Combina: tráfego + (IG encaixado antes do rodapé) / só um / nenhum ──
+  let html: string;
+  if (trafficHtml) {
+    html = igSnap
+      ? trafficHtml.replace("<!-- FOOTER -->", `${igSectionHtml(igSnap)}\n\n  <!-- FOOTER -->`)
+      : trafficHtml;
+  } else if (igSnap) {
+    html = buildIgOnlyHtml(clientName, periodo, igSnap);
+  } else {
+    return { ok: false, error: accountId ? "sem campanhas nem Instagram no período" : "cliente sem tráfego nem Instagram" };
+  }
 
-  // Alcance deduplicado no nível da conta (não somar campanha a campanha).
-  const accountReach = await fetchAccountReach(token, accountId, 7);
-
-  const reportData = buildTrafficReportData(clientName, campaigns, periodLabel7d(), undefined, demographics, undefined, 7, accountReach ?? undefined);
-  const html = buildClientReportHtml(reportData);
   const pdf = await htmlToPdf(html);
   if (!pdf.ok || !pdf.buffer) return { ok: false, error: pdf.error ?? "falha no render" };
   return { ok: true, buffer: pdf.buffer };

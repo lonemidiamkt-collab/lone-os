@@ -1388,6 +1388,17 @@ export async function POST(req: NextRequest) {
           ? `${msg.text}\n[Imagem que o cliente enviou: ${v.descricao}]`
           : `[Imagem que o cliente enviou: ${v.descricao}]`;
         console.log(`[CS/inbound] 🖼️ imagem descrita (${msg.authorName || "?"}): "${v.descricao.slice(0, 80)}"`);
+      } else if (!msg.text) {
+        // Visão não leu a foto. Se o cliente JÁ tem demanda pendente recente (rajada de fotos), não
+        // deixa cair: entra como mais um item do card. Fora de rajada, segue trivial (é descartada).
+        const desdeRaj = new Date(Date.now() - COALESCE_WINDOW_S * 1000).toISOString();
+        const { data: pRaj } = await supabaseAdmin.from("cs_demandas").select("id")
+          .eq("group_jid", msg.groupJid).eq("author", msg.authorName || msg.authorJid).eq("status", "pendente")
+          .gte("created_at", desdeRaj).limit(1);
+        if (pRaj && pRaj.length > 0) {
+          msg.text = "[Imagem que o cliente enviou: mais um produto — conferir os detalhes na própria foto]";
+          console.log(`[CS/inbound] 🖼️ imagem sem leitura, mas em rajada → anexa ao card do ${msg.authorName || "?"}`);
+        }
       }
     } else if (media.base64) {
       console.warn("[CS/inbound] imagem muito grande — skip visão");
@@ -1485,7 +1496,9 @@ export async function POST(req: NextRequest) {
     // Só coalesce quando há EXATAMENTE 1 pendente do autor (alvo inequívoco). Com 2+, não dá pra
     // saber a qual o complemento pertence — mesclar no mais recente colava no card ERRADO. Deixa
     // virar demanda própria (a equipe decide) em vez de contaminar outro pedido.
-    pendente = data && data.length === 1 ? data[0] : null;
+    // EXCEÇÃO — rajada de IMAGENS: cliente mandando foto atrás de foto (vários produtos p/ arte) é
+    // UM card só; mesmo com 2+ pendentes, anexa à mais recente (não deixa cair nem cria card novo).
+    pendente = data && data.length === 1 ? data[0] : (msg.isImage && data && data.length >= 1 ? data[0] : null);
   }
   if (pendente) {
     const textoAntigo = (pendente.message_text as string) || "";
@@ -1496,6 +1509,11 @@ export async function POST(req: NextRequest) {
       message_text: combinado,
       briefing: `${(pendente.briefing as string) || ""}\n\n+ (cliente complementou): ${msg.text}`.trim(),
     };
+    // RAJADA DE IMAGENS: 2+ fotos de produto em sequência do mesmo cliente = UM card só, listando
+    // cada produto no briefing (o designer faz o conjunto). NÃO fragmenta em vários cards nem deixa
+    // cair nenhuma — mesmo que o A1 veja "produtos distintos". (Regra do Roberto — Império dos Pisos.)
+    const nImagens = (combinado.match(/\[Imagem que o cliente enviou:/g) || []).length;
+    const rajadaImagem = msg.isImage && nImagens >= 2;
     if (isOpenAIConfigured()) {
       const re = await classifyBlock(
         [{ author: autor, text: textoAntigo }, { author: autor, text: msg.text }],
@@ -1505,20 +1523,30 @@ export async function POST(req: NextRequest) {
         },
       );
       const itens = re.ok && re.data ? re.data.itens.filter((i) => i.is_demanda && i.confianca >= 0.6) : [];
-      if (itens.length >= 2) {
-        ehDemandaSeparada = true; // assunto novo no meio da rajada → não mistura no mesmo card
-      } else if (itens.length === 1) {
-        const it = itens[0];
+      if (itens.length >= 2 && !rajadaImagem) {
+        ehDemandaSeparada = true; // assunto novo (texto) no meio da rajada → não mistura no mesmo card
+      } else if (itens.length >= 1 || rajadaImagem) {
+        const it = itens[0] ?? {
+          tipo: pendente.tipo as string, urgencia: pendente.urgencia as string,
+          resumo: (pendente.resumo as string) || "", confianca: (pendente.confianca as number) ?? 0.7,
+        };
         const urgOrd: Record<string, number> = { baixa: 0, media: 1, alta: 2 };
         const urg = (urgOrd[it.urgencia] ?? 0) >= (urgOrd[pendente.urgencia as string] ?? 0)
           ? it.urgencia : (pendente.urgencia as string);
         const a3 = await gerarBriefing({
           clienteNome, clienteNicho: c.nicho as string, clienteBriefing, regras: regrasFmt,
-          tipo: it.tipo, urgencia: urg, resumo: it.resumo, mensagemOriginal: combinado,
+          tipo: it.tipo, urgencia: urg, resumo: it.resumo,
+          mensagemOriginal: rajadaImagem
+            ? `${combinado}\n\n(OBS: o cliente enviou ${nImagens} imagens de produtos em sequência — é UM card só; contemple e LISTE todos os produtos no briefing.)`
+            : combinado,
         });
+        const baseTitulo = a3.ok && a3.data ? a3.data.titulo : (it.resumo || (pendente.resumo as string) || "Artes promocionais");
+        const resumoFinal = rajadaImagem
+          ? `${baseTitulo.replace(/\s*\(\d+ itens\)\s*$/, "")} (${nImagens} itens)`
+          : baseTitulo;
         updates = {
           message_text: combinado, tipo: it.tipo, urgencia: urg, confianca: it.confianca,
-          resumo: a3.ok && a3.data ? a3.data.titulo : it.resumo,
+          resumo: resumoFinal,
           briefing: a3.ok && a3.data ? formatBriefing(a3.data) : (updates.briefing as string),
         };
         reclassificou = true;
