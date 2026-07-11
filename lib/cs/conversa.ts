@@ -3,6 +3,7 @@
 // Provider: gpt-4o (tom + julgamento). Suggest-only: fala SÓ no grupo interno, nunca com o cliente.
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
+import { getEstiloTime } from "./estilo";
 
 export const CONVERSA_MODEL = "gpt-4o";
 
@@ -92,10 +93,12 @@ emoji. Respostas CURTAS (1-3 frases), como no WhatsApp.
 Responda APENAS no JSON do schema (campos "resposta" e "ensino").`;
 
 export async function conversarComEquipe(inp: ConversaInput): Promise<OpenAiResult<ConversaOutput>> {
+  const estiloTime = await getEstiloTime(); // passo 3: escreve no tom real do time (aprendido + revisado)
   const user = [
     inp.contexto ? `Contexto agora: ${inp.contexto}` : "",
     `${inp.autor || "Alguém"} falou com você: "${inp.mensagem}"`,
     ``,
+    estiloTime ? `# Seu tom de escrita (jeito do time da Lone — siga fielmente, é conversa interna):\n${estiloTime}\n` : "",
     `Responda no seu tom (JSON).`,
   ].filter(Boolean).join("\n");
   return chatJson<ConversaOutput>({

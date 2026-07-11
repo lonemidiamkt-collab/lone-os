@@ -1774,7 +1774,7 @@ export async function POST(req: NextRequest) {
       let respostaSugerida = "";
       if (["duvida", "cobranca_prazo", "reclamacao"].includes(it.tipo) && isOpenAIConfigured()) {
         const rs = await sugerirResposta({
-          clienteNome: clienteNomeItem, mensagemCliente: msg.text, tipo: it.tipo,
+          clienteNome: clienteNomeItem, clientId: cItem.id as string, mensagemCliente: msg.text, tipo: it.tipo,
           briefing: clienteBriefing, statusInfo: statusBriefing,
         });
         if (rs.ok && rs.data?.resposta) respostaSugerida = `\n\n━━━━━━━\n💬 *Resposta pro cliente* (copie e envie, ou ajuste):\n_${rs.data.resposta}_`;

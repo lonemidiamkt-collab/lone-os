@@ -3,9 +3,11 @@
 // Roda em tipos onde o cliente ESPERA resposta (dúvida, cobrança, reclamação). Provider: gpt-4o-mini.
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
+import { getEstiloCliente } from "./estilo";
 
 export interface RespostaInput {
   clienteNome: string;
+  clientId?: string | null;     // pra calibrar o tom pelo jeito do cliente (perfil de estilo)
   mensagemCliente: string;
   tipo: string;                 // duvida | cobranca_prazo | reclamacao | …
   briefing?: string;            // contexto do cliente (não inventar nada fora disso)
@@ -42,11 +44,15 @@ robótico. Curto (1 a 3 frases). No MÁXIMO 1 emoji.
 Responda APENAS no JSON do schema (campo "resposta").`;
 
 export async function sugerirResposta(inp: RespostaInput): Promise<OpenAiResult<RespostaOutput>> {
+  // Passo 3: se houver perfil do cliente, usa SÓ pra calibrar a formalidade/proximidade da resposta
+  // — NUNCA pra copiar as gírias dele. A resposta é da EQUIPE e continua profissional.
+  const estiloCliente = await getEstiloCliente(inp.clientId);
   const user = [
     `Cliente: ${inp.clienteNome}`,
     `Tipo: ${inp.tipo}`,
     inp.statusInfo ? `Status conhecido da arte: ${inp.statusInfo}` : "",
     `Contexto do cliente: ${inp.briefing?.slice(0, 800) || "(sem briefing)"}`,
+    estiloCliente ? `Como o cliente costuma falar (use SÓ pra calibrar o nível de formalidade e proximidade — NÃO copie gírias dele, a resposta é da equipe e continua profissional): ${estiloCliente.slice(0, 400)}` : "",
     `--- Mensagem do cliente ---`,
     `"${inp.mensagemCliente}"`,
     ``,
