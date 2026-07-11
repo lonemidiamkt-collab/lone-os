@@ -9,7 +9,7 @@ import { useState, useEffect } from "react";
 interface Post { id: string; tipo: string; thumb: string | null; permalink: string | null; curtidas: number | null; comentarios: number | null; views: number | null; alcance: number | null; engajamento: number }
 interface Resumo { alcance: number | null; seguidoresGanhos: number | null; curtidas: number; comentarios: number; engajamento: number; postsNoPeriodo: number }
 interface Audiencia { generoMascPct: number | null; generoFemPct: number | null; idades: { faixa: string; pct: number }[]; cidades: { nome: string; pct: number }[] }
-interface Snap { conta?: { username: string; seguidores: number | null; posts: number | null }; resumo?: Resumo; audiencia?: Audiencia; posts?: Post[] }
+interface Snap { conta?: { username: string; seguidores: number | null; posts: number | null }; resumo?: Resumo; audiencia?: Audiencia; posts?: Post[]; fonte?: "owned" | "publico" }
 
 function Bar({ label, pct, color, max = 100 }: { label: string; pct: number; color: string; max?: number }) {
   return (
@@ -49,10 +49,13 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
 
   const r = data?.resumo;
   const a = data?.audiencia;
+  // Fonte pública (business discovery): a Meta não entrega alcance nem seguidores-ganhos de conta que
+  // não é nossa. Em vez de mostrar "—" (parece quebrado), escondemos esses e explicamos numa nota.
+  const isPublico = data?.fonte === "publico";
   const cards = [
     { l: "Seguidores", v: nf(data?.conta?.seguidores ?? null) },
-    { l: "Seguidores ganhos", v: nfSigned(r?.seguidoresGanhos ?? null) },
-    { l: "Alcance", v: nf(r?.alcance ?? null) },
+    ...(isPublico ? [] : [{ l: "Seguidores ganhos", v: nfSigned(r?.seguidoresGanhos ?? null) }]),
+    ...(isPublico ? [] : [{ l: "Alcance", v: nf(r?.alcance ?? null) }]),
     { l: "Engajamento", v: nf(r?.engajamento ?? null) },
     { l: "Curtidas", v: nf(r?.curtidas ?? null) },
     { l: "Comentários", v: nf(r?.comentarios ?? null) },
@@ -85,6 +88,12 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
           </div>
         ))}
       </div>
+
+      {isPublico && (
+        <p className="text-[11px] mb-4" style={{ color: "#6B7280" }}>
+          📊 Alcance, seguidores ganhos e público (gênero/idade/cidades) ficam disponíveis quando o perfil é conectado ao nosso Business Manager.
+        </p>
+      )}
 
       {/* Público do perfil (gênero / idade / cidades) */}
       {temAudiencia && (

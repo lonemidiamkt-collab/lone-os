@@ -29,10 +29,11 @@ function kpiCard(label: string, value: string, accent = false): string {
 
 function igKpis(snap: IgSnapshot): string {
   const r = snap.resumo;
+  const pub = snap.fonte === "publico"; // fonte pública não tem alcance nem seguidores-ganhos
   return [
     kpiCard("Seguidores", fmtBR(snap.conta?.seguidores), true),
-    kpiCard("Seguidores ganhos", fmtSigned(r?.seguidoresGanhos ?? null)),
-    kpiCard("Alcance", fmtBR(r?.alcance ?? null)),
+    ...(pub ? [] : [kpiCard("Seguidores ganhos", fmtSigned(r?.seguidoresGanhos ?? null))]),
+    ...(pub ? [] : [kpiCard("Alcance", fmtBR(r?.alcance ?? null))]),
     kpiCard("Engajamento total", fmtBR(r?.engajamento ?? null)),
     kpiCard("Curtidas", fmtBR(r?.curtidas ?? null)),
     kpiCard("Comentários", fmtBR(r?.comentarios ?? null)),
