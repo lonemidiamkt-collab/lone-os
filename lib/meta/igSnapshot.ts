@@ -6,6 +6,9 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
+// Conta da agência (@lonemidia) que faz o business_discovery de perfis públicos que NÃO estão no
+// nosso Business Manager (ex.: cliente com IG comercial mas Página fora do BM da agência).
+const AGENCY_IG_ID = process.env.META_AGENCY_IG_ID || "17841413649646681";
 export type IgPeriod = "7d" | "14d" | "30d";
 export const IG_PERIODS: IgPeriod[] = ["7d", "14d", "30d"];
 const DAYS: Record<IgPeriod, number> = { "7d": 7, "14d": 14, "30d": 30 };
@@ -40,6 +43,7 @@ export interface IgSnapshot {
   needsReconnect?: boolean;
   periodo: IgPeriod;
   periodoLabel?: string;
+  fonte?: "owned" | "publico"; // owned = conta no nosso BM (métricas completas); publico = business_discovery (só seguidores + posts)
   conta?: { username: string; seguidores: number | null; posts: number | null };
   resumo?: {
     alcance: number | null;
@@ -127,10 +131,61 @@ async function reachDedup(igId: string, dias: number, token: string): Promise<nu
   return null;
 }
 
+// business_discovery: dados PÚBLICOS de um perfil comercial pelo @, via a conta @lonemidia — pra
+// clientes cujo IG NÃO está no BM da agência. Dá seguidores + posts (curtidas/comentários), mas NÃO
+// alcance/seguidores-ganhos/público (esses exigem acesso dono da conta). Marca fonte:"publico".
+async function buildIgSnapshotPublico(handle: string, periodo: IgPeriod): Promise<IgSnapshot> {
+  const token = await getMetaToken();
+  if (!token) return { mapped: true, periodo, error: "Token Meta não configurado ou expirado" };
+  const dias = DAYS[periodo];
+  const desde = new Date(Date.now() - dias * 86400000);
+  const F = `business_discovery.username(${encodeURIComponent(handle)})%7Busername%2Cfollowers_count%2Cmedia_count%2Cmedia.limit(50)%7Bid%2Clike_count%2Ccomments_count%2Cmedia_type%2Ctimestamp%2Cpermalink%2Cthumbnail_url%2Cmedia_url%7D%7D`;
+  const r = await fetch(`${GRAPH}/${AGENCY_IG_ID}?fields=${F}&access_token=${token}`);
+  const j = await r.json().catch(() => ({}));
+  const bd = j?.business_discovery;
+  if (j?.error || !bd) {
+    const err = j?.error;
+    return { mapped: true, periodo, fonte: "publico", error: err?.message || "perfil não encontrado (precisa ser conta Comercial/Criador pública)", needsReconnect: err?.code === 190 };
+  }
+  const mediaAll = (bd.media?.data ?? []) as Array<Record<string, unknown>>;
+  const posts: IgPost[] = mediaAll
+    .filter((m) => ((m.timestamp as string) || "") >= desde.toISOString())
+    .map((m) => {
+      const curtidas = (m.like_count as number) ?? null;
+      const comentarios = (m.comments_count as number) ?? null;
+      return {
+        id: m.id as string, tipo: (m.media_type as string) || "",
+        thumb: (m.thumbnail_url as string) || (m.media_url as string) || null,
+        permalink: (m.permalink as string) || null,
+        curtidas, comentarios, views: null, alcance: null,
+        engajamento: (curtidas || 0) + (comentarios || 0),
+        data: (m.timestamp as string) || null,
+      };
+    });
+  posts.sort((a, b) => b.engajamento - a.engajamento);
+  const resumo = {
+    alcance: null, seguidoresGanhos: null,
+    curtidas: posts.reduce((s, p) => s + (p.curtidas || 0), 0),
+    comentarios: posts.reduce((s, p) => s + (p.comentarios || 0), 0),
+    engajamento: posts.reduce((s, p) => s + p.engajamento, 0),
+    postsNoPeriodo: posts.length,
+  };
+  return {
+    mapped: true, periodo, periodoLabel: IG_PERIOD_LABEL[periodo], fonte: "publico",
+    conta: { username: (bd.username as string) || handle, seguidores: (bd.followers_count as number) ?? null, posts: (bd.media_count as number) ?? null },
+    resumo, posts,
+  };
+}
+
 export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Promise<IgSnapshot> {
-  const { data: cli } = await supabaseAdmin.from("clients").select("ig_business_account_id").eq("id", clientId).maybeSingle();
+  const { data: cli } = await supabaseAdmin.from("clients").select("ig_business_account_id, ig_public_username").eq("id", clientId).maybeSingle();
   const igId = cli?.ig_business_account_id as string | null;
-  if (!igId) return { mapped: false, periodo };
+  if (!igId) {
+    // Sem conta no BM: se tiver @ público cadastrado, usa business_discovery (métricas parciais).
+    const handle = ((cli?.ig_public_username as string) || "").trim().replace(/^@/, "");
+    if (handle) return buildIgSnapshotPublico(handle, periodo);
+    return { mapped: false, periodo };
+  }
 
   const token = await getMetaToken();
   if (!token) return { mapped: true, periodo, error: "Token Meta não configurado ou expirado" };
@@ -200,7 +255,7 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
   };
 
   return {
-    mapped: true, periodo, periodoLabel: IG_PERIOD_LABEL[periodo],
+    mapped: true, periodo, periodoLabel: IG_PERIOD_LABEL[periodo], fonte: "owned",
     conta: { username: acct.username as string, seguidores: (acct.followers_count as number) ?? null, posts: (acct.media_count as number) ?? null },
     resumo, audiencia, posts,
   };

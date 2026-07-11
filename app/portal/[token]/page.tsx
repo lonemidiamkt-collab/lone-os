@@ -16,7 +16,7 @@ export default async function PortalPage({
   // Valida token
   const { data: client } = await supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, public_report_enabled, public_report_token_revoked_at, service_type")
+    .select("id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, public_report_enabled, public_report_token_revoked_at, service_type, meta_ad_account_id, ig_business_account_id")
     .eq("public_report_token", token)
     .single();
 
@@ -29,7 +29,9 @@ export default async function PortalPage({
   // 100% social/design. Social/artes aparece pra quem tem social ou design no pacote.
   const st = (client.service_type as string) || "lone_growth";
   const socialOnly = ["assessoria_social", "assessoria_design"].includes(st);
-  const hasAds = !socialOnly;
+  // Anúncios só aparece se o pacote permite E existe conta de anúncio DE VERDADE — senão o botão vinha
+  // vazio (ex.: Dumar, pacote lone_growth mas sem conta de anúncio → só social). Robusto p/ todos.
+  const hasAds = !socialOnly && !!client.meta_ad_account_id;
   const hasSocial = ["lone_growth", "assessoria_social", "assessoria_design", "trafego_social_site"].includes(st);
 
   // Log de acesso

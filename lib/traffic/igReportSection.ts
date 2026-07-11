@@ -130,9 +130,11 @@ function sectionBand(kicker: string, titulo: string, cor: string, sub: string): 
 export function igSectionHtml(snap: IgSnapshot): string {
   if (!snap.mapped || snap.error || !snap.conta) return "";
   const label = snap.periodoLabel || "período";
+  const sub = snap.fonte === "publico"
+    ? `Seguidores e engajamento dos seus posts nos últimos ${label} (dados públicos do perfil)`
+    : `Alcance, seguidores, engajamento e público do seu perfil nos últimos ${label}`;
   return `
-  ${sectionBand("Instagram Orgânico · " + label, "@" + snap.conta.username, IG,
-    `Alcance, seguidores, engajamento e público do seu perfil nos últimos ${label}`)}
+  ${sectionBand("Instagram Orgânico · " + label, "@" + snap.conta.username, IG, sub)}
   <div style="padding:12px 32px 0;display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
     ${igKpis(snap)}
   </div>

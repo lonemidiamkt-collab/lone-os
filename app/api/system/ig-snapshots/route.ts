@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   const denied = requireCron(req); if (denied) return denied;
   const onlyClient = req.nextUrl.searchParams.get("clientId");
 
-  let q = supabaseAdmin.from("clients").select("id, name, nome_fantasia").not("ig_business_account_id", "is", null);
+  let q = supabaseAdmin.from("clients").select("id, name, nome_fantasia").or("ig_business_account_id.not.is.null,ig_public_username.not.is.null");
   if (onlyClient) q = supabaseAdmin.from("clients").select("id, name, nome_fantasia").eq("id", onlyClient);
   const { data: clients } = await q;
 

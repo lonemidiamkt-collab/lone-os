@@ -16,6 +16,7 @@ export interface ReportClientRow {
   nome_fantasia: string | null;
   meta_ad_account_id: string | null;
   ig_business_account_id?: string | null;
+  ig_public_username?: string | null;
   whatsapp_group_jid?: string | null;
   whatsapp_group_name?: string | null;
 }
@@ -54,8 +55,8 @@ export function slug(s: string): string {
 export async function selectActiveMetaClients(onlyClientId?: string | null): Promise<ReportClientRow[]> {
   let q = supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, meta_ad_account_id, ig_business_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
-    .or("meta_ad_account_id.not.is.null,ig_business_account_id.not.is.null")
+    .select("id, name, nome_fantasia, meta_ad_account_id, ig_business_account_id, ig_public_username, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
+    .or("meta_ad_account_id.not.is.null,ig_business_account_id.not.is.null,ig_public_username.not.is.null")
     .in("status", ["good", "average", "onboarding"])
     .is("draft_status", null)
     .order("nome_fantasia");
@@ -100,9 +101,10 @@ export async function buildClientPdf(
   const periodo = periodLabelDays(periodDays);
   const igPeriodo = IG_PERIOD_FOR_DAYS[periodDays] ?? "7d";
 
-  // ── Instagram orgânico (do cache; não bate na Meta ao vivo) ──
+  // ── Instagram orgânico (do cache; não bate na Meta ao vivo). Vale p/ conta no BM (owned) OU
+  //    perfil público via @ (business_discovery). ──
   let igSnap: IgSnapshot | null = null;
-  if (client.ig_business_account_id && client.id) {
+  if ((client.ig_business_account_id || client.ig_public_username) && client.id) {
     try {
       const s = await getIgSnapshotCached(client.id, igPeriodo, false);
       if (s.mapped && !s.error && s.conta) igSnap = s;
