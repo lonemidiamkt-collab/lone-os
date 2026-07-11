@@ -43,10 +43,14 @@ export async function POST(req: NextRequest) {
     const key = body?.key as string;
     const value = (body?.value as string) ?? "";
     if (!key?.startsWith("cs_style:")) return NextResponse.json({ error: "key inválida" }, { status: 400 });
+    // Marca (ou tira) o selo de REVISADO — o cron cs-estilo não sobrescreve perfil revisado à mão.
+    const reviewedKey = key.replace("cs_style:", "cs_style_reviewed:");
     if (!value.trim()) {
       await supabaseAdmin.from("agency_settings").delete().eq("key", key);
+      await supabaseAdmin.from("agency_settings").delete().eq("key", reviewedKey);
     } else {
       await supabaseAdmin.from("agency_settings").upsert({ key, value: value.trim() }, { onConflict: "key" });
+      await supabaseAdmin.from("agency_settings").upsert({ key: reviewedKey, value: new Date().toISOString() }, { onConflict: "key" });
     }
     return NextResponse.json({ ok: true });
   }

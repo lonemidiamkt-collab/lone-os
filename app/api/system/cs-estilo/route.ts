@@ -32,8 +32,15 @@ async function resumirEstilo(amostra: string[]): Promise<string | null> {
   return r.ok && r.data ? r.data.estilo : null;
 }
 
-async function salvar(key: string, value: string) {
+// Grava o perfil gerado — MAS preserva o que o humano já revisou. Ao revisar/editar no /agente, a
+// rota estilo-perfis marca `cs_style_reviewed:<sufixo>`; aqui a gente pula esses (senão o cron semanal
+// apagaria a edição do Roberto). Retorna true se gravou, false se preservou o revisado.
+async function salvar(key: string, value: string): Promise<boolean> {
+  const reviewedKey = key.replace("cs_style:", "cs_style_reviewed:");
+  const { data: rev } = await supabaseAdmin.from("agency_settings").select("value").eq("key", reviewedKey).maybeSingle();
+  if (rev?.value) return false; // revisado por humano → não clobbera
   await supabaseAdmin.from("agency_settings").upsert({ key, value }, { onConflict: "key" });
+  return true;
 }
 
 export async function POST(req: NextRequest) {
@@ -44,6 +51,7 @@ export async function POST(req: NextRequest) {
 
   const trintaDias = new Date(Date.now() - 30 * 86400000).toISOString();
   const gerados: string[] = [];
+  const preservados: string[] = []; // perfis revisados por humano que NÃO foram sobrescritos
 
   // Perfil do TIME (mensagens is_team=true, qualquer grupo) — só uma vez.
   if (!onlyClient) {
@@ -52,7 +60,10 @@ export async function POST(req: NextRequest) {
       .gte("created_at", trintaDias).order("created_at", { ascending: false }).limit(80);
     if (team && team.length >= MIN_MSGS) {
       const estilo = await resumirEstilo(team.map((m) => m.text as string));
-      if (estilo) { if (!dry) await salvar("cs_style:team", estilo); gerados.push("team"); }
+      if (estilo) {
+        const saved = dry ? true : await salvar("cs_style:team", estilo);
+        (saved ? gerados : preservados).push("team");
+      }
     }
   }
 
@@ -69,8 +80,12 @@ export async function POST(req: NextRequest) {
       .gte("created_at", trintaDias).order("created_at", { ascending: false }).limit(60);
     if (!msgs || msgs.length < MIN_MSGS) continue;
     const estilo = await resumirEstilo(msgs.map((m) => m.text as string));
-    if (estilo) { if (!dry) await salvar(`cs_style:${c.id}`, estilo); gerados.push((c.nome_fantasia as string) || (c.name as string)); }
+    if (estilo) {
+      const nome = (c.nome_fantasia as string) || (c.name as string);
+      const saved = dry ? true : await salvar(`cs_style:${c.id}`, estilo);
+      (saved ? gerados : preservados).push(nome);
+    }
   }
 
-  return NextResponse.json({ ok: true, dry, perfis_gerados: gerados.length, detalhe: gerados });
+  return NextResponse.json({ ok: true, dry, perfis_gerados: gerados.length, detalhe: gerados, preservados });
 }
