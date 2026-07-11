@@ -177,6 +177,37 @@ async function buildIgSnapshotPublico(handle: string, periodo: IgPeriod): Promis
   };
 }
 
+// Auto-vincula o Instagram pela CONTA DE ANÚNCIO: /act_<id>/instagram_accounts devolve o IG ligado
+// ao ad account, e como a agência gerencia esse anúncio, o token tem acesso de DONO ao IG (métricas
+// completas). Roda no cron: todo cliente novo com anúncio (e sem IG) vincula sozinho. Retorna os
+// mapeados. Best-effort — falha de uma conta não derruba as outras.
+export async function reconcileIgFromAdAccounts(): Promise<string[]> {
+  const token = await getMetaToken();
+  if (!token) return [];
+  const { data: clients } = await supabaseAdmin
+    .from("clients").select("id, name, nome_fantasia, meta_ad_account_id")
+    .not("meta_ad_account_id", "is", null)
+    .is("ig_business_account_id", null).is("ig_public_username", null)
+    .in("status", ["good", "average", "onboarding"]).is("draft_status", null)
+    .or("active.is.null,active.eq.true");
+  const mapeados: string[] = [];
+  for (const c of clients ?? []) {
+    const act = ((c.meta_ad_account_id as string) || "").replace(/^act_/, "");
+    if (!act) continue;
+    try {
+      const r = await fetch(`${GRAPH}/act_${act}/instagram_accounts?fields=id,username&access_token=${token}`);
+      const j = await r.json().catch(() => ({}));
+      const ig = j?.data?.[0] as { id?: string; username?: string } | undefined;
+      if (ig?.id) {
+        await supabaseAdmin.from("clients").update({ ig_business_account_id: ig.id, ig_username_cache: ig.username ?? null }).eq("id", c.id as string);
+        mapeados.push(`${(c.nome_fantasia as string) || (c.name as string)} → @${ig.username || ig.id}`);
+      }
+    } catch { /* segue */ }
+    await new Promise((res) => setTimeout(res, 300)); // respiro pra não estourar a cota
+  }
+  return mapeados;
+}
+
 export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Promise<IgSnapshot> {
   const { data: cli } = await supabaseAdmin.from("clients").select("ig_business_account_id, ig_public_username").eq("id", clientId).maybeSingle();
   const igId = cli?.ig_business_account_id as string | null;

@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { getIgSnapshotCached, IG_PERIODS } from "@/lib/meta/igSnapshot";
+import { getIgSnapshotCached, reconcileIgFromAdAccounts, IG_PERIODS } from "@/lib/meta/igSnapshot";
 
 // POST /api/system/ig-snapshots — pré-gera os relatórios de Instagram (semana + mês) de cada cliente
 // com IG mapeado, guardando no cache (client_ig_snapshots). Assim o portal/interno lê do cache e NÃO
@@ -13,6 +13,9 @@ import { getIgSnapshotCached, IG_PERIODS } from "@/lib/meta/igSnapshot";
 export async function POST(req: NextRequest) {
   const denied = requireCron(req); if (denied) return denied;
   const onlyClient = req.nextUrl.searchParams.get("clientId");
+
+  // Auto-vincula IG pela conta de anúncio (cliente novo com anúncio já entra sozinho). Só no lote.
+  const autoMapeados = onlyClient ? [] : await reconcileIgFromAdAccounts();
 
   let q = supabaseAdmin.from("clients").select("id, name, nome_fantasia").or("ig_business_account_id.not.is.null,ig_public_username.not.is.null");
   if (onlyClient) q = supabaseAdmin.from("clients").select("id, name, nome_fantasia").eq("id", onlyClient);
@@ -27,5 +30,5 @@ export async function POST(req: NextRequest) {
       await new Promise((r) => setTimeout(r, 1500));
     }
   }
-  return NextResponse.json({ ok: true, gerados: feitos.length, detalhe: feitos });
+  return NextResponse.json({ ok: true, gerados: feitos.length, detalhe: feitos, auto_vinculados: autoMapeados });
 }
