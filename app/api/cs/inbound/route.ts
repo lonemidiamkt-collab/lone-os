@@ -22,6 +22,7 @@ import { detectarAprovacao } from "@/lib/cs/aprovacao";
 import { sugerirResposta } from "@/lib/cs/resposta";
 import { sincronizarBriefingAprendido } from "@/lib/cs/briefing-sync";
 import { conversarComEquipe } from "@/lib/cs/conversa";
+import { detectarEventoFuturo, pareceTerData } from "@/lib/cs/evento";
 import { montarSnapshotCS } from "@/lib/cs/snapshot";
 import { ehPerguntaProLone, ehVisaoGeralDemandas } from "@/lib/cs/intent";
 import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/cs/criativo";
@@ -1605,6 +1606,41 @@ export async function POST(req: NextRequest) {
   const spAgora = spNow();
   const DIAS_SEMANA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
   const dataHoraAtual = `${DIAS_SEMANA[spAgora.getDay()]}, ${String(spAgora.getDate()).padStart(2, "0")}/${String(spAgora.getMonth() + 1).padStart(2, "0")}/${spAgora.getFullYear()} ${String(spAgora.getHours()).padStart(2, "0")}:${String(spAgora.getMinutes()).padStart(2, "0")} (horário de Brasília)`;
+
+  // ─── DATA/EVENTO FUTURO: o cliente citou uma data (promoção dia 12, evento, lançamento) → agenda um
+  // lembrete no calendário do social responsável. O cron cs-eventos avisa faltando 5 e 2 dias. Não
+  // atrapalha a classificação de demanda (roda em paralelo, best-effort). Pré-filtro barato antes da IA.
+  if (c.id && !sandbox && pareceTerData(msg.text) && isOpenAIConfigured()) {
+    const hojeISO = spAgora.toISOString().slice(0, 10);
+    const ev = await detectarEventoFuturo(msg.text, hojeISO, DIAS_SEMANA[spAgora.getDay()]);
+    const d = ev.ok ? ev.data : null;
+    if (d?.is_evento && d.data && /^\d{4}-\d{2}-\d{2}$/.test(d.data) && d.data > hojeISO) {
+      const tituloEv = d.titulo.slice(0, 80);
+      // Dedup: mesma data + título parecido já anotado pro cliente → não duplica.
+      const { data: jaEv } = await supabaseAdmin.from("cs_client_events")
+        .select("id").eq("client_id", c.id as string).eq("event_date", d.data).eq("status", "ativo")
+        .ilike("titulo", `${tituloEv.slice(0, 15)}%`).limit(1).maybeSingle();
+      if (!jaEv) {
+        const assignedSocial = (c.assigned_social as string) || null;
+        await supabaseAdmin.from("cs_client_events").insert({
+          client_id: c.id as string, group_jid: msg.groupJid, titulo: tituloEv,
+          descricao: (d.descricao || "").slice(0, 300), event_date: d.data,
+          assigned_social: assignedSocial, source_message: msg.text.slice(0, 500),
+        });
+        const dataBR = new Date(`${d.data}T12:00:00`).toLocaleDateString("pt-BR");
+        // Notificação no sistema pro social responsável (por cliente).
+        await supabaseAdmin.from("notifications").insert({
+          type: "content", title: `📅 Data do ${clienteNome}: ${tituloEv}`,
+          body: `${clienteNome} avisou: ${d.descricao} — dia ${dataBR}. Vale preparar conteúdo. Lembro faltando 5 e 2 dias.`,
+          client_id: c.id as string,
+        }).then(() => {}, () => {});
+        // Confirma no grupo interno (tom do time; não fala com o cliente).
+        const jidEv = internalGroupJid();
+        if (jidEv) await csSendGroupText(jidEv, `📅 *Anotei uma data — ${clienteNome}*\n*${tituloEv}* em ${dataBR}${assignedSocial ? ` · ${assignedSocial}` : ""}\n_${d.descricao}_\n\nTá no calendário — lembro o time faltando 5 e 2 dias. 📌`);
+        console.log(`[CS/inbound] 📅 evento futuro → ${clienteNome}: ${tituloEv} (${d.data})`);
+      }
+    }
+  }
 
   const ctx: ClassifierContext = {
     clienteNome,
