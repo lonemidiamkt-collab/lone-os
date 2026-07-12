@@ -32,12 +32,14 @@ export async function parseOnboardingTrigger(text: string): Promise<{ cliente: s
 // Perguntas de onboarding da Lone (lista oficial do Roberto), no tom da Lone, 1 por vez.
 export const ONBOARDING_QUESTIONS: string[] = [
   "Pra começar: vocês já têm fotos profissionais ou um banco de imagens próprio? 📸",
+  "Me passa os dados de contato de vocês? 📍 Endereço completo, telefone/WhatsApp, a região que atendem e o horário de funcionamento — é o que a gente coloca no fim de cada post pra facilitar o cliente chegar até vocês.",
   "Qual o principal objetivo de vocês com o Instagram nesse momento? (atrair mais clientes, construir autoridade, divulgar produtos/serviços, fortalecer a marca…)",
   "Quais serviços ou produtos vocês querem dar mais foco nas postagens?",
   "Como vocês descreveriam a missão da empresa? Se quiser, pode contar um pouco da história — ajuda a criar um conteúdo mais humano e autêntico. 💙",
   "Vocês têm algum slogan ou frase de impacto que costumam usar?",
   "Existe algum perfil no Instagram que vocês curtem ou se inspiram? (pelo design, linguagem, estilo dos posts… se lembrar, manda os @!)",
   "Quais são os produtos que mais vendem?",
+  "Tem algo que vocês NÃO querem que apareça nos posts? 🚫 Pode ser uma palavra, um tema, uma promessa que não podem fazer, ou um concorrente pra não citar. (Se não tiver nada, é só falar!)",
   "E por último: quais produtos dão mais margem (mais lucro) pro negócio? 🎯",
 ];
 
@@ -69,6 +71,7 @@ export type TomVoz = "formal" | "informal" | "divertido" | "tecnico" | "misto" |
 
 export interface BriefingEstruturado {
   resumo_estrategico: string;
+  contato: string; // endereço + telefone/WhatsApp + região + horário (pronto pra fechar legenda)
   posicionamento: string;
   produtos: string[];
   produtos_destaque_atual: string[];
@@ -86,11 +89,12 @@ const BRIEFING_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
   required: [
-    "resumo_estrategico", "posicionamento", "produtos", "produtos_destaque_atual", "publico_alvo",
+    "resumo_estrategico", "contato", "posicionamento", "produtos", "produtos_destaque_atual", "publico_alvo",
     "dores", "tom_voz", "observacoes_estrategicas", "palavras_proibidas", "concorrentes_evitar_mencionar", "ganchos", "ctas",
   ],
   properties: {
     resumo_estrategico: { type: "string" },
+    contato: { type: "string" },
     posicionamento: { type: "string" },
     produtos: { type: "array", items: { type: "string" } },
     produtos_destaque_atual: { type: "array", items: { type: "string" } },
@@ -119,7 +123,9 @@ export async function estruturarBriefing(
     system:
       "Você organiza as respostas de onboarding de um cliente de agência de marketing num briefing " +
       "estruturado. Use SÓ o que o cliente disse — NÃO invente. Campos vazios = array vazio ou string curta. " +
-      "Seja fiel e conciso. resumo_estrategico = 1-2 frases sobre o negócio e o objetivo. posicionamento = " +
+      "Seja fiel e conciso. resumo_estrategico = 1-2 frases sobre o negócio e o objetivo. contato = " +
+      "endereço, telefone/WhatsApp, região e horário EXATOS que o cliente informou, num texto curto pronto " +
+      "pra fechar legenda (ex.: 'Av. X, 810 – Bairro · (22) 99999-9999 · Seg-Sex 8h-18h'). Vazio se não informou. posicionamento = " +
       "como a marca quer ser vista. tom_voz = EXATAMENTE um de: formal | informal | divertido | tecnico | misto " +
       "(o mais próximo do que o cliente descreveu; null se não der pra inferir). observacoes_estrategicas = a " +
       "NUANCE do tom e qualquer detalhe útil que não cabe nos outros campos (ex.: 'tom acolhedor e caseiro'). " +

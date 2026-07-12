@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import type { BriefingCliente } from "@/lib/cs/criativo";
 
 export const BRIEFING_COLS =
-  "resumo_estrategico, produtos, publico_alvo, posicionamento, dores, ganchos, ctas, tom_voz, produtos_destaque_atual, palavras_proibidas, concorrentes_evitar_mencionar";
+  "resumo_estrategico, contato, produtos, publico_alvo, posicionamento, dores, ganchos, ctas, tom_voz, produtos_destaque_atual, palavras_proibidas, concorrentes_evitar_mencionar";
 
 // Preferências de estilo de roteiro aprendidas do cliente (loop de feedback): regras 'roteiro' +
 // as 'sempre' (do's & don'ts gerais valem p/ o roteiro também).
@@ -28,6 +28,7 @@ export async function loadBriefingTexto(clientId: string): Promise<string | unde
   const j = (a: unknown) => (Array.isArray(a) && a.length ? (a as string[]).join(", ") : null);
   const linhas = [
     b.resumo_estrategico && `Resumo: ${b.resumo_estrategico}`,
+    b.contato && `Contato (fechar a legenda com isto — endereço/telefone/horário): ${b.contato}`,
     b.posicionamento && `Posicionamento: ${b.posicionamento}`,
     j(b.produtos) && `Produtos: ${j(b.produtos)}`,
     j(b.produtos_destaque_atual) && `Destaques do momento: ${j(b.produtos_destaque_atual)}`,

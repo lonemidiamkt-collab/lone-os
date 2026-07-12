@@ -457,7 +457,7 @@ async function salvarBriefingOnboarding(clientId: string, est: BriefingEstrutura
   await supabaseAdmin.from("client_briefings").update({ is_current: false }).eq("client_id", clientId).eq("is_current", true);
   const { error } = await supabaseAdmin.from("client_briefings").insert({
     client_id: clientId, version, is_current: true,
-    resumo_estrategico: est.resumo_estrategico, posicionamento: est.posicionamento,
+    resumo_estrategico: est.resumo_estrategico, contato: est.contato, posicionamento: est.posicionamento,
     produtos: est.produtos, produtos_destaque_atual: est.produtos_destaque_atual,
     publico_alvo: est.publico_alvo, dores: est.dores, tom_voz: est.tom_voz,
     observacoes_estrategicas: est.observacoes_estrategicas,
