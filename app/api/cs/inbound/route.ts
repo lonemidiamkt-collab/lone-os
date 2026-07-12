@@ -178,6 +178,23 @@ const STATUS_CARD_LABEL: Record<string, string> = {
   approval: "Aprovação Social Media", client_approval: "Aprovação do cliente", scheduled: "Agendado", published: "Publicado",
 };
 
+// Comando de MOVER um card ("Lone, marca a arte do X como pronta / manda pro social / põe em
+// produção / agenda"). Retorna o status-alvo + se marca a ENTREGA do designer. null = não é mover.
+// Exige verbo + alvo (card/arte) + status claro — sem status, NÃO age (evita mexer no card errado).
+function ehComandoMoverCard(text: string): { status: string; delivered: boolean } | null {
+  const t = text.toLowerCase();
+  if (!/\blone\b/.test(t)) return null;
+  const verbo = /\b(marca|marque|move|mover|manda|mande|passa|passe|p[õo]e|poe|coloca|coloque|bota|finaliza|conclui)\b/.test(t);
+  const alvo = /\b(card|arte|post|criativo|pe[çc]a|demanda)\b/.test(t);
+  if (!verbo || !alvo) return null;
+  if (/\bpront[oa]|entregue|finaliz|termin|feit[oa]|conclu[ií]/.test(t)) return { status: "approval", delivered: true };
+  if (/\bprodu[çc][ãa]o|produzir|produzindo/.test(t)) return { status: "in_production", delivered: false };
+  if (/\bsocial|aprova[çc][ãa]o|revis/.test(t)) return { status: "approval", delivered: false };
+  if (/\bagend/.test(t)) return { status: "scheduled", delivered: false };
+  if (/\bpublic|postad|postou|postar/.test(t)) return { status: "published", delivered: false };
+  return null;
+}
+
 // Raio-X do cliente ("Lone, me dá um raio-x do Contele" / "resumo do X" / "panorama da X").
 // Resumo completo do cliente (demandas, produção, entregas, reclamação, atividade). Determinístico.
 function ehPedidoRaioX(text: string): boolean {
@@ -908,6 +925,39 @@ export async function POST(req: NextRequest) {
     }
     const r = await montarDemandaComando(c, msg.text, quem, msg.messageId, msg.groupJid);
     return NextResponse.json({ ok: true, demanda_cmd: r ? "sugerida" : "erro", cliente: r?.cliente, titulo: r?.titulo });
+  }
+
+  // ─── Agente "Lone": MOVER um card por comando ("Lone, marca a arte do X como pronta / manda pro
+  // social / põe em produção"). Fecha o loop operacional no WhatsApp. Confirma QUAL card moveu e
+  // convida a corrigir (reduz risco de mover o errado). Casa o tema da msg; senão, o card mais recente. ───
+  const cmdMover = (!demandaDaSugestao && msg.groupJid === internalGroupJid()) ? ehComandoMoverCard(msg.text) : null;
+  if (cmdMover) {
+    const alvoM = await resolveClientePorNome(msg.text);
+    if (!alvoM) {
+      await csSendGroupText(msg.groupJid, "De qual cliente é o card? Me diz o nome que eu movo. 😉");
+      conversaAtiva.set(chaveConversa(msg.groupJid, msg.authorJid), Date.now());
+      return NextResponse.json({ ok: true, mover_card: "sem_cliente" });
+    }
+    const { data: cardsM } = await supabaseAdmin.from("content_cards")
+      .select("id, title, status, designer_delivered_at")
+      .eq("client_id", alvoM.id).is("archived_at", null).neq("status", "published")
+      .order("updated_at", { ascending: false }).limit(6);
+    if (!cardsM || cardsM.length === 0) {
+      await csSendGroupText(msg.groupJid, `Não achei card ativo da *${alvoM.nome}* pra mover 🤔 (pode já estar publicado/arquivado).`);
+      return NextResponse.json({ ok: true, mover_card: "sem_card" });
+    }
+    const twM = normNome(msg.text).split(/\s+/).filter((w) => w.length >= 4 && !STOP_NOME.has(w));
+    const cardM = cardsM.find((k) => {
+      const tt = normNome((k.title as string) || "");
+      return twM.filter((w) => tt.includes(w)).length >= 2;
+    }) ?? cardsM[0];
+    const upd: Record<string, unknown> = { status: cmdMover.status };
+    if (cmdMover.delivered) upd.designer_delivered_at = new Date().toISOString();
+    await supabaseAdmin.from("content_cards").update(upd).eq("id", cardM.id as string);
+    const label = STATUS_CARD_LABEL[cmdMover.status] ?? cmdMover.status;
+    await csSendGroupText(msg.groupJid, `✅ Movi *${cardM.title}* da *${alvoM.nome}* pra *${label}*${cmdMover.delivered ? " (arte marcada como entregue)" : ""}.\nSe não era esse card, me fala que eu volto. 👍`);
+    console.log(`[CS/inbound] mover card ${cardM.id} → ${cmdMover.status} (${alvoM.nome})`);
+    return NextResponse.json({ ok: true, mover_card: "ok", cliente: alvoM.nome, card: cardM.title as string, status: cmdMover.status });
   }
 
   // ─── Onboarding: equipe avisa "Lone, entrou um novo cliente X no grupo Y" → o Lone CONDUZ lá. ───

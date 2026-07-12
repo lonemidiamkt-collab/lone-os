@@ -95,7 +95,23 @@ export async function POST(req: NextRequest) {
   const demandasSocial = [...porSocial.entries()]
     .map(([autor, g]) => ({ autor, ...g })).sort((a, b) => b.criadas - a.criadas);
 
-  const msg = buildDeliveryReport({ periodoLabel, entregas, emProducao: emProducao ?? 0, publicados, demandasSocial });
+  // 🎯 PLACAR DO AGENTE (semana): das sugestões dele, quantas viraram card (ok) vs descartadas (não).
+  const { data: demSemana } = await supabaseAdmin
+    .from("cs_demandas").select("status, motivo_descarte, created_at").gte("created_at", desde);
+  let placarConf = 0, placarDesc = 0, placarFalsoPos = 0, placarPend = 0;
+  for (const d of demSemana ?? []) {
+    const k = spDateKeyOf(d.created_at as string);
+    if (!k || k < segKey || k > hojeKey) continue;
+    if (d.status === "confirmada") placarConf++;
+    else if (d.status === "descartada") { placarDesc++; if (d.motivo_descarte === "nao_e_demanda") placarFalsoPos++; }
+    else if (d.status === "pendente") placarPend++;
+  }
+  const placarDecididas = placarConf + placarDesc;
+  const placarAcerto = placarDecididas > 0 ? Math.round((placarConf / placarDecididas) * 100) : null;
+  const placar = (placarDecididas === 0 && placarPend === 0) ? "" :
+    `\n\n🎯 *Placar do agente (semana)*\n${placarConf} viraram card · ${placarDesc} descartada${placarDesc !== 1 ? "s" : ""}${placarFalsoPos ? ` (${placarFalsoPos} falso-positivo)` : ""}${placarPend ? ` · ${placarPend} aguardando ok` : ""}${placarAcerto != null ? `\n✅ Acerto: *${placarAcerto}%* das decididas viraram card` : ""}`;
+
+  const msg = buildDeliveryReport({ periodoLabel, entregas, emProducao: emProducao ?? 0, publicados, demandasSocial }) + placar;
 
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let postada = false;
