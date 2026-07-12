@@ -5,7 +5,7 @@ import type { SnapshotCS } from "@/lib/cs/snapshot";
 
 const vazio: SnapshotCS = {
   pendentes: [], emProducao: 0, aguardandoAprovacao: 0, aguardandoDesigner: 0, entreguesAguardandoSocial: 0, prontasPraPostar: [],
-  atrasados: [], encalhados: 0, esfriando: [], semPostsSemana: [], semPostsLabel: "essa semana", novosHoje: 0, texto: "",
+  atrasados: [], encalhados: 0, esfriando: [], semPostsSemana: [], semPostsLabel: "essa semana", novosHoje: 0, eventosClientes: [], texto: "",
 };
 const dia = new Date(2026, 6, 1); // quarta, 01/07 (sem data comemorativa perto)
 

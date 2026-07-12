@@ -27,6 +27,7 @@ export interface SnapshotCS {
   semPostsSemana: { nome: string; social?: string | null }[]; // clientes de social SEM post planejado na semana-alvo
   semPostsLabel: string;     // "essa semana" (seg-qua) ou "semana que vem" (qui-dom)
   novosHoje: number;         // cards criados hoje
+  eventosClientes: { cliente: string; titulo: string; data: string }[]; // datas/promos que os clientes marcaram (14d)
   texto: string;             // resumo factual compacto (p/ a IA ler e o bom-dia montar)
 }
 
@@ -134,6 +135,21 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
   // Datas comemorativas chegando (14 dias, só as relevantes) — a Lone responde "que datas vêm aí?".
   const datasProx = proximasDatas(agora, 14).filter((d) => d.peso >= 2);
 
+  // Datas/promoções que os CLIENTES marcaram (cs_client_events, próx. 14 dias) — o mais acionável pro
+  // social planejar conteúdo com antecedência (ex.: "Império tem promoção de 15% dia 12").
+  const em14 = ymd(new Date(agora.getTime() + 14 * 86400000));
+  const { data: evData } = await supabaseAdmin.from("cs_client_events")
+    .select("titulo, event_date, client:clients(name, nome_fantasia)")
+    .eq("status", "ativo").gte("event_date", hojeData).lte("event_date", em14)
+    .order("event_date", { ascending: true }).limit(12);
+  const eventosClientes = ((evData ?? []) as Array<{ titulo: string; event_date: string; client?: { name?: string; nome_fantasia?: string } }>)
+    .filter((e) => !!e.client && !ehTeste(e.client.nome_fantasia) && !ehTeste(e.client.name))
+    .map((e) => ({
+      cliente: e.client?.nome_fantasia || e.client?.name || "Cliente",
+      titulo: (e.titulo || "").slice(0, 60),
+      data: new Date(`${e.event_date}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+    }));
+
   // Resumo factual compacto — a IA lê ISTO pra responder com números reais (não inventa).
   const linhas = [
     `Demandas pendentes esperando ok/não: ${pendentes.length} no total` +
@@ -156,7 +172,10 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
     datasProx.length
       ? `Datas comemorativas próximas (14d): ${datasProx.slice(0, 4).map((d) => formatDataCurta(d).replace(/\*/g, "")).join("; ")}`
       : "",
+    eventosClientes.length
+      ? `📅 Datas/promoções que os CLIENTES marcaram (14d — planejar conteúdo com antecedência): ${eventosClientes.map((e) => `${e.cliente}: ${e.titulo} (${e.data})`).join("; ")}`
+      : "",
   ].filter(Boolean);
 
-  return { pendentes, emProducao, aguardandoAprovacao, aguardandoDesigner, entreguesAguardandoSocial, prontasPraPostar, atrasados, encalhados, esfriando, semPostsSemana, semPostsLabel: semana.label, novosHoje, texto: linhas.join("\n") };
+  return { pendentes, emProducao, aguardandoAprovacao, aguardandoDesigner, entreguesAguardandoSocial, prontasPraPostar, atrasados, encalhados, esfriando, semPostsSemana, semPostsLabel: semana.label, novosHoje, eventosClientes, texto: linhas.join("\n") };
 }

@@ -92,9 +92,17 @@ export async function POST(req: NextRequest) {
       .is("archived_at", null).order("created_at", { ascending: false }).limit(10);
     const historico = (recentes ?? []).map((r) => (r.title as string) || "").filter(Boolean);
 
+    // Datas/promoções que o PRÓPRIO cliente marcou (cs_client_events) pra semana da pauta + poucos
+    // dias além (teaser de promo iminente) → a pauta planeja conteúdo pra elas.
+    const fimJanela = ymd(new Date(segunda.getTime() + 9 * 86400000));
+    const { data: evCli } = await supabaseAdmin.from("cs_client_events")
+      .select("titulo, event_date").eq("client_id", c.id as string).eq("status", "ativo")
+      .gte("event_date", semanaKey).lte("event_date", fimJanela).order("event_date", { ascending: true });
+    const eventos = (evCli ?? []).map((e) => `${e.titulo as string} (${labelDia(e.event_date as string)})`);
+
     const r = await gerarPautaSemanal({
       clienteNome: nome, clienteNicho: (c.nicho as string) || undefined,
-      briefing, regras, historicoTitulos: historico, datas,
+      briefing, regras, historicoTitulos: historico, datas, eventos,
     });
     if (!r.ok || !r.data || !r.data.itens.length) {
       resultados.push({ cliente: nome, skip: `geração falhou: ${r.ok ? "0 itens" : r.error}` });

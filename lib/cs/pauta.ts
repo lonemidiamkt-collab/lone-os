@@ -52,6 +52,8 @@ designer consegue produzir lendo só o título + descrição.
 - Use o briefing/regras/nicho do cliente como fonte: produtos, tom, público, do's & don'ts.
 - NÃO invente promoção, preço, número ou oferta — só use o que o briefing trouxer. Sem oferta no
   briefing, proponha conteúdo de valor (dica, bastidor, prova social genérica, institucional leve).
+- Se vier "📅 Datas/promoções que o CLIENTE marcou", PRIORIZE conteúdo pra essas datas na pauta
+  (é o que ele mesmo pediu) — use os dados que ele deu, sem inventar preço/oferta além disso.
 - Considere data comemorativa BR da semana QUANDO fizer sentido pro nicho (Dia dos Pais pra
   varejo sim; pra B2B industrial, talvez não force).
 - NÃO repita os temas dos posts recentes (lista na mensagem) — varie assunto E formato.
@@ -72,6 +74,8 @@ export interface PautaInput {
   historicoTitulos: string[];
   /** Datas-alvo YYYY-MM-DD (seg/qua/sex da semana seguinte, sem feriados). */
   datas: string[];
+  /** Datas/promoções que o PRÓPRIO cliente marcou pra semana (cs_client_events) — planejar em cima. */
+  eventos?: string[];
 }
 
 const DIAS_PT = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
@@ -99,6 +103,7 @@ export async function gerarPautaSemanal(inp: PautaInput): Promise<OpenAiResult<P
     `Briefing do cliente: ${inp.briefing?.trim().slice(0, 1500) || "(sem briefing cadastrado — proponha conteúdo de valor genérico do nicho, sem inventar oferta)"}`,
     `Do's & don'ts:\n${regras}`,
     `Posts recentes (NÃO repetir tema):\n${historico}`,
+    inp.eventos?.length ? `📅 Datas/promoções que o CLIENTE marcou pra essa semana (PRIORIZE conteúdo pra elas): ${inp.eventos.join(" · ")}` : "",
     `Datas-alvo da pauta (uma proposta por data): ${inp.datas.map((d) => `${d} (${labelDia(d)})`).join(" · ")}`,
     ``,
     `Monte a pauta da semana no JSON.`,

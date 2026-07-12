@@ -6,13 +6,19 @@
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
 const VISION_SYSTEM =
-  "Você descreve uma IMAGEM que alguém enviou num grupo de WhatsApp de um cliente de agência de " +
-  "marketing. Em 1-2 frases OBJETIVAS, diga o que é e o que importa pra um pedido de arte/design: " +
-  "é panfleto/anúncio, print de concorrente, foto de produto, referência visual, tabela de preços, " +
-  "print de conversa, logo, ou só uma foto pessoal/meme sem relação com marketing? " +
-  "Se houver TEXTO legível relevante (preço, oferta, telefone, nome), transcreva o essencial. " +
-  "Não invente o que não dá pra ver. Se for claramente foto pessoal/meme/figurinha sem valor pra " +
-  "um pedido, responda apenas: IRRELEVANTE.";
+  "Você lê uma IMAGEM enviada num grupo de WhatsApp de um cliente de agência de marketing e a " +
+  "descreve pra quem vai CRIAR a arte/post. Seja PRECISO e ÚTIL pro designer — extraia nesta ordem:\n" +
+  "1. O QUE É: panfleto/anúncio, print de concorrente, foto de produto, referência de estilo, tabela " +
+  "de preços, print de conversa, logo, ou foto pessoal/meme sem relação.\n" +
+  "2. TEXTO E DADOS (o mais importante): transcreva LITERALMENTE o que estiver legível e importa — " +
+  "nome exato do produto, PREÇO (com centavos), condição de pagamento, desconto/oferta, telefone, " +
+  "data, chamada/headline. NÃO arredonde, não resuma número, não invente o que está borrado.\n" +
+  "3. VISUAL (se for referência de estilo): cores predominantes, clima/estética e elementos que o " +
+  "cliente parece querer reproduzir.\n" +
+  "4. INTENÇÃO provável: arte NOVA desse produto/oferta? reproduzir algo parecido? só informação?\n" +
+  "Responda em 2-4 frases objetivas com os DADOS explícitos (produto/preço/oferta em destaque). Não " +
+  "invente o que não dá pra ver. Se for claramente foto pessoal/meme/figurinha sem valor pra um " +
+  "pedido, responda APENAS: IRRELEVANTE.";
 
 export interface VisionResult {
   ok: boolean;
@@ -33,15 +39,17 @@ export async function describeImage(base64: string, mimetype?: string): Promise<
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: 220,
+        max_tokens: 420,
         temperature: 0,
         messages: [
           { role: "system", content: VISION_SYSTEM },
           {
             role: "user",
             content: [
-              { type: "text", text: "Descreva esta imagem para um pedido de marketing:" },
-              { type: "image_url", image_url: { url: dataUri, detail: "low" } },
+              { type: "text", text: "Leia esta imagem para um pedido de arte/marketing. Transcreva preço, produto e oferta com precisão:" },
+              // detail "high" = lê texto fino (preço/produto/tabela) com precisão — a leitura da arte
+              // é um valor central do agente; o custo extra compensa o acerto no briefing do designer.
+              { type: "image_url", image_url: { url: dataUri, detail: "high" } },
             ],
           },
         ],
