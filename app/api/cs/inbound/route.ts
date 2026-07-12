@@ -748,6 +748,22 @@ export async function POST(req: NextRequest) {
     const temBriefing = !!(cliRow.data?.fixed_briefing as string)?.trim();
     const social = (cliRow.data?.assigned_social as string) || "—";
 
+    // Instagram (do cache, 7d) — resultado REAL no raio-x. Best-effort (nem todo cliente tem).
+    const { data: igSnapRow } = await supabaseAdmin.from("client_ig_snapshots")
+      .select("data").eq("client_id", alvo.id).eq("period_kind", "7d").maybeSingle();
+    const igD = igSnapRow?.data as { conta?: { username?: string; seguidores?: number | null }; resumo?: { alcance?: number | null; seguidoresGanhos?: number | null; engajamento?: number | null; postsNoPeriodo?: number | null }; fonte?: string } | undefined;
+    let igLinha = "";
+    if (igD?.conta) {
+      const nfIg = (n?: number | null) => (n == null ? "—" : n.toLocaleString("pt-BR"));
+      const parts = [`${nfIg(igD.conta.seguidores)} seguidores`];
+      if (igD.fonte !== "publico") {
+        if (igD.resumo?.seguidoresGanhos != null) parts.push(`${igD.resumo.seguidoresGanhos >= 0 ? "+" : ""}${nfIg(igD.resumo.seguidoresGanhos)}/sem`);
+        if (igD.resumo?.alcance != null) parts.push(`alcance ${nfIg(igD.resumo.alcance)}`);
+      }
+      parts.push(`engaj. ${nfIg(igD.resumo?.engajamento)}`, `${nfIg(igD.resumo?.postsNoPeriodo)} posts (7d)`);
+      igLinha = `📸 *Instagram* @${igD.conta.username || ""}: ${parts.join(" · ")}`;
+    }
+
     const linhas = [
       `📊 *Raio-X — ${alvo.nome}*`,
       `👤 Social: ${social}${temBriefing ? " · briefing ✅" : " · *sem briefing* ⚠️"}`,
@@ -755,6 +771,7 @@ export async function POST(req: NextRequest) {
       `*Últimos 30 dias:* ${demArr.length} demanda${demArr.length !== 1 ? "s" : ""}${pend ? ` · ${pend} pendente${pend > 1 ? "s" : ""}` : ""}${conf ? ` · ${conf} confirmada${conf > 1 ? "s" : ""}` : ""}`,
       `*Produção agora:* ${emProd} em produção · ${aguardando} aguardando aprovação`,
       `*Entregas (7d):* ${entregues7} · *Publicados:* ${publicados}`,
+      igLinha,
       diasQuieto == null ? `*Atividade:* sem registro de mensagem do cliente ainda` : `*Última fala do cliente:* há ${diasQuieto} dia${diasQuieto !== 1 ? "s" : ""}${diasQuieto >= 7 ? " ⚠️ (esfriando)" : ""}`,
       (regras.count ?? 0) > 0 ? `*Regras aprendidas:* ${regras.count}` : "",
       ultReclam.data ? `\n🔴 *Última reclamação:* ${ultReclam.data.resumo} (${new Date(ultReclam.data.created_at as string).toLocaleDateString("pt-BR")})` : "",
@@ -1383,14 +1400,22 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ─── A Lone CONVERSA com a equipe: "Lone, [algo]" que não casou com nenhum comando → responde no
-  // tom da casa (antes ficava MUDA — a msg da equipe caía no skip abaixo). Só no grupo interno, só
-  // quando falam COM ela. Fica DEPOIS de todos os comandos (fallback). Responde quotando a msg. ───
+  // ─── A Lone CONVERSA com a equipe (fallback, DEPOIS de todos os comandos). Gatilho ABERTO: além de
+  // "Lone…" e das perguntas operacionais, dispara em QUALQUER pergunta no grupo interno — e o próprio
+  // MODELO decide se era pra ele (campo "ignorar") pra não virar tagarela. Chamado direto → sempre responde. ───
+  const chamadoDireto = ehFalaComAgente(msg.text) || emConversa(msg.groupJid, msg.authorJid);
+  const parecePergunta = /\?/.test(msg.text)
+    || /^(quem|qual|quais|quando|onde|como|quanto|quantos|quantas|por ?que|o que|oq |tem |teve |cad[êe]|manda|lista|mostra|me (diz|fala|manda|mostra|explica)|sabe )/i.test(msg.text.trim());
   const querPapo = msg.groupJid === internalGroupJid() && !isTrivial(msg.text) && isOpenAIConfigured();
-  const dispara = querPapo && (ehFalaComAgente(msg.text) || ehPerguntaProLone(msg.text) || emConversa(msg.groupJid, msg.authorJid));
+  const dispara = querPapo && (chamadoDireto || ehPerguntaProLone(msg.text) || parecePergunta);
   if (dispara) {
     const snap = await montarSnapshotCS(); // fatos reais → ela responde com dados, sem inventar
     const conv = await conversarComEquipe({ mensagem: msg.text, autor: msg.authorName || "", contexto: snap.texto });
+    // O modelo achou que NÃO era pra ele E não te chamaram direto → fica quieto (evita virar tagarela).
+    if (conv.ok && conv.data?.ignorar === true && !chamadoDireto) {
+      console.log(`[CS/inbound] conversa ignorada (não era pra Lone): "${msg.text.slice(0, 40)}"`);
+      return NextResponse.json({ ok: true, conversa: "ignorada" });
+    }
     const resp = (conv.ok && conv.data?.resposta) ? conv.data.resposta : "Opa! Tô por aqui 👋 me chama que eu ajudo.";
     await csSendGroupText(msg.groupJid, resp, msg.quotedMsgId || undefined);
     conversaAtiva.set(chaveConversa(msg.groupJid, msg.authorJid), Date.now()); // mantém a conversa viva

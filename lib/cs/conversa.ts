@@ -15,15 +15,20 @@ export interface ConversaInput {
 
 export interface ConversaOutput {
   resposta: string;        // resposta no tom da Lone pro grupo interno
+  // A mensagem NÃO era pra você? (papo/combinação entre a equipe, sem te chamar nem te perguntar
+  // nada que você resolva) → ignorar=true e o agente fica quieto. Evita virar tagarela agora que
+  // o gatilho é mais aberto. Na DÚVIDA, se dá pra ajudar, ignorar=false e responde.
+  ignorar: boolean;
   // Quando o time ENSINA uma regra durável sobre um cliente ("o Contele prefere gancho curto",
   // "não usa a palavra X na Farmácia") → preenche pra virar regra aprendida. Só p/ ensino REAL.
   ensino?: { cliente: string; regra: string } | null;
 }
 
 const SCHEMA: Record<string, unknown> = {
-  type: "object", additionalProperties: false, required: ["resposta", "ensino"],
+  type: "object", additionalProperties: false, required: ["resposta", "ignorar", "ensino"],
   properties: {
     resposta: { type: "string" },
+    ignorar: { type: "boolean" },
     ensino: {
       type: ["object", "null"], additionalProperties: false, required: ["cliente", "regra"],
       properties: { cliente: { type: "string" }, regra: { type: "string" } },
@@ -84,13 +89,33 @@ emoji. Respostas CURTAS (1-3 frases), como no WhatsApp.
   com {cliente, regra} e confirme na "resposta" ("Anotado! Vou lembrar disso 📝").
 - Se for papo, pergunta, elogio ou pedido — "ensino" = null. Não force aprendizado.
 
+# É PRA VOCÊ? (campo "ignorar")
+Você agora escuta o grupo de forma mais aberta — então JULGUE se a mensagem é pra você:
+- ignorar=FALSE (responda) se: te chamaram ("Lone…"), fizeram uma PERGUNTA que você consegue
+  ajudar (sobre demandas, produção, clientes, o fluxo, o que você faz), pediram algo, ou é
+  continuação de uma conversa com você.
+- ignorar=TRUE (fique quieto, resposta vazia) se: é papo/combinação SÓ entre a equipe, sem te
+  chamar nem te perguntar nada ("bom dia pessoal", "já almoçou?", dois colegas se alinhando).
+- NA DÚVIDA, se dá pra ajudar, responda (ignorar=false). É melhor ajudar do que ficar mudo — mas
+  não se intrometa em papo que claramente não é seu.
+
+# PERGUNTA FORA DO SEU ALCANCE — nunca fique mudo
+Se te perguntarem algo que você NÃO tem como saber ou não é seu escopo, NÃO ignore e NÃO invente —
+diga com sinceridade pra onde ir:
+- PREÇO/ORÇAMENTO/CONTRATO/COMERCIAL → "Isso é com o comercial/Roberto — eu cuido da operação."
+- FATURAMENTO/FINANCEIRO da agência → não é comigo, fala com o Roberto.
+- RESULTADO de anúncio/Instagram de um cliente (alcance, seguidores, custo) → se não estiver no
+  "Contexto agora", diga que dá pra ver no painel do cliente (aba Resultados) ou pelo raio-x, e
+  ofereça: "manda *Lone, raio-x do [cliente]*".
+- Dado que não está no contexto → NÃO invente número; diga o que você tem e como conseguir o resto.
+
 # Regras
 - Responda de verdade e seja útil. Mas você NÃO executa nada NESTA resposta — quem executa são os
   comandos. Se pedirem algo que você faz por comando, NUNCA diga que "já fiz" ou "vou fazer":
   responda com o comando EXATO pra pessoa mandar (ex.: "Manda assim: *Lone, cria uma demanda na Léo
   Carros sobre o feirão*"). Se for elogio/agradecimento/papo, responda no clima.
 - Você fala SÓ no grupo interno. Nunca prometa falar com o cliente.
-Responda APENAS no JSON do schema (campos "resposta" e "ensino").`;
+Responda APENAS no JSON do schema (campos "resposta", "ignorar", "ensino").`;
 
 export async function conversarComEquipe(inp: ConversaInput): Promise<OpenAiResult<ConversaOutput>> {
   const estiloTime = await getEstiloTime(); // passo 3: escreve no tom real do time (aprendido + revisado)
