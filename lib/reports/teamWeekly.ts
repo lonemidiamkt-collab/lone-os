@@ -148,6 +148,7 @@ export async function buildTeamWeeklyData(): Promise<TeamWeeklyData> {
     }
     verba.sort((a, b) => Math.abs(b.deltaPct ?? 999) - Math.abs(a.deltaPct ?? 999));
   }
+  const verbaTop = verba.slice(0, 12); // no máx. 12 movimentos (evita tabela gigante em semanas atípicas)
 
   return {
     periodoLabel,
@@ -155,7 +156,7 @@ export async function buildTeamWeeklyData(): Promise<TeamWeeklyData> {
     publicados, emProducao: emProducao ?? 0, demandasCriadas,
     designers: [...desMap.values()].sort((a, b) => b.entregues - a.entregues),
     socials: [...socMap.values()].sort((a, b) => (b.publicados + b.demandas) - (a.publicados + a.demandas)),
-    naoEntregas, rotina, verba,
+    naoEntregas, rotina, verba: verbaTop,
   };
 }
 
