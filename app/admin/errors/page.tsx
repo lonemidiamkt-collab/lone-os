@@ -70,7 +70,7 @@ export default function AdminErrorsPage() {
 
       <div className="rounded-xl border p-4 space-y-2" style={{ background: "#16161D", borderColor: "#1E1E2A" }}>
         <div className="flex items-center gap-2 mb-3">
-          <Tag size={14} style={{ color: "#0d4af5" }} />
+          <Tag size={14} style={{ color: "#2b3cff" }} />
           <p className="text-sm font-semibold">Tags disponíveis para filtrar</p>
         </div>
         {[
@@ -79,7 +79,7 @@ export default function AdminErrorsPage() {
           { tag: "cron_endpoint:true", desc: "Erros em /api/system/generate-snapshots" },
         ].map(({ tag, desc }) => (
           <div key={tag} className="flex items-start gap-3">
-            <code className="text-xs px-2 py-0.5 rounded shrink-0" style={{ background: "#0f0f1a", color: "#0d4af5" }}>{tag}</code>
+            <code className="text-xs px-2 py-0.5 rounded shrink-0" style={{ background: "#0f0f1a", color: "#2b3cff" }}>{tag}</code>
             <p className="text-xs" style={{ color: "#9CA3AF" }}>{desc}</p>
           </div>
         ))}

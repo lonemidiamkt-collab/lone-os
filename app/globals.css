@@ -350,7 +350,7 @@
   /* ─── ATTENTION LEVELS ─────────────────────────────────── */
   .level-low      { @apply text-zinc-400 bg-zinc-500/[0.08] border-zinc-500/[0.12]; }
   .level-medium   { @apply text-amber-400 bg-amber-500/[0.08] border-amber-500/[0.12]; }
-  .level-high     { @apply text-[#3b6ff5] bg-[#2b3cff]/[0.08] border-[#2b3cff]/[0.12]; }
+  .level-high     { @apply text-[#2b3cff] bg-[#2b3cff]/[0.08] border-[#2b3cff]/[0.12]; }
   .level-critical { @apply text-red-400 bg-red-500/[0.08] border-red-500/[0.12]; }
 
   /* ─── INPUT — solid background, no blur ─────────────────── */

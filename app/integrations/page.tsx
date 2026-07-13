@@ -417,7 +417,7 @@ export default function IntegrationsPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-3">
-          <Plug size={24} className="text-[#0d4af5]" />
+          <Plug size={24} className="text-[#2b3cff]" />
           Integrações
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -443,7 +443,7 @@ export default function IntegrationsPage() {
           onClick={() => setActiveCategory("all")}
           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
             activeCategory === "all"
-              ? "bg-[#0d4af5] text-white"
+              ? "bg-[#2b3cff] text-white"
               : "bg-muted text-muted-foreground hover:text-foreground hover:bg-hover"
           }`}
         >
@@ -458,7 +458,7 @@ export default function IntegrationsPage() {
               onClick={() => setActiveCategory(cat.key)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 activeCategory === cat.key
-                  ? "bg-[#0d4af5] text-white"
+                  ? "bg-[#2b3cff] text-white"
                   : "bg-muted text-muted-foreground hover:text-foreground hover:bg-hover"
               }`}
             >
@@ -484,7 +484,7 @@ export default function IntegrationsPage() {
               key={integration.id}
               className={`card border transition-all ${
                 status === "connected"
-                  ? "border-[#0d4af5]/20 hover:border-[#0d4af5]/40"
+                  ? "border-[#2b3cff]/20 hover:border-[#2b3cff]/40"
                   : "border-border hover:border-zinc-600"
               }`}
             >
@@ -533,7 +533,7 @@ export default function IntegrationsPage() {
                     {!isMeta && status === "disconnected" && (
                       <button
                         onClick={() => handleConnect(integration)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2b3cff] text-white text-xs font-medium hover:bg-[#2b3cff]/80 transition-all"
                       >
                         <Plug size={12} /> Conectar
                       </button>
@@ -542,7 +542,7 @@ export default function IntegrationsPage() {
                       <>
                         <button
                           onClick={() => handleManualSync(integration.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d4af5]/10 text-[#0d4af5] text-xs font-medium border border-[#0d4af5]/20 hover:bg-[#0d4af5]/20 transition-all"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2b3cff]/10 text-[#2b3cff] text-xs font-medium border border-[#2b3cff]/20 hover:bg-[#2b3cff]/20 transition-all"
                         >
                           <RefreshCw size={12} /> Sincronizar
                         </button>
@@ -597,7 +597,7 @@ export default function IntegrationsPage() {
                     <select
                       value={conn.syncFrequency}
                       onChange={(e) => handleSyncFrequencyChange(integration.id, e.target.value as SyncFrequency)}
-                      className="mt-1 w-full bg-muted border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-[#0d4af5]/40"
+                      className="mt-1 w-full bg-muted border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-[#2b3cff]/40"
                     >
                       {Object.entries(SYNC_LABELS).map(([val, label]) => (
                         <option key={val} value={val}>{label}</option>
@@ -640,7 +640,7 @@ export default function IntegrationsPage() {
       {webhookLog.length > 0 && (
         <div className="card border border-border">
           <div className="flex items-center gap-2 mb-4">
-            <Globe size={16} className="text-[#0d4af5]" />
+            <Globe size={16} className="text-[#2b3cff]" />
             <h2 className="text-sm font-semibold text-foreground">Webhook Log</h2>
             <span className="text-[10px] text-muted-foreground ml-auto">Últimos {Math.min(webhookLog.length, 10)} eventos</span>
           </div>
@@ -697,7 +697,7 @@ export default function IntegrationsPage() {
             <div className="p-5 space-y-4">
               <div>
                 <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5 mb-2">
-                  <Shield size={12} className="text-[#0d4af5]" />
+                  <Shield size={12} className="text-[#2b3cff]" />
                   Permissões necessárias
                 </h4>
                 <ul className="space-y-1.5">
@@ -729,7 +729,7 @@ export default function IntegrationsPage() {
               <button
                 onClick={handleAuthorize}
                 disabled={connectLoading}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#0d4af5] text-white text-xs font-medium hover:bg-[#0d4af5]/80 transition-all disabled:opacity-70"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#2b3cff] text-white text-xs font-medium hover:bg-[#2b3cff]/80 transition-all disabled:opacity-70"
               >
                 {connectLoading ? (
                   <>

@@ -73,7 +73,7 @@ export default function BroadcastsPage() {
           </div>
           <button
             onClick={() => setComposerOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2b3cff] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all"
           >
             <Plus size={14} /> Novo Comunicado
           </button>
@@ -467,7 +467,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
             type="button"
             onClick={handleSend}
             disabled={testing || sending || audienceCount === 0}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#2b3cff] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all disabled:opacity-50"
           >
             {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
             {sending ? "Enviando..." : `Enviar para ${audienceCount}`}

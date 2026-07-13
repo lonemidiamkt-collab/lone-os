@@ -134,7 +134,7 @@ export default function DefesaAtivaPage() {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <ShieldAlert size={22} className="text-[#0d4af5]" />
+              <ShieldAlert size={22} className="text-[#2b3cff]" />
               Defesa Ativa
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
@@ -163,7 +163,7 @@ export default function DefesaAtivaPage() {
         <div className="flex items-center gap-2 flex-wrap">
           {(["unack", "ack", "all"] as FilterStatus[]).map((f) => (
             <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-lg border text-xs transition-colors ${filter === f ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-[#0d4af5]" : "border-border text-zinc-400 hover:text-foreground"}`}>
+              className={`px-3 py-1.5 rounded-lg border text-xs transition-colors ${filter === f ? "border-[#2b3cff]/50 bg-[#2b3cff]/10 text-[#2b3cff]" : "border-border text-zinc-400 hover:text-foreground"}`}>
               {f === "unack" ? "Ativos" : f === "ack" ? "Resolvidos" : "Todos"}
             </button>
           ))}
@@ -176,7 +176,7 @@ export default function DefesaAtivaPage() {
         )}
 
         {loading ? (
-          <div className="flex justify-center py-16"><Loader2 size={20} className="text-[#0d4af5] animate-spin" /></div>
+          <div className="flex justify-center py-16"><Loader2 size={20} className="text-[#2b3cff] animate-spin" /></div>
         ) : alerts.length === 0 ? (
           <div className="text-center py-16 space-y-2">
             <CheckCircle size={32} className="text-emerald-500/60 mx-auto" />

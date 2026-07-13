@@ -148,7 +148,7 @@ function NoticeFormBlock() {
               <span className="text-xs text-red-500">Urgente</span>
             </label>
             <div className="flex items-center gap-2">
-              {formSuccess && <span className="text-xs text-[#0d4af5] font-medium flex items-center gap-1"><CheckCircle2 size={12} /> Publicado!</span>}
+              {formSuccess && <span className="text-xs text-[#2b3cff] font-medium flex items-center gap-1"><CheckCircle2 size={12} /> Publicado!</span>}
               <button onClick={() => setShowForm(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
               <button onClick={handleAdd} disabled={formSuccess} className="btn-primary text-xs flex items-center gap-1 disabled:opacity-50"><Send size={11} /> Publicar</button>
             </div>
@@ -164,7 +164,7 @@ function NoticeFormBlock() {
           return (
             <div key={notice.id} className={`p-3 rounded-lg border text-sm ${
               notice.urgent ? "bg-red-500/10 border-red-500/20"
-              : notice.category === "meeting" ? "bg-blue-500/5 border-[#0d4af5]/20"
+              : notice.category === "meeting" ? "bg-blue-500/5 border-[#2b3cff]/20"
               : "bg-muted border-transparent"
             }`}>
               <div className="flex items-start justify-between gap-2">
@@ -185,7 +185,7 @@ function NoticeFormBlock() {
               <div className="flex items-center gap-2 mt-1">
                 <p className="text-muted-foreground/50 text-xs">por {notice.createdBy} · {notice.createdAt}</p>
                 {notice.scheduledAt && (
-                  <span className="text-xs text-[#0d4af5] bg-[#0d4af5]/10 px-1.5 py-0.5 rounded">
+                  <span className="text-xs text-[#2b3cff] bg-[#2b3cff]/10 px-1.5 py-0.5 rounded">
                     {new Date(notice.scheduledAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 )}
@@ -279,7 +279,7 @@ function EmployeeDashboard() {
   return (
     <>
       {/* Greeting */}
-      <div className="bg-gradient-to-r from-[#0d4af5]/10 to-transparent border border-[#0d4af5]/20 rounded-2xl p-5">
+      <div className="bg-gradient-to-r from-[#2b3cff]/10 to-transparent border border-[#2b3cff]/20 rounded-2xl p-5">
         <h2 className="text-lg font-bold text-foreground">
           {greeting}, {currentUser.split(" ")[0]}!
         </h2>
@@ -306,13 +306,13 @@ function EmployeeDashboard() {
           label="Taxa de Conclusão"
           value={`${performance.rate}%`}
           sub={`${performance.done}/${performance.total} tarefas`}
-          iconColor={performance.rate >= 80 ? "text-[#0d4af5]" : performance.rate >= 50 ? "text-[#3b6ff5]" : "text-red-500"}
-          iconBg={performance.rate >= 80 ? "bg-[#0d4af5]/10" : performance.rate >= 50 ? "bg-[#0d4af5]/10" : "bg-red-500/10"}
+          iconColor={performance.rate >= 80 ? "text-[#2b3cff]" : performance.rate >= 50 ? "text-[#2b3cff]" : "text-red-500"}
+          iconBg={performance.rate >= 80 ? "bg-[#2b3cff]/10" : performance.rate >= 50 ? "bg-[#2b3cff]/10" : "bg-red-500/10"}
           href="/calendar"
         />
         {role === "social" && (
           <>
-            <MetricCard icon={Instagram} label="Publicados" value={performance.published} sub="este mês" iconColor="text-[#0d4af5]" iconBg="bg-[#0d4af5]/10" href="/social" />
+            <MetricCard icon={Instagram} label="Publicados" value={performance.published} sub="este mês" iconColor="text-[#2b3cff]" iconBg="bg-[#2b3cff]/10" href="/social" />
             <MetricCard icon={FileText} label="No Pipeline" value={performance.inPipeline} sub="cards em andamento" iconColor="text-primary" iconBg="bg-primary/10" href="/social" />
           </>
         )}
@@ -324,15 +324,15 @@ function EmployeeDashboard() {
               label="Suporte Hoje"
               value={`${performance.supportDone}/${performance.supportTotal}`}
               sub="check-ins feitos"
-              iconColor={performance.supportDone >= performance.supportTotal ? "text-[#0d4af5]" : "text-[#3b6ff5]"}
-              iconBg={performance.supportDone >= performance.supportTotal ? "bg-[#0d4af5]/10" : "bg-[#0d4af5]/10"}
+              iconColor={performance.supportDone >= performance.supportTotal ? "text-[#2b3cff]" : "text-[#2b3cff]"}
+              iconBg={performance.supportDone >= performance.supportTotal ? "bg-[#2b3cff]/10" : "bg-[#2b3cff]/10"}
               href="/traffic"
             />
           </>
         )}
         {role === "designer" && (
           <>
-            <MetricCard icon={Palette} label="Na Fila" value={myDesignRequests.filter((r) => r.status === "queued").length} sub="pedidos aguardando" iconColor="text-[#3b6ff5]" iconBg="bg-[#0d4af5]/10" href="/design" />
+            <MetricCard icon={Palette} label="Na Fila" value={myDesignRequests.filter((r) => r.status === "queued").length} sub="pedidos aguardando" iconColor="text-[#2b3cff]" iconBg="bg-[#2b3cff]/10" href="/design" />
             <MetricCard icon={Activity} label="Em Produção" value={myDesignRequests.filter((r) => r.status === "in_progress").length} sub="fazendo agora" iconColor="text-primary" iconBg="bg-primary/10" href="/design" />
           </>
         )}
@@ -376,7 +376,7 @@ function EmployeeDashboard() {
               <div key={task.id} className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
                 <span className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${
                   task.priority === "critical" ? "bg-red-500" :
-                  task.priority === "high" ? "bg-[#3b6ff5]" :
+                  task.priority === "high" ? "bg-[#2b3cff]" :
                   task.priority === "medium" ? "bg-blue-500" : "bg-zinc-500"
                 }`} />
                 <div className="flex-1 min-w-0">
@@ -385,7 +385,7 @@ function EmployeeDashboard() {
                     <span className="text-[10px] text-muted-foreground">{task.clientName}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                       task.status === "in_progress" ? "bg-primary/10 text-primary" :
-                      task.status === "review" ? "bg-[#0d4af5]/10 text-[#3b6ff5]" :
+                      task.status === "review" ? "bg-[#2b3cff]/10 text-[#2b3cff]" :
                       "bg-muted text-muted-foreground"
                     }`}>
                       {task.status === "pending" ? "Pendente" : task.status === "in_progress" ? "Em Progresso" : "Revisão"}

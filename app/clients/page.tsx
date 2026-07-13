@@ -289,7 +289,7 @@ export default function ClientsPage() {
                       Cadastros Pendentes ({drafts.length})
                     </h3>
                   </div>
-                  <Link href="/clients/pending" className="text-xs text-[#0d4af5] hover:underline flex items-center gap-1">
+                  <Link href="/clients/pending" className="text-xs text-[#2b3cff] hover:underline flex items-center gap-1">
                     Revisar todos <ExternalLink size={10} />
                   </Link>
                 </div>
@@ -309,7 +309,7 @@ export default function ClientsPage() {
                             </span>
                           )}
                           {draft.draftStatus === "awaiting_approval" && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20 flex items-center gap-1">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#2b3cff]/10 text-[#2b3cff] border border-[#2b3cff]/20 flex items-center gap-1">
                               <Check size={8} /> Formulario recebido
                             </span>
                           )}
@@ -454,7 +454,7 @@ export default function ClientsPage() {
                     className={`card cursor-pointer transition-all select-none hover:border-primary/40 hover:bg-zinc-800/50 hover:shadow-lg ${
                       client.status === "at_risk" ? "border-red-500/20" : ""
                     } ${
-                      hasMetaLinked ? "ring-1 ring-[#0d4af5]/30" : ""
+                      hasMetaLinked ? "ring-1 ring-[#2b3cff]/30" : ""
                     } ${hasAdError ? "ring-1 ring-red-500/40" : ""}`}
                     onClick={() => {
                       if (client.status === "onboarding") {
@@ -473,7 +473,7 @@ export default function ClientsPage() {
                             <h4 className="font-semibold text-foreground tracking-tight">{client.name}</h4>
                             <span className="text-xs text-muted-foreground">{getStatusLabel(client.status)}</span>
                             {hasMetaLinked && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#2b3cff]/10 text-[#2b3cff] border border-[#2b3cff]/20">
                                 <Facebook size={9} />
                                 Meta
                               </span>

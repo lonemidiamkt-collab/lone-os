@@ -103,7 +103,7 @@ export default function ChurnRiskPage() {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <Thermometer size={22} className="text-[#0d4af5]" />
+              <Thermometer size={22} className="text-[#2b3cff]" />
               Termômetro de Churn
             </h1>
             <p className="text-sm text-muted-foreground mt-1">Score preditivo de risco por cliente. Quanto maior, maior a chance de churn. Atualizado diariamente às 06:00 BRT.</p>
@@ -136,7 +136,7 @@ export default function ChurnRiskPage() {
         )}
 
         {loading ? (
-          <div className="flex justify-center py-16"><Loader2 size={20} className="text-[#0d4af5] animate-spin" /></div>
+          <div className="flex justify-center py-16"><Loader2 size={20} className="text-[#2b3cff] animate-spin" /></div>
         ) : clients.length === 0 ? (
           <div className="text-center py-16 space-y-2">
             <Shield size={32} className="text-zinc-700 mx-auto" />
@@ -246,7 +246,7 @@ function ClientHealthCard({ client: c }: { client: Row }) {
           </div>
           <Link
             href={`/clients/${c.id}`}
-            className="inline-flex items-center gap-1 text-xs text-[#0d4af5] hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-[#2b3cff] hover:underline"
           >
             Abrir cliente <ChevronRight size={12} />
           </Link>

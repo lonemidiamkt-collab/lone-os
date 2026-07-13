@@ -96,7 +96,7 @@ function InputField({ label, value, onChange, placeholder, required, type = "tex
         onChange={(e) => onChange(mask ? mask(e.target.value) : e.target.value)}
         placeholder={placeholder}
         className={`w-full bg-[#111113] border rounded-lg px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-600 outline-none transition-colors ${
-          fieldError ? "border-red-500/50 focus:border-red-500" : "border-[#1e1e2a] focus:border-[#0d4af5]/50"
+          fieldError ? "border-red-500/50 focus:border-red-500" : "border-[#1e1e2a] focus:border-[#2b3cff]/50"
         }`}
       />
       {fieldError && <p className="text-[10px] text-red-400">{fieldError}</p>}
@@ -161,7 +161,7 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
           return (
             <div className="flex justify-center">
               <img src={previewSrc} alt={label}
-                className={`max-h-24 object-contain ${previewRound ? "w-20 h-20 rounded-full border-2 border-[#0d4af5]/30" : "rounded-lg border border-[#1e1e2a]"}`} />
+                className={`max-h-24 object-contain ${previewRound ? "w-20 h-20 rounded-full border-2 border-[#2b3cff]/30" : "rounded-lg border border-[#1e1e2a]"}`} />
             </div>
           );
         }
@@ -180,7 +180,7 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
       ) : (
         <div className="flex gap-2">
           <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#0d4af5]/30 text-zinc-400 hover:text-white transition-all text-xs">
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#2b3cff]/30 text-zinc-400 hover:text-white transition-all text-xs">
             {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
             {uploading ? "Enviando..." : "Selecionar Arquivo"}
           </button>
@@ -190,7 +190,7 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
             input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleFile(f); };
             input.click();
           }}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#0d4af5]/30 text-zinc-400 hover:text-white transition-all text-xs">
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#2b3cff]/30 text-zinc-400 hover:text-white transition-all text-xs">
             <Camera size={14} /> Foto
           </button>
         </div>
@@ -212,7 +212,7 @@ function AccessField({ platform, icon, login, password, status, onLogin, onPassw
   return (
     <div className={`rounded-xl border p-4 space-y-3 transition-all ${
       status === "waiting_client" ? "border-amber-500/20 bg-amber-500/[0.02]" :
-      status === "partner_invite" ? "border-[#0d4af5]/20 bg-[#0d4af5]/[0.02]" :
+      status === "partner_invite" ? "border-[#2b3cff]/20 bg-[#2b3cff]/[0.02]" :
       "border-[#1e1e2a] bg-[#0f0f13]"
     }`}>
       <p className="text-sm font-medium text-zinc-300 flex items-center gap-2"><span>{icon}</span> {platform}</p>
@@ -224,17 +224,17 @@ function AccessField({ platform, icon, login, password, status, onLogin, onPassw
         ]).map((opt) => (
           <button key={opt.v} type="button" onClick={() => onStatus(opt.v)}
             className={`flex-1 text-xs py-2 rounded-lg border transition-all ${
-              status === opt.v ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-white" : "border-[#1e1e2a] text-zinc-500 hover:text-zinc-300"
+              status === opt.v ? "border-[#2b3cff]/50 bg-[#2b3cff]/10 text-white" : "border-[#1e1e2a] text-zinc-500 hover:text-zinc-300"
             }`}>{opt.icon} {opt.label}</button>
         ))}
       </div>
       {status === "fill_now" && (
         <div className="space-y-2">
           <input type="text" value={login} onChange={(e) => onLogin(e.target.value)} placeholder="Login / Email"
-            className="w-full bg-[#0a0a0c] border border-[#1e1e2a] rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-[#0d4af5]/50" />
+            className="w-full bg-[#0a0a0c] border border-[#1e1e2a] rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-[#2b3cff]/50" />
           <div className="relative">
             <input type={showPw ? "text" : "password"} value={password} onChange={(e) => onPassword(e.target.value)} placeholder="Senha"
-              className="w-full bg-[#0a0a0c] border border-[#1e1e2a] rounded-lg px-3 py-2 pr-10 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-[#0d4af5]/50" />
+              className="w-full bg-[#0a0a0c] border border-[#1e1e2a] rounded-lg px-3 py-2 pr-10 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-[#2b3cff]/50" />
             <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400">
               {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
@@ -245,7 +245,7 @@ function AccessField({ platform, icon, login, password, status, onLogin, onPassw
         <div className="flex items-center gap-2 text-xs text-amber-400/80"><AlertTriangle size={12} /><span>Sera marcado como pendencia</span></div>
       )}
       {status === "partner_invite" && (
-        <p className="text-xs text-[#3b6ff5]">Nos adicionaremos como parceiro via Business Manager.</p>
+        <p className="text-xs text-[#2b3cff]">Nos adicionaremos como parceiro via Business Manager.</p>
       )}
     </div>
   );
@@ -529,7 +529,7 @@ export default function ExternalOnboardingPage() {
   // ─── States ─────────────────────────────────────────────
   if (loading) return (
     <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
-      <Loader2 size={24} className="text-[#0d4af5] animate-spin" />
+      <Loader2 size={24} className="text-[#2b3cff] animate-spin" />
     </div>
   );
 
@@ -560,7 +560,7 @@ export default function ExternalOnboardingPage() {
           </ul>
         </div>
         <button onClick={() => { setSubmitted(false); setSubmission(null); setError(""); }}
-          className="text-xs text-zinc-500 hover:text-[#0d4af5] transition-colors flex items-center gap-1.5 mx-auto">
+          className="text-xs text-zinc-500 hover:text-[#2b3cff] transition-colors flex items-center gap-1.5 mx-auto">
           <RefreshCw size={12} /> Preciso corrigir algo
         </button>
       </div>
@@ -600,17 +600,17 @@ export default function ExternalOnboardingPage() {
             </div>
             <div className="flex items-center gap-2">
               {autoSaving && <span className="text-[10px] text-zinc-600 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Salvando...</span>}
-              <span className="text-[10px] text-[#0d4af5] font-medium">{fieldProgress}%</span>
+              <span className="text-[10px] text-[#2b3cff] font-medium">{fieldProgress}%</span>
             </div>
           </div>
           {/* Progress bar — field-based */}
           <div className="h-1.5 bg-[#111113] rounded-full overflow-hidden">
-            <div className="h-full bg-[#0d4af5] rounded-full transition-all duration-700 ease-out" style={{ width: `${fieldProgress}%` }} />
+            <div className="h-full bg-[#2b3cff] rounded-full transition-all duration-700 ease-out" style={{ width: `${fieldProgress}%` }} />
           </div>
           <div className="flex justify-between mt-2">
             {STEPS.map((s, i) => (
               <button key={s.key} onClick={() => setStep(s.key)}
-                className={`text-[10px] transition-colors ${i <= currentStep ? "text-[#0d4af5]" : "text-zinc-600"}`}>
+                className={`text-[10px] transition-colors ${i <= currentStep ? "text-[#2b3cff]" : "text-zinc-600"}`}>
                 {s.label}
               </button>
             ))}
@@ -634,7 +634,7 @@ export default function ExternalOnboardingPage() {
           <div className="space-y-4 animate-fade-in">
             <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
               <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
-                <Building2 size={10} className="text-[#0d4af5]" /> Dados da Empresa
+                <Building2 size={10} className="text-[#2b3cff]" /> Dados da Empresa
               </p>
               <InputField label="Nome Fantasia" value={nomeFantasia} onChange={setNomeFantasia} placeholder="Ex: Loja do Joao" required
                 error={showValidation && missingRequired.nomeFantasia ? REQUIRED_ERROR : undefined} />
@@ -668,8 +668,8 @@ export default function ExternalOnboardingPage() {
                       onClick={() => setNicho(opt)}
                       className={`text-[10px] px-2.5 py-1 rounded-full border transition-all ${
                         nicho === opt
-                          ? "bg-[#0d4af5]/15 text-[#0d4af5] border-[#0d4af5]/30"
-                          : "bg-[#0a0a0c] text-zinc-500 border-[#1e1e2a] hover:border-[#0d4af5]/20 hover:text-zinc-300"
+                          ? "bg-[#2b3cff]/15 text-[#2b3cff] border-[#2b3cff]/30"
+                          : "bg-[#0a0a0c] text-zinc-500 border-[#1e1e2a] hover:border-[#2b3cff]/20 hover:text-zinc-300"
                       }`}
                     >
                       {opt}
@@ -684,7 +684,7 @@ export default function ExternalOnboardingPage() {
 
             <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
               <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
-                <User size={10} className="text-[#0d4af5]" /> Responsavel
+                <User size={10} className="text-[#2b3cff]" /> Responsavel
               </p>
               <InputField label="Nome Completo" value={contactName} onChange={setContactName} placeholder="Ex: Joao da Silva" required
                 error={showValidation && missingRequired.contactName ? REQUIRED_ERROR : undefined} />
@@ -697,7 +697,7 @@ export default function ExternalOnboardingPage() {
 
             <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
               <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
-                <MapPin size={10} className="text-[#0d4af5]" /> Endereco
+                <MapPin size={10} className="text-[#2b3cff]" /> Endereco
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <InputField label="CEP" value={enderecoCep} onChange={handleCepChange} placeholder="00000-000" required
@@ -785,7 +785,7 @@ export default function ExternalOnboardingPage() {
               <label className="text-xs font-medium text-zinc-400">Observacoes (opcional)</label>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
                 placeholder="Alguma informacao adicional..."
-                className="w-full bg-[#111113] border border-[#1e1e2a] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-[#0d4af5]/50 transition-colors resize-none" />
+                className="w-full bg-[#111113] border border-[#1e1e2a] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-[#2b3cff]/50 transition-colors resize-none" />
             </div>
           </div>
         )}
@@ -803,7 +803,7 @@ export default function ExternalOnboardingPage() {
                 </p>
               )}
               <button onClick={handleSubmit} disabled={submitting || !isFormComplete}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-[#2b3cff] hover:bg-[#2b3cff]/80 text-white text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 title={!isFormComplete ? "Preencha todos os campos obrigatorios para finalizar" : ""}>
                 {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 {submitting ? "Enviando..." : "Finalizar Onboarding"}
@@ -811,7 +811,7 @@ export default function ExternalOnboardingPage() {
             </div>
           ) : (
             <button onClick={goNext}
-              className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-[#0d4af5] hover:bg-[#0d4af5]/80 text-white text-sm font-medium transition-colors">
+              className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-[#2b3cff] hover:bg-[#2b3cff]/80 text-white text-sm font-medium transition-colors">
               Proximo <ChevronRight size={14} />
             </button>
           )}

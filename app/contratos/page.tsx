@@ -159,7 +159,7 @@ export default function ContratosGlobalPage() {
   const statusBadge = (c: Row): { label: string; cls: string; icon: typeof CheckCircle } => {
     if (c.signed_at) return { label: "Assinado", cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", icon: FileCheck2 };
     if (c.status === "expired") return { label: "Vencido", cls: "bg-red-500/10 text-red-400 border-red-500/20", icon: AlertTriangle };
-    if (c.status === "active") return { label: "Ativo", cls: "bg-[#0d4af5]/10 text-[#0d4af5] border-[#0d4af5]/20", icon: CheckCircle };
+    if (c.status === "active") return { label: "Ativo", cls: "bg-[#2b3cff]/10 text-[#2b3cff] border-[#2b3cff]/20", icon: CheckCircle };
     return { label: "Pendente", cls: "bg-amber-500/10 text-amber-400 border-amber-500/20", icon: Clock };
   };
 
@@ -182,7 +182,7 @@ export default function ContratosGlobalPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <FileText size={22} className="text-[#0d4af5]" />
+              <FileText size={22} className="text-[#2b3cff]" />
               Contratos
             </h1>
             <p className="text-sm text-muted-foreground mt-1">Todos os contratos da base. Upload do PDF assinado fecha o ciclo.</p>
@@ -207,7 +207,7 @@ export default function ContratosGlobalPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por nome ou CNPJ..."
-              className="w-full bg-surface border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-foreground outline-none focus:border-[#0d4af5]/50"
+              className="w-full bg-surface border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-foreground outline-none focus:border-[#2b3cff]/50"
             />
           </div>
           <div className="flex items-center gap-1.5 text-xs">
@@ -215,7 +215,7 @@ export default function ContratosGlobalPage() {
             <span className="text-zinc-500">Status:</span>
             {(["all", "pending", "signed", "active", "expired"] as StatusFilter[]).map((s) => (
               <button key={s} onClick={() => setStatusFilter(s)}
-                className={`px-2.5 py-1 rounded border text-xs transition-all ${statusFilter === s ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-[#0d4af5]" : "border-border text-zinc-500 hover:text-foreground"}`}>
+                className={`px-2.5 py-1 rounded border text-xs transition-all ${statusFilter === s ? "border-[#2b3cff]/50 bg-[#2b3cff]/10 text-[#2b3cff]" : "border-border text-zinc-500 hover:text-foreground"}`}>
                 {s === "all" ? "Tudo" : s === "pending" ? "Pendentes" : s === "signed" ? "Assinados" : s === "active" ? "Ativos" : "Vencidos"}
               </button>
             ))}
@@ -224,7 +224,7 @@ export default function ContratosGlobalPage() {
             <span className="text-zinc-500">Serviço:</span>
             {(["all", "assessoria_trafego", "assessoria_social", "lone_growth", "trafego_social_site"] as ServiceFilter[]).map((s) => (
               <button key={s} onClick={() => setServiceFilter(s)}
-                className={`px-2.5 py-1 rounded border text-xs transition-all ${serviceFilter === s ? "border-[#0d4af5]/50 bg-[#0d4af5]/10 text-[#0d4af5]" : "border-border text-zinc-500 hover:text-foreground"}`}>
+                className={`px-2.5 py-1 rounded border text-xs transition-all ${serviceFilter === s ? "border-[#2b3cff]/50 bg-[#2b3cff]/10 text-[#2b3cff]" : "border-border text-zinc-500 hover:text-foreground"}`}>
                 {s === "all" ? "Tudo" : s === "trafego_social_site" ? "Site" : SERVICE_LABELS[s]?.split(" ")[0] ?? s}
               </button>
             ))}
@@ -241,7 +241,7 @@ export default function ContratosGlobalPage() {
 
         {/* Table / list */}
         {loading ? (
-          <div className="flex justify-center py-16"><Loader2 size={20} className="text-[#0d4af5] animate-spin" /></div>
+          <div className="flex justify-center py-16"><Loader2 size={20} className="text-[#2b3cff] animate-spin" /></div>
         ) : filteredContracts.length === 0 ? (
           <div className="text-center py-16 space-y-2">
             <FileText size={32} className="text-zinc-700 mx-auto" />
@@ -269,14 +269,14 @@ export default function ContratosGlobalPage() {
                     return (
                       <tr key={c.id} className="hover:bg-muted/20 transition-colors">
                         <td className="px-4 py-3">
-                          <Link href={`/clients/${c.client_id}`} className="text-foreground hover:text-[#0d4af5] font-medium flex items-center gap-1 group">
+                          <Link href={`/clients/${c.client_id}`} className="text-foreground hover:text-[#2b3cff] font-medium flex items-center gap-1 group">
                             {clientName}
                             <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                           </Link>
                           <p className="text-[10px] text-zinc-500 mt-0.5">V{c.version} · {c.clients?.cnpj || "sem CNPJ"}</p>
                         </td>
                         <td className="px-4 py-3 text-xs text-zinc-400">{SERVICE_LABELS[c.service_type] ?? c.service_type}</td>
-                        <td className="px-4 py-3 text-[#0d4af5] font-semibold text-xs">
+                        <td className="px-4 py-3 text-[#2b3cff] font-semibold text-xs">
                           {Number(c.monthly_value) > 0 ? formatCurrency(Number(c.monthly_value)) : <span className="text-zinc-600 font-normal">— ver PDF</span>}
                         </td>
                         <td className="px-4 py-3 text-[10px] text-zinc-400">
@@ -302,7 +302,7 @@ export default function ContratosGlobalPage() {
                             )}
                             {c.signed_pdf_path ? (
                               <button onClick={() => handleViewSigned(c.signed_pdf_path!)}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#0d4af5]/10 text-[#0d4af5] text-[10px] hover:bg-[#0d4af5]/20 border border-[#0d4af5]/20">
+                                className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#2b3cff]/10 text-[#2b3cff] text-[10px] hover:bg-[#2b3cff]/20 border border-[#2b3cff]/20">
                                 <FileCheck2 size={10} /> Ver Assinado
                               </button>
                             ) : (

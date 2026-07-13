@@ -63,7 +63,7 @@ export default function SobrePage() {
         </div>
 
         {/* Capa */}
-        <section className="rounded-2xl border border-border bg-gradient-to-br from-[#0d4af5]/[0.08] via-card to-card p-10 print:p-6 print:page-break-after-always">
+        <section className="rounded-2xl border border-border bg-gradient-to-br from-[#2b3cff]/[0.08] via-card to-card p-10 print:p-6 print:page-break-after-always">
           <div className="flex items-center gap-4 mb-6">
             <Logo className="w-14 h-14" priority />
             <div>
@@ -139,7 +139,7 @@ export default function SobrePage() {
             {isAdmin && (
               <button
                 onClick={() => setCreatorOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d4af5] hover:bg-[#1a56ff] text-white text-xs font-medium transition-all shrink-0 print:hidden"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2b3cff] hover:bg-[#1a56ff] text-white text-xs font-medium transition-all shrink-0 print:hidden"
               >
                 <Plus size={12} /> Nova atualização
               </button>
@@ -153,14 +153,14 @@ export default function SobrePage() {
             <div className="space-y-3">
               {updates.map((u) => (
                 <div key={u.id} className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/40 print:break-inside-avoid">
-                  <div className="w-9 h-9 rounded-lg bg-[#0d4af5]/10 flex items-center justify-center shrink-0 text-lg">
+                  <div className="w-9 h-9 rounded-lg bg-[#2b3cff]/10 flex items-center justify-center shrink-0 text-lg">
                     {u.icon || "📦"}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-foreground">{u.title}</p>
                       <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
-                        u.category === "feature" ? "bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20" :
+                        u.category === "feature" ? "bg-[#2b3cff]/10 text-[#2b3cff] border border-[#2b3cff]/20" :
                         u.category === "fix" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
                         u.category === "breaking" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
                         "bg-muted text-muted-foreground border border-border"
@@ -189,7 +189,7 @@ export default function SobrePage() {
               {ROADMAP.map((r) => (
                 <div key={r.title} className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/40">
                   <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${
-                    r.status === "in_progress" ? "bg-amber-400" : r.status === "next" ? "bg-[#0d4af5]" : "bg-zinc-500"
+                    r.status === "in_progress" ? "bg-amber-400" : r.status === "next" ? "bg-[#2b3cff]" : "bg-zinc-500"
                   }`} />
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
@@ -253,7 +253,7 @@ export default function SobrePage() {
 function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div>
-      <p className="text-2xl font-bold text-[#0d4af5]">{value}</p>
+      <p className="text-2xl font-bold text-[#2b3cff]">{value}</p>
       <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
     </div>
   );
@@ -263,7 +263,7 @@ function Section({ title, icon: Icon, children, id }: { title: string; icon: typ
   return (
     <section id={id} className="space-y-4 print:break-inside-avoid">
       <div className="flex items-center gap-2 pb-2 border-b border-border">
-        <Icon size={16} className="text-[#0d4af5]" />
+        <Icon size={16} className="text-[#2b3cff]" />
         <h2 className="text-lg font-bold text-foreground">{title}</h2>
       </div>
       {children}
@@ -274,7 +274,7 @@ function Section({ title, icon: Icon, children, id }: { title: string; icon: typ
 function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-border bg-muted/40 p-4 print:break-inside-avoid">
-      <p className="text-xs font-semibold text-[#3b6ff5] uppercase tracking-wider mb-2">{title}</p>
+      <p className="text-xs font-semibold text-[#2b3cff] uppercase tracking-wider mb-2">{title}</p>
       <p className="text-sm text-foreground leading-relaxed">{children}</p>
     </div>
   );
@@ -301,8 +301,8 @@ function ModuleAccordion({ module: m, expanded, onToggle }: { module: Module; ex
         onClick={onToggle}
         className="w-full flex items-center gap-3 p-4 text-left hover:bg-muted/60 transition-colors"
       >
-        <div className="w-10 h-10 rounded-xl bg-[#0d4af5]/15 flex items-center justify-center shrink-0">
-          <m.icon size={18} className="text-[#0d4af5]" />
+        <div className="w-10 h-10 rounded-xl bg-[#2b3cff]/15 flex items-center justify-center shrink-0">
+          <m.icon size={18} className="text-[#2b3cff]" />
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="text-base font-bold text-foreground">{m.title}</h3>
@@ -322,7 +322,7 @@ function ModuleAccordion({ module: m, expanded, onToggle }: { module: Module; ex
           {/* Quem usa */}
           <div className="flex items-center gap-2 text-[10px]">
             <span className="text-muted-foreground uppercase tracking-wider">Quem usa:</span>
-            <span className="px-2 py-0.5 rounded bg-[#0d4af5]/10 text-[#3b6ff5] border border-[#0d4af5]/20 font-medium">
+            <span className="px-2 py-0.5 rounded bg-[#2b3cff]/10 text-[#2b3cff] border border-[#2b3cff]/20 font-medium">
               {m.whoUses}
             </span>
           </div>
@@ -339,13 +339,13 @@ function ModuleAccordion({ module: m, expanded, onToggle }: { module: Module; ex
           {/* Como funciona */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <PlayCircle size={12} className="text-[#0d4af5]" />
+              <PlayCircle size={12} className="text-[#2b3cff]" />
               <p className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Como funciona</p>
             </div>
             <ol className="space-y-2">
               {m.howItWorks.map((step, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                  <span className="w-5 h-5 rounded-full bg-[#0d4af5]/15 text-[#3b6ff5] text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="w-5 h-5 rounded-full bg-[#2b3cff]/15 text-[#2b3cff] text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                     {i + 1}
                   </span>
                   <span className="leading-relaxed">{step}</span>
@@ -357,13 +357,13 @@ function ModuleAccordion({ module: m, expanded, onToggle }: { module: Module; ex
           {/* Features */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <Sparkles size={12} className="text-[#3b6ff5]" />
+              <Sparkles size={12} className="text-[#2b3cff]" />
               <p className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Principais features</p>
             </div>
             <ul className="space-y-1.5">
               {m.features.map((f, i) => (
                 <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <span className="text-[#0d4af5] mt-0.5">•</span>
+                  <span className="text-[#2b3cff] mt-0.5">•</span>
                   <span className="leading-relaxed">{f}</span>
                 </li>
               ))}
@@ -392,7 +392,7 @@ function ModuleAccordion({ module: m, expanded, onToggle }: { module: Module; ex
           {m.faq && m.faq.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <HelpCircle size={12} className="text-[#3b6ff5]" />
+                <HelpCircle size={12} className="text-[#2b3cff]" />
                 <p className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Perguntas frequentes</p>
               </div>
               <div className="space-y-2">

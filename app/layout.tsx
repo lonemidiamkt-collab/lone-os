@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   description: "Sistema de Gestão Operacional Interna",
   icons: { icon: "/logo.png" },
   manifest: "/manifest.json",
-  themeColor: "#0d4af5",
+  themeColor: "#2b3cff",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Lone OS" },
 };
 
