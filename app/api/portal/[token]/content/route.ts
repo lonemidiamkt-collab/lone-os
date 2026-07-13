@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   // Cards ENTREGUES (arte pronta): tem capa (image_url) OU já publicado/agendado. Não traz rascunho.
   const { data: cards } = await supabaseAdmin
     .from("content_cards")
-    .select("id, title, format, status, image_url, due_date, scheduled_at, published_at")
+    .select("id, title, format, status, image_url, due_date, scheduled_at, published_at, designer_delivered_at, client_approved_at")
     .eq("client_id", client.id as string)
     .not("image_url", "is", null)
     .neq("image_url", "")
@@ -31,14 +31,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   const items = (cards ?? [])
     .filter((c) => (c.image_url as string)?.startsWith("http") || (c.image_url as string)?.startsWith("/"))
     .slice(0, 12)
-    .map((c) => ({
-      id: c.id as string,
-      title: (c.title as string) || "Post",
-      format: (c.format as string) || "",
-      status: (c.status as string) || "",
-      imageUrl: c.image_url as string,
-      date: (c.published_at as string) || (c.scheduled_at as string) || (c.due_date as string) || null,
-    }));
+    .map((c) => {
+      const aprovada = !!c.client_approved_at;
+      const entregue = !!c.designer_delivered_at;
+      const publicado = ["published", "scheduled"].includes((c.status as string) || "");
+      // Pendente de aprovação DO CLIENTE: arte entregue, ainda não aprovada e ainda não publicada/agendada.
+      const pendente = entregue && !aprovada && !publicado;
+      return {
+        id: c.id as string,
+        title: (c.title as string) || "Post",
+        format: (c.format as string) || "",
+        status: (c.status as string) || "",
+        imageUrl: c.image_url as string,
+        date: (c.published_at as string) || (c.scheduled_at as string) || (c.due_date as string) || null,
+        pendente, aprovada,
+      };
+    })
+    .sort((a, b) => Number(b.pendente) - Number(a.pendente)); // pendentes primeiro
 
   return NextResponse.json({ items });
 }
