@@ -77,7 +77,20 @@ export async function GET(req: NextRequest) {
       href: "/social",
     });
   }
-  // 6) Destaque POSITIVO de crescimento no Instagram (30d) — o que celebrar.
+  // 6) Artes que o CLIENTE já aprovou (portal/WhatsApp) e ainda não foram publicadas → é só postar.
+  const { data: aprovadas } = await supabaseAdmin.from("content_cards")
+    .select("title, client_name, status").not("client_approved_at", "is", null).is("archived_at", null).limit(20);
+  const prontasAprovadas = (aprovadas ?? []).filter((c) => !["published", "scheduled"].includes((c.status as string) || ""));
+  if (prontasAprovadas.length > 0) {
+    insights.push({
+      id: "aprovadas-cliente", tone: "atencao", icon: "🎉",
+      titulo: `${prontasAprovadas.length} arte${prontasAprovadas.length > 1 ? "s" : ""} aprovada${prontasAprovadas.length > 1 ? "s" : ""} pelo cliente`,
+      detalhe: `Pode postar — ${prontasAprovadas.slice(0, 3).map((a) => `${a.client_name}: ${a.title}`).join(" · ")}`,
+      href: "/social",
+    });
+  }
+
+  // 7) Destaque POSITIVO de crescimento no Instagram (30d) — o que celebrar.
   const { data: igSnaps } = await supabaseAdmin
     .from("client_ig_snapshots").select("client_id, data").eq("period_kind", "30d");
   const movers = (igSnaps ?? [])

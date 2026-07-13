@@ -1919,6 +1919,11 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                         <CheckCircle size={9} /> Arte confirmada
                       </span>
                     )}
+                    {card.clientApprovedAt && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-lone-success-bg text-lone-success border border-lone-success-border flex items-center gap-0.5 font-semibold">
+                        🎉 Cliente aprovou
+                      </span>
+                    )}
                     {card.nonDeliveryReason ? (
                       <span className="text-[10px] text-destructive flex items-center gap-0.5" title={card.nonDeliveryReason}>
                         <FileWarning size={9} /> N/Entregue

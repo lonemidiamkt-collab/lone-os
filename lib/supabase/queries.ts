@@ -326,6 +326,7 @@ export function snakeToContentCard(row: Record<string, unknown>): ContentCard {
     designerDeliveredBy: (row.designer_delivered_by as string) ?? undefined,
     socialConfirmedAt: (row.social_confirmed_at as string) ?? undefined,
     socialConfirmedBy: (row.social_confirmed_by as string) ?? undefined,
+    clientApprovedAt: (row.client_approved_at as string) ?? undefined,
     nonDeliveryReason: (row.non_delivery_reason as string) ?? undefined,
     nonDeliveryReportedBy: (row.non_delivery_reported_by as string) ?? undefined,
     nonDeliveryReportedAt: (row.non_delivery_reported_at as string) ?? undefined,

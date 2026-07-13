@@ -246,6 +246,7 @@ export interface ContentCard {
   designerDeliveredBy?: string; // designer name
   socialConfirmedAt?: string;   // ISO — when social media confirmed receipt
   socialConfirmedBy?: string;   // social media name
+  clientApprovedAt?: string;    // ISO — when the CLIENT approved (via portal ou WhatsApp) → pode postar
   // Non-delivery tracking
   nonDeliveryReason?: string;   // reason when card wasn't delivered on time
   nonDeliveryReportedBy?: string;

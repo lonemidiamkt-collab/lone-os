@@ -856,6 +856,11 @@ export default function ContentCardModal({ card, onClose }: Props) {
               <Palette size={12} /> Aguardando design...
             </span>
           )}
+          {card.clientApprovedAt && role !== "designer" && (
+            <span className="mr-auto flex items-center gap-1.5 text-sm font-semibold text-lone-success px-2.5 py-1 rounded-lg bg-lone-success-bg border border-lone-success-border">
+              🎉 Cliente aprovou — pode agendar/postar!
+            </span>
+          )}
           {card.designerDeliveredAt && !card.socialConfirmedAt && role !== "designer" && (
             <Button
               variant="outline"
