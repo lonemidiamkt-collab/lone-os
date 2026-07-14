@@ -31,7 +31,7 @@ interface PrimaryItem {
   hasSecondary?: boolean;
 }
 
-const PRIMARY_NAV: PrimaryItem[] = [
+export const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/",              icon: LayoutDashboard, label: "Dashboard",  roles: ["admin","manager","traffic","social","designer"] },
   { href: "/my-work",       icon: Inbox,           label: "Meu Trabalho", roles: ["admin","manager","traffic","social","designer"] },
   { href: "/traffic",       icon: TrendingUp,      label: "Tráfego",    roles: ["admin","manager","traffic"],                    hasSecondary: true },

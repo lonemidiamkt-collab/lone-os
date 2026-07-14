@@ -4,8 +4,8 @@
   "description": "Sistema de Gestao Operacional - Lone Midia",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#09090b",
-  "theme_color": "#0d4af5",
+  "background_color": "#060814",
+  "theme_color": "#2b3cff",
   "orientation": "portrait-primary",
   "icons": [
     {

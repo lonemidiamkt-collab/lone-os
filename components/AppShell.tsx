@@ -7,6 +7,7 @@ import { AppStateProvider } from "@/lib/context/AppStateContext";
 import { NavProvider, useNav } from "@/lib/context/NavContext";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import Sidebar from "@/components/Sidebar";
+import MobileBottomNav from "@/components/MobileBottomNav";
 import LoginScreen from "@/components/LoginScreen";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { Logo } from "@/components/ui/Logo";
@@ -79,9 +80,10 @@ function MainLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-transparent relative">
       {/* Fundo navy + glow azul vêm do body (html.dark body) — wrapper transparente deixa aparecer */}
 
-      {/* Mobile hamburger */}
+      {/* Hambúrguer flutuante — escondido: no mobile a navegação é a barra inferior (MobileBottomNav),
+          e o "Mais" dela abre este mesmo drawer. Mantido no DOM só pra preservar as refs. */}
       <button
-        className="lg:hidden fixed top-4 left-4 z-30 w-10 h-10 rounded-xl bg-primary flex items-center justify-center"
+        className="hidden"
         aria-label="Abrir menu"
         onClick={() => setMobileOpen(!mobileOpen)}
       >
@@ -101,6 +103,8 @@ function MainLayout({ children }: { children: React.ReactNode }) {
         className={[
           "flex-1 flex flex-col overflow-auto w-full",
           "transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[padding]",
+          // Espaço pra barra inferior no mobile (altura 3.5rem + safe-area do iPhone). Zero no desktop.
+          "pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0",
           contentOffset,
         ].join(" ")}
       >
@@ -108,6 +112,9 @@ function MainLayout({ children }: { children: React.ReactNode }) {
           {children}
         </ErrorBoundary>
       </main>
+
+      {/* Navegação inferior estilo app (só mobile) */}
+      <MobileBottomNav />
     </div>
   );
 }
