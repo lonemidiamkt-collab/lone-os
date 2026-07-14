@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import EmptyState from "@/components/ui/EmptyState";
+import Skeleton from "@/components/ui/Skeleton";
 
 interface Insight {
   id: string;
@@ -39,7 +40,7 @@ export default function DashboardInsights() {
   if (insights === null) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-        {[0, 1, 2].map((i) => <div key={i} className="h-[76px] rounded-xl animate-pulse bg-muted" />)}
+        {[0, 1, 2].map((i) => <Skeleton key={i} className="h-[76px] rounded-xl" />)}
       </div>
     );
   }
@@ -57,7 +58,7 @@ export default function DashboardInsights() {
           <Link
             key={it.id}
             href={it.href}
-            className="group relative flex items-start gap-3 rounded-xl border border-border bg-card p-3.5 pl-4 transition-colors hover:border-primary/40"
+            className="card-interactive group relative flex items-start gap-3 rounded-xl border border-border bg-card p-3.5 pl-4 hover:border-primary/40"
           >
             <span className="absolute left-0 top-2 bottom-2 w-1 rounded-full" style={{ background: t.bar }} />
             <span className="text-xl leading-none mt-0.5 shrink-0">{it.icon}</span>

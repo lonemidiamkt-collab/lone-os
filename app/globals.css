@@ -459,3 +459,29 @@
 /* Utility: ocultar scrollbar mantendo scroll funcional (portal tabs) */
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+
+/* ═══════════════════════════════════════════════════════════
+   DESIGN SYSTEM v2 — refinamentos (skeleton shimmer + micro-interação)
+   ═══════════════════════════════════════════════════════════ */
+
+/* Skeleton com brilho que corre — mais elegante que o animate-pulse cru. */
+.lone-skeleton { position: relative; overflow: hidden; background: var(--muted); }
+.lone-skeleton::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  animation: lone-shimmer 1.5s ease-in-out infinite;
+}
+.light .lone-skeleton::after { background: linear-gradient(90deg, transparent, rgba(0,0,0,0.04), transparent); }
+@keyframes lone-shimmer { 100% { transform: translateX(100%); } }
+
+/* Card clicável: leve elevação no hover + reação ao toque (sensação de app). */
+.card-interactive { transition: transform .16s cubic-bezier(0.16,1,0.3,1), border-color .16s ease; will-change: transform; }
+.card-interactive:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.12); }
+.light .card-interactive:hover { border-color: rgba(0,0,0,0.12); }
+.card-interactive:active { transform: translateY(0) scale(0.995); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lone-skeleton::after { animation: none; }
+  .card-interactive { transition: none; }
+  .card-interactive:hover, .card-interactive:active { transform: none; }
+}

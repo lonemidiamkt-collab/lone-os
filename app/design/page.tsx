@@ -2256,7 +2256,7 @@ function ClientesView({
             <button
               key={c.id}
               onClick={() => onCreateTask(c)}
-              className="card text-left hover:border-primary/30 transition-colors group"
+              className="card card-interactive text-left hover:border-primary/30 group"
             >
               <div className="flex items-start gap-3">
                 {c.docLogo ? (

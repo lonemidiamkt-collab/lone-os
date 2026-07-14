@@ -17,6 +17,7 @@ import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
 import { useRole } from "@/lib/context/RoleContext";
 import DashboardInsights from "@/components/DashboardInsights";
+import SectionHeader from "@/components/ui/SectionHeader";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
@@ -765,7 +766,7 @@ export default function DashboardPage() {
 
         {/* Insights acionáveis — o que precisa de atenção hoje (a rota filtra por papel) */}
         <div>
-          <h2 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">O que precisa de atenção</h2>
+          <SectionHeader eyebrow="Operação" title="O que precisa de atenção" subtitle="O que resolver primeiro hoje — priorizado por urgência." />
           <DashboardInsights />
         </div>
 
