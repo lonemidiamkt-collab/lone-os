@@ -93,18 +93,18 @@ const FRASES: Record<string, [string[], string[], string[]]> = {
     ],
     [`{p}, o {c} segue travado faz uns dias. Tem algum impedimento? Me fala que a gente resolve junto.`],
   ],
-  // vig 4 — social: arte entregue, precisa revisar e mover no board
+  // vig 4 — social: arte entregue, precisa revisar e ENTREGAR AO CLIENTE (mover pra Aprovação)
   revisar: [
     [
-      `Oi {p}! o designer entregou a arte do {c}! Dá uma revisada e move o card pra *Aprovação* — aí todo mundo vê o status real. 👀`,
-      `Oi {p}! saiu a arte do {c} 🎨 quando puder, confere e move o card no board pra *Aprovação*.`,
-      `{p}, a arte do {c} já está pronta! Consegue revisar e avançar o card pra *Aprovação*?`,
+      `Oi {p}! o designer entregou a arte do {c}! Revisa e já manda pro cliente aprovar (move pra *Aprovação*). 👀`,
+      `Oi {p}! saiu a arte do {c} 🎨 confere e envia pro cliente aprovar — move o card pra *Aprovação*.`,
+      `{p}, a arte do {c} está pronta! Consegue revisar e mandar pro cliente aprovar?`,
     ],
     [
-      `{p}, passando de novo — a arte do {c} ainda não andou no board. Quando der, revisa e move o card.`,
-      `Oi {p}, o {c} segue entregue e parado no board. Uma revisada e mover pra *Aprovação* já resolve.`,
+      `{p}, passando de novo — a arte do {c} ainda não foi pro cliente. Quando der, revisa e manda aprovar.`,
+      `Oi {p}, o {c} segue entregue e sem ir pro cliente. Uma revisada e enviar pra aprovação já resolve.`,
     ],
-    [`{p}, a arte do {c} segue entregue e o card parado. Consegue revisar e mover hoje? Se travou em algo, me avisa.`],
+    [`{p}, a arte do {c} segue entregue e ainda não foi pro cliente. Consegue revisar e mandar aprovar hoje? Se travou, me avisa.`],
   ],
   // vig 5 — social: cliente aprovou, falta agendar
   agendar: [

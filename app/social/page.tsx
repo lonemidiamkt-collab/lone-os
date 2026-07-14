@@ -2906,6 +2906,13 @@ export default function SocialPage() {
               }}
               onDeleteCard={(card) => setCardToDelete(card)}
               onSendToDesigner={(card) => {
+                // TRAVA: sem data de postagem, não vai pro designer. A data é o prazo que o designer
+                // e o CS usam pra cobrar no momento certo. Abre o card pro social preencher.
+                if (!card.dueDate) {
+                  pushNotification("system", "Falta a data de postagem", `Defina a data de postagem no card "${card.title}" antes de enviar pro designer — é o prazo que o designer e o CS usam.`, card.clientId);
+                  setSelectedCard(card);
+                  return;
+                }
                 // Etiqueta "A fazer": envia a ideia automaticamente pro designer (cria a demanda).
                 // Guard de in-flight (ref) evita demanda DUPLICADA em duplo-clique — designRequestId
                 // só fica setado depois do round-trip. Notifica conforme o resultado real.
