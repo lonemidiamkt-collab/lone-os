@@ -273,7 +273,7 @@ function TaskRow({ task }: { task: Task }) {
   const route = task.role === "social" ? "/social" : task.role === "designer" ? "/design" : "/traffic";
 
   return (
-    <Link href={route} className={`flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-primary/20 transition-all cursor-pointer ${isDone ? "opacity-50" : ""}`}>
+    <Link href={route} className={`card-interactive flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-primary/20 cursor-pointer ${isDone ? "opacity-50" : ""}`}>
       <button
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); updateTask(task.id, { status: isDone ? "pending" : "done" }); }}
         className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
@@ -316,7 +316,7 @@ function CardRow({ card, isApproval }: { card: ContentCard; isApproval?: boolean
   };
 
   return (
-    <Link href={`/social?card=${card.id}`} className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${
+    <Link href={`/social?card=${card.id}`} className={`card-interactive flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${
       isApproval
         ? "bg-lone-warning-bg/[0.03] border-lone-warning-border hover:border-lone-warning-border"
         : "bg-muted/30 border-border/50 hover:border-primary/20"

@@ -1348,7 +1348,7 @@ export default function DesignPage() {
                 const onTime = card.dueDate && card.designerDeliveredAt && spDateStr(card.designerDeliveredAt) <= card.dueDate;
                 return (
                   <div key={card.id} onClick={() => setDetailCard(card)}
-                    className="card p-4 flex items-center gap-4 cursor-pointer hover:border-primary/20 transition-all">
+                    className="card card-interactive p-4 flex items-center gap-4 cursor-pointer hover:border-primary/20">
                     {card.imageUrl ? (
                       <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted shrink-0">
                         <SignedImage src={card.imageUrl!} alt="" className="w-full h-full object-cover" />
