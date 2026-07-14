@@ -53,7 +53,10 @@ export async function POST(req: NextRequest) {
   const cardByClient = new Map<string, { delivered: boolean }>();
   for (const k of cardsData ?? []) {
     const cid = k.client_id as string;
-    const delivered = !!k.designer_delivered_at || k.status === "published" || k.status === "scheduled" || k.status === "approved";
+    // "approved" não existe como status — os reais são approval/client_approval (arte já entregue,
+    // em aprovação) além de scheduled/published. Sem isso, card em aprovação sem designer_delivered_at
+    // seria cobrado como "arte não entregue".
+    const delivered = !!k.designer_delivered_at || ["published", "scheduled", "approval", "client_approval"].includes(k.status as string);
     const prev = cardByClient.get(cid);
     cardByClient.set(cid, { delivered: delivered || !!prev?.delivered });
   }
