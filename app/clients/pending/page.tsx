@@ -163,6 +163,17 @@ export default function PendingClientsPage() {
     if (isAdmin) loadData();
   }, [isAdmin, loadData]);
 
+  // Pré-seleciona o cadastro vindo do botão "Revisar" (?client=<id>) da lista de Clientes.
+  // Lê a URL direto (evita o requisito de Suspense do useSearchParams no build).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const pre = new URLSearchParams(window.location.search).get("client");
+    if (!pre || loading || selected) return;
+    const d = drafts.find((x) => x.id === pre);
+    if (d) selectDraft(d);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, drafts]);
+
   // Resolve legal:// (private bucket) paths to signed URLs when a client is selected
   useEffect(() => {
     setResolvedContrato(null);

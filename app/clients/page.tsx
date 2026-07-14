@@ -319,6 +319,12 @@ export default function ClientsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
+                        <Link
+                          href={`/clients/pending?client=${draft.id}`}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#2b3cff]/10 text-[#2b3cff] text-xs font-medium hover:bg-[#2b3cff]/20 transition-colors border border-[#2b3cff]/20"
+                        >
+                          <ExternalLink size={10} /> Revisar
+                        </Link>
                         {draft.draftStatus === "awaiting_approval" && (
                           <button
                             onClick={() => handleApprove(draft.id)}
