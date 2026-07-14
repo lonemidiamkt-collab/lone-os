@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
   if (updates.format !== undefined) row.format = updates.format;
   if (updates.deadline !== undefined) row.deadline = updates.deadline;
   if (updates.attachments !== undefined) row.attachments = updates.attachments;
+  if (updates.designerNote !== undefined) row.designer_note = updates.designerNote;
 
   if (Object.keys(row).length === 0) return NextResponse.json({ success: true });
 

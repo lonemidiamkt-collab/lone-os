@@ -312,6 +312,7 @@ export interface DesignRequest {
   contentCardId?: string;
   deadline?: string;
   createdAt?: string;
+  designerNote?: string; // comentário/pedido do designer (ex.: "briefing incompleto") — o social vê
 }
 
 export interface Notice {

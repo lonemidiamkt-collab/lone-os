@@ -469,13 +469,37 @@ export default function DesignPage() {
   const [briefingUploading, setBriefingUploading] = useState(false);
   const [briefingUploadError, setBriefingUploadError] = useState<string | null>(null);
   const [briefingUploadOk, setBriefingUploadOk] = useState(false);
+  // Caixinha de comentário do designer na demanda (pedir ajuste no briefing etc.)
+  const [designerNoteText, setDesignerNoteText] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteSaved, setNoteSaved] = useState(false);
 
   useEffect(() => {
     setBriefingUploading(false);
     setBriefingUploadError(null);
     setBriefingUploadOk(false);
     if (briefingUploadInputRef.current) briefingUploadInputRef.current.value = "";
-  }, [briefingReq?.id]);
+    setDesignerNoteText(briefingReq?.designerNote ?? "");
+    setNoteSaved(false);
+  }, [briefingReq?.id, briefingReq?.designerNote]);
+
+  async function saveDesignerNote() {
+    if (!briefingReq) return;
+    const note = designerNoteText.trim();
+    setSavingNote(true);
+    try {
+      await updateDesignRequest(briefingReq.id, { designerNote: note });
+      setBriefingReq({ ...briefingReq, designerNote: note });
+      setNoteSaved(true);
+      setTimeout(() => setNoteSaved(false), 2000);
+      if (note) {
+        pushNotification("content", "Designer comentou na demanda",
+          `"${briefingReq.title}" (${briefingReq.clientName}) — ${currentUser}: ${note.slice(0, 80)}`, briefingReq.clientId);
+      }
+    } catch {
+      /* o store reverte otimista sozinho */
+    } finally { setSavingNote(false); }
+  }
 
   async function handleBriefingArtUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -1750,6 +1774,28 @@ export default function DesignPage() {
                 }`}>
                   {briefingReq.status === "queued" ? "Na Fila" : briefingReq.status === "in_progress" ? "Em Produção" : "Concluído"}
                 </span>
+              </div>
+
+              {/* Caixinha de comentário do designer — pedir ajuste no briefing / avisar o social */}
+              <div className="space-y-1.5 pt-1">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">💬 Comentário do designer</p>
+                <textarea
+                  value={designerNoteText}
+                  onChange={(e) => setDesignerNoteText(e.target.value)}
+                  placeholder="Precisa de algo? Ex.: 'faltou o preço no briefing' — o social é avisado."
+                  rows={2}
+                  className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-colors resize-none"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={saveDesignerNote}
+                    disabled={savingNote || designerNoteText.trim() === (briefingReq.designerNote ?? "").trim()}
+                    className="btn-primary text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {savingNote ? "Salvando..." : "Salvar comentário"}
+                  </button>
+                  {noteSaved && <span className="text-[10px] text-primary">Salvo ✓ — social avisado</span>}
+                </div>
               </div>
 
               {/* Anexos já enviados */}

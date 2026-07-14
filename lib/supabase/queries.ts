@@ -450,6 +450,7 @@ export function snakeToDesignRequest(row: Record<string, unknown>): DesignReques
     contentCardId: (row.content_card_id as string) ?? undefined,
     deadline: (row.deadline as string) ?? undefined,
     createdAt: (row.created_at as string) ?? undefined,
+    designerNote: (row.designer_note as string) ?? undefined,
   };
 }
 

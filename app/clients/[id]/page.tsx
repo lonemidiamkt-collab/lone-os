@@ -416,6 +416,8 @@ export default function ClientDetailPage() {
   const isAdmin = role === "admin" || role === "manager";
   const visibleTabs = TABS.filter((tab) => {
     if (tab === "reports" || tab === "wallet" || tab === "contratos" || tab === "portal" || tab === "ficha-viva") return isAdmin;
+    // Crescimento = faturamento/vendas/ticket do cliente. O designer não precisa desse dado de negócio.
+    if (tab === "resultados") return role !== "designer";
     return true;
   });
 
@@ -679,7 +681,7 @@ export default function ClientDetailPage() {
 
 
           {/* ── RESULTADOS ──────────────────────────────────────────────────── */}
-          {activeTab === "resultados" && (
+          {activeTab === "resultados" && role !== "designer" && (
             <div className="space-y-4">
               <FeedbackCliente clientId={clientId} />
               <CrescimentoTab client={client} currentUser={currentUser} />
