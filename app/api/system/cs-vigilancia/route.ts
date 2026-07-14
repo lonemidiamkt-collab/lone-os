@@ -23,14 +23,13 @@ import {
 // responsável (os cards antigos são lixo acumulado). "Sem pauta" e card antigo seguem só dry-run.
 const VIGILANCIA_LIVE = true; // false = volta tudo pra dry-run (kill switch).
 
-// Thresholds em HORAS ÚTEIS. Reduzidos (jul/2026, pedido do Roberto: CS mais rápido cobrando
-// designer/social) — mantendo um fôlego mínimo pra não punir ação normal.
-const TH_DESIGNER_PEGAR = 2;   // card com demanda parado na Fila (designer não pegou) — era 4
-const TH_PRODUCAO = 6;         // card em Produção sem entregar — era 8
-const TH_SOCIAL_VER = 1;       // designer entregou e o social ainda não revisou — era 2
-const TH_AGENDAR = 2;          // social revisou e não agendou (mover pra "Agendado") — era 3
-const TH_TRAVADO = 1;          // card travado sem resolução — era 2
-const TH_MANDAR_DESIGNER = 1;  // card criado sem design_request ("A fazer" não marcado) — era 2
+// Thresholds em HORAS ÚTEIS. Roberto pediu (jul/2026) TODOS em 1h — CS o mais rápido possível.
+const TH_DESIGNER_PEGAR = 1;   // card com demanda parado na Fila (designer não pegou)
+const TH_PRODUCAO = 1;         // card em Produção sem entregar
+const TH_SOCIAL_VER = 1;       // designer entregou e o social ainda não revisou
+const TH_AGENDAR = 1;          // social revisou e não agendou (mover pra "Agendado")
+const TH_TRAVADO = 1;          // card travado sem resolução
+const TH_MANDAR_DESIGNER = 1;  // card criado sem design_request ("A fazer" não marcado)
 
 type Area = "social" | "designer";
 interface Cobranca {

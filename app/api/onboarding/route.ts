@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { csSendGroupText } from "@/lib/cs/notify";
 import { randomBytes } from "crypto";
 
 /** Token de onboarding forte (128 bits) — não enumerável. */
@@ -257,6 +258,26 @@ export async function POST(req: NextRequest) {
         description: `${clientName} preencheu o formulario de onboarding externo.`,
         timestamp: new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
       });
+
+      // Aviso IMEDIATO no grupo interno: cliente concluiu o cadastro (100%). Marca o time se já
+      // escalado (social/designer/tráfego) pra eles já se prepararem; senão, avisa o grupo pra revisar.
+      try {
+        const { data: cli } = await supabase.from("clients")
+          .select("assigned_social, assigned_designer, assigned_traffic")
+          .eq("id", formData.clientId).maybeSingle();
+        const time = [
+          cli?.assigned_social ? `social *${cli.assigned_social}*` : null,
+          cli?.assigned_designer ? `designer *${cli.assigned_designer}*` : null,
+          cli?.assigned_traffic ? `tráfego *${cli.assigned_traffic}*` : null,
+        ].filter(Boolean).join(" · ");
+        const jid = process.env.CS_INTERNAL_GROUP_JID;
+        if (jid) {
+          const msg = `🎉 *${clientName}* concluiu o cadastro do onboarding (100%)!\n${time ? `Time: ${time} — já podem se preparar.\n` : ""}Falta só revisar e ativar em *Clientes → Cadastros Pendentes* (botão "Revisar").`;
+          await csSendGroupText(jid, msg);
+        }
+      } catch (e) {
+        console.error("[onboarding submit] aviso no grupo falhou:", e);
+      }
     }
 
     return NextResponse.json({ success: true });
@@ -369,6 +390,21 @@ export async function POST(req: NextRequest) {
         body: `Voce foi escalado para a conta ${clientName}. Verifique o onboarding e inicie o setup.`,
         client_id: clientId,
       });
+      // Aviso no WhatsApp do grupo interno, nomeando o time escalado (social/designer/tráfego) —
+      // é o momento em que eles devem começar o setup deste cliente.
+      try {
+        const jid = process.env.CS_INTERNAL_GROUP_JID;
+        const timeAtivo = [
+          clientRow?.assigned_social ? `social *${clientRow.assigned_social}*` : null,
+          clientRow?.assigned_designer ? `designer *${clientRow.assigned_designer}*` : null,
+          clientRow?.assigned_traffic ? `tráfego *${clientRow.assigned_traffic}*` : null,
+        ].filter(Boolean).join(" · ");
+        if (jid && timeAtivo) {
+          await csSendGroupText(jid, `✅ *${clientName}* ativado e escalado!\n${timeAtivo} — bora começar o setup deste cliente. 🚀`);
+        }
+      } catch (e) {
+        console.error("[onboarding setup] aviso ao time falhou:", e);
+      }
     }
 
     // Send welcome email — gated: only dispatch if email was persisted (re-read from DB)
