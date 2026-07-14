@@ -50,15 +50,16 @@ export async function POST(req: NextRequest) {
     .select("client_id, designer_delivered_at, status")
     .eq("due_date", amanhaKey)
     .is("archived_at", null);
-  const cardByClient = new Map<string, { delivered: boolean }>();
+  // allDelivered: o cliente só conta como "pronto" se TODOS os cards de amanhã estiverem entregues.
+  // (Antes, 1 card entregue marcava o cliente inteiro como pronto e escondia um 2º post não pronto.)
+  const cardByClient = new Map<string, { allDelivered: boolean }>();
   for (const k of cardsData ?? []) {
     const cid = k.client_id as string;
     // "approved" não existe como status — os reais são approval/client_approval (arte já entregue,
-    // em aprovação) além de scheduled/published. Sem isso, card em aprovação sem designer_delivered_at
-    // seria cobrado como "arte não entregue".
+    // em aprovação) além de scheduled/published.
     const delivered = !!k.designer_delivered_at || ["published", "scheduled", "approval", "client_approval"].includes(k.status as string);
     const prev = cardByClient.get(cid);
-    cardByClient.set(cid, { delivered: delivered || !!prev?.delivered });
+    cardByClient.set(cid, { allDelivered: (prev?.allDelivered ?? true) && delivered });
   }
 
   // Quem é esperado postar amanhã e ainda não está pronto.
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
     const social = (c.assigned_social as string) || "—";
     const card = cardByClient.get(c.id as string);
     if (!card) semCard.push({ nome, social });
-    else if (!card.delivered) semArte.push({ nome, social });
+    else if (!card.allDelivered) semArte.push({ nome, social });
     else prontos++;
   }
 

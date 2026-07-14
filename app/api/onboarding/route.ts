@@ -273,7 +273,9 @@ export async function POST(req: NextRequest) {
         const jid = process.env.CS_INTERNAL_GROUP_JID;
         if (jid) {
           const msg = `🎉 *${clientName}* concluiu o cadastro do onboarding (100%)!\n${time ? `Time: ${time} — já podem se preparar.\n` : ""}Falta só revisar e ativar em *Clientes → Cadastros Pendentes* (botão "Revisar").`;
-          await csSendGroupText(jid, msg);
+          // Fire-and-forget: não segura a resposta ao cliente (Evolution pode levar até ~21s no pior
+          // caso). O servidor Node é persistente (VPS), então o envio completa em background.
+          void csSendGroupText(jid, msg).catch((e) => console.error("[onboarding submit] aviso no grupo falhou:", e));
         }
       } catch (e) {
         console.error("[onboarding submit] aviso no grupo falhou:", e);
