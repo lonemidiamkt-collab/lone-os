@@ -2305,6 +2305,28 @@ function ClientDrawer({
 
   const hasBriefing = client.toneOfVoice || client.fixedBriefing || client.campaignBriefing;
 
+  // Baixar a logo crua (server-side, funciona pra qualquer logo) — o designer usa direto na arte.
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoErr, setLogoErr] = useState<string | null>(null);
+  const baixarLogo = async () => {
+    setLogoBusy(true); setLogoErr(null);
+    try {
+      const res = await authedFetch(`/api/clients/${client.id}/logo`);
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error((d as { error?: string }).error || `HTTP ${res.status}`); }
+      const blob = await res.blob();
+      const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg").replace("svg+xml", "svg");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `logo-${(client.nomeFantasia || client.name || "cliente").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase()}.${ext}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setLogoErr(e instanceof Error ? e.message : "Falha ao baixar");
+      setTimeout(() => setLogoErr(null), 4000);
+    } finally { setLogoBusy(false); }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end animate-fade-in" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -2347,6 +2369,16 @@ function ClientDrawer({
               <p className="text-xl font-bold text-foreground">{contentCards.length}</p>
               <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Total</p>
             </div>
+          </div>
+
+          {/* Baixar logo — pro designer usar direto na arte (sem precisar da aba Clientes/admin) */}
+          <div>
+            <button onClick={baixarLogo} disabled={logoBusy || !client.docLogo}
+              className="w-full flex items-center justify-center gap-2 rounded-lg border border-border bg-muted/40 hover:bg-muted px-3 py-2.5 text-xs font-medium text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+              <Download size={13} />
+              {client.docLogo ? (logoBusy ? "Baixando..." : "Baixar Logo") : "Sem logo cadastrada"}
+            </button>
+            {logoErr && <p className="text-[10px] text-destructive mt-1">{logoErr}</p>}
           </div>
 
           {/* Briefing (editavel por qualquer role) */}

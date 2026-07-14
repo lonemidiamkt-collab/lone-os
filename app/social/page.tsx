@@ -1325,6 +1325,24 @@ function AccessTab({ clients, clientAccess, onSave, isAdmin }: AccessTabProps) {
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState<string | null>(null);
+  const [logoBusy, setLogoBusy] = useState<string | null>(null);
+
+  // Baixar a logo crua do cliente (server-side) — pro social usar na arte/postagem.
+  const baixarLogo = async (client: { id: string; name: string; nomeFantasia?: string }) => {
+    setLogoBusy(client.id);
+    try {
+      const res = await authedFetch(`/api/clients/${client.id}/logo`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg").replace("svg+xml", "svg");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `logo-${(client.nomeFantasia || client.name || "cliente").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase()}.${ext}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch { /* silencioso */ } finally { setLogoBusy(null); }
+  };
 
   const FIELDS = [
     { key: "instagramLogin", label: "Instagram Login", icon: "📸" },
@@ -1390,6 +1408,16 @@ function AccessTab({ clients, clientAccess, onSave, isAdmin }: AccessTabProps) {
               </div>
               {saved === client.id && (
                 <span className="text-xs text-primary font-medium animate-fade-in">Salvo!</span>
+              )}
+              {client.docLogo && !isEditing && (
+                <button
+                  onClick={() => baixarLogo(client)}
+                  disabled={logoBusy === client.id}
+                  title="Baixar logo do cliente pra usar na arte"
+                  className="btn-ghost text-xs flex items-center gap-1 disabled:opacity-40"
+                >
+                  <Download size={11} /> {logoBusy === client.id ? "..." : "Logo"}
+                </button>
               )}
               {!isEditing ? (
                 <button
