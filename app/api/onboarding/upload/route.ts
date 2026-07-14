@@ -132,7 +132,10 @@ export async function POST(req: NextRequest) {
   // Public bucket: return usable public URL.
   // Private bucket: return the storage path (prefixed) — frontend must request a signed URL to access.
   if (bucket === "brand-assets") {
-    const publicUrl = `/storage/v1/object/public/${bucket}/${path}`;
+    // URL COMPLETA (browser-facing), igual ao image_url dos cards: base pública + path.
+    // Salvar só "/storage/..." (sem o segmento /supabase do proxy) fazia o <img> quebrar (401/404).
+    const publicBase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    const publicUrl = `${publicBase}/storage/v1/object/public/${bucket}/${path}`;
     // Persist URL to clients table server-side (service role bypasses RLS, no client-side auth needed)
     if (dbColumn) {
       await supabase.from("clients").update({ [dbColumn]: publicUrl }).eq("id", clientId);
