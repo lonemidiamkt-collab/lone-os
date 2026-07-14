@@ -292,7 +292,7 @@ export default function CEOPage() {
     setEditName(member.name);
     setEditEmail(member.email);
     setEditRole(member.role);
-    setEditPassword(member.password);
+    setEditPassword(""); // começa VAZIO — "deixe vazio para manter". Pré-preencher confundia e quebrava a troca.
   }, []);
 
   const handleSaveEdit = useCallback(async () => {
@@ -317,6 +317,10 @@ export default function CEOPage() {
     // Senha nova → atualiza DE VERDADE no Supabase Auth (o campo antes só mexia no estado local
     // da lista e a troca "não pegava" no login).
     if (editPassword.trim()) {
+      if (editPassword.trim().length < 6) {
+        alert("A senha precisa ter no mínimo 6 caracteres. Nada foi alterado.");
+        return;
+      }
       try {
         const r = await authedFetch("/api/auth/set-password", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -1303,9 +1307,10 @@ export default function CEOPage() {
                           <div>
                             <label className="text-xs text-muted-foreground font-medium block mb-1.5">Nova senha (deixe vazio para manter)</label>
                             <input
+                              type="password"
                               value={editPassword}
                               onChange={(e) => setEditPassword(e.target.value)}
-                              placeholder="••••"
+                              placeholder="deixe vazio para manter a atual"
                               className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
                             />
                           </div>
