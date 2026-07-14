@@ -11,8 +11,10 @@ import type { CsDemandType } from "@/lib/cs/taxonomy";
 export const A2_MODEL = "gpt-4o";
 
 // Banda ambígua: só vale a pena pagar o A2 quando o A1 não está confiante.
-// >= A2_TRUST_FROM o A1 é confiável o bastante → pula o A2.
-export const A2_TRUST_FROM = 0.85;
+// >= A2_TRUST_FROM o A1 é confiável o bastante → pula o A2. Abaixo disso, o verificador cético
+// (gpt-4o) revisa antes de incomodar o time. Subido 0.85 → 0.90 (jul/2026, fine-tuning: mais
+// precisão) — a banda 0.85–0.90 do A1 ainda escondia falso-positivo; agora ela também é verificada.
+export const A2_TRUST_FROM = 0.90;
 
 export interface VerifierInput {
   clienteNome: string;
