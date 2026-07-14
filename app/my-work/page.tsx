@@ -6,6 +6,7 @@ import {
   TrendingUp, Instagram, ChevronRight, CheckCircle, Filter,
   Eye, Bell,
 } from "lucide-react";
+import EmptyState from "@/components/ui/EmptyState";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
@@ -198,11 +199,7 @@ export default function MyWorkPage() {
 
           {/* Empty state */}
           {totalItems === 0 && (
-            <div className="card text-center py-16">
-              <CheckCircle size={40} className="mx-auto text-primary/30 mb-3" />
-              <p className="text-foreground font-medium">Tudo em dia!</p>
-              <p className="text-sm text-muted-foreground mt-1">Nenhuma tarefa ou card pendente no momento.</p>
-            </div>
+            <EmptyState icon={<CheckCircle size={20} />} title="Tudo em dia!" subtitle="Nenhuma tarefa ou card pendente no momento." />
           )}
         </div>
 

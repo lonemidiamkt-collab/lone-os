@@ -27,7 +27,7 @@ const QuickActions = React.forwardRef<HTMLDivElement, QuickActionsProps>(
         {...props}
       >
         {label && (
-          <span className="text-lone-caption font-inter text-lone-text-tertiary mr-1">
+          <span className="text-xs font-sans text-lone-text-tertiary mr-1">
             {label}
           </span>
         )}
@@ -35,8 +35,8 @@ const QuickActions = React.forwardRef<HTMLDivElement, QuickActionsProps>(
         {actions.map((action) => {
           const isPrimary = action.variant === "primary";
           const baseClass = cn(
-            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg",
-            "text-lone-caption font-inter font-medium transition-colors",
+            "inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg",
+            "text-sm font-sans font-medium transition-colors",
             isPrimary
               ? "bg-lone-brand/10 text-lone-brand border border-lone-brand/20 hover:bg-lone-brand/20"
               : "bg-lone-bg-elevated text-lone-text-primary border border-lone-border hover:bg-lone-bg-elevated/70"

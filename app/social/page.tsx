@@ -2,6 +2,7 @@
 
 import { toast } from "sonner";
 import Header from "@/components/Header";
+import EmptyState from "@/components/ui/EmptyState";
 import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
 import CsAgentInbox from "@/components/cs/CsAgentInbox";
@@ -1388,7 +1389,7 @@ function AccessTab({ clients, clientAccess, onSave, isAdmin }: AccessTabProps) {
       </div>
 
       {clients.length === 0 && (
-        <p className="text-muted-foreground text-sm text-center py-8">Nenhum cliente ativo neste workspace.</p>
+        <EmptyState icon={<Key size={20} />} title="Nenhum cliente ativo neste workspace" subtitle="Quando houver clientes ativos na sua carteira, os acessos aparecem aqui." />
       )}
 
       {clients.map((client) => {
