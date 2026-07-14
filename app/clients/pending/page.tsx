@@ -46,11 +46,62 @@ interface Submission {
   doc_identidade: string | null;
   notes: string | null;
   submitted_at: string | null;
+  // Dados empresariais preenchidos pelo CLIENTE (o select é '*', mas o tipo não os listava —
+  // por isso a revisão os ignorava e mostrava o rascunho/placeholder). ESTA é a fonte de verdade.
+  nome_fantasia: string | null;
+  razao_social: string | null;
+  cnpj: string | null;
+  nicho: string | null;
+  contact_email: string | null;
+  endereco_rua: string | null;
+  endereco_bairro: string | null;
+  endereco_cidade: string | null;
+  endereco_estado: string | null;
+  endereco_cep: string | null;
+}
+
+// Monta o endereço completo a partir das partes preenchidas pelo cliente.
+function composeEndereco(sub?: Submission | null): string {
+  if (!sub) return "";
+  const linha1 = [sub.endereco_rua, sub.endereco_bairro].filter(Boolean).join(", ");
+  const linha2 = [sub.endereco_cidade, sub.endereco_estado].filter(Boolean).join(" - ");
+  const cep = sub.endereco_cep ? `CEP ${sub.endereco_cep}` : "";
+  return [linha1, linha2, cep].filter(Boolean).join(" · ");
+}
+
+// Progresso de preenchimento do cliente — quanto ele já respondeu e o que falta.
+interface ProgressInfo { pct: number; filled: number; total: number; missing: string[]; started: boolean; submitted: boolean; }
+function computeProgress(sub?: Submission | null): ProgressInfo {
+  const has = (v: string | null | undefined) => !!(v && v.trim());
+  const accessOk = (login: string | null, status: string | null) => has(login) || (!!status && status !== "fill_now");
+  const items: { label: string; ok: boolean }[] = sub ? [
+    { label: "Nome fantasia", ok: has(sub.nome_fantasia) },
+    { label: "Razão social", ok: has(sub.razao_social) },
+    { label: "CNPJ", ok: has(sub.cnpj) },
+    { label: "Segmento", ok: has(sub.nicho) },
+    { label: "Endereço", ok: has(sub.endereco_rua) || has(sub.endereco_cidade) },
+    { label: "Contato", ok: has(sub.contact_name) },
+    { label: "WhatsApp", ok: has(sub.contact_whatsapp) },
+    { label: "E-mail", ok: has(sub.contact_email) },
+    { label: "Acesso Meta", ok: accessOk(sub.meta_login, sub.meta_status) },
+    { label: "Acesso Instagram", ok: accessOk(sub.instagram_login, sub.instagram_status) },
+    { label: "Acesso Google", ok: accessOk(sub.google_login, sub.google_status) },
+    { label: "Contrato social", ok: has(sub.doc_contrato_social) },
+    { label: "Documento (RG/CNH)", ok: has(sub.doc_identidade) },
+  ] : [];
+  const total = items.length || 1;
+  const filled = items.filter((i) => i.ok).length;
+  return {
+    pct: Math.round((filled / total) * 100), filled, total,
+    missing: items.filter((i) => !i.ok).map((i) => i.label),
+    started: filled > 0,
+    submitted: sub?.status === "submitted" || !!sub?.submitted_at,
+  };
 }
 
 // ─── Helpers ──────────────────────────────────────────────
 function getDisplayName(draft: Client, sub?: Submission | null): string {
-  return draft.nomeFantasia || draft.razaoSocial || draft.name || sub?.contact_name || "Sem nome";
+  return sub?.nome_fantasia || draft.nomeFantasia || draft.razaoSocial || draft.name || sub?.contact_name || "Sem nome";
 }
 
 function getContactDisplay(draft: Client, sub?: Submission | null): string {
@@ -149,16 +200,18 @@ export default function PendingClientsPage() {
   const selectDraft = (draft: Client) => {
     setSelected(draft);
     const sub = submissions[draft.id];
+    // PRIORIDADE: o que o CLIENTE respondeu (sub) vem primeiro; o rascunho (draft) é só fallback.
+    // Antes era o contrário e a revisão mostrava placeholder ("Tecnologia", CNPJ do rascunho, etc.).
     setEditForm({
-      nomeFantasia: draft.nomeFantasia || draft.name || "",
-      razaoSocial: draft.razaoSocial || "",
-      cnpj: draft.cnpj || draft.cpfCnpj || sub?.contact_cpf || "",
-      industry: draft.industry || "Outro",
+      nomeFantasia: sub?.nome_fantasia || draft.nomeFantasia || draft.name || "",
+      razaoSocial: sub?.razao_social || draft.razaoSocial || "",
+      cnpj: sub?.cnpj || draft.cnpj || draft.cpfCnpj || sub?.contact_cpf || "",
+      industry: sub?.nicho || draft.industry || "Outro",
       contactName: sub?.contact_name || draft.contactName || "",
       cpfCnpj: sub?.contact_cpf || draft.cpfCnpj || "",
       phone: sub?.contact_whatsapp || draft.phone || "",
-      emailCorporativo: draft.emailCorporativo || draft.email || "",
-      endereco: draft.endereco || "",
+      emailCorporativo: sub?.contact_email || draft.emailCorporativo || draft.email || "",
+      endereco: composeEndereco(sub) || draft.endereco || "",
       serviceType: draft.serviceType || "lone_growth",
       assignedTraffic: draft.assignedTraffic || team.forField("assignedTraffic")[0]?.name || "",
       assignedSocial: draft.assignedSocial || team.forField("assignedSocial")[0]?.name || "",
@@ -333,7 +386,7 @@ export default function PendingClientsPage() {
                 <p className="text-sm font-medium text-foreground truncate">{name}</p>
                 {contact && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">Contato: {contact}</p>}
                 <div className="flex items-center gap-2 mt-1.5">
-                  <span className="text-[10px] text-muted-foreground">{draft.industry}</span>
+                  <span className="text-[10px] text-muted-foreground">{dSub?.nicho || draft.industry}</span>
                   {draft.draftStatus === "pending_invite" && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border flex items-center gap-1">
                       <Send size={8} /> Aguardando
@@ -352,6 +405,27 @@ export default function PendingClientsPage() {
                     </span>
                   )}
                 </div>
+                {/* Progresso de preenchimento do cliente */}
+                {(() => {
+                  const prog = computeProgress(dSub);
+                  if (!prog.started && !prog.submitted) {
+                    return <p className="mt-2 text-[10px] text-muted-foreground">○ Ainda não começou o preenchimento</p>;
+                  }
+                  const done = prog.pct === 100;
+                  return (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-[10px] font-semibold ${done ? "text-lone-success" : "text-foreground"}`}>
+                          {prog.submitted ? "✓ Enviado" : "Preenchendo"} · {prog.pct}%
+                        </span>
+                        {prog.missing.length > 0 && <span className="text-[9px] text-muted-foreground">faltam {prog.missing.length}</span>}
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${prog.pct}%`, background: done ? "var(--lone-success)" : "#2b3cff" }} />
+                      </div>
+                    </div>
+                  );
+                })()}
               </button>
             );
           })}
@@ -386,6 +460,37 @@ export default function PendingClientsPage() {
                   </button>
                 </div>
               </div>
+
+              {/* ═══ PROGRESSO DO PREENCHIMENTO ═══ */}
+              {(() => {
+                const prog = computeProgress(sub);
+                const done = prog.pct === 100;
+                return (
+                  <div className={`rounded-xl border p-4 ${done ? "border-lone-success-border bg-lone-success-bg/[0.03]" : "border-border bg-card"}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-foreground">
+                        {!prog.started && !prog.submitted ? "○ Cliente ainda não começou" : prog.submitted ? "✓ Cadastro enviado pelo cliente" : "Cliente preenchendo…"}
+                      </p>
+                      <span className={`text-base font-bold tabular-nums ${done ? "text-lone-success" : "text-primary"}`}>{prog.pct}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${prog.pct}%`, background: done ? "var(--lone-success)" : "#2b3cff" }} />
+                    </div>
+                    {prog.missing.length > 0 ? (
+                      <div className="mt-3">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Ainda falta ({prog.missing.length})</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {prog.missing.map((m) => (
+                            <span key={m} className="text-[10px] px-2 py-0.5 rounded-full bg-lone-warning-bg text-lone-warning border border-lone-warning-border">{m}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-[11px] text-lone-success">Tudo preenchido — pronto pra revisar e ativar o cliente.</p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* ═══ DOCUMENTOS ═══ */}
               <div className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -473,7 +578,7 @@ export default function PendingClientsPage() {
                     <Label>Segmento</Label>
                     <Select value={editForm.industry} onValueChange={(v) => setEdit("industry", v)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{INDUSTRIES.map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
+                      <SelectContent>{(editForm.industry && !INDUSTRIES.includes(editForm.industry) ? [editForm.industry, ...INDUSTRIES] : INDUSTRIES).map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5 col-span-2"><Label>Endereco</Label><Input value={editForm.endereco} onChange={(e) => setEdit("endereco", e.target.value)} /></div>
