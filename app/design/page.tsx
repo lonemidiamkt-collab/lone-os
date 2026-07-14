@@ -5,6 +5,7 @@ import SignedImage from "@/components/shared/SignedImage";
 import KanbanBoard from "@/components/KanbanBoard";
 import CsAgentInbox from "@/components/cs/CsAgentInbox";
 import ContentCardModal from "@/components/ContentCardModal";
+import EmptyState from "@/components/ui/EmptyState";
 import CardArtAttachments from "@/components/kanban/CardArtAttachments";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -2215,13 +2216,11 @@ function ClientesView({
 }) {
   if (clients.length === 0) {
     return (
-      <div className="card text-center py-16 animate-fade-in">
-        <Users size={32} className="mx-auto text-muted-foreground/50 mb-3" />
-        <p className="text-sm font-medium text-foreground">Nenhum cliente na sua carteira ainda</p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Quando clientes forem atribuídos a você como designer, eles aparecem aqui.
-        </p>
-      </div>
+      <EmptyState
+        icon={<Users size={20} />}
+        title="Nenhum cliente na sua carteira ainda"
+        subtitle="Quando clientes forem atribuídos a você como designer, eles aparecem aqui."
+      />
     );
   }
 
