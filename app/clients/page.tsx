@@ -457,7 +457,7 @@ export default function ClientsPage() {
                 return (
                   <div
                     key={client.id}
-                    className={`card cursor-pointer transition-all select-none hover:border-primary/40 hover:bg-zinc-800/50 hover:shadow-lg ${
+                    className={`card card-interactive cursor-pointer select-none hover:border-primary/40 hover:bg-zinc-800/50 hover:shadow-lg ${
                       client.status === "at_risk" ? "border-red-500/20" : ""
                     } ${
                       hasMetaLinked ? "ring-1 ring-[#2b3cff]/30" : ""

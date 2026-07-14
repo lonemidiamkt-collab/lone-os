@@ -80,8 +80,8 @@ export default function SignedImage({
     <>
       {status === "loading" && (
         <div
-          className={`animate-pulse rounded-lg ${className ?? ""}`}
-          style={{ background: "#1A1F33", width, height }}
+          className={`lone-skeleton rounded-lg ${className ?? ""}`}
+          style={{ width, height }}
         />
       )}
       {/* img sempre presente para acionar load/error — oculta durante loading */}

@@ -440,7 +440,7 @@ export default function CrmPage() {
 
       {tab === "hoje" && (() => {
         const leadRow = (l: CrmLead, meta: string) => (
-          <button key={l.id} onClick={() => setDraft({ ...l })} className="flex w-full items-center gap-3 rounded-lg border border-border bg-background p-3 text-left transition-colors hover:border-primary/40">
+          <button key={l.id} onClick={() => setDraft({ ...l })} className="card-interactive flex w-full items-center gap-3 rounded-lg border border-border bg-background p-3 text-left hover:border-primary/40">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lone-caption font-semibold text-primary">{iniciais(l.contatoNome)}</span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-lone-body font-medium text-foreground">{l.contatoNome}</span>
