@@ -84,8 +84,8 @@ const KPICard = React.forwardRef<HTMLDivElement, KPICardProps>(
           </span>
         </div>
 
-        {/* Value */}
-        <p className={cn("font-jetbrains font-medium leading-none tabular-nums", toneValue({ tone }))}
+        {/* Value — Montserrat (fonte da marca), não JetBrains Mono. tabular-nums mantém o alinhamento. */}
+        <p className={cn("font-sans font-bold leading-none tabular-nums", toneValue({ tone }))}
            style={{ fontSize: "27px" }}>
           {value}
         </p>

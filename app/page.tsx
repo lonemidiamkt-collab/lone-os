@@ -612,16 +612,16 @@ function AdminDashboard() {
           </p>
           <div className="flex gap-6">
             <div>
-              <p className="text-lone-h1 font-jetbrains text-[var(--lone-success)]">{contractStats.active}</p>
+              <p className="text-lone-h1 font-sans font-bold tabular-nums text-[var(--lone-success)]">{contractStats.active}</p>
               <p className="text-lone-caption font-inter text-lone-text-tertiary">Assinados</p>
             </div>
             <div>
-              <p className="text-lone-h1 font-jetbrains text-[var(--lone-warning)]">{contractStats.pending}</p>
+              <p className="text-lone-h1 font-sans font-bold tabular-nums text-[var(--lone-warning)]">{contractStats.pending}</p>
               <p className="text-lone-caption font-inter text-lone-text-tertiary">Pendentes</p>
             </div>
             {contractStats.expiring > 0 && (
               <div>
-                <p className="text-lone-h1 font-jetbrains text-[var(--lone-danger)]">{contractStats.expiring}</p>
+                <p className="text-lone-h1 font-sans font-bold tabular-nums text-[var(--lone-danger)]">{contractStats.expiring}</p>
                 <p className="text-lone-caption font-inter text-lone-text-tertiary">Vence em 30d</p>
               </div>
             )}
