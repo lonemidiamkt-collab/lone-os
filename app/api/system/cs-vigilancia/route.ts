@@ -23,13 +23,14 @@ import {
 // responsável (os cards antigos são lixo acumulado). "Sem pauta" e card antigo seguem só dry-run.
 const VIGILANCIA_LIVE = true; // false = volta tudo pra dry-run (kill switch).
 
-// Thresholds em HORAS ÚTEIS (decisão do Roberto: manter os propostos).
-const TH_DESIGNER_PEGAR = 4;   // card com demanda parado na Fila (designer não pegou)
-const TH_PRODUCAO = 8;         // card em Produção sem entregar
-const TH_SOCIAL_VER = 2;       // designer entregou e o social ainda não revisou
-const TH_AGENDAR = 3;          // social revisou e não agendou (mover pra "Agendado")
-const TH_TRAVADO = 2;          // card travado sem resolução
-const TH_MANDAR_DESIGNER = 2;  // card criado sem design_request ("A fazer" não marcado)
+// Thresholds em HORAS ÚTEIS. Reduzidos (jul/2026, pedido do Roberto: CS mais rápido cobrando
+// designer/social) — mantendo um fôlego mínimo pra não punir ação normal.
+const TH_DESIGNER_PEGAR = 2;   // card com demanda parado na Fila (designer não pegou) — era 4
+const TH_PRODUCAO = 6;         // card em Produção sem entregar — era 8
+const TH_SOCIAL_VER = 1;       // designer entregou e o social ainda não revisou — era 2
+const TH_AGENDAR = 2;          // social revisou e não agendou (mover pra "Agendado") — era 3
+const TH_TRAVADO = 1;          // card travado sem resolução — era 2
+const TH_MANDAR_DESIGNER = 1;  // card criado sem design_request ("A fazer" não marcado) — era 2
 
 type Area = "social" | "designer";
 interface Cobranca {
@@ -46,32 +47,99 @@ interface CardRow {
   design_request_status?: string | null; // status REAL da demanda (queued/in_progress/done)
 }
 
-/** Mensagem amigável: [o que vi] + [pergunta] + [oferta de ajuda]. 1 emoji máx. T3: tom escala
- *  conforme `nivel` (1ª/2ª/3ª+ vez que a MESMA situação é cobrada) — sempre educado. */
-function mensagemAmigavel(vig: number, area: Area, cliente: string, pessoa: string, motivo: string, nivel = 1): string {
+// Hash estável → escolhe uma variação de frase (mesma situação sempre gera a mesma, mas cada
+// card/cliente/nível varia). Evita o efeito "robô repetindo a mesma frase".
+function hashSeed(s: string): number { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
+function pick(arr: string[], seed: number): string { return arr[seed % arr.length]; }
+
+// Banco de frases por SITUAÇÃO (6 tipos de pedido) × NÍVEL (1ª / 2ª / 3ª+ cobrança). Cada célula
+// tem variações; a escolha é estável por card. Estrutura sempre: [o que vi] + [pergunta] + [oferta].
+const FRASES: Record<string, [string[], string[], string[]]> = {
+  // vig 2 — social: pauta ainda não foi pro designer ("A fazer")
+  pauta: [
+    [
+      `Oi {p}! a pauta do {c} ainda não foi pro designer. Quando puder, marca *"A fazer"* que ela segue — qualquer dúvida, tô aqui.`,
+      `Oi {p}! vi que o card do {c} ainda não foi encaminhado pro designer. É só marcar *"A fazer"* 🙂 precisando de algo, me chama.`,
+      `{p}, o {c} já pode ir pro designer, falta só marcar *"A fazer"*. Consegue dar esse toque?`,
+    ],
+    [
+      `{p}, passando de novo — o {c} ainda não seguiu pro designer. Quando der, marca *"A fazer"*.`,
+      `Oi {p}, o {c} segue esperando ir pro designer. Uns segundos pra marcar *"A fazer"* e destrava.`,
+    ],
+    [`{p}, o {c} continua sem ir pro designer faz um tempo. Tem algum impedimento? Me fala que resolvo com você.`],
+  ],
+  // vig 3 — designer: pegar da fila / em produção há tempo
+  designer: [
+    [
+      `Oi {p}! tem um card do {c} te esperando na fila. Consegue começar? Se faltar referência no briefing, é só falar. 🎨`,
+      `Oi {p}! o {c} tá pronto pra produção e aguardando você pegar. Bora nele? Qualquer coisa que faltar, me avisa.`,
+      `{p}, o {c} tá na fila há um tempinho — dá pra encaixar hoje? Se precisar de algo do briefing, tô aqui.`,
+    ],
+    [
+      `{p}, passando de novo — o {c} segue esperando produção. Tá tudo certo com o briefing?`,
+      `Oi {p}, o {c} ainda não andou. Consegue começar hoje? Se travou em algo, me conta.`,
+    ],
+    [`{p}, o {c} continua parado esperando produção. Tá rolando alguma coisa? Posso ajudar com algo.`],
+  ],
+  // vig 3 — social: card travado
+  travado: [
+    [
+      `Oi {p}! o card do {c} tá travado{m}. Consegue dar uma destravada? Se precisar de algo, me chama.`,
+      `Oi {p}! vi o {c} travado{m}. Dá pra resolver hoje? Qualquer impedimento, me fala que ajudo.`,
+      `{p}, o {c} está parado como travado{m}. O que precisa pra seguir?`,
+    ],
+    [
+      `{p}, só passando de novo — o {c} ainda tá travado. Quando puder, dá uma olhada.`,
+      `Oi {p}, o {c} segue travado. Consegue destravar ou me diz o que falta?`,
+    ],
+    [`{p}, o {c} segue travado faz uns dias. Tem algum impedimento? Me fala que a gente resolve junto.`],
+  ],
+  // vig 4 — social: arte entregue, precisa revisar e mover no board
+  revisar: [
+    [
+      `Oi {p}! o designer entregou a arte do {c}! Dá uma revisada e move o card pra *Aprovação* — aí todo mundo vê o status real. 👀`,
+      `Oi {p}! saiu a arte do {c} 🎨 quando puder, confere e move o card no board pra *Aprovação*.`,
+      `{p}, a arte do {c} já está pronta! Consegue revisar e avançar o card pra *Aprovação*?`,
+    ],
+    [
+      `{p}, passando de novo — a arte do {c} ainda não andou no board. Quando der, revisa e move o card.`,
+      `Oi {p}, o {c} segue entregue e parado no board. Uma revisada e mover pra *Aprovação* já resolve.`,
+    ],
+    [`{p}, a arte do {c} segue entregue e o card parado. Consegue revisar e mover hoje? Se travou em algo, me avisa.`],
+  ],
+  // vig 5 — social: cliente aprovou, falta agendar
+  agendar: [
+    [
+      `Oi {p}! o cliente APROVOU a arte do {c} 🎉 — falta só agendar no Meta (mover pra *Agendado*). Consegue dar esse último passo?`,
+      `Oi {p}! boa notícia: {c} aprovado pelo cliente ✅ agora é só agendar no Meta e mover pra *Agendado*.`,
+      `{p}, o {c} já tem o ok do cliente! Falta agendar no Meta — consegue fechar isso?`,
+    ],
+    [
+      `{p}, passando de novo — o {c} já foi aprovado e ainda falta agendar no Meta.`,
+      `Oi {p}, o {c} segue aprovado e sem agendar. Quando puder, dá esse último passo 🙂`,
+    ],
+    [`{p}, o cliente aprovou o {c} e ele segue sem agendar — falta só esse passo. Precisa de ajuda?`],
+  ],
+};
+
+/** Mensagem amigável, com VARIAÇÃO de fala por card. `seed` (card/cliente) mantém estável, mas
+ *  diferente entre cards. T3: escala o tom por `nivel` (1ª/2ª/3ª+). Sempre educado, 1 emoji máx. */
+function mensagemAmigavel(vig: number, area: Area, cliente: string, pessoa: string, motivo: string, nivel = 1, seed = ""): string {
   const travado = vig === 3 && /travado/i.test(motivo);
-  if (nivel >= 3) { // 3ª+ vez: firme (educado), oferece ajuda direta
-    const oi = `${pessoa}, `;
-    if (travado) return `${oi}o card do *${cliente}* segue travado faz uns dias. Tem algum impedimento? Me fala que a gente resolve junto.`;
-    if (vig === 3) return `${oi}o card do *${cliente}* continua parado esperando produção. Tá rolando alguma coisa? Posso ajudar com algo.`;
-    if (vig === 4) return `${oi}a arte do *${cliente}* segue entregue e o card parado no board. Consegue revisar e mover hoje? Se travou em algo, me avisa.`;
-    if (vig === 5) return `${oi}o cliente aprovou a arte do *${cliente}* e ela segue sem agendar — falta só esse passo. Precisa de ajuda?`;
-    return `${oi}o *${cliente}* segue pendente: ${motivo}. Posso ajudar com algo?`;
+  const situacao = vig === 2 ? "pauta"
+    : travado ? "travado"
+    : vig === 3 ? "designer"
+    : vig === 4 ? "revisar"
+    : vig === 5 ? "agendar" : "";
+  const banco = FRASES[situacao];
+  if (banco) {
+    const arr = banco[Math.min(Math.max(nivel, 1), 3) - 1];
+    const extra = travado ? motivo.replace(/^card travado/i, "") : "";
+    return pick(arr, hashSeed((seed || cliente) + vig + nivel))
+      .replace(/\{p\}/g, pessoa).replace(/\{c\}/g, `*${cliente}*`).replace(/\{m\}/g, extra);
   }
-  if (nivel === 2) { // 2ª vez: lembrete reconhecendo que já passou aqui
-    const oi = `${pessoa}, só passando de novo aqui — `;
-    if (travado) return `${oi}o card do *${cliente}* ainda tá travado. Quando puder, dá uma olhada.`;
-    if (vig === 3) return `${oi}o card do *${cliente}* segue esperando produção. Tá tudo certo com o briefing?`;
-    if (vig === 4) return `${oi}a arte do *${cliente}* ainda não andou no board. Quando der, revisa e move o card.`;
-    if (vig === 5) return `${oi}o cliente já aprovou a arte do *${cliente}* e ainda falta agendar no Meta.`;
-    return `${oi}o *${cliente}*: ${motivo}.`;
-  }
-  const oi = `Oi ${pessoa}! `; // 1ª vez
-  if (vig === 2) return `${oi}a pauta do *${cliente}* ainda não foi pro designer. Quando puder, marca *"A fazer"* pra ela seguir — qualquer dúvida, tô aqui.`;
-  if (travado) return `${oi}o card do *${cliente}* tá travado${motivo.replace(/^card travado/i, "")}. Consegue dar uma destravada? Se precisar de algo, me chama.`;
-  if (vig === 3) return `${oi}tem um card do *${cliente}* esperando produção. Tá tudo certo com o briefing? Se faltar referência, é só falar. 🎨`;
-  if (vig === 4) return `${oi}o designer entregou a arte do *${cliente}*! Dá uma revisada e move o card pra *Aprovação* no board — assim todo mundo enxerga o status real. 👀`;
-  if (vig === 5) return `${oi}o cliente APROVOU a arte do *${cliente}* 🎉 — falta só agendar no Meta (mover pra *Agendado*). Consegue dar esse último passo?`;
+  // Fallback genérico (situação sem banco).
+  const oi = nivel >= 3 ? `${pessoa}, ` : nivel === 2 ? `${pessoa}, só passando de novo — ` : `Oi ${pessoa}! `;
   return `${oi}sobre o *${cliente}*: ${motivo}. Quando puder, dá uma olhada — tamo junto.`;
 }
 
@@ -254,7 +322,7 @@ export async function POST(req: NextRequest) {
       nivel = (count ?? 0) + 1;
     }
     const msg = live
-      ? mensagemAmigavel(cob.vigilancia, cob.area, nome, pessoa!, cob.motivo, nivel)
+      ? mensagemAmigavel(cob.vigilancia, cob.area, nome, pessoa!, cob.motivo, nivel, cob.card_id || cob.client_id)
       : `[dry-run] ${nome}: ${cob.motivo}${pessoa ? ` (@${pessoa})` : ""}`;
     const { error: insErr } = await supabaseAdmin.from("cs_cobrancas").insert({
       vigilancia: cob.vigilancia, client_id: cob.client_id, card_id: cob.card_id,
