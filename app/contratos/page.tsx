@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import EmptyState from "@/components/ui/EmptyState";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
@@ -243,10 +244,7 @@ export default function ContratosGlobalPage() {
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 size={20} className="text-[#2b3cff] animate-spin" /></div>
         ) : filteredContracts.length === 0 ? (
-          <div className="text-center py-16 space-y-2">
-            <FileText size={32} className="text-zinc-700 mx-auto" />
-            <p className="text-sm text-muted-foreground">Nenhum contrato encontrado com esses filtros.</p>
-          </div>
+          <EmptyState icon={<FileText size={20} />} title="Nenhum contrato encontrado" subtitle="Nenhum contrato bate com esses filtros. Ajuste a busca ou crie um novo." />
         ) : (
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="overflow-x-auto">

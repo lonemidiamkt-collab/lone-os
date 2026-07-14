@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
+import EmptyState from "@/components/ui/EmptyState";
 import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -84,11 +85,7 @@ export default function BroadcastsPage() {
             <Loader2 size={20} className="text-primary animate-spin" />
           </div>
         ) : broadcasts.length === 0 ? (
-          <div className="card text-center py-16">
-            <Megaphone size={32} className="mx-auto text-muted-foreground/50 mb-3" />
-            <p className="text-sm text-foreground font-medium">Nenhum comunicado ainda</p>
-            <p className="text-xs text-muted-foreground mt-1">Comece criando um novo comunicado para sua base.</p>
-          </div>
+          <EmptyState icon={<Megaphone size={20} />} title="Nenhum comunicado ainda" subtitle="Comece criando um novo comunicado para sua base." />
         ) : (
           <div className="space-y-2">
             {broadcasts.map((b) => (
