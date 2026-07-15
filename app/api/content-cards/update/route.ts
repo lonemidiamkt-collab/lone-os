@@ -40,7 +40,11 @@ export async function POST(req: NextRequest) {
 
   const row: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(updates)) {
-    row[KEY_MAP[key] ?? key] = val;
+    const col = KEY_MAP[key];
+    if (col) row[col] = val;
+    else if (!/[A-Z]/.test(key)) row[key] = val; // já é snake_case → passa direto
+    // camelCase não-mapeado = coluna inexistente: DESCARTA (antes quebrava o update inteiro → 500).
+    else console.warn("[content-cards/update] campo não mapeado ignorado:", key);
   }
 
   if (Object.keys(row).length === 0 && !contentApproval) {

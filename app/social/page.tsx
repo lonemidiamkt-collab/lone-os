@@ -2494,9 +2494,10 @@ export default function SocialPage() {
                   if (!verifyChecks.postLive || !verifyChecks.copyCorrect) return;
                   const now = new Date().toISOString();
                   updateContentCard(verifyingCard.id, {
+                    // publishVerifyChecks NÃO é coluna do banco — mandá-lo quebrava o update inteiro
+                    // (coluna inexistente) → o card não saía da "Verificação de Publicação". Removido.
                     publishVerifiedAt: now,
                     publishVerifiedBy: currentUser,
-                    publishVerifyChecks: { ...verifyChecks },
                     status: "published",
                     statusChangedAt: now,
                     columnEnteredAt: {
