@@ -379,8 +379,10 @@ export default function CardArtAttachments({
           onChange={handleFileChange}
         />
 
-        {/* Grid — 2 colunas: artes em formato maior (antes eram 5 col, ficava minúsculo) */}
-        <div className="grid grid-cols-2 gap-2">
+        {/* Grid — 2 colunas: artes em formato maior (antes eram 5 col, ficava minúsculo).
+            max-h + overflow-y-auto: com MUITAS artes o grid não estoura o quadro (empurrava
+            pra fora ao subir vários) — passa a rolar dentro de uma área limitada. */}
+        <div className="grid grid-cols-2 gap-2 max-h-[62vh] overflow-y-auto pr-0.5">
           {/* Existing attachments */}
           {attachments.map((art, idx) => (
             <div
