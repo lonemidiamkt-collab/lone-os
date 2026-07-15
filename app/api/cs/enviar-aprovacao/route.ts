@@ -76,20 +76,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "não há arte com imagem direta pra enviar (pode estar como link do Drive)." }, { status: 400 });
   }
 
-  // 1) mensagem de aprovação (varia). 2) cada arte como imagem.
+  // Envio MISTO (texto + mídia juntos): a mensagem de aprovação vai como LEGENDA da 1ª arte, e as
+  // demais artes seguem na sequência. Assim o cliente recebe uma mensagem única e coesa (texto colado
+  // na 1ª imagem) em vez de um balão de texto solto + várias imagens avulsas.
   const texto = mensagemAprovacao(urls.length, nomeProduto(card.title as string));
-  const rTxt = await csSendGroupText(jid, texto);
-  if (!rTxt.ok) {
-    return NextResponse.json({ error: `Falha ao enviar no grupo: ${rTxt.error || "erro"}` }, { status: 502 });
-  }
   let enviadas = 0;
   const falhas: string[] = [];
   for (let i = 0; i < urls.length; i++) {
-    const cap = urls.length > 1 ? `Arte ${i + 1}/${urls.length}` : undefined;
+    const cap = i === 0 ? texto : undefined; // texto só na 1ª (mistura texto+imagem); demais soltas
     const r = await csSendGroupImage(jid, urls[i], cap);
     if (r.ok) enviadas++;
     else falhas.push(`arte ${i + 1}: ${r.error || "erro"}`);
     await new Promise((res) => setTimeout(res, 700)); // respira entre imagens (evita rate/ordem trocada)
+  }
+  // Rede de segurança: se a 1ª arte (que carrega o texto) falhou mas outras foram, manda o texto
+  // solto pra mensagem de aprovação não se perder.
+  if (falhas.some((f) => f.startsWith("arte 1:")) && enviadas > 0) {
+    await csSendGroupText(jid, texto).catch(() => {});
+  }
+  // Se NADA foi enviado, tenta ao menos o texto (pra sinalizar) e reporta erro.
+  if (enviadas === 0) {
+    const rTxt = await csSendGroupText(jid, texto);
+    if (!rTxt.ok) {
+      return NextResponse.json({ error: `Falha ao enviar no grupo: ${falhas[0] || rTxt.error || "erro"}` }, { status: 502 });
+    }
   }
 
   // Registra no card (rastro de que já foi mandado pro cliente) e loga o envio.
