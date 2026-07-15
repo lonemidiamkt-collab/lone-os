@@ -35,8 +35,11 @@ JUSTO — aponte só problemas REAIS e visíveis, não preferências de gosto.
 
 Verifique:
 - TEXTO: erro de português, ortografia, palavra cortada, texto ilegível ou cobrindo elemento importante.
-- INFORMAÇÃO: telefone/WhatsApp, endereço, preço e datas — legíveis e plausíveis? (não invente que
-  está errado se não dá pra confirmar; aponte só se claramente ilegível ou incoerente).
+- INFORMAÇÃO vs BRIEFING (⚠️ o mais importante): compare os DADOS da arte com o que o briefing pede.
+  Se o briefing diz um PREÇO/valor e a arte mostra outro → aponte ("preço na arte R$Y não bate com o
+  briefing R$X"). Idem produto/modelo, telefone/WhatsApp, endereço/loja, datas e condições (à vista,
+  PIX, etc.). É EXATAMENTE aqui que erra na prática (arte com o valor trocado). Se o briefing não traz
+  o dado pra comparar, avalie só legibilidade/coerência — não invente divergência.
 - MARCA: a logo do cliente aparece? Respeita o que o briefing pede (cores, "obrigatórios")?
 - REGRAS: viola alguma "⚠️ nunca fazer" / palavra proibida do briefing?
 - TEMA: a arte é sobre o que o briefing pediu?
