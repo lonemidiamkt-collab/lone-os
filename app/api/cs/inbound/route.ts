@@ -1680,7 +1680,10 @@ export async function POST(req: NextRequest) {
   const confirmadasRecentes = (confirmadas ?? [])
     .map((r) => {
       const t = ((r.message_text as string) || "").trim().slice(0, 120);
-      return t ? `"${t}" → ${r.tipo as string}` : "";
+      // #4: rótulo explícito de edição — reforça que, pra ESTE cliente, mensagens assim são
+      // EDIÇÃO de uma arte que já existe (não pedido novo). O A1 calibra o edição-vs-novo por cliente.
+      const rot = r.tipo === "ajuste_arte" ? "ajuste_arte (edição de uma arte já existente)" : (r.tipo as string);
+      return t ? `"${t}" → ${rot}` : "";
     })
     .filter(Boolean);
 
