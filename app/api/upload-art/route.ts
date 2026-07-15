@@ -8,7 +8,7 @@ import { getServerUser } from "@/lib/supabase/auth-server";
 const BUCKET = "arts";
 const MAX_CARD_SIZE = 10 * 1024 * 1024; // 10MB para card attachments
 const MAX_MISC_SIZE = 25 * 1024 * 1024; // 25MB para uploads avulsos
-const MAX_CARD_ATTACHMENTS = 10; // até 10 artes por card (carrosséis) — ver migration 064
+const MAX_CARD_ATTACHMENTS = 20; // até 20 artes por card (limite do carrossel do Instagram). Era 10.
 
 const CARD_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
 const MISC_MIMES = new Set([...CARD_MIMES, "application/pdf", "video/mp4", "video/webm"]);

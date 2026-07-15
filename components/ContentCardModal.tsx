@@ -174,7 +174,10 @@ export default function ContentCardModal({ card, onClose }: Props) {
     finally { setRevisandoPost(false); }
   }
 
-  const comments = card.comments ?? [];
+  // Comentários REATIVOS: lê do store (não da prop estática) — assim o comentário recém-escrito
+  // aparece na hora. Antes vinha de card.comments (prop congelada) e "não ficava" na tela.
+  const liveComments = useContentStore((s) => s.contentCards.find((c) => c.id === card.id)?.comments);
+  const comments = liveComments ?? card.comments ?? [];
 
   // Carrega as artes (multi-arte) ao abrir o card
   useEffect(() => {
