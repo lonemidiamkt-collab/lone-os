@@ -340,9 +340,11 @@ export default function ContentCardModal({ card, onClose }: Props) {
 
         {/* Body */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Left: Artes (multi-arte) */}
-          <div className="w-72 border-r border-border flex flex-col shrink-0 overflow-auto">
-            <div className="p-3 space-y-2">
+          {/* Left: Artes (multi-arte). A GRADE de artes rola; o botão de enviar fica FIXO no rodapé
+              da coluna (antes ficava no fim da lista → tinha que rolar todas as artes pra achar). */}
+          <div className="w-72 border-r border-border flex flex-col shrink-0 overflow-hidden">
+            {/* Área rolável das artes */}
+            <div className="p-3 space-y-2 flex-1 overflow-auto">
               <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
                 <ImageIcon size={13} /> Artes do card
               </div>
@@ -361,23 +363,23 @@ export default function ContentCardModal({ card, onClose }: Props) {
               <p className="text-[9px] text-muted-foreground text-center">
                 PNG, JPEG, WebP, GIF — até 10MB, máx 20 artes
               </p>
+            </div>
 
-              {/* 📤 Enviar as artes pro grupo do cliente aprovar (pelo CS, mensagem padronizada).
-                  Fica aqui, junto das artes, pra aparecer em QUALQUER status (não só em Aprovação) —
-                  antes estava preso na seção de Aprovação e sumia quando o card ia pra Agendado etc.
-                  Aparece quando há arte e não pro designer. Disparo humano. */}
-              {(((attachments?.length ?? 0) > 0) || card.imageUrl) && role !== "designer" && (
+            {/* 📤 Rodapé FIXO da coluna: enviar as artes pro grupo do cliente aprovar (pelo CS).
+                Sempre visível (não rola), em qualquer status, quando há arte e não pro designer. */}
+            {(((attachments?.length ?? 0) > 0) || card.imageUrl) && role !== "designer" && (
+              <div className="shrink-0 border-t border-border p-3">
                 <button
                   type="button"
                   onClick={enviarProCliente}
                   disabled={enviandoCliente}
-                  className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg bg-lone-success-bg border border-lone-success-border hover:brightness-105 transition-all text-[11px] font-semibold text-lone-success disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg bg-lone-success-bg border border-lone-success-border hover:brightness-105 transition-all text-xs font-semibold text-lone-success disabled:opacity-50"
                   title="O CS manda as artes deste card no grupo do WhatsApp do cliente com uma mensagem pedindo aprovação"
                 >
-                  <Send size={12} /> {enviandoCliente ? "Enviando…" : "📤 Enviar pro cliente"}
+                  <Send size={13} /> {enviandoCliente ? "Enviando…" : "📤 Enviar pro cliente"}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Right: Details */}
