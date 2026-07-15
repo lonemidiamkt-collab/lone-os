@@ -43,7 +43,14 @@ export async function criarCardDemanda(opts: {
   titulo: string; urgencia: string; briefing: string; tipo?: string;
   /** Data de postagem explícita (YYYY-MM-DD) — ex.: item de pauta. Sobrepõe a heurística. */
   dueDate?: string | null;
+  /** Se é ajuste_arte de uma arte JÁ existente: roteia a correção pro card em vez de criar novo. */
+  ajusteCardId?: string | null;
 }): Promise<string | null> {
+  // Edição de arte existente: não abre card novo — aplica o ajuste no card que o cliente está corrigindo.
+  if (opts.tipo === "ajuste_arte" && opts.ajusteCardId) {
+    const ok = await aplicarAjusteNoCard({ cardId: opts.ajusteCardId, correcao: opts.briefing, clientId: opts.clientId, clienteNome: opts.clienteNome });
+    return ok ? opts.ajusteCardId : null;
+  }
   const pilot = csIsPilot();
   const { data: cli } = await supabaseAdmin.from("clients").select("assigned_social").eq("id", opts.clientId).maybeSingle();
   const dono = ((cli?.assigned_social as string) || opts.responsavel || "").trim() || null;
@@ -76,6 +83,36 @@ export async function criarCardDemanda(opts: {
     });
   }
   return (card?.id as string) ?? null;
+}
+
+/** Roteia um AJUSTE pra uma arte JÁ EXISTENTE (em vez de criar card novo): anexa a correção ao
+ *  briefing, comenta no card, volta pra produção (limpa designer_delivered_at → o designer refaz e a
+ *  vigilância cobra) e notifica. Retorna false se o card sumiu. */
+export async function aplicarAjusteNoCard(opts: {
+  cardId: string; correcao: string; clientId: string; clienteNome: string;
+}): Promise<boolean> {
+  const { data: card } = await supabaseAdmin
+    .from("content_cards").select("briefing, title").eq("id", opts.cardId).is("archived_at", null).maybeSingle();
+  if (!card) return false;
+  const nowIso = new Date().toISOString();
+  const briefingNovo = `${(card.briefing as string) || ""}\n\n---\n✏️ AJUSTE DO CLIENTE (via Agente CS): ${opts.correcao}`.slice(0, 6000);
+  const { error } = await supabaseAdmin.from("content_cards").update({
+    briefing: briefingNovo,
+    status: "in_production",       // volta pra produção pro designer refazer
+    designer_delivered_at: null,   // "não entregue" de novo → a vigilância cobra o designer
+    status_changed_at: nowIso,
+    column_entered_at: { in_production: nowIso },
+  }).eq("id", opts.cardId);
+  if (error) { console.error("[CS] aplicar ajuste no card:", error.message); return false; }
+  await supabaseAdmin.from("card_comments").insert({
+    card_id: opts.cardId, author: "🤖 Agente CS", role: "system", text: `✏️ Ajuste do cliente: ${opts.correcao.slice(0, 400)}`,
+  }).then(() => {}, () => {});
+  await supabaseAdmin.from("notifications").insert({
+    type: "content", title: "✏️ Ajuste na arte (Agente CS)",
+    body: `"${(card.title as string) || "arte"}" (${opts.clienteNome}) — o cliente pediu ajuste. Voltou pra produção.`,
+    client_id: opts.clientId,
+  }).then(() => {}, () => {});
+  return true;
 }
 
 /** Cria os cards de uma PAUTA confirmada (1 por item, com a data do item). Retorna os ids criados. */

@@ -479,26 +479,29 @@ function ehFatoTemporario(texto: string): boolean {
 // (>=2 palavras distintivas em comum com o título). Evita cobrar algo já entregue.
 async function acharCardRelacionado(
   clientId: string, topic: string,
-): Promise<{ title: string; status: string; social_media: string | null; designer_delivered_at: string | null } | null> {
+): Promise<{ id: string; title: string; status: string; social_media: string | null; designer_delivered_at: string | null; ambiguo: boolean } | null> {
   const { data: cards } = await supabaseAdmin
-    .from("content_cards").select("title, status, social_media, designer_delivered_at")
+    .from("content_cards").select("id, title, status, social_media, designer_delivered_at")
     .eq("client_id", clientId).is("archived_at", null)
     .order("created_at", { ascending: false }).limit(25);
   if (!cards || !cards.length) return null;
   const tw = normNome(topic).split(/\s+/).filter((w) => w.length >= 4);
   if (!tw.length) return null;
-  let best: { c: (typeof cards)[number]; score: number } | null = null;
-  for (const card of cards) {
-    const ct = normNome((card.title as string) || "");
-    const score = tw.filter((w) => ct.includes(w)).length;
-    if (score >= 2 && (!best || score > best.score)) best = { c: card, score };
-  }
-  if (!best) return null;
+  const scored = cards
+    .map((card) => ({ c: card, score: tw.filter((w) => normNome((card.title as string) || "").includes(w)).length }))
+    .filter((s) => s.score >= 2)
+    .sort((a, b) => b.score - a.score);
+  if (!scored.length) return null;
+  const best = scored[0];
+  // Ambíguo: 2+ cards com o MESMO score máximo (não dá pra saber qual arte é) → o chamador pergunta.
+  const ambiguo = scored.length > 1 && scored[1].score === best.score;
   return {
+    id: (best.c.id as string),
     title: (best.c.title as string) || "arte",
     status: (best.c.status as string) || "—",
     social_media: (best.c.social_media as string) || null,
     designer_delivered_at: (best.c.designer_delivered_at as string) || null,
+    ambiguo,
   };
 }
 
@@ -911,7 +914,7 @@ export async function POST(req: NextRequest) {
     if (!temConteudoColado) {
       const d7 = new Date(Date.now() - 2 * 864e5).toISOString(); // 2 dias: pega o que a X pediu recente, sem confirmar pendente velho
       const { data: jaPend } = await supabaseAdmin.from("cs_demandas")
-        .select("id, resumo, tipo, urgencia, briefing, message_text, responsavel")
+        .select("id, resumo, tipo, urgencia, briefing, message_text, responsavel, content_card_id")
         .eq("client_id", c.id as string).eq("status", "pendente")
         .gte("created_at", d7).order("created_at", { ascending: false }).limit(6);
       if (jaPend && jaPend.length > 0) {
@@ -927,6 +930,7 @@ export async function POST(req: NextRequest) {
               clientId: c.id as string, clienteNome, responsavel: d.responsavel as string | null,
               titulo: (d.resumo as string) || (d.message_text as string), urgencia: d.urgencia as string,
               briefing: (d.briefing as string) || (d.message_text as string), tipo: d.tipo as string,
+              ajusteCardId: (d.content_card_id as string) ?? null,
             });
           }
           await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: quem }).eq("id", d.id as string);
@@ -1066,6 +1070,7 @@ export async function POST(req: NextRequest) {
               clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null,
               titulo: (d.resumo as string) || (d.message_text as string), urgencia: d.urgencia as string,
               briefing: (d.briefing as string) || (d.message_text as string), tipo: d.tipo as string,
+              ajusteCardId: (d.content_card_id as string) ?? null,
             });
           }
           await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: decidedBy }).eq("id", d.id);
@@ -1154,6 +1159,7 @@ export async function POST(req: NextRequest) {
       clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null,
       titulo: (d.resumo as string) || (d.message_text as string), urgencia: d.urgencia as string,
       briefing: (d.briefing as string) || (d.message_text as string), tipo: d.tipo as string,
+      ajusteCardId: (d.content_card_id as string) ?? null,
     });
     await supabaseAdmin.from("cs_demandas").update({
       status: "confirmada", content_card_id: cardId, decided_at: new Date().toISOString(), decided_by: decidedBy,
@@ -1280,6 +1286,7 @@ export async function POST(req: NextRequest) {
             clientId, clienteNome: (alvo.cliente_nome as string) || "Cliente", responsavel: alvo.responsavel as string | null,
             titulo: tituloFinal, urgencia: alvo.urgencia as string,
             briefing: briefingFinal, tipo: alvo.tipo as string,
+            ajusteCardId: (alvo.content_card_id as string) ?? null,
           });
           await supabaseAdmin.from("cs_demandas").update({ status: "confirmada", content_card_id: cardId, resumo: tituloFinal, decided_at: new Date().toISOString(), decided_by: quem }).eq("id", alvo.id);
           await csSendGroupText(msg.groupJid, i.resposta, sug);
@@ -1865,12 +1872,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // AJUSTE DE ARTE EXISTENTE: se o cliente corrige uma arte já produzida, tenta casar com o card dela
+    // (por tema do título). 1 card claro → vira EDIÇÃO daquele card (não abre novo). Ambíguo/sem match →
+    // segue como pedido, mas PERGUNTA qual arte (nunca chuta o card errado — pergunta > roteamento errado).
+    let ajusteCard: Awaited<ReturnType<typeof acharCardRelacionado>> = null;
+    if (it.tipo === "ajuste_arte" && cItem.id) {
+      ajusteCard = await acharCardRelacionado(cItem.id as string, `${it.resumo} ${it.trecho_origem}`);
+    }
+    const ajusteLinkado = ajusteCard && !ajusteCard.ambiguo ? ajusteCard : null;
+
     const codigo = randomBytes(2).toString("hex"); // mantido só p/ auditoria — NÃO aparece na mensagem
     const { data: novaDem, error: insErr } = await supabaseAdmin.from("cs_demandas").insert({
       codigo, group_jid: msg.groupJid, client_id: (cItem.id as string) ?? null, cliente_nome: clienteNomeItem,
       author: msg.authorName || msg.authorJid, message_id: msg.messageId, message_text: msg.text,
       tipo: it.tipo, urgencia: it.urgencia, confianca: it.confianca, resumo: titulo,
       briefing: briefingTxt, responsavel, status: "pendente",
+      content_card_id: ajusteLinkado ? ajusteLinkado.id : null, // edição roteada pra este card no "ok"
     }).select("id").single();
     if (insErr || !novaDem) { console.error("[CS/inbound] gravar demanda:", insErr?.message); continue; }
     sugeridas.push(`${it.tipo}/${it.urgencia}[${codigo}→${responsavel}]`);
@@ -1890,6 +1907,12 @@ export async function POST(req: NextRequest) {
         });
         if (rs.ok && rs.data?.resposta) respostaSugerida = `\n\n━━━━━━━\n💬 *Resposta pro cliente* (copie e envie, ou ajuste):\n_${rs.data.resposta}_`;
       }
+      // Nota do #3 (pergunta > roteamento errado): é ajuste mas não achei a arte com certeza.
+      const notaAjuste = (it.tipo === "ajuste_arte" && !ajusteLinkado)
+        ? (ajusteCard?.ambiguo
+            ? `\n\n❓ _Achei mais de uma arte parecida — me diz QUAL é pra eu aplicar o ajuste na certa (ou "ok" abre uma nova)._`
+            : `\n\n❓ _Não localizei a arte anterior — se for ajuste de uma que já existe, me diz qual; senão o "ok" abre uma nova._`)
+        : "";
       // Gramática visual fixa: cabeçalho (tipo — cliente) · 👤 responsável · 📩 fala do cliente · 👉 ação.
       const txt = aviso + (statusBriefing
         ? `👀 *ACOMPANHAMENTO — ${clienteNomeItem}*\n👤 ${responsavel}\n\n${statusBriefing}\n\n_Não é pedido novo._\n👉 *não* se já tratou · *ok* pra abrir um follow-up`
@@ -1897,7 +1920,9 @@ export async function POST(req: NextRequest) {
         ? `🔴 *RECLAMAÇÃO — ${clienteNomeItem}*\n👤 ${responsavel}, atenção.\n\n📩 O cliente disse:\n_"${a3d ? a3d.briefing.trim() : msg.text}"_\n\n👉 Responde aqui: *ok* (registro como demanda) · *não* (vocês tratam direto)`
         : precisaConfirmar
         ? `✏️ *PEDIDO PRA CONFIRMAR — ${clienteNomeItem}*\n👤 ${responsavel}\n\n📩 O cliente pediu:\n*${it.resumo}*\n\n❓ Tá meio vago — confirma com ele antes de produzir:\n${a3d?.observacao ?? ""}\n\n${acao}`
-        : `🆕 *NOVO PEDIDO — ${clienteNomeItem}*\n👤 ${responsavel}\n\n📩 O cliente pediu:\n*${it.resumo}*\n\n${a3d ? `📋 ${a3d.briefing.trim()}\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : `📋 _"${msg.text}"_`}\n\n${acao}`) + respostaSugerida;
+        : ajusteLinkado
+        ? `✏️ *AJUSTE NA ARTE — ${clienteNomeItem}*\n👤 ${responsavel}\n📌 Arte: *${ajusteLinkado.title}*\n\n📩 O cliente pediu:\n*${it.resumo}*\n\n${a3d ? `📋 ${a3d.briefing.trim()}` : `📋 _"${msg.text}"_`}\n\n👉 *ok* (aplico o ajuste nessa arte — volta pra produção) · *não* · *ajustar*`
+        : `🆕 *NOVO PEDIDO — ${clienteNomeItem}*\n👤 ${responsavel}\n\n📩 O cliente pediu:\n*${it.resumo}*\n\n${a3d ? `📋 ${a3d.briefing.trim()}\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : `📋 _"${msg.text}"_`}${notaAjuste}\n\n${acao}`) + respostaSugerida;
       const r = await csSendGroupText(internalJid, txt);
       // Guarda o id da msg postada → o "reply" da equipe casa com esta demanda (sem código).
       if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", novaDem.id);
