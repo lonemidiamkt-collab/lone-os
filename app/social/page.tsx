@@ -6,6 +6,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import KanbanBoard from "@/components/KanbanBoard";
 import ContentCardModal from "@/components/ContentCardModal";
 import CsAgentInbox from "@/components/cs/CsAgentInbox";
+import DailyClosePanel from "@/components/social/DailyClosePanel";
 import ArchivedDemandsModal from "@/components/ArchivedDemandsModal";
 import SignedImage from "@/components/shared/SignedImage";
 import ContentIdeasModal from "@/components/ContentIdeasModal";
@@ -2860,6 +2861,8 @@ export default function SocialPage() {
                 <Archive size={13} /> Arquivadas
               </button>
             </div>
+
+            <DailyClosePanel cards={filteredCards} />
 
             <CsAgentInbox cards={filteredCards} onOpen={setSelectedCard} />
 
