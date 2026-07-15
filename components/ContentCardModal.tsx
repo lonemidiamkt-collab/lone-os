@@ -686,8 +686,9 @@ export default function ContentCardModal({ card, onClose }: Props) {
             </div>
 
             {/* 📤 Enviar as artes pro grupo do cliente aprovar (pelo CS, mensagem padronizada).
-                Só aparece com arte entregue e não pro designer. Disparo humano. */}
-            {card.designerDeliveredAt && role !== "designer" && (
+                Aparece sempre que o card TEM arte (anexos ou capa) — não só na entrega do designer,
+                porque muita arte é colada direto no card. Não pro designer. Disparo humano. */}
+            {((card.cardAttachments?.length ?? 0) > 0 || card.imageUrl) && role !== "designer" && (
               <button
                 type="button"
                 onClick={enviarProCliente}

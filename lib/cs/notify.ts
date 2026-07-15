@@ -87,6 +87,37 @@ export async function csSendGroupDocument(
   }
 }
 
+/** Envia uma IMAGEM (arte) a um grupo pelo número do CS (monitor[IA]). `media` = URL pública
+ *  (bucket `arts` é público → a Evolution baixa direto) ou base64. Pro envio de artes pro cliente. */
+export async function csSendGroupImage(
+  jid: string,
+  media: string,
+  caption?: string,
+  fileName = "arte.png",
+): Promise<{ ok: boolean; error?: string }> {
+  const baseUrl = process.env.EVOLUTION_API_URL?.replace(/\/+$/, "");
+  const apiKey = process.env.EVOLUTION_API_KEY_NEW;
+  const instance = process.env.EVOLUTION_INSTANCE_NEW;
+  if (!baseUrl || !apiKey || !instance) return { ok: false, error: "Evolution (monitor[IA]) não configurada" };
+  if (!media) return { ok: false, error: "imagem vazia" };
+  try {
+    const res = await fetch(`${baseUrl}/message/sendMedia/${encodeURIComponent(instance)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: apiKey },
+      body: JSON.stringify({
+        number: jid, mediatype: "image", mimetype: "image/png", media, fileName,
+        ...(caption ? { caption } : {}),
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+    const body = await res.text().catch(() => "");
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${body.slice(0, 150)}` };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "erro de conexão" };
+  }
+}
+
 const normNm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
 /** Acha o JID de um grupo do monitor[IA] pelo NOME (melhor match). Pro onboarding. */

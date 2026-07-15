@@ -5,13 +5,14 @@ export const maxDuration = 60;
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
-import { sendText, sendMediaImage } from "@/lib/whatsapp/evolution";
+import { csSendGroupText, csSendGroupImage } from "@/lib/cs/notify";
 
-// POST /api/cs/enviar-aprovacao { cardId } — o social/gestor CLICA e o CS manda as artes ENTREGUES
+// POST /api/cs/enviar-aprovacao { cardId } — o social/gestor CLICA e o CS manda as artes do card
 // pro GRUPO DO CLIENTE, com uma mensagem padronizada (variada, pra não ficar robótico) pedindo
-// aprovação. Disparo 100% no clique humano (nunca automático). Sai pelo número do gestor (que está
-// nos grupos dos clientes), não pelo monitor[IA]. As artes ficam no bucket público `arts` → a
-// Evolution baixa a URL direto.
+// aprovação. Disparo 100% no clique humano (nunca automático). Sai pelo número do CS (monitor[IA],
+// EVOLUTION_*_NEW) — a pedido do Roberto, é o Lone CS que fala com o cliente, não o número do Julio.
+// (Requer que o monitor[IA] esteja no grupo do cliente.) As artes ficam no bucket público `arts`
+// → a Evolution baixa a URL direto.
 const isImageUrl = (u: string) => /^https?:\/\//.test(u) && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u);
 const MAX_ARTES = 20;
 
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
 
   // 1) mensagem de aprovação (varia). 2) cada arte como imagem.
   const texto = mensagemAprovacao(clienteNome, urls.length);
-  const rTxt = await sendText(jid, texto);
+  const rTxt = await csSendGroupText(jid, texto);
   if (!rTxt.ok) {
     return NextResponse.json({ error: `Falha ao enviar no grupo: ${rTxt.error || "erro"}` }, { status: 502 });
   }
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
   const falhas: string[] = [];
   for (let i = 0; i < urls.length; i++) {
     const cap = urls.length > 1 ? `Arte ${i + 1}/${urls.length}` : undefined;
-    const r = await sendMediaImage(jid, urls[i], cap);
+    const r = await csSendGroupImage(jid, urls[i], cap);
     if (r.ok) enviadas++;
     else falhas.push(`arte ${i + 1}: ${r.error || "erro"}`);
     await new Promise((res) => setTimeout(res, 700)); // respira entre imagens (evita rate/ordem trocada)
