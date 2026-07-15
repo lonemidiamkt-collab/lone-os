@@ -16,15 +16,29 @@ import { csSendGroupText, csSendGroupImage } from "@/lib/cs/notify";
 const isImageUrl = (u: string) => /^https?:\/\//.test(u) && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u);
 const MAX_ARTES = 20;
 
-// 5 variações da mensagem de aprovação (o {n} vira "a arte"/"as N artes"). Escolhe uma aleatória.
-function mensagemAprovacao(clienteNome: string, nArtes: number): string {
-  const artesTxt = nArtes > 1 ? `as ${nArtes} artes` : "a arte";
+// Deriva o "tema" da arte a partir do título do card (ex.: "Pisos" → "de pisos") pra IDENTIFICAR
+// o que está sendo enviado. Ignora títulos genéricos/vazios (aí manda sem tema).
+function temaDaArte(titulo?: string): string {
+  const t = (titulo || "").trim();
+  if (!t || t.length < 2) return "";
+  // remove sufixos internos comuns que não ajudam o cliente (ex.: "(Post triplo)")
+  const limpo = t.replace(/\s*\(.*?\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  if (!limpo) return "";
+  return `de ${limpo.toLowerCase()}`;
+}
+
+// 5 variações da mensagem de aprovação, estilo direto "pessoal, tô enviando as artes de X".
+// Inclui o TEMA (o que é a arte) e concorda em número. Escolhe uma aleatória.
+function mensagemAprovacao(nArtes: number, tema: string): string {
+  const base = nArtes > 1 ? `as ${nArtes} artes` : "a arte";
+  const artes = tema ? `${base} ${tema}` : base; // "as 3 artes de pisos"
+  const solicitadas = nArtes > 1 ? "que foram solicitadas" : "que foi solicitada";
   const variacoes = [
-    `Oi! 😊 Chegou ${artesTxt} novinha aqui pra vocês. Deem uma olhada e me digam se está tudo certo pra publicar ou se querem ajustar algo. 🎨`,
-    `Prontinho! ✨ Segue ${artesTxt} pra aprovação de vocês. Se estiver do jeito que imaginaram, é só dar o ok que a gente agenda. Qualquer ajuste, manda aqui!`,
-    `Olá! Acabou de sair ${artesTxt} do forno 🔥 Confere pra mim e me fala se libero pra publicação ou se ajusto alguma coisa. 🙌`,
-    `Oi, pessoal! 👋 Trouxe ${artesTxt} pra vocês avaliarem. Ficou massa! Me deem o ok ou apontem o que quiserem mudar que eu já resolvo.`,
-    `E aí! 🎯 ${nArtes > 1 ? `Aqui estão as ${nArtes} artes` : "Aqui está a arte"} pra aprovação. Deem uma conferida e me retornem: pode publicar ou querem algum ajuste?`,
+    `Pessoal, tô enviando ${artes} ${solicitadas}! Deem uma olhada e me falem se pode publicar ou se querem ajustar algo. 🎨`,
+    `Oi, pessoal! Seguem ${artes} pra aprovação de vocês. Se tiver tudo certo, é só dar o ok! Qualquer ajuste, manda aqui. ✨`,
+    `Prontinho! Tô mandando ${artes} ${solicitadas}. Confere pra mim e me diz se libero pra publicação ou se ajusto alguma coisa. 🙌`,
+    `Pessoal, chegaram ${artes}! Deem uma conferida e me retornem: pode publicar ou querem mudar algo?`,
+    `Oi! Enviando ${artes} pra vocês avaliarem. Me deem o ok ou apontem o que quiserem ajustar que eu resolvo. 🎨`,
   ];
   const i = Math.floor(Math.random() * variacoes.length);
   return variacoes[i];
@@ -60,7 +74,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 1) mensagem de aprovação (varia). 2) cada arte como imagem.
-  const texto = mensagemAprovacao(clienteNome, urls.length);
+  const texto = mensagemAprovacao(urls.length, temaDaArte(card.title as string));
   const rTxt = await csSendGroupText(jid, texto);
   if (!rTxt.ok) {
     return NextResponse.json({ error: `Falha ao enviar no grupo: ${rTxt.error || "erro"}` }, { status: 502 });
