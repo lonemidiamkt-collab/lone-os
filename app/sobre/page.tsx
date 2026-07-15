@@ -538,6 +538,8 @@ const MODULES: Module[] = [
       "Criação em lote de conteúdo mensal (20 cards de uma vez)",
       "Agente CS (monitor[IA]) lê os grupos e abre card automático — fotos enviadas em sequência (ex: vários produtos) viram UM card só, sem fragmentar nem perder nenhuma",
       "Relatório de Instagram orgânico (seguidores, seguidores ganhos, alcance, engajamento, público — gênero/idade/cidades — e posts mais engajados) em 7/14/30 dias — no portal e no PDF semanal/mensal, com anúncios e Instagram em páginas separadas",
+      "Botão 'Enviar pro cliente aprovar': com a arte entregue, o social/gestor clica e o CS manda as artes no grupo do WhatsApp do cliente com uma mensagem de aprovação padronizada (varia entre 5 versões pra não soar robótico)",
+      "Painel 'Fechamento do dia' no topo do board: mostra quantos clientes com post programado pra hoje já têm arte pronta e quais ainda faltam — pra não esquecer ninguém",
     ],
     tips: [
       "Use 'criação em lote' no começo do mês pra já deixar o calendário montado.",
@@ -566,6 +568,7 @@ const MODULES: Module[] = [
       "Botão 'Nova Tarefa' pro designer criar trabalho próprio",
       "Tag '⚡ Auto-iniciada' distinguindo tarefas próprias de pedidos",
       "Upload de artes com preview",
+      "Revisão automática por IA na ENTREGA: assim que o designer entrega, a IA de visão confere TODAS as artes contra o briefing (preço, texto, telefone, endereço, datas) e avisa no grupo de Artes + comenta no card se algo não bate — pega erro antes de ir ao cliente",
       "Smart Handoff do Tráfego chega com sugestões IA de criativos",
       "Performance: entregas no prazo, atrasadas, breakdown por social",
     ],
