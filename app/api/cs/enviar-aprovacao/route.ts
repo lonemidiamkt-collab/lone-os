@@ -38,6 +38,10 @@ function mensagemAprovacao(nArtes: number, nome: string): string {
     `Pessoal, tudo bem? Estou mandando ${alvo}. Dá uma olhadinha e me diz se pode liberar ou se ajusto algo, por favor. 🎨`,
     `Olá! Enviando ${alvo} pra vocês. Poderiam verificar se ficou certinho antes de eu publicar? 🙏`,
     `Pessoal, aqui ${nArtes > 1 ? "estão" : "está"} ${alvo}. Vocês poderiam conferir se está tudo certo, por favor? ✨`,
+    `Oi, pessoal! Tudo certo? Deixei ${alvo} aqui pra vocês. Poderiam dar uma conferida e me dizer se ficou certinho? 🙌`,
+    `Pessoal, ${nArtes > 1 ? "chegaram" : "chegou"} ${alvo}! Vocês poderiam verificar pra mim se está tudo ok antes de publicar, por favor? 😊`,
+    `Olá, pessoal! ${nArtes > 1 ? "Seguem" : "Segue"} ${alvo} pra aprovação de vocês. Se puderem conferir e me retornar se pode ir ao ar, agradeço demais! 🙏`,
+    `Oi! Estou passando ${alvo} pra vocês darem uma olhada. Está tudo certinho ou querem que eu ajuste alguma coisa? 🎨`,
   ];
   const i = Math.floor(Math.random() * variacoes.length);
   return variacoes[i];
