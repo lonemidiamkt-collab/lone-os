@@ -1866,26 +1866,44 @@ export async function POST(req: NextRequest) {
     const titulo = statusTitulo ?? (a3?.ok && a3.data ? a3.data.titulo : it.resumo);
     const precisaConfirmar = !statusBriefing && !!(a3?.ok && a3.data?.observacao); // A3 achou o pedido vago
 
-    // Dedup: já existe uma pendente RECENTE do mesmo cliente com o MESMO resumo (mesma peça)? Ex.:
-    // o cliente manda 2 ajustes ao mesmo panfleto em mensagens seguidas → o A1 pode ver "2 demandas"
-    // (não coalesce), mas é a MESMA peça. Em vez de duplicar a sugestão, funde no pendente. Match
-    // EXATO do resumo pra não misturar peças diferentes (que teriam títulos diferentes).
+    // DEBOUNCE / coalescência da rajada: em vez de empilhar NOVO PEDIDO + vários COMPLEMENTOs numa
+    // rajada de mensagens, funde tudo na MESMA demanda pendente e reposta o "🔁 juntei" no máximo
+    // 1x/90s. Match: (1) MESMO resumo em 30 min (mesma peça) OU (2) RAJADA — mesmo cliente + tipo de
+    // arte em 3 min (o resumo pode diferir a cada mensagem, mas é a mesma peça evoluindo, tipo Contele).
     if (cItem.id) {
-      const desdeDup = new Date(Date.now() - COALESCE_WINDOW_S * 1000).toISOString();
-      const { data: jaPend } = await supabaseAdmin
-        .from("cs_demandas").select("id, codigo, briefing, message_text, msg_id_sugestao")
+      const COLS = "id, codigo, briefing, message_text, resumo, created_at, updated_at, msg_id_sugestao";
+      const desdeExato = new Date(Date.now() - COALESCE_WINDOW_S * 1000).toISOString();
+      const { data: exato } = await supabaseAdmin
+        .from("cs_demandas").select(COLS)
         .eq("group_jid", msg.groupJid).eq("client_id", cItem.id as string).eq("status", "pendente")
-        .eq("resumo", titulo).gte("created_at", desdeDup)
+        .eq("resumo", titulo).gte("created_at", desdeExato)
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      let jaPend = exato;
+      if (!jaPend && (it.tipo === "arte_nova" || it.tipo === "ajuste_arte")) {
+        const desdeRajada = new Date(Date.now() - 180 * 1000).toISOString(); // 3 min
+        const { data: rajada } = await supabaseAdmin
+          .from("cs_demandas").select(COLS)
+          .eq("group_jid", msg.groupJid).eq("client_id", cItem.id as string).eq("status", "pendente")
+          .eq("tipo", it.tipo).gte("created_at", desdeRajada)
+          .order("created_at", { ascending: false }).limit(1).maybeSingle();
+        jaPend = rajada;
+      }
       if (jaPend) {
+        // O resumo mais COMPLETO (mais longo) prevalece — "Post — promoção de kits (2 itens)" > "kits solares".
+        const resumoFinal = titulo.length > ((jaPend.resumo as string) || "").length ? titulo : (jaPend.resumo as string);
+        // Debounce: só reposta se o último aviso (updated_at, ou a criação) foi há > 90s. Senão, funde SILENCIOSO.
+        const refIso = (jaPend.updated_at as string) || (jaPend.created_at as string);
+        const reposta = destJid && (jaPend.msg_id_sugestao as string) && (!refIso || Date.now() - new Date(refIso).getTime() > 90_000);
         await supabaseAdmin.from("cs_demandas").update({
           message_text: `${(jaPend.message_text as string) || ""}\n${msg.text}`.trim(),
           briefing: `${(jaPend.briefing as string) || ""}\n\n+ (cliente complementou): ${msg.text}`.trim(),
+          resumo: resumoFinal,
+          ...(reposta ? { updated_at: new Date().toISOString() } : {}), // marca o repost p/ o próximo debounce
         }).eq("id", jaPend.id);
-        if (destJid && (jaPend.msg_id_sugestao as string)) {
-          await csSendGroupText(destJid, `🔁 A *${clienteNomeItem}* mandou mais uma coisa sobre *${titulo}* — juntei no mesmo pedido. Vale o mesmo: *ok* · *não* · *ajustar*.`, jaPend.msg_id_sugestao as string);
+        if (reposta) {
+          await csSendGroupText(destJid!, `🔁 A *${clienteNomeItem}* mandou mais coisas — juntei tudo no pedido de *${resumoFinal}*. Vale o mesmo: *ok* · *não* · *ajustar*.`, jaPend.msg_id_sugestao as string);
         }
-        console.log(`[CS/inbound] dedup → fundiu na pendente ${jaPend.codigo} (mesmo resumo "${titulo.slice(0, 40)}")`);
+        console.log(`[CS/inbound] rajada → fundiu na ${jaPend.codigo} (repost=${!!reposta})`);
         sugeridas.push(`dedup[${jaPend.codigo}]`);
         continue; // NÃO cria sugestão nova
       }
