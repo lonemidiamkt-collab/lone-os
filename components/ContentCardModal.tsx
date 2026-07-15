@@ -359,8 +359,24 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 />
               )}
               <p className="text-[9px] text-muted-foreground text-center">
-                PNG, JPEG, WebP, GIF — até 10MB, máx 10 artes
+                PNG, JPEG, WebP, GIF — até 10MB, máx 20 artes
               </p>
+
+              {/* 📤 Enviar as artes pro grupo do cliente aprovar (pelo CS, mensagem padronizada).
+                  Fica aqui, junto das artes, pra aparecer em QUALQUER status (não só em Aprovação) —
+                  antes estava preso na seção de Aprovação e sumia quando o card ia pra Agendado etc.
+                  Aparece quando há arte e não pro designer. Disparo humano. */}
+              {(((attachments?.length ?? 0) > 0) || card.imageUrl) && role !== "designer" && (
+                <button
+                  type="button"
+                  onClick={enviarProCliente}
+                  disabled={enviandoCliente}
+                  className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg bg-lone-success-bg border border-lone-success-border hover:brightness-105 transition-all text-[11px] font-semibold text-lone-success disabled:opacity-50"
+                  title="O CS manda as artes deste card no grupo do WhatsApp do cliente com uma mensagem pedindo aprovação"
+                >
+                  <Send size={12} /> {enviandoCliente ? "Enviando…" : "📤 Enviar pro cliente"}
+                </button>
+              )}
             </div>
           </div>
 
@@ -729,24 +745,6 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 </div>
               )}
             </div>
-
-            {/* 📤 Enviar as artes pro grupo do cliente aprovar (pelo CS, mensagem padronizada).
-                Aparece sempre que o card TEM arte (anexos ou capa). Ação destacada, logo acima da
-                decisão. Não pro designer. Disparo humano. */}
-            {((card.cardAttachments?.length ?? 0) > 0 || card.imageUrl) && role !== "designer" && (
-              <button
-                type="button"
-                onClick={enviarProCliente}
-                disabled={enviandoCliente}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-lone-success-bg border border-lone-success-border hover:brightness-105 transition-all text-xs font-semibold text-lone-success disabled:opacity-50"
-                title="O CS manda as artes entregues no grupo do WhatsApp do cliente com uma mensagem pedindo aprovação"
-              >
-                <Send size={13} /> {enviandoCliente ? "Enviando pro cliente…" : "📤 Enviar artes pro cliente aprovar"}
-              </button>
-            )}
-
-            {/* Divisor sutil antes da decisão principal */}
-            <div className="border-t border-border/60" />
 
             {!showRejectInput ? (
               <div className="flex items-center gap-2">
