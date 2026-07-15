@@ -63,7 +63,12 @@ function authorized(req: NextRequest): boolean {
 const splitEnv = (v?: string) => (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const teamJids = () => splitEnv(process.env.CS_LONE_TEAM_JIDS);
 const pilotGroupAllowlist = () => splitEnv(process.env.CS_PILOT_GROUP_JIDS);
-const internalGroupJid = () => process.env.CS_INTERNAL_GROUP_JID || null;
+const internalGroupJid = () => process.env.CS_INTERNAL_GROUP_JID || null; // grupo de ARTES (produção/cobranças/lembretes)
+// Grupo de TRÁFEGO (anúncios/estratégia — onde está o Julio). Se não configurado, cai no de artes.
+const trafficGroupJid = () => process.env.CS_TRAFFIC_GROUP_JID || internalGroupJid();
+// Grupos INTERNOS de comando (artes + tráfego): onde o time responde ok/não/ajustar e dá comandos.
+// Ambos são "internos" (não classificam demanda de cliente).
+const isInternalCmdGroup = (jid: string) => jid === internalGroupJid() || jid === trafficGroupJid();
 // Grupos SANDBOX (fase de teste): ali o agente trata mensagem da EQUIPE como se fosse pedido de
 // cliente (ignora o filtro de equipe) e CLASSIFICA demanda mesmo sendo o grupo interno — pra o time
 // testar o fluxo inteiro (inclusive imagem) num grupo só. Vazio em produção real.
@@ -615,7 +620,7 @@ export async function POST(req: NextRequest) {
   // sequestrado pelo handler de ajuste de roteiro (ehAjusteRoteiro casa ajusta/muda/troca em
   // qualquer posição) e o ajuste da demanda se perdia em silêncio. ───
   let demandaDaSugestao: Record<string, unknown> | null = null;
-  if (msg.quotedMsgId && msg.groupJid === internalGroupJid()) {
+  if (msg.quotedMsgId && isInternalCmdGroup(msg.groupJid)) {
     const { data } = await supabaseAdmin.from("cs_demandas").select("*")
       .eq("msg_id_sugestao", msg.quotedMsgId).order("created_at", { ascending: false }).limit(1).maybeSingle();
     demandaDaSugestao = data ?? null;
@@ -623,14 +628,14 @@ export async function POST(req: NextRequest) {
   // Fallback por TEXTO citado: o id do quote MUITAS vezes não bate (COMPLEMENTO troca o
   // msg_id_sugestao; ou o id de envio difere do stanzaId do reply). Reencontra a demanda pendente
   // pelo cliente/resumo citado — corrige "dei ok num reply de ontem e ele ignorou".
-  if (!demandaDaSugestao && msg.quotedText && msg.groupJid === internalGroupJid()) {
+  if (!demandaDaSugestao && msg.quotedText && isInternalCmdGroup(msg.groupJid)) {
     demandaDaSugestao = await acharDemandaPorTexto(msg.quotedText);
   }
 
   // ─── Agente "Lone": pedido de ROTEIRO no grupo interno ("Lone, faz um roteiro pro [cliente]") ───
   // Reconhece o pedido, acha o cliente, lê o briefing e devolve os roteiros. Se faltar briefing, pede.
   // Cada pedido vira corpus (cs_roteiro_pedidos) p/ ir aprendendo o estilo de cada cliente.
-  const pedeRot = !demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPedidoRoteiro(msg.text);
+  const pedeRot = !demandaDaSugestao && isInternalCmdGroup(msg.groupJid) && ehPedidoRoteiro(msg.text);
   // "ajusta/muda/troca…" só é ajuste de ROTEIRO se EXISTE roteiro recente (30 min). Checar ANTES
   // de reivindicar a mensagem: sem contexto, o fluxo segue (antes: return silencioso que engolia
   // respostas de demanda e poluía o corpus cs_roteiro_pedidos).
@@ -639,7 +644,7 @@ export async function POST(req: NextRequest) {
   // Pedro") é ajuste de DEMANDA, não de roteiro — não pode ser sequestrado como ajuste de roteiro.
   const pareceOpDeDemanda = /\b(arte|artes|card|cards|design|designer|demanda|logo|banner|panfleto|flyer)\b/i.test(msg.text)
     || /\b(pro|pra|para\s+[oa])\s+[A-ZÀ-Ú]/.test(msg.text);
-  if (!demandaDaSugestao && !pedeRot && !pareceOpDeDemanda && msg.groupJid === internalGroupJid() && ehAjusteRoteiro(msg.text)) {
+  if (!demandaDaSugestao && !pedeRot && !pareceOpDeDemanda && isInternalCmdGroup(msg.groupJid) && ehAjusteRoteiro(msg.text)) {
     const desde30 = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const { data: ult } = await supabaseAdmin.from("cs_roteiro_pedidos")
       .select("client_id, cliente_nome, pedido").not("client_id", "is", null).gte("created_at", desde30)
@@ -722,7 +727,7 @@ export async function POST(req: NextRequest) {
   // ─── Agente "Lone": RAIO-X do cliente ("Lone, me dá um raio-x do Contele") ───
   // Resumo completo pro gestor/social bater o olho: demandas, produção, entregas, reclamação,
   // atividade e regras aprendidas. Determinístico (sem IA).
-  if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPedidoRaioX(msg.text)) {
+  if (!demandaDaSugestao && isInternalCmdGroup(msg.groupJid) && ehPedidoRaioX(msg.text)) {
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) {
       await csSendGroupText(msg.groupJid, "De qual cliente é o raio-x? Me diz o nome. 😉");
@@ -786,7 +791,7 @@ export async function POST(req: NextRequest) {
 
   // ─── Agente "Lone": pergunta de STATUS ("Lone, a demanda do Léo Carros foi feita?") ───
   // Acha o cliente + a demanda/card mais relacionados e reporta o estágio REAL. Determinístico.
-  if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPerguntaStatus(msg.text)) {
+  if (!demandaDaSugestao && isInternalCmdGroup(msg.groupJid) && ehPerguntaStatus(msg.text)) {
     const alvoSt = await resolveClientePorNome(msg.text);
     // Sem cliente resolvido: se for VISÃO GERAL ("as demandas de hoje", "de todos"), NÃO pergunta
     // "de qual cliente?" — deixa cair no conversacional abaixo, que dá o panorama (snapshot). Só
@@ -850,7 +855,7 @@ export async function POST(req: NextRequest) {
   // Guarda: só completa se a resposta for CURTA (o nome do cliente — ex.: "WT Shopping", "a da wt").
   // Sem isso, qualquer papo posterior que mencione um cliente por acaso completava a demanda errada.
   const respostaCurtaAg = msg.text.trim().split(/\s+/).length <= 6;
-  if (msg.groupJid === internalGroupJid() && !demandaDaSugestao && isOpenAIConfigured()
+  if (isInternalCmdGroup(msg.groupJid) && !demandaDaSugestao && isOpenAIConfigured()
       && !ehPedidoCriarDemanda(msg.text) && !isTrivial(msg.text) && respostaCurtaAg) {
     const quemAg = msg.authorName || msg.authorJid;
     const desdeAg = new Date(Date.now() - 30 * 60 * 1000).toISOString();
@@ -871,7 +876,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPedidoCriarDemanda(msg.text) && !ehPedidoIdeias(msg.text)) {
+  if (!demandaDaSugestao && isInternalCmdGroup(msg.groupJid) && ehPedidoCriarDemanda(msg.text) && !ehPedidoIdeias(msg.text)) {
     if (!isOpenAIConfigured()) {
       await csSendGroupText(msg.groupJid, "Tô sem acesso à IA agora pra montar a demanda 😕");
       return NextResponse.json({ ok: true, demanda_cmd: "sem_ia" });
@@ -951,7 +956,7 @@ export async function POST(req: NextRequest) {
   // ─── Agente "Lone": MOVER um card por comando ("Lone, marca a arte do X como pronta / manda pro
   // social / põe em produção"). Fecha o loop operacional no WhatsApp. Confirma QUAL card moveu e
   // convida a corrigir (reduz risco de mover o errado). Casa o tema da msg; senão, o card mais recente. ───
-  const cmdMover = (!demandaDaSugestao && msg.groupJid === internalGroupJid()) ? ehComandoMoverCard(msg.text) : null;
+  const cmdMover = (!demandaDaSugestao && isInternalCmdGroup(msg.groupJid)) ? ehComandoMoverCard(msg.text) : null;
   if (cmdMover) {
     const alvoM = await resolveClientePorNome(msg.text);
     if (!alvoM) {
@@ -982,7 +987,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── Onboarding: equipe avisa "Lone, entrou um novo cliente X no grupo Y" → o Lone CONDUZ lá. ───
-  if (msg.groupJid === internalGroupJid() && ehOnboardingTrigger(msg.text)) {
+  if (isInternalCmdGroup(msg.groupJid) && ehOnboardingTrigger(msg.text)) {
     if (!isOpenAIConfigured()) {
       await csSendGroupText(msg.groupJid, "Tô sem IA agora pra conduzir o onboarding 😕");
       return NextResponse.json({ ok: true, onboarding: "sem_ia" });
@@ -1017,7 +1022,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── Férias/ausência: "Lone, o Rodrigo está de férias até dia 15" / "Lone, o Carlos voltou" ───
-  if (msg.groupJid === internalGroupJid() && ehComandoAusencia(msg.text)) {
+  if (isInternalCmdGroup(msg.groupJid) && ehComandoAusencia(msg.text)) {
     if (!isOpenAIConfigured()) {
       await csSendGroupText(msg.groupJid, "Tô sem IA agora pra anotar isso 😕");
       return NextResponse.json({ ok: true, ausencia: "sem_ia" });
@@ -1046,7 +1051,7 @@ export async function POST(req: NextRequest) {
   // ─── Desambiguação: 2+ pedidos abertos + confirmação/seleção SEM reply → cria os escolhidos ou
   // LISTA por nome (fim do "responde na mensagem" seco). Só age com 2+ pendentes; o caso de 1
   // pendente e os replies citados seguem pelo fluxo robusto abaixo (evita card duplicado no retry). ─
-  if (msg.groupJid === internalGroupJid() && !demandaDaSugestao && (ehConfirmacaoLivre(msg.text) || pareceSelecao(msg.text))) {
+  if (isInternalCmdGroup(msg.groupJid) && !demandaDaSugestao && (ehConfirmacaoLivre(msg.text) || pareceSelecao(msg.text))) {
     const desdeAmb = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
     const { data: pend } = await supabaseAdmin.from("cs_demandas").select("*")
       .eq("status", "pendente").gte("created_at", desdeAmb)
@@ -1093,7 +1098,7 @@ export async function POST(req: NextRequest) {
 
   // ─── Decisão humana (grupo interno): RESPONDA a sugestão com "ok" (cria) ou "não" (descarta) ───
   const decision = parseDecision(msg.text);
-  if (decision && msg.groupJid === internalGroupJid()) {
+  if (decision && isInternalCmdGroup(msg.groupJid)) {
     const alvoDec: AlvoDemanda = demandaDaSugestao
       ? (demandaDaSugestao.status === "pendente"
           ? { demanda: demandaDaSugestao }
@@ -1173,7 +1178,7 @@ export async function POST(req: NextRequest) {
 
   // ─── Ajuste humano: RESPONDA a sugestão com "ajustar <o que mudar>" → enriquece o briefing ───
   const ajuste = parseAjuste(msg.text);
-  if (ajuste && msg.groupJid === internalGroupJid()) {
+  if (ajuste && isInternalCmdGroup(msg.groupJid)) {
     const alvoAj: AlvoDemanda = demandaDaSugestao
       ? (demandaDaSugestao.status === "pendente"
           ? { demanda: demandaDaSugestao }
@@ -1215,7 +1220,7 @@ export async function POST(req: NextRequest) {
   // (alucinada). O "ok/não/ajustar" explícito (parseDecision/parseAjuste) segue funcionando sem reply.
   // NÃO gateia por !isTrivial: uma confirmação trivial ("beleza", "show", "Ok!") respondendo (reply)
   // a uma sugestão DEVE ser interpretada — antes o isTrivial engolia e o card nunca era criado.
-  if (msg.groupJid === internalGroupJid() && isOpenAIConfigured() && (msg.quotedMsgId || ehConfirmacaoLivre(msg.text))) {
+  if (isInternalCmdGroup(msg.groupJid) && isOpenAIConfigured() && (msg.quotedMsgId || ehConfirmacaoLivre(msg.text))) {
     let alvo = demandaDaSugestao?.status === "pendente" ? demandaDaSugestao : null;
     // Sem reply, mas a mensagem parece confirmação ("cria o card", "pode criar", "tá certo"):
     // interpreta se houver EXATAMENTE 1 demanda pendente recente (com 2+ o bloco de desambiguação
@@ -1302,7 +1307,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── Agente "Lone": radar de DATAS ("Lone, que datas vêm aí?") — 30 dias × carteira. Determinístico. ───
-  if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPerguntaDatas(msg.text)) {
+  if (!demandaDaSugestao && isInternalCmdGroup(msg.groupJid) && ehPerguntaDatas(msg.text)) {
     const prox = proximasDatas(spNow(), 30);
     if (prox.length === 0) {
       await csSendGroupText(msg.groupJid, "Os próximos 30 dias tão sem data comemorativa relevante no meu radar. 😌");
@@ -1329,7 +1334,7 @@ export async function POST(req: NextRequest) {
 
   // ─── Agente "Lone": IDEIAS de post ("Lone, me dá ideias de post pro Contele") ───
   // Banco de ideias na hora: briefing + histórico (não repete) + datas chegando. Reusa o motor da pauta.
-  if (!demandaDaSugestao && msg.groupJid === internalGroupJid() && ehPedidoIdeias(msg.text) && isOpenAIConfigured()) {
+  if (!demandaDaSugestao && isInternalCmdGroup(msg.groupJid) && ehPedidoIdeias(msg.text) && isOpenAIConfigured()) {
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) {
       await csSendGroupText(msg.groupJid, "Pra qual cliente? Me fala o nome que eu mando as ideias. 😉");
@@ -1367,7 +1372,7 @@ export async function POST(req: NextRequest) {
   // pedido completo). Esse follow-up deve COMPLETAR a demanda pendente — antes caía no "grupo sem
   // cliente" e se perdia, então a demanda ficava só com o áudio. Gate apertado: grupo interno,
   // conteúdo real, 1 pendente recente do MESMO autor, e não é pergunta/papo com a Lone nem comando. ───
-  if (msg.groupJid === internalGroupJid() && !demandaDaSugestao && isOpenAIConfigured()
+  if (isInternalCmdGroup(msg.groupJid) && !demandaDaSugestao && isOpenAIConfigured()
       && !isTrivial(msg.text) && msg.text.trim().length >= 15
       && !ehPedidoCriarDemanda(msg.text) && !ehFalaComAgente(msg.text) && !ehPerguntaProLone(msg.text)) {
     const quemEnr = msg.authorName || msg.authorJid;
@@ -1413,7 +1418,7 @@ export async function POST(req: NextRequest) {
   const chamadoDireto = ehFalaComAgente(msg.text) || emConversa(msg.groupJid, msg.authorJid);
   const parecePergunta = /\?/.test(msg.text)
     || /^(quem|qual|quais|quando|onde|como|quanto|quantos|quantas|por ?que|o que|oq |tem |teve |cad[êe]|manda|lista|mostra|me (diz|fala|manda|mostra|explica)|sabe )/i.test(msg.text.trim());
-  const querPapo = msg.groupJid === internalGroupJid() && !isTrivial(msg.text) && isOpenAIConfigured();
+  const querPapo = isInternalCmdGroup(msg.groupJid) && !isTrivial(msg.text) && isOpenAIConfigured();
   const dispara = querPapo && (chamadoDireto || ehPerguntaProLone(msg.text) || parecePergunta);
   if (dispara) {
     const snap = await montarSnapshotCS(); // fatos reais → ela responde com dados, sem inventar
@@ -1456,7 +1461,7 @@ export async function POST(req: NextRequest) {
   // O grupo INTERNO é coordenação da equipe — nada aqui é demanda de cliente (já passou pelos
   // handlers internos: decisão/roteiro/comando/onboarding/interpretação). Evita "alucinada".
   // Exceção: grupo sandbox classifica mesmo sendo o interno (é o modo de teste do fluxo completo).
-  if (msg.groupJid === internalGroupJid() && !sandbox) return NextResponse.json({ ok: true, skip: "grupo interno — não classifica demanda" });
+  if (isInternalCmdGroup(msg.groupJid) && !sandbox) return NextResponse.json({ ok: true, skip: "grupo interno — não classifica demanda" });
 
   // ─── Imagem: DESCREVE (visão gpt-4o-mini, detail low) e enriquece o texto → segue pro A1 como
   // qualquer demanda. Chega aqui foto de cliente (ou de qualquer um, no grupo sandbox), então a
@@ -1802,6 +1807,8 @@ export async function POST(req: NextRequest) {
     }
     const ehReclamacao = it.tipo === "reclamacao";
     const area = tipoToArea(it.tipo as CsDemandType);
+    // Roteamento por grupo: anúncio/estratégia (área tráfego) → grupo do Julio; resto → grupo de artes.
+    const destJid = area === "trafego" ? trafficGroupJid() : internalGroupJid();
 
     // Grupo com JID compartilhado por 2+ clientes (ex.: Bazar Ribeiro Maricá vs Saquarema): atribui
     // ao cliente que o A1 identificou (it.cliente), não sempre a clients[0]. Sem isso a demanda de
@@ -1866,8 +1873,8 @@ export async function POST(req: NextRequest) {
           message_text: `${(jaPend.message_text as string) || ""}\n${msg.text}`.trim(),
           briefing: `${(jaPend.briefing as string) || ""}\n\n+ (cliente complementou): ${msg.text}`.trim(),
         }).eq("id", jaPend.id);
-        if (internalJid && (jaPend.msg_id_sugestao as string)) {
-          await csSendGroupText(internalJid, `🔁 A *${clienteNomeItem}* mandou mais uma coisa sobre *${titulo}* — juntei no mesmo pedido. Vale o mesmo: *ok* · *não* · *ajustar*.`, jaPend.msg_id_sugestao as string);
+        if (destJid && (jaPend.msg_id_sugestao as string)) {
+          await csSendGroupText(destJid, `🔁 A *${clienteNomeItem}* mandou mais uma coisa sobre *${titulo}* — juntei no mesmo pedido. Vale o mesmo: *ok* · *não* · *ajustar*.`, jaPend.msg_id_sugestao as string);
         }
         console.log(`[CS/inbound] dedup → fundiu na pendente ${jaPend.codigo} (mesmo resumo "${titulo.slice(0, 40)}")`);
         sugeridas.push(`dedup[${jaPend.codigo}]`);
@@ -1895,7 +1902,7 @@ export async function POST(req: NextRequest) {
     if (insErr || !novaDem) { console.error("[CS/inbound] gravar demanda:", insErr?.message); continue; }
     sugeridas.push(`${it.tipo}/${it.urgencia}[${codigo}→${responsavel}]`);
 
-    if (internalJid) {
+    if (destJid) {
       // Mensagem CURTA e humana, SEM código — a equipe RESPONDE (reply) nesta mensagem.
       const a3d = a3?.ok ? a3.data : null;
       const acao = `👉 Responde aqui: *ok* (crio o card) · *não* (você cuida) · *ajustar*`;
@@ -1926,7 +1933,7 @@ export async function POST(req: NextRequest) {
         : ajusteLinkado
         ? `✏️ *AJUSTE NA ARTE — ${clienteNomeItem}*\n👤 ${responsavel}\n📌 Arte: *${ajusteLinkado.title}*\n\n📩 O cliente pediu:\n*${it.resumo}*\n\n${a3d ? `📋 ${a3d.briefing.trim()}` : `📋 _"${msg.text}"_`}\n\n👉 *ok* (aplico o ajuste nessa arte — volta pra produção) · *não* · *ajustar*`
         : `🆕 *NOVO PEDIDO — ${clienteNomeItem}*\n👤 ${responsavel}\n\n📩 O cliente pediu:\n*${it.resumo}*\n\n${a3d ? `📋 ${a3d.briefing.trim()}\n_${a3d.formato_sugerido} · prazo ${a3d.prazo_sugerido}_` : `📋 _"${msg.text}"_`}${notaAjuste}\n\n${acao}`) + respostaSugerida;
-      const r = await csSendGroupText(internalJid, txt);
+      const r = await csSendGroupText(destJid, txt);
       // Guarda o id da msg postada → o "reply" da equipe casa com esta demanda (sem código).
       if (r.ok && r.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: r.id }).eq("id", novaDem.id);
       else if (!r.ok) console.error("[CS/inbound] post sugestão falhou:", r.error);
