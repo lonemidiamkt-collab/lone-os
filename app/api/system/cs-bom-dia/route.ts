@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
 
   const snap = await montarSnapshotCS();
   const msg = buildBomDiaDigest(snap, now);
-  const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
+  // Bom dia vai pro grupo da EQUIPE (onde a Lone é "do time"); cai no grupo de artes se não houver.
+  const internalJid = process.env.CS_TEAM_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID || null;
   let postada = false;
   if (BOM_DIA_LIVE && internalJid && !previewOnly) {
     const r = await csSendGroupText(internalJid, msg);

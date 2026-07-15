@@ -69,6 +69,12 @@ const trafficGroupJid = () => process.env.CS_TRAFFIC_GROUP_JID || internalGroupJ
 // Grupos INTERNOS de comando (artes + tráfego): onde o time responde ok/não/ajustar e dá comandos.
 // Ambos são "internos" (não classificam demanda de cliente).
 const isInternalCmdGroup = (jid: string) => jid === internalGroupJid() || jid === trafficGroupJid();
+// Grupo EQUIPE: papo descontraído (a Lone é "parte do time" — bom dia, piada, técnica quando precisa).
+// Conversa sim; comandos de demanda (ok/não) não. Não classifica demanda de cliente.
+const teamGroupJid = () => process.env.CS_TEAM_GROUP_JID || null;
+const isTeamGroup = (jid: string) => !!teamGroupJid() && jid === teamGroupJid();
+// Onde a Lone NÃO trata mensagem como pedido de cliente (grupos internos + equipe).
+const isNaoClassifica = (jid: string) => isInternalCmdGroup(jid) || isTeamGroup(jid);
 // Grupos SANDBOX (fase de teste): ali o agente trata mensagem da EQUIPE como se fosse pedido de
 // cliente (ignora o filtro de equipe) e CLASSIFICA demanda mesmo sendo o grupo interno — pra o time
 // testar o fluxo inteiro (inclusive imagem) num grupo só. Vazio em produção real.
@@ -1418,11 +1424,14 @@ export async function POST(req: NextRequest) {
   const chamadoDireto = ehFalaComAgente(msg.text) || emConversa(msg.groupJid, msg.authorJid);
   const parecePergunta = /\?/.test(msg.text)
     || /^(quem|qual|quais|quando|onde|como|quanto|quantos|quantas|por ?que|o que|oq |tem |teve |cad[êe]|manda|lista|mostra|me (diz|fala|manda|mostra|explica)|sabe )/i.test(msg.text.trim());
-  const querPapo = isInternalCmdGroup(msg.groupJid) && !isTrivial(msg.text) && isOpenAIConfigured();
-  const dispara = querPapo && (chamadoDireto || ehPerguntaProLone(msg.text) || parecePergunta);
+  const noGrupoEquipe = isTeamGroup(msg.groupJid);
+  const querPapo = (isInternalCmdGroup(msg.groupJid) || noGrupoEquipe) && !isTrivial(msg.text) && isOpenAIConfigured();
+  // No grupo Equipe a Lone é mais participativa (é "do time"): responde bom dia e entra na conversa,
+  // não só em pergunta direta. (O modelo ainda decide o "ignorar" pra não virar tagarela.)
+  const dispara = querPapo && (chamadoDireto || ehPerguntaProLone(msg.text) || parecePergunta || noGrupoEquipe);
   if (dispara) {
     const snap = await montarSnapshotCS(); // fatos reais → ela responde com dados, sem inventar
-    const conv = await conversarComEquipe({ mensagem: msg.text, autor: msg.authorName || "", contexto: snap.texto });
+    const conv = await conversarComEquipe({ mensagem: msg.text, autor: msg.authorName || "", contexto: snap.texto, descontraido: noGrupoEquipe });
     // O modelo achou que NÃO era pra ele E não te chamaram direto → fica quieto (evita virar tagarela).
     if (conv.ok && conv.data?.ignorar === true && !chamadoDireto) {
       console.log(`[CS/inbound] conversa ignorada (não era pra Lone): "${msg.text.slice(0, 40)}"`);
@@ -1461,7 +1470,7 @@ export async function POST(req: NextRequest) {
   // O grupo INTERNO é coordenação da equipe — nada aqui é demanda de cliente (já passou pelos
   // handlers internos: decisão/roteiro/comando/onboarding/interpretação). Evita "alucinada".
   // Exceção: grupo sandbox classifica mesmo sendo o interno (é o modo de teste do fluxo completo).
-  if (isInternalCmdGroup(msg.groupJid) && !sandbox) return NextResponse.json({ ok: true, skip: "grupo interno — não classifica demanda" });
+  if (isNaoClassifica(msg.groupJid) && !sandbox) return NextResponse.json({ ok: true, skip: "grupo interno/equipe — não classifica demanda" });
 
   // ─── Imagem: DESCREVE (visão gpt-4o-mini, detail low) e enriquece o texto → segue pro A1 como
   // qualquer demanda. Chega aqui foto de cliente (ou de qualquer um, no grupo sandbox), então a

@@ -11,6 +11,7 @@ export interface ConversaInput {
   mensagem: string;        // o que a equipe falou
   autor: string;           // quem falou
   contexto?: string;       // fatos atuais (snapshot do CS: pendentes, produção, esfriando…) — opcional
+  descontraido?: boolean;  // grupo EQUIPE: mais solta/participativa (bom dia, piada), como um membro do time
 }
 
 export interface ConversaOutput {
@@ -117,6 +118,19 @@ diga com sinceridade pra onde ir:
 - Você fala SÓ no grupo interno. Nunca prometa falar com o cliente.
 Responda APENAS no JSON do schema (campos "resposta", "ignorar", "ensino").`;
 
+// Modo "grupo Equipe": a Lone é um MEMBRO do time, não uma ferramenta. Mais presente e humana.
+const DESCONTRAIDO = `
+
+# VOCÊ ESTÁ NO GRUPO DA EQUIPE (não é grupo de cliente)
+Aqui você é um MEMBRO de verdade do time, não uma ferramenta. Seja mais solta e presente:
+- Retribui o bom dia/boa tarde do pessoal, entra na brincadeira, RI ("kkk"), solta uma piada leve,
+  comemora as vitórias do time ("boraaa!", "que orgulho 👏").
+- MAS continua TÉCNICA e SÉRIA quando o assunto pede: número, problema, decisão, cobrança — aí você
+  responde com precisão, sem palhaçada. Sabe a hora de cada tom.
+- Não precisa responder TODA mensagem (senão cansa) — mas seja mais participativa que num grupo de
+  trabalho. Se é claramente papo particular entre dois colegas, deixa rolar (ignorar=true).
+- Segue curta e no jeito do WhatsApp. No máx. 1-2 emojis.`;
+
 export async function conversarComEquipe(inp: ConversaInput): Promise<OpenAiResult<ConversaOutput>> {
   const estiloTime = await getEstiloTime(); // passo 3: escreve no tom real do time (aprendido + revisado)
   const user = [
@@ -128,6 +142,7 @@ export async function conversarComEquipe(inp: ConversaInput): Promise<OpenAiResu
   ].filter(Boolean).join("\n");
   return chatJson<ConversaOutput>({
     model: CONVERSA_MODEL, schemaName: "cs_conversa", schema: SCHEMA,
-    maxTokens: 300, temperature: 0.6, system: SYSTEM, user,
+    maxTokens: 300, temperature: inp.descontraido ? 0.75 : 0.6,
+    system: inp.descontraido ? SYSTEM + DESCONTRAIDO : SYSTEM, user,
   });
 }
