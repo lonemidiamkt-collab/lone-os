@@ -22,6 +22,7 @@ import { detectarAprovacao } from "@/lib/cs/aprovacao";
 import { sugerirResposta } from "@/lib/cs/resposta";
 import { sincronizarBriefingAprendido } from "@/lib/cs/briefing-sync";
 import { conversarComEquipe } from "@/lib/cs/conversa";
+import { analisarSentimentoCliente } from "@/lib/cs/sentimento";
 import { detectarEventoFuturo, pareceTerData } from "@/lib/cs/evento";
 import { montarSnapshotCS } from "@/lib/cs/snapshot";
 import { ehPerguntaProLone, ehVisaoGeralDemandas } from "@/lib/cs/intent";
@@ -253,6 +254,44 @@ function histTexto(jid: string): string {
 type PendPapo = { timer: ReturnType<typeof setTimeout>; partes: string[] };
 const pendPapo = new Map<string, PendPapo>();
 const PAPO_DEBOUNCE_MS = 2600;
+
+// ── TERMÔMETRO DE SATISFAÇÃO ── lê a mensagem do CLIENTE e, se houver insatisfação/risco de churn,
+// avisa o time (grupo Equipe) pra agir cedo. Cooldown por cliente pra não spammar. Fire-and-forget.
+const satisfacaoCooldown = new Map<string, number>(); // clientId → epoch ms do último alerta
+const SATISFACAO_COOLDOWN_MS = 6 * 60 * 60 * 1000;     // 6h por cliente
+async function checarSatisfacao(
+  client: { id: string; name?: string | null; nome_fantasia?: string | null; assigned_social?: string | null },
+  mensagem: string,
+) {
+  try {
+    if (!isOpenAIConfigured() || !mensagem || mensagem.trim().length < 6) return;
+    const last = satisfacaoCooldown.get(client.id);
+    if (last && Date.now() - last < SATISFACAO_COOLDOWN_MS) return; // já alertei esse cliente há pouco
+    const r = await analisarSentimentoCliente(mensagem);
+    if (!r.ok || !r.data) return;
+    const s = r.data;
+    const alerta = s.churn || (s.sentimento === "negativo" && (s.risco === "medio" || s.risco === "alto"));
+    if (!alerta) return;
+    satisfacaoCooldown.set(client.id, Date.now());
+    const nome = client.nome_fantasia || client.name || "Cliente";
+    const social = client.assigned_social ? `@${String(client.assigned_social).split(" ")[0]} ` : "";
+    const nivel = s.churn ? "🚨 *Risco de o cliente sair*" : s.risco === "alto" ? "🔴 *Cliente insatisfeito*" : "🟠 *Atenção com o cliente*";
+    const dest = teamGroupJid() || internalGroupJid();
+    if (dest) {
+      const aviso = `${nivel} — *${nome}*\n${social}O cliente falou algo que parece insatisfação:\n"${mensagem.slice(0, 180)}"\n\n_Por quê: ${s.motivo}_\nDá uma olhada no grupo dele antes que aperte. 🙏`;
+      await csSendGroupText(dest, aviso).catch(() => {});
+    }
+    await supabaseAdmin.from("notifications").insert({
+      type: "content",
+      title: `${s.churn ? "🚨 Risco de churn" : "⚠️ Cliente pode estar insatisfeito"} — ${nome}`,
+      body: `"${mensagem.slice(0, 140)}" — ${s.motivo}`,
+      client_id: client.id,
+    }).then(() => {}, () => {});
+    console.log(`[CS/inbound] termômetro: ${nome} sentimento=${s.sentimento} risco=${s.risco} churn=${s.churn}`);
+  } catch (e) {
+    console.error("[CS/inbound] checarSatisfacao erro:", e);
+  }
+}
 
 // Processa o papo (após o debounce): responde UMA vez, com memória curta do grupo. Roda fora do
 // ciclo do webhook (o reply sai pela Evolution), então nunca segura a resposta HTTP.
@@ -1574,6 +1613,12 @@ export async function POST(req: NextRequest) {
   if (!clients || clients.length === 0) {
     console.warn("[CS/inbound] grupo sem cliente mapeado:", msg.groupJid);
     return NextResponse.json({ ok: true, skip: "grupo sem cliente" });
+  }
+
+  // TERMÔMETRO DE SATISFAÇÃO: em paralelo, sem travar o webhook. Só cliente real (não sandbox/teste)
+  // e só texto de verdade (pula descrição de imagem). Se detectar insatisfação, avisa o time.
+  if (!sandbox && !isTestGroup && msg.text && !msg.text.startsWith("[Imagem")) {
+    void checarSatisfacao(clients[0] as { id: string; name?: string | null; nome_fantasia?: string | null; assigned_social?: string | null }, msg.text);
   }
 
   const multiCliente = clients.length > 1;
