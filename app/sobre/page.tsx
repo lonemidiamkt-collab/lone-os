@@ -540,6 +540,7 @@ const MODULES: Module[] = [
       "Relatório de Instagram orgânico (seguidores, seguidores ganhos, alcance, engajamento, público — gênero/idade/cidades — e posts mais engajados) em 7/14/30 dias — no portal e no PDF semanal/mensal, com anúncios e Instagram em páginas separadas",
       "Botão 'Enviar pro cliente aprovar': com a arte entregue, o social/gestor clica e o CS manda as artes no grupo do WhatsApp do cliente com uma mensagem de aprovação padronizada (varia entre 5 versões pra não soar robótico)",
       "Painel 'Fechamento do dia' no topo do board: mostra quantos clientes com post programado pra hoje já têm arte pronta e quais ainda faltam — pra não esquecer ninguém",
+      "Termômetro de satisfação: o CS lê o tom das mensagens dos clientes nos grupos e avisa a equipe quando alguém parece insatisfeito ou dando sinal de querer sair — antes de virar cancelamento (distingue pedido normal de reclamação de verdade; 1 alerta a cada 6h por cliente)",
     ],
     tips: [
       "Use 'criação em lote' no começo do mês pra já deixar o calendário montado.",
