@@ -12,6 +12,7 @@ export interface ConversaInput {
   autor: string;           // quem falou
   contexto?: string;       // fatos atuais (snapshot do CS: pendentes, produção, esfriando…) — opcional
   descontraido?: boolean;  // grupo EQUIPE: mais solta/participativa (bom dia, piada), como um membro do time
+  historico?: string;      // últimas mensagens do grupo (memória curta) — pra não repetir nem perder o fio
 }
 
 export interface ConversaOutput {
@@ -175,10 +176,11 @@ export async function conversarComEquipe(inp: ConversaInput): Promise<OpenAiResu
   const estiloTime = await getEstiloTime(); // passo 3: escreve no tom real do time (aprendido + revisado)
   const user = [
     inp.contexto ? `Contexto agora: ${inp.contexto}` : "",
-    `${inp.autor || "Alguém"} falou com você: "${inp.mensagem}"`,
+    inp.historico ? `# Últimas mensagens do grupo (memória curta — pra você não repetir, não perder o fio e entender fragmentos):\n${inp.historico}\n` : "",
+    `AGORA ${inp.autor || "Alguém"} falou com você: "${inp.mensagem}"`,
     ``,
     estiloTime ? `# Seu tom de escrita (jeito do time da Lone — siga fielmente, é conversa interna):\n${estiloTime}\n` : "",
-    `Responda no seu tom (JSON).`,
+    `Responda no seu tom (JSON). Não repita o que você já disse no histórico acima.`,
   ].filter(Boolean).join("\n");
   return chatJson<ConversaOutput>({
     model: CONVERSA_MODEL, schemaName: "cs_conversa", schema: SCHEMA,
