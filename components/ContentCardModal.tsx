@@ -659,19 +659,34 @@ export default function ContentCardModal({ card, onClose }: Props) {
               </a>
             )}
 
-            {/* 🔍 Revisão de arte por IA — confere contra o briefing antes de ir ao cliente. */}
-            <div>
-              <button
-                type="button"
-                onClick={revisarArteIA}
-                disabled={revisando}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary/[0.06] border border-primary/20 hover:border-primary/40 transition-all text-xs text-primary disabled:opacity-50"
-                title="A IA confere logo, preço legível, palavra proibida, erro de texto e aderência ao briefing"
-              >
-                <ImageIcon size={13} /> {revisando ? "Revisando a arte…" : "🔍 Revisar arte com IA"}
-              </button>
+            {/* Ferramentas de conferência por IA — par compacto lado a lado (antes eram 3 barras
+                full-width empilhadas, ficava pesado). Os resultados abrem full-width logo abaixo. */}
+            <div className="space-y-2">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Conferir com IA (opcional)</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={revisarArteIA}
+                  disabled={revisando}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary/[0.06] border border-primary/20 hover:border-primary/40 transition-all text-xs text-primary disabled:opacity-50"
+                  title="A IA confere logo, preço legível, palavra proibida, erro de texto e aderência ao briefing"
+                >
+                  <ImageIcon size={13} /> {revisando ? "Revisando…" : "Revisar arte"}
+                </button>
+                <button
+                  type="button"
+                  onClick={revisarPostIA}
+                  disabled={revisandoPost}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary/[0.06] border border-primary/20 hover:border-primary/40 transition-all text-xs text-primary disabled:opacity-50"
+                  title="A IA revisa o post COMPLETO: a legenda bate com a arte? preço/claim inventado? palavra proibida? português?"
+                >
+                  <CheckCircle size={13} /> {revisandoPost ? "Revisando…" : "Revisão final"}
+                </button>
+              </div>
+
+              {/* Resultado — Revisar arte */}
               {revisao && (
-                <div className={`mt-2 rounded-lg border p-3 text-xs ${revisao.ok ? "border-lone-success-border/30 bg-lone-success-bg/10 text-lone-success" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>
+                <div className={`rounded-lg border p-3 text-xs ${revisao.ok ? "border-lone-success-border/30 bg-lone-success-bg/10 text-lone-success" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>
                   <div className="font-semibold flex items-center gap-1.5">
                     {revisao.ok ? <CheckCircle size={13} /> : <XCircle size={13} />} {revisao.resumo}
                   </div>
@@ -683,37 +698,10 @@ export default function ContentCardModal({ card, onClose }: Props) {
                   <p className="mt-1.5 text-[10px] text-muted-foreground">Sugestão da IA — a decisão é sua.</p>
                 </div>
               )}
-            </div>
 
-            {/* 📤 Enviar as artes pro grupo do cliente aprovar (pelo CS, mensagem padronizada).
-                Aparece sempre que o card TEM arte (anexos ou capa) — não só na entrega do designer,
-                porque muita arte é colada direto no card. Não pro designer. Disparo humano. */}
-            {((card.cardAttachments?.length ?? 0) > 0 || card.imageUrl) && role !== "designer" && (
-              <button
-                type="button"
-                onClick={enviarProCliente}
-                disabled={enviandoCliente}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-lone-success-bg border border-lone-success-border hover:brightness-105 transition-all text-xs font-semibold text-lone-success disabled:opacity-50"
-                title="O CS manda as artes entregues no grupo do WhatsApp do cliente com uma mensagem pedindo aprovação"
-              >
-                <Send size={13} /> {enviandoCliente ? "Enviando pro cliente…" : "📤 Enviar pro cliente aprovar"}
-              </button>
-            )}
-
-            {/* ✅ Revisão FINAL do post (arte + legenda) — o pre-flight: coerência legenda×arte,
-                preço inventado, palavra proibida, dado divergente, português. */}
-            <div>
-              <button
-                type="button"
-                onClick={revisarPostIA}
-                disabled={revisandoPost}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary/[0.06] border border-primary/20 hover:border-primary/40 transition-all text-xs text-primary disabled:opacity-50"
-                title="A IA revisa o post COMPLETO: a legenda bate com a arte? preço/claim inventado? palavra proibida? português?"
-              >
-                <CheckCircle size={13} /> {revisandoPost ? "Revisando o post…" : "✅ Revisão final do post (IA)"}
-              </button>
+              {/* Resultado — Revisão final do post */}
               {revisaoPost && (
-                <div className={`mt-2 rounded-lg border p-3 text-xs ${revisaoPost.aprovado ? "border-lone-success-border/30 bg-lone-success-bg/10 text-lone-success" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>
+                <div className={`rounded-lg border p-3 text-xs ${revisaoPost.aprovado ? "border-lone-success-border/30 bg-lone-success-bg/10 text-lone-success" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>
                   <div className="font-semibold flex items-center gap-1.5">
                     {revisaoPost.aprovado ? <CheckCircle size={13} /> : <XCircle size={13} />} {revisaoPost.resumo}
                   </div>
@@ -741,6 +729,24 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 </div>
               )}
             </div>
+
+            {/* 📤 Enviar as artes pro grupo do cliente aprovar (pelo CS, mensagem padronizada).
+                Aparece sempre que o card TEM arte (anexos ou capa). Ação destacada, logo acima da
+                decisão. Não pro designer. Disparo humano. */}
+            {((card.cardAttachments?.length ?? 0) > 0 || card.imageUrl) && role !== "designer" && (
+              <button
+                type="button"
+                onClick={enviarProCliente}
+                disabled={enviandoCliente}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-lone-success-bg border border-lone-success-border hover:brightness-105 transition-all text-xs font-semibold text-lone-success disabled:opacity-50"
+                title="O CS manda as artes entregues no grupo do WhatsApp do cliente com uma mensagem pedindo aprovação"
+              >
+                <Send size={13} /> {enviandoCliente ? "Enviando pro cliente…" : "📤 Enviar artes pro cliente aprovar"}
+              </button>
+            )}
+
+            {/* Divisor sutil antes da decisão principal */}
+            <div className="border-t border-border/60" />
 
             {!showRejectInput ? (
               <div className="flex items-center gap-2">
