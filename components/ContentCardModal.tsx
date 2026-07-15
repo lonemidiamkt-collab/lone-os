@@ -105,7 +105,27 @@ export default function ContentCardModal({ card, onClose }: Props) {
     resumo: string;
     legenda_corrigida: string | null;
   } | null>(null);
+  const [enviandoCliente, setEnviandoCliente] = useState(false); // mandando as artes pro grupo do cliente aprovar
   const commentsEndRef = useRef<HTMLDivElement>(null);
+
+  // 📤 Envia as artes ENTREGUES pro grupo do cliente aprovar (mensagem padronizada, pelo CS).
+  // Disparo humano — o social/gestor clica. Confirma antes (é mensagem pra fora).
+  async function enviarProCliente() {
+    if (!window.confirm(`Enviar as artes de "${card.title}" pro grupo do WhatsApp de ${card.clientName} pedir aprovação?`)) return;
+    setEnviandoCliente(true);
+    try {
+      const r = await authedFetch("/api/cs/enviar-aprovacao", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: card.id }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.ok) {
+        toast.success(`Enviei ${d.enviadas}/${d.total} arte(s) pro grupo de ${card.clientName} aprovar. 🎉`);
+      } else {
+        toast.error(d.error || d.falhas?.join("; ") || "Não deu pra enviar pro cliente.");
+      }
+    } catch { toast.error("Falha de conexão ao enviar pro cliente."); }
+    finally { setEnviandoCliente(false); }
+  }
 
   // ✍️ Legenda pronta por IA: usa o briefing do cliente pra escrever gancho+corpo+CTA+hashtags.
   async function gerarLegendaIA() {
@@ -664,6 +684,20 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 </div>
               )}
             </div>
+
+            {/* 📤 Enviar as artes pro grupo do cliente aprovar (pelo CS, mensagem padronizada).
+                Só aparece com arte entregue e não pro designer. Disparo humano. */}
+            {card.designerDeliveredAt && role !== "designer" && (
+              <button
+                type="button"
+                onClick={enviarProCliente}
+                disabled={enviandoCliente}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-lone-success-bg border border-lone-success-border hover:brightness-105 transition-all text-xs font-semibold text-lone-success disabled:opacity-50"
+                title="O CS manda as artes entregues no grupo do WhatsApp do cliente com uma mensagem pedindo aprovação"
+              >
+                <Send size={13} /> {enviandoCliente ? "Enviando pro cliente…" : "📤 Enviar pro cliente aprovar"}
+              </button>
+            )}
 
             {/* ✅ Revisão FINAL do post (arte + legenda) — o pre-flight: coerência legenda×arte,
                 preço inventado, palavra proibida, dado divergente, português. */}

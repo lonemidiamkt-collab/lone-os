@@ -133,6 +133,34 @@ export async function sendMediaDocument(
   }, cfg, { retries: 1, timeoutMs: 60_000 });
 }
 
+/**
+ * Envia uma IMAGEM (arte) para um número ou JID de grupo. `media` pode ser a URL pública
+ * da imagem (o bucket `arts` é público → a Evolution baixa direto) ou base64. Usado pra
+ * mandar as artes entregues pro grupo do cliente aprovar.
+ */
+export async function sendMediaImage(
+  to: string,
+  media: string,          // URL pública OU base64
+  caption?: string,
+  fileName = "arte.png",
+): Promise<EvoResult> {
+  const cfg = getEvolutionConfig();
+  if (!cfg) return { ok: false, error: "Evolution não configurada (env ausente)" };
+  if (!to) return { ok: false, error: "destino (número/JID) vazio" };
+  if (!media) return { ok: false, error: "imagem vazia" };
+  return evoFetch(`/message/sendMedia/${encodeURIComponent(cfg.instance)}`, {
+    method: "POST",
+    body: JSON.stringify({
+      number: to,
+      mediatype: "image",
+      mimetype: "image/png",
+      media,
+      fileName,
+      ...(caption ? { caption } : {}),
+    }),
+  }, cfg, { retries: 1, timeoutMs: 45_000 });
+}
+
 /** Estado da conexão da instância. `connected=true` quando state==="open". */
 export async function checkInstance(): Promise<EvoResult<{ state: string; connected: boolean }>> {
   const cfg = getEvolutionConfig();
