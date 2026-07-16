@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   if (!cardId) return NextResponse.json({ error: "cardId obrigatório" }, { status: 400 });
 
   const { data: card } = await supabaseAdmin
-    .from("content_cards").select("id, title, image_url, client_id, client_name, designer_delivered_at").eq("id", cardId).maybeSingle();
+    .from("content_cards").select("id, title, image_url, client_id, client_name, designer_delivered_at, status, social_confirmed_at").eq("id", cardId).maybeSingle();
   if (!card) return NextResponse.json({ error: "card não encontrado" }, { status: 404 });
 
   const { data: cli } = await supabaseAdmin
@@ -108,6 +108,24 @@ export async function POST(req: NextRequest) {
     card_id: cardId, author: "🤖 CS", role: "system",
     text: `📤 Enviei ${enviadas}/${urls.length} arte(s) pro grupo de *${clienteNome}* aprovar (por ${nomeQuem}).${falhas.length ? ` Falhas: ${falhas.join("; ")}` : ""}`,
   }).then(() => {}, () => {});
+
+  // AVANÇA o card automaticamente: mandar as artes pro cliente = arte confirmada pelo social e agora
+  // com o CLIENTE pra aprovar. Isso tira o card do limbo "in_production" (que virava falso atraso) e
+  // reflete a realidade sem o social ter que atualizar o status na mão. Só avança pra frente.
+  const st = card.status as string;
+  if (enviadas > 0 && ["ideas", "script", "in_production", "approval"].includes(st)) {
+    const nowIso = new Date().toISOString();
+    await supabaseAdmin.from("content_cards").update({
+      status: "client_approval",
+      social_confirmed_at: (card.social_confirmed_at as string) || nowIso,
+      social_confirmed_by: nomeQuem,
+      status_changed_at: nowIso,
+    }).eq("id", cardId).then(() => {}, () => {});
+    await supabaseAdmin.from("card_comments").insert({
+      card_id: cardId, author: "🤖 CS", role: "system",
+      text: "➡️ Card movido pra *Aprovação Cliente* automaticamente (artes enviadas pro cliente).",
+    }).then(() => {}, () => {});
+  }
 
   return NextResponse.json({ ok: enviadas > 0, enviadas, total: urls.length, falhas, grupo: (cli?.whatsapp_group_name as string) || jid });
 }

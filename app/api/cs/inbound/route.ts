@@ -327,6 +327,39 @@ async function marcarTarefaFeita(autor: string | null | undefined, ref: string):
   }
 }
 
+// Time postou uma IMAGEM no grupo do cliente (provável arte entregue/postada fora do botão) → avança
+// o card do cliente automaticamente. CONSERVADOR: só age se houver EXATAMENTE UM card candidato (arte
+// já entregue pelo designer, ainda parado em produção/aprovação) — assim nunca marca o card errado.
+async function autoAvancarPorArteNoGrupo(groupJid: string, autorNome?: string | null) {
+  try {
+    const { data: cli } = await supabaseAdmin
+      .from("clients").select("id, name, nome_fantasia").eq("whatsapp_group_jid", groupJid).maybeSingle();
+    if (!cli) return;
+    const { data: cards } = await supabaseAdmin
+      .from("content_cards").select("id, title, status")
+      .eq("client_id", cli.id as string)
+      .not("designer_delivered_at", "is", null)
+      .in("status", ["in_production", "approval"])
+      .is("archived_at", null);
+    if (!cards || cards.length !== 1) return; // 0 ou vários → não arrisca marcar o errado
+    const card = cards[0];
+    const nowIso = new Date().toISOString();
+    await supabaseAdmin.from("content_cards").update({
+      status: "client_approval",
+      social_confirmed_at: nowIso,
+      social_confirmed_by: autorNome || "CS",
+      status_changed_at: nowIso,
+    }).eq("id", card.id as string);
+    await supabaseAdmin.from("card_comments").insert({
+      card_id: card.id as string, author: "🤖 CS", role: "system",
+      text: `➡️ Vi a arte no grupo do cliente → movi *${card.title as string}* pra *Aprovação Cliente* automaticamente. Se não era essa, é só voltar o status.`,
+    }).then(() => {}, () => {});
+    console.log(`[CS/inbound] auto-avancei card por arte no grupo do cliente: "${card.title}"`);
+  } catch (e) {
+    console.error("[CS/inbound] autoAvancarPorArteNoGrupo erro:", e);
+  }
+}
+
 // Processa o papo (após o debounce): responde UMA vez, com memória curta do grupo. Roda fora do
 // ciclo do webhook (o reply sai pela Evolution), então nunca segura a resposta HTTP.
 async function responderPapo(p: {
@@ -1598,7 +1631,13 @@ export async function POST(req: NextRequest) {
   // ─── Mensagem de cliente: A0 → A1 → A3 → sugere ───
   // SANDBOX de teste: no grupo de teste, a msg da equipe É tratada como pedido (pra testar o fluxo).
   const sandbox = ehSandbox(msg.groupJid);
-  if (!sandbox && (isLoneTeam(msg.authorJid, teamJids()) || ehNomeEquipeLone(msg.authorName))) return NextResponse.json({ ok: true, skip: "autor = equipe Lone" });
+  if (!sandbox && (isLoneTeam(msg.authorJid, teamJids()) || ehNomeEquipeLone(msg.authorName))) {
+    // O time postou algo no grupo do cliente. Se for IMAGEM, é provável que seja a ARTE sendo
+    // enviada/postada pro cliente (fora do botão). Tenta avançar o card do cliente automaticamente
+    // (pedido do Roberto) — conservador: só age se houver UM card candidato claro.
+    if (msg.isImage) void autoAvancarPorArteNoGrupo(msg.groupJid, msg.authorName);
+    return NextResponse.json({ ok: true, skip: "autor = equipe Lone" });
+  }
   // O grupo INTERNO é coordenação da equipe — nada aqui é demanda de cliente (já passou pelos
   // handlers internos: decisão/roteiro/comando/onboarding/interpretação). Evita "alucinada".
   // Exceção: grupo sandbox classifica mesmo sendo o interno (é o modo de teste do fluxo completo).
