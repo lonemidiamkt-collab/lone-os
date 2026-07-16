@@ -31,8 +31,19 @@ export function buildBomDiaDigest(snap: SnapshotCS, now: Date): string {
     l.push(`✅ *${snap.prontasPraPostar.length}* arte(s) PRONTA(S) do designer só esperando vocês postarem — ${top}${snap.prontasPraPostar.length > 4 ? "…" : ""} — é confirmar e subir!`);
   }
   if (snap.atrasados.length) {
-    const top = snap.atrasados.slice(0, 3).map((a) => `${a.cliente} (${a.dias}d)`).join(", ");
-    l.push(`⏰ *${snap.atrasados.length}* com prazo vencido — ${top}${snap.atrasados.length > 3 ? "…" : ""} — dá pra priorizar hoje`);
+    // Separa por CULPA real: prazo vencido aguardando o DESIGNER (falta a arte) vs prazo vencido
+    // mas a ARTE JÁ ESTÁ PRONTA (falta só o social postar). Não jogar tudo como "atraso" — o designer
+    // reclamou (com razão) que era cobrado por card que ele já entregou; o gargalo ali é a postagem.
+    const semArte = snap.atrasados.filter((a) => !a.designerEntregou);
+    const comArte = snap.atrasados.filter((a) => a.designerEntregou);
+    if (semArte.length) {
+      const top = semArte.slice(0, 3).map((a) => `${a.cliente} (${a.dias}d)`).join(", ");
+      l.push(`⏰ *${semArte.length}* com prazo vencido esperando a ARTE (designer) — ${top}${semArte.length > 3 ? "…" : ""}`);
+    }
+    if (comArte.length) {
+      const top = comArte.slice(0, 3).map((a) => `${a.cliente} (${a.dias}d)`).join(", ");
+      l.push(`📮 *${comArte.length}* vencida(s) mas com ARTE JÁ PRONTA — falta só o social postar (${top}${comArte.length > 3 ? "…" : ""}) — não é atraso do designer`);
+    }
   }
   if (snap.encalhados) {
     l.push(`🧹 *${snap.encalhados}* cards encalhados (parados há +30d) — vale arquivar ou fechar pra limpar o board`);
