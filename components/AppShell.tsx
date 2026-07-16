@@ -56,15 +56,18 @@ function MainLayout({ children }: { children: React.ReactNode }) {
 
   // Notificações do sino — ninguém carregava o histórico do banco, então cada usuário só via o
   // que a própria sessão empurrava (ex: o designer nunca recebia "Conteúdo reprovado" do social).
-  // Carrega no login + refetch a cada 45s (aba visível) e ao voltar o foco. Realtime está OFF.
+  // Carrega no login + refetch a cada 45s e ao voltar o foco. Realtime está OFF.
+  // IMPORTANTE: o poll roda MESMO com a aba oculta (antes era gated em "visible") — senão, numa
+  // outra aba do navegador as notificações novas nem chegavam, e a notificação do SO não disparava.
+  // Em segundo plano o browser afrouxa o timer p/ ~1/min, o que é ok pra notificação.
   const initNotifs = useNotificationsStore((s) => s.init);
   const refreshNotifs = useNotificationsStore((s) => s.refresh);
   useEffect(() => {
     initNotifs();
-    const tick = () => { if (document.visibilityState === "visible") refreshNotifs(); };
-    const interval = setInterval(tick, 45000);
-    document.addEventListener("visibilitychange", tick);
-    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", tick); };
+    const interval = setInterval(() => { refreshNotifs(); }, 45000);
+    const onVisible = () => { if (document.visibilityState === "visible") refreshNotifs(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
   }, [initNotifs, refreshNotifs]);
 
   // Secondary sidebar is 240px; primary is 72px
