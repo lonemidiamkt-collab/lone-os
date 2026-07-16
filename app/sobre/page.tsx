@@ -10,7 +10,7 @@ import NewPlatformUpdateModal from "@/components/NewPlatformUpdateModal";
 import {
   Brain, Users, TrendingUp, Instagram, Palette, FileText, Megaphone, Zap, Lock,
   Settings, Printer, Sparkles, ChevronDown, ChevronUp, Rocket, Package,
-  GitBranch, Lightbulb, HelpCircle, PlayCircle, Plus, RefreshCw,
+  GitBranch, Lightbulb, HelpCircle, PlayCircle, Plus, RefreshCw, ClipboardCheck,
 } from "lucide-react";
 
 interface PlatformUpdate {
@@ -577,6 +577,34 @@ const MODULES: Module[] = [
       "Abra o drawer do cliente ANTES de começar uma tarefa — é onde está o tom de voz e o que não fazer.",
       "Se o briefing estiver vazio, preencha ali mesmo — vale pra sempre.",
       "Use tarefa auto-iniciada pra bloquear tempo de trabalho em brainstorming, não só execução.",
+    ],
+  },
+  {
+    id: "tarefas",
+    icon: ClipboardCheck,
+    title: "Tarefas",
+    shortDesc: "Gerenciador de tarefas do time com cobrança automática do Lone CS",
+    whoUses: "Admin, Manager, Traffic, Social, Designer, Comercial",
+    context: "Onde qualquer pessoa do time cria e acompanha tarefas — do admin delegando pro colaborador, ou colegas se organizando entre si. Cada tarefa tem um responsável, prazo e prioridade, e aparece no painel da pessoa pra ela marcar como feita. O diferencial é o Lone CS cobrar sozinho o que está pra vencer, pra nada cair no esquecimento.",
+    howItWorks: [
+      "Em /tarefas, clique em 'Nova tarefa': escolha o colaborador, o prazo, a prioridade e (opcional) o cliente.",
+      "A tarefa aparece no board agrupada por urgência (Atrasadas, Vence hoje, Em aberto) e no 'Meu Trabalho' da pessoa.",
+      "Quem é responsável (ou quem criou) marca como feita clicando no círculo — some da lista de abertas.",
+      "Cobrança do Lone CS: lembra na véspera às 10h e no dia do prazo às 9h; se atrasar, insiste 1x/dia no grupo da equipe até concluir.",
+      "Se alguém avisar no grupo que já fez ('já fiz a arte da Imperio'), a própria IA marca a tarefa como feita.",
+    ],
+    features: [
+      "Criar tarefa pra qualquer colaborador com prazo e prioridade (cliente é opcional)",
+      "Board por urgência: Atrasadas, Vence hoje, Em aberto, Concluídas",
+      "Ligação automática pessoa ↔ painel (cada um vê as suas em Tarefas e em Meu Trabalho)",
+      "Cobrança automática pelo Lone CS na véspera (10h) e no dia (9h), com escalada diária se atrasar",
+      "IA marca a tarefa como feita quando alguém avisa no grupo que concluiu",
+      "Gestão vê tudo e filtra por colaborador; cada colaborador vê as suas e as que criou",
+    ],
+    tips: [
+      "Sempre defina o prazo — é o que liga a cobrança automática do CS.",
+      "Tarefa sem cliente serve pra coisas internas (ex.: 'revisar planejamento de agosto').",
+      "Marque como feita assim que concluir — é o que faz o CS parar de cobrar.",
     ],
   },
   {
