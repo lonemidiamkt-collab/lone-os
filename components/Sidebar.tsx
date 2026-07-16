@@ -34,6 +34,7 @@ interface PrimaryItem {
 export const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/",              icon: LayoutDashboard, label: "Dashboard",  roles: ["admin","manager","traffic","social","designer"] },
   { href: "/my-work",       icon: Inbox,           label: "Meu Trabalho", roles: ["admin","manager","traffic","social","designer"] },
+  { href: "/tarefas",       icon: ClipboardCheck,  label: "Tarefas",    roles: ["admin","manager","traffic","social","designer","comercial"] },
   { href: "/traffic",       icon: TrendingUp,      label: "Tráfego",    roles: ["admin","manager","traffic"],                    hasSecondary: true },
   { href: "/social",        icon: Instagram,       label: "Social",     roles: ["admin","manager","social","designer"],          hasSecondary: true },
   { href: "/design",        icon: Palette,         label: "Designer",   roles: ["admin","manager","designer","social"],          hasSecondary: true },

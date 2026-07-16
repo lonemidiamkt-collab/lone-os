@@ -254,8 +254,8 @@ function snakeToTask(row: Record<string, unknown>): Task {
   return {
     id: row.id as string,
     title: row.title as string,
-    clientId: row.client_id as string,
-    clientName: row.client_name as string,
+    clientId: (row.client_id as string) ?? "",
+    clientName: (row.client_name as string) ?? "",
     assignedTo: row.assigned_to as string,
     role: row.role as Task["role"],
     status: row.status as Task["status"],
@@ -263,6 +263,7 @@ function snakeToTask(row: Record<string, unknown>): Task {
     startDate: (row.start_date as string) ?? undefined,
     dueDate: (row.due_date as string) ?? undefined,
     description: (row.description as string) ?? undefined,
+    createdBy: (row.created_by as string) ?? undefined,
     workStartedAt: (row.work_started_at as string) ?? undefined,
     totalTimeSpentMs: (row.total_time_spent_ms as number) ?? 0,
   };

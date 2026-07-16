@@ -185,15 +185,16 @@ export interface CreativeAsset {
 export interface Task {
   id: string;
   title: string;
-  clientId: string;
-  clientName: string;
-  assignedTo: string;
+  clientId: string;           // "" = tarefa geral (sem cliente)
+  clientName: string;         // "" = sem cliente
+  assignedTo: string;         // NOME do colaborador (bate com currentUser / assigned_social)
   role: Role;
   status: TaskStatus;
   priority: Priority;
   startDate?: string;
   dueDate?: string;
   description?: string;
+  createdBy?: string;         // quem criou a tarefa
   attachments?: string[];
   // Timesheet Invisível
   workStartedAt?: string;          // ISO — when work started (in_progress)

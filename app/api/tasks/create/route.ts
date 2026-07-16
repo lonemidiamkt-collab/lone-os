@@ -10,22 +10,23 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
 
   const body = await req.json().catch(() => null);
-  if (!body?.title || !body?.clientId) {
-    return NextResponse.json({ error: "title e clientId são obrigatórios" }, { status: 400 });
+  if (!body?.title || !body?.assignedTo) {
+    return NextResponse.json({ error: "title e assignedTo são obrigatórios" }, { status: 400 });
   }
 
   try {
     const { data, error } = await supabaseAdmin.from("tasks").insert({
       title: body.title,
-      client_id: body.clientId,
-      client_name: body.clientName ?? "",
-      assigned_to: body.assignedTo ?? null,
-      role: body.role ?? null,
+      client_id: body.clientId || null,       // cliente é opcional (tarefa pode ser geral)
+      client_name: body.clientName || null,
+      assigned_to: body.assignedTo,
+      role: body.role ?? "social",
       status: body.status ?? "pending",
       priority: body.priority ?? "medium",
       start_date: body.startDate ?? null,
       due_date: body.dueDate ?? null,
       description: body.description ?? null,
+      created_by: body.createdBy ?? null,
     }).select("id").single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
