@@ -32,7 +32,7 @@ import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
-import { useRole } from "@/lib/context/RoleContext";
+import { useRole, USER_PROFILES } from "@/lib/context/RoleContext";
 import DriveButton from "@/components/DriveButton";
 import type { ContentCard, Task, TrafficRoutineCheck, TaskStatus, Priority, Reminder, Role } from "@/lib/types";
 import HolidaysPdfButton from "@/components/HolidaysPdfButton";
@@ -1219,6 +1219,8 @@ function QuickCreateModal({
   const [title, setTitle] = useState("");
   const [clientId, setClientId] = useState(visibleClients[0]?.id || "");
   const [sector, setSector] = useState<"social" | "designer" | "traffic">("social");
+  // Colaborador ESPECÍFICO da tarefa (pedido do Roberto): escolhe a pessoa, não só o setor.
+  const [assignee, setAssignee] = useState<string>(currentUser);
   const [priority, setPriority] = useState<Priority>("medium");
   const [description, setDescription] = useState("");
   const [briefing, setBriefing] = useState("");
@@ -1237,7 +1239,10 @@ function QuickCreateModal({
 
   const selectedClient = visibleClients.find((c) => c.id === clientId);
 
+  // Tarefa agora vai pra PESSOA escolhida (assignee). Mantém o fallback pro responsável do cliente
+  // naquele setor se por algum motivo não houver pessoa selecionada.
   const getAssignedTo = () => {
+    if (assignee) return assignee;
     if (!selectedClient) return currentUser;
     if (sector === "social") return selectedClient.assignedSocial;
     if (sector === "designer") return selectedClient.assignedDesigner;
@@ -1282,7 +1287,7 @@ function QuickCreateModal({
     // Task
     const taskData: Omit<Task, "id"> = {
       title: title.trim(),
-      clientId,
+      clientId: clientId || "",
       clientName: selectedClient?.name || "",
       assignedTo: getAssignedTo(),
       role: sector as Role,
@@ -1291,6 +1296,7 @@ function QuickCreateModal({
       startDate: date,
       dueDate: endDate,
       description: description || undefined,
+      createdBy: currentUser,
     };
 
     if (openDetails) {
@@ -1376,12 +1382,13 @@ function QuickCreateModal({
           {createType !== "reminder" && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Cliente</label>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Cliente{createType === "task" ? " (opcional)" : ""}</label>
                 <select
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
                   className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
                 >
+                  {createType === "task" && <option value="">— Sem cliente —</option>}
                   {visibleClients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -1434,6 +1441,23 @@ function QuickCreateModal({
                   </select>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Colaborador específico (só tarefa) — escolhe a PESSOA que vai executar, não só o setor.
+              É essa pessoa que recebe no painel dela e que o Lone CS cobra. */}
+          {createType === "task" && (
+            <div className="space-y-1.5">
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Colaborador</label>
+              <select
+                value={assignee}
+                onChange={(e) => setAssignee(e.target.value)}
+                className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
+              >
+                {USER_PROFILES.map((p) => (
+                  <option key={p.id} value={p.name}>{p.name}</option>
+                ))}
+              </select>
             </div>
           )}
 
@@ -1525,13 +1549,13 @@ function QuickCreateModal({
           )}
 
           {/* Routing info */}
-          {createType !== "reminder" && selectedClient && (
+          {((createType === "social" && selectedClient) || createType === "task") && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/[0.03] border border-primary/10">
               <User size={12} className="text-primary shrink-0" />
               <span className="text-[10px] text-muted-foreground">
                 {createType === "social"
-                  ? `Será enviado para o board de ${selectedClient.assignedSocial}`
-                  : `Atribuído a ${getAssignedTo()} → Board de ${sector === "social" ? "Social" : sector === "designer" ? "Design" : "Tráfego"}`
+                  ? `Será enviado para o board de ${selectedClient?.assignedSocial}`
+                  : `Atribuído a ${getAssignedTo()}${selectedClient ? ` · ${selectedClient.name}` : ""} → o Lone CS cobra se tiver prazo`
                 }
               </span>
             </div>
