@@ -138,6 +138,14 @@ export default function CalendarPage() {
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  // Painel do dia é uma sidebar que, em tela estreita, empilha EMBAIXO do calendário — parecia que
+  // "não abria". Ao clicar num dia, rola o painel pra vista (só se estiver fora da tela).
+  const dayPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selectedDay && dayPanelRef.current) {
+      dayPanelRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [selectedDay]);
   const [filterTypes, setFilterTypes] = useState<EventType[]>(["content", "task", "routine", "reminder"]);
   const [filterClient, setFilterClient] = useState<string>("all");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -851,8 +859,8 @@ export default function CalendarPage() {
                               <button
                                 key={bar.taskId}
                                 onClick={(e) => { e.stopPropagation(); handleBarClick(bar); }}
-                                className={`h-[14px] flex items-center text-[9px] font-medium text-foreground truncate transition-all hover:brightness-125 ${
-                                  isDone ? "bg-lone-success-bg" : "bg-primary"
+                                className={`h-[17px] flex items-center text-[10px] font-medium truncate transition-all hover:brightness-125 ${
+                                  isDone ? "bg-lone-success-bg text-lone-success" : "bg-primary text-primary-foreground"
                                 } ${isStart ? "rounded-l-sm pl-1" : "pl-0.5"} ${isEnd ? "rounded-r-sm pr-1" : "pr-0"}`}
                                 title={`${bar.title} — ${bar.clientName} (${bar.assignedTo})`}
                               >
@@ -879,12 +887,12 @@ export default function CalendarPage() {
                               onDragStart={isDraggable ? (ev) => handleDragStart(ev, e) : undefined}
                               onDragEnd={isDraggable ? handleDragEnd : undefined}
                               onClick={(ev) => { ev.stopPropagation(); handleEventClick(e); }}
-                              className={`flex items-center gap-1 px-1 py-0.5 rounded text-[10px] truncate text-left transition-all ${isDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${
+                              className={`flex items-center gap-1 px-1.5 py-1 rounded-md text-[11px] truncate text-left transition-all ${isDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${
                                 isTaskDeadline
-                                  ? "bg-destructive/15 text-destructive font-bold drop-"
+                                  ? "bg-destructive/15 text-destructive font-bold"
                                   : e.type === "content" ? "bg-primary/15 text-primary" :
                                     e.type === "task" ? "bg-primary/15 text-primary" :
-                                    "bg-muted text-muted-foreground"
+                                    "bg-muted text-foreground"
                               } hover:brightness-125`}
                               title={`${e.clientName}: ${e.title}`}
                             >
@@ -910,7 +918,7 @@ export default function CalendarPage() {
         <div className="space-y-4">
           {/* Selected Day Detail */}
           {selectedDay && (
-            <div className="card animate-fade-in">
+            <div ref={dayPanelRef} className="card animate-fade-in scroll-mt-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-foreground text-sm">
                   {selectedDay} de {MONTHS[viewMonth]}
