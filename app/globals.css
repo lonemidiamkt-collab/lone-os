@@ -19,6 +19,9 @@
        Inspired by Vercel, Stripe, Linear
        Zero glow. Zero neon. Authority through restraint.
        ═══════════════════════════════════════════════════════════ */
+    /* Faz os controles NATIVOS (dropdown de <select>, date picker, scrollbar) renderizarem
+       em dark — senão o <option> fica texto escuro em fundo escuro (nomes "sumiam" no select). */
+    color-scheme: dark;
     --background: #060814;
     --foreground: #eef0f6;
 
@@ -134,6 +137,7 @@
 
   /* ─── Light theme = base / :root (next-themes injeta .dark no html) ─── */
   :root {
+    color-scheme: light;
     --background: #fafafa;
     --foreground: #18181b;
     --card: #ffffff;
@@ -267,6 +271,10 @@
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--radius); }
   button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
   :focus:not(:focus-visible) { outline: none; }
+
+  /* Opções nativas do <select> legíveis no dark (reforço além do color-scheme: alguns browsers
+     renderiam texto escuro em fundo escuro → os nomes "sumiam" na lista). */
+  html.dark select option { background-color: #0b0e1e; color: #eef0f6; }
 }
 
 /* ═══════════════════════════════════════════════════════════
