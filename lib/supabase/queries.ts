@@ -495,8 +495,12 @@ export async function updateDesignRequestDb(id: string, updates: Partial<DesignR
 // NOTIFICATIONS
 // ═══════════════════════════════════════════════════════════
 
-export async function fetchNotifications(): Promise<AppNotification[]> {
-  const { data, error } = await db.from("notifications").select("*").order("created_at", { ascending: false }).limit(50);
+// forUser = nome do colaborador logado. Retorna as GLOBAIS (target_user null) + as direcionadas A ELE.
+// Sem forUser (compat) → todas. Assim uma notificação de "nova tarefa pro Pedro" só chega ao Pedro.
+export async function fetchNotifications(forUser?: string): Promise<AppNotification[]> {
+  let q = db.from("notifications").select("*").order("created_at", { ascending: false }).limit(50);
+  if (forUser) q = q.or(`target_user.is.null,target_user.eq.${forUser}`);
+  const { data, error } = await q;
   if (error) { console.error("[DB] fetchNotifications:", error); return []; }
   return (data ?? []).map((row: Record<string, unknown>) => ({
     id: row.id as string,

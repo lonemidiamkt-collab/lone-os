@@ -1219,8 +1219,12 @@ function QuickCreateModal({
   const [title, setTitle] = useState("");
   const [clientId, setClientId] = useState(visibleClients[0]?.id || "");
   const [sector, setSector] = useState<"social" | "designer" | "traffic">("social");
-  // Colaborador ESPECÍFICO da tarefa (pedido do Roberto): escolhe a pessoa, não só o setor.
-  const [assignee, setAssignee] = useState<string>(currentUser);
+  // Colaborador(es) da tarefa: pode escolher MAIS DE UM (cria uma tarefa por pessoa). Social Media
+  // também escolhe o responsável (single) — antes vinha só do cliente.
+  const [assignees, setAssignees] = useState<string[]>([currentUser]);
+  const [socialAssignee, setSocialAssignee] = useState<string>("");
+  const toggleAssignee = (name: string) =>
+    setAssignees((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]);
   const [priority, setPriority] = useState<Priority>("medium");
   const [description, setDescription] = useState("");
   const [briefing, setBriefing] = useState("");
@@ -1242,7 +1246,7 @@ function QuickCreateModal({
   // Tarefa agora vai pra PESSOA escolhida (assignee). Mantém o fallback pro responsável do cliente
   // naquele setor se por algum motivo não houver pessoa selecionada.
   const getAssignedTo = () => {
-    if (assignee) return assignee;
+    if (assignees[0]) return assignees[0];
     if (!selectedClient) return currentUser;
     if (sector === "social") return selectedClient.assignedSocial;
     if (sector === "designer") return selectedClient.assignedDesigner;
@@ -1272,7 +1276,7 @@ function QuickCreateModal({
         title: title.trim(),
         clientId,
         clientName: selectedClient?.name || "",
-        socialMedia: selectedClient?.assignedSocial || currentUser,
+        socialMedia: socialAssignee || selectedClient?.assignedSocial || currentUser,
         status: "ideas",
         priority,
         format,
@@ -1284,12 +1288,13 @@ function QuickCreateModal({
       return;
     }
 
-    // Task
-    const taskData: Omit<Task, "id"> = {
+    // Task — cria UMA tarefa por colaborador escolhido (fallback: o do cliente/atual).
+    const alvos = assignees.length ? assignees : [getAssignedTo()];
+    const mkTask = (quem: string): Omit<Task, "id"> => ({
       title: title.trim(),
       clientId: clientId || "",
       clientName: selectedClient?.name || "",
-      assignedTo: getAssignedTo(),
+      assignedTo: quem,
       role: sector as Role,
       status: "pending",
       priority,
@@ -1297,12 +1302,12 @@ function QuickCreateModal({
       dueDate: endDate,
       description: description || undefined,
       createdBy: currentUser,
-    };
+    });
 
-    if (openDetails) {
-      onSaveAndOpen(taskData);
+    if (openDetails && alvos.length === 1) {
+      onSaveAndOpen(mkTask(alvos[0]));
     } else {
-      onCreateTask(taskData);
+      alvos.forEach((quem) => onCreateTask(mkTask(quem)));
     }
   };
 
@@ -1444,17 +1449,43 @@ function QuickCreateModal({
             </div>
           )}
 
-          {/* Colaborador específico (só tarefa) — escolhe a PESSOA que vai executar, não só o setor.
-              É essa pessoa que recebe no painel dela e que o Lone CS cobra. */}
+          {/* Colaborador(es) da tarefa — pode escolher MAIS DE UM (cria uma tarefa por pessoa). Cada
+              um recebe no painel dele e o Lone CS cobra individualmente. */}
           {createType === "task" && (
             <div className="space-y-1.5">
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Colaborador</label>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                Colaborador{assignees.length > 1 ? `es (${assignees.length})` : ""}
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {USER_PROFILES.map((p) => {
+                  const on = assignees.includes(p.name);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => toggleAssignee(p.name)}
+                      className={`px-2.5 py-1.5 rounded-lg border text-[11px] transition-all ${on ? "border-primary/50 bg-primary/15 text-primary font-medium" : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-border"}`}
+                    >
+                      {on ? "✓ " : ""}{p.name}
+                    </button>
+                  );
+                })}
+              </div>
+              {assignees.length > 1 && <p className="text-[9px] text-muted-foreground">Vai criar {assignees.length} tarefas — uma pra cada.</p>}
+            </div>
+          )}
+
+          {/* Colaborador do Social Media (responsável pelo card) — antes vinha só do cliente. */}
+          {createType === "social" && (
+            <div className="space-y-1.5">
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Responsável (social)</label>
               <select
-                value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
+                value={socialAssignee}
+                onChange={(e) => setSocialAssignee(e.target.value)}
                 className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
               >
-                {USER_PROFILES.map((p) => (
+                <option value="">{selectedClient?.assignedSocial ? `Padrão do cliente (${selectedClient.assignedSocial})` : "— Escolher —"}</option>
+                {USER_PROFILES.filter((p) => ["social", "admin", "manager"].includes(p.role)).map((p) => (
                   <option key={p.id} value={p.name}>{p.name}</option>
                 ))}
               </select>
@@ -1554,8 +1585,8 @@ function QuickCreateModal({
               <User size={12} className="text-primary shrink-0" />
               <span className="text-[10px] text-muted-foreground">
                 {createType === "social"
-                  ? `Será enviado para o board de ${selectedClient?.assignedSocial}`
-                  : `Atribuído a ${getAssignedTo()}${selectedClient ? ` · ${selectedClient.name}` : ""} → o Lone CS cobra se tiver prazo`
+                  ? `Será enviado para o board de ${socialAssignee || selectedClient?.assignedSocial}`
+                  : `Atribuído a ${assignees.length ? assignees.join(", ") : getAssignedTo()}${selectedClient ? ` · ${selectedClient.name}` : ""} → o Lone CS cobra se tiver prazo`
                 }
               </span>
             </div>

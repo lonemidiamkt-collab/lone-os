@@ -44,6 +44,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // ALERTA direcionado ao social responsável pelo card (bell + toast + notificação do SO).
+    if (body.socialMedia && body.socialMedia !== body.createdBy) {
+      const quando = body.dueDate ? ` (${String(body.dueDate).slice(8, 10)}/${String(body.dueDate).slice(5, 7)})` : "";
+      await supabaseAdmin.from("notifications").insert({
+        type: "content",
+        title: "🖼️ Novo card de conteúdo pra você",
+        body: `${body.title}${body.clientName ? ` — ${body.clientName}` : ""}${quando}`,
+        client_id: body.clientId,
+        target_user: body.socialMedia,
+      }).then(() => {}, () => {});
+    }
+
     return NextResponse.json({ id: data.id });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
