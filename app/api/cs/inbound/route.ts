@@ -293,6 +293,40 @@ async function checarSatisfacao(
   }
 }
 
+// Auto-marca uma TAREFA como feita quando alguém avisa no grupo que concluiu ("já fiz a arte da
+// Imperio"). Casa a referência com uma tarefa ABERTA — prioriza a do próprio autor e/ou o cliente
+// citado. Só marca com âncora forte (evita marcar a errada). Devolve o título marcado ou null.
+async function marcarTarefaFeita(autor: string | null | undefined, ref: string): Promise<string | null> {
+  try {
+    const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    const r = norm(ref);
+    if (r.length < 3) return null;
+    const { data } = await supabaseAdmin.from("tasks")
+      .select("id, title, client_name, assigned_to").neq("status", "done").limit(200);
+    if (!data || data.length === 0) return null;
+    const autorPrimeiro = norm(autor || "").split(" ")[0];
+    const refWords = new Set(r.split(/\W+/).filter((w) => w.length >= 4));
+    let best: { id: string; title: string; score: number } | null = null;
+    for (const t of data) {
+      const cliN = norm((t.client_name as string) || "");
+      const mine = !!autorPrimeiro && norm(t.assigned_to as string).includes(autorPrimeiro);
+      const cliInRef = cliN.length >= 3 && r.includes(cliN);
+      let overlap = 0;
+      for (const w of norm(t.title as string).split(/\W+/)) if (w.length >= 4 && refWords.has(w)) overlap++;
+      const forte = cliInRef || (mine && overlap >= 1) || overlap >= 2;
+      const score = overlap + (cliInRef ? 3 : 0) + (mine ? 1 : 0);
+      if (forte && (!best || score > best.score)) best = { id: t.id as string, title: t.title as string, score };
+    }
+    if (!best) return null;
+    await supabaseAdmin.from("tasks").update({ status: "done" }).eq("id", best.id);
+    console.log(`[CS/inbound] tarefa marcada feita via chat: "${best.title}"`);
+    return best.title;
+  } catch (e) {
+    console.error("[CS/inbound] marcarTarefaFeita erro:", e);
+    return null;
+  }
+}
+
 // Processa o papo (após o debounce): responde UMA vez, com memória curta do grupo. Roda fora do
 // ciclo do webhook (o reply sai pela Evolution), então nunca segura a resposta HTTP.
 async function responderPapo(p: {
@@ -307,11 +341,17 @@ async function responderPapo(p: {
       mensagem: p.texto, autor: p.authorName || "", contexto: snap.texto,
       descontraido: p.descontraido, historico: historico || undefined,
     });
-    if (conv.ok && conv.data?.ignorar === true && !p.chamadoDireto) {
+    // Avisaram que uma tarefa foi feita? Marca no sistema (fecha o loop da cobrança).
+    let marcada: string | null = null;
+    if (conv.ok && conv.data?.tarefa_feita) marcada = await marcarTarefaFeita(p.authorName, conv.data.tarefa_feita);
+    if (conv.ok && conv.data?.ignorar === true && !p.chamadoDireto && !marcada) {
       console.log(`[CS/inbound] conversa ignorada (não era pra Lone): "${p.texto.slice(0, 40)}"`);
       return;
     }
-    const resp = (conv.ok && conv.data?.resposta) ? conv.data.resposta : "Opa! Tô por aqui 👋 me chama que eu ajudo.";
+    const resp0 = (conv.ok && conv.data?.resposta) ? conv.data.resposta : "Opa! Tô por aqui 👋 me chama que eu ajudo.";
+    // Se marquei a tarefa e a resposta não deixou isso claro, confirmo.
+    const resp = marcada && !/marqu|marcad|feita|conclu/i.test(resp0)
+      ? `${resp0}\n\n✅ Marquei "${marcada}" como feita no sistema.` : resp0;
     await csSendGroupText(p.groupJid, resp, p.quotedMsgId || undefined);
     pushHist(p.groupJid, "Você (Lone)", resp);      // lembra o que ELA disse → não repete
     conversaAtiva.set(chaveConversa(p.groupJid, p.authorJid), Date.now());

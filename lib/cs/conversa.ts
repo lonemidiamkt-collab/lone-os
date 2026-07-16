@@ -24,10 +24,13 @@ export interface ConversaOutput {
   // Quando o time ENSINA uma regra durável sobre um cliente ("o Contele prefere gancho curto",
   // "não usa a palavra X na Farmácia") → preenche pra virar regra aprendida. Só p/ ensino REAL.
   ensino?: { cliente: string; regra: string } | null;
+  // Alguém avisou que uma TAREFA/demanda foi concluída ("já fiz a arte da Imperio", "terminei o
+  // roteiro da Nova União") → preenche com a referência (o que foi feito) pra Lone marcar no sistema.
+  tarefa_feita?: string | null;
 }
 
 const SCHEMA: Record<string, unknown> = {
-  type: "object", additionalProperties: false, required: ["resposta", "ignorar", "ensino"],
+  type: "object", additionalProperties: false, required: ["resposta", "ignorar", "ensino", "tarefa_feita"],
   properties: {
     resposta: { type: "string" },
     ignorar: { type: "boolean" },
@@ -35,6 +38,7 @@ const SCHEMA: Record<string, unknown> = {
       type: ["object", "null"], additionalProperties: false, required: ["cliente", "regra"],
       properties: { cliente: { type: "string" }, regra: { type: "string" } },
     },
+    tarefa_feita: { type: ["string", "null"] },
   },
 };
 
@@ -112,6 +116,13 @@ status/raio-x, mas o envio pro grupo do cliente é sempre disparado por um human
   curto", "não usa a palavra promoção na Farmácia", "o Léo gosta de emoji"), preencha "ensino"
   com {cliente, regra} e confirme na "resposta" ("Anotado! Vou lembrar disso 📝").
 - Se for papo, pergunta, elogio ou pedido — "ensino" = null. Não force aprendizado.
+
+# TAREFA CONCLUÍDA (campo "tarefa_feita")
+Se alguém avisar que TERMINOU/FEZ uma tarefa ou demanda ("já fiz a arte da Imperio", "terminei o
+roteiro da Nova União", "a tarefa do post do Léo tá pronta", "acabei aquela do feirão") → preencha
+"tarefa_feita" com a REFERÊNCIA em poucas palavras (o que foi feito + cliente, se citado; ex.: "arte
+da Imperio", "roteiro Nova União"). Na "resposta", confirme leve ("Boa! Vou marcar como feita ✅").
+Se NÃO for aviso de conclusão (é pedido, dúvida, papo) → tarefa_feita = null. Não invente conclusão.
 
 # É PRA VOCÊ? (campo "ignorar")
 Você agora escuta o grupo de forma mais aberta — então JULGUE se a mensagem é pra você:

@@ -71,6 +71,19 @@ function playArtChime() {
   } catch {}
 }
 
+// Notificação do SISTEMA OPERACIONAL (Web Notifications API) — aparece e TOCA mesmo com a aba em
+// segundo plano (o AudioContext é suspenso em aba inativa, por isso o som in-app não tocava fora do
+// painel). Só dispara quando a aba NÃO está em foco; com a aba ativa, o toast + chime já resolvem.
+function showOsNotification(id: string, title: string, body: string) {
+  try {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    if (typeof document !== "undefined" && !document.hidden) return; // aba ativa → não precisa
+    const n = new Notification(title, { body: body.slice(0, 160), tag: id, silent: false });
+    n.onclick = () => { try { window.focus(); } catch { /* ignore */ } n.close(); };
+  } catch { /* Notification pode falhar em contexto não seguro */ }
+}
+
 // Notificação é sobre ARTE entrando (entrega do designer / arte adicionada pelo social)?
 function ehEventoDeArte(n: AppNotification): boolean {
   if (n.type !== "content") return false;
@@ -92,6 +105,15 @@ export default function NotificationToast() {
       initialLoadRef.current = false;
     }
   }, [notifications]);
+
+  // Pede permissão de notificação do navegador na 1ª interação do usuário (policy exige gesto).
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "default") return;
+    const ask = () => { Notification.requestPermission().catch(() => {}); };
+    window.addEventListener("pointerdown", ask, { once: true });
+    return () => window.removeEventListener("pointerdown", ask);
+  }, []);
 
   // Watch for new notifications — GROUP by type
   useEffect(() => {
@@ -145,6 +167,11 @@ export default function NotificationToast() {
       playArtChime();
     } else if (newToasts.some((t) => t.isCritical)) {
       playPremiumPing();
+    }
+
+    // Aba em segundo plano → dispara notificação do SO (aparece + toca fora do painel).
+    if (typeof document !== "undefined" && document.hidden) {
+      newToasts.forEach((t) => showOsNotification(t.id, t.title, t.body));
     }
 
     setToasts((prev) => [...newToasts, ...prev].slice(0, 4));
