@@ -1738,14 +1738,21 @@ export async function POST(req: NextRequest) {
       if (cardAprov) {
         const ap = await detectarAprovacao(msg.text, (cardAprov.title as string) || clienteNome);
         if (ap.ok && ap.data?.aprovou) {
+          const nowIso = new Date().toISOString();
+          // Aprovou → marca client_approved_at E AVANÇA pra Agendado (pedido do Roberto): sai da fila
+          // de produção/aprovação e vira "pronto pra publicar". Atômico (.is null) contra corrida/retry.
           const { data: marcado } = await supabaseAdmin.from("content_cards")
-            .update({ client_approved_at: new Date().toISOString() })
+            .update({ client_approved_at: nowIso, status: "scheduled", status_changed_at: nowIso })
             .eq("id", cardAprov.id).is("client_approved_at", null).select("id");
           if (marcado && marcado.length > 0) {
             aprovacaoDetectada = cardAprov.id as string;
+            await supabaseAdmin.from("card_comments").insert({
+              card_id: cardAprov.id as string, author: "🤖 CS", role: "system",
+              text: `🎉 Cliente aprovou no grupo → movi pra *Agendado*. Pode publicar! (Se não era essa arte, é só voltar o status.)`,
+            }).then(() => {}, () => {});
             const jid = internalGroupJid();
-            if (jid) await csSendGroupText(jid, `🎉 O cliente *${clienteNome}* aprovou a arte *${cardAprov.title}*! Já pode agendar.`);
-            console.log(`[CS/inbound] cliente aprovou card ${cardAprov.id}`);
+            if (jid) await csSendGroupText(jid, `🎉 O cliente *${clienteNome}* aprovou a arte *${cardAprov.title}*! Já movi pra *Agendado* — é só publicar. 🚀`);
+            console.log(`[CS/inbound] cliente aprovou card ${cardAprov.id} → Agendado`);
           }
         }
       }
