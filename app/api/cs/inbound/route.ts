@@ -1602,13 +1602,14 @@ export async function POST(req: NextRequest) {
   // "Lone…" e das perguntas operacionais, dispara em QUALQUER pergunta no grupo interno — e o próprio
   // MODELO decide se era pra ele (campo "ignorar") pra não virar tagarela. Chamado direto → sempre responde. ───
   const chamadoDireto = ehFalaComAgente(msg.text) || emConversa(msg.groupJid, msg.authorJid);
-  const parecePergunta = /\?/.test(msg.text)
-    || /^(quem|qual|quais|quando|onde|como|quanto|quantos|quantas|por ?que|o que|oq |tem |teve |cad[êe]|manda|lista|mostra|me (diz|fala|manda|mostra|explica)|sabe )/i.test(msg.text.trim());
   const noGrupoEquipe = isTeamGroup(msg.groupJid);
   const querPapo = (isInternalCmdGroup(msg.groupJid) || noGrupoEquipe) && !isTrivial(msg.text) && isOpenAIConfigured();
-  // No grupo Equipe a Lone é mais participativa (é "do time"): responde bom dia e entra na conversa,
-  // não só em pergunta direta. (O modelo ainda decide o "ignorar" pra não virar tagarela.)
-  const dispara = querPapo && (chamadoDireto || ehPerguntaProLone(msg.text) || parecePergunta || noGrupoEquipe);
+  // MENOS TAGARELA (pedido do Roberto): o CS NÃO responde qualquer mensagem do grupo. Só dispara quando
+  // (a) foi CHAMADO — "Lone…" ou conversa ativa recente — ou (b) fizeram uma PERGUNTA OPERACIONAL dele
+  // (pendências/atrasos/entrega/demanda…). Recado solto, tag pra outra pessoa, "somente o panfleto",
+  // "a arte foi entregue" → fica QUIETO. Antes qualquer msg no grupo Equipe (noGrupoEquipe) ou com "?"
+  // disparava → virava conversa à toa.
+  const dispara = querPapo && (chamadoDireto || ehPerguntaProLone(msg.text));
   if (dispara) {
     // ANTI-FRAGMENTAÇÃO: acumula os balões picados do mesmo autor e só responde quando ele para de
     // digitar (evita responder 2x a "raio x da me" + "Mr"). A resposta usa a MEMÓRIA curta do grupo.
