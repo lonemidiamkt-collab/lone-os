@@ -117,14 +117,18 @@ export function crescimentoPdfHtml(cliente: string, rowsIn: CrescimentoRow[], da
     : cresc < -3 ? `O faturamento recuou <b>${cresc}%</b> no período — vamos reverter isso juntos com as ações certas.`
     : `O faturamento ficou estável (${cresc >= 0 ? "+" : ""}${cresc}%) no período — base sólida pra escalar.`;
 
+  // Sem web-font (Montserrat): o Chrome embutia ~400KB de fonte no PDF, deixando pesado/travado pra
+  // abrir. Fonte de sistema = PDF leve (~40KB) e geração rápida (sem esperar rede). Visual mantém a
+  // pegada premium pelos pesos/cores.
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   @page { size:A4; margin:0; }
-  body { font-family:'Montserrat',-apple-system,'Segoe UI',Roboto,Arial,sans-serif; color:#EEF0F6; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif; color:#EEF0F6; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  /* Fundo SÓLIDO (não gradiente de página inteira) — gradiente A4 vira imagem pesada no PDF e trava
+     a visualização. Sólido = PDF leve e rápido de abrir. */
   .page { width:210mm; min-height:297mm; padding:18mm 15mm; position:relative; overflow:hidden;
-    background:radial-gradient(1200px 500px at 78% -8%, #1a2350 0%, rgba(26,35,80,0) 55%), linear-gradient(160deg,#0a0f24 0%,#060814 60%); page-break-after:always; }
+    background:#070b1a; page-break-after:always; }
   .page:last-child { page-break-after:auto; }
   .top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
   .brand { display:flex; align-items:center; gap:9px; }
