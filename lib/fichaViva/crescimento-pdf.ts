@@ -13,7 +13,13 @@ const BRAND = "#5A68FF";
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 const brl = (n: number) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const brlShort = (n: number) => "R$ " + (n / 1_000_000).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "M";
+// Compacto e ADAPTATIVO: >=1M vira "1,05M"; >=mil vira "159 mil"; senão o valor cheio. Assim clientes
+// abaixo de R$ 1M não viram todos "R$ 0,08M" (que perdia precisão).
+const brlShort = (n: number) => {
+  if (n >= 1_000_000) return "R$ " + (n / 1_000_000).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "M";
+  if (n >= 1_000) return "R$ " + Math.round(n / 1_000).toLocaleString("pt-BR") + " mil";
+  return "R$ " + Math.round(n).toLocaleString("pt-BR");
+};
 const inte = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 const mesLabel = (m: string) => {
   const [y, mm] = m.split("-");
@@ -213,7 +219,7 @@ export function crescimentoPdfHtml(cliente: string, rowsIn: CrescimentoRow[], da
       <div class="dq"><div class="dl">💰 Maior faturamento</div><div class="dv">${brl(maxFat.revenue)}</div><div class="ds">${mesLabel(maxFat.month)}</div></div>
       ${maxVen ? `<div class="dq"><div class="dl">🛒 Maior volume de vendas</div><div class="dv">${inte(maxVen.vendas)}</div><div class="ds">${mesLabel(maxVen.month)}</div></div>` : `<div class="dq"><div class="dl">📈 Crescimento no período</div><div class="dv">${cresc != null ? `${cresc >= 0 ? "+" : ""}${cresc}%` : "—"}</div><div class="ds">${mesCurto(primeiro?.month || "")} → ${mesCurto(ultimo?.month || "")}</div></div>`}
       ${maxTk && maxTk.ticket != null ? `<div class="dq"><div class="dl">🎯 Maior ticket médio</div><div class="dv">${brl(maxTk.ticket)}</div><div class="ds">${mesLabel(maxTk.month)}</div></div>` : ""}
-      <div class="dq"><div class="dl">🏆 Faturamento total</div><div class="dv">${brlShort(totalFat).replace("M", " mi")}</div><div class="ds">${rows.length} ${rows.length === 1 ? "mês" : "meses"} acompanhados</div></div>
+      <div class="dq"><div class="dl">🏆 Faturamento total</div><div class="dv">${brlShort(totalFat)}</div><div class="ds">${rows.length} ${rows.length === 1 ? "mês" : "meses"} acompanhados</div></div>
     </div>
     <div class="reading" style="margin-top:22px">Esses números mostram um cliente <b>em ascensão</b>. Com as ações certas de marketing e oferta, o próximo degrau de faturamento é uma consequência natural do que já está sendo construído.</div>
     <div class="foot"><span>Lone Mídia · Relatório de Crescimento</span><span>${cliente}</span></div>
