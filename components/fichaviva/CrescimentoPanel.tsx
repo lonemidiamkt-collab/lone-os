@@ -12,7 +12,7 @@
 // (trajetória real do cliente), só os gráficos/KPIs são do ano.
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { TrendingUp, TrendingDown, Minus, Loader2, Check, Link2, ChevronLeft, ChevronRight } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Loader2, Check, Link2, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import {
   BarChart, Bar, LabelList, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, ReferenceLine, Cell,
@@ -335,8 +335,40 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   })();
   const growthCls = growth == null ? "" : growth > 0 ? "bg-lone-success-bg text-lone-success" : growth < 0 ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
 
+  const [baixandoPdf, setBaixandoPdf] = useState(false);
+  const baixarPdf = useCallback(async () => {
+    setBaixandoPdf(true);
+    try {
+      const r = await authedFetch(`/api/clients/${clientId}/crescimento-pdf`);
+      if (!r.ok) { const e = await r.json().catch(() => ({})); window.alert(e.error || "Não deu pra gerar o PDF."); return; }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "crescimento.pdf"; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch { window.alert("Falha ao baixar o PDF. Verifique a conexão."); }
+    finally { setBaixandoPdf(false); }
+  }, [clientId]);
+
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* Cabeçalho do painel + baixar PDF de crescimento (relatório navy branded) */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-lone-eyebrow text-primary">Painel de Crescimento</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Faturamento, ticket e vendas do cliente — com relatório pronto pra enviar.</p>
+        </div>
+        <button
+          onClick={baixarPdf}
+          disabled={baixandoPdf}
+          title="Gera um PDF profissional do crescimento do cliente (dados reais, gráficos, identidade Lone)"
+          className="shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/85 transition-all disabled:opacity-50"
+        >
+          {baixandoPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+          {baixandoPdf ? "Gerando PDF…" : "Baixar PDF de Crescimento"}
+        </button>
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         <Kpi label={`Faturamento ${year}`} value={brl(kpis.fat)} foot={kpis.meses ? `Média ${brl(kpis.fat / kpis.meses)}/mês` : "—"} />
