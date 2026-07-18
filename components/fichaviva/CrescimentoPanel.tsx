@@ -315,6 +315,22 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
     return { tone, label: pctFmt(pct) };
   }, [allWithData]);
 
+  // Baixar PDF de crescimento — declarado ANTES do early return abaixo (ordem de hooks estável).
+  const [baixandoPdf, setBaixandoPdf] = useState(false);
+  const baixarPdf = useCallback(async () => {
+    setBaixandoPdf(true);
+    try {
+      const r = await authedFetch(`/api/clients/${clientId}/crescimento-pdf`);
+      if (!r.ok) { const e = await r.json().catch(() => ({})); window.alert(e.error || "Não deu pra gerar o PDF."); return; }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "crescimento.pdf"; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch { window.alert("Falha ao baixar o PDF. Verifique a conexão."); }
+    finally { setBaixandoPdf(false); }
+  }, [clientId]);
+
   if (loading) return <div className="flex justify-center py-10"><Loader2 size={20} className="text-primary animate-spin" /></div>;
 
   const healthColor = health.level === "up" ? "var(--lone-success)" : health.level === "risk" ? "var(--destructive)" : health.level === "ok" ? "var(--primary)" : "var(--muted-foreground)";
@@ -334,21 +350,6 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
     return { latest, pct, monthsLeft, batido: latest >= goal.value };
   })();
   const growthCls = growth == null ? "" : growth > 0 ? "bg-lone-success-bg text-lone-success" : growth < 0 ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
-
-  const [baixandoPdf, setBaixandoPdf] = useState(false);
-  const baixarPdf = useCallback(async () => {
-    setBaixandoPdf(true);
-    try {
-      const r = await authedFetch(`/api/clients/${clientId}/crescimento-pdf`);
-      if (!r.ok) { const e = await r.json().catch(() => ({})); window.alert(e.error || "Não deu pra gerar o PDF."); return; }
-      const blob = await r.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = "crescimento.pdf"; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-    } catch { window.alert("Falha ao baixar o PDF. Verifique a conexão."); }
-    finally { setBaixandoPdf(false); }
-  }, [clientId]);
 
   return (
     <div className="space-y-4 animate-fade-in">
