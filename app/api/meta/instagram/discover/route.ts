@@ -134,21 +134,42 @@ export async function POST(req: NextRequest) {
     for (const c of contasMap.values()) { const k = norm(c.igUsername); if (k && !porHandle.has(k)) porHandle.set(k, c); }
 
     const { data: clients } = await supabaseAdmin.from("clients")
-      .select("id, name, nome_fantasia, instagram_user, ig_business_account_id")
+      .select("id, name, nome_fantasia, instagram_user, ig_business_account_id, meta_ad_account_id")
       .or("active.is.null,active.eq.true");
 
-    const mapeados: { cliente: string; igUsername: string }[] = [];
-    for (const c of clients ?? []) {
-      const handle = c.instagram_user as string | null;
-      if (!handle) continue;                                   // sem @ cadastrado → não arrisca
-      const conta = porHandle.get(norm(handle));
-      if (!conta) continue;                                    // @ não está visível pro token
-      if (c.ig_business_account_id === conta.igId) continue;   // já mapeado certo
+    const mapeados: { cliente: string; igUsername: string; via: string }[] = [];
+    const mapear1 = async (id: string, nome: string, igId: string, igUser: string, pageId: string | null, via: string) => {
       const { error } = await supabaseAdmin.from("clients").update({
-        ig_business_account_id: conta.igId, fb_page_id: conta.pageId, ig_username_cache: conta.igUsername,
-      }).eq("id", c.id);
-      if (!error) mapeados.push({ cliente: (c.nome_fantasia as string) || (c.name as string), igUsername: conta.igUsername });
+        ig_business_account_id: igId, ig_username_cache: igUser, ...(pageId ? { fb_page_id: pageId } : {}),
+      }).eq("id", id);
+      if (!error) mapeados.push({ cliente: nome, igUsername: igUser, via });
+    };
+
+    // 1) VIA CONTA DE ANÚNCIO (owner, mais confiável): o IG ligado ao ad account do cliente É o dele.
+    //    GET /act_<id>/instagram_accounts. Não depende de @ nem de estar em /me/accounts ou BM.
+    for (const c of clients ?? []) {
+      const raw = c.meta_ad_account_id as string | null;
+      if (!raw) continue;
+      const actId = raw.startsWith("act_") ? raw : `act_${raw}`;
+      const j = await graphGet(`${GRAPH}/${actId}/instagram_accounts?fields=id,username,followers_count&access_token=${token}`);
+      const ig = (j.data ?? [])[0] as { id?: string; username?: string } | undefined;
+      if (ig?.id && c.ig_business_account_id !== ig.id) {
+        await mapear1(c.id as string, (c.nome_fantasia as string) || (c.name as string), ig.id, ig.username || "", null, "conta de anúncio");
+      }
     }
+
+    // 2) VIA @ (pra quem não tem ad account com IG mas tem @ cadastrado que casa com uma conta visível).
+    const jaMapeado = new Set(mapeados.map((m) => m.cliente));
+    for (const c of clients ?? []) {
+      const nome = (c.nome_fantasia as string) || (c.name as string);
+      if (jaMapeado.has(nome)) continue;
+      const handle = c.instagram_user as string | null;
+      if (!handle) continue;
+      const conta = porHandle.get(norm(handle));
+      if (!conta || c.ig_business_account_id === conta.igId) continue;
+      await mapear1(c.id as string, nome, conta.igId, conta.igUsername, conta.pageId, "@ na página");
+    }
+
     return NextResponse.json({ ok: true, mapeados, total: mapeados.length });
   }
 
