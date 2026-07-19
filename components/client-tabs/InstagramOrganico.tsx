@@ -25,6 +25,7 @@ export default function InstagramOrganico({ clientId }: { clientId: string }) {
   const [mapOpen, setMapOpen] = useState(false);
   const [contas, setContas] = useState<DiscoverConta[] | null>(null);
   const [salvando, setSalvando] = useState<string | null>(null);
+  const [automap, setAutomap] = useState<{ loading: boolean; msg: string }>({ loading: false, msg: "" });
 
   const load = () => {
     setLoading(true); setErro(null);
@@ -55,6 +56,20 @@ export default function InstagramOrganico({ clientId }: { clientId: string }) {
       body: JSON.stringify(c ? { clientId, igId: c.igId, pageId: c.pageId, igUsername: c.igUsername } : { clientId, igId: "" }),
     });
     setSalvando(null); setMapOpen(false); load();
+  };
+
+  // Auto-mapeia TODOS os clientes cujo @ cadastrado bate exatamente com uma conta visível (seguro).
+  const autoMapear = async () => {
+    setAutomap({ loading: true, msg: "" });
+    try {
+      const r = await authedFetch("/api/meta/instagram/discover", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "automap" }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) setAutomap({ loading: false, msg: d.total > 0 ? `✅ ${d.total} cliente(s) mapeado(s) automaticamente: ${d.mapeados.map((m: { cliente: string }) => m.cliente).join(", ")}` : "Nenhum novo casou pelo @ (os que faltam não têm @ cadastrado ou a conta não está visível pro token)." });
+      else setAutomap({ loading: false, msg: d.error || "Falha ao auto-mapear." });
+      load();
+    } catch { setAutomap({ loading: false, msg: "Falha de conexão." }); }
   };
 
   return (
@@ -123,7 +138,15 @@ export default function InstagramOrganico({ clientId }: { clientId: string }) {
       {mapOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMapOpen(false)}>
           <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-5 max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
-            <h4 className="font-semibold text-foreground mb-3">Mapear conta de Instagram</h4>
+            <h4 className="font-semibold text-foreground mb-1">Mapear conta de Instagram</h4>
+            <p className="text-[11px] text-muted-foreground mb-3">Scanner varre todas as Páginas e Business Managers que o token enxerga.</p>
+            {/* Auto-mapear em lote (todos que batem pelo @) */}
+            <button onClick={autoMapear} disabled={automap.loading}
+              className="w-full mb-2 flex items-center justify-center gap-2 rounded-lg bg-primary/10 border border-primary/25 text-primary text-xs font-medium py-2 hover:bg-primary/15 transition-colors disabled:opacity-50">
+              {automap.loading ? <Loader2 size={13} className="animate-spin" /> : <Link2 size={13} />}
+              {automap.loading ? "Escaneando e mapeando…" : "Auto-mapear todos que batem pelo @"}
+            </button>
+            {automap.msg && <p className="text-[11px] text-muted-foreground mb-2 leading-snug">{automap.msg}</p>}
             {!contas ? (
               <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-primary" /></div>
             ) : contas.length === 0 ? (

@@ -34,10 +34,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Este cliente ainda não tem faturamento cadastrado pra gerar o relatório." }, { status: 404 });
   }
 
+  // Meta de faturamento (opcional) — guardada em agency_settings key growth_goal:<id>. Se houver,
+  // o PDF ganha a página de projeção "caminho até a meta".
+  let goal: { value: number; month: string } | null = null;
+  try {
+    const { data: g } = await supabaseAdmin.from("agency_settings").select("value").eq("key", `growth_goal:${id}`).maybeSingle();
+    if (g?.value) goal = JSON.parse(g.value as string);
+  } catch { goal = null; }
+
   const nome = (client.nome_fantasia as string) || (client.name as string);
   const dataLabel = new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "America/Sao_Paulo" });
   const logo = await loadLoneLogo();
-  const html = crescimentoPdfHtml(nome, rows, dataLabel, logo);
+  const html = crescimentoPdfHtml(nome, rows, dataLabel, logo, goal);
 
   const pdf = await htmlToPdf(html);
   if (!pdf.ok || !pdf.buffer) return NextResponse.json({ error: pdf.error ?? "Falha ao gerar PDF" }, { status: 502 });

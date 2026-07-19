@@ -71,7 +71,32 @@ function lineChart(rows: CrescimentoRow[]): string {
     <path d="${area}" fill="url(#la)"/><path d="${line}" fill="none" stroke="${BRAND}" stroke-width="2.5" stroke-linejoin="round"/>${dots}</svg>`;
 }
 
-export function crescimentoPdfHtml(cliente: string, rowsIn: CrescimentoRow[], dataLabel: string, logoDataUri: string): string {
+export interface MetaCrescimento { value: number; month: string } // faturamento-alvo/mês até "YYYY-MM"
+
+// Mini gráfico de barras da projeção (média atual · último mês · meta), destacando a meta em azul.
+function metaChart(media: number, ultimo: number, alvo: number): string {
+  const W = 820, H = 250, padB = 40, padT = 30;
+  const dados = [
+    { l: "Média atual", v: media, alvo: false },
+    { l: "Último mês", v: ultimo, alvo: false },
+    { l: "Meta/mês", v: alvo, alvo: true },
+  ];
+  const max = Math.max(media, ultimo, alvo, 1);
+  const bw = 150, gap = (W - 40) / dados.length;
+  const bars = dados.map((d, i) => {
+    const h = (d.v / max) * (H - padB - padT);
+    const x = 20 + i * gap + (gap - bw) / 2;
+    const y = H - padB - h;
+    const fill = d.alvo ? "url(#mg)" : "#2a3050";
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw}" height="${h.toFixed(1)}" rx="7" fill="${fill}"${d.alvo ? "" : ' opacity="0.9"'}/>
+      <text x="${(x + bw / 2).toFixed(1)}" y="${(y - 8).toFixed(1)}" fill="${d.alvo ? "#c7ccf5" : "#9096b8"}" font-size="13" font-weight="800" text-anchor="middle">${brlShort(d.v)}</text>
+      <text x="${(x + bw / 2).toFixed(1)}" y="${(H - 14).toFixed(1)}" fill="#8b91a1" font-size="12" text-anchor="middle">${d.l}</text>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="mg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6f7cff"/><stop offset="1" stop-color="#3f4fd6"/></linearGradient></defs>${bars}</svg>`;
+}
+
+export function crescimentoPdfHtml(cliente: string, rowsIn: CrescimentoRow[], dataLabel: string, logoDataUri: string, goal?: MetaCrescimento | null): string {
   const rows = [...rowsIn].sort((a, b) => a.month.localeCompare(b.month));
   const totalFat = rows.reduce((s, r) => s + r.revenue, 0);
   const comVendas = rows.filter((r) => r.vendas != null) as (CrescimentoRow & { vendas: number })[];
@@ -116,6 +141,37 @@ export function crescimentoPdfHtml(cliente: string, rowsIn: CrescimentoRow[], da
     cresc > 3 ? `O faturamento cresceu <b>+${cresc}%</b> de ${mesCurto(primeiro.month)} a ${mesCurto(ultimo.month)} — trajetória de alta consistente.`
     : cresc < -3 ? `O faturamento recuou <b>${cresc}%</b> no período — vamos reverter isso juntos com as ações certas.`
     : `O faturamento ficou estável (${cresc >= 0 ? "+" : ""}${cresc}%) no período — base sólida pra escalar.`;
+
+  // Página de PROJEÇÃO (só se houver META cadastrada) — caminho até o alvo mensal.
+  let projecaoHtml = "";
+  if (goal && goal.value > 0 && ultimo) {
+    const alvo = goal.value;
+    const gapPct = ultimo.revenue > 0 ? Math.round((alvo / ultimo.revenue - 1) * 100) : null;
+    const metaMesLabel = mesLabel(goal.month);
+    const leituraMeta = gapPct == null ? "" :
+      gapPct <= 0 ? `A meta de <b>${brl(alvo)}/mês</b> já foi <b>alcançada</b> — o último mês (${brl(ultimo.revenue)}) já está no alvo. Bora manter o ritmo!`
+      : `Pra bater a meta de <b>${brl(alvo)}/mês</b> até ${metaMesLabel}, faltam <b>+${gapPct}%</b> sobre o último mês (${brl(ultimo.revenue)}). É um degrau alcançável com as ações certas.`;
+    // cenários de ticket (só quando há volume de vendas): quanto de ticket em cada volume p/ bater a meta.
+    let cenarios = "";
+    if (hasVendas && ultimo.vendas) {
+      const base = ultimo.vendas;
+      const vols = [base, Math.round(base * 1.1), Math.round(base * 1.2), Math.round(base * 1.3)];
+      const linhas = vols.map((v, i) => `<tr><td class="mes">${inte(v)}${i === 0 ? " <span>(atual)</span>" : ""}</td><td class="num strong">${brl(alvo / v)}</td></tr>`).join("");
+      cenarios = `<div class="card"><div class="ct">Quanto de ticket pra bater a meta</div><div class="cs">Faturamento-alvo ÷ volume de vendas = ticket necessário</div>
+        <table><thead><tr><th>Vendas / mês</th><th>Ticket p/ ${brl(alvo)}</th></tr></thead><tbody>${linhas}</tbody></table></div>`;
+    }
+    projecaoHtml = `
+  <div class="page">
+    <div class="top"><div class="brand">${logoDataUri ? `<img src="${logoDataUri}" alt="">` : `<span class="word">LONE MÍDIA</span>`}</div><div class="meta">Projeção</div></div>
+    <div class="kicker">Projeção · Meta</div>
+    <h2>O caminho até a meta</h2>
+    ${leituraMeta ? `<div class="reading">${leituraMeta}</div>` : ""}
+    <div class="card"><div class="ct">Faturamento · atual vs meta</div><div class="cs">Média do período · último mês · meta de ${brl(alvo)}/mês</div>${metaChart(mediaMes, ultimo.revenue, alvo)}</div>
+    ${cenarios}
+    <div class="reading" style="margin-top:22px">Meta é plano, não sorte: com consistência de oferta e as campanhas certas, <b>${brl(alvo)}/mês</b> deixa de ser alvo e vira o novo normal do cliente.</div>
+    <div class="foot"><span>Lone Mídia · Relatório de Crescimento</span><span>${cliente}</span></div>
+  </div>`;
+  }
 
   // Sem web-font (Montserrat): o Chrome embutia ~400KB de fonte no PDF, deixando pesado/travado pra
   // abrir. Fonte de sistema = PDF leve (~40KB) e geração rápida (sem esperar rede). Visual mantém a
@@ -228,6 +284,6 @@ export function crescimentoPdfHtml(cliente: string, rowsIn: CrescimentoRow[], da
     <div class="reading" style="margin-top:22px">Esses números mostram um cliente <b>em ascensão</b>. Com as ações certas de marketing e oferta, o próximo degrau de faturamento é uma consequência natural do que já está sendo construído.</div>
     <div class="foot"><span>Lone Mídia · Relatório de Crescimento</span><span>${cliente}</span></div>
   </div>` : ""}
-
+  ${projecaoHtml}
 </body></html>`;
 }
