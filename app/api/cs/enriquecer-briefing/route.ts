@@ -32,8 +32,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ cliente: mp.nome, fontes, rascunho: res.data });
 }
 
-// POST — grava o rascunho REVISADO como nova versão de client_briefings (is_current).
-// Human-gated: só entra aqui o que o time aprovou na UI. Versiona (não sobrescreve).
+// POST — dois modos:
+//   { clientId, materialExtra? }  → GERA o rascunho (incluindo material novo colado pelo time).
+//   { clientId, rascunho }        → SALVA o rascunho revisado como nova versão (human-gated).
 export async function POST(req: NextRequest) {
   const user = await getServerUser(req);
   if (!user?.isAdmin) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
@@ -41,7 +42,21 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const clientId = body?.clientId as string;
   const b = body?.rascunho as BriefingEstruturado | undefined;
-  if (!clientId || !b) return NextResponse.json({ error: "clientId e rascunho obrigatórios" }, { status: 400 });
+  if (!clientId) return NextResponse.json({ error: "clientId obrigatório" }, { status: 400 });
+
+  // Modo GERAR (sem rascunho): junta material (+ o novo colado) e devolve o rascunho.
+  if (!b) {
+    const mp = await coletarMateriaPrima(clientId, (body?.materialExtra as string) || undefined);
+    if (!mp) return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
+    const fontes = {
+      fixedBriefing: !!mp.fixedBriefing, campanha: !!mp.campaignBriefing, onboarding: !!mp.onboarding,
+      ficha: !!mp.ficha, notas: !!mp.notes, briefingAtual: !!mp.briefingAtual, materialNovo: !!mp.materialExtra,
+    };
+    const res = await enriquecerBriefing(mp);
+    if (!res.ok || !res.data) return NextResponse.json({ error: res.error ?? "Falha ao gerar rascunho" }, { status: 502 });
+    return NextResponse.json({ cliente: mp.nome, fontes, rascunho: res.data });
+  }
+  // Modo SALVAR (com rascunho):
 
   // próxima versão + desmarca a atual
   const { data: cur } = await supabaseAdmin.from("client_briefings")

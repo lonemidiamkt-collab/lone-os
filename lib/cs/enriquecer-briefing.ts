@@ -26,6 +26,7 @@ export interface MateriaPrimaBriefing {
   onboarding?: string;    // resumo formatado da submissão de onboarding
   ficha?: string;         // ficha do guia-legendas (voz + contato)
   briefingAtual?: string; // briefing estruturado atual, formatado (pra MELHORAR, não recomeçar)
+  materialExtra?: string; // NOVO material trazido pelo time (colado na UI) — fonte PRIORITÁRIA
 }
 
 export interface MixPilares { autoridade: number; aproximacao: number; comercial: number }
@@ -94,6 +95,9 @@ posts — então precisa ser afiado e útil, não institucional.
 # A REGRA QUE NÃO SE QUEBRA
 - FATO é só do material: contato, endereço, telefone, preço, produtos/serviços, nome — copie do
   material, NUNCA invente. Se não veio, não escreva (e liste em "campos_faltando").
+- FATOS DIVERGENTES: se o material trouxer fatos conflitantes (ex.: 2 telefones, 2 endereços),
+  NÃO escolha em silêncio. Prioridade: "Material novo trazido pelo time" > "Briefing fixo" > demais.
+  Use o de maior prioridade E sinalize a divergência em "campos_faltando".
 - DIAGNÓSTICO você INFERE (é seu trabalho de estrategista): desejos, objeções, crença atual→desejada,
   ângulos vs. concorrência, maturidade da marca — deduza do nicho + dores + posicionamento + público.
   Isso não é inventar fato: é ler o mercado. Seja específico ao nicho, não genérico.
@@ -116,7 +120,7 @@ concreto vs. concorrente X", "depoimentos"). Não encha: só o que realmente fal
 Responda APENAS no JSON do schema.`;
 
 /** Junta a matéria-prima do cliente do banco. Server-only (supabaseAdmin). */
-export async function coletarMateriaPrima(clienteId: string): Promise<MateriaPrimaBriefing | null> {
+export async function coletarMateriaPrima(clienteId: string, materialExtra?: string): Promise<MateriaPrimaBriefing | null> {
   const { data: c } = await supabaseAdmin
     .from("clients")
     .select("name, nome_fantasia, nicho, instagram_user, fixed_briefing, campaign_briefing, notes")
@@ -174,6 +178,7 @@ export async function coletarMateriaPrima(clienteId: string): Promise<MateriaPri
     onboarding,
     ficha: fichaDoCliente(nome) || undefined,
     briefingAtual,
+    materialExtra: (materialExtra && materialExtra.trim()) ? materialExtra.trim() : undefined,
   };
 }
 
@@ -183,6 +188,7 @@ export async function enriquecerBriefing(mp: MateriaPrimaBriefing): Promise<Open
   const user =
     `Cliente: ${mp.nome}${mp.nicho ? ` · Nicho: ${mp.nicho}` : ""}${mp.instagramUser ? ` · @${mp.instagramUser}` : ""}\n\n` +
     `Material disponível (use SÓ isto como fato):\n\n` +
+    bloco("⭐ Material novo trazido pelo time (FONTE PRIORITÁRIA)", mp.materialExtra) +
     bloco("Briefing fixo (marca)", mp.fixedBriefing) +
     bloco("Briefing de campanha", mp.campaignBriefing) +
     bloco("Onboarding do cliente", mp.onboarding) +

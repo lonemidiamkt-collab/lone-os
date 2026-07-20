@@ -40,11 +40,15 @@ export default function BriefingEstrategico({ clientId }: { clientId: string }) 
   const [saving, setSaving] = useState(false);
   const [fontes, setFontes] = useState<Record<string, boolean> | null>(null);
   const [msg, setMsg] = useState("");
+  const [material, setMaterial] = useState("");
 
   const gerar = async () => {
     setLoading(true); setMsg("");
     try {
-      const res = await authedFetch(`/api/cs/enriquecer-briefing?clientId=${clientId}`);
+      const res = await authedFetch(`/api/cs/enriquecer-briefing`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, materialExtra: material }),
+      });
       const j = await res.json();
       if (!res.ok) setMsg(j.error || "Falhou ao gerar");
       else { setR(j.rascunho); setFontes(j.fontes); }
@@ -70,8 +74,8 @@ export default function BriefingEstrategico({ clientId }: { clientId: string }) 
     setField(k, text.split("\n").map((s) => s.trim()).filter(Boolean));
 
   const fontesLabel: Record<string, string> = {
-    fixedBriefing: "briefing fixo", campanha: "campanha", onboarding: "onboarding",
-    ficha: "ficha", notas: "notas", briefingAtual: "briefing atual",
+    materialNovo: "✦ material novo", fixedBriefing: "briefing fixo", campanha: "campanha",
+    onboarding: "onboarding", ficha: "ficha", notas: "notas", briefingAtual: "briefing atual",
   };
 
   return (
@@ -82,6 +86,12 @@ export default function BriefingEstrategico({ clientId }: { clientId: string }) 
           <p className="text-sm text-muted-foreground">Junta o material do cliente e monta o briefing com diagnóstico. Revise antes de salvar.</p>
         </div>
         <Button onClick={gerar} disabled={loading}>{loading ? "Gerando…" : r ? "Gerar de novo" : "Gerar rascunho"}</Button>
+      </div>
+
+      <div className="space-y-1">
+        <Label>Material novo do cliente <span className="text-muted-foreground">(opcional — cole aqui o briefing/infos que o cliente mandou; é fonte prioritária)</span></Label>
+        <Textarea value={material} onChange={(e) => setMaterial(e.target.value)} rows={3}
+          placeholder="Cole aqui o material novo trazido do cliente. A IA prioriza isto sobre o que já está no sistema." />
       </div>
 
       {fontes && (
