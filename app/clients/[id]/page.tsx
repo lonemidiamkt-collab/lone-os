@@ -43,6 +43,7 @@ import EditClientModal from "@/components/EditClientModal";
 import dynamic from "next/dynamic";
 import DadosTab from "@/components/client-tabs/DadosTab";
 import BriefingEstrategico from "@/components/client-tabs/BriefingEstrategico";
+import CalendarioEstrategico from "@/components/client-tabs/CalendarioEstrategico";
 import CrescimentoTab from "@/components/fichaviva/CrescimentoTab";
 import AIAuditsTab from "@/components/client-tabs/AIAuditsTab";
 import ClientNPS from "@/components/sector/ClientNPS";
@@ -728,6 +729,7 @@ export default function ClientDetailPage() {
           {activeTab === "briefing" && (
             <div className="space-y-4">
               {isAdmin && <BriefingEstrategico clientId={clientId} />}
+              {(isAdmin || role === "social") && <CalendarioEstrategico clientId={clientId} />}
               <BriefingTab clientId={clientId} />
               <ClientCsRules clientId={clientId} />
             </div>

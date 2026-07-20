@@ -45,6 +45,8 @@ export async function criarCardDemanda(opts: {
   dueDate?: string | null;
   /** Se é ajuste_arte de uma arte JÁ existente: roteia a correção pro card em vez de criar novo. */
   ajusteCardId?: string | null;
+  /** Decisão estratégica (Fase 3): grava pilar/objetivo/ângulo/por que agora no card (loop de aprendizado). */
+  decisao?: { pilar?: string; objetivo?: string; posicao_funil?: string; angulo?: string; dor_alvo?: string; por_que_agora?: string } | null;
 }): Promise<string | null> {
   // Edição de arte existente: não abre card novo — aplica o ajuste no card que o cliente está corrigindo.
   if (opts.tipo === "ajuste_arte" && opts.ajusteCardId) {
@@ -68,6 +70,11 @@ export async function criarCardDemanda(opts: {
       requested_by_traffic: pilot ? "🤖 Agente CS (teste)" : "🤖 Agente CS",
       status_changed_at: new Date().toISOString(),
       column_entered_at: { ideas: new Date().toISOString() },
+      ...(opts.decisao ? {
+        pilar: opts.decisao.pilar ?? null, objetivo: opts.decisao.objetivo ?? null,
+        posicao_funil: opts.decisao.posicao_funil ?? null, angulo: opts.decisao.angulo ?? null,
+        dor_alvo: opts.decisao.dor_alvo ?? null, por_que_agora: opts.decisao.por_que_agora ?? null,
+      } : {}),
     })
     .select("id")
     .maybeSingle();

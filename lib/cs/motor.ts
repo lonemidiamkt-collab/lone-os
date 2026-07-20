@@ -4,8 +4,8 @@
 // Preview-first: planejarPeriodo devolve o plano; persistir cards/plano é o passo seguinte.
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
-import { NUCLEO_PLANEJAMENTO } from "@/lib/cs/estrategista";
-import { ESTRUTURAS_FORMATO } from "@/lib/cs/bibliotecas";
+import { NUCLEO_PLANEJAMENTO, NUCLEO_CONTEUDO } from "@/lib/cs/estrategista";
+import { ESTRUTURAS_FORMATO, estruturaDoFormato } from "@/lib/cs/bibliotecas";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { coletarMateriaPrima, enriquecerBriefing } from "@/lib/cs/enriquecer-briefing";
 import type {
@@ -167,4 +167,50 @@ export async function planejarPeriodo(clienteId: string, periodo: string, datas:
   }));
 
   return { ok: true, nome, plano: { diagnostico: diag, objetivo, decisoes } };
+}
+
+// ── Estágio 4 — EXECUÇÃO (decisão → peça final) ──────────────────────────────
+// Cada decisão vira a peça pronta: gancho, apoio, CTA, legenda e orientação de design (com
+// variação visual). Os geradores herdam o núcleo estrategista (Fase 1). Isto alimenta o card.
+export interface PecaFinal {
+  data: string; formato: string; titulo: string;
+  gancho: string; apoio: string; cta: string; legenda: string; sugestao_design: string;
+}
+
+const PECA_SCHEMA: Record<string, unknown> = {
+  type: "object", additionalProperties: false,
+  required: ["titulo", "gancho", "apoio", "cta", "legenda", "sugestao_design"],
+  properties: {
+    titulo: { type: "string" }, gancho: { type: "string" }, apoio: { type: "string" },
+    cta: { type: "string" }, legenda: { type: "string" }, sugestao_design: { type: "string" },
+  },
+};
+
+export async function executarDecisao(nome: string, diag: DiagnosticoEstrategico, dec: DecisaoDeConteudo): Promise<OpenAiResult<PecaFinal> & { peca?: PecaFinal }> {
+  const system = `${NUCLEO_CONTEUDO}
+
+${estruturaDoFormato(dec.formato) || ""}
+
+Você EXECUTA uma peça JÁ DECIDIDA — não decida de novo, entregue. A decisão manda no assunto, no
+objetivo e no ângulo; você escreve a peça afiada. Entregue: gancho (1ª linha que para o scroll — dor/
+pergunta/benefício, nunca "Somos"/nome no gancho), apoio (o conteúdo/benefício específico), CTA única,
+legenda pronta (no tom da marca; se souber o contato do cliente, feche com ele), e sugestao_design
+(orientação pro designer executar sem perguntar — inclua a VARIAÇÃO visual, principalmente se carrossel).
+Use só o que está na decisão/diagnóstico; não invente preço/oferta. Responda só no JSON.`;
+  const user = `Cliente: ${nome}\nFormato: ${dec.formato} · Pilar: ${dec.pilar} · Objetivo: ${dec.objetivo} · Funil: ${dec.posicaoFunil}\n` +
+    `Tema: ${dec.tema}\nÂngulo (a ideia central): ${dec.angulo}\nDor-alvo: ${dec.dorAlvo}\n` +
+    (dec.objecaoAlvo ? `Objeção a quebrar: ${dec.objecaoAlvo}\n` : "") +
+    `Por que agora: ${dec.porQueAgora}\n\nContexto do cliente:\n` +
+    `Crença a mudar: ${diag.crencaAtual} → ${diag.crencaDesejada}\n` +
+    (diag.diferenciais.length ? `Diferenciais: ${diag.diferenciais.join("; ")}\n` : "") +
+    `\nEscreva a peça.`;
+  const res = await chatJson<PecaFinal>({ model: MODEL, system, user, schema: PECA_SCHEMA, schemaName: "cs_peca_final", maxTokens: 1200, temperature: 0.6 });
+  const peca = res.ok && res.data ? { ...res.data, data: dec.data, formato: dec.formato } : undefined;
+  return { ...res, peca };
+}
+
+/** Executa todas as decisões do plano (em paralelo). Retorna as peças na ordem das decisões. */
+export async function executarPlano(nome: string, diag: DiagnosticoEstrategico, decisoes: DecisaoDeConteudo[]): Promise<PecaFinal[]> {
+  const rs = await Promise.all(decisoes.map((d) => executarDecisao(nome, diag, d)));
+  return rs.map((r) => r.peca).filter((p): p is PecaFinal => !!p);
 }
