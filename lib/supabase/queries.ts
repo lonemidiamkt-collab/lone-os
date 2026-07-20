@@ -548,15 +548,16 @@ export async function fetchNotifications(forUser?: string): Promise<AppNotificat
     title: row.title as string,
     body: (row.body as string) ?? "",
     clientId: (row.client_id as string) ?? undefined,
+    cardId: (row.card_id as string) ?? undefined,
     read: (row.read as boolean) ?? false,
     createdAt: row.created_at as string,
   }));
 }
 
-export async function insertNotification(n: { type: string; title: string; body?: string; clientId?: string; read?: boolean }): Promise<void> {
+export async function insertNotification(n: { type: string; title: string; body?: string; clientId?: string; cardId?: string; read?: boolean }): Promise<void> {
   const { error } = await db.from("notifications").insert({
     type: n.type, title: n.title, body: n.body,
-    client_id: n.clientId, read: false,
+    client_id: n.clientId, card_id: n.cardId ?? null, read: false,
   });
   if (error) console.error("[DB] insertNotification:", error);
 }

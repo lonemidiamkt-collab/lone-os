@@ -87,6 +87,7 @@ export async function criarCardDemanda(opts: {
       title: "🤖 Nova demanda do Agente CS",
       body: `"${opts.titulo.slice(0, 60)}" (${opts.clienteNome}) já está no seu board.`,
       client_id: opts.clientId,
+      card_id: card.id,
     });
   }
   return (card?.id as string) ?? null;
@@ -117,7 +118,7 @@ export async function aplicarAjusteNoCard(opts: {
   await supabaseAdmin.from("notifications").insert({
     type: "content", title: "✏️ Ajuste na arte (Agente CS)",
     body: `"${(card.title as string) || "arte"}" (${opts.clienteNome}) — o cliente pediu ajuste. Voltou pra produção.`,
-    client_id: opts.clientId,
+    client_id: opts.clientId, card_id: opts.cardId,
   }).then(() => {}, () => {});
   return true;
 }

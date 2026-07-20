@@ -2936,7 +2936,7 @@ export default function SocialPage() {
                 })
                   .then((req) => {
                     updateContentCard(card.id, { designRequestId: req.id });
-                    pushNotification("content", "A fazer → Designer", `"${card.title}" (${card.clientName}) foi marcado como A fazer e enviado pro designer.`, card.clientId);
+                    pushNotification("content", "A fazer → Designer", `"${card.title}" (${card.clientName}) foi marcado como A fazer e enviado pro designer.`, card.clientId, card.id);
                   })
                   .catch(() => {
                     pushNotification("system", "Falha ao enviar pro designer", `Não deu pra enviar "${card.title}". Tente de novo.`, card.clientId);

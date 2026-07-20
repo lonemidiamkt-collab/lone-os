@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bell, X, CheckCheck, AlertTriangle, Activity, FileText, Settings, Clock, Trash2 } from "lucide-react";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 
@@ -26,6 +27,15 @@ export default function NotificationCenter() {
   const markAllNotificationsRead = useNotificationsStore((s) => s.markAllRead);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread">("all");
+  const router = useRouter();
+
+  // Clique na notificação: marca como lida e ABRE o alvo — card direto no board (/social?card=)
+  // ou a ficha do cliente. Sem alvo, só marca como lida.
+  const abrir = (notif: { id: string; read: boolean; cardId?: string; clientId?: string }) => {
+    if (!notif.read) markNotificationRead(notif.id);
+    const destino = notif.cardId ? `/social?card=${notif.cardId}` : notif.clientId ? `/clients/${notif.clientId}` : null;
+    if (destino) { setOpen(false); router.push(destino); }
+  };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const filtered = filter === "unread" ? notifications.filter((n) => !n.read) : notifications;
@@ -119,7 +129,7 @@ export default function NotificationCenter() {
                     return (
                       <button
                         key={notif.id}
-                        onClick={() => { if (!notif.read) markNotificationRead(notif.id); }}
+                        onClick={() => abrir(notif)}
                         className={`w-full text-left px-5 py-3 transition-all hover:bg-card/[0.02] ${
                           !notif.read ? "bg-primary/[0.015]" : ""
                         }`}

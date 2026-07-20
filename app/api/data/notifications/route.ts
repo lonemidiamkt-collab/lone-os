@@ -31,14 +31,14 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { action, id, type, title, body: msgBody, clientId } = body;
+  const { action, id, type, title, body: msgBody, clientId, cardId } = body;
 
   if (action === "markRead") {
     await db.markNotificationReadDb(id);
   } else if (action === "markAllRead") {
     await db.markAllNotificationsReadDb();
   } else {
-    await db.insertNotification({ type, title, body: msgBody, clientId, read: false });
+    await db.insertNotification({ type, title, body: msgBody, clientId, cardId, read: false });
   }
 
   return NextResponse.json({ ok: true });

@@ -80,7 +80,9 @@ const SCHEMA: Record<string, unknown> = {
       required: ["autoridade", "aproximacao", "comercial"],
       properties: { autoridade: { type: "number" }, aproximacao: { type: "number" }, comercial: { type: "number" } },
     },
-    ganchos: arr, ctas: arr, tom_voz: { type: "string" }, pessoa_verbal: { type: "string" },
+    ganchos: arr, ctas: arr,
+    tom_voz: { type: "string", enum: ["formal", "informal", "divertido", "tecnico", "misto"] },
+    pessoa_verbal: { type: "string", enum: ["voce", "voces", "tu", "a_gente"] },
     palavras_proibidas: arr, concorrentes_evitar_mencionar: arr, hashtags_padrao: arr,
     contato: { type: "string" }, observacoes_estrategicas: { type: "string" }, campos_faltando: arr,
   },
@@ -110,6 +112,8 @@ posts — então precisa ser afiado e útil, não institucional.
 - maturidade_marca: nova / em_crescimento / consolidada (tempo de mercado, presença).
 - mix_pilares: proporção-alvo autoridade/aproximacao/comercial somando 100, ajustada à maturidade e ao
   objetivo (marca nova ou que quer lead → mais autoridade+comercial; consolidada de relacionamento → mais aproximação).
+- tom_voz: escolha UMA categoria (formal / informal / divertido / tecnico / misto) — nuances vão em
+  observacoes_estrategicas. pessoa_verbal: voce / voces / tu / a_gente.
 - contato: monte a linha de contato final (endereço/telefone/WhatsApp) SÓ com o que veio no material.
 - Se já existe um briefing atual, MELHORE-O: mantenha o que está bom, preencha lacunas, eleve ao estratégico.
 

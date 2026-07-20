@@ -12,7 +12,7 @@ interface NotificationsState {
   refresh: () => Promise<void>;
   subscribeRealtime: () => () => void;
 
-  push: (type: NotificationType, title: string, body: string, clientId?: string) => Promise<void>;
+  push: (type: NotificationType, title: string, body: string, clientId?: string, cardId?: string) => Promise<void>;
   markRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
 }
@@ -69,6 +69,7 @@ export const useNotificationsStore = create<NotificationsState>()(
               title: row.title as string,
               body: (row.body as string) ?? "",
               clientId: row.client_id as string | undefined,
+              cardId: row.card_id as string | undefined,
               read: Boolean(row.read),
               createdAt: row.created_at as string,
             };
@@ -91,7 +92,7 @@ export const useNotificationsStore = create<NotificationsState>()(
         return () => { supabase.removeChannel(channel); };
       },
 
-      push: async (type, title, body, clientId) => {
+      push: async (type, title, body, clientId, cardId) => {
         const tempId = `temp-notif-${Date.now()}`;
         const optimistic: AppNotification = {
           id: tempId,
@@ -99,6 +100,7 @@ export const useNotificationsStore = create<NotificationsState>()(
           title,
           body,
           clientId,
+          cardId,
           read: false,
           createdAt: new Date().toISOString(),
         };
@@ -107,7 +109,7 @@ export const useNotificationsStore = create<NotificationsState>()(
           const res = await authedFetch("/api/data/notifications", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type, title, body, clientId }),
+            body: JSON.stringify({ type, title, body, clientId, cardId }),
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
         } catch {

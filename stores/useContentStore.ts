@@ -225,7 +225,7 @@ export const useContentStore = create<ContentState>()(
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             if (card) {
               import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
-                useNotificationsStore.getState().push("content", "Conteúdo aprovado", `"${card.title}" de ${card.clientName} foi aprovado por ${reviewer}. Pronto para agendamento.`, card.clientId);
+                useNotificationsStore.getState().push("content", "Conteúdo aprovado", `"${card.title}" de ${card.clientName} foi aprovado por ${reviewer}. Pronto para agendamento.`, card.clientId, card.id);
               });
             }
           })

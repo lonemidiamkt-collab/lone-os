@@ -992,19 +992,20 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   );
 
   const pushNotification = useCallback(
-    (type: NotificationType, title: string, body: string, clientId?: string) => {
+    (type: NotificationType, title: string, body: string, clientId?: string, cardId?: string) => {
       const notif: AppNotification = {
         id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
         type,
         title,
         body,
         clientId,
+        cardId,
         read: false,
         createdAt: new Date().toISOString(),
       };
       setNotifications((prev) => [notif, ...prev]);
       // Persist to DB
-      db.insertNotification({ type, title, body, clientId }).catch(() => {});
+      db.insertNotification({ type, title, body, clientId, cardId }).catch(() => {});
     },
     []
   );
@@ -2019,7 +2020,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setContentCards((prev) => {
         const card = prev.find((c) => c.id === cardId);
         if (card) {
-          pushNotification("content", "Conteúdo aprovado", `"${card.title}" de ${card.clientName} foi aprovado por ${reviewer}. Pronto para agendamento.`, card.clientId);
+          pushNotification("content", "Conteúdo aprovado", `"${card.title}" de ${card.clientName} foi aprovado por ${reviewer}. Pronto para agendamento.`, card.clientId, card.id);
         }
         return prev.map((c) => c.id === cardId ? { ...c, status: "scheduled" as const, statusChangedAt: new Date().toISOString() } : c);
       });

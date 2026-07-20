@@ -551,6 +551,7 @@ export interface AppNotification {
   title: string;
   body: string;
   clientId?: string;
+  cardId?: string; // se a notificação é sobre um card, o clique abre /social?card=<cardId>
   read: boolean;
   createdAt: string; // ISO
 }
