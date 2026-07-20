@@ -832,7 +832,7 @@ export async function POST(req: NextRequest) {
 
   // ─── Agente "Lone": pedido de CALENDÁRIO ("Lone, monta o calendário mensal do X") ───
   // Gera o calendário estratégico e manda o PDF no grupo. Geração é longa → ack + background.
-  if (!demandaDaSugestao && isInternalCmdGroup(msg.groupJid) && ehPedidoCalendario(msg.text)) {
+  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehPedidoCalendario(msg.text)) {
     const quemCal = msg.authorName || "";
     if (!isOpenAIConfigured()) {
       await csSendGroupText(msg.groupJid, "Tô sem acesso à IA agora pra montar o calendário 😕 já já volto.");
