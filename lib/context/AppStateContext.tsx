@@ -627,7 +627,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           db.fetchCrisisNotes(),
           db.fetchNotifications(),
           db.fetchQuinzReports(),
-          db.fetchClientAccess(),
+          // SEGURANÇA: NÃO busca client_access no client (RLS libera authenticated → todo logado, até
+          // designer, recebia as senhas planas dos clientes). A aba Acessos usa o caminho GATED
+          // (useOperationalStore → /api/data/operational com canSeeCofre, service role). Aqui fica vazio.
+          Promise.resolve({} as Record<string, import("@/lib/types").ClientAccess>),
           db.fetchTrafficReports(),
           db.fetchTrafficRoutineChecks(),
           db.fetchSocialReports(),

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerUser } from "@/lib/supabase/auth-server";
 
 export async function POST(req: NextRequest) {
+  // SEGURANÇA: só admin logado pode trocar token (usa META_APP_SECRET p/ estender p/ 60d).
+  // Sem gate, virava um oráculo aberto de extensão de token com o segredo do app.
+  const user = await getServerUser(req);
+  if (!user?.isAdmin) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
   const { short_lived_token } = await req.json();
 
   if (!short_lived_token) {
