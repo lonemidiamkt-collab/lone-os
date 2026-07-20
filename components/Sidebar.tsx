@@ -7,7 +7,7 @@ import {
   MessageCircle, Calendar, LogOut, Sun, Moon,
   ClipboardCheck, BarChart2, Megaphone, Brain, FileText,
   ChevronLeft, Activity, Layers, AlertTriangle, Settings,
-  Users2, Globe, Target, Inbox, ShieldCheck, ShieldAlert, Package, Zap, PanelLeftClose, PanelLeft, Thermometer, Bot, Handshake, CalendarClock,
+  Users2, Globe, Target, Inbox, ShieldCheck, ShieldAlert, Package, Zap, PanelLeftClose, PanelLeft, Thermometer, Bot, Handshake, CalendarClock, HeartPulse,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -43,6 +43,7 @@ export const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/crm",           icon: Handshake,       label: "Comercial",  roles: ["admin","manager","comercial"], hasSecondary: true },
   { href: "/contratos",     icon: FileText,        label: "Contratos",  roles: ["admin","manager"] },
   { href: "/churn",         icon: Thermometer,     label: "Termômetro",  roles: ["admin","manager"] },
+  { href: "/jornada",       icon: HeartPulse,      label: "Jornada CS",  roles: ["admin","manager","social"] },
   { href: "/carteira",      icon: Layers,          label: "Carteira",    roles: ["admin","manager"] },
   { href: "/defesa",        icon: ShieldAlert,     label: "Defesa Ativa",roles: ["admin","manager","traffic"] },
   { href: "/calendar",      icon: Calendar,        label: "Calendário", roles: ["admin","manager","traffic","social","designer"] },
