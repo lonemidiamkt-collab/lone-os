@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 
-interface Bloco { rotulo: string; titulo: string; subtitulo: string; topicos: string[]; imagem: string; texto: string }
-interface Peca { data: string; formato: string; titulo: string; subtitulo: string; objetivo_label: string; duracao: string; blocos: Bloco[]; cta: string; legenda: string }
+interface Bloco { rotulo: string; objetivo: string; headline: string; subheadline: string; direcao_arte: string; topicos: string[] }
+interface Peca { data: string; formato: string; titulo: string; objetivo_peca: string; narrativa: string; conceito_visual: string; duracao: string; blocos: Bloco[]; cta: string; legenda: string }
 interface Decisao { data: string; formato: string; pilar: string; objetivo: string; posicaoFunil: string; tema: string; angulo: string; dorAlvo: string; objecaoAlvo?: string; porQueAgora: string }
 interface Objetivo { objetivoPrincipal: string; narrativa: string; mixPilares: { autoridade: number; aproximacao: number; comercial: number } }
 interface Plano { diagnostico: unknown; objetivo: Objetivo; decisoes: Decisao[] }
@@ -132,16 +132,18 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
                   {d && <span className="rounded px-1.5 py-0.5 bg-muted">funil: {d.posicaoFunil}</span>}
                 </div>
                 <p className="font-medium">{p.titulo}{p.duracao ? ` · ${p.duracao}` : ""}</p>
-                {p.subtitulo && <p className="text-sm text-muted-foreground">{p.subtitulo}</p>}
+                {p.objetivo_peca && <p className="text-sm text-muted-foreground">🎯 {p.objetivo_peca}</p>}
+                {p.narrativa && <p className="text-xs text-muted-foreground">📐 {p.narrativa}</p>}
+                {p.conceito_visual && <p className="text-xs text-muted-foreground">🎨 {p.conceito_visual}</p>}
                 <div className="space-y-2">
                   {p.blocos?.map((b, bi) => (
-                    <div key={bi} className="rounded-md bg-muted/40 p-2 text-sm">
+                    <div key={bi} className="rounded-md bg-muted/40 p-2 text-sm space-y-1">
                       <div className="text-[11px] font-semibold text-primary tracking-wide">{b.rotulo}</div>
-                      {b.titulo && <div className="font-medium">{b.titulo}</div>}
-                      {b.subtitulo && <div className="text-muted-foreground">{b.subtitulo}</div>}
+                      {b.objetivo && <div className="text-xs text-muted-foreground"><span className="uppercase text-[10px]">objetivo</span> {b.objetivo}</div>}
+                      {b.headline && <div className="font-medium">{b.headline}</div>}
+                      {b.subheadline && <div className="text-muted-foreground">{b.subheadline}</div>}
                       {b.topicos?.length > 0 && <ul className="list-disc list-inside text-muted-foreground">{b.topicos.map((t, ti) => <li key={ti}>{t}</li>)}</ul>}
-                      {b.imagem && <div className="text-xs italic text-muted-foreground mt-1">🖼 {b.imagem}</div>}
-                      {b.texto && <div className="text-xs mt-1">{b.texto}</div>}
+                      {b.direcao_arte && <div className="text-xs mt-1 rounded bg-primary/5 p-1.5"><span className="text-primary text-[10px] font-semibold">🎨 DIREÇÃO DE ARTE</span> {b.direcao_arte}</div>}
                     </div>
                   ))}
                 </div>

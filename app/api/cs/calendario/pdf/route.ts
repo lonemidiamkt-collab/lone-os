@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   const resumo = pecas.map((p) => `
     <div class="rrow">
       <div class="rdia">${esc(diaCurto(p.data))}</div>
-      <div class="rmid"><div class="rt">${esc(p.titulo)}</div><div class="rs">${esc(p.objetivo_label)}</div></div>
+      <div class="rmid"><div class="rt">${esc(p.titulo)}</div><div class="rs">${esc((p.objetivo_peca || "").slice(0, 80))}</div></div>
       <div class="rfmt">${esc(p.formato)}${p.duracao ? ` · ${esc(p.duracao)}` : ""}</div>
     </div>`).join("");
 
@@ -61,17 +61,18 @@ export async function POST(req: NextRequest) {
     const blocos = p.blocos.map((b, bi) => `
       <div class="bloco">
         <div class="brot"><span class="bnum">${bi + 1}</span>${esc(b.rotulo || "ARTE")}</div>
-        ${b.titulo ? `<div class="btit">${esc(b.titulo)}</div>` : ""}
-        ${b.subtitulo ? `<div class="bsub">${esc(b.subtitulo)}</div>` : ""}
+        ${b.objetivo ? `<div class="bfield"><span>OBJETIVO</span> ${esc(b.objetivo)}</div>` : ""}
+        ${b.headline ? `<div class="btit">${esc(b.headline)}</div>` : ""}
+        ${b.subheadline ? `<div class="bsub">${esc(b.subheadline)}</div>` : ""}
         ${b.topicos?.length ? `<ul class="btop">${b.topicos.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
-        ${b.imagem ? `<div class="bimg"><span>IMAGEM</span> ${esc(b.imagem)}</div>` : ""}
-        ${b.texto ? `<div class="btxt">${esc(b.texto)}</div>` : ""}
+        ${b.direcao_arte ? `<div class="bdir"><span>🎨 DIREÇÃO DE ARTE</span> ${esc(b.direcao_arte)}</div>` : ""}
       </div>`).join("");
     return `<section class="page">
       <div class="ph"><div>${logoImg}</div><div class="ph-r">CALENDÁRIO DE CONTEÚDO<br/><b>${cliente} · ${esc(diaSemana(p.data))}</b></div></div>
       <div class="plabel">${esc(diaSemana(p.data).toUpperCase())} · ${esc(String(p.formato).toUpperCase())}</div>
       <h2>${esc(p.titulo)}</h2>
-      <div class="ppills"><span>Formato: ${esc(p.formato)}</span><span>Objetivo: ${esc(p.objetivo_label)}</span>${p.duracao ? `<span>Duração: ${esc(p.duracao)}</span>` : ""}</div>
+      <div class="ppills"><span>Formato: ${esc(p.formato)}</span>${p.duracao ? `<span>Duração: ${esc(p.duracao)}</span>` : ""}<span>${esc(p.blocos.length)} arte(s)</span></div>
+      ${p.conceito_visual ? `<div class="conceito"><span>CONCEITO</span> ${esc(p.conceito_visual)}</div>` : ""}
       ${blocos}
       <div class="cta"><div class="cta-h">📣 CTA</div>${esc(p.cta)}</div>
       <div class="leg"><div class="leg-h">✍️ LEGENDA</div>${esc(p.legenda)}</div>
@@ -109,8 +110,9 @@ export async function POST(req: NextRequest) {
     .btit { font-weight: 700; font-size: 16px; margin: 8px 0 4px; border-left: 3px solid #4f7cff; padding-left: 10px; }
     .bsub { color: #b9c6e2; font-size: 13px; margin: 2px 0; }
     .btop { list-style: none; margin: 8px 0 2px; } .btop li { font-size: 13px; padding: 3px 0 3px 20px; position: relative; color: #dbe4f5; } .btop li:before { content: "✔"; color: #4f7cff; position: absolute; left: 0; }
-    .bimg { font-size: 12px; color: #93a3c0; font-style: italic; margin-top: 6px; } .bimg span { font-style: normal; color: #6b7c9e; letter-spacing: 1px; font-size: 10px; margin-right: 4px; }
-    .btxt { font-size: 13px; color: #cdd8ee; margin-top: 6px; }
+    .bfield { font-size: 12px; color: #93a3c0; margin: 2px 0 6px; } .bfield span { color: #6b7c9e; letter-spacing: 1px; font-size: 10px; margin-right: 4px; }
+    .bdir { font-size: 12.5px; color: #cdd8ee; margin-top: 10px; background: #0c142b; border: 1px solid #1a2848; border-radius: 8px; padding: 8px 10px; } .bdir span { color: #7aa2ff; letter-spacing: .5px; font-size: 10px; margin-right: 4px; font-weight: 700; }
+    .conceito { font-size: 12.5px; color: #b9c6e2; background: #101830; border: 1px solid #1e2b48; border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; } .conceito span { color: #7aa2ff; letter-spacing: 1px; font-size: 10px; margin-right: 6px; font-weight: 700; }
     .cta { border: 1px solid #2a3a5e; border-radius: 12px; padding: 14px 18px; margin: 18px 0 12px; font-size: 14px; font-weight: 600; }
     .cta-h { color: #4f7cff; font-size: 11px; letter-spacing: 1px; margin-bottom: 6px; font-weight: 700; }
     .leg { border: 1px dashed #2a3a5e; border-radius: 12px; padding: 14px 18px; font-size: 13px; color: #cdd8ee; white-space: pre-wrap; line-height: 1.55; }

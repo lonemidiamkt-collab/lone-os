@@ -42,6 +42,8 @@ Cinco estágios, cada um com entrada/saída estruturada (contrato em [`pipeline.
 
 **Execução vira executor.** Os geradores atuais (`gerarLegenda`, `gerarRoteiros`, `gerarBriefingDesign`, `gerarPautaSemanal`) deixam de decidir e passam a **executar uma `DecisaoDeConteudo`**. O núcleo estrategista continua sendo a "instrução de raciocínio" de cada estágio.
 
+**PROJETAR, não preencher slides.** A execução (`executarDecisao`) NÃO pica um texto em N artes. Ela projeta uma peça de comunicação, nesta ordem obrigatória: **objetivo da peça** (o que a pessoa deve pensar depois) → **padrão narrativo** (quebra de crença / problema→solução / comparação / lista / pergunta — ver `ARQUITETURA_CONTEUDO`) → **nº de artes que a mensagem PEDE** (menos é mais; 2 se resolve em 2) → **conceito visual** → **direção de arte por peça** (objetivo, headline, subheadline, direção de arte concreta — cena/cores/sensação). O documento serve o designer, o social E a IA. Nunca "imagem.jpg".
+
 ## 3. Quando roda o pipeline pesado (e quando não)
 
 Pipeline não pode virar peso morto. Ele roda onde a **decisão nasce**:

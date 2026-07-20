@@ -70,6 +70,20 @@ export function estruturaDoFormato(formato: string): string {
   return `# ESTRUTURA (${e.formato})\n${e.passos.map((p) => `- ${p}`).join("\n")}\nRegra: ${e.regra}`;
 }
 
+// ── Arquitetura de conteúdo — o PADRÃO NARRATIVO da peça ─────────────────────
+// O erro clássico da IA: pegar um texto e picar em slides. O certo: escolher PRIMEIRO o padrão
+// que melhor VENDE a ideia, e daí decidir quantas artes. Menos é mais — a mensagem manda o número.
+export interface PadraoNarrativo { nome: string; etapas: string[]; quando: string }
+
+export const ARQUITETURA_CONTEUDO: PadraoNarrativo[] = [
+  { nome: "Quebra de crença", etapas: ["Quebra (derruba a crença atual)", "Nova percepção"], quando: "mudar como o público enxerga algo — resolve em 2 artes" },
+  { nome: "Problema → Solução", etapas: ["Problema", "Consequência", "Solução", "CTA"], quando: "dor clara que a marca resolve" },
+  { nome: "Comparação", etapas: ["Antes", "Depois"], quando: "mostrar transformação/resultado — curto e forte" },
+  { nome: "Lista", etapas: ["Erro/ponto", "Correção", "Resumo"], quando: "educar com itens (erros, dicas) — compartilhável" },
+  { nome: "Pergunta", etapas: ["Pergunta", "Resposta", "Convite"], quando: "gerar reflexão e conversa" },
+  { nome: "Mito x Verdade", etapas: ["Mito", "Verdade", "Convite"], quando: "corrigir uma crença comum do nicho" },
+];
+
 // ── Frameworks de copy (escolher pelo objetivo da peça) ──────────────────────
 
 export interface Framework { nome: string; estrutura: string; quandoUsar: string }

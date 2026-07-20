@@ -5,7 +5,7 @@
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { NUCLEO_PLANEJAMENTO, NUCLEO_CONTEUDO } from "@/lib/cs/estrategista";
-import { ESTRUTURAS_FORMATO, estruturaDoFormato } from "@/lib/cs/bibliotecas";
+import { ESTRUTURAS_FORMATO, estruturaDoFormato, ARQUITETURA_CONTEUDO } from "@/lib/cs/bibliotecas";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { coletarMateriaPrima, enriquecerBriefing } from "@/lib/cs/enriquecer-briefing";
 import type {
@@ -175,88 +175,99 @@ export async function planejarPeriodo(clienteId: string, periodo: string, datas:
   return { ok: true, nome, plano: { diagnostico: diag, objetivo, decisoes } };
 }
 
-// ── Estágio 4 — EXECUÇÃO (decisão → peça final ESTRUTURADA) ──────────────────
-// A peça sai PRONTA pro designer, slide a slide / cena a cena (não um resumo): cada bloco tem o
-// texto real que vai na arte. Carrossel → 1 bloco por slide; reel → gancho/desenvolvimento/
-// fechamento; post → headline/subheadline/texto. Sempre CTA + legenda.
+// ── Estágio 4 — EXECUÇÃO: PROJETAR a peça (não preencher slides) ──────────────
+// O agente NÃO pica um texto em slides. Ele PROJETA uma peça de comunicação: objetivo → padrão
+// narrativo → nº de artes que a mensagem PEDE → conceito visual → DIREÇÃO DE ARTE por peça.
+// Cada arte serve o designer, o social E a IA: objetivo + headline + subheadline + direção de arte.
 export interface BlocoPeca {
-  rotulo: string;    // "ARTE 1 · CAPA", "GANCHO", "DESENVOLVIMENTO", "HEADLINE"…
-  titulo: string;    // título/fala principal do bloco (o texto que aparece)
-  subtitulo: string; // apoio (vazio se não tiver)
-  topicos: string[]; // bullets quando for lista (ex.: os 5 benefícios, os 3 erros)
-  imagem: string;    // o que aparece na imagem/cena (vazio se n/a)
-  texto: string;     // texto de apoio/rodapé do bloco (vazio se n/a)
+  rotulo: string;       // "ARTE 01", "GANCHO", "PROBLEMA"…
+  objetivo: string;     // o objetivo DESTA arte (o que ela faz na narrativa)
+  headline: string;     // o texto forte que aparece (headline / fala)
+  subheadline: string;  // apoio (vazio se n/a)
+  direcao_arte: string; // CONCEITO VISUAL: cena, cores, sensação, elementos — designer cria sem perguntar
+  topicos: string[];    // bullets só quando for lista real
 }
 export interface PecaFinal {
   data: string; formato: string;
-  titulo: string;         // tema/título geral da peça
-  subtitulo: string;      // uma linha de apoio
-  objetivo_label: string; // ex.: "autoridade e percepção"
-  duracao: string;        // reel: "40 segundos"; senão ""
+  titulo: string;          // tema da peça
+  objetivo_peca: string;   // o que a pessoa deve PENSAR/SENTIR depois de ver
+  narrativa: string;       // o padrão narrativo escolhido + por que esse nº de artes
+  conceito_visual: string; // mood/direção geral da peça
+  duracao: string;         // reel/vídeo: "40s"; senão ""
   blocos: BlocoPeca[];
   cta: string; legenda: string;
 }
 
 const BLOCO_SCHEMA = {
   type: "object", additionalProperties: false,
-  required: ["rotulo", "titulo", "subtitulo", "topicos", "imagem", "texto"],
+  required: ["rotulo", "objetivo", "headline", "subheadline", "direcao_arte", "topicos"],
   properties: {
-    rotulo: { type: "string" }, titulo: { type: "string" }, subtitulo: { type: "string" },
-    topicos: { type: "array", items: { type: "string" } }, imagem: { type: "string" }, texto: { type: "string" },
+    rotulo: { type: "string" }, objetivo: { type: "string" }, headline: { type: "string" },
+    subheadline: { type: "string" }, direcao_arte: { type: "string" }, topicos: { type: "array", items: { type: "string" } },
   },
 };
 const PECA_SCHEMA: Record<string, unknown> = {
   type: "object", additionalProperties: false,
-  required: ["titulo", "subtitulo", "objetivo_label", "duracao", "blocos", "cta", "legenda"],
+  required: ["titulo", "objetivo_peca", "narrativa", "conceito_visual", "duracao", "blocos", "cta", "legenda"],
   properties: {
-    titulo: { type: "string" }, subtitulo: { type: "string" }, objetivo_label: { type: "string" },
-    duracao: { type: "string" }, blocos: { type: "array", items: BLOCO_SCHEMA },
-    cta: { type: "string" }, legenda: { type: "string" },
+    titulo: { type: "string" }, objetivo_peca: { type: "string" }, narrativa: { type: "string" },
+    conceito_visual: { type: "string" }, duracao: { type: "string" },
+    blocos: { type: "array", items: BLOCO_SCHEMA }, cta: { type: "string" }, legenda: { type: "string" },
   },
 };
 
 export async function executarDecisao(nome: string, diag: DiagnosticoEstrategico, dec: DecisaoDeConteudo): Promise<OpenAiResult<PecaFinal> & { peca?: PecaFinal }> {
+  const padroes = ARQUITETURA_CONTEUDO.map((p) => `- ${p.nome} (${p.etapas.join(" → ")}) — ${p.quando}`).join("\n");
   const system = `${NUCLEO_CONTEUDO}
 
 ${estruturaDoFormato(dec.formato) || ""}
 
-Você EXECUTA uma peça JÁ DECIDIDA — não decida de novo, entregue. Escreva o CONTEÚDO PRONTO E
-DETALHADO, slide a slide / cena a cena (NUNCA um resumo). Monte "blocos" conforme o formato:
-- CARROSSEL: um bloco por SLIDE. Bloco 1 = CAPA (rotulo "ARTE 1 · CAPA": titulo = headline forte
-  que para o scroll, subtitulo = apoio, imagem = o que aparece). Blocos seguintes = CONTEÚDO
-  (rotulo "ARTE 2 · CONTEÚDO"…: titulo, topicos quando for lista, texto = rodapé/apoio). Escreva
-  o TEXTO REAL de cada slide. Gere de 3 a 6 slides.
-- REEL: blocos GANCHO (titulo = fala dos 0-3s), DESENVOLVIMENTO (topicos = as falas/pontos),
-  FECHAMENTO (titulo = fala final). Preencha "duracao".
-- POST: um bloco (rotulo "ARTE"): titulo = HEADLINE, subtitulo = SUBHEADLINE, texto = texto inferior.
-- STORY: um bloco por story (gancho → curiosidade → … → CTA).
-Sempre: "cta" (a chamada única) e "legenda" (pronta, no tom da marca; feche com o contato se souber).
-"objetivo_label" curto (ex.: "autoridade e percepção"). Campos sem uso = "" ou [] (não invente).
-Gancho nunca começa por "Somos"/nome da empresa. Use só o que está na decisão/diagnóstico — não
-invente preço/oferta. Responda só no JSON.`;
-  const user = `Cliente: ${nome}\nFormato: ${dec.formato} · Pilar: ${dec.pilar} · Objetivo: ${dec.objetivo} · Funil: ${dec.posicaoFunil}\n` +
+Você PROJETA uma peça de comunicação — você NÃO preenche slides nem pica um texto em partes.
+Pense como diretor criativo, NESTA ordem:
+
+1. OBJETIVO DA PEÇA: o que a pessoa deve PENSAR ou SENTIR depois de ver? (campo "objetivo_peca")
+2. PADRÃO NARRATIVO: escolha o que melhor VENDE a ideia (não o que "preenche"):
+${padroes}
+   Descreva o padrão escolhido + por que, em "narrativa".
+3. Nº DE ARTES: só o que a mensagem PEDE. MENOS É MAIS. Se resolve em 2, faça 2; não estique até 6/7
+   sem motivo. Cada arte precisa ter uma FUNÇÃO na narrativa — se não tem, corta.
+4. CONCEITO VISUAL geral da peça (mood, direção): campo "conceito_visual".
+5. DIREÇÃO DE ARTE por arte (cada "bloco"): o documento serve o DESIGNER, o social e a IA. Para
+   cada arte preencha:
+   - "objetivo": o que esta arte faz na narrativa.
+   - "headline": o texto forte que aparece na arte (fala, no caso de reel/vídeo).
+   - "subheadline": apoio (ou "").
+   - "direcao_arte": o CONCEITO VISUAL concreto — cena, quem aparece, cores, sensação, elementos
+     gráficos. O designer tem que saber o que criar SEM perguntar. NUNCA escreva "imagem.jpg".
+   - "topicos": só quando a arte é uma lista real (senão []).
+
+Regras: gancho/headline da capa nunca começa por "Somos"/nome da empresa. Use só o que está na
+decisão/diagnóstico — não invente preço/oferta/depoimento. Sempre entregue "cta" (chamada única) e
+"legenda" pronta (tom da marca; feche com o contato se souber). "duracao" só p/ reel/vídeo. Responda só no JSON.`;
+  const user = `Cliente: ${nome}\nFormato decidido: ${dec.formato} · Pilar: ${dec.pilar} · Objetivo estratégico: ${dec.objetivo} · Funil: ${dec.posicaoFunil}\n` +
     `Tema: ${dec.tema}\nÂngulo (a ideia central): ${dec.angulo}\nDor-alvo: ${dec.dorAlvo}\n` +
     (dec.objecaoAlvo ? `Objeção a quebrar: ${dec.objecaoAlvo}\n` : "") +
     `Por que agora: ${dec.porQueAgora}\n\nContexto do cliente:\n` +
     `Crença a mudar: ${diag.crencaAtual} → ${diag.crencaDesejada}\n` +
     (diag.diferenciais.length ? `Diferenciais: ${diag.diferenciais.join("; ")}\n` : "") +
-    `\nEscreva a peça completa, slide a slide.`;
-  const res = await chatJson<PecaFinal>({ model: MODEL, system, user, schema: PECA_SCHEMA, schemaName: "cs_peca_final", maxTokens: 2200, temperature: 0.6 });
+    `\nProjete a peça: objetivo → padrão narrativo → nº de artes que a mensagem pede → direção de arte de cada uma.`;
+  const res = await chatJson<PecaFinal>({ model: MODEL, system, user, schema: PECA_SCHEMA, schemaName: "cs_peca_final", maxTokens: 2400, temperature: 0.6 });
   const peca = res.ok && res.data ? { ...res.data, data: dec.data, formato: dec.formato } : undefined;
   return { ...res, peca };
 }
 
-/** Achata a peça estruturada em texto (pro briefing do card). */
+/** Achata a peça projetada em texto (pro briefing do card). */
 export function pecaParaTexto(p: PecaFinal): string {
   const blocos = p.blocos.map((b) => {
     const parts = [
-      b.rotulo ? `【${b.rotulo}】` : "", b.titulo, b.subtitulo,
+      b.rotulo ? `【${b.rotulo}】` : "", b.objetivo ? `Objetivo: ${b.objetivo}` : "",
+      b.headline ? `Headline: ${b.headline}` : "", b.subheadline ? `Subheadline: ${b.subheadline}` : "",
       b.topicos.length ? b.topicos.map((t) => `• ${t}`).join("\n") : "",
-      b.imagem ? `Imagem: ${b.imagem}` : "", b.texto,
+      b.direcao_arte ? `Direção de arte: ${b.direcao_arte}` : "",
     ].filter(Boolean);
     return parts.join("\n");
   }).join("\n\n");
-  return `${p.titulo}${p.subtitulo ? `\n${p.subtitulo}` : ""}${p.duracao ? `\n(${p.duracao})` : ""}\n\n${blocos}\n\nCTA: ${p.cta}\n\n— Legenda —\n${p.legenda}`;
+  return `${p.titulo}${p.duracao ? ` (${p.duracao})` : ""}\nObjetivo: ${p.objetivo_peca}\nNarrativa: ${p.narrativa}\nConceito visual: ${p.conceito_visual}\n\n${blocos}\n\nCTA: ${p.cta}\n\n— Legenda —\n${p.legenda}`;
 }
 
 /** Executa todas as decisões do plano, com concorrência limitada (mês pode ter ~13 peças). */
