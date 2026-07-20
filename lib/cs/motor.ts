@@ -183,7 +183,7 @@ export interface BlocoPeca {
   rotulo: string;       // "ARTE 01", "GANCHO", "PROBLEMA"…
   objetivo: string;     // o objetivo DESTA arte (o que ela faz na narrativa)
   headline: string;     // o texto forte que aparece (headline / fala)
-  subheadline: string;  // apoio (vazio se n/a)
+  corpo: string;        // o CONTEXTO desenvolvido: 2-4 frases que constroem o argumento (não um título solto)
   direcao_arte: string; // CONCEITO VISUAL: cena, cores, sensação, elementos — designer cria sem perguntar
   topicos: string[];    // bullets só quando for lista real
 }
@@ -200,10 +200,10 @@ export interface PecaFinal {
 
 const BLOCO_SCHEMA = {
   type: "object", additionalProperties: false,
-  required: ["rotulo", "objetivo", "headline", "subheadline", "direcao_arte", "topicos"],
+  required: ["rotulo", "objetivo", "headline", "corpo", "direcao_arte", "topicos"],
   properties: {
     rotulo: { type: "string" }, objetivo: { type: "string" }, headline: { type: "string" },
-    subheadline: { type: "string" }, direcao_arte: { type: "string" }, topicos: { type: "array", items: { type: "string" } },
+    corpo: { type: "string" }, direcao_arte: { type: "string" }, topicos: { type: "array", items: { type: "string" } },
   },
 };
 const PECA_SCHEMA: Record<string, unknown> = {
@@ -229,21 +229,25 @@ Pense como diretor criativo, NESTA ordem:
 2. PADRÃO NARRATIVO: escolha o que melhor VENDE a ideia (não o que "preenche"):
 ${padroes}
    Descreva o padrão escolhido + por que, em "narrativa".
-3. Nº DE ARTES: só o que a mensagem PEDE. MENOS É MAIS. Se resolve em 2, faça 2; não estique até 6/7
-   sem motivo. Cada arte precisa ter uma FUNÇÃO na narrativa — se não tem, corta.
+3. Nº DE ARTES — MENOS É MAIS (regra dura): use o MÍNIMO que a mensagem pede.
+   - Carrossel/post: 2 a 4 artes. IDEALMENTE 2-3. NÃO passe de 4. Se a ideia resolve em 2, faça 2.
+   - Reel/vídeo: 3 a 5 cenas (gancho → corpo → CTA). Não estique.
+   PROIBIDO encher com slide "resumo", "por que escolher a empresa", "sobre nós" — isso é enrolação.
+   Cada arte precisa de uma FUNÇÃO única. Se um slide seria só um título solto, JUNTE com outro.
 4. CONCEITO VISUAL geral da peça (mood, direção): campo "conceito_visual".
-5. DIREÇÃO DE ARTE por arte (cada "bloco"): o documento serve o DESIGNER, o social e a IA. Para
-   cada arte preencha:
-   - "objetivo": o que esta arte faz na narrativa.
-   - "headline": o texto forte que aparece na arte (fala, no caso de reel/vídeo).
-   - "subheadline": apoio (ou "").
-   - "direcao_arte": o CONCEITO VISUAL concreto — cena, quem aparece, cores, sensação, elementos
-     gráficos. O designer tem que saber o que criar SEM perguntar. NUNCA escreva "imagem.jpg".
+5. Para cada arte (cada "bloco") — o documento serve o DESIGNER, o social e a IA. Preencha:
+   - "objetivo": o que esta arte faz na narrativa (1 linha).
+   - "headline": o texto forte que aparece na arte (a fala, no caso de reel/vídeo).
+   - "corpo": o CONTEXTO DESENVOLVIDO — 2 a 4 frases que constroem o argumento/persuasão. NÃO deixe
+     só um título e uma linha: aqui vai a substância que faz a arte convencer (o "porquê", o exemplo,
+     o dado, a virada). É o que hoje está faltando. Peça sem corpo = peça seca, refaça.
+   - "direcao_arte": o conceito visual concreto — cena, quem aparece, cores, sensação. Foque no que
+     CRIAR naquele dia (sem "imagem.jpg", sem ficar justificando alternativas de arte).
    - "topicos": só quando a arte é uma lista real (senão []).
 
-Regras: gancho/headline da capa nunca começa por "Somos"/nome da empresa. Use só o que está na
-decisão/diagnóstico — não invente preço/oferta/depoimento. Sempre entregue "cta" (chamada única) e
-"legenda" pronta (tom da marca; feche com o contato se souber). "duracao" só p/ reel/vídeo. Responda só no JSON.`;
+Regras: headline da capa nunca começa por "Somos"/nome da empresa. Use só o que está na decisão/
+diagnóstico — não invente preço/oferta/depoimento/número. Sempre "cta" (chamada única) e "legenda"
+pronta (tom da marca; feche com o contato se souber). "duracao" só p/ reel/vídeo. Responda só no JSON.`;
   const user = `Cliente: ${nome}\nFormato decidido: ${dec.formato} · Pilar: ${dec.pilar} · Objetivo estratégico: ${dec.objetivo} · Funil: ${dec.posicaoFunil}\n` +
     `Tema: ${dec.tema}\nÂngulo (a ideia central): ${dec.angulo}\nDor-alvo: ${dec.dorAlvo}\n` +
     (dec.objecaoAlvo ? `Objeção a quebrar: ${dec.objecaoAlvo}\n` : "") +
@@ -261,7 +265,7 @@ export function pecaParaTexto(p: PecaFinal): string {
   const blocos = p.blocos.map((b) => {
     const parts = [
       b.rotulo ? `【${b.rotulo}】` : "", b.objetivo ? `Objetivo: ${b.objetivo}` : "",
-      b.headline ? `Headline: ${b.headline}` : "", b.subheadline ? `Subheadline: ${b.subheadline}` : "",
+      b.headline ? `Headline: ${b.headline}` : "", b.corpo ? `Corpo: ${b.corpo}` : "",
       b.topicos.length ? b.topicos.map((t) => `• ${t}`).join("\n") : "",
       b.direcao_arte ? `Direção de arte: ${b.direcao_arte}` : "",
     ].filter(Boolean);

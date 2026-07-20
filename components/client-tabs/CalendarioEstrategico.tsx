@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 
-interface Bloco { rotulo: string; objetivo: string; headline: string; subheadline: string; direcao_arte: string; topicos: string[] }
+interface Bloco { rotulo: string; objetivo: string; headline: string; corpo: string; direcao_arte: string; topicos: string[] }
 interface Peca { data: string; formato: string; titulo: string; objetivo_peca: string; narrativa: string; conceito_visual: string; duracao: string; blocos: Bloco[]; cta: string; legenda: string }
 interface Decisao { data: string; formato: string; pilar: string; objetivo: string; posicaoFunil: string; tema: string; angulo: string; dorAlvo: string; objecaoAlvo?: string; porQueAgora: string }
 interface Objetivo { objetivoPrincipal: string; narrativa: string; mixPilares: { autoridade: number; aproximacao: number; comercial: number } }
@@ -141,7 +141,7 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
                       <div className="text-[11px] font-semibold text-primary tracking-wide">{b.rotulo}</div>
                       {b.objetivo && <div className="text-xs text-muted-foreground"><span className="uppercase text-[10px]">objetivo</span> {b.objetivo}</div>}
                       {b.headline && <div className="font-medium">{b.headline}</div>}
-                      {b.subheadline && <div className="text-muted-foreground">{b.subheadline}</div>}
+                      {b.corpo && <div className="text-muted-foreground">{b.corpo}</div>}
                       {b.topicos?.length > 0 && <ul className="list-disc list-inside text-muted-foreground">{b.topicos.map((t, ti) => <li key={ti}>{t}</li>)}</ul>}
                       {b.direcao_arte && <div className="text-xs mt-1 rounded bg-primary/5 p-1.5"><span className="text-primary text-[10px] font-semibold">🎨 DIREÇÃO DE ARTE</span> {b.direcao_arte}</div>}
                     </div>

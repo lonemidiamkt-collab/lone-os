@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     </div>`).join("");
 
   const capa = `<section class="page cover">
-    ${logoImg}
+    <div class="cov-logo">${logoImg}</div>
     <div class="cov-mid">
       <div class="pill">CALENDÁRIO DE CONTEÚDO · ${modo.toUpperCase()}</div>
       <h1>Calendário<br/>do <span>${modo}</span></h1>
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
         <div class="brot"><span class="bnum">${bi + 1}</span>${esc(b.rotulo || "ARTE")}</div>
         ${b.objetivo ? `<div class="bfield"><span>OBJETIVO</span> ${esc(b.objetivo)}</div>` : ""}
         ${b.headline ? `<div class="btit">${esc(b.headline)}</div>` : ""}
-        ${b.subheadline ? `<div class="bsub">${esc(b.subheadline)}</div>` : ""}
+        ${b.corpo ? `<div class="bsub">${esc(b.corpo)}</div>` : ""}
         ${b.topicos?.length ? `<ul class="btop">${b.topicos.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
         ${b.direcao_arte ? `<div class="bdir"><span>🎨 DIREÇÃO DE ARTE</span> ${esc(b.direcao_arte)}</div>` : ""}
       </div>`).join("");
@@ -84,7 +84,8 @@ export async function POST(req: NextRequest) {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #e7ecf5; background: #0a0f1e; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .page { background: #0a0f1e; min-height: 100vh; padding: 40px 44px; page-break-after: always; position: relative; }
-    .logo { height: 30px; } .logo-txt, .logo\\-txt { color: #fff; font-weight: 800; letter-spacing: .5px; }
+    .logo { height: 30px; width: auto; max-width: 190px; display: block; object-fit: contain; } .logo-txt { color: #fff; font-weight: 800; letter-spacing: .5px; font-size: 18px; }
+    .cov-logo { align-self: flex-start; }
     /* Capa */
     .cover { display: flex; flex-direction: column; }
     .cov-mid { margin-top: 90px; flex: 1; }
