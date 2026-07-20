@@ -59,9 +59,34 @@ Para ser auditável e aprender, a decisão precisa morar no banco:
 - Estratégia viva por cliente: `DiagnosticoEstrategico` em `client_briefings` (coluna jsonb) ou tabela própria; `ObjetivoPeriodo` por período.
 - *DDL entra só na Fase 3, com aprovação — nada é criado agora.*
 
-## 5. O loop de aprendizado
+## 5. O loop de aprendizado — o motor melhora a si mesmo E o briefing
 
-O motor **aprende**: a revisão crítica (estágio 5) e o que o time ensina no grupo (`cs_client_rules`) retroalimentam o diagnóstico e as próximas decisões. Erro vira regra; regra afina a decisão seguinte.
+O que faz isso ser um ativo difícil de replicar: o motor não é estático. Ele vê o que deu certo, ouve o time e observa o mercado — e **enriquece o próprio briefing**. O briefing vira um **documento vivo**.
+
+```
+        decide → executa → PUBLICA
+           ↑                   ↓
+   briefing vivo ←— aprende ←— 3 sinais
+   (v2, v3…)                   │
+                    ┌──────────┼───────────┐
+             performance   time ensina   observação
+             (métricas IG:  (grupo /      (concorrência,
+              salvou?       aprovou/      datas, dor/
+              compartilhou?) reprovou?)   ângulo faltando)
+```
+
+**Os 3 sinais** (contrato: `SinalAprendizado`, `ResultadoPeca`):
+1. **Performance** — métricas orgânicas por post (salvamentos, compartilhamentos, alcance). O motor correlaciona **decisão → resultado** (por isso a decisão precisa estar persistida) e aprende qual pilar/ângulo/gancho funciona **para aquele cliente** → ajusta o mix e prioriza ângulos.
+2. **O time ensina** — `cs_client_rules` (ensino no grupo) + aprovar/reprovar arte (`cs_rework_events`). Erro vira regra; regra afina a próxima decisão.
+3. **Observação** — ao diagnosticar e ver datas/concorrência/o que performou, o motor identifica o que **falta no briefing** (uma dor, um ângulo, uma oportunidade sazonal).
+
+**O curador de briefing** (contrato: `Curar` → `PropostaBriefing`): um job periódico que lê os sinais e **propõe** enriquecimentos ao briefing (nunca aplica sozinho). O time aprova → o briefing ganha uma **nova versão**.
+
+Dois princípios que tornam isto seguro:
+- **Briefing versionado** (`client_briefings.version`/`is_current`) → cada aprendizado é uma versão nova, **auditável e reversível**.
+- **Human-gated** — tudo é sugestão; o time decide. Mesma filosofia do resto do agente CS.
+
+Sementes que já existem: métricas orgânicas do IG, `cs_client_rules`, `cs_rework_events`, briefing versionado. O que a Fase 3 liga: **persistir a decisão por peça** e o **elo decisão↔resultado** (sem ele a IA não aprende de verdade) + o curador.
 
 ## 6. Bibliotecas — o repertório curado
 
@@ -79,4 +104,61 @@ A crescer (por nicho, alimentado pelo diagnóstico e pelo que o time ensina): do
 
 - **Fase 1 — Upgrade dos prompts:** ✅ feita. Núcleo estrategista plugado em legenda/roteiro/briefing/pauta; revisão-post ganhou dimensão `estrategia`.
 - **Fase 2 — Manual/KB + contrato:** ✅ feita. Este doc + [`pipeline.ts`](../lib/cs/pipeline.ts) (contrato) + [`bibliotecas.ts`](../lib/cs/bibliotecas.ts) (repertório seedado). Bibliotecas por nicho crescem com o uso.
-- **Fase 3 — Calendário = pipeline inteiro:** ⏳ pendente. Primeiro módulo a rodar decide→executa→revisa com estado persistido.
+- **Fase 3 — Calendário = pipeline inteiro:** ⏳ plano pronto (§8). Primeiro módulo a rodar decide→executa→revisa com estado persistido + loop.
+
+## 8. Plano de execução — Fase 3
+
+O calendário deixa de ser gerador de pauta e passa a rodar o pipeline inteiro, com a decisão **persistida** e o loop ligado.
+
+**Passo 0 — Pré-requisito (Trilha A):** enriquecer os briefings (o construtor/enriquecedor). Sem briefing bom, o Diagnóstico raciocina no vazio. Roda na carteira antes de tudo.
+
+**Passo 1 — DDL** *(entra na sua mão, com aprovação — o classifier me bloqueia)*:
+
+Persistir o Diagnóstico (campos estratégicos que faltam no briefing):
+```sql
+ALTER TABLE client_briefings
+  ADD COLUMN IF NOT EXISTS desejos text[],
+  ADD COLUMN IF NOT EXISTS objecoes text[],
+  ADD COLUMN IF NOT EXISTS crenca_atual text,
+  ADD COLUMN IF NOT EXISTS crenca_desejada text,
+  ADD COLUMN IF NOT EXISTS diferenciais text[],
+  ADD COLUMN IF NOT EXISTS angulos_concorrencia text[],
+  ADD COLUMN IF NOT EXISTS maturidade_marca text,
+  ADD COLUMN IF NOT EXISTS mix_pilares jsonb;
+```
+
+Persistir a Decisão por peça (o que hoje não existe em lugar nenhum):
+```sql
+ALTER TABLE content_cards
+  ADD COLUMN IF NOT EXISTS pilar text,
+  ADD COLUMN IF NOT EXISTS objetivo text,
+  ADD COLUMN IF NOT EXISTS posicao_funil text,
+  ADD COLUMN IF NOT EXISTS angulo text,
+  ADD COLUMN IF NOT EXISTS dor_alvo text,
+  ADD COLUMN IF NOT EXISTS por_que_agora text,
+  ADD COLUMN IF NOT EXISTS published_media_id text; -- liga o card ao post do IG (p/ métricas do loop)
+```
+
+Plano do período (objetivo + narrativa por semana/mês):
+```sql
+CREATE TABLE IF NOT EXISTS content_period_plans (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id uuid NOT NULL REFERENCES clients(id),
+  periodo text NOT NULL,               -- "2026-W31" | "2026-08"
+  objetivo_principal text, narrativa text, mix_pilares jsonb,
+  diagnostico_snapshot jsonb,          -- foto do diagnóstico usado
+  created_at timestamptz DEFAULT now(),
+  UNIQUE (client_id, periodo)
+);
+ALTER TABLE content_period_plans ENABLE ROW LEVEL SECURITY; -- app usa service_role; sem acesso anon/authenticated direto
+```
+
+**Passo 2 — Motor** (`lib/cs/motor.ts`): implementar `diagnosticar` → `definirObjetivoPeriodo` → `decidirPecas` → `planejarPeriodo`, cada estágio 1 chamada IA com núcleo estrategista + bibliotecas, saída no schema do contrato.
+
+**Passo 3 — Execução:** `gerarPautaSemanal` passa a **receber** as `DecisaoDeConteudo[]` (deixa de decidir); `criarCardsPauta` grava pilar/objetivo/ângulo/por_que_agora. Legenda/roteiro/brief recebem a decisão como contexto.
+
+**Passo 4 — Entrega:** calendário no padrão Max (cada peça: objetivo · gancho · copy · CTA · sugestão visual · **justificativa**) → PDF branded + brief pro designer com variação de arte. Comando novo ("Lone, monta o calendário do X") + anúncio em `conversa.ts`.
+
+**Passo 5 — Loop:** `registrarResultado` (cron liga métricas do IG ao card via `published_media_id`) + `curar` (job → `PropostaBriefing` pro time aprovar → nova versão do briefing).
+
+**Ordem segura:** Trilha A → Passo 1 (DDL) → 2–4 (validar num cliente) → 5 (loop).

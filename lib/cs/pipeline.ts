@@ -116,3 +116,44 @@ export type RevisarCriticamente = (peca: unknown, decisao: DecisaoDeConteudo) =>
 
 /** O pipeline inteiro de um período (o que a Fase 3 implementa e persiste). */
 export type PlanejarPeriodo = (clienteId: string, periodo: string, datas: string[]) => Promise<PlanoDePeriodo>;
+
+// ── Estágio 6 — APRENDIZADO (o loop que melhora o motor E o briefing) ────────
+// O que faz o motor deixar de ser estático: ele vê o que deu certo, ouve o time e
+// observa o mercado — e propõe enriquecer o briefing (versionado, human-gated).
+
+/** De onde vem um aprendizado. */
+export type FonteAprendizado = "performance" | "ensino_time" | "aprovacao_cliente" | "observacao";
+
+/** Resultado observado de uma peça publicada — FECHA o elo decisão→resultado (o que a IA correlaciona pra aprender). */
+export interface ResultadoPeca {
+  cardId: string;
+  clienteId: string;
+  decisao?: DecisaoDeConteudo;   // a decisão que gerou a peça (pilar/objetivo/ângulo)
+  salvamentos?: number; compartilhamentos?: number; comentarios?: number;
+  curtidas?: number; alcance?: number;
+  aprovadoCliente?: boolean; reworks?: number;
+  medidoEm: string;              // ISO
+}
+
+/** Um sinal que retroalimenta o motor (vira regra / ajusta mix / afina ângulo). */
+export interface SinalAprendizado {
+  clienteId: string;
+  fonte: FonteAprendizado;
+  conteudo: string;              // o que foi aprendido (ex.: "ângulo erro-comum salva muito")
+  referencia?: string;           // cardId, id de regra, post…
+  registradoEm: string;          // ISO
+}
+
+/** Proposta do CURADOR de briefing — enriquecimento SUGERIDO ao time (nunca aplica sozinho). */
+export interface PropostaBriefing {
+  clienteId: string;
+  campo: string;                 // campo do briefing a enriquecer (ex.: "desejos", "ganchos", "produtos_destaque_atual")
+  sugestao: string;              // o que adicionar/ajustar
+  justificativa: string;         // por que — baseado em qual sinal
+  fonte: FonteAprendizado;
+}
+
+/** Registra o resultado de uma peça publicada (liga decisão↔desempenho). */
+export type RegistrarResultado = (r: ResultadoPeca) => Promise<void>;
+/** O CURADOR: olha os sinais do período e propõe melhorias no briefing (o time aprova → nova versão). */
+export type Curar = (clienteId: string, sinais: SinalAprendizado[]) => Promise<PropostaBriefing[]>;
