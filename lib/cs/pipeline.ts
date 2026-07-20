@@ -45,6 +45,7 @@ export interface DiagnosticoEstrategico {
   crencaAtual: string;        // no que o público acredita hoje
   crencaDesejada: string;     // no que precisamos que ele passe a acreditar
   diferenciais: string[];     // o que a marca tem de único e defensável
+  produtos: string[];         // produtos/serviços concretos (matéria-prima pra especificidade)
   angulosVsConcorrencia: string[]; // como fugir do post-padrão do nicho
   oportunidades: string[];    // brechas de conteúdo/posicionamento
   maturidadeMarca: MaturidadeMarca;

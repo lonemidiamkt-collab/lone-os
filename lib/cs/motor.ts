@@ -24,7 +24,7 @@ export async function diagnosticar(clienteId: string): Promise<DiagnosticoEstrat
   const nome = (c.nome_fantasia as string) || (c.name as string);
 
   const { data: b } = await supabaseAdmin.from("client_briefings")
-    .select("publico_alvo, dores, desejos, objecoes, crenca_atual, crenca_desejada, diferenciais, angulos_concorrencia, maturidade_marca, posicionamento, resumo_estrategico")
+    .select("publico_alvo, dores, desejos, objecoes, crenca_atual, crenca_desejada, diferenciais, produtos, angulos_concorrencia, maturidade_marca, posicionamento, resumo_estrategico")
     .eq("client_id", clienteId).eq("is_current", true).order("version", { ascending: false }).limit(1).maybeSingle();
 
   // Briefing enriquecido (tem o diagnóstico gravado)?
@@ -34,7 +34,7 @@ export async function diagnosticar(clienteId: string): Promise<DiagnosticoEstrat
       publico: { quemE: norm(b.publico_alvo).join("; "), oQueSente: "", momento: "" },
       dores: norm(b.dores), desejos: norm(b.desejos), objecoes: norm(b.objecoes),
       crencaAtual: (b.crenca_atual as string) || "", crencaDesejada: (b.crenca_desejada as string) || "",
-      diferenciais: norm(b.diferenciais), angulosVsConcorrencia: norm(b.angulos_concorrencia),
+      diferenciais: norm(b.diferenciais), produtos: norm(b.produtos), angulosVsConcorrencia: norm(b.angulos_concorrencia),
       oportunidades: norm(b.angulos_concorrencia),
       maturidadeMarca: ((b.maturidade_marca as string) || "em_crescimento") as DiagnosticoEstrategico["maturidadeMarca"],
       geradoEm: new Date().toISOString(), fonteBriefing: "client_briefings",
@@ -52,7 +52,7 @@ export async function diagnosticar(clienteId: string): Promise<DiagnosticoEstrat
     publico: { quemE: d.publico_alvo.join("; "), oQueSente: "", momento: "" },
     dores: d.dores, desejos: d.desejos, objecoes: d.objecoes,
     crencaAtual: d.crenca_atual, crencaDesejada: d.crenca_desejada,
-    diferenciais: d.diferenciais, angulosVsConcorrencia: d.angulos_concorrencia, oportunidades: d.angulos_concorrencia,
+    diferenciais: d.diferenciais, produtos: d.produtos, angulosVsConcorrencia: d.angulos_concorrencia, oportunidades: d.angulos_concorrencia,
     maturidadeMarca: d.maturidade_marca, geradoEm: new Date().toISOString(), fonteBriefing: "efemero",
   };
 }
@@ -238,23 +238,35 @@ ${padroes}
 5. Para cada arte (cada "bloco") — o documento serve o DESIGNER, o social e a IA. Preencha:
    - "objetivo": o que esta arte faz na narrativa (1 linha).
    - "headline": o texto forte que aparece na arte (a fala, no caso de reel/vídeo).
-   - "corpo": o CONTEXTO DESENVOLVIDO — 2 a 4 frases que constroem o argumento/persuasão. NÃO deixe
-     só um título e uma linha: aqui vai a substância que faz a arte convencer (o "porquê", o exemplo,
-     o dado, a virada). É o que hoje está faltando. Peça sem corpo = peça seca, refaça.
+   - "corpo": 2 a 4 frases que ENSINAM ou PROVAM algo CONCRETO — o leitor tem que SAIR SABENDO algo
+     que não sabia: um mecanismo (ex.: "escolher o Simples quando o Lucro Presumido pagaria menos custa
+     caro o ano inteiro"), uma consequência real, uma distinção prática, um exemplo do dia a dia do
+     público. PROIBIDO frase de recheio genérica ("muitas empresas perdem dinheiro", "é muito
+     importante", "descubra como", "não perca tempo"). Se o corpo só repete o headline com outras
+     palavras, está ERRADO — refaça com substância. Puxe da MATÉRIA-PRIMA do cliente (dores/produtos/
+     diferenciais) e do seu CONHECIMENTO REAL DO NICHO para ter profundidade — isso é EDUCAR, é
+     permitido e desejado. O que NÃO pode: inventar preço, oferta, depoimento ou número específico DO
+     CLIENTE (esses só se vierem no material).
    - "direcao_arte": o conceito visual concreto — cena, quem aparece, cores, sensação. Foque no que
      CRIAR naquele dia (sem "imagem.jpg", sem ficar justificando alternativas de arte).
    - "topicos": só quando a arte é uma lista real (senão []).
 
-Regras: headline da capa nunca começa por "Somos"/nome da empresa. Use só o que está na decisão/
-diagnóstico — não invente preço/oferta/depoimento/número. Sempre "cta" (chamada única) e "legenda"
-pronta (tom da marca; feche com o contato se souber). "duracao" só p/ reel/vídeo. Responda só no JSON.`;
+Regras: headline da capa nunca começa por "Somos"/nome da empresa. FATOS DO CLIENTE (preço, oferta,
+depoimento, número específico do cliente, contato) só se vierem no material — nunca invente. MAS
+conhecimento geral do nicho é liberado e desejado pra ter profundidade (educar). Sempre "cta"
+(chamada única) e "legenda" pronta (tom da marca; feche com o contato se souber). "duracao" só p/
+reel/vídeo. Responda só no JSON.`;
+  const li = (t: string, a: string[]) => (a.length ? `${t}: ${a.slice(0, 6).join(" · ")}\n` : "");
   const user = `Cliente: ${nome}\nFormato decidido: ${dec.formato} · Pilar: ${dec.pilar} · Objetivo estratégico: ${dec.objetivo} · Funil: ${dec.posicaoFunil}\n` +
     `Tema: ${dec.tema}\nÂngulo (a ideia central): ${dec.angulo}\nDor-alvo: ${dec.dorAlvo}\n` +
     (dec.objecaoAlvo ? `Objeção a quebrar: ${dec.objecaoAlvo}\n` : "") +
-    `Por que agora: ${dec.porQueAgora}\n\nContexto do cliente:\n` +
+    `Por que agora: ${dec.porQueAgora}\n\n=== MATÉRIA-PRIMA do cliente (use pra ter ESPECIFICIDADE, não platitude) ===\n` +
+    `Público: ${diag.publico.quemE}\n` +
     `Crença a mudar: ${diag.crencaAtual} → ${diag.crencaDesejada}\n` +
-    (diag.diferenciais.length ? `Diferenciais: ${diag.diferenciais.join("; ")}\n` : "") +
-    `\nProjete a peça: objetivo → padrão narrativo → nº de artes que a mensagem pede → direção de arte de cada uma.`;
+    li("Dores reais", diag.dores) + li("Desejos", diag.desejos) + li("Objeções", diag.objecoes) +
+    li("Produtos/serviços", diag.produtos) +
+    li("Diferenciais", diag.diferenciais) + li("Ângulos vs. concorrência", diag.angulosVsConcorrencia) +
+    `\nProjete a peça: objetivo → padrão narrativo → nº de artes que a mensagem pede → direção de arte de cada uma. Puxe a substância do corpo desta matéria-prima + do seu conhecimento do nicho.`;
   const res = await chatJson<PecaFinal>({ model: MODEL, system, user, schema: PECA_SCHEMA, schemaName: "cs_peca_final", maxTokens: 2400, temperature: 0.6 });
   const peca = res.ok && res.data ? { ...res.data, data: dec.data, formato: dec.formato } : undefined;
   // ENFORCE nº de artes em código (o prompt sozinho não segura — modelo estica). Mantém a última
