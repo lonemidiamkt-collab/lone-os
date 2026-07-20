@@ -66,19 +66,20 @@ O que faz isso ser um ativo difícil de replicar: o motor não é estático. Ele
 ```
         decide → executa → PUBLICA
            ↑                   ↓
-   briefing vivo ←— aprende ←— 3 sinais
+   briefing vivo ←— aprende ←— 4 sinais
    (v2, v3…)                   │
-                    ┌──────────┼───────────┐
-             performance   time ensina   observação
-             (métricas IG:  (grupo /      (concorrência,
-              salvou?       aprovou/      datas, dor/
-              compartilhou?) reprovou?)   ângulo faltando)
+              ┌────────┬───────┼────────────┬──────────────┐
+        performance  time    observação   radar EXTERNO
+        (métricas IG) ensina  (concorrência (formatos novos,
+                      (grupo)  datas, gaps)  estilos que
+                                             performam) 🔎
 ```
 
-**Os 3 sinais** (contrato: `SinalAprendizado`, `ResultadoPeca`):
+**Os 4 sinais** (contrato: `SinalAprendizado`, `ResultadoPeca`, `TendenciaExterna`):
 1. **Performance** — métricas orgânicas por post (salvamentos, compartilhamentos, alcance). O motor correlaciona **decisão → resultado** (por isso a decisão precisa estar persistida) e aprende qual pilar/ângulo/gancho funciona **para aquele cliente** → ajusta o mix e prioriza ângulos.
 2. **O time ensina** — `cs_client_rules` (ensino no grupo) + aprovar/reprovar arte (`cs_rework_events`). Erro vira regra; regra afina a próxima decisão.
 3. **Observação** — ao diagnosticar e ver datas/concorrência/o que performou, o motor identifica o que **falta no briefing** (uma dor, um ângulo, uma oportunidade sazonal).
+4. **Radar externo** 🔎 — pesquisa **fora**: formatos de vídeo novos, estilos de post que performam, tendências do nicho e da plataforma. Vira `TendenciaExterna` que alimenta as **bibliotecas** (repertório vivo) e o **curador**. **Regra:** tendência é insumo pro estrategista, **não ordem** — filtrada pela lente da marca (nunca "copiar o que tá na moda"). Requer um provedor de busca (ver §8, passo 6).
 
 **O curador de briefing** (contrato: `Curar` → `PropostaBriefing`): um job periódico que lê os sinais e **propõe** enriquecimentos ao briefing (nunca aplica sozinho). O time aprova → o briefing ganha uma **nova versão**.
 
@@ -159,6 +160,8 @@ ALTER TABLE content_period_plans ENABLE ROW LEVEL SECURITY; -- app usa service_r
 
 **Passo 4 — Entrega:** calendário no padrão Max (cada peça: objetivo · gancho · copy · CTA · sugestão visual · **justificativa**) → PDF branded + brief pro designer com variação de arte. Comando novo ("Lone, monta o calendário do X") + anúncio em `conversa.ts`.
 
-**Passo 5 — Loop:** `registrarResultado` (cron liga métricas do IG ao card via `published_media_id`) + `curar` (job → `PropostaBriefing` pro time aprovar → nova versão do briefing).
+**Passo 5 — Loop interno:** `registrarResultado` (cron liga métricas do IG ao card via `published_media_id`) + `curar` (job → `PropostaBriefing` pro time aprovar → nova versão do briefing).
 
-**Ordem segura:** Trilha A → Passo 1 (DDL) → 2–4 (validar num cliente) → 5 (loop).
+**Passo 6 — Radar externo** (`Pesquisar`): job periódico que pesquisa formatos/estilos/tendências (geral + por nicho) → grava `TendenciaExterna` numa `content_trends` (jsonb) → alimenta as bibliotecas e o curador. **Requer um provedor de busca** (o agente hoje só tem o conhecimento estático do gpt-4o, com data de corte — não vê o que é novo). Opções: web search da OpenAI (reusa `OPENAI_API_KEY`, menos infra) · API dedicada (Tavily/Brave/SerpAPI, mais controle, nova key). Decisão do Roberto (custo + integração). Tendências passam pela lente do estrategista antes de virar decisão.
+
+**Ordem segura:** Trilha A → Passo 1 (DDL) → 2–4 (validar num cliente) → 5 (loop interno) → 6 (radar externo).

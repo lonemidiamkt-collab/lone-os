@@ -122,7 +122,27 @@ export type PlanejarPeriodo = (clienteId: string, periodo: string, datas: string
 // observa o mercado — e propõe enriquecer o briefing (versionado, human-gated).
 
 /** De onde vem um aprendizado. */
-export type FonteAprendizado = "performance" | "ensino_time" | "aprovacao_cliente" | "observacao";
+export type FonteAprendizado = "performance" | "ensino_time" | "aprovacao_cliente" | "observacao" | "tendencia_externa";
+
+// ── Pesquisa externa — o radar que mantém o motor atualizado com o mundo ─────
+// O motor não aprende só com os dados do próprio cliente; ele pesquisa FORA:
+// formatos de vídeo novos, estilos de post que performam, tendências do nicho.
+// REGRA: tendência é INSUMO pro estrategista, não ordem. Filtrar pela lente da
+// marca — nunca "copiar o que tá na moda" (ver O_QUE_EVITAR em estrategista.ts).
+
+/** Uma referência/tendência capturada do mundo externo. */
+export interface TendenciaExterna {
+  tema: string;              // do que se trata
+  formato?: string;          // reel, carrossel, formato de vídeo novo…
+  estilo?: string;           // a estrutura/estilo (ex.: "POV", "antes-depois em 3 cortes")
+  porQueFunciona: string;    // a razão (retenção, curiosidade, prova…)
+  aplicabilidade?: string;   // pra que nicho/tipo de marca serve (e pra qual NÃO)
+  fonte: string;             // origem (url/plataforma)
+  capturadoEm: string;       // ISO
+}
+
+/** Pesquisa externa por tema/nicho → tendências. O resultado alimenta bibliotecas e o curador. */
+export type Pesquisar = (tema: string, contexto?: { nicho?: string }) => Promise<TendenciaExterna[]>;
 
 /** Resultado observado de uma peça publicada — FECHA o elo decisão→resultado (o que a IA correlaciona pra aprender). */
 export interface ResultadoPeca {
