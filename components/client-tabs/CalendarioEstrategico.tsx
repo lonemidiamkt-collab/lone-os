@@ -7,6 +7,8 @@
 import { useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 interface Peca { data: string; formato: string; titulo: string; gancho: string; apoio: string; cta: string; legenda: string; sugestao_design: string }
 interface Decisao { data: string; formato: string; pilar: string; objetivo: string; posicaoFunil: string; tema: string; angulo: string; dorAlvo: string; objecaoAlvo?: string; porQueAgora: string }
@@ -23,6 +25,9 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
   const [plano, setPlano] = useState<Plano | null>(null);
   const [pecas, setPecas] = useState<Peca[]>([]);
   const [periodo, setPeriodo] = useState("");
+  const [cliente, setCliente] = useState("");
+  const [modo, setModo] = useState<"semana" | "mes">("semana");
+  const [contexto, setContexto] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
@@ -30,11 +35,31 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
   const gerar = async () => {
     setLoading(true); setMsg(""); setPlano(null); setPecas([]);
     try {
-      const res = await authedFetch(`/api/cs/calendario?clientId=${clientId}`);
+      const res = await authedFetch(`/api/cs/calendario`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, modo, contexto }),
+      });
       const j = await res.json();
       if (!res.ok) setMsg(j.error || "Falhou ao gerar");
-      else { setPlano(j.plano); setPecas(j.pecas || []); setPeriodo(j.periodo); }
+      else { setPlano(j.plano); setPecas(j.pecas || []); setPeriodo(j.periodo); setCliente(j.cliente || ""); }
     } catch { setMsg("Erro de conexão"); } finally { setLoading(false); }
+  };
+
+  const baixarPdf = async () => {
+    if (!plano) return;
+    setMsg("");
+    try {
+      const res = await authedFetch(`/api/cs/calendario/pdf`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cliente, periodo, objetivo: plano.objetivo, decisoes: plano.decisoes, pecas }),
+      });
+      if (!res.ok) { setMsg("Falhou ao gerar o PDF"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `calendario-${cliente || "cliente"}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+    } catch { setMsg("Erro ao baixar"); }
   };
 
   const criar = async () => {
@@ -43,7 +68,7 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
     try {
       const res = await authedFetch(`/api/cs/calendario`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, periodo, objetivo: plano.objetivo, decisoes: plano.decisoes, pecas, diagnostico: plano.diagnostico }),
+        body: JSON.stringify({ clientId, criar: true, periodo, objetivo: plano.objetivo, decisoes: plano.decisoes, pecas, diagnostico: plano.diagnostico }),
       });
       const j = await res.json();
       setMsg(res.ok ? `${j.total} card(s) criados no board ✓` : (j.error || "Falhou ao criar"));
@@ -59,7 +84,19 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
           <h3 className="font-semibold">Calendário estratégico (IA)</h3>
           <p className="text-sm text-muted-foreground">Monta a semana pensando no funil (não posts soltos). Revise e crie no board.</p>
         </div>
-        <Button onClick={gerar} disabled={loading}>{loading ? "Pensando…" : plano ? "Gerar de novo" : "Gerar calendário"}</Button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-md border border-border overflow-hidden text-sm">
+            <button onClick={() => setModo("semana")} className={`px-3 py-1.5 ${modo === "semana" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Semana</button>
+            <button onClick={() => setModo("mes")} className={`px-3 py-1.5 ${modo === "mes" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Mês</button>
+          </div>
+          <Button onClick={gerar} disabled={loading}>{loading ? "Pensando…" : plano ? "Gerar de novo" : "Gerar calendário"}</Button>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <Label>Contexto do período <span className="text-muted-foreground">(opcional — campanhas, promoções, datas do próximo mês)</span></Label>
+        <Textarea value={contexto} onChange={(e) => setContexto(e.target.value)} rows={2}
+          placeholder="Ex.: Em agosto a loja toda entra em promoção de aniversário; foco em porcelanato e tintas; frete grátis acima de X." />
       </div>
 
       {msg && <p className="text-sm font-medium">{msg}</p>}
@@ -100,6 +137,7 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
           })}
 
           <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
+            <Button variant="outline" onClick={baixarPdf}>Baixar PDF</Button>
             <Button onClick={criar} disabled={saving}>{saving ? "Criando…" : "Criar no board"}</Button>
           </div>
         </div>

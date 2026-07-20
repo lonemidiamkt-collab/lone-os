@@ -79,14 +79,16 @@ const OBJ_SCHEMA: Record<string, unknown> = {
 };
 
 export async function definirObjetivoPeriodo(
-  nome: string, diag: DiagnosticoEstrategico, periodo: string, eventos?: string[],
+  nome: string, diag: DiagnosticoEstrategico, periodo: string, eventos?: string[], contexto?: string,
 ): Promise<OpenAiResult<{ objetivo_principal: string; narrativa: string; mix_pilares: MixPilares }>> {
   const system = `${NUCLEO_PLANEJAMENTO}
 
 Você define o OBJETIVO ESTRATÉGICO e a NARRATIVA do período (semana/mês) de um cliente. O que essa
 marca precisa PROVAR/mover agora? Qual tema costura as peças? E o mix-alvo de pilares (autoridade/
-aproximacao/comercial, somando 100), ajustado à maturidade e ao objetivo. Responda só no JSON.`;
+aproximacao/comercial, somando 100), ajustado à maturidade e ao objetivo. Se houver CAMPANHA/PROMOÇÃO
+no contexto do período, a narrativa deve girar em torno dela (e o mix pende pro comercial). Responda só no JSON.`;
   const user = fmtDiag(nome, diag) + `\nPeríodo: ${periodo}\n` +
+    (contexto ? `\n⭐ Contexto/campanha DESTE período (abastecido pelo time — prioritário):\n${contexto}\n` : "") +
     (eventos?.length ? `Datas/eventos marcados: ${eventos.join("; ")}\n` : "") +
     `\nDefina o objetivo do período, a narrativa que amarra as peças, e o mix-alvo de pilares.`;
   return chatJson({ model: MODEL, system, user, schema: OBJ_SCHEMA, schemaName: "cs_objetivo_periodo", maxTokens: 700, temperature: 0.5 });
@@ -119,29 +121,33 @@ const DEC_SCHEMA: Record<string, unknown> = {
 
 export async function decidirPecas(
   nome: string, diag: DiagnosticoEstrategico, obj: { objetivo_principal: string; narrativa: string; mix_pilares: MixPilares },
-  datas: string[], eventos?: string[],
+  datas: string[], eventos?: string[], contexto?: string,
 ): Promise<OpenAiResult<{ itens: Array<Omit<DecisaoDeConteudo, "clienteId" | "baseadoEmPeriodo"> & { objecao_alvo: string | null; posicao_funil: string; dor_alvo: string; por_que_agora: string }> }>> {
   const estruturas = ESTRUTURAS_FORMATO.map((e) => `- ${e.formato}: ${e.passos[0]}`).join("\n");
+  const mes = datas.length > 4;
   const system = `${NUCLEO_PLANEJAMENTO}
 
 Você DECIDE cada peça do período — uma por data. As peças formam um FUNIL (ex.: uma quebra
 percepção, uma educa/compartilha, uma posiciona/vende), respeitando o mix-alvo de pilares. Para
 cada peça decida: formato, pilar, objetivo, posição no funil, tema, ÂNGULO (a ideia central que a
 peça defende), dor-alvo, objeção-alvo (ou null), e POR QUE AGORA (a justificativa). Não repita
-pilar/ângulo em todas. Formatos possíveis:\n${estruturas}\nResponda só no JSON (itens na ordem das datas).`;
+pilar/ângulo em todas.${mes ? ` Este é um MÊS: as peças devem CONVERSAR ENTRE SI e construir um ARCO ao
+longo das semanas (ex.: aquecimento → anúncio → prova/depoimento → urgência/última chance se houver
+promoção), nunca posts isolados. Distribua o mix ao longo do mês.` : ""} Formatos possíveis:\n${estruturas}\nResponda só no JSON (itens na ordem das datas).`;
   const user = fmtDiag(nome, diag) +
     `\nObjetivo do período: ${obj.objetivo_principal}\nNarrativa: ${obj.narrativa}\n` +
     `Mix-alvo: autoridade ${obj.mix_pilares.autoridade} / aproximacao ${obj.mix_pilares.aproximacao} / comercial ${obj.mix_pilares.comercial}\n` +
+    (contexto ? `⭐ Contexto/campanha do período: ${contexto}\n` : "") +
     `Datas (uma peça por data): ${datas.join(", ")}\n` +
     (eventos?.length ? `Datas/eventos marcados: ${eventos.join("; ")}\n` : "") +
-    `\nDecida as peças formando o funil.`;
-  return chatJson({ model: MODEL, system, user, schema: DEC_SCHEMA, schemaName: "cs_decisao_pecas", maxTokens: 1800, temperature: 0.6 });
+    `\nDecida as peças${mes ? " formando o arco do mês" : " formando o funil"}.`;
+  return chatJson({ model: MODEL, system, user, schema: DEC_SCHEMA, schemaName: "cs_decisao_pecas", maxTokens: mes ? 4000 : 1800, temperature: 0.6 });
 }
 
 // ── planejarPeriodo — compõe os 3 estágios ───────────────────────────────────
 export interface PlanoResult { ok: boolean; plano?: PlanoDePeriodo; nome?: string; error?: string }
 
-export async function planejarPeriodo(clienteId: string, periodo: string, datas: string[], eventos?: string[]): Promise<PlanoResult> {
+export async function planejarPeriodo(clienteId: string, periodo: string, datas: string[], eventos?: string[], contexto?: string): Promise<PlanoResult> {
   const { data: c } = await supabaseAdmin.from("clients").select("name, nome_fantasia").eq("id", clienteId).maybeSingle();
   if (!c) return { ok: false, error: "Cliente não encontrado" };
   const nome = (c.nome_fantasia as string) || (c.name as string);
@@ -149,10 +155,10 @@ export async function planejarPeriodo(clienteId: string, periodo: string, datas:
   const diag = await diagnosticar(clienteId);
   if (!diag) return { ok: false, error: "Sem material pra diagnosticar este cliente (cadastre um briefing)" };
 
-  const objRes = await definirObjetivoPeriodo(nome, diag, periodo, eventos);
+  const objRes = await definirObjetivoPeriodo(nome, diag, periodo, eventos, contexto);
   if (!objRes.ok || !objRes.data) return { ok: false, error: objRes.error ?? "Falha ao definir objetivo" };
 
-  const decRes = await decidirPecas(nome, diag, objRes.data, datas, eventos);
+  const decRes = await decidirPecas(nome, diag, objRes.data, datas, eventos, contexto);
   if (!decRes.ok || !decRes.data) return { ok: false, error: decRes.error ?? "Falha ao decidir peças" };
 
   const objetivo: ObjetivoPeriodo = {
@@ -209,8 +215,14 @@ Use só o que está na decisão/diagnóstico; não invente preço/oferta. Respon
   return { ...res, peca };
 }
 
-/** Executa todas as decisões do plano (em paralelo). Retorna as peças na ordem das decisões. */
+/** Executa todas as decisões do plano, com concorrência limitada (mês pode ter ~13 peças). */
 export async function executarPlano(nome: string, diag: DiagnosticoEstrategico, decisoes: DecisaoDeConteudo[]): Promise<PecaFinal[]> {
-  const rs = await Promise.all(decisoes.map((d) => executarDecisao(nome, diag, d)));
-  return rs.map((r) => r.peca).filter((p): p is PecaFinal => !!p);
+  const out: PecaFinal[] = [];
+  const LIMITE = 4;
+  for (let i = 0; i < decisoes.length; i += LIMITE) {
+    const lote = decisoes.slice(i, i + LIMITE);
+    const rs = await Promise.all(lote.map((d) => executarDecisao(nome, diag, d)));
+    for (const r of rs) if (r.peca) out.push(r.peca);
+  }
+  return out;
 }
