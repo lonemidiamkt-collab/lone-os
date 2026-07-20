@@ -58,6 +58,16 @@ export async function diagnosticar(clienteId: string): Promise<DiagnosticoEstrat
   };
 }
 
+// CAPTURA: promos/eventos que o cliente (ou o time) mencionou no grupo — o detectarEventoFuturo
+// grava em cs_client_events; aqui o calendário LÊ os que caem no período pra planejar em cima.
+export async function eventosDoCliente(clienteId: string, ini: string, fim: string): Promise<string[]> {
+  const { data } = await supabaseAdmin.from("cs_client_events")
+    .select("titulo, descricao, event_date")
+    .eq("client_id", clienteId).eq("status", "ativo")
+    .gte("event_date", ini).lte("event_date", fim).order("event_date", { ascending: true });
+  return (data ?? []).map((e) => `${e.event_date}: ${e.titulo as string}${e.descricao ? ` — ${(e.descricao as string).slice(0, 160)}` : ""}`);
+}
+
 // MEMÓRIA: o que já foi feito recentemente pro cliente (evita repetir tema/ângulo, dá progressão).
 export async function historicoRecente(clienteId: string, limite = 15): Promise<string> {
   const { data } = await supabaseAdmin.from("content_cards")
@@ -174,12 +184,15 @@ export async function planejarPeriodo(clienteId: string, periodo: string, datas:
   const diag = await diagnosticar(clienteId);
   if (!diag) return { ok: false, error: "Sem material pra diagnosticar este cliente (cadastre um briefing)" };
 
-  const objRes = await definirObjetivoPeriodo(nome, diag, periodo, eventos, contexto);
+  // Eventos/promos capturados no grupo (cs_client_events) que caem no período — entram sozinhos.
+  const eventosFinal = eventos ?? (datas.length ? await eventosDoCliente(clienteId, datas[0], datas[datas.length - 1]) : []);
+
+  const objRes = await definirObjetivoPeriodo(nome, diag, periodo, eventosFinal, contexto);
   if (!objRes.ok || !objRes.data) return { ok: false, error: objRes.error ?? "Falha ao definir objetivo" };
 
   const historico = await historicoRecente(clienteId);
   const regras = await loadContentRules(clienteId);
-  const decRes = await decidirPecas(nome, diag, objRes.data, datas, eventos, contexto, historico, regras);
+  const decRes = await decidirPecas(nome, diag, objRes.data, datas, eventosFinal, contexto, historico, regras);
   if (!decRes.ok || !decRes.data) return { ok: false, error: decRes.error ?? "Falha ao decidir peças" };
 
   const objetivo: ObjetivoPeriodo = {
