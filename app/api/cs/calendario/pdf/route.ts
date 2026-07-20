@@ -7,8 +7,10 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
-import { loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import type { PecaFinal } from "@/lib/cs/motor";
+
+// Wordmark em CSS (não depende de imagem — a logo.png esticava/quebrava no PDF).
+const LOGO = '<div class="brand"><span class="bmark">M</span><span class="bname">LONE MÍDIA</span></div>';
 
 const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const DIAS = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
@@ -31,8 +33,7 @@ export async function POST(req: NextRequest) {
   const pecas = (body?.pecas as PecaFinal[]) || [];
   if (!pecas.length) return NextResponse.json({ error: "sem conteúdo pra gerar" }, { status: 400 });
 
-  const logo = await loadLoneLogo();
-  const logoImg = logo ? `<img class="logo" src="${logo}"/>` : `<span class="logo-txt">LONE MÍDIA</span>`;
+  const logoImg = LOGO;
 
   // Capa: tabela-resumo
   const resumo = pecas.map((p) => `
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
       ${blocos}
       <div class="cta"><div class="cta-h">📣 CTA</div>${esc(p.cta)}</div>
       <div class="leg"><div class="leg-h">✍️ LEGENDA</div>${esc(p.legenda)}</div>
-      <div class="pf"><span>${logo ? "" : "LONE MÍDIA"}</span><span>Calendário de Conteúdo · ${cliente} · ${String(i + 2).padStart(2, "0")}</span></div>
+      <div class="pf"><span>LONE MÍDIA</span><span>Calendário de Conteúdo · ${cliente} · ${String(i + 2).padStart(2, "0")}</span></div>
     </section>`;
   }).join("");
 
@@ -84,7 +85,9 @@ export async function POST(req: NextRequest) {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #e7ecf5; background: #0a0f1e; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .page { background: #0a0f1e; min-height: 100vh; padding: 40px 44px; page-break-after: always; position: relative; }
-    .logo { height: 30px; width: auto; max-width: 190px; display: block; object-fit: contain; } .logo-txt { color: #fff; font-weight: 800; letter-spacing: .5px; font-size: 18px; }
+    .brand { display: inline-flex; align-items: center; gap: 8px; }
+    .bmark { width: 26px; height: 26px; border-radius: 6px; background: #2f6bff; color: #fff; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+    .bname { color: #fff; font-weight: 800; letter-spacing: 1px; font-size: 15px; }
     .cov-logo { align-self: flex-start; }
     /* Capa */
     .cover { display: flex; flex-direction: column; }

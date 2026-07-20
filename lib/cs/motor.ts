@@ -257,6 +257,15 @@ pronta (tom da marca; feche com o contato se souber). "duracao" só p/ reel/víd
     `\nProjete a peça: objetivo → padrão narrativo → nº de artes que a mensagem pede → direção de arte de cada uma.`;
   const res = await chatJson<PecaFinal>({ model: MODEL, system, user, schema: PECA_SCHEMA, schemaName: "cs_peca_final", maxTokens: 2400, temperature: 0.6 });
   const peca = res.ok && res.data ? { ...res.data, data: dec.data, formato: dec.formato } : undefined;
+  // ENFORCE nº de artes em código (o prompt sozinho não segura — modelo estica). Mantém a última
+  // arte (CTA/fechamento) e corta o excesso do meio. "menos é mais" garantido.
+  if (peca) {
+    const CAP: Record<string, number> = { carrossel: 4, post: 3, story: 5, reel: 6, video_venda: 6 };
+    const cap = CAP[dec.formato] ?? 5;
+    if (peca.blocos.length > cap) {
+      peca.blocos = [...peca.blocos.slice(0, cap - 1), peca.blocos[peca.blocos.length - 1]];
+    }
+  }
   return { ...res, peca };
 }
 
