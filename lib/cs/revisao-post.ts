@@ -22,7 +22,7 @@ export interface RevisaoPostInput {
 
 export interface ProblemaPost {
   gravidade: "alta" | "media" | "baixa";
-  area: "coerencia" | "legenda" | "arte" | "regras" | "dados";
+  area: "coerencia" | "legenda" | "arte" | "regras" | "dados" | "estrategia";
   detalhe: string;           // o problema, concreto
   sugestao: string | null;   // como resolver (ou null)
 }
@@ -48,7 +48,7 @@ const SCHEMA = {
         required: ["gravidade", "area", "detalhe", "sugestao"],
         properties: {
           gravidade: { type: "string", enum: ["alta", "media", "baixa"] },
-          area: { type: "string", enum: ["coerencia", "legenda", "arte", "regras", "dados"] },
+          area: { type: "string", enum: ["coerencia", "legenda", "arte", "regras", "dados", "estrategia"] },
           detalhe: { type: "string" },
           sugestao: { type: ["string", "null"] },
         },
@@ -74,6 +74,14 @@ Verifique NESTA ordem de importância:
    (CTA ausente = baixa), hashtags incoerentes com o post.
 5. ARTE (area "arte", media): erro de texto visível na arte, informação ilegível. (Só se a arte
    estiver anexada — sem arte, ignore esta parte.)
+6. ESTRATÉGIA (area "estrategia", media — o reforço crítico): o post MUDA percepção ou é só
+   institucional/genérico que some no feed? Marque como "media" (SEMPRE com sugestão concreta em
+   "sugestao") quando: gancho fraco na 1ª linha; fala da EMPRESA em vez da dor/desejo do cliente
+   final ("somos há X anos", "onde estamos", "confiança" sem contexto de dor); sem objetivo claro
+   (autoridade / desejo / quebra de objeção / venda); indistinguível do que qualquer concorrente do
+   nicho posta; clichê ou promessa vazia. Post com gancho forte, foco na dor e ângulo próprio PASSA
+   — não reprove por gosto pessoal. Isto NÃO se aplica a arte que já existe e o pedido é só a legenda
+   dela: aí a arte já decidiu o assunto; critique só se a LEGENDA está genérica/sem gancho.
 
 REGRA DE OURO DO GUIA — CONTATO (area "dados"): TODA legenda fecha com o contato do cliente
 (endereço e/ou telefone/WhatsApp), sem exceção. Se a legenda NÃO terminar com contato → problema

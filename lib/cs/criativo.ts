@@ -4,6 +4,7 @@
 // avalia, ajusta ou refaz. Nunca inventa fato do cliente. gpt-4o (julgamento + tom).
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
+import { FOCO_NA_DOR } from "@/lib/cs/estrategista";
 
 export const CRIATIVO_MODEL = "gpt-4o";
 
@@ -89,7 +90,9 @@ const CRIATIVO_SCHEMA: Record<string, unknown> = {
 };
 
 // Prefixo ESTÁVEL (cacheado pela OpenAI) — o Método Lone Mídia inteiro.
-const CRIATIVO_SYSTEM = `Você é o AGENTE CRIATIVO da Lone Mídia. Ajuda os social media (Carlos e Pedro) a criar
+const CRIATIVO_SYSTEM = `${FOCO_NA_DOR}
+
+Você é o AGENTE CRIATIVO da Lone Mídia. Ajuda os social media (Carlos e Pedro) a criar
 roteiros de ANÚNCIO de alta conversão. Você SUGERE — o humano aprova, ajusta ou refaz. Tradução do
 método Roberto Lino.
 

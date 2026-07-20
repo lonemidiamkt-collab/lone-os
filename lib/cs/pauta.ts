@@ -6,6 +6,7 @@
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { addDays, ymd } from "@/lib/cs/vigilancia";
+import { NUCLEO_PLANEJAMENTO } from "@/lib/cs/estrategista";
 
 export const PAUTA_MODEL = "gpt-4o";
 
@@ -44,7 +45,9 @@ const PAUTA_SCHEMA: Record<string, unknown> = {
   },
 };
 
-const PAUTA_SYSTEM = `Você é um(a) social media SÊNIOR da Lone Mídia planejando a PAUTA DA SEMANA
+const PAUTA_SYSTEM = `${NUCLEO_PLANEJAMENTO}
+
+Você é um(a) social media SÊNIOR da Lone Mídia planejando a PAUTA DA SEMANA
 de um cliente. Proponha 1 post por data oferecida (as datas vêm na mensagem) — conteúdo que um
 designer consegue produzir lendo só o título + descrição.
 

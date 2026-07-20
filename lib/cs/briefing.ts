@@ -6,6 +6,7 @@
 // Blueprint A3.
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
+import { NUCLEO_CONTEUDO } from "@/lib/cs/estrategista";
 
 // gpt-4o (não o mini): o A3 precisa INTERPRETAR o pedido e julgar se dá pra produzir ou se
 // falta info — o mini assumia "promoção" e despejava o rulebook do cliente em qualquer pedido.
@@ -52,7 +53,9 @@ const A3_SCHEMA: Record<string, unknown> = {
   },
 };
 
-const A3_SYSTEM = `Você é um(a) social media SÊNIOR da Lone Mídia montando o briefing de um pedido
+const A3_SYSTEM = `${NUCLEO_CONTEUDO}
+
+Você é um(a) social media SÊNIOR da Lone Mídia montando o briefing de um pedido
 que chegou de um cliente. Quem vai ler é o designer/social da equipe. Fale como gente: direto,
 natural e útil — NADA de encher linguiça nem de soar robô/template.
 

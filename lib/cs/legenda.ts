@@ -4,6 +4,7 @@
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { METODO_LEGENDA, fichaDoCliente } from "@/lib/cs/guia-legendas";
+import { NUCLEO_CONTEUDO } from "@/lib/cs/estrategista";
 
 export const LEGENDA_MODEL = "gpt-4o";
 
@@ -28,7 +29,9 @@ const SCHEMA: Record<string, unknown> = {
   properties: { legenda: { type: "string" }, hashtags: { type: "string" } },
 };
 
-const SYSTEM = `Você é social media da Lone Mídia escrevendo a LEGENDA de um post pra rede social
+const SYSTEM = `${NUCLEO_CONTEUDO}
+
+Você é social media da Lone Mídia escrevendo a LEGENDA de um post pra rede social
 de um cliente. Escreve como gente, no tom da marca — nada robótico.
 
 # A ARTE MANDA no assunto (regra nº 1)

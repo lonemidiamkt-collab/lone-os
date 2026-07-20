@@ -5,6 +5,7 @@
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { fichaDoCliente } from "@/lib/cs/guia-legendas";
+import { NUCLEO_CONTEUDO } from "@/lib/cs/estrategista";
 
 export const BRIEFING_DESIGN_MODEL = "gpt-4o";
 
@@ -48,7 +49,14 @@ const SCHEMA: Record<string, unknown> = {
   },
 };
 
-const SYSTEM = `Você é diretor(a) de arte da Lone Mídia escrevendo o BRIEFING DE UMA ARTE pro
+const SYSTEM = `${NUCLEO_CONTEUDO}
+
+# VARIAÇÃO VISUAL (quebra de padrão)
+Mantenha a identidade da marca, mas VARIE a construção da arte entre os posts — layout, grid,
+foco, hierarquia (principalmente em carrossel). Evite que todo post fique igual (mesmo layout/
+cor padrão), o que faz a marca sumir no feed. Peça a variação no briefing quando fizer sentido.
+
+Você é diretor(a) de arte da Lone Mídia escrevendo o BRIEFING DE UMA ARTE pro
 designer executar SEM precisar perguntar nada. O designer não conhece o cliente — o briefing tem
 que ser autossuficiente.
 
