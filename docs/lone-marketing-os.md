@@ -162,6 +162,6 @@ ALTER TABLE content_period_plans ENABLE ROW LEVEL SECURITY; -- app usa service_r
 
 **Passo 5 — Loop interno:** `registrarResultado` (cron liga métricas do IG ao card via `published_media_id`) + `curar` (job → `PropostaBriefing` pro time aprovar → nova versão do briefing).
 
-**Passo 6 — Radar externo** (`Pesquisar`): job periódico que pesquisa formatos/estilos/tendências (geral + por nicho) → grava `TendenciaExterna` numa `content_trends` (jsonb) → alimenta as bibliotecas e o curador. **Requer um provedor de busca** (o agente hoje só tem o conhecimento estático do gpt-4o, com data de corte — não vê o que é novo). Opções: web search da OpenAI (reusa `OPENAI_API_KEY`, menos infra) · API dedicada (Tavily/Brave/SerpAPI, mais controle, nova key). Decisão do Roberto (custo + integração). Tendências passam pela lente do estrategista antes de virar decisão.
+**Passo 6 — Radar externo** (`Pesquisar`): job periódico que pesquisa formatos/estilos/tendências (geral + por nicho) → grava `TendenciaExterna` numa `content_trends` (jsonb) → alimenta as bibliotecas e o curador. **Provedor: web search da OpenAI** (decidido — reusa `OPENAI_API_KEY`, sem nova integração/conta). O agente hoje só tem o conhecimento estático do gpt-4o (data de corte); o web search traz o que é novo. Tendências passam pela lente do estrategista antes de virar decisão.
 
 **Ordem segura:** Trilha A → Passo 1 (DDL) → 2–4 (validar num cliente) → 5 (loop interno) → 6 (radar externo).
