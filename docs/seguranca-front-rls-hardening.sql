@@ -1,0 +1,20 @@
+-- Hardening RLS pós-varredura de segurança do front (jul/2026)
+--
+-- ⚠️ RETRATAÇÃO (verificado no banco vivo em 19-20/jul): NÃO rode nada aqui.
+--
+-- Minha análise inicial dizia que client_access estava com policy `USING(true)` e vazava
+-- as senhas planas pra TODO usuário logado. Isso estava ERRADO. No banco vivo a policy é:
+--
+--     client_access_admin | {authenticated} | ALL | is_admin()
+--
+-- Ou seja: só ADMIN lê/escreve. Designer/social/traffic logados recebem 0 linhas. E anon
+-- tem 0 grants na tabela. O DB já está corretamente trancado (desde o hardening de 12/jul).
+--
+-- O único resíduo real era o browser do ADMIN carregar as senhas planas à toa via
+-- AppStateContext — isso foi resolvido em CÓDIGO (deploy 7c23e62): o front não busca mais
+-- client_access; a aba Acessos usa o caminho gated (/api/data/operational, service_role).
+--
+-- Portanto: NENHUM DDL é necessário aqui. Arquivo mantido só como registro da retratação.
+--
+-- (O DROP POLICY que estava aqui antes tiraria a policy is_admin() — desnecessário e
+--  potencialmente confuso. Não execute.)
