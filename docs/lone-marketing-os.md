@@ -63,17 +63,20 @@ Para ser auditável e aprender, a decisão precisa morar no banco:
 
 O motor **aprende**: a revisão crítica (estágio 5) e o que o time ensina no grupo (`cs_client_rules`) retroalimentam o diagnóstico e as próximas decisões. Erro vira regra; regra afina a decisão seguinte.
 
-## 6. Bibliotecas (a preencher — Fase 2 continuada)
+## 6. Bibliotecas — o repertório curado
 
-O estágio de decisão consulta bibliotecas curadas da Lone. Estrutura prevista:
+Código: [`lib/cs/bibliotecas.ts`](../lib/cs/bibliotecas.ts). São referências (não regras rígidas) que os estágios de decisão e execução consultam. Já seedadas:
 
-- Ganchos · Headlines · CTA · Dores · Desejos · Objeções (por nicho)
-- Frameworks de copy (AIDA, PAS, BAB, Hook-Story-Offer…)
-- Séries/campanhas · Datas · Analogias · Storytelling
-- Checklists (briefing, carrossel, reel, stories, calendário, revisão)
+- **Estruturas por formato** — o esqueleto de execução de carrossel, reel, post, stories, vídeo de venda (`ESTRUTURAS_FORMATO` + `estruturaDoFormato()`).
+- **Frameworks de copy** — AIDA, PAS, BAB, Hook-Story-Offer, PASTOR, 4U, Golden Circle, FAB (`FRAMEWORKS_COPY`).
+- **Ganchos** — padrões de 1ª linha (erro-comum, contraste, custo-oculto, pergunta provocativa, número, mito…) com template + exemplo (`GANCHOS`).
+- **CTAs por objetivo** — salvar, compartilhar, comentar, direct, agendar, posicionamento (`CTAS`).
+- **Checklists** — carrossel, reel, legenda, calendário; portões da revisão crítica (`CHECKLISTS` + `checklistDe()`).
+
+A crescer (por nicho, alimentado pelo diagnóstico e pelo que o time ensina): dores · desejos · objeções por segmento · séries/campanhas · analogias · storytelling.
 
 ## 7. Status do roadmap
 
 - **Fase 1 — Upgrade dos prompts:** ✅ feita. Núcleo estrategista plugado em legenda/roteiro/briefing/pauta; revisão-post ganhou dimensão `estrategia`.
-- **Fase 2 — Manual/KB + contrato:** 🔧 em andamento. Este doc + [`pipeline.ts`](../lib/cs/pipeline.ts) (contrato). Falta preencher as bibliotecas (§6).
+- **Fase 2 — Manual/KB + contrato:** ✅ feita. Este doc + [`pipeline.ts`](../lib/cs/pipeline.ts) (contrato) + [`bibliotecas.ts`](../lib/cs/bibliotecas.ts) (repertório seedado). Bibliotecas por nicho crescem com o uso.
 - **Fase 3 — Calendário = pipeline inteiro:** ⏳ pendente. Primeiro módulo a rodar decide→executa→revisa com estado persistido.
