@@ -143,14 +143,22 @@ export default function PendingClientsPage() {
 
     const subMap: Record<string, Submission> = {};
     if (d.length > 0) {
+      // SEGURANÇA: não traz as senhas (meta/instagram/google_password) — a aprovação só exibe os
+      // LOGINS + status; as senhas já foram espelhadas (cifradas) em clients no submit e não são
+      // usadas aqui. (RLS já limita a leitura a is_admin(); isto tira o peso morto sensível do wire.)
+      const SUB_COLS =
+        "id, client_id, token, status, submitted_at, created_at, contact_name, contact_cpf, contact_email, " +
+        "contact_whatsapp, nome_fantasia, razao_social, cnpj, nicho, endereco_rua, endereco_bairro, endereco_cidade, " +
+        "endereco_estado, endereco_cep, doc_contrato_social, doc_identidade, doc_logo, notes, meta_login, meta_status, " +
+        "instagram_login, instagram_status, google_login, google_status";
       const { data } = await supabase
         .from("client_onboarding_submissions")
-        .select("*")
+        .select(SUB_COLS)
         .in("client_id", d.map((x) => x.id))
         .order("created_at", { ascending: false });
 
       if (data) {
-        for (const row of data) {
+        for (const row of data as unknown as Submission[]) {
           const cid = row.client_id as string;
           if (!subMap[cid]) subMap[cid] = row as Submission;
         }
