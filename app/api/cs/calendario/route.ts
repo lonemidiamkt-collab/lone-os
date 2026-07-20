@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { planejarPeriodo, executarPlano, type PecaFinal } from "@/lib/cs/motor";
+import { planejarPeriodo, executarPlano, pecaParaTexto, type PecaFinal } from "@/lib/cs/motor";
 import { criarCardDemanda } from "@/lib/cs/card";
 import { datasProximaSemana } from "@/lib/cs/pauta";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
     for (const d of decisoes) {
       const p = pecaDe(d.data);
       const briefing = p
-        ? `${p.gancho}\n\n${p.apoio}\n\nCTA: ${p.cta}\n\n— Legenda sugerida —\n${p.legenda}\n\n— Design —\n${p.sugestao_design}\n\n_${d.formato} · pilar: ${d.pilar} · objetivo: ${d.objetivo} · por que agora: ${d.porQueAgora}_`
+        ? `${pecaParaTexto(p)}\n\n_${d.formato} · pilar: ${d.pilar} · objetivo: ${d.objetivo} · por que agora: ${d.porQueAgora}_`
         : `${d.tema}\n\nÂngulo: ${d.angulo}\n\n_${d.formato} · pilar: ${d.pilar} · objetivo: ${d.objetivo}_`;
       const id = await criarCardDemanda({
         clientId, clienteNome: nome, titulo: p?.titulo || d.tema, urgencia: "media",

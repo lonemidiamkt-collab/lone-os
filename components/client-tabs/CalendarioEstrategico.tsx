@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 
-interface Peca { data: string; formato: string; titulo: string; gancho: string; apoio: string; cta: string; legenda: string; sugestao_design: string }
+interface Bloco { rotulo: string; titulo: string; subtitulo: string; topicos: string[]; imagem: string; texto: string }
+interface Peca { data: string; formato: string; titulo: string; subtitulo: string; objetivo_label: string; duracao: string; blocos: Bloco[]; cta: string; legenda: string }
 interface Decisao { data: string; formato: string; pilar: string; objetivo: string; posicaoFunil: string; tema: string; angulo: string; dorAlvo: string; objecaoAlvo?: string; porQueAgora: string }
 interface Objetivo { objetivoPrincipal: string; narrativa: string; mixPilares: { autoridade: number; aproximacao: number; comercial: number } }
 interface Plano { diagnostico: unknown; objetivo: Objetivo; decisoes: Decisao[] }
@@ -61,7 +62,7 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
     try {
       const res = await authedFetch(`/api/cs/calendario/pdf`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cliente, periodo, objetivo: plano.objetivo, decisoes: plano.decisoes, pecas }),
+        body: JSON.stringify({ cliente, periodo, modo, pecas }),
       });
       if (!res.ok) { setMsg("Falhou ao gerar o PDF"); return; }
       const blob = await res.blob();
@@ -130,16 +131,24 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
                   {d && <span className="rounded px-1.5 py-0.5 bg-muted">{d.objetivo}</span>}
                   {d && <span className="rounded px-1.5 py-0.5 bg-muted">funil: {d.posicaoFunil}</span>}
                 </div>
-                <p className="font-medium">{p.titulo}</p>
-                <div className="text-sm space-y-1">
-                  <p><span className="text-muted-foreground">Gancho:</span> {p.gancho}</p>
-                  <p><span className="text-muted-foreground">Apoio:</span> {p.apoio}</p>
-                  <p><span className="text-muted-foreground">CTA:</span> {p.cta}</p>
+                <p className="font-medium">{p.titulo}{p.duracao ? ` · ${p.duracao}` : ""}</p>
+                {p.subtitulo && <p className="text-sm text-muted-foreground">{p.subtitulo}</p>}
+                <div className="space-y-2">
+                  {p.blocos?.map((b, bi) => (
+                    <div key={bi} className="rounded-md bg-muted/40 p-2 text-sm">
+                      <div className="text-[11px] font-semibold text-primary tracking-wide">{b.rotulo}</div>
+                      {b.titulo && <div className="font-medium">{b.titulo}</div>}
+                      {b.subtitulo && <div className="text-muted-foreground">{b.subtitulo}</div>}
+                      {b.topicos?.length > 0 && <ul className="list-disc list-inside text-muted-foreground">{b.topicos.map((t, ti) => <li key={ti}>{t}</li>)}</ul>}
+                      {b.imagem && <div className="text-xs italic text-muted-foreground mt-1">🖼 {b.imagem}</div>}
+                      {b.texto && <div className="text-xs mt-1">{b.texto}</div>}
+                    </div>
+                  ))}
                 </div>
+                <p className="text-sm"><span className="text-muted-foreground">CTA:</span> {p.cta}</p>
                 <details className="text-sm">
-                  <summary className="cursor-pointer text-muted-foreground">Legenda + design</summary>
+                  <summary className="cursor-pointer text-muted-foreground">Legenda</summary>
                   <p className="mt-1 whitespace-pre-wrap">{p.legenda}</p>
-                  <p className="mt-2"><span className="text-muted-foreground">Design:</span> {p.sugestao_design}</p>
                 </details>
                 {d && <p className="text-xs text-muted-foreground border-t border-border pt-2">💡 <span className="font-medium">Por que agora:</span> {d.porQueAgora}</p>}
               </div>

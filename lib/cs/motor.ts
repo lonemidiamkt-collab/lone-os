@@ -175,20 +175,43 @@ export async function planejarPeriodo(clienteId: string, periodo: string, datas:
   return { ok: true, nome, plano: { diagnostico: diag, objetivo, decisoes } };
 }
 
-// ── Estágio 4 — EXECUÇÃO (decisão → peça final) ──────────────────────────────
-// Cada decisão vira a peça pronta: gancho, apoio, CTA, legenda e orientação de design (com
-// variação visual). Os geradores herdam o núcleo estrategista (Fase 1). Isto alimenta o card.
+// ── Estágio 4 — EXECUÇÃO (decisão → peça final ESTRUTURADA) ──────────────────
+// A peça sai PRONTA pro designer, slide a slide / cena a cena (não um resumo): cada bloco tem o
+// texto real que vai na arte. Carrossel → 1 bloco por slide; reel → gancho/desenvolvimento/
+// fechamento; post → headline/subheadline/texto. Sempre CTA + legenda.
+export interface BlocoPeca {
+  rotulo: string;    // "ARTE 1 · CAPA", "GANCHO", "DESENVOLVIMENTO", "HEADLINE"…
+  titulo: string;    // título/fala principal do bloco (o texto que aparece)
+  subtitulo: string; // apoio (vazio se não tiver)
+  topicos: string[]; // bullets quando for lista (ex.: os 5 benefícios, os 3 erros)
+  imagem: string;    // o que aparece na imagem/cena (vazio se n/a)
+  texto: string;     // texto de apoio/rodapé do bloco (vazio se n/a)
+}
 export interface PecaFinal {
-  data: string; formato: string; titulo: string;
-  gancho: string; apoio: string; cta: string; legenda: string; sugestao_design: string;
+  data: string; formato: string;
+  titulo: string;         // tema/título geral da peça
+  subtitulo: string;      // uma linha de apoio
+  objetivo_label: string; // ex.: "autoridade e percepção"
+  duracao: string;        // reel: "40 segundos"; senão ""
+  blocos: BlocoPeca[];
+  cta: string; legenda: string;
 }
 
+const BLOCO_SCHEMA = {
+  type: "object", additionalProperties: false,
+  required: ["rotulo", "titulo", "subtitulo", "topicos", "imagem", "texto"],
+  properties: {
+    rotulo: { type: "string" }, titulo: { type: "string" }, subtitulo: { type: "string" },
+    topicos: { type: "array", items: { type: "string" } }, imagem: { type: "string" }, texto: { type: "string" },
+  },
+};
 const PECA_SCHEMA: Record<string, unknown> = {
   type: "object", additionalProperties: false,
-  required: ["titulo", "gancho", "apoio", "cta", "legenda", "sugestao_design"],
+  required: ["titulo", "subtitulo", "objetivo_label", "duracao", "blocos", "cta", "legenda"],
   properties: {
-    titulo: { type: "string" }, gancho: { type: "string" }, apoio: { type: "string" },
-    cta: { type: "string" }, legenda: { type: "string" }, sugestao_design: { type: "string" },
+    titulo: { type: "string" }, subtitulo: { type: "string" }, objetivo_label: { type: "string" },
+    duracao: { type: "string" }, blocos: { type: "array", items: BLOCO_SCHEMA },
+    cta: { type: "string" }, legenda: { type: "string" },
   },
 };
 
@@ -197,22 +220,43 @@ export async function executarDecisao(nome: string, diag: DiagnosticoEstrategico
 
 ${estruturaDoFormato(dec.formato) || ""}
 
-Você EXECUTA uma peça JÁ DECIDIDA — não decida de novo, entregue. A decisão manda no assunto, no
-objetivo e no ângulo; você escreve a peça afiada. Entregue: gancho (1ª linha que para o scroll — dor/
-pergunta/benefício, nunca "Somos"/nome no gancho), apoio (o conteúdo/benefício específico), CTA única,
-legenda pronta (no tom da marca; se souber o contato do cliente, feche com ele), e sugestao_design
-(orientação pro designer executar sem perguntar — inclua a VARIAÇÃO visual, principalmente se carrossel).
-Use só o que está na decisão/diagnóstico; não invente preço/oferta. Responda só no JSON.`;
+Você EXECUTA uma peça JÁ DECIDIDA — não decida de novo, entregue. Escreva o CONTEÚDO PRONTO E
+DETALHADO, slide a slide / cena a cena (NUNCA um resumo). Monte "blocos" conforme o formato:
+- CARROSSEL: um bloco por SLIDE. Bloco 1 = CAPA (rotulo "ARTE 1 · CAPA": titulo = headline forte
+  que para o scroll, subtitulo = apoio, imagem = o que aparece). Blocos seguintes = CONTEÚDO
+  (rotulo "ARTE 2 · CONTEÚDO"…: titulo, topicos quando for lista, texto = rodapé/apoio). Escreva
+  o TEXTO REAL de cada slide. Gere de 3 a 6 slides.
+- REEL: blocos GANCHO (titulo = fala dos 0-3s), DESENVOLVIMENTO (topicos = as falas/pontos),
+  FECHAMENTO (titulo = fala final). Preencha "duracao".
+- POST: um bloco (rotulo "ARTE"): titulo = HEADLINE, subtitulo = SUBHEADLINE, texto = texto inferior.
+- STORY: um bloco por story (gancho → curiosidade → … → CTA).
+Sempre: "cta" (a chamada única) e "legenda" (pronta, no tom da marca; feche com o contato se souber).
+"objetivo_label" curto (ex.: "autoridade e percepção"). Campos sem uso = "" ou [] (não invente).
+Gancho nunca começa por "Somos"/nome da empresa. Use só o que está na decisão/diagnóstico — não
+invente preço/oferta. Responda só no JSON.`;
   const user = `Cliente: ${nome}\nFormato: ${dec.formato} · Pilar: ${dec.pilar} · Objetivo: ${dec.objetivo} · Funil: ${dec.posicaoFunil}\n` +
     `Tema: ${dec.tema}\nÂngulo (a ideia central): ${dec.angulo}\nDor-alvo: ${dec.dorAlvo}\n` +
     (dec.objecaoAlvo ? `Objeção a quebrar: ${dec.objecaoAlvo}\n` : "") +
     `Por que agora: ${dec.porQueAgora}\n\nContexto do cliente:\n` +
     `Crença a mudar: ${diag.crencaAtual} → ${diag.crencaDesejada}\n` +
     (diag.diferenciais.length ? `Diferenciais: ${diag.diferenciais.join("; ")}\n` : "") +
-    `\nEscreva a peça.`;
-  const res = await chatJson<PecaFinal>({ model: MODEL, system, user, schema: PECA_SCHEMA, schemaName: "cs_peca_final", maxTokens: 1200, temperature: 0.6 });
+    `\nEscreva a peça completa, slide a slide.`;
+  const res = await chatJson<PecaFinal>({ model: MODEL, system, user, schema: PECA_SCHEMA, schemaName: "cs_peca_final", maxTokens: 2200, temperature: 0.6 });
   const peca = res.ok && res.data ? { ...res.data, data: dec.data, formato: dec.formato } : undefined;
   return { ...res, peca };
+}
+
+/** Achata a peça estruturada em texto (pro briefing do card). */
+export function pecaParaTexto(p: PecaFinal): string {
+  const blocos = p.blocos.map((b) => {
+    const parts = [
+      b.rotulo ? `【${b.rotulo}】` : "", b.titulo, b.subtitulo,
+      b.topicos.length ? b.topicos.map((t) => `• ${t}`).join("\n") : "",
+      b.imagem ? `Imagem: ${b.imagem}` : "", b.texto,
+    ].filter(Boolean);
+    return parts.join("\n");
+  }).join("\n\n");
+  return `${p.titulo}${p.subtitulo ? `\n${p.subtitulo}` : ""}${p.duracao ? `\n(${p.duracao})` : ""}\n\n${blocos}\n\nCTA: ${p.cta}\n\n— Legenda —\n${p.legenda}`;
 }
 
 /** Executa todas as decisões do plano, com concorrência limitada (mês pode ter ~13 peças). */
