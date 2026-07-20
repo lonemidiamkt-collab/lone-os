@@ -33,18 +33,28 @@ function safeEncrypt(value: string | null | undefined): string | null {
 }
 
 // GET — Fetch submission by token (public, used by onboarding page)
+// SEGURANÇA: NÃO devolve as colunas de credencial (meta/instagram/google login+password). A
+// página pública de onboarding só restaura dados cadastrais/endereço/docs — nunca lê senha de
+// volta (o cliente redigita). Antes o select("*") mandava as creds (cifradas, mas 1 legada em
+// plaintext) pra qualquer portador do token. Allowlist explícita fecha isso.
+const ONBOARDING_PUBLIC_COLS =
+  "id, client_id, token, status, submitted_at, created_at, contact_name, contact_cpf, contact_email, " +
+  "contact_whatsapp, nome_fantasia, razao_social, cnpj, nicho, endereco_rua, endereco_bairro, " +
+  "endereco_cidade, endereco_estado, endereco_cep, doc_contrato_social, doc_identidade, doc_logo, " +
+  "notes, meta_status, instagram_status, google_status, clients(name, industry, service_type)";
+
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token");
   if (!token) return NextResponse.json({ error: "Token required" }, { status: 400 });
 
   const { data, error } = await supabase
     .from("client_onboarding_submissions")
-    .select("*, clients(name, industry, service_type)")
+    .select(ONBOARDING_PUBLIC_COLS)
     .eq("token", token)
     .maybeSingle();
 
   if (error || !data) return NextResponse.json({ error: "Link invalido ou expirado" }, { status: 404 });
-  if (data.status === "submitted") return NextResponse.json({ error: "already_submitted", submission: data });
+  if ((data as { status?: string }).status === "submitted") return NextResponse.json({ error: "already_submitted", submission: data });
 
   return NextResponse.json(data);
 }
