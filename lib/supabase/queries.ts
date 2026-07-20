@@ -202,25 +202,65 @@ function clientToSnake(c: Partial<Client>): Record<string, unknown> {
   return row;
 }
 
+// SEGURANÇA — colunas que NÃO vão nas LISTAS (carregadas em massa em TODO browser logado).
+// Tirar daqui: tokens de acesso público (dão acesso sem login à ficha/portal do cliente),
+// logins/senhas de plataforma, e PII sensível (cpf, endereço, docs, nascimento, pix, telefone
+// financeiro). Quem precisa desses campos (tela de detalhe do cliente, aprovação de cadastro)
+// puxa o registro COMPLETO, 1 cliente por vez, por rota gated no servidor (fetchClientById /
+// fetchDraftClientsFull → /api/clients/[id]). Allowlist é fail-safe: coluna nova só aparece na
+// lista se for adicionada aqui de propósito.
+const CLIENT_LEAN_COLS = [
+  "id", "name", "logo", "logo_url", "doc_logo", "industry", "nicho", "monthly_budget", "daily_budget",
+  "status", "active", "churned_at", "churn_reason", "attention_level", "tags",
+  "assigned_traffic", "assigned_social", "assigned_designer", "last_post_date", "join_date", "created_at",
+  "updated_at", "payment_method", "notes", "contract_end", "tone_of_voice", "drive_link", "instagram_user",
+  "posts_this_month", "posts_goal", "service_type", "perfil_conteudo", "draft_status", "contact_name",
+  "contact_role", "razao_social", "nome_fantasia", "cnpj", "email", "email_corporativo", "phone",
+  "last_kanban_activity", "campaign_briefing", "fixed_briefing", "agente_ativo", "meta_ad_account_id",
+  "meta_ad_account_name", "lead_source", "budget_alert_pct", "nps_score", "first_value_delivered_at",
+  "activated_at", "ttv_days", "public_report_enabled", "ficha_viva_enabled", "whatsapp_team_phone",
+  "whatsapp_group_jid", "whatsapp_group_name", "portal_welcome_message", "brand_color", "fb_page_id",
+  "ig_business_account_id", "ig_public_username", "ig_username_cache", "current_health_level",
+  "current_health_score", "health_computed_at", "last_client_msg_at",
+].join(",");
+
 // Clientes ATIVOS (carteira atual). Ex-clientes (active=false) ficam de fora de
 // toda a operação — listagens, /social, automação que lê o estado do app.
 // Arquivados são carregados sob demanda por fetchChurnedClients (view de arquivados / métricas).
 export async function fetchClients(): Promise<Client[]> {
-  const { data, error } = await db.from("clients").select("*").is("draft_status", null).neq("active", false).order("name");
+  const { data, error } = await db.from("clients").select(CLIENT_LEAN_COLS).is("draft_status", null).neq("active", false).order("name");
   if (error) { console.error("[DB] fetchClients:", error); return []; }
-  return (data ?? []).map(snakeToClient);
+  return (data ?? []).map((r) => snakeToClient(r as unknown as Record<string, unknown>));
 }
 
 // Ex-clientes (churned). Para a aba "Arquivados" e métricas de carteira.
 export async function fetchChurnedClients(): Promise<Client[]> {
-  const { data, error } = await db.from("clients").select("*").is("draft_status", null).eq("active", false).order("churned_at", { ascending: false });
+  const { data, error } = await db.from("clients").select(CLIENT_LEAN_COLS).is("draft_status", null).eq("active", false).order("churned_at", { ascending: false });
   if (error) { console.error("[DB] fetchChurnedClients:", error); return []; }
-  return (data ?? []).map(snakeToClient);
+  return (data ?? []).map((r) => snakeToClient(r as unknown as Record<string, unknown>));
 }
 
+// Rascunhos (cadastros em onboarding, pré-aprovação). Lista fica MAGRA; a tela de aprovação
+// puxa os campos completos via fetchDraftClientsFull (gated, server).
 export async function fetchDraftClients(): Promise<Client[]> {
-  const { data, error } = await db.from("clients").select("*").not("draft_status", "is", null).order("created_at", { ascending: false });
+  const { data, error } = await db.from("clients").select(CLIENT_LEAN_COLS).not("draft_status", "is", null).order("created_at", { ascending: false });
   if (error) { console.error("[DB] fetchDraftClients:", error); return []; }
+  return (data ?? []).map((r) => snakeToClient(r as unknown as Record<string, unknown>));
+}
+
+// COMPLETO — 1 cliente. SÓ server (service_role). Usado pela rota gated /api/clients/[id] pra
+// alimentar a tela de detalhe (form Dados, cards de link público). Senhas continuam fora (snakeToClient
+// as descarta; admin revela via /api/client-vault/reveal).
+export async function fetchClientById(id: string): Promise<Client | null> {
+  const { data, error } = await supabaseAdmin.from("clients").select("*").eq("id", id).maybeSingle();
+  if (error) { console.error("[DB] fetchClientById:", error); return null; }
+  return data ? snakeToClient(data) : null;
+}
+
+// COMPLETO — rascunhos. SÓ server (service_role). Alimenta a tela de aprovação de cadastro.
+export async function fetchDraftClientsFull(): Promise<Client[]> {
+  const { data, error } = await supabaseAdmin.from("clients").select("*").not("draft_status", "is", null).order("created_at", { ascending: false });
+  if (error) { console.error("[DB] fetchDraftClientsFull:", error); return []; }
   return (data ?? []).map(snakeToClient);
 }
 

@@ -28,7 +28,7 @@ import {
   calcHealthScore,
   todaySP,
 } from "@/lib/utils";
-import type { TimelineEntryType, ClientStatus, CreativeAsset, SocialProofEntry } from "@/lib/types";
+import type { TimelineEntryType, ClientStatus, CreativeAsset, SocialProofEntry, Client } from "@/lib/types";
 import {
   ArrowLeft, MessageSquare, FileText, TrendingUp,
   Instagram, Calendar, AlertTriangle,
@@ -51,7 +51,7 @@ const ContractGenerator = dynamic(() => import("@/components/ContractGenerator")
 import PortalManagementCard from "@/components/PortalManagementCard";
 import FichaViva360Tab from "@/components/fichaviva/FichaViva360Tab";
 import Link from "next/link";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { exportReportAsPdf } from "@/lib/exportPdf";
 
 // ── Timeline helpers ─────────────────────────────────────────────────────────
@@ -137,7 +137,37 @@ export default function ClientDetailPage() {
   const initOps = useOperationalStore((s) => s.init);
   const subOps = useOperationalStore((s) => s.subscribeRealtime);
 
-  const client = clients.find((c) => c.id === clientId);
+  const baseClient = clients.find((c) => c.id === clientId);
+
+  // A lista (useClientsStore) vem MAGRA por segurança — sem logins, tokens de link público
+  // nem PII (cpf/endereço/docs). Esses campos são puxados 1x, gated, por /api/clients/[id],
+  // e mesclados só nas chaves sensíveis (pra não sobrescrever updates realtime dos campos comuns).
+  const [clientExtra, setClientExtra] = useState<Partial<Client>>({});
+  useEffect(() => {
+    let alive = true;
+    setClientExtra({});
+    authedFetch(`/api/clients/${clientId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d?.client) setClientExtra(d.client as Client); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [clientId]);
+  const client = useMemo(() => {
+    if (!baseClient) return undefined;
+    const SENSITIVE: (keyof Client)[] = [
+      "cpfCnpj", "birthDate", "idade", "docIdentidade", "docContratoSocial",
+      "endereco", "enderecoRua", "enderecoNumero", "enderecoBairro", "enderecoCidade", "enderecoEstado", "enderecoCep",
+      "facebookLogin", "googleAdsLogin", "instagramLogin",
+      "publicReportToken", "publicReportTokenCreatedAt", "publicReportTokenRevokedAt",
+      "fichaVivaToken", "fichaVivaRaioxToken", "fichaVivaTokenCreatedAt", "fichaVivaTokenRevokedAt",
+    ];
+    const merged = { ...baseClient };
+    for (const k of SENSITIVE) {
+      const v = (clientExtra as Record<string, unknown>)[k as string];
+      if (v !== undefined) (merged as Record<string, unknown>)[k as string] = v;
+    }
+    return merged;
+  }, [baseClient, clientExtra]);
 
   // Deep-link: ?tab=onboarding navigates directly to onboarding tab
   const initialTab = (() => {

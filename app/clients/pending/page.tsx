@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
-import { fetchDraftClients } from "@/lib/supabase/queries";
 import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import type { Client } from "@/lib/types";
@@ -137,7 +136,9 @@ export default function PendingClientsPage() {
 
   // ─── Load data ────────────────────────────────
   const loadData = useCallback(async () => {
-    const d = await fetchDraftClients();
+    // Rascunhos COMPLETOS (com PII/docs) via rota gated — a lista magra não traz esses campos.
+    const draftsRes = await authedFetch("/api/clients/drafts").then((r) => (r.ok ? r.json() : { drafts: [] })).catch(() => ({ drafts: [] }));
+    const d = (draftsRes.drafts ?? []) as Client[];
     setDrafts(d);
 
     const subMap: Record<string, Submission> = {};
