@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
-import { coletarMateriaPrima, enriquecerBriefing } from "@/lib/cs/enriquecer-briefing";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import { coletarMateriaPrima, enriquecerBriefing, type BriefingEstruturado } from "@/lib/cs/enriquecer-briefing";
 
 export async function GET(req: NextRequest) {
   const user = await getServerUser(req);
@@ -29,4 +30,37 @@ export async function GET(req: NextRequest) {
   if (!res.ok || !res.data) return NextResponse.json({ error: res.error ?? "Falha ao gerar rascunho" }, { status: 502 });
 
   return NextResponse.json({ cliente: mp.nome, fontes, rascunho: res.data });
+}
+
+// POST — grava o rascunho REVISADO como nova versão de client_briefings (is_current).
+// Human-gated: só entra aqui o que o time aprovou na UI. Versiona (não sobrescreve).
+export async function POST(req: NextRequest) {
+  const user = await getServerUser(req);
+  if (!user?.isAdmin) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
+  const body = await req.json().catch(() => ({}));
+  const clientId = body?.clientId as string;
+  const b = body?.rascunho as BriefingEstruturado | undefined;
+  if (!clientId || !b) return NextResponse.json({ error: "clientId e rascunho obrigatórios" }, { status: 400 });
+
+  // próxima versão + desmarca a atual
+  const { data: cur } = await supabaseAdmin.from("client_briefings")
+    .select("version").eq("client_id", clientId).order("version", { ascending: false }).limit(1).maybeSingle();
+  const nextVersion = ((cur?.version as number) ?? 0) + 1;
+  await supabaseAdmin.from("client_briefings").update({ is_current: false }).eq("client_id", clientId).eq("is_current", true);
+
+  const { error } = await supabaseAdmin.from("client_briefings").insert({
+    client_id: clientId, version: nextVersion, is_current: true,
+    resumo_estrategico: b.resumo_estrategico, posicionamento: b.posicionamento,
+    publico_alvo: b.publico_alvo, produtos: b.produtos, produtos_destaque_atual: b.produtos_destaque_atual,
+    dores: b.dores, desejos: b.desejos, objecoes: b.objecoes,
+    crenca_atual: b.crenca_atual, crenca_desejada: b.crenca_desejada,
+    diferenciais: b.diferenciais, angulos_concorrencia: b.angulos_concorrencia,
+    maturidade_marca: b.maturidade_marca, mix_pilares: b.mix_pilares,
+    ganchos: b.ganchos, ctas: b.ctas, tom_voz: b.tom_voz, pessoa_verbal: b.pessoa_verbal,
+    palavras_proibidas: b.palavras_proibidas, concorrentes_evitar_mencionar: b.concorrentes_evitar_mencionar,
+    hashtags_padrao: b.hashtags_padrao, contato: b.contato, observacoes_estrategicas: b.observacoes_estrategicas,
+  });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, version: nextVersion });
 }
