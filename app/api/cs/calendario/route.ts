@@ -10,35 +10,16 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { planejarPeriodo, executarPlano, pecaParaTexto, type PecaFinal } from "@/lib/cs/motor";
+import { planejarPeriodo, executarPlano, pecaParaTexto, datasDoPeriodo, type PecaFinal } from "@/lib/cs/motor";
 import { criarCardDemanda } from "@/lib/cs/card";
-import { datasProximaSemana } from "@/lib/cs/pauta";
-import { spNow, ymd } from "@/lib/cs/vigilancia";
 import type { DecisaoDeConteudo, ObjetivoPeriodo, DiagnosticoEstrategico } from "@/lib/cs/pipeline";
-
-const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-
-function datasProximoMes(): { periodo: string; datas: string[] } {
-  const now = spNow();
-  const nm = now.getMonth() === 11 ? 0 : now.getMonth() + 1;
-  const ny = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
-  const dias = new Date(ny, nm + 1, 0).getDate();
-  const datas: string[] = [];
-  for (let d = 1; d <= dias; d++) {
-    const dt = new Date(ny, nm, d);
-    if ([1, 3, 5].includes(dt.getDay())) datas.push(ymd(dt));
-  }
-  return { periodo: `${MESES[nm]}/${ny}`, datas };
-}
 
 // Roda a geração em background e grava o resultado no job (fire-and-forget num server Node vivo).
 async function rodarGeracao(jobId: string, clientId: string, modo: "semana" | "mes", contexto?: string) {
   const finish = (patch: Record<string, unknown>) =>
     supabaseAdmin.from("content_calendar_jobs").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", jobId);
   try {
-    const { periodo, datas } = modo === "mes"
-      ? datasProximoMes()
-      : (() => { const { segunda, datas } = datasProximaSemana(spNow()); return { periodo: `semana de ${ymd(segunda)}`, datas }; })();
+    const { periodo, datas } = datasDoPeriodo(modo);
 
     const r = await planejarPeriodo(clientId, periodo, datas, undefined, contexto);
     if (!r.ok || !r.plano || !r.nome) { await finish({ status: "error", error: r.error ?? "Falha ao planejar" }); return; }

@@ -27,6 +27,8 @@ import { detectarEventoFuturo, pareceTerData } from "@/lib/cs/evento";
 import { montarSnapshotCS } from "@/lib/cs/snapshot";
 import { ehPerguntaProLone, ehVisaoGeralDemandas } from "@/lib/cs/intent";
 import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/cs/criativo";
+import { planejarPeriodo, executarPlano, datasDoPeriodo } from "@/lib/cs/motor";
+import { calendarioPdfHtml } from "@/lib/cs/calendario-pdf";
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { spNow } from "@/lib/cs/vigilancia";
@@ -150,6 +152,16 @@ function ehPedidoRoteiro(text: string): boolean {
   const t = text.toLowerCase();
   if (!/\blone\b/.test(t)) return false;
   return /\b(roteiro|roteiros|an[úu]ncio|anuncio|criativo|script|vsl)\b/.test(t);
+}
+
+// "Lone, monta/faz o calendário [mensal/semanal] do X" → gera o calendário estratégico e manda o PDF.
+function ehPedidoCalendario(text: string): boolean {
+  const t = text.toLowerCase();
+  if (!/\blone\b/.test(t)) return false;
+  return /\b(calend[áa]rio|planejamento)\b/.test(t) && /\b(monta|montar|faz|fazer|gera|gerar|cria|criar|prepara|preparar|manda|mandar)\b/.test(t);
+}
+function modoCalendario(text: string): "semana" | "mes" {
+  return /\b(m[êe]s|mensal|do m[êe]s|pr[óo]ximo m[êe]s)\b/.test(text.toLowerCase()) ? "mes" : "semana";
 }
 
 // Follow-up de ajuste num roteiro recém-enviado ("ajusta o gancho", "mais curto", "refaz o CTA").
@@ -816,6 +828,44 @@ export async function POST(req: NextRequest) {
   // pelo cliente/resumo citado — corrige "dei ok num reply de ontem e ele ignorou".
   if (!demandaDaSugestao && msg.quotedText && isInternalCmdGroup(msg.groupJid)) {
     demandaDaSugestao = await acharDemandaPorTexto(msg.quotedText);
+  }
+
+  // ─── Agente "Lone": pedido de CALENDÁRIO ("Lone, monta o calendário mensal do X") ───
+  // Gera o calendário estratégico e manda o PDF no grupo. Geração é longa → ack + background.
+  if (!demandaDaSugestao && isInternalCmdGroup(msg.groupJid) && ehPedidoCalendario(msg.text)) {
+    const quemCal = msg.authorName || "";
+    if (!isOpenAIConfigured()) {
+      await csSendGroupText(msg.groupJid, "Tô sem acesso à IA agora pra montar o calendário 😕 já já volto.");
+      return NextResponse.json({ ok: true, calendario: "sem_ia" });
+    }
+    const alvo = await resolveClientePorNome(msg.text);
+    if (!alvo) {
+      await csSendGroupText(msg.groupJid, "Bora! 📅 De qual cliente é o calendário? Me diz o nome que eu já monto.");
+      return NextResponse.json({ ok: true, calendario: "sem_cliente" });
+    }
+    const modo = modoCalendario(msg.text);
+    await csSendGroupText(msg.groupJid, `Fechou${quemCal ? `, ${quemCal}` : ""}! 📅 Montando o calendário ${modo === "mes" ? "mensal" : "da semana"} do *${alvo.nome}*… leva ~1 min, já te mando o PDF. 😉`);
+    void (async () => {
+      try {
+        const { periodo, datas } = datasDoPeriodo(modo);
+        const r = await planejarPeriodo(alvo.id, periodo, datas);
+        if (!r.ok || !r.plano || !r.nome) {
+          await csSendGroupText(msg.groupJid, `Eita, não consegui montar o calendário do *${alvo.nome}* agora 😕 ${r.error ? `(${r.error}) ` : ""}me chama de novo daqui a pouco?`);
+          return;
+        }
+        const pecas = await executarPlano(r.nome, r.plano.diagnostico, r.plano.decisoes);
+        const pdf = await htmlToPdf(calendarioPdfHtml({ cliente: r.nome, nicho: alvo.nicho, periodo, modo, pecas }));
+        if (pdf.ok && pdf.buffer) {
+          await csSendGroupText(msg.groupJid, `📅 Pronto! Calendário ${modo === "mes" ? "mensal" : "da semana"} do *${alvo.nome}* — ${pecas.length} peça(s), cada uma com direção de arte pro designer:`);
+          await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), `Calendario ${alvo.nome} - ${periodo}.pdf`);
+        } else {
+          await csSendGroupText(msg.groupJid, `Montei o calendário do *${alvo.nome}* mas o PDF falhou 😕 — abre em *Planejamento* no sistema que tá lá.`);
+        }
+      } catch {
+        await csSendGroupText(msg.groupJid, `Deu ruim ao montar o calendário do *${alvo.nome}* 😕 tenta de novo?`);
+      }
+    })();
+    return NextResponse.json({ ok: true, calendario: "montando", cliente: alvo.nome });
   }
 
   // ─── Agente "Lone": pedido de ROTEIRO no grupo interno ("Lone, faz um roteiro pro [cliente]") ───

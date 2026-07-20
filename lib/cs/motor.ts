@@ -9,11 +9,29 @@ import { ESTRUTURAS_FORMATO, estruturaDoFormato, ARQUITETURA_CONTEUDO } from "@/
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { coletarMateriaPrima, enriquecerBriefing } from "@/lib/cs/enriquecer-briefing";
 import { loadContentRules } from "@/lib/cs/load-briefing";
+import { datasProximaSemana } from "@/lib/cs/pauta";
+import { spNow, ymd } from "@/lib/cs/vigilancia";
 import type {
   DiagnosticoEstrategico, ObjetivoPeriodo, DecisaoDeConteudo, PlanoDePeriodo, MixPilares,
 } from "@/lib/cs/pipeline";
 
 const MODEL = "gpt-4o";
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+// Datas de postagem do período (seg/qua/sex): próxima semana OU próximo mês inteiro.
+export function datasDoPeriodo(modo: "semana" | "mes"): { periodo: string; datas: string[] } {
+  const now = spNow();
+  if (modo === "mes") {
+    const nm = now.getMonth() === 11 ? 0 : now.getMonth() + 1;
+    const ny = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
+    const dias = new Date(ny, nm + 1, 0).getDate();
+    const datas: string[] = [];
+    for (let d = 1; d <= dias; d++) { const dt = new Date(ny, nm, d); if ([1, 3, 5].includes(dt.getDay())) datas.push(ymd(dt)); }
+    return { periodo: `${MESES[nm]}/${ny}`, datas };
+  }
+  const { segunda, datas } = datasProximaSemana(now);
+  return { periodo: `semana de ${ymd(segunda)}`, datas };
+}
 const norm = (x: unknown): string[] => (Array.isArray(x) ? (x as string[]).filter(Boolean) : []);
 
 // ── Estágio 1 — DIAGNÓSTICO ──────────────────────────────────────────────────
