@@ -8,6 +8,7 @@ import { NUCLEO_PLANEJAMENTO, NUCLEO_CONTEUDO } from "@/lib/cs/estrategista";
 import { ESTRUTURAS_FORMATO, estruturaDoFormato, ARQUITETURA_CONTEUDO } from "@/lib/cs/bibliotecas";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { coletarMateriaPrima, enriquecerBriefing } from "@/lib/cs/enriquecer-briefing";
+import { loadContentRules } from "@/lib/cs/load-briefing";
 import type {
   DiagnosticoEstrategico, ObjetivoPeriodo, DecisaoDeConteudo, PlanoDePeriodo, MixPilares,
 } from "@/lib/cs/pipeline";
@@ -55,6 +56,18 @@ export async function diagnosticar(clienteId: string): Promise<DiagnosticoEstrat
     diferenciais: d.diferenciais, produtos: d.produtos, angulosVsConcorrencia: d.angulos_concorrencia, oportunidades: d.angulos_concorrencia,
     maturidadeMarca: d.maturidade_marca, geradoEm: new Date().toISOString(), fonteBriefing: "efemero",
   };
+}
+
+// MEMÓRIA: o que já foi feito recentemente pro cliente (evita repetir tema/ângulo, dá progressão).
+export async function historicoRecente(clienteId: string, limite = 15): Promise<string> {
+  const { data } = await supabaseAdmin.from("content_cards")
+    .select("title, pilar, objetivo, angulo, created_at")
+    .eq("client_id", clienteId).is("archived_at", null)
+    .order("created_at", { ascending: false }).limit(limite);
+  if (!data?.length) return "";
+  return data
+    .map((c) => `- ${(c.title as string) || "(sem título)"}${c.angulo ? ` — ângulo: ${c.angulo}` : ""}${c.pilar ? ` [${c.pilar}]` : ""}`)
+    .join("\n");
 }
 
 function fmtDiag(nome: string, d: DiagnosticoEstrategico): string {
@@ -121,7 +134,7 @@ const DEC_SCHEMA: Record<string, unknown> = {
 
 export async function decidirPecas(
   nome: string, diag: DiagnosticoEstrategico, obj: { objetivo_principal: string; narrativa: string; mix_pilares: MixPilares },
-  datas: string[], eventos?: string[], contexto?: string,
+  datas: string[], eventos?: string[], contexto?: string, historico?: string, regras?: string[],
 ): Promise<OpenAiResult<{ itens: Array<Omit<DecisaoDeConteudo, "clienteId" | "baseadoEmPeriodo"> & { objecao_alvo: string | null; posicao_funil: string; dor_alvo: string; por_que_agora: string }> }>> {
   const estruturas = ESTRUTURAS_FORMATO.map((e) => `- ${e.formato}: ${e.passos[0]}`).join("\n");
   const mes = datas.length > 4;
@@ -133,14 +146,20 @@ cada peça decida: formato, pilar, objetivo, posição no funil, tema, ÂNGULO (
 peça defende), dor-alvo, objeção-alvo (ou null), e POR QUE AGORA (a justificativa). Não repita
 pilar/ângulo em todas.${mes ? ` Este é um MÊS: as peças devem CONVERSAR ENTRE SI e construir um ARCO ao
 longo das semanas (ex.: aquecimento → anúncio → prova/depoimento → urgência/última chance se houver
-promoção), nunca posts isolados. Distribua o mix ao longo do mês.` : ""} Formatos possíveis:\n${estruturas}\nResponda só no JSON (itens na ordem das datas).`;
+promoção), nunca posts isolados. Distribua o mix ao longo do mês.` : ""}
+CONTINUIDADE: se vier "JÁ FEITO recentemente", NÃO repita aqueles temas nem ângulos — AVANCE a
+conversa (novo ângulo do mesmo objetivo, próximo passo da jornada, ou outra dor/desejo ainda não
+explorado). O feed do cliente tem que parecer uma sequência que evolui, não posts que se repetem.
+Formatos possíveis:\n${estruturas}\nResponda só no JSON (itens na ordem das datas).`;
   const user = fmtDiag(nome, diag) +
     `\nObjetivo do período: ${obj.objetivo_principal}\nNarrativa: ${obj.narrativa}\n` +
     `Mix-alvo: autoridade ${obj.mix_pilares.autoridade} / aproximacao ${obj.mix_pilares.aproximacao} / comercial ${obj.mix_pilares.comercial}\n` +
     (contexto ? `⭐ Contexto/campanha do período: ${contexto}\n` : "") +
+    (regras?.length ? `\n⚠️ REGRAS DO CLIENTE (o time definiu — OBEDEÇA sempre):\n${regras.map((r) => `- ${r}`).join("\n")}\n` : "") +
+    (historico ? `\n=== JÁ FEITO recentemente (NÃO repita tema nem ângulo — dê PROGRESSÃO) ===\n${historico}\n` : "") +
     `Datas (uma peça por data): ${datas.join(", ")}\n` +
     (eventos?.length ? `Datas/eventos marcados: ${eventos.join("; ")}\n` : "") +
-    `\nDecida as peças${mes ? " formando o arco do mês" : " formando o funil"}.`;
+    `\nDecida as peças${mes ? " formando o arco do mês" : " formando o funil"}, sem repetir o que já foi feito.`;
   return chatJson({ model: MODEL, system, user, schema: DEC_SCHEMA, schemaName: "cs_decisao_pecas", maxTokens: mes ? 4000 : 1800, temperature: 0.6 });
 }
 
@@ -158,7 +177,9 @@ export async function planejarPeriodo(clienteId: string, periodo: string, datas:
   const objRes = await definirObjetivoPeriodo(nome, diag, periodo, eventos, contexto);
   if (!objRes.ok || !objRes.data) return { ok: false, error: objRes.error ?? "Falha ao definir objetivo" };
 
-  const decRes = await decidirPecas(nome, diag, objRes.data, datas, eventos, contexto);
+  const historico = await historicoRecente(clienteId);
+  const regras = await loadContentRules(clienteId);
+  const decRes = await decidirPecas(nome, diag, objRes.data, datas, eventos, contexto, historico, regras);
   if (!decRes.ok || !decRes.data) return { ok: false, error: decRes.error ?? "Falha ao decidir peças" };
 
   const objetivo: ObjetivoPeriodo = {
@@ -216,7 +237,7 @@ const PECA_SCHEMA: Record<string, unknown> = {
   },
 };
 
-export async function executarDecisao(nome: string, diag: DiagnosticoEstrategico, dec: DecisaoDeConteudo): Promise<OpenAiResult<PecaFinal> & { peca?: PecaFinal }> {
+export async function executarDecisao(nome: string, diag: DiagnosticoEstrategico, dec: DecisaoDeConteudo, regras?: string[]): Promise<OpenAiResult<PecaFinal> & { peca?: PecaFinal }> {
   const padroes = ARQUITETURA_CONTEUDO.map((p) => `- ${p.nome} (${p.etapas.join(" → ")}) — ${p.quando}`).join("\n");
   const system = `${NUCLEO_CONTEUDO}
 
@@ -266,6 +287,7 @@ reel/vídeo. Responda só no JSON.`;
     li("Dores reais", diag.dores) + li("Desejos", diag.desejos) + li("Objeções", diag.objecoes) +
     li("Produtos/serviços", diag.produtos) +
     li("Diferenciais", diag.diferenciais) + li("Ângulos vs. concorrência", diag.angulosVsConcorrencia) +
+    (regras?.length ? `\n⚠️ REGRAS DO CLIENTE (o time definiu — OBEDEÇA sempre):\n${regras.map((r) => `- ${r}`).join("\n")}\n` : "") +
     `\nProjete a peça: objetivo → padrão narrativo → nº de artes que a mensagem pede → direção de arte de cada uma. Puxe a substância do corpo desta matéria-prima + do seu conhecimento do nicho.`;
   const res = await chatJson<PecaFinal>({ model: MODEL, system, user, schema: PECA_SCHEMA, schemaName: "cs_peca_final", maxTokens: 2400, temperature: 0.6 });
   const peca = res.ok && res.data ? { ...res.data, data: dec.data, formato: dec.formato } : undefined;
@@ -297,11 +319,12 @@ export function pecaParaTexto(p: PecaFinal): string {
 
 /** Executa todas as decisões do plano, com concorrência limitada (mês pode ter ~13 peças). */
 export async function executarPlano(nome: string, diag: DiagnosticoEstrategico, decisoes: DecisaoDeConteudo[]): Promise<PecaFinal[]> {
+  const regras = await loadContentRules(diag.clienteId); // regras do cliente (feedback) — 1x
   const out: PecaFinal[] = [];
   const LIMITE = 4;
   for (let i = 0; i < decisoes.length; i += LIMITE) {
     const lote = decisoes.slice(i, i + LIMITE);
-    const rs = await Promise.all(lote.map((d) => executarDecisao(nome, diag, d)));
+    const rs = await Promise.all(lote.map((d) => executarDecisao(nome, diag, d, regras)));
     for (const r of rs) if (r.peca) out.push(r.peca);
   }
   return out;

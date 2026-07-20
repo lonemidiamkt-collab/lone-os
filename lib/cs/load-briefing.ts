@@ -17,6 +17,16 @@ export async function loadRoteiroPrefs(clientId: string): Promise<string[]> {
   return (data ?? []).map((r) => r.texto as string).filter(Boolean);
 }
 
+// Regras de CONTEÚDO que o motor de calendário obedece (feedback do time → o motor respeita):
+// escopo 'social' (conteúdo/social), 'promocao' (promoções ativas) e 'sempre' (do's & don'ts gerais).
+export async function loadContentRules(clientId: string): Promise<string[]> {
+  const { data } = await supabaseAdmin
+    .from("cs_client_rules").select("texto")
+    .eq("client_id", clientId).eq("ativo", true).in("escopo", ["sempre", "social", "promocao"])
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
+  return (data ?? []).map((r) => r.texto as string).filter(Boolean);
+}
+
 /** Briefing estruturado como TEXTO compacto pros prompts (A1/A3/pauta). Na base real os campos
  *  de texto livre clients.fixed/campaign_briefing estão VAZIOS — o briefing vivo mora em
  *  client_briefings (onboarding/ficha). Sem este loader, A3 e pauta rodavam sem contexto. */

@@ -32,6 +32,23 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [fbMsg, setFbMsg] = useState("");
+
+  // Feedback vira REGRA do cliente (cs_client_rules escopo social) — o motor obedece na próxima geração.
+  const salvarFeedback = async () => {
+    const t = feedback.trim();
+    if (!t) return;
+    setFbMsg("");
+    try {
+      const res = await authedFetch(`/api/cs/client-rules`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, texto: t, escopo: "social" }),
+      });
+      setFbMsg(res.ok ? "Regra salva — o motor vai obedecer na próxima geração ✓" : "Falhou ao salvar");
+      if (res.ok) setFeedback("");
+    } catch { setFbMsg("Erro de conexão"); }
+  };
 
   const gerar = async () => {
     setLoading(true); setMsg(modo === "mes" ? "Planejando o mês… (pode levar 1-2 min)" : "Pensando…"); setPlano(null); setPecas([]);
@@ -163,6 +180,16 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
           </div>
         </div>
       )}
+
+      <div className="space-y-1 border-t border-border pt-3">
+        <Label>Não gostou de algo? O que mudar pra esse cliente? <span className="text-muted-foreground">(vira regra permanente que o motor obedece)</span></Label>
+        <div className="flex gap-2">
+          <Textarea value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={2}
+            placeholder="Ex.: nunca prometer economia com número exato · sempre fechar com o WhatsApp · evitar tom alarmista · focar mais em abertura de MEI" />
+          <Button variant="outline" onClick={salvarFeedback} className="self-end">Salvar regra</Button>
+        </div>
+        {fbMsg && <p className="text-sm text-muted-foreground">{fbMsg}</p>}
+      </div>
     </div>
   );
 }
