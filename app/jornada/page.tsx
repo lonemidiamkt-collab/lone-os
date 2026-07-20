@@ -36,6 +36,16 @@ export default function JornadaPage() {
   const [editId, setEditId] = useState("");
   const [form, setForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [checkins, setCheckins] = useState<Array<{ pergunta: string; resposta: string | null; status: string; origem: string; enviado_em: string }>>([]);
+  const [ckResp, setCkResp] = useState("");
+
+  const carregarCheckins = (clientId: string) =>
+    authedFetch(`/api/cs/jornada?checkinsFor=${clientId}`).then((r) => r.json()).then((d) => setCheckins(d.checkins ?? [])).catch(() => setCheckins([]));
+  const salvarCheckin = async () => {
+    if (!ckResp.trim() || !editId) return;
+    await authedFetch("/api/cs/jornada", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId: editId, checkinResposta: ckResp }) });
+    setCkResp(""); carregarCheckins(editId);
+  };
 
   const carregar = () => {
     setLoading(true);
@@ -67,6 +77,7 @@ export default function JornadaPage() {
 
   const abrirEdicao = (f: Ficha) => {
     setEditId(f.clientId);
+    setCkResp(""); carregarCheckins(f.clientId);
     setForm({
       proximaAcao: f.proximaAcao ?? "", responsavel: f.responsavel ?? "", prazo: f.prazo ?? "",
       estado: f.estado ?? "", notas: f.notas ?? "",
@@ -156,6 +167,24 @@ export default function JornadaPage() {
                   <div className="space-y-1"><Label>Pendências do cliente <span className="text-muted-foreground">(o que ELE deve — 1 por linha)</span></Label><Textarea rows={2} value={form.pendencias} onChange={(e) => setForm({ ...form, pendencias: e.target.value })} placeholder="Ex.: senha do Instagram · logo em alta · aprovar arte da promoção" /></div>
                   <div className="space-y-1"><Label>Notas do relacionamento</Label><Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} /></div>
                   <div className="flex justify-end"><Button onClick={salvar} disabled={saving}>{saving ? "Salvando…" : "Salvar ficha"}</Button></div>
+
+                  <div className="border-t border-border pt-3 space-y-2">
+                    <Label>Check-ins (o que o cliente informou)</Label>
+                    {checkins.length === 0 ? <p className="text-xs text-muted-foreground">Nenhum check-in ainda. No WhatsApp: "Lone, faz o check-in do {f.nome}" (pro time) ou "…pro cliente".</p> : (
+                      <div className="space-y-1.5">
+                        {checkins.map((ck, i) => (
+                          <div key={i} className="text-xs rounded bg-background/60 p-2">
+                            <div className="text-muted-foreground">{ck.pergunta} <span className="opacity-60">· {ck.origem}</span></div>
+                            {ck.resposta ? <div className="text-foreground mt-0.5">↳ {ck.resposta}</div> : <div className="text-amber-500 mt-0.5">aguardando resposta…</div>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Input value={ckResp} onChange={(e) => setCkResp(e.target.value)} placeholder="Registrar o que o cliente falou (leads, atendimento, objeções, prioridades)…" />
+                      <Button variant="outline" onClick={salvarCheckin}>Registrar</Button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

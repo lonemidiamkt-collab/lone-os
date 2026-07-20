@@ -9,10 +9,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { montarJornada } from "@/lib/cs/jornada";
+import { checkinsRecentes, registrarRespostaManual } from "@/lib/cs/checkin";
 
 export async function GET(req: NextRequest) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  // ?checkinsFor=<clientId> → os check-ins recentes daquele cliente (pra ficha expandida)
+  const checkinsFor = req.nextUrl.searchParams.get("checkinsFor");
+  if (checkinsFor) return NextResponse.json({ checkins: await checkinsRecentes(checkinsFor) });
   const fichas = await montarJornada();
   return NextResponse.json({ fichas });
 }
@@ -24,6 +28,12 @@ export async function POST(req: NextRequest) {
   const b = await req.json().catch(() => ({}));
   const clientId = b?.clientId as string;
   if (!clientId) return NextResponse.json({ error: "clientId obrigatório" }, { status: 400 });
+
+  // Registrar resposta de check-in (o time anota o que o cliente falou)
+  if (typeof b?.checkinResposta === "string" && b.checkinResposta.trim()) {
+    const ok = await registrarRespostaManual(clientId, b.checkinResposta.trim());
+    return NextResponse.json({ ok });
+  }
 
   // só os campos enviados (patch) — não zera o que não veio
   const patch: Record<string, unknown> = { client_id: clientId, updated_at: new Date().toISOString(), updated_by: user.email ?? null };

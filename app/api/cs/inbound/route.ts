@@ -29,6 +29,7 @@ import { ehPerguntaProLone, ehVisaoGeralDemandas } from "@/lib/cs/intent";
 import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/cs/criativo";
 import { planejarPeriodo, executarPlano, datasDoPeriodo } from "@/lib/cs/motor";
 import { calendarioPdfHtml } from "@/lib/cs/calendario-pdf";
+import { proximaPergunta, registrarEnvio, capturarResposta, textoParaEnvio } from "@/lib/cs/checkin";
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { spNow } from "@/lib/cs/vigilancia";
@@ -162,6 +163,15 @@ function ehPedidoCalendario(text: string): boolean {
 }
 function modoCalendario(text: string): "semana" | "mes" {
   return /\b(m[êe]s|mensal|do m[êe]s|pr[óo]ximo m[êe]s)\b/.test(text.toLowerCase()) ? "mes" : "semana";
+}
+// "Lone, faz o check-in do X" → pergunta de negócio (time ou cliente). "pro cliente" = grupo dele.
+function ehPedidoCheckin(text: string): boolean {
+  const t = text.toLowerCase();
+  if (!/\blone\b/.test(t)) return false;
+  return /\bcheck[\s-]?in\b/.test(t) && /\b(faz|fazer|manda|mandar|inicia|iniciar|pergunta|perguntar|roda|rodar|abre|abrir)\b/.test(t);
+}
+function checkinProCliente(text: string): boolean {
+  return /\b(pro cliente|ao cliente|no grupo dele|no grupo do cliente|pro grupo do cliente|direto pro cliente|pergunta pro cliente)\b/.test(text.toLowerCase());
 }
 
 // Follow-up de ajuste num roteiro recém-enviado ("ajusta o gancho", "mais curto", "refaz o CTA").
@@ -866,6 +876,26 @@ export async function POST(req: NextRequest) {
       }
     })();
     return NextResponse.json({ ok: true, calendario: "montando", cliente: alvo.nome });
+  }
+
+  // ─── Agente "Lone": CHECK-IN do cliente ("Lone, faz o check-in do X" | "…pro cliente") ───
+  // Pergunta 1 coisa de negócio (progressiva). Pro TIME (grupo interno) ou pro CLIENTE (grupo dele).
+  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehPedidoCheckin(msg.text)) {
+    const alvo = await resolveClientePorNome(msg.text);
+    if (!alvo) { await csSendGroupText(msg.groupJid, "Bora! 📋 Check-in de qual cliente? Me diz o nome."); return NextResponse.json({ ok: true, checkin: "sem_cliente" }); }
+    const p = await proximaPergunta(alvo.id);
+    if (checkinProCliente(msg.text)) {
+      const { data: cli } = await supabaseAdmin.from("clients").select("whatsapp_group_jid").eq("id", alvo.id).maybeSingle();
+      const gj = (cli?.whatsapp_group_jid as string) || null;
+      if (!gj) { await csSendGroupText(msg.groupJid, `O *${alvo.nome}* não tem grupo de WhatsApp mapeado — não consigo perguntar direto pro cliente. Quer que eu pergunte pro time?`); return NextResponse.json({ ok: true, checkin: "sem_grupo" }); }
+      await csSendGroupText(gj, textoParaEnvio(p, "cliente", alvo.nome));
+      await registrarEnvio(alvo.id, "cliente", p, gj);
+      await csSendGroupText(msg.groupJid, `✅ Mandei o check-in pro grupo do *${alvo.nome}*. Quando ele responder, eu registro na ficha (aba *Jornada CS*).`);
+      return NextResponse.json({ ok: true, checkin: "cliente", cliente: alvo.nome });
+    }
+    await csSendGroupText(msg.groupJid, textoParaEnvio(p, "time", alvo.nome));
+    await registrarEnvio(alvo.id, "time", p, msg.groupJid);
+    return NextResponse.json({ ok: true, checkin: "time", cliente: alvo.nome });
   }
 
   // ─── Agente "Lone": pedido de ROTEIRO no grupo interno ("Lone, faz um roteiro pro [cliente]") ───
@@ -1757,6 +1787,9 @@ export async function POST(req: NextRequest) {
   // Carimba a última atividade do CLIENTE no grupo → detector de "cliente esfriando" (churn precoce).
   // Best-effort, não bloqueia (só falha se a migration 063 não estiver aplicada).
   if (c.id && !sandbox) void supabaseAdmin.from("clients").update({ last_client_msg_at: new Date().toISOString() }).eq("id", c.id as string).then(() => {});
+  // CHECK-IN: se há uma pergunta de check-in aguardando pra este cliente, a 1ª resposta dele é
+  // capturada e registrada na ficha (Jornada CS). Silencioso — não bloqueia a classificação de demanda.
+  if (c.id && !sandbox && msg.text && !msg.text.startsWith("[Imagem")) void capturarResposta(c.id as string, "cliente", msg.text);
   const clienteNome = nomeOf(c);
   // Texto livre OU o briefing estruturado (client_briefings) — o texto livre está vazio na base real.
   const clienteBriefing = await loadBriefingCombinado(c.id as string, briefingCompleto(c));

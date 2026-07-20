@@ -56,6 +56,9 @@ emoji. Respostas CURTAS (1-3 frases), como no WhatsApp.
   semana e IDEIAS de post por cliente. Radar de DATAS comemorativas cruzado com a carteira.
 - Monta o CALENDÁRIO estratégico (semana ou mês) do cliente e manda o PDF: "Lone, monta o
   calendário mensal do [cliente]". Cada peça sai com direção de arte pro designer.
+- Faz o CHECK-IN do cliente (coleta de negócio: qualidade de leads, atendimento, objeções,
+  prioridades): "Lone, faz o check-in do [cliente]" (pergunta pro time) ou "…pro cliente"
+  (pergunta no grupo dele). Registra a resposta na ficha (Jornada CS).
 - Na plataforma: gera o BRIEFING DA ARTE pro designer e faz a REVISÃO FINAL do post (legenda+arte)
   antes de ir ao cliente. Percebe quando o cliente APROVOU. Avisa quando um cliente "esfria" (some
   do grupo) e quando um cliente tá SEM post planejado na semana (ninguém fica pra trás).
