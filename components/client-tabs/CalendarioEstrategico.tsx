@@ -33,15 +33,25 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
   const [msg, setMsg] = useState("");
 
   const gerar = async () => {
-    setLoading(true); setMsg(""); setPlano(null); setPecas([]);
+    setLoading(true); setMsg(modo === "mes" ? "Planejando o mês… (pode levar 1-2 min)" : "Pensando…"); setPlano(null); setPecas([]);
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
     try {
       const res = await authedFetch(`/api/cs/calendario`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clientId, modo, contexto }),
       });
       const j = await res.json();
-      if (!res.ok) setMsg(j.error || "Falhou ao gerar");
-      else { setPlano(j.plano); setPecas(j.pecas || []); setPeriodo(j.periodo); setCliente(j.cliente || ""); }
+      if (!res.ok || !j.jobId) { setMsg(j.error || "Falhou ao iniciar"); setLoading(false); return; }
+      // polling do job (até ~3 min)
+      for (let i = 0; i < 60; i++) {
+        await wait(3000);
+        const r = await authedFetch(`/api/cs/calendario?jobId=${j.jobId}`);
+        const s = await r.json();
+        if (s.status === "done" && s.result) {
+          setPlano(s.result.plano); setPecas(s.result.pecas || []); setPeriodo(s.result.periodo); setCliente(s.result.cliente || ""); setMsg(""); break;
+        }
+        if (s.status === "error") { setMsg(s.error || "Falhou ao gerar"); break; }
+      }
     } catch { setMsg("Erro de conexão"); } finally { setLoading(false); }
   };
 

@@ -1,8 +1,8 @@
-// /api/cs/calendario — calendário estratégico (Fase 3). Semana ou MÊS, com contexto/campanha
-// abastecido pelo time (ex.: "agosto: promoção na loja toda").
-//   POST { clientId, modo?("semana"|"mes"), contexto? }        → GERA (plano + peças).
-//   POST { clientId, criar:true, periodo, objetivo, decisoes, pecas, diagnostico } → cria no board.
-// Human-gated: gera → time revisa → cria.
+// /api/cs/calendario — calendário estratégico (Fase 3). Geração é ASSÍNCRONA (job) porque roda
+// vários passos de IA e estouraria o timeout do gateway numa request síncrona.
+//   POST { clientId, modo?, contexto? }              → inicia a geração, retorna { jobId }.
+//   GET  ?jobId=...                                  → status/resultado do job (polling).
+//   POST { clientId, criar:true, ... }               → cria os cards no board (rápido, síncrono).
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +18,6 @@ import type { DecisaoDeConteudo, ObjetivoPeriodo, DiagnosticoEstrategico } from 
 
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
-// Seg/qua/sex do PRÓXIMO mês (planejar agosto estando em julho).
 function datasProximoMes(): { periodo: string; datas: string[] } {
   const now = spNow();
   const nm = now.getMonth() === 11 ? 0 : now.getMonth() + 1;
@@ -32,6 +31,34 @@ function datasProximoMes(): { periodo: string; datas: string[] } {
   return { periodo: `${MESES[nm]}/${ny}`, datas };
 }
 
+// Roda a geração em background e grava o resultado no job (fire-and-forget num server Node vivo).
+async function rodarGeracao(jobId: string, clientId: string, modo: "semana" | "mes", contexto?: string) {
+  const finish = (patch: Record<string, unknown>) =>
+    supabaseAdmin.from("content_calendar_jobs").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", jobId);
+  try {
+    const { periodo, datas } = modo === "mes"
+      ? datasProximoMes()
+      : (() => { const { segunda, datas } = datasProximaSemana(spNow()); return { periodo: `semana de ${ymd(segunda)}`, datas }; })();
+
+    const r = await planejarPeriodo(clientId, periodo, datas, undefined, contexto);
+    if (!r.ok || !r.plano || !r.nome) { await finish({ status: "error", error: r.error ?? "Falha ao planejar" }); return; }
+    const pecas = await executarPlano(r.nome, r.plano.diagnostico, r.plano.decisoes);
+    await finish({ status: "done", result: { cliente: r.nome, periodo, modo, plano: r.plano, pecas } });
+  } catch (e) {
+    await finish({ status: "error", error: e instanceof Error ? e.message : "erro inesperado" });
+  }
+}
+
+export async function GET(req: NextRequest) {
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const jobId = req.nextUrl.searchParams.get("jobId");
+  if (!jobId) return NextResponse.json({ error: "jobId obrigatório" }, { status: 400 });
+  const { data: job } = await supabaseAdmin.from("content_calendar_jobs").select("status, result, error").eq("id", jobId).maybeSingle();
+  if (!job) return NextResponse.json({ error: "job não encontrado" }, { status: 404 });
+  return NextResponse.json({ status: job.status, result: job.result ?? null, error: job.error ?? null });
+}
+
 export async function POST(req: NextRequest) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
@@ -40,7 +67,7 @@ export async function POST(req: NextRequest) {
   const clientId = body?.clientId as string;
   if (!clientId) return NextResponse.json({ error: "clientId obrigatório" }, { status: 400 });
 
-  // ── CRIAR no board (a partir do plano aprovado) ──
+  // ── CRIAR no board (rápido, síncrono) ──
   if (body?.criar === true) {
     const periodo = body?.periodo as string;
     const objetivo = body?.objetivo as ObjetivoPeriodo | undefined;
@@ -75,16 +102,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, cardIds, total: cardIds.length });
   }
 
-  // ── GERAR (preview) ──
+  // ── GERAR (assíncrono): cria o job e dispara em background ──
   const modo = body?.modo === "mes" ? "mes" : "semana";
   const contexto = (body?.contexto as string) || undefined;
-  const { periodo, datas } = modo === "mes"
-    ? datasProximoMes()
-    : (() => { const { segunda, datas } = datasProximaSemana(spNow()); return { periodo: `semana de ${ymd(segunda)}`, datas }; })();
+  const { data: job, error } = await supabaseAdmin.from("content_calendar_jobs")
+    .insert({ client_id: clientId, modo, contexto: contexto ?? null, status: "running" }).select("id").maybeSingle();
+  if (error || !job) return NextResponse.json({ error: "Não consegui iniciar a geração" }, { status: 500 });
 
-  const r = await planejarPeriodo(clientId, periodo, datas, undefined, contexto);
-  if (!r.ok || !r.plano || !r.nome) return NextResponse.json({ error: r.error ?? "Falha ao planejar" }, { status: 502 });
-
-  const pecas = await executarPlano(r.nome, r.plano.diagnostico, r.plano.decisoes);
-  return NextResponse.json({ cliente: r.nome, periodo, modo, plano: r.plano, pecas });
+  void rodarGeracao(job.id as string, clientId, modo, contexto);
+  return NextResponse.json({ jobId: job.id });
 }
