@@ -30,6 +30,7 @@ import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/c
 import { planejarPeriodo, executarPlano, datasDoPeriodo } from "@/lib/cs/motor";
 import { calendarioPdfHtml } from "@/lib/cs/calendario-pdf";
 import { proximaPergunta, registrarEnvio, capturarResposta, textoParaEnvio } from "@/lib/cs/checkin";
+import { gerarCobrancaPendencias } from "@/lib/cs/cobranca";
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { spNow } from "@/lib/cs/vigilancia";
@@ -172,6 +173,12 @@ function ehPedidoCheckin(text: string): boolean {
 }
 function checkinProCliente(text: string): boolean {
   return /\b(pro cliente|ao cliente|no grupo dele|no grupo do cliente|pro grupo do cliente|direto pro cliente|pergunta pro cliente)\b/.test(text.toLowerCase());
+}
+// "Lone, cobra as pendências do X" → cobra o cliente (com impacto) sobre o que ele deve (na ficha).
+function ehPedidoCobranca(text: string): boolean {
+  const t = text.toLowerCase();
+  if (!/\blone\b/.test(t)) return false;
+  return /\b(cobra|cobrar|cobran[çc]a)\b/.test(t) && /\b(pend[êe]ncia|pendencias|pend[êe]ncias)\b/.test(t);
 }
 
 // Follow-up de ajuste num roteiro recém-enviado ("ajusta o gancho", "mais curto", "refaz o CTA").
@@ -896,6 +903,30 @@ export async function POST(req: NextRequest) {
     await csSendGroupText(msg.groupJid, textoParaEnvio(p, "time", alvo.nome));
     await registrarEnvio(alvo.id, "time", p, msg.groupJid);
     return NextResponse.json({ ok: true, checkin: "time", cliente: alvo.nome });
+  }
+
+  // ─── Agente "Lone": COBRANÇA de pendências do cliente ("Lone, cobra as pendências do X") ───
+  // Lê as pendências do cliente (ficha Jornada) e gera cobrança COM IMPACTO. Draft no interno, ou
+  // "…pro cliente" manda direto no grupo dele. Não cobra pagamento (SEM financeiro).
+  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehPedidoCobranca(msg.text)) {
+    const alvo = await resolveClientePorNome(msg.text);
+    if (!alvo) { await csSendGroupText(msg.groupJid, "Cobrar as pendências de qual cliente? Me diz o nome."); return NextResponse.json({ ok: true, cobranca: "sem_cliente" }); }
+    const { data: jr } = await supabaseAdmin.from("client_journey").select("pendencias_cliente").eq("client_id", alvo.id).maybeSingle();
+    const pend = (jr?.pendencias_cliente as { item: string; impacto?: string }[]) || [];
+    if (!pend.length) { await csSendGroupText(msg.groupJid, `Não tem pendência do *${alvo.nome}* registrada. Cadastra as pendências dele na ficha (*Jornada CS*) que eu cobro com o impacto.`); return NextResponse.json({ ok: true, cobranca: "sem_pendencia" }); }
+    if (!isOpenAIConfigured()) { await csSendGroupText(msg.groupJid, "Tô sem IA agora pra escrever a cobrança 😕 já já volto."); return NextResponse.json({ ok: true, cobranca: "sem_ia" }); }
+    const r = await gerarCobrancaPendencias(alvo.nome, alvo.nicho, pend);
+    if (!r.ok || !r.data) { await csSendGroupText(msg.groupJid, `Não consegui montar a cobrança do *${alvo.nome}* agora 😕 tenta de novo?`); return NextResponse.json({ ok: true, cobranca: "erro" }); }
+    if (checkinProCliente(msg.text)) {
+      const { data: cli } = await supabaseAdmin.from("clients").select("whatsapp_group_jid").eq("id", alvo.id).maybeSingle();
+      const gj = (cli?.whatsapp_group_jid as string) || null;
+      if (!gj) { await csSendGroupText(msg.groupJid, `O *${alvo.nome}* não tem grupo mapeado — segue o texto pra você mandar:\n\n${r.data.mensagem}`); return NextResponse.json({ ok: true, cobranca: "sem_grupo" }); }
+      await csSendGroupText(gj, r.data.mensagem);
+      await csSendGroupText(msg.groupJid, `✅ Mandei a cobrança das pendências pro grupo do *${alvo.nome}*.`);
+    } else {
+      await csSendGroupText(msg.groupJid, `📋 *Cobrança de pendências — ${alvo.nome}* (revisa e manda, ou fala _"Lone, cobra as pendências do ${alvo.nome} pro cliente"_):\n\n${r.data.mensagem}`);
+    }
+    return NextResponse.json({ ok: true, cobranca: alvo.nome });
   }
 
   // ─── Agente "Lone": pedido de ROTEIRO no grupo interno ("Lone, faz um roteiro pro [cliente]") ───
