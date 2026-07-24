@@ -2215,8 +2215,15 @@ export async function POST(req: NextRequest) {
         .eq("resumo", titulo).gte("created_at", desdeExato)
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
       let jaPend = exato;
-      if (!jaPend && (it.tipo === "arte_nova" || it.tipo === "ajuste_arte")) {
-        const desdeRajada = new Date(Date.now() - 180 * 1000).toISOString(); // 3 min
+      if (!jaPend) {
+        // Rajada: mesmo cliente + MESMO tipo em janela curta = mesma linha de pensamento continuando
+        // (o cliente manda 2-3 mensagens sobre a MESMA coisa, resumo variando a cada uma). Vale pra
+        // QUALQUER tipo — não só arte: "Feedback — X" + "Feedback — Y" a 6s viravam 2 cards. Arte usa
+        // janela maior (o cliente manda foto atrás de foto ao longo de vários minutos — vistoria viu
+        // pares a 226s/240s escapando dos 3 min); demais tipos, janela mais curta (menos risco de colar
+        // dois assuntos distintos que só calharam do mesmo tipo).
+        const ehArte = it.tipo === "arte_nova" || it.tipo === "ajuste_arte";
+        const desdeRajada = new Date(Date.now() - (ehArte ? 360_000 : 150_000)).toISOString(); // arte 6min · resto 2,5min
         const { data: rajada } = await supabaseAdmin
           .from("cs_demandas").select(COLS)
           .eq("group_jid", msg.groupJid).eq("client_id", cItem.id as string).eq("status", "pendente")
