@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { montarNotaHandoff, montarMensagemGrupoHandoff } from "@/lib/cs/handoff";
 import { randomBytes } from "crypto";
 
 /** Token de onboarding forte (128 bits) — não enumerável. */
@@ -72,13 +73,29 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ─── Generate link WITH draft client (main flow from modal) ───
+  // ─── Generate link WITH draft client (main flow from modal / conversão Ganho→Cliente do CRM) ───
   if (body.action === "generate_link_with_draft") {
-    // 1. Create draft client (invisible to main app)
+    // Handoff comercial→CS: se veio de um lead GANHO do CRM (body.leadId), o servidor RE-LÊ o lead
+    // (fonte de verdade — não confia no client) e o seu histórico, pra carregar o contexto da venda
+    // pro cliente novo em vez de jogar tudo fora.
+    let lead: Record<string, unknown> | null = null;
+    let atividades: Array<{ tipo: string; texto: string; created_at?: string | null }> = [];
+    if (body.leadId) {
+      const { data: l } = await supabase.from("crm_leads").select("*").eq("id", body.leadId).maybeSingle();
+      lead = l ?? null;
+      if (lead) {
+        const { data: acts } = await supabase.from("crm_lead_activities")
+          .select("tipo, texto, created_at").eq("lead_id", body.leadId)
+          .order("created_at", { ascending: false }).limit(12);
+        atividades = (acts as typeof atividades) ?? [];
+      }
+    }
+
+    // 1. Create draft client (invisible to main app) — enriquecido com o que o comercial já coletou.
     const { data: client, error: clientErr } = await supabase.from("clients").insert({
       name: body.name,
       nome_fantasia: body.name,
-      contact_name: body.contactName || null,
+      contact_name: body.contactName || (lead?.contato_nome as string) || null,
       industry: body.industry ?? "Outro",
       service_type: body.serviceType ?? "lone_growth",
       status: "onboarding",
@@ -86,6 +103,12 @@ export async function POST(req: NextRequest) {
       attention_level: "medium",
       monthly_budget: 0,
       payment_method: "pix",
+      ...(lead ? {
+        phone: (lead.telefone as string) || null,
+        email: (lead.email as string) || null,
+        lead_source: (lead.origem as string) || null,
+        source_lead_id: lead.id as string,
+      } : {}),
     }).select("id").maybeSingle();
 
     if (clientErr || !client) {
@@ -101,6 +124,33 @@ export async function POST(req: NextRequest) {
     });
 
     if (subErr) return NextResponse.json({ error: subErr.message }, { status: 500 });
+
+    // 3. Handoff comercial→CS (só quando veio de um lead real): semeia a ficha da jornada com a nota do
+    // comercial + a 1ª próxima ação (iniciar onboarding), e avisa o time no grupo interno do CS. Assim
+    // o cliente não entra "pelado" no /jornada e ninguém começa no escuro. Best-effort (não trava a conversão).
+    if (lead) {
+      try {
+        const leadHandoff = {
+          empresa: lead.empresa as string, contato_nome: lead.contato_nome as string,
+          telefone: lead.telefone as string, email: lead.email as string,
+          valor_orcamento: lead.valor_orcamento as number, origem: lead.origem as string,
+          responsavel: lead.responsavel as string, observacoes: lead.observacoes as string,
+        };
+        await supabase.from("client_journey").upsert({
+          client_id: client.id,
+          proxima_acao: "Iniciar onboarding com o cliente",
+          notas: montarNotaHandoff(leadHandoff, atividades),
+          updated_by: "🤝 handoff comercial",
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "client_id" });
+
+        const jid = process.env.CS_INTERNAL_GROUP_JID;
+        if (jid) await csSendGroupText(jid, montarMensagemGrupoHandoff(leadHandoff));
+      } catch (e) {
+        console.error("[onboarding] handoff comercial→CS falhou (segue):", e);
+      }
+    }
+
     return NextResponse.json({ token, url: `/onboarding/${token}`, clientId: client.id });
   }
 

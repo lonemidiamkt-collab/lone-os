@@ -64,7 +64,7 @@ const FIXED: ReadonlyArray<{ mmdd: string; name: string; category: Commemorative
   { mmdd: "10-05", name: "Dia do Empreendedor / Empresário", category: "profissao" },
 
   // ─── NICHO: Odontologia ─────────────────────────────────────
-  { mmdd: "10-03", name: "Dia do Dentista", category: "profissao", nichos: ["Odontologia"] },
+  { mmdd: "10-25", name: "Dia do Dentista", category: "profissao", nichos: ["Odontologia"] },
 
   // ─── NICHO: Saúde / Clínicas ────────────────────────────────
   { mmdd: "01-20", name: "Dia do Farmacêutico", category: "profissao", nichos: ["Saúde / Clínicas"] },

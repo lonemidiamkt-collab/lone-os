@@ -388,6 +388,7 @@ export default function CrmPage() {
           contactName: draft.contatoNome ?? null,
           industry: "Outro",
           serviceType: "lone_growth",
+          leadId: draft.id, // handoff comercial→CS: o servidor re-lê o lead e carrega o contexto da venda
         }),
       });
       const data = await res.json().catch(() => ({}));
