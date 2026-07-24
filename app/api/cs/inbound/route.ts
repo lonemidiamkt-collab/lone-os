@@ -31,6 +31,8 @@ import { planejarPeriodo, executarPlano, datasDoPeriodo } from "@/lib/cs/motor";
 import { calendarioPdfHtml } from "@/lib/cs/calendario-pdf";
 import { proximaPergunta, registrarEnvio, capturarResposta, textoParaEnvio } from "@/lib/cs/checkin";
 import { gerarCobrancaPendencias } from "@/lib/cs/cobranca";
+import { montarJornada } from "@/lib/cs/jornada";
+import { montarPrepReuniao, pontosPraReuniao, resumirReuniao, formatResumoReuniao, extrairNotasReuniao } from "@/lib/cs/reuniao";
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { spNow } from "@/lib/cs/vigilancia";
@@ -201,6 +203,18 @@ function ehPedidoCobranca(text: string): boolean {
   const t = text.toLowerCase();
   if (!/\blone\b/.test(t)) return false;
   return /\b(cobra|cobrar|cobran[çc]a)\b/.test(t) && /\b(pend[êe]ncia|pendencias|pend[êe]ncias)\b/.test(t);
+}
+// "Lone, prepara a reunião do X" → briefing do estado do cliente + pontos pra puxar (grupo interno).
+function ehPedidoPrepReuniao(text: string): boolean {
+  const t = text.toLowerCase();
+  if (!/\blone\b/.test(t)) return false;
+  return /\b(reuni[ãa]o|reuniao|call|meeting)\b/.test(t) && /\b(prepar|prep|briefing|monta|montar|antes d)/.test(t);
+}
+// "Lone, resumo da reunião do X: <notas>" → IA extrai decisões/ações/pendências e ALIMENTA a ficha.
+function ehPedidoResumoReuniao(text: string): boolean {
+  const t = text.toLowerCase();
+  if (!/\blone\b/.test(t)) return false;
+  return /\b(reuni[ãa]o|reuniao|call|meeting)\b/.test(t) && /\b(resumo|resumir|resume|ata|registra|anota)\b/.test(t);
 }
 
 // Follow-up de ajuste num roteiro recém-enviado ("ajusta o gancho", "mais curto", "refaz o CTA").
@@ -957,6 +971,63 @@ export async function POST(req: NextRequest) {
       await csSendGroupText(msg.groupJid, `📋 *Cobrança de pendências — ${alvo.nome}* (revisa e manda, ou fala _"Lone, cobra as pendências do ${alvo.nome} pro cliente"_):\n\n${r.data.mensagem}`);
     }
     return NextResponse.json({ ok: true, cobranca: alvo.nome });
+  }
+
+  // ─── Agente "Lone": PREPARO de reunião ("Lone, prepara a reunião do X") ───
+  // Briefing do estado do cliente (risco consolidado + atrasos + pendências + valor) + pontos pra puxar.
+  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehPedidoPrepReuniao(msg.text)) {
+    const alvo = await resolveClientePorNome(msg.text);
+    if (!alvo) { await csSendGroupText(msg.groupJid, "📅 Preparar a reunião de qual cliente? Me diz o nome."); return NextResponse.json({ ok: true, prep_reuniao: "sem_cliente" }); }
+    const ficha = (await montarJornada()).find((f) => f.clientId === alvo.id);
+    if (!ficha) { await csSendGroupText(msg.groupJid, `Não achei a ficha do *${alvo.nome}* pra preparar 😕`); return NextResponse.json({ ok: true, prep_reuniao: "sem_ficha" }); }
+    const contexto = [
+      `Estado: ${ficha.estado}${ficha.risco.motivos.length ? ` (${ficha.risco.motivos.join("; ")})` : ""}`,
+      ficha.diasSemFalar != null ? `Sem falar há ${ficha.diasSemFalar} dia(s)` : "",
+      !ficha.percebeValor ? "Sinais de que não percebe valor" : "Participa/engaja bem",
+      ficha.cardsAtrasados ? `${ficha.cardsAtrasados} entrega(s) nossa(s) atrasada(s)` : "",
+      ficha.pendenciasCliente.length ? `Pendências do cliente: ${ficha.pendenciasCliente.map((p) => p.item).join(", ")}` : "",
+      ficha.notas ? `Notas da ficha: ${ficha.notas.slice(0, 500)}` : "",
+    ].filter(Boolean).join("\n");
+    const pontos = await pontosPraReuniao(alvo.nome, alvo.nicho, contexto);
+    await csSendGroupText(msg.groupJid, montarPrepReuniao(ficha, pontos));
+    return NextResponse.json({ ok: true, prep_reuniao: alvo.nome });
+  }
+
+  // ─── Agente "Lone": RESUMO de reunião ("Lone, resumo da reunião do X: <notas>") ───
+  // A IA extrai decisões/ações/pendências das notas e ALIMENTA a ficha (ultima_reuniao, proxima_acao,
+  // pendencias_cliente, proxima_reuniao, notas). Fecha o loop da reunião.
+  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehPedidoResumoReuniao(msg.text)) {
+    const alvo = await resolveClientePorNome(msg.text);
+    if (!alvo) { await csSendGroupText(msg.groupJid, "📝 Resumo da reunião de qual cliente? Fala _\"Lone, resumo da reunião do X: <suas notas>\"_."); return NextResponse.json({ ok: true, resumo_reuniao: "sem_cliente" }); }
+    const notas = extrairNotasReuniao(msg.text);
+    if (notas.length < 15) { await csSendGroupText(msg.groupJid, `Manda as notas da reunião do *${alvo.nome}* depois dos dois-pontos, ex.: _"Lone, resumo da reunião do ${alvo.nome}: cliente pediu mais reels, ficou de mandar fotos até sexta..."_`); return NextResponse.json({ ok: true, resumo_reuniao: "sem_notas" }); }
+    if (!isOpenAIConfigured()) { await csSendGroupText(msg.groupJid, "Tô sem IA agora pra resumir a reunião 😕 já volto."); return NextResponse.json({ ok: true, resumo_reuniao: "sem_ia" }); }
+    const r = await resumirReuniao(alvo.nome, alvo.nicho, notas);
+    if (!r.ok || !r.data) { await csSendGroupText(msg.groupJid, `Não consegui resumir a reunião do *${alvo.nome}* agora 😕 tenta de novo?`); return NextResponse.json({ ok: true, resumo_reuniao: "erro" }); }
+    const res = r.data;
+    const hojeISO = spNow().toISOString().slice(0, 10);
+    // Alimenta a ficha: mescla pendências (dedup por item), seta 1ª próxima ação, marca a reunião e anexa nota.
+    const { data: jr } = await supabaseAdmin.from("client_journey").select("pendencias_cliente, notas").eq("client_id", alvo.id).maybeSingle();
+    const pendAtuais = (jr?.pendencias_cliente as { item: string; impacto?: string }[]) || [];
+    const vistos = new Set(pendAtuais.map((p) => p.item.trim().toLowerCase()));
+    const pendNovas = res.pendencias_cliente
+      .filter((p) => p.item?.trim() && !vistos.has(p.item.trim().toLowerCase()))
+      .map((p) => ({ item: p.item.trim(), desde: hojeISO, impacto: p.impacto || undefined }));
+    const primeira = res.proximas_acoes[0];
+    const notaReuniao = `📅 Reunião ${hojeISO}: ${res.resumo.trim()}`;
+    const notasFicha = jr?.notas ? `${jr.notas}\n\n${notaReuniao}` : notaReuniao;
+    await supabaseAdmin.from("client_journey").upsert({
+      client_id: alvo.id,
+      ultima_reuniao: hojeISO,
+      ...(res.proxima_reuniao ? { proxima_reuniao: res.proxima_reuniao } : {}),
+      ...(primeira ? { proxima_acao: primeira.acao, proxima_acao_responsavel: primeira.responsavel || null, proxima_acao_prazo: primeira.prazo || null } : {}),
+      pendencias_cliente: [...pendAtuais, ...pendNovas],
+      notas: notasFicha,
+      updated_by: "📝 resumo de reunião",
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "client_id" });
+    await csSendGroupText(msg.groupJid, formatResumoReuniao(alvo.nome, res));
+    return NextResponse.json({ ok: true, resumo_reuniao: alvo.nome, pendencias_novas: pendNovas.length });
   }
 
   // ─── Agente "Lone": pedido de ROTEIRO no grupo interno ("Lone, faz um roteiro pro [cliente]") ───
