@@ -12,7 +12,16 @@ function extFromMime(mime?: string): string {
   return "ogg"; // padrão das notas de voz do WhatsApp (opus)
 }
 
-export async function transcribeAudio(base64: string, mimetype?: string): Promise<string> {
+// Prompt de domínio: viesa a grafia do Whisper pro vocabulário do dia a dia (marketing + nome do
+// cliente/nicho, quando conhecido). Sem isso ele erra termo técnico e nome próprio ("card", "story",
+// "reels", "carrossel", "tráfego", "Império dos Pisos"…). Cap ~200 chars (o prompt não é transcrito).
+function promptDominio(contexto?: string): string {
+  const base = "Conversa de agência de marketing digital no WhatsApp. Termos comuns: post, arte, card, story, stories, reels, feed, carrossel, legenda, briefing, tráfego, campanha, criativo, panfleto, orçamento, agendar, publicar.";
+  const ctx = (contexto || "").trim().slice(0, 90);
+  return (ctx ? `${ctx}. ${base}` : base).slice(0, 200);
+}
+
+export async function transcribeAudio(base64: string, mimetype?: string, contexto?: string): Promise<string> {
   const key = process.env.OPENAI_API_KEY;
   if (!key || !base64) return "";
   try {
@@ -22,6 +31,7 @@ export async function transcribeAudio(base64: string, mimetype?: string): Promis
     form.append("file", new Blob([bytes], { type }), `audio.${extFromMime(type)}`);
     form.append("model", "whisper-1");
     form.append("language", "pt");
+    form.append("prompt", promptDominio(contexto));
     const res = await fetch(OPENAI_TRANSCRIBE_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}` },

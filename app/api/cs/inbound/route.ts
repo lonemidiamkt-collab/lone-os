@@ -67,6 +67,22 @@ function authorized(req: NextRequest): boolean {
 
 const splitEnv = (v?: string) => (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const teamJids = () => splitEnv(process.env.CS_LONE_TEAM_JIDS);
+
+// NOMES da equipe Lone (Julio, Roberto, Carlos…) pro A1 saber quem NÃO é cliente — o classifier
+// recebia teamJids() (JIDs de WhatsApp, ilegíveis pro LLM). Puxa de team_members (fonte de verdade),
+// cacheado 10 min (raramente muda; não vale um SELECT por mensagem). Fallback: CS_TEAM_NAMES do env.
+let _nomesEquipeCache: { nomes: string[]; at: number } | null = null;
+async function nomesEquipeLone(): Promise<string[]> {
+  if (_nomesEquipeCache && Date.now() - _nomesEquipeCache.at < 10 * 60 * 1000) return _nomesEquipeCache.nomes;
+  let nomes: string[] = [];
+  try {
+    const { data } = await supabaseAdmin.from("team_members").select("name").or("is_active.is.null,is_active.eq.true");
+    nomes = (data ?? []).map((m) => (m.name as string || "").trim()).filter(Boolean);
+  } catch { /* best-effort */ }
+  if (!nomes.length) nomes = splitEnv(process.env.CS_TEAM_NAMES);
+  _nomesEquipeCache = { nomes, at: Date.now() };
+  return nomes;
+}
 const pilotGroupAllowlist = () => splitEnv(process.env.CS_PILOT_GROUP_JIDS);
 const internalGroupJid = () => process.env.CS_INTERNAL_GROUP_JID || null; // grupo de ARTES (produção/cobranças/lembretes)
 // Grupo de TRÁFEGO (anúncios/estratégia — onde está o Julio). Se não configurado, cai no de artes.
@@ -833,7 +849,13 @@ export async function POST(req: NextRequest) {
     }
     // Áudio de 1h+ estouraria memória e o limite do Whisper (~25MB) — demanda real é curta.
     if (media.base64.length > 8_000_000) return NextResponse.json({ ok: true, skip: "áudio muito longo" });
-    msg.text = await transcribeAudio(media.base64, media.mimetype);
+    // Nome do cliente (por grupo) viesa a grafia do Whisper — evita errar nome próprio na demanda.
+    const { data: cliAud } = await supabaseAdmin
+      .from("clients").select("name, nome_fantasia, nicho").eq("whatsapp_group_jid", msg.groupJid).limit(1).maybeSingle();
+    const ctxAud = cliAud
+      ? [(cliAud.nome_fantasia as string) || (cliAud.name as string), cliAud.nicho as string].filter(Boolean).join(", ")
+      : undefined;
+    msg.text = await transcribeAudio(media.base64, media.mimetype, ctxAud);
     if (!msg.text) return NextResponse.json({ ok: true, skip: "áudio sem transcrição" });
     console.log(`[CS/inbound] 🎤 áudio transcrito (${msg.authorName || "?"}): "${msg.text.slice(0, 80)}"`);
   }
@@ -1930,7 +1952,7 @@ export async function POST(req: NextRequest) {
         [{ author: autor, text: textoAntigo }, { author: autor, text: msg.text }],
         {
           clienteNome, clienteNicho: (c.nicho as string) || undefined, briefing: clienteBriefing,
-          nomesEquipeLone: teamJids(), clientesDoGrupo: clients.map(nomeOf),
+          nomesEquipeLone: await nomesEquipeLone(), clientesDoGrupo: clients.map(nomeOf),
         },
       );
       const itens = re.ok && re.data ? re.data.itens.filter((i) => i.is_demanda && i.confianca >= 0.6) : [];
@@ -2059,7 +2081,7 @@ export async function POST(req: NextRequest) {
     clienteNome,
     clienteNicho: (c.nicho as string) || undefined,
     briefing: clienteBriefing,
-    nomesEquipeLone: teamJids(),
+    nomesEquipeLone: await nomesEquipeLone(),
     clientesDoGrupo: clients.map(nomeOf),
     recusasRecentes,
     confirmadasRecentes,
