@@ -52,11 +52,11 @@ const FIXED: ReadonlyArray<{ mmdd: string; name: string; category: Commemorative
   { mmdd: "01-08", name: "Dia do Fotógrafo", category: "profissao" },
   { mmdd: "02-01", name: "Dia do Publicitário", category: "profissao" },
   { mmdd: "04-07", name: "Dia do Jornalista", category: "profissao" },
-  { mmdd: "04-27", name: "Dia do Designer Gráfico", category: "profissao" },
+  { mmdd: "11-05", name: "Dia do Designer Gráfico", category: "profissao" },
   { mmdd: "05-18", name: "Dia do Web Designer", category: "profissao" },
   { mmdd: "05-08", name: "Dia do Marketing", category: "profissao" },
   { mmdd: "09-13", name: "Dia do Programador", category: "profissao" },
-  { mmdd: "10-30", name: "Dia do Designer", category: "profissao" },
+  { mmdd: "10-30", name: "Dia do Designer de Interiores", category: "profissao" },
 
   // ─── PROFISSÕES — Negócios / Vendas ─────────────────────────
   { mmdd: "07-16", name: "Dia do Comerciante", category: "profissao" },
