@@ -54,8 +54,8 @@ const FIXED: ReadonlyArray<{ mmdd: string; name: string; category: Commemorative
   { mmdd: "04-07", name: "Dia do Jornalista", category: "profissao" },
   { mmdd: "04-27", name: "Dia do Designer Gráfico", category: "profissao" },
   { mmdd: "05-18", name: "Dia do Web Designer", category: "profissao" },
-  { mmdd: "05-19", name: "Dia do Marketing", category: "profissao" },
-  { mmdd: "09-19", name: "Dia do Programador", category: "profissao" },
+  { mmdd: "05-08", name: "Dia do Marketing", category: "profissao" },
+  { mmdd: "09-13", name: "Dia do Programador", category: "profissao" },
   { mmdd: "10-30", name: "Dia do Designer", category: "profissao" },
 
   // ─── PROFISSÕES — Negócios / Vendas ─────────────────────────
@@ -91,20 +91,20 @@ const FIXED: ReadonlyArray<{ mmdd: string; name: string; category: Commemorative
   { mmdd: "12-15", name: "Dia do Arquiteto", category: "profissao", nichos: ["Arquitetura e Engenharia"] },
 
   // ─── NICHO: Estética e Beleza ───────────────────────────────
-  { mmdd: "07-17", name: "Dia do Tatuador", category: "profissao", nichos: ["Estética e Beleza"] },
-  { mmdd: "07-25", name: "Dia da Manicure", category: "profissao", nichos: ["Estética e Beleza"] },
-  { mmdd: "07-28", name: "Dia do Maquiador", category: "profissao", nichos: ["Estética e Beleza"] },
-  { mmdd: "09-08", name: "Dia do Cabeleireiro", category: "profissao", nichos: ["Estética e Beleza"] },
+  { mmdd: "07-20", name: "Dia do Tatuador", category: "profissao", nichos: ["Estética e Beleza"] },
+  { mmdd: "01-18", name: "Dia da Manicure", category: "profissao", nichos: ["Estética e Beleza"] },
+  { mmdd: "01-19", name: "Dia do Maquiador", category: "profissao", nichos: ["Estética e Beleza"] },
+  { mmdd: "01-19", name: "Dia do Cabeleireiro", category: "profissao", nichos: ["Estética e Beleza"] },
   { mmdd: "09-26", name: "Dia da Beleza", category: "profissao", nichos: ["Estética e Beleza"] },
 
   // ─── NICHO: Restaurante / Food ──────────────────────────────
   { mmdd: "04-14", name: "Dia do Café", category: "profissao", nichos: ["Restaurante / Food"] },
   { mmdd: "05-28", name: "Dia do Hambúrguer", category: "profissao", nichos: ["Restaurante / Food"] },
-  { mmdd: "07-05", name: "Dia do Confeiteiro", category: "profissao", nichos: ["Restaurante / Food"] },
+  { mmdd: "01-02", name: "Dia do Confeiteiro", category: "profissao", nichos: ["Restaurante / Food"] },
   { mmdd: "07-08", name: "Dia do Padeiro", category: "profissao", nichos: ["Restaurante / Food"] },
   { mmdd: "07-10", name: "Dia da Pizza", category: "profissao", nichos: ["Restaurante / Food"] },
   { mmdd: "08-11", name: "Dia do Garçom", category: "profissao", nichos: ["Restaurante / Food"] },
-  { mmdd: "08-17", name: "Dia do Cozinheiro", category: "profissao", nichos: ["Restaurante / Food"] },
+  { mmdd: "05-10", name: "Dia do Cozinheiro", category: "profissao", nichos: ["Restaurante / Food"] },
   { mmdd: "09-23", name: "Dia do Sorvete", category: "profissao", nichos: ["Restaurante / Food"] },
 
   // ─── NICHO: Pet Shop ────────────────────────────────────────
