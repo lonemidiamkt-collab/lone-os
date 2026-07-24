@@ -84,7 +84,7 @@ const FIXED: ReadonlyArray<{ mmdd: string; name: string; category: Commemorative
 
   // ─── NICHO: Construção Civil ────────────────────────────────
   { mmdd: "05-24", name: "Dia do Construtor", category: "profissao", nichos: ["Construção Civil"] },
-  { mmdd: "07-25", name: "Dia do Pedreiro", category: "profissao", nichos: ["Construção Civil"] },
+  { mmdd: "12-13", name: "Dia do Pedreiro", category: "profissao", nichos: ["Construção Civil"] },
 
   // ─── NICHO: Arquitetura e Engenharia ────────────────────────
   { mmdd: "12-11", name: "Dia do Engenheiro", category: "profissao", nichos: ["Arquitetura e Engenharia"] },
