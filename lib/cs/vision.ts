@@ -1,7 +1,7 @@
 // lib/cs/vision.ts — descrição de IMAGEM do Agente CS (reconhecimento de foto/print).
 // Cliente manda foto ("faz parecido com isso", print de concorrente, foto de produto, tabela de
 // preços) → aqui a imagem vira TEXTO, que segue pro A1/A3 como qualquer demanda. Provider: OpenAI
-// gpt-4o-mini com detail "low" (imagem ~85 tokens fixos → barato). Nunca lança.
+// gpt-4o-mini com detail "high" (lê preço/texto fino; a leitura da arte é valor central). Nunca lança.
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -16,7 +16,9 @@ const VISION_SYSTEM =
   "3. VISUAL (se for referência de estilo): cores predominantes, clima/estética e elementos que o " +
   "cliente parece querer reproduzir.\n" +
   "4. INTENÇÃO provável: arte NOVA desse produto/oferta? reproduzir algo parecido? só informação?\n" +
-  "Responda em 2-4 frases objetivas com os DADOS explícitos (produto/preço/oferta em destaque). Não " +
+  "Seja conciso — MAS se for TABELA DE PREÇOS / panfleto com vários produtos, LISTE cada item com " +
+  "seu preço e condição (um por linha), SEM resumir nem cortar itens: o designer precisa de todos. " +
+  "Para os demais casos, 2-4 frases com os DADOS explícitos (produto/preço/oferta em destaque). Não " +
   "invente o que não dá pra ver. Se for claramente foto pessoal/meme/figurinha sem valor pra um " +
   "pedido, responda APENAS: IRRELEVANTE.";
 
@@ -39,7 +41,7 @@ export async function describeImage(base64: string, mimetype?: string): Promise<
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: 420,
+        max_tokens: 900, // tabela de preços com muitos itens não pode truncar
         temperature: 0,
         messages: [
           { role: "system", content: VISION_SYSTEM },
@@ -66,7 +68,7 @@ export async function describeImage(base64: string, mimetype?: string): Promise<
     const j = JSON.parse(body) as { choices?: Array<{ message?: { content?: string } }> };
     const desc = (j.choices?.[0]?.message?.content ?? "").trim();
     if (!desc || /^irrelevante\b/i.test(desc)) return { ok: true, descricao: null };
-    return { ok: true, descricao: desc.slice(0, 500) };
+    return { ok: true, descricao: desc.slice(0, 2000) }; // cabe uma tabela de preços inteira
   } catch (err) {
     return { ok: false, descricao: null, error: err instanceof Error ? err.message : "erro de conexão" };
   }

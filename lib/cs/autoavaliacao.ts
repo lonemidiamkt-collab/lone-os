@@ -11,6 +11,7 @@ export interface AutoavalStats {
   pendentes: number;
   taxaAprovacao: number | null;    // % das DECIDIDAS (meta > 75)
   taxaFalsoPositivo: number | null; // % das DECIDIDAS (meta < 10)
+  taxaResposta: number | null;     // % que o time DECIDIU (ok/não) do total — mede se o loop fecha
   recorrentesTipo: { tipo: string; recusas: number }[];     // tipos recusados (>=2)
   recorrentesCliente: { cliente: string; recusas: number }[]; // clientes c/ recusas (>=2)
 }
@@ -40,6 +41,7 @@ export function computeAutoavaliacao(demandas: DemandaAval[]): AutoavalStats {
     total: demandas.length, aprovadas, recusadas, pendentes,
     taxaAprovacao: decididas ? Math.round((aprovadas / decididas) * 100) : null,
     taxaFalsoPositivo: decididas ? Math.round((recusadas / decididas) * 100) : null,
+    taxaResposta: demandas.length ? Math.round((decididas / demandas.length) * 100) : null,
     recorrentesTipo, recorrentesCliente,
   };
 }
@@ -62,12 +64,16 @@ export function formatAutoavaliacao(s: AutoavalStats, periodoLabel: string): str
     `❌ Recusadas: ${s.recusadas}`,
     `⏳ Pendentes: ${s.pendentes}`,
     ``,
-    `${status(s.taxaAprovacao, 75, true)} Taxa de acerto: *${s.taxaAprovacao ?? "—"}%* (meta >75%)`,
+    `${status(s.taxaResposta, 60, true)} Taxa de resposta: *${s.taxaResposta ?? "—"}%* (vocês decidiram ok/não; meta >60%)`,
+    `${status(s.taxaAprovacao, 75, true)} Taxa de acerto: *${s.taxaAprovacao ?? "—"}%* (das decididas; meta >75%)`,
     `${status(s.taxaFalsoPositivo, 10, false)} Falso positivo: *${s.taxaFalsoPositivo ?? "—"}%* (meta <10%)`,
   ];
   // Leitura de gestor — traduz os números em uma frase acionável (o time reclamou que só número é seco).
   const decididas = s.aprovadas + s.recusadas;
-  if (decididas < 4) {
+  // PRIORIDADE: se o time não fecha o loop (muita pendência sem ok/não), esse é o problema nº 1.
+  if (s.taxaResposta != null && s.taxaResposta < 60 && s.pendentes >= 5) {
+    linhas.push(``, `👉 *Leitura:* ${s.pendentes} sugestões ficaram SEM *ok/não* (${100 - (s.taxaResposta ?? 0)}% da fila). Sem sua resposta elas não viram card e eu não aprendo — me respondam, nem que seja "não". É o ponto mais importante agora.`);
+  } else if (decididas < 4) {
     linhas.push(``, `👉 *Leitura:* poucas decididas ainda (${decididas}) — me respondam "ok/não" que eu meço melhor.`);
   } else if (s.taxaFalsoPositivo != null && s.taxaFalsoPositivo > 10) {
     linhas.push(``, `👉 *Leitura:* tô sugerindo demanda demais que não vingou — preciso apertar o filtro. Continua me corrigindo com "não".`);

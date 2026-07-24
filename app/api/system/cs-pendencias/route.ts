@@ -29,6 +29,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skip: "fora de dia útil", dia: ymd(now) });
   }
 
+  // Expira pendências que o time nunca decidiu (ok/não) há muito tempo. Sem isso a fila só cresce
+  // (58 pendentes de 22 dias na vistoria), poluindo o board e a autoavaliação. 14 dias = morta.
+  // Não conta como recusa (é 'expirada', não 'descartada') pra não sujar o falso-positivo.
+  if (!previewOnly) {
+    const morta = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    await supabaseAdmin
+      .from("cs_demandas")
+      .update({ status: "expirada" })
+      .eq("status", "pendente")
+      .lt("created_at", morta);
+  }
+
   const desde = new Date(Date.now() - JANELA_DIAS * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabaseAdmin
     .from("cs_demandas")

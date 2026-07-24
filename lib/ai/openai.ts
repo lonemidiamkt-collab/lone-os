@@ -59,6 +59,7 @@ export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiRe
           json_schema: { name: p.schemaName, strict: true, schema: p.schema },
         },
       }),
+      signal: AbortSignal.timeout(45_000), // não pendura o webhook/handler se a OpenAI travar
     });
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "erro de conexão" };

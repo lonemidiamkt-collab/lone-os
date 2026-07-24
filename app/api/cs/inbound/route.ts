@@ -153,7 +153,13 @@ function pareceNovoPedido(text: string): boolean {
 function ehPedidoRoteiro(text: string): boolean {
   const t = text.toLowerCase();
   if (!/\blone\b/.test(t)) return false;
-  return /\b(roteiro|roteiros|an[úu]ncio|anuncio|criativo|script|vsl)\b/.test(t);
+  if (/\b(roteiro|roteiros|vsl|script)\b/.test(t)) return true; // inequívoco
+  // "anúncio/criativo" só é ROTEIRO com verbo de GERAÇÃO e sem contexto de mover/status de card
+  // (evita "Lone, marca o criativo do X como pronto" ser sequestrado pelo handler de roteiro).
+  if (!/\b(an[úu]ncio|anuncio|criativo)\b/.test(t)) return false;
+  const geracao = /\b(faz|fazer|gera|gerar|monta|montar|cria|criar|escreve|escrever|quero|preciso)\b/.test(t);
+  const moverStatus = /\b(marca|marcar|move|mover|pronto|feito|aprovad|publicad|produ[çc][ãa]o|aprova[çc][ãa]o|coluna|status|board)\b/.test(t);
+  return geracao && !moverStatus;
 }
 
 // "Lone, monta/faz o calendário [mensal/semanal] do X" → gera o calendário estratégico e manda o PDF.
@@ -364,10 +370,12 @@ async function autoAvancarPorArteNoGrupo(groupJid: string, autorNome?: string | 
     const { data: cli } = await supabaseAdmin
       .from("clients").select("id, name, nome_fantasia").eq("whatsapp_group_jid", groupJid).maybeSingle();
     if (!cli) return;
+    const há4dias = new Date(Date.now() - 4 * 86400000).toISOString();
     const { data: cards } = await supabaseAdmin
       .from("content_cards").select("id, title, status")
       .eq("client_id", cli.id as string)
       .not("designer_delivered_at", "is", null)
+      .gte("designer_delivered_at", há4dias) // só entrega RECENTE — não avança card velho por foto solta
       .in("status", ["in_production", "approval"])
       .is("archived_at", null);
     if (!cards || cards.length !== 1) return; // 0 ou vários → não arrisca marcar o errado
@@ -1744,10 +1752,17 @@ export async function POST(req: NextRequest) {
   // SANDBOX de teste: no grupo de teste, a msg da equipe É tratada como pedido (pra testar o fluxo).
   const sandbox = ehSandbox(msg.groupJid);
   if (!sandbox && (isLoneTeam(msg.authorJid, teamJids()) || ehNomeEquipeLone(msg.authorName))) {
-    // O time postou algo no grupo do cliente. Se for IMAGEM, é provável que seja a ARTE sendo
-    // enviada/postada pro cliente (fora do botão). Tenta avançar o card do cliente automaticamente
-    // (pedido do Roberto) — conservador: só age se houver UM card candidato claro.
-    if (msg.isImage) void autoAvancarPorArteNoGrupo(msg.groupJid, msg.authorName);
+    // O time postou algo no grupo do cliente. Se for IMAGEM, PODE ser a arte sendo enviada. Antes de
+    // avançar o card, DESCREVE a imagem (visão) — só avança se for conteúdo real (não meme/print/
+    // comprovante) e houver UM card entregue RECENTEMENTE (guarda contra avanço cego — VIS-3).
+    if (msg.isImage && isOpenAIConfigured()) {
+      void (async () => {
+        const media = await csFetchMediaBase64(payload.data ?? {});
+        if (!media.base64 || media.base64.length > 8_000_000) return;
+        const v = await describeImage(media.base64, media.mimetype);
+        if (v.descricao) await autoAvancarPorArteNoGrupo(msg.groupJid, msg.authorName);
+      })();
+    }
     return NextResponse.json({ ok: true, skip: "autor = equipe Lone" });
   }
   // O grupo INTERNO é coordenação da equipe — nada aqui é demanda de cliente (já passou pelos
