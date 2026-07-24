@@ -215,8 +215,63 @@ export function buildTeamWeeklyHtml(d: TeamWeeklyData): string {
       </div>`
     : "";
 
-  // Página 1 — Produção
-  const page1 = `<div style="padding:40px 44px;">
+  // Tráfego (Julio) — vira SEÇÃO da mesma página (o relatório tem pouca informação; 2 páginas era desperdício).
+  const rotinaHtml = d.rotina.length
+    ? d.rotina.map((r) => `<div style="padding:12px 16px;border-top:1px solid ${C.border};">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;">
+          <strong style="font-size:12px;color:${C.text};">${esc(r.cliente)}</strong>
+          <span style="font-size:10px;color:${C.faint};">${esc(r.data)}</span>
+        </div>
+        ${r.nota ? `<div style="font-size:11.5px;color:${C.muted};margin-top:4px;line-height:1.5;">${esc(r.nota)}</div>` : ""}
+      </div>`).join("")
+    : `<div style="padding:14px 16px;color:${C.muted};font-size:12px;">Nenhuma rotina registrada pelo Julio nesta semana.</div>`;
+
+  const verbaHtml = d.verba.length
+    ? d.verba.map((v) => {
+        const map = {
+          subiu: { ico: "▲", cor: C.green, txt: `verba subiu ${v.deltaPct}%` },
+          caiu: { ico: "▼", cor: C.amber, txt: `verba caiu ${Math.abs(v.deltaPct ?? 0)}%` },
+          ligou: { ico: "●", cor: C.green, txt: "campanha ligada (estava parada)" },
+          pausou: { ico: "○", cor: C.red, txt: "campanha pausada (estava ativa)" },
+        }[v.sinal];
+        return `<tr>
+          <td style="padding:11px 14px;border-top:1px solid ${C.border};font-weight:700;color:${C.text};">${esc(v.cliente)}</td>
+          <td style="padding:11px 14px;border-top:1px solid ${C.border};text-align:right;color:${C.muted};">${brl(v.anterior)}</td>
+          <td style="padding:11px 14px;border-top:1px solid ${C.border};text-align:right;font-weight:800;color:#fff;">${brl(v.atual)}</td>
+          <td style="padding:11px 14px;border-top:1px solid ${C.border};text-align:left;color:${map.cor};font-weight:700;white-space:nowrap;">${map.ico} ${map.txt}</td>
+        </tr>`;
+      }).join("")
+    : `<tr><td colspan="4" style="padding:14px;color:${C.muted};text-align:center;border-top:1px solid ${C.border};">Nenhuma variação relevante de verba na semana.</td></tr>`;
+
+  // Divisor "Tráfego" — seção da MESMA página (não um cabeçalho de página novo).
+  const trafego = `<div style="margin-top:30px;padding-top:22px;border-top:2px solid ${C.border};">
+    <div style="font-size:16px;font-weight:900;color:#fff;letter-spacing:-.01em;">🚀 Tráfego pago — Julio</div>
+    <div style="font-size:11px;color:${C.muted};margin:2px 0 14px;">Trabalho da semana · ${d.periodoLabel}</div>
+
+    <div style="background:${C.card2};border:1px solid ${C.border};border-radius:12px;padding:12px 16px;margin-bottom:6px;font-size:11px;color:${C.muted};line-height:1.5;">
+      ℹ️ O sistema <strong style="color:${C.text};">lê e sincroniza</strong> a Meta — ele não registra cada edição feita no Gerenciador.
+      Abaixo, os dois sinais reais do trabalho do Julio: a <strong style="color:${C.text};">rotina</strong> que ele registrou e a
+      <strong style="color:${C.text};">variação de verba</strong> por cliente (semana vs. anterior).
+    </div>
+
+    ${sectionTitle("🗂️ Rotina do Julio — clientes trabalhados")}
+    <div style="background:${C.card};border:1px solid ${C.border};border-radius:14px;overflow:hidden;">${rotinaHtml.replace(`border-top:1px solid ${C.border};`, "")}</div>
+
+    ${sectionTitle("💸 Onde a verba se moveu")}
+    <table style="width:100%;border-collapse:collapse;background:${C.card};border:1px solid ${C.border};border-radius:14px;overflow:hidden;font-size:12px;">
+      <thead><tr style="background:${C.card2};">
+        <th style="padding:11px 14px;text-align:left;color:${C.muted};font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Cliente</th>
+        <th style="padding:11px 14px;text-align:right;color:${C.muted};font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Sem. ant.</th>
+        <th style="padding:11px 14px;text-align:right;color:${C.muted};font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Esta sem.</th>
+        <th style="padding:11px 14px;text-align:left;color:${C.muted};font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Movimento</th>
+      </tr></thead>
+      <tbody>${verbaHtml}</tbody>
+    </table>
+  </div>`;
+
+  // Uma página só: cabeçalho mestre + produção + tráfego como seção. Conteúdo curto cabe numa página;
+  // em semana cheia (muitas linhas) o navegador quebra sozinho — sem quebra FORÇADA gerando página vazia.
+  const page = `<div style="padding:40px 44px;">
     ${head(logoUrl, "Produção da semana", `Relatório interno do time · ${d.periodoLabel}`)}
     <div style="display:flex;gap:12px;margin-bottom:6px;">
       ${kpi("Artes entregues", String(d.totalEntregues))}
@@ -247,63 +302,12 @@ export function buildTeamWeeklyHtml(d: TeamWeeklyData): string {
     </table>
 
     ${naoEntregasHtml}
-  </div>`;
-
-  // Página 2 — Tráfego (Julio)
-  const rotinaHtml = d.rotina.length
-    ? d.rotina.map((r) => `<div style="padding:12px 16px;border-top:1px solid ${C.border};">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;">
-          <strong style="font-size:12px;color:${C.text};">${esc(r.cliente)}</strong>
-          <span style="font-size:10px;color:${C.faint};">${esc(r.data)}</span>
-        </div>
-        ${r.nota ? `<div style="font-size:11.5px;color:${C.muted};margin-top:4px;line-height:1.5;">${esc(r.nota)}</div>` : ""}
-      </div>`).join("")
-    : `<div style="padding:14px 16px;color:${C.muted};font-size:12px;">Nenhuma rotina registrada pelo Julio nesta semana.</div>`;
-
-  const verbaHtml = d.verba.length
-    ? d.verba.map((v) => {
-        const map = {
-          subiu: { ico: "▲", cor: C.green, txt: `verba subiu ${v.deltaPct}%` },
-          caiu: { ico: "▼", cor: C.amber, txt: `verba caiu ${Math.abs(v.deltaPct ?? 0)}%` },
-          ligou: { ico: "●", cor: C.green, txt: "campanha ligada (estava parada)" },
-          pausou: { ico: "○", cor: C.red, txt: "campanha pausada (estava ativa)" },
-        }[v.sinal];
-        return `<tr>
-          <td style="padding:11px 14px;border-top:1px solid ${C.border};font-weight:700;color:${C.text};">${esc(v.cliente)}</td>
-          <td style="padding:11px 14px;border-top:1px solid ${C.border};text-align:right;color:${C.muted};">${brl(v.anterior)}</td>
-          <td style="padding:11px 14px;border-top:1px solid ${C.border};text-align:right;font-weight:800;color:#fff;">${brl(v.atual)}</td>
-          <td style="padding:11px 14px;border-top:1px solid ${C.border};text-align:left;color:${map.cor};font-weight:700;white-space:nowrap;">${map.ico} ${map.txt}</td>
-        </tr>`;
-      }).join("")
-    : `<tr><td colspan="4" style="padding:14px;color:${C.muted};text-align:center;border-top:1px solid ${C.border};">Nenhuma variação relevante de verba na semana.</td></tr>`;
-
-  const page2 = `<div style="padding:40px 44px;break-before:page;page-break-before:always;">
-    ${head(logoUrl, "Tráfego pago — Julio", `Trabalho da semana · ${d.periodoLabel}`)}
-
-    <div style="background:${C.card2};border:1px solid ${C.border};border-radius:12px;padding:12px 16px;margin-bottom:6px;font-size:11px;color:${C.muted};line-height:1.5;">
-      ℹ️ O sistema <strong style="color:${C.text};">lê e sincroniza</strong> a Meta — ele não registra cada edição feita no Gerenciador.
-      Abaixo, os dois sinais reais do trabalho do Julio: a <strong style="color:${C.text};">rotina</strong> que ele registrou e a
-      <strong style="color:${C.text};">variação de verba</strong> por cliente (semana vs. anterior).
-    </div>
-
-    ${sectionTitle("🗂️ Rotina do Julio — clientes trabalhados")}
-    <div style="background:${C.card};border:1px solid ${C.border};border-radius:14px;overflow:hidden;">${rotinaHtml.replace(`border-top:1px solid ${C.border};`, "")}</div>
-
-    ${sectionTitle("💸 Onde a verba se moveu")}
-    <table style="width:100%;border-collapse:collapse;background:${C.card};border:1px solid ${C.border};border-radius:14px;overflow:hidden;font-size:12px;">
-      <thead><tr style="background:${C.card2};">
-        <th style="padding:11px 14px;text-align:left;color:${C.muted};font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Cliente</th>
-        <th style="padding:11px 14px;text-align:right;color:${C.muted};font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Sem. ant.</th>
-        <th style="padding:11px 14px;text-align:right;color:${C.muted};font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Esta sem.</th>
-        <th style="padding:11px 14px;text-align:left;color:${C.muted};font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Movimento</th>
-      </tr></thead>
-      <tbody>${verbaHtml}</tbody>
-    </table>
+    ${trafego}
   </div>`;
 
   return `<!doctype html><html><head><meta charset="utf-8"/><style>
     * { margin:0; padding:0; box-sizing:border-box; }
     html, body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:${C.bg}; color:${C.text}; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     @page { size:A4; margin:0; }
-  </style></head><body>${page1}${page2}</body></html>`;
+  </style></head><body>${page}</body></html>`;
 }
