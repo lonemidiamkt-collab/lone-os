@@ -560,10 +560,14 @@ export async function fetchNotifications(forUser?: string): Promise<AppNotificat
   }));
 }
 
-export async function insertNotification(n: { type: string; title: string; body?: string; clientId?: string; cardId?: string; read?: boolean }): Promise<void> {
+export async function insertNotification(n: { type: string; title: string; body?: string; clientId?: string; cardId?: string; targetUser?: string | null; read?: boolean }): Promise<void> {
+  // `targetUser` faltava na assinatura: TODA notificação criada pela UI (arte entregue, arte
+  // reprovada, "@fulano" num card) nascia GLOBAL e caía no sino do time inteiro. Em produção, 92%
+  // das notificações estão sem destinatário — o que fez todo mundo parar de olhar o sino.
   const { error } = await db.from("notifications").insert({
     type: n.type, title: n.title, body: n.body,
-    client_id: n.clientId, card_id: n.cardId ?? null, read: false,
+    client_id: n.clientId, card_id: n.cardId ?? null,
+    target_user: n.targetUser ?? null, read: false,
   });
   if (error) console.error("[DB] insertNotification:", error);
 }
@@ -573,8 +577,15 @@ export async function markNotificationReadDb(id: string): Promise<void> {
   if (error) console.error("[DB] markNotificationRead:", error);
 }
 
-export async function markAllNotificationsReadDb(): Promise<void> {
-  const { error } = await db.from("notifications").update({ read: true }).eq("read", false);
+/**
+ * Marca como lidas SÓ as notificações de quem clicou (as dela + as globais).
+ * Antes era um UPDATE sem filtro nenhum: o designer clicava em "marcar todas como lidas" às 9h e
+ * apagava os avisos não lidos do time inteiro — CEO, social e tráfego perdiam o dia sem saber.
+ */
+export async function markAllNotificationsReadDb(targetUser?: string | null): Promise<void> {
+  let q = db.from("notifications").update({ read: true }).eq("read", false);
+  q = targetUser ? q.or(`target_user.is.null,target_user.eq.${targetUser}`) : q.is("target_user", null);
+  const { error } = await q;
   if (error) console.error("[DB] markAllNotificationsRead:", error);
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   ListChecks, Plus, X, Check, Clock, AlertTriangle, Calendar,
   User, Trash2, CircleDot, Flag,
@@ -35,6 +35,11 @@ export default function TarefasPage() {
   const clients = useClientsStore((s) => s.clients);
   const { role, currentUser } = useRole();
   const isGestao = role === "admin" || role === "manager";
+
+  // Sem init a página abria com ZERO tarefas quando acessada direto.
+  const initClients = useClientsStore((s) => s.init);
+  const initOps = useOperationalStore((s) => s.init);
+  useEffect(() => { initClients(); initOps(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [criando, setCriando] = useState(false);
   const [filtroPessoa, setFiltroPessoa] = useState<string>("todos");
