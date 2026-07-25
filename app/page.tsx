@@ -30,6 +30,7 @@ import {
   TeamSection,
   WeeklyAttention,
   type AttentionEntry,
+  ProducaoHistorico,
   ClientStatusList,
 } from "@/components/dashboard-v2";
 import { KPICard, PillBadge } from "@/components/lone-ui";
@@ -495,6 +496,7 @@ function AdminDashboard() {
   const clients = useClientsStore((s) => s.clients);
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
+  const notices = useOperationalStore((s) => s.notices);
   const tasks = useOperationalStore((s) => s.tasks);
   const updateTask = useOperationalStore((s) => s.updateTask);
   const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
@@ -519,7 +521,7 @@ function AdminDashboard() {
   }, []);
 
   // Publicados do MÊS — do servidor (inclui arquivados), pois o board ao vivo não bate com a realidade.
-  const [publishedMonth, setPublishedMonth] = useState<{ total: number; byMember: Record<string, number>; byClient: Record<string, number>; artesProntas: Record<string, number>; semana?: { total: number } } | null>(null);
+  const [publishedMonth, setPublishedMonth] = useState<{ total: number; byMember: Record<string, number>; byClient: Record<string, number>; artesProntas: Record<string, number>; semana?: { total: number }; historico?: { mes: string; label: string; total: number }[] } | null>(null);
   // Equipes pelo PAPEL (team_members) + suporte real do log — não deduzido dos clientes.
   const [equipes, setEquipes] = useState<{ social: { name: string; clientCount: number; published: number; publishedWeek: number }[]; trafego: { name: string; clientCount: number; supportDone: number; supportTotal: number }[]; semSocial: number } | null>(null);
   useEffect(() => {
@@ -662,6 +664,15 @@ function AdminDashboard() {
         <KPICard label="Design"      value={designQueued + designInProg} caption={`${designQueued} fila · ${designInProg} prod`} onClick={() => router.push("/design")} />
       </div>
 
+      {/* Produção: semana + mês + histórico mês a mês (janela móvel, se atualiza sozinha). */}
+      {publishedMonth?.historico && publishedMonth.historico.length > 0 && (
+        <ProducaoHistorico
+          semana={publishedMonth.semana?.total ?? 0}
+          mes={publishedMonth.total}
+          historico={publishedMonth.historico}
+        />
+      )}
+
       {/* Equipes: papéis vêm de team_members e o suporte do log real de mensagens enviadas.
           Antes a lista era deduzida de clients.assigned_social — o que colocava o Julio (manager de
           tráfego) na Equipe Social e criava um membro fantasma com os clientes sem responsável. */}
@@ -675,9 +686,11 @@ function AdminDashboard() {
         </p>
       )}
 
-      {/* Avisos + Tarefas Urgentes */}
+      {/* Avisos + Tarefas Urgentes — o grid se ajusta ao conteúdo: "Avisos" só ocupa 2/3 quando TEM
+          aviso. Vazio (o normal), ele encolhe pra 1/3 e as Tarefas Urgentes ganham o espaço, em vez
+          de sobrar meia tela com "Nenhum aviso". */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2">
+        <div className={notices.length > 0 ? "xl:col-span-2" : ""}>
           <NoticeFormBlock />
         </div>
         <div className="rounded-xl border border-lone-border bg-lone-bg-card p-4">
