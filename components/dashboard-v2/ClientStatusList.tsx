@@ -37,6 +37,8 @@ export interface ClientRowData {
   status: ClientStatus;
   postsThisMonth: number;
   postsGoal: number;
+  /** Artes entregues pelo designer e ainda não publicadas (gargalo de postagem). */
+  artesProntas?: number;
   assignedTraffic?: string;
   assignedSocial?: string;
 }
@@ -168,6 +170,16 @@ const ClientStatusList = React.forwardRef<HTMLDivElement, ClientStatusListProps>
                           <span className="text-lone-caption font-jetbrains text-lone-text-tertiary">
                             {posts}/{goal}
                           </span>
+                          {/* Arte pronta e não postada: sem isto, quem tem 3 artes na fila aparece
+                              como "0/12" e parece abandonado, quando na verdade o gargalo é postar. */}
+                          {(client.artesProntas ?? 0) > 0 && (
+                            <span
+                              className="text-lone-caption font-jetbrains text-[var(--lone-warning)]"
+                              title={`${client.artesProntas} arte(s) pronta(s) aguardando postagem`}
+                            >
+                              +{client.artesProntas} pronta{client.artesProntas !== 1 ? "s" : ""}
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>

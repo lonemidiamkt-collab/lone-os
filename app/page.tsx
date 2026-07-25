@@ -519,7 +519,15 @@ function AdminDashboard() {
   }, []);
 
   // Publicados do MÊS — do servidor (inclui arquivados), pois o board ao vivo não bate com a realidade.
-  const [publishedMonth, setPublishedMonth] = useState<{ total: number; byMember: Record<string, number>; byClient: Record<string, number> } | null>(null);
+  const [publishedMonth, setPublishedMonth] = useState<{ total: number; byMember: Record<string, number>; byClient: Record<string, number>; artesProntas: Record<string, number>; semana?: { total: number } } | null>(null);
+  // Equipes pelo PAPEL (team_members) + suporte real do log — não deduzido dos clientes.
+  const [equipes, setEquipes] = useState<{ social: { name: string; clientCount: number; published: number; publishedWeek: number }[]; trafego: { name: string; clientCount: number; supportDone: number; supportTotal: number }[]; semSocial: number } | null>(null);
+  useEffect(() => {
+    authedFetch("/api/dashboard/equipes")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setEquipes(d); })
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     authedFetch("/api/dashboard/published-month")
       .then((r) => (r.ok ? r.json() : null))
@@ -654,11 +662,18 @@ function AdminDashboard() {
         <KPICard label="Design"      value={designQueued + designInProg} caption={`${designQueued} fila · ${designInProg} prod`} onClick={() => router.push("/design")} />
       </div>
 
-      {/* Equipes — "publicados" por social vem do servidor (mês real), não do board ao vivo */}
+      {/* Equipes: papéis vêm de team_members e o suporte do log real de mensagens enviadas.
+          Antes a lista era deduzida de clients.assigned_social — o que colocava o Julio (manager de
+          tráfego) na Equipe Social e criava um membro fantasma com os clientes sem responsável. */}
       <TeamSection
-        socialTeam={publishedMonth ? teamProductivity.map((m) => ({ ...m, published: publishedMonth.byMember[m.name] ?? 0 })) : teamProductivity}
-        trafficTeam={trafficProductivity}
+        socialTeam={equipes?.social.map((m) => ({ ...m, inPipeline: 0 })) ?? teamProductivity}
+        trafficTeam={equipes?.trafego ?? trafficProductivity}
       />
+      {equipes && equipes.semSocial > 0 && (
+        <p className="-mt-3 text-lone-caption font-inter text-lone-text-tertiary">
+          ⚠️ {equipes.semSocial} cliente{equipes.semSocial !== 1 ? "s" : ""} sem social responsável — defina em Clientes.
+        </p>
+      )}
 
       {/* Avisos + Tarefas Urgentes */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -719,6 +734,7 @@ function AdminDashboard() {
           status: c.status,
           postsThisMonth: publishedMonth?.byClient[c.id] ?? c.postsThisMonth ?? 0,
           postsGoal: c.postsGoal ?? 12,
+          artesProntas: publishedMonth?.artesProntas?.[c.id] ?? 0,
           assignedTraffic: c.assignedTraffic,
           assignedSocial: c.assignedSocial,
         }))}
