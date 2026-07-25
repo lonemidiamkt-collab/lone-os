@@ -71,7 +71,20 @@ const ROLE_GOALS: Record<string, string> = {
 // (removido: TEAM_OKRS_CURRENT era mock não utilizado — o render usa realTeamOkrs + generateSnapshot)
 
 // ─── Historical Snapshot Generator (called inside component with real team data) ──
-function generateSnapshot(month: number, variance: number, teamMembersList: Array<{ name: string; role: string }>): Omit<PeriodSnapshot, "companyOkrs"> {
+/**
+ * Snapshot de um mês. `real` traz o que dá pra medir de verdade (posts entregues, SLA e entregas no
+ * prazo, derivados de content_card_transitions). O resto dos OKRs ainda não tem fonte histórica —
+ * esses ficam marcados como `simulado: true` e a tela mostra a tag, em vez de passarem por relatório.
+ *
+ * ANTES: TODOS os números aqui eram fórmula — inclusive o progresso individual, que usava o
+ * `m.name.length` (o tamanho do nome da pessoa) como componente. Nada disso vinha do banco.
+ */
+function generateSnapshot(
+  month: number,
+  variance: number,
+  teamMembersList: Array<{ name: string; role: string }>,
+  real?: { postsEntregues: number; slaMedioHoras: number | null; entregasNoPrazo: number | null; porMembro?: Record<string, number> },
+): Omit<PeriodSnapshot, "companyOkrs"> {
   const v = variance;
   const status = (current: number, target: number, inverted = false): "on_track" | "at_risk" | "off_track" => {
     const pct = inverted ? (target / Math.max(current, 0.01)) * 100 : (current / target) * 100;
@@ -80,31 +93,37 @@ function generateSnapshot(month: number, variance: number, teamMembersList: Arra
 
   const teamOkrs: TeamOKRs[] = [
     { team: "Trafego Pago", icon: TrendingUp, color: "var(--primary)", okrs: [
-      { id: "tr-1", title: "ROAS medio > 4.0", target: 4.0, current: +(3.2 + v * 0.5).toFixed(1), unit: "x", status: status(3.2 + v * 0.5, 4.0) },
-      { id: "tr-2", title: "Investimento executado > 95%", target: 95, current: Math.round(78 + v * 10), unit: "%", status: status(78 + v * 10, 95) },
-      { id: "tr-3", title: "Novos leads/mes > 500", target: 500, current: Math.round(320 + v * 100), unit: "leads", status: status(320 + v * 100, 500) },
+      { id: "tr-1", title: "ROAS medio > 4.0", target: 4.0, current: +(3.2 + v * 0.5).toFixed(1), unit: "x", status: status(3.2 + v * 0.5, 4.0), isReal: false, source: "fórmula (sem fonte histórica)" },
+      { id: "tr-2", title: "Investimento executado > 95%", target: 95, current: Math.round(78 + v * 10), unit: "%", status: status(78 + v * 10, 95), isReal: false, source: "fórmula (sem fonte histórica)" },
+      { id: "tr-3", title: "Novos leads/mes > 500", target: 500, current: Math.round(320 + v * 100), unit: "leads", status: status(320 + v * 100, 500), isReal: false, source: "fórmula (sem fonte histórica)" },
     ]},
     { team: "Social Media", icon: Instagram, color: "var(--primary)", okrs: [
-      { id: "so-1", title: "Posts entregues/mes > 96", target: 96, current: Math.round(60 + v * 18), unit: "posts", status: status(60 + v * 18, 96) },
-      { id: "so-2", title: "Engajamento medio > 3.5%", target: 3.5, current: +(2.6 + v * 0.5).toFixed(1), unit: "%", status: status(2.6 + v * 0.5, 3.5) },
-      { id: "so-3", title: "SLA de entrega < 48h", target: 48, current: Math.round(55 - v * 13), unit: "horas", status: status(55 - v * 13, 48, true) },
+      // REAL: posts publicados no mês, do histórico de transições.
+      { id: "so-1", title: "Posts entregues/mes > 96", target: 96, current: real?.postsEntregues ?? 0, unit: "posts", status: status(real?.postsEntregues ?? 0, 96), isReal: true, source: "content_card_transitions" },
+      { id: "so-2", title: "Engajamento medio > 3.5%", target: 3.5, current: +(2.6 + v * 0.5).toFixed(1), unit: "%", status: status(2.6 + v * 0.5, 3.5), isReal: false, source: "fórmula (sem fonte histórica)" },
+      // REAL quando houve produção medida no mês; senão fica simulado e a tag aparece.
+      { id: "so-3", title: "SLA de entrega < 48h", target: 48, current: real?.slaMedioHoras ?? Math.round(55 - v * 13), unit: "horas", status: status(real?.slaMedioHoras ?? (55 - v * 13), 48, true), isReal: real?.slaMedioHoras != null, source: real?.slaMedioHoras != null ? "histórico de publicação" : "fórmula" },
     ]},
     { team: "Design", icon: Palette, color: "var(--chart-4)", okrs: [
-      { id: "de-1", title: "Pedidos no prazo > 90%", target: 90, current: Math.round(75 + v * 10), unit: "%", status: status(75 + v * 10, 90) },
-      { id: "de-2", title: "Tempo medio < 3 dias", target: 3, current: +(3.5 - v * 0.7).toFixed(1), unit: "dias", status: status(3.5 - v * 0.7, 3, true) },
-      { id: "de-3", title: "Satisfacao > 4.5/5", target: 4.5, current: +(3.8 + v * 0.4).toFixed(1), unit: "/5", status: status(3.8 + v * 0.4, 4.5) },
+      { id: "de-1", title: "Pedidos no prazo > 90%", target: 90, current: real?.entregasNoPrazo ?? Math.round(75 + v * 10), unit: "%", status: status(real?.entregasNoPrazo ?? (75 + v * 10), 90), isReal: real?.entregasNoPrazo != null, source: real?.entregasNoPrazo != null ? "histórico de publicação" : "fórmula" },
+      { id: "de-2", title: "Tempo medio < 3 dias", target: 3, current: +(3.5 - v * 0.7).toFixed(1), unit: "dias", status: status(3.5 - v * 0.7, 3, true), isReal: false, source: "fórmula (sem fonte histórica)" },
+      { id: "de-3", title: "Satisfacao > 4.5/5", target: 4.5, current: +(3.8 + v * 0.4).toFixed(1), unit: "/5", status: status(3.8 + v * 0.4, 4.5), isReal: false, source: "fórmula (sem fonte histórica)" },
     ]},
   ];
 
+  // Progresso individual. O do SOCIAL é real (posts que a pessoa publicou no mês ÷ meta da equipe).
+  // Os demais papéis ainda não têm métrica individual no banco — em vez de inventar (era
+  // `m.name.length * 2.3`, o TAMANHO DO NOME), fica em 0 e a tela mostra "sem meta medida".
   const individualGoals = teamMembersList.filter((m) => m.role !== "admin").map((m) => {
-    const baseProgress = 60 + v * 20 + Math.round(m.name.length * 2.3) % 20;
-    const progress = Math.min(100, Math.max(10, Math.round(baseProgress)));
+    const postsDele = real?.porMembro?.[m.name];
+    const temReal = m.role === "social" && postsDele != null;
+    const progress = temReal ? Math.min(100, Math.round((postsDele / 32) * 100)) : 0;
     return {
       name: m.name,
       role: ROLE_LABELS[m.role] ?? m.role,
-      goal: ROLE_GOALS[m.role] ?? "Meta operacional",
+      goal: temReal ? `${postsDele} posts publicados no mês` : "sem meta medida",
       progress,
-      status: progress >= 80 ? "on_track" as const : "at_risk" as const,
+      status: (temReal && progress >= 80 ? "on_track" : temReal ? "at_risk" : "off_track") as "on_track" | "at_risk" | "off_track",
     };
   });
 
@@ -251,14 +270,32 @@ export default function GoalsPage() {
     kpiToOkr("co-4", "Novos clientes/mes", metrics.company.newClients),
   ], [metrics.company, churnKpi]);
 
-  // Generate monthly snapshots using real team data
+  // Operação REAL mês a mês (posts entregues, SLA, entregas no prazo) — do histórico de transições.
+  const [okrReal, setOkrReal] = useState<Record<string, { postsEntregues: number; slaMedioHoras: number | null; entregasNoPrazo: number | null; porMembro?: Record<string, number> }>>({});
+  useEffect(() => {
+    authedFetch("/api/okr/historico?meses=12")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.historico) return;
+        const map: typeof okrReal = {};
+        for (const h of d.historico as Array<{ mes: string; postsEntregues: number; slaMedioHoras: number | null; entregasNoPrazo: number | null; porMembro?: Record<string, number> }>) {
+          map[h.mes] = { postsEntregues: h.postsEntregues, slaMedioHoras: h.slaMedioHoras, entregasNoPrazo: h.entregasNoPrazo, porMembro: h.porMembro };
+        }
+        setOkrReal(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Snapshots por mês: onde há dado real, ele manda; o resto vai marcado como simulado.
   const MONTHLY_SNAPSHOTS = useMemo(() => {
     const snaps: Record<number, Omit<PeriodSnapshot, "companyOkrs">> = {};
+    const ano = new Date().getFullYear();
     for (let m = 0; m < 12; m++) {
-      snaps[m] = generateSnapshot(m, m / 11, teamMembers);
+      const chave = `${ano}-${String(m + 1).padStart(2, "0")}`;
+      snaps[m] = generateSnapshot(m, m / 11, teamMembers, okrReal[chave]);
     }
     return snaps;
-  }, [teamMembers]);
+  }, [teamMembers, okrReal]);
 
   const getQuarterSnapshot = useCallback((q: number): Omit<PeriodSnapshot, "companyOkrs"> => {
     const endMonth = Math.min(q * 3 + 2, 11);
