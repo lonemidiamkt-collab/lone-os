@@ -970,12 +970,27 @@ export async function POST(req: NextRequest) {
           return;
         }
         const pecas = await executarPlano(r.nome, r.plano.diagnostico, r.plano.decisoes);
+
+        // PERSISTE o planejamento. Antes o comando do WhatsApp gerava diagnóstico + objetivo + mix de
+        // pilares + peça a peça (caro em IA) e mandava só o PDF: NADA ia pro banco, enquanto a mesma
+        // função pela plataforma grava em content_period_plans. O planejamento do mês existia apenas
+        // como arquivo num grupo — e a mensagem de erro ainda mandava "abrir em Planejamento", onde
+        // não estava. Agora os dois caminhos gravam no mesmo lugar.
+        const obj = r.plano.objetivo;
+        if (obj && periodo) {
+          await supabaseAdmin.from("content_period_plans").upsert({
+            client_id: alvo.id, periodo,
+            objetivo_principal: obj.objetivoPrincipal, narrativa: obj.narrativa,
+            mix_pilares: obj.mixPilares, diagnostico_snapshot: r.plano.diagnostico ?? null,
+          }, { onConflict: "client_id,periodo" }).then(() => {}, () => {});
+        }
+
         const pdf = await htmlToPdf(calendarioPdfHtml({ cliente: r.nome, nicho: alvo.nicho, periodo, modo, pecas }));
         if (pdf.ok && pdf.buffer) {
           await csSendGroupText(msg.groupJid, `📅 Pronto! Calendário ${modo === "mes" ? "mensal" : "da semana"} do *${alvo.nome}* — ${pecas.length} peça(s), cada uma com direção de arte pro designer:`);
           await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), `Calendario ${alvo.nome} - ${periodo}.pdf`);
         } else {
-          await csSendGroupText(msg.groupJid, `Montei o calendário do *${alvo.nome}* mas o PDF falhou 😕 — abre em *Planejamento* no sistema que tá lá.`);
+          await csSendGroupText(msg.groupJid, `Montei o calendário do *${alvo.nome}* mas o PDF falhou 😕 — o planejamento ficou salvo, abre em *Planejamento* na ficha do cliente.`);
         }
       } catch {
         await csSendGroupText(msg.groupJid, `Deu ruim ao montar o calendário do *${alvo.nome}* 😕 tenta de novo?`);
