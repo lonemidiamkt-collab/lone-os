@@ -128,6 +128,12 @@ export interface Client {
   fixedBriefing?: string;
   /** Agente CS ligado pra este cliente? false = pausa total (captação + vigilância). */
   agenteAtivo?: boolean;
+  /** Score de churn do cron compute-health (0-100, MAIOR = MAIS RISCO). Fonte única de saúde. */
+  currentHealthScore?: number;
+  currentHealthLevel?: "safe" | "attention" | "high" | "critical";
+  healthComputedAt?: string;
+  /** Última vez que o CLIENTE falou no grupo (webhook do WhatsApp). */
+  lastClientMsgAt?: string;
   // Meta Ads
   metaAdAccountId?: string;
   metaAdAccountName?: string;

@@ -101,6 +101,12 @@ function snakeToClient(row: Record<string, unknown>): Client {
     campaignBriefing: (row.campaign_briefing as string) ?? undefined,
     fixedBriefing: (row.fixed_briefing as string) ?? undefined,
     agenteAtivo: (row.agente_ativo as boolean) ?? true,
+    // Estas 4 colunas JÁ vinham do banco (estão em CLIENT_LEAN_COLS) mas não eram mapeadas — por isso
+    // o score que o cron compute-health calcula todo dia nunca chegava ao dashboard/Radar/clients.
+    currentHealthScore: (row.current_health_score as number) ?? undefined,
+    currentHealthLevel: (row.current_health_level as Client["currentHealthLevel"]) ?? undefined,
+    healthComputedAt: (row.health_computed_at as string) ?? undefined,
+    lastClientMsgAt: (row.last_client_msg_at as string) ?? undefined,
     metaAdAccountId: (row.meta_ad_account_id as string) ?? undefined,
     metaAdAccountName: (row.meta_ad_account_name as string) ?? undefined,
     cpfCnpj: (row.cpf_cnpj as string) ?? undefined,

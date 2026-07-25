@@ -36,6 +36,9 @@ function isCeoSessionValid(): boolean {
 
 // Score de risco de churn (0-100, maior = pior) — extraído pra dar pra ORDENAR a lista.
 function churnRiskScore(client: Client): number {
+  // Fonte única: o score do cron compute-health (mesma escala — maior = mais risco). A fórmula local
+  // abaixo vira fallback; ela dava +25 fixo a TODO cliente porque lastKanbanActivity nunca era escrito.
+  if (typeof client.currentHealthScore === "number") return client.currentHealthScore;
   let score = 0;
   if (client.status === "at_risk") score += 35;
   else if (client.status === "average") score += 15;
