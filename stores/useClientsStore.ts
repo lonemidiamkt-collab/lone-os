@@ -57,7 +57,10 @@ export const useClientsStore = create<ClientsState>()(
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const { clients, clientChats } = await res.json();
           set({ clients, clientChats, loading: false, initialized: true }, false, "clients/init/done");
-        } catch {
+        } catch (e) {
+          // NUNCA engolir em silêncio: este catch já deixou o painel inteiro zerado sem nenhuma
+          // pista no console (o time via "0 clientes" e achava que o sistema tinha perdido os dados).
+          console.error(`[store:clients] falhou ao carregar — a tela vai ficar vazia:`, e);
           set({ loading: false }, false, "clients/init/error");
         }
       },

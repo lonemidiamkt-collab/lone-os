@@ -62,7 +62,10 @@ export const useContentStore = create<ContentState>()(
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const { contentCards, designRequests, contentApprovals, socialReports } = await res.json();
           set({ contentCards, designRequests, contentApprovals, socialReports, loading: false, initialized: true }, false, "content/init/done");
-        } catch {
+        } catch (e) {
+          // NUNCA engolir em silêncio: este catch já deixou o painel inteiro zerado sem nenhuma
+          // pista no console (o time via "0 clientes" e achava que o sistema tinha perdido os dados).
+          console.error(`[store:content] falhou ao carregar — a tela vai ficar vazia:`, e);
           set({ loading: false }, false, "content/init/error");
         }
       },
