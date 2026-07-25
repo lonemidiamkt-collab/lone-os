@@ -7,6 +7,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 import { clientesSemPostNaSemana, semanaAlvo } from "@/lib/cs/lacunas";
 import { proximasDatas, formatDataCurta } from "@/lib/cs/datas";
+import { postsMes, postsSemana } from "@/lib/metrics/producao";
+import { pulsoDeTodos } from "@/lib/pulse/fetch";
 
 const DIAS_QUIETO = 7; // igual ao cs-esfriando: cliente que falava e sumiu há >= N dias
 
@@ -150,8 +152,26 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       data: new Date(`${e.event_date}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
     }));
 
+  // O agente enxergando o resto do sistema. Enxuto de propósito: isto entra no PROMPT, então são
+  // poucas linhas já resumidas — panorama, não despejo de tabela. (O raio-x por cliente, que não vai
+  // pro prompt, é onde cabe profundidade.)
+  const [prodMes, prodSemana, pulso] = await Promise.all([
+    postsMes().catch(() => null),
+    postsSemana().catch(() => null),
+    pulsoDeTodos().catch(() => [] as Awaited<ReturnType<typeof pulsoDeTodos>>),
+  ]);
+  const precisamAtencao = pulso.filter((p) => !p.semSinal && p.motivoDominante).sort((a, b) => a.score - b.score);
+  const linhaProducao = prodMes && prodSemana
+    ? `Posts publicados: ${prodSemana.total} esta semana · ${prodMes.total} no mês (fonte: histórico de publicação, inclui arquivados)`
+    : "";
+  const linhaAtencao = precisamAtencao.length
+    ? `Precisam de atenção agora (motivo dominante): ${precisamAtencao.slice(0, 6).map((p) => `${p.nome} — ${p.motivoLabel}`).join("; ")}`
+    : "Nenhum cliente em estado de atenção pelos sinais de atividade.";
+
   // Resumo factual compacto — a IA lê ISTO pra responder com números reais (não inventa).
   const linhas = [
+    linhaProducao,
+    linhaAtencao,
     `Demandas pendentes esperando ok/não: ${pendentes.length} no total` +
       (pendentes.length ? ` (algumas: ${pendentes.slice(0, 8).map((p) => `${p.cliente} (${p.tipo}, há ${p.dias}d)`).join("; ")})` : ""),
     `Em produção: ${emProducao} · Aguardando aprovação: ${aguardandoAprovacao} · Novos cards hoje: ${novosHoje}`,

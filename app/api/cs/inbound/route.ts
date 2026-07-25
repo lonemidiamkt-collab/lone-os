@@ -1170,9 +1170,27 @@ export async function POST(req: NextRequest) {
       igLinha = `📸 *Instagram* @${igD.conta.username || ""}: ${parts.join(" · ")}`;
     }
 
+    // Ficha da jornada — inclusive o que o COMERCIAL prometeu na venda. O handoff comercial→CS
+    // gravava a nota e o agente NUNCA lia de volta (mão única). NÃO expomos `notas` inteiras aqui
+    // (contêm valor negociado); só a próxima ação, pendências e reunião — o que serve pra operar.
+    const { data: jr } = await supabaseAdmin.from("client_journey")
+      .select("proxima_acao, proxima_acao_responsavel, proxima_acao_prazo, pendencias_cliente, proxima_reuniao")
+      .eq("client_id", alvo.id).maybeSingle();
+    const pendCli = (jr?.pendencias_cliente as { item: string }[] | null) ?? [];
+    const linhaJornada = jr?.proxima_acao
+      ? `🎯 *Próxima ação:* ${jr.proxima_acao}${jr.proxima_acao_responsavel ? ` (${jr.proxima_acao_responsavel})` : ""}${jr.proxima_acao_prazo ? ` — até ${jr.proxima_acao_prazo}` : ""}`
+      : "";
+    const linhaPend = pendCli.length
+      ? `📌 *O cliente deve:* ${pendCli.slice(0, 3).map((p) => p.item).join(" · ")}`
+      : "";
+    const linhaReuniao = jr?.proxima_reuniao ? `🗓️ Próxima reunião: ${jr.proxima_reuniao}` : "";
+
     const linhas = [
       `📊 *Raio-X — ${alvo.nome}*`,
       `👤 Social: ${social}${temBriefing ? " · briefing ✅" : " · *sem briefing* ⚠️"}`,
+      linhaJornada,
+      linhaPend,
+      linhaReuniao,
       ``,
       `*Últimos 30 dias:* ${demArr.length} demanda${demArr.length !== 1 ? "s" : ""}${pend ? ` · ${pend} pendente${pend > 1 ? "s" : ""}` : ""}${conf ? ` · ${conf} confirmada${conf > 1 ? "s" : ""}` : ""}`,
       `*Produção agora:* ${emProd} em produção · ${aguardando} aguardando aprovação`,
