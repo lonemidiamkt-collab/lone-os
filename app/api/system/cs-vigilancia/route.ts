@@ -10,8 +10,12 @@ import {
 } from "@/lib/cs/vigilancia";
 
 // POST /api/system/cs-vigilancia — "Vigilância de Fluxo" do Agente CS.
-// FASE 0 = MODO SECO: avalia o fluxo de produção e REGISTRA em cs_cobrancas (dry_run=true) o que
-// cobraria, mas NÃO posta no WhatsApp. Cron sugerido: 10h30 e 15h (BRT). Calibrar antes da Fase 1.
+// ESTÁ NO AR desde 26/jun (VIGILANCIA_LIVE = true, abaixo): posta cobrança de card REAL no grupo e
+// registra em cs_cobrancas com dry_run=false. O que NÃO passa no gate de "ao vivo" (card antigo, sem
+// responsável, "sem pauta") é só registrado com dry_run=true — é o modo seco, que sobrevive para
+// calibragem. Cron: 10h30 e 15h (BRT).
+// (Este cabeçalho dizia "FASE 0 = MODO SECO" muito depois de a rotina ter sido ligada — o comentário
+//  desatualizado já induziu uma auditoria a concluir que o agente não cobrava nada.)
 //
 // Vigia o pipeline de cada post (seg/sex firmes; quarta leve), nas etapas que o Roberto definiu:
 //   pauta pro dia → social mandou pro designer ("A fazer") → designer fez → (ou travada) →

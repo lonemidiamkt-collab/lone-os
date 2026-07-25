@@ -18,17 +18,36 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
   }
 
-  // Cards ENTREGUES (arte pronta): tem capa (image_url) OU já publicado/agendado. Não traz rascunho.
+  // Cards ENTREGUES (arte pronta).
+  //
+  // A capa pode estar em DOIS lugares: `content_cards.image_url` (entrega legada, por link) ou em
+  // `card_attachments` (entrega multi-arte, que é o caminho padrão hoje). O portal filtrava só por
+  // image_url — e como a entrega atual grava apenas em card_attachments, o cliente abria o portal e
+  // NÃO VIA NENHUMA ARTE. Em produção: 60 cards entregues, 0 com image_url, 60 com anexo.
   const { data: cards } = await supabaseAdmin
     .from("content_cards")
     .select("id, title, format, status, image_url, due_date, scheduled_at, published_at, designer_delivered_at, client_approved_at")
     .eq("client_id", client.id as string)
-    .not("image_url", "is", null)
-    .neq("image_url", "")
+    .is("archived_at", null)   // card arquivado não deve aparecer pro cliente
+    .or("image_url.not.is.null,designer_delivered_at.not.is.null")
     .order("due_date", { ascending: false })
-    .limit(24);
+    .limit(40);
+
+  // Capa vinda dos anexos (a primeira, por posição) para os cards sem image_url.
+  const semCapa = (cards ?? []).filter((c) => !(c.image_url as string)?.trim()).map((c) => c.id as string);
+  const capaDeAnexo = new Map<string, string>();
+  if (semCapa.length) {
+    const { data: anexos } = await supabaseAdmin
+      .from("card_attachments").select("card_id, url, position")
+      .in("card_id", semCapa).order("position", { ascending: true });
+    for (const a of anexos ?? []) {
+      const cid = a.card_id as string;
+      if (!capaDeAnexo.has(cid) && (a.url as string)) capaDeAnexo.set(cid, a.url as string);
+    }
+  }
 
   const items = (cards ?? [])
+    .map((c) => ({ ...c, image_url: (c.image_url as string)?.trim() || capaDeAnexo.get(c.id as string) || null }))
     .filter((c) => (c.image_url as string)?.startsWith("http") || (c.image_url as string)?.startsWith("/"))
     .slice(0, 12)
     .map((c) => {

@@ -3,15 +3,20 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { isCronRequest } from "@/lib/api/cron-guard";
+import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { isOpenAIConfigured } from "@/lib/ai/openai";
 import { computeAutoavaliacao, type DemandaAval } from "@/lib/cs/autoavaliacao";
 
 // GET /api/cs/dashboard — painel de controle do Agente Lone: acurácia, erros recorrentes,
-// aprendizado (cs_client_rules), atividade recente e config. Auth: usuário logado (ou cron).
+// aprendizado (cs_client_rules), atividade recente e config.
+// GESTÃO apenas (ou cron): devolve o RESUMO das demandas — inclusive reclamações nominais de
+// clientes — e as regras aprendidas. Antes bastava estar logado: SDR e designer liam tudo.
 export async function GET(req: NextRequest) {
-  const denied = await requireCronOrUser(req);
-  if (denied) return denied;
+  if (!isCronRequest(req)) {
+    const gate = await requireRole(req, GESTAO);
+    if (gate instanceof NextResponse) return gate;
+  }
 
   const d30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
