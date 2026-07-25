@@ -2,7 +2,6 @@
 
 import Header from "@/components/Header";
 import MetricCard from "@/components/MetricCard";
-import MorningBriefing from "@/components/MorningBriefing";
 import {
   Users, TrendingUp, AlertTriangle, UserPlus,
   Activity, Megaphone, Clock, Bell, Send, X,
@@ -39,7 +38,6 @@ import PostCounter from "@/components/sector/PostCounter";
 import DesignQueue from "@/components/sector/DesignQueue";
 import BudgetAlert from "@/components/sector/BudgetAlert";
 import DesignDeliveriesAlert from "@/components/DesignDeliveriesAlert";
-import SmartAlerts from "@/components/SmartAlerts";
 import SystemAlertBanner from "@/components/SystemAlertBanner";
 import MetaHealthCard from "@/components/MetaHealthCard";
 import ClientHealthRadar from "@/components/ClientHealthRadar";
@@ -609,11 +607,8 @@ function AdminDashboard() {
       {/* Artes entregues pelo designer aguardando confirmação do social */}
       <DesignDeliveriesAlert cards={contentCards} />
 
-      {/* Health Radar + Smart Alerts */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <ClientHealthRadar />
-        <SmartAlerts />
-      </div>
+      {/* Health Radar (SmartAlerts removido: duplicava o DashboardInsights — server é a fonte única) */}
+      <ClientHealthRadar />
 
       {/* Resumo de contratos — somente admin */}
       {(contractStats.active > 0 || contractStats.pending > 0 || contractStats.expiring > 0) && (
@@ -640,8 +635,6 @@ function AdminDashboard() {
         </div>
       )}
 
-      {/* Ad Rejection Alert — oculto: dados dependem de mockAdCampaigns (ver BACKLOG #5) */}
-      {/* MorningBriefing (AI) — oculto: dados dependem de mockAdCampaigns (ver BACKLOG #5) */}
 
       {/* Pipeline Quick Stats */}
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
