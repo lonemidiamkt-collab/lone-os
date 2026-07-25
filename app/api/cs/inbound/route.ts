@@ -34,6 +34,7 @@ import { gerarCobrancaPendencias } from "@/lib/cs/cobranca";
 import { montarJornada } from "@/lib/cs/jornada";
 import { montarPrepReuniao, pontosPraReuniao, resumirReuniao, formatResumoReuniao, extrairNotasReuniao } from "@/lib/cs/reuniao";
 import { parseConfirmacaoPostagem } from "@/lib/cs/postagem";
+import { trafegoPorCliente, linhaTrafego } from "@/lib/metrics/trafego";
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
@@ -1334,6 +1335,11 @@ export async function POST(req: NextRequest) {
       : "";
     const linhaReuniao = jr?.proxima_reuniao ? `🗓️ Próxima reunião: ${jr.proxima_reuniao}` : "";
 
+    // TRÁFEGO no raio-x: o agente não lia NADA de anúncio — podia cobrar produção de conteúdo de um
+    // cliente cuja conta estava zerada/pausada, e não sabia responder "como está a verba do X?".
+    const trf = (await trafegoPorCliente().catch(() => null))?.get(alvo.id);
+    const linhaTrf = linhaTrafego(trf) ?? "";
+
     const linhas = [
       `📊 *Raio-X — ${alvo.nome}*`,
       `👤 Social: ${social}${temBriefing ? " · briefing ✅" : " · *sem briefing* ⚠️"}`,
@@ -1344,6 +1350,7 @@ export async function POST(req: NextRequest) {
       `*Últimos 30 dias:* ${demArr.length} demanda${demArr.length !== 1 ? "s" : ""}${pend ? ` · ${pend} pendente${pend > 1 ? "s" : ""}` : ""}${conf ? ` · ${conf} confirmada${conf > 1 ? "s" : ""}` : ""}`,
       `*Produção agora:* ${emProd} em produção · ${aguardando} aguardando aprovação`,
       `*Entregas (7d):* ${entregues7} · *Publicados:* ${publicados}`,
+      linhaTrf,
       igLinha,
       diasQuieto == null ? `*Atividade:* sem registro de mensagem do cliente ainda` : `*Última fala do cliente:* há ${diasQuieto} dia${diasQuieto !== 1 ? "s" : ""}${diasQuieto >= 7 ? " ⚠️ (esfriando)" : ""}`,
       (regras.count ?? 0) > 0 ? `*Regras aprendidas:* ${regras.count}` : "",

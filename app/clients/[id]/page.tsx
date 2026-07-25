@@ -118,6 +118,8 @@ export default function ClientDetailPage() {
   // Posts do MÊS e artes na fila — da fonte única (transições), não do board ao vivo nem do campo manual.
   const [postsMesCliente, setPostsMesCliente] = useState<number | null>(null);
   const [artesProntasCliente, setArtesProntasCliente] = useState(0);
+  // Tráfego do cliente — a ficha mostrava a conta Meta vinculada mas NENHUM número dela.
+  const [trafegoCliente, setTrafegoCliente] = useState<{ gasto7d: number; leads7d: number; diasSemGastar: number | null; verbaMes: number | null; gastoMes: number | null; contaAtiva: boolean } | null>(null);
   const designRequests = useContentStore((s) => s.designRequests);
   const addDesignRequest = useContentStore((s) => s.addDesignRequest);
 
@@ -168,6 +170,10 @@ export default function ClientDetailPage() {
         setPostsMesCliente(d.byClient?.[clientId] ?? 0);
         setArtesProntasCliente(d.artesProntas?.[clientId] ?? 0);
       })
+      .catch(() => {});
+    authedFetch(`/api/clients/${clientId}/trafego`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d?.trafego) setTrafegoCliente(d.trafego); })
       .catch(() => {});
     return () => { alive = false; };
   }, [clientId]);
@@ -1032,6 +1038,16 @@ export default function ClientDetailPage() {
                       { label: "Pipeline Ativo", value: `${cardsInPipeline}`, pct: Math.min(100, cardsInPipeline * 10), color: "bg-primary" },
                       { label: "Tarefas Concluídas", value: `${tasksCompleted}/${totalTasks}`, pct: taskPct, color: taskPct >= 80 ? "bg-primary" : "bg-lone-warning-bg" },
                       { label: "Artes prontas", value: artesProntasCliente > 0 ? `${artesProntasCliente} aguardando` : "—", pct: Math.min(100, artesProntasCliente * 20), color: artesProntasCliente > 0 ? "bg-lone-warning-bg" : "bg-primary" },
+                      // Tráfego na ficha: a metade PAGA da operação não aparecia aqui.
+                      ...(trafegoCliente ? [{
+                        label: trafegoCliente.diasSemGastar != null && trafegoCliente.diasSemGastar >= 3 ? "⚠️ Anúncio parado" : "Tráfego (7d)",
+                        value: trafegoCliente.diasSemGastar != null && trafegoCliente.diasSemGastar >= 3
+                          ? `há ${trafegoCliente.diasSemGastar}d`
+                          : `R$ ${Math.round(trafegoCliente.gasto7d).toLocaleString("pt-BR")}${trafegoCliente.leads7d ? ` · ${trafegoCliente.leads7d} result.` : ""}`,
+                        pct: trafegoCliente.verbaMes && trafegoCliente.gastoMes != null
+                          ? Math.min(100, Math.round((trafegoCliente.gastoMes / trafegoCliente.verbaMes) * 100)) : 50,
+                        color: trafegoCliente.diasSemGastar != null && trafegoCliente.diasSemGastar >= 3 ? "bg-destructive" : "bg-primary",
+                      }] : []),
                     ].map(({ label, value, pct, color }) => (
                       <div key={label} className="p-3 rounded-xl bg-muted/30 border border-border/50">
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
