@@ -205,6 +205,16 @@ function ehPedidoCobranca(text: string): boolean {
   if (!/\blone\b/.test(t)) return false;
   return /\b(cobra|cobrar|cobran[çc]a)\b/.test(t) && /\b(pend[êe]ncia|pendencias|pend[êe]ncias)\b/.test(t);
 }
+// "Lone, o X já mandou as fotos" / "pode tirar a pendência do X" → dá BAIXA numa pendência do cliente.
+// Human-gated de propósito: dar baixa sozinho (adivinhando pela mensagem do cliente) arriscaria
+// apagar pendência ainda aberta. Aqui alguém do time confirma que chegou.
+function ehBaixaPendencia(text: string): boolean {
+  const t = text.toLowerCase();
+  if (!/\blone\b/.test(t)) return false;
+  return /\b(pend[êe]ncia|pendencias|pend[êe]ncias)\b/.test(t)
+    && /\b(tira|tirar|remove|remover|baixa|dar baixa|resolvid|entregou|mandou|ja (mandou|enviou|entregou)|chegou|recebi)\b/.test(t);
+}
+
 // "Lone, prepara a reunião do X" → briefing do estado do cliente + pontos pra puxar (grupo interno).
 // Resposta ao fechamento do dia ("todos", "postou o Império", "só faltou a Farmácia"). NÃO exige
 // "lone" — é resposta a uma pergunta que o agente acabou de fazer no grupo. Só vale se houver card
@@ -345,7 +355,32 @@ async function checarSatisfacao(
     const r = await analisarSentimentoCliente(mensagem);
     if (!r.ok || !r.data) return;
     const s = r.data;
+
+    // PERSISTE o sentimento — inclusive o POSITIVO. Antes o resultado só virava mensagem no grupo:
+    // não havia histórico ("o Contele reclamou quantas vezes em 90 dias?"), o elogio era computado e
+    // jogado fora, e o agente NUNCA mexia em attention_level — então um cliente visivelmente bravo no
+    // WhatsApp seguia verde na ficha da Jornada (que deriva "percebe valor" desse campo).
+    // Reusa mood_entries, o mesmo caminho que o feedback manual da plataforma já usa.
+    const mood = s.churn ? "angry" : s.sentimento === "negativo" ? "frustrated" : s.sentimento === "positivo" ? "happy" : "neutral";
+    void supabaseAdmin.from("mood_entries").insert({
+      client_id: client.id, mood,
+      note: `🤖 (agente, do WhatsApp) "${mensagem.slice(0, 200)}" — ${s.motivo}`,
+      recorded_by: "🤖 Agente CS",
+      date: ymd(spNow()),
+    }).then(() => {}, () => {});
+
     const alerta = s.churn || (s.sentimento === "negativo" && (s.risco === "medio" || s.risco === "alto"));
+
+    // Sinal grave sobe o nível de atenção do cliente (só ESCALA, nunca abaixa sozinho — quem melhora
+    // o cliente é o time, e o rebaixamento fica com o humano).
+    if (alerta) {
+      const novo = s.churn ? "critical" : "high";
+      void supabaseAdmin.from("clients")
+        .update({ attention_level: novo }).eq("id", client.id)
+        .in("attention_level", novo === "critical" ? ["low", "medium", "high"] : ["low", "medium"])
+        .then(() => {}, () => {});
+    }
+
     if (!alerta) return;
     satisfacaoCooldown.set(client.id, Date.now());
     const nome = client.nome_fantasia || client.name || "Cliente";
@@ -802,15 +837,24 @@ export async function POST(req: NextRequest) {
   // Guarda uma amostra das mensagens de texto dos grupos pra depois a IA aprender o TOM de cada
   // grupo/cliente e do time da Lone. Fire-and-forget (não bloqueia o webhook). RLS ligado: só o
   // service_role lê (conversa de cliente é sensível). Retenção/poda vem numa próxima etapa.
-  if (msg.text && msg.text.trim().length >= 3) {
+  // ORDEM IMPORTA: este insert rodava aqui e SÓ aqui — antes da transcrição do áudio (~linha 890) e
+  // da descrição da imagem. Como `msg.text` está vazio nesses casos, NOTA DE VOZ NUNCA ENTRAVA NO
+  // CORPUS: cliente que fala por áudio ficava invisível pro aprendizado de estilo e de briefing (que
+  // exigem volume mínimo de mensagens), e a transcrição — paga — era descartada se não virasse
+  // demanda. Agora é uma função chamada nos 3 momentos, com guarda pra não duplicar.
+  let corpusGravado = false;
+  const gravarNoCorpus = (texto: string) => {
+    if (corpusGravado || !texto || texto.trim().length < 3) return;
+    corpusGravado = true;
     void supabaseAdmin.from("cs_message_corpus").insert({
       group_jid: msg.groupJid,
       is_team: isLoneTeam(msg.authorJid, teamJids()),
       author_jid: msg.authorJid ?? null,
       author_name: msg.authorName ?? null,
-      text: msg.text.slice(0, 2000),
+      text: texto.slice(0, 2000),
     }).then(() => {}, () => {});
-  }
+  };
+  gravarNoCorpus(msg.text);
 
   try {
   // Diagnóstico (fase de piloto): toda mensagem REALMENTE recebida do webhook fica visível no log —
@@ -882,6 +926,7 @@ export async function POST(req: NextRequest) {
     msg.text = await transcribeAudio(media.base64, media.mimetype, ctxAud);
     if (!msg.text) return NextResponse.json({ ok: true, skip: "áudio sem transcrição" });
     console.log(`[CS/inbound] 🎤 áudio transcrito (${msg.authorName || "?"}): "${msg.text.slice(0, 80)}"`);
+    gravarNoCorpus(msg.text); // a fala do cliente entra no aprendizado igual a uma mensagem escrita
   }
 
   // ─── Reply direto numa SUGESTÃO do agente? Então é resposta de DEMANDA (ok/não/ajustar/
@@ -959,6 +1004,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, checkin: "time", cliente: alvo.nome });
   }
 
+  // ─── Agente "Lone": BAIXA de pendência ("Lone, o X já mandou as fotos") ───
+  // Nada nunca REMOVIA de pendencias_cliente: a lista só crescia (merge aditivo no resumo de
+  // reunião), então o raio-x mostrava "o cliente deve: fotos" eternamente e a cobrança pedia de novo
+  // algo já entregue — na cara do cliente.
+  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehBaixaPendencia(msg.text)) {
+    const alvo = await resolveClientePorNome(msg.text);
+    if (!alvo) { await csSendGroupText(msg.groupJid, "Dar baixa na pendência de qual cliente? Me diz o nome."); return NextResponse.json({ ok: true, baixa: "sem_cliente" }); }
+    const { data: jr } = await supabaseAdmin.from("client_journey").select("pendencias_cliente").eq("client_id", alvo.id).maybeSingle();
+    const pend = (jr?.pendencias_cliente as { item: string; desde?: string; impacto?: string }[]) || [];
+    if (!pend.length) { await csSendGroupText(msg.groupJid, `O *${alvo.nome}* não tem pendência registrada. 👍`); return NextResponse.json({ ok: true, baixa: "sem_pendencia" }); }
+
+    // Casa pelo item citado; se não citou nenhum e só há uma, dá baixa nela.
+    const norm = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const t = norm(msg.text);
+    const casaram = pend.filter((p) => norm(p.item).split(/\s+/).some((w) => w.length >= 4 && t.includes(w)));
+    const baixar = casaram.length ? casaram : (pend.length === 1 ? pend : []);
+
+    if (!baixar.length) {
+      await csSendGroupText(msg.groupJid,
+        `Qual pendência do *${alvo.nome}* posso tirar?\n${pend.map((p, i) => `${i + 1}. ${p.item}`).join("\n")}`);
+      return NextResponse.json({ ok: true, baixa: "ambiguo" });
+    }
+    const restantes = pend.filter((p) => !baixar.includes(p));
+    await supabaseAdmin.from("client_journey").upsert({
+      client_id: alvo.id, pendencias_cliente: restantes,
+      updated_by: msg.authorName || "equipe", updated_at: new Date().toISOString(),
+    }, { onConflict: "client_id" });
+    await csSendGroupText(msg.groupJid,
+      `✅ Baixa dada em: ${baixar.map((p) => `*${p.item}*`).join(", ")}.` +
+      (restantes.length ? `\nAinda falta: ${restantes.map((p) => p.item).join(" · ")}` : `\nO *${alvo.nome}* está sem pendências agora. 🎯`));
+    console.log(`[CS] baixa de pendência: ${alvo.nome} -${baixar.length}`);
+    return NextResponse.json({ ok: true, baixa: baixar.length });
+  }
+
   // ─── Agente "Lone": COBRANÇA de pendências do cliente ("Lone, cobra as pendências do X") ───
   // Lê as pendências do cliente (ficha Jornada) e gera cobrança COM IMPACTO. Draft no interno, ou
   // "…pro cliente" manda direto no grupo dele. Não cobra pagamento (SEM financeiro).
@@ -976,6 +1055,13 @@ export async function POST(req: NextRequest) {
       const gj = (cli?.whatsapp_group_jid as string) || null;
       if (!gj) { await csSendGroupText(msg.groupJid, `O *${alvo.nome}* não tem grupo mapeado — segue o texto pra você mandar:\n\n${r.data.mensagem}`); return NextResponse.json({ ok: true, cobranca: "sem_grupo" }); }
       await csSendGroupText(gj, r.data.mensagem);
+      // REGISTRA que cobrou. Sem isto não havia timestamp nenhum: dava pra cobrar o mesmo cliente 3×
+      // no mesmo dia sem o sistema saber, e era impossível medir se cobrança funciona.
+      void supabaseAdmin.from("cs_cobrancas").insert({
+        vigilancia: 0, client_id: alvo.id, card_id: null,
+        pessoa_cobrada: alvo.nome, chave: `pendencias:${alvo.id}:${ymd(spNow())}`,
+        mensagem: r.data.mensagem.slice(0, 1000), dry_run: false,
+      }).then(() => {}, () => {});
       await csSendGroupText(msg.groupJid, `✅ Mandei a cobrança das pendências pro grupo do *${alvo.nome}*.`);
     } else {
       await csSendGroupText(msg.groupJid, `📋 *Cobrança de pendências — ${alvo.nome}* (revisa e manda, ou fala _"Lone, cobra as pendências do ${alvo.nome} pro cliente"_):\n\n${r.data.mensagem}`);
@@ -1957,6 +2043,9 @@ export async function POST(req: NextRequest) {
     } else if (media.base64) {
       console.warn("[CS/inbound] imagem muito grande — skip visão");
     }
+    // O que a visão leu na foto do cliente também alimenta o aprendizado (antes só sobrevivia se
+    // virasse demanda; foto sem legenda não deixava rastro nenhum).
+    gravarNoCorpus(msg.text);
   }
 
   if (isTrivial(msg.text)) return NextResponse.json({ ok: true, skip: "trivial" });
