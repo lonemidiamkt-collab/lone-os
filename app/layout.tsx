@@ -36,14 +36,19 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    {/* `translate="no"` + notranslate: a tradução automática do navegador REESCREVE o DOM e quebra o
+        React (bug conhecido do removeChild) — a tela para de atualizar, os contadores travam em zero
+        e os cards ficam em branco. Aconteceu em produção: o Chrome traduziu a página que já é
+        pt-BR e virou "Assinados"→"Assassinados", "Pipeline"→"Gasoduto", "Design"→"Projeto". */}
+    <html lang="pt-BR" translate="no" suppressHydrationWarning>
       <head>
+        <meta name="google" content="notranslate" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body className={`${inter.variable} ${montserrat.variable} ${jetbrainsMono.variable} font-sans bg-background text-foreground`}>
+      <body className={`notranslate ${inter.variable} ${montserrat.variable} ${jetbrainsMono.variable} font-sans bg-background text-foreground`}>
         <ThemeProvider>
           <ConditionalAppShell>{children}</ConditionalAppShell>
           <Toaster position="bottom-right" richColors />
