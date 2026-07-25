@@ -21,7 +21,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
 import type { ClientStatus } from "@/lib/types";
-import { mockAdCampaigns } from "@/lib/mockData";
 import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { getDashboardData } from "@/lib/dashboard/getDashboardData";
@@ -30,6 +29,7 @@ import {
   QuickActions,
   TeamSection,
   WeeklyAttention,
+  type AttentionEntry,
   ClientStatusList,
 } from "@/components/dashboard-v2";
 import { KPICard, PillBadge } from "@/components/lone-ui";
@@ -527,11 +527,19 @@ function AdminDashboard() {
       .catch(() => {});
   }, []);
 
+  // Pulso (atividade bidirecional) — substitui o "inativos 7 dias", que lia campos mortos.
+  const [pulse, setPulse] = useState<{ atencao: AttentionEntry[]; semSinal: { clientId: string; nome: string }[] } | null>(null);
+  useEffect(() => {
+    authedFetch("/api/dashboard/pulse")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setPulse(d); })
+      .catch(() => {});
+  }, []);
+
   const {
     activeClients, atRiskClients, onboardingClients, urgentTasks,
     pipelineCards, publishedThisMonth, stuckCards, pendingApproval,
     designQueued, designInProg, teamProductivity, trafficProductivity,
-    inactiveSevenDays,
   } = useMemo(
     () => getDashboardData({ clients, contentCards, designRequests, tasks, trafficRoutineChecks }),
     [clients, contentCards, designRequests, tasks, trafficRoutineChecks]
@@ -701,7 +709,7 @@ function AdminDashboard() {
         </div>
       </div>
 
-      <WeeklyAttention clients={inactiveSevenDays} />
+      <WeeklyAttention clients={pulse?.atencao ?? []} semSinal={pulse?.semSinal ?? []} />
 
       {/* Lista de status dos clientes */}
       <ClientStatusList
