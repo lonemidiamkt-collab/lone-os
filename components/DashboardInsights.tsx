@@ -28,16 +28,32 @@ const TONE: Record<Insight["tone"], { bar: string; chip: string; label: string }
 
 export default function DashboardInsights() {
   const [insights, setInsights] = useState<Insight[] | null>(null);
+  const [erro, setErro] = useState(false);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let alive = true;
+    // ERRO ≠ VAZIO: um fetch quebrado NÃO pode virar "tudo sob controle" num painel de vigilância.
     authedFetch("/api/dashboard/insights")
-      .then((r) => (r.ok ? r.json() : { insights: [] }))
-      .then((d) => { if (alive) setInsights(d.insights ?? []); })
-      .catch(() => { if (alive) setInsights([]); });
+      .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then((d) => { if (alive) { setInsights(d.insights ?? []); setErro(false); } })
+      .catch(() => { if (alive) setErro(true); });
     return () => { alive = false; };
-  }, []);
+  }, [tick]);
 
+  if (erro) {
+    return (
+      <div className="rounded-xl border border-lone-danger-border bg-lone-danger-bg px-4 py-3 flex items-center justify-between gap-3">
+        <p className="text-sm text-lone-danger">Não consegui carregar os alertas agora — os dados podem estar desatualizados.</p>
+        <button
+          onClick={() => { setErro(false); setInsights(null); setTick((t) => t + 1); }}
+          className="shrink-0 text-xs font-medium text-lone-danger underline underline-offset-2 hover:opacity-80"
+        >
+          Recarregar
+        </button>
+      </div>
+    );
+  }
   if (insights === null) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
