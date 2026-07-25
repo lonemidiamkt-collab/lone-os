@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { aplicarAjusteNoCard } from "@/lib/cs/card";
 
 // POST /api/portal/[token]/approve — o CLIENTE aprova (ou pede ajuste em) uma arte entregue, pelo
 // próprio link do portal. Valida token + que o card é DELE. Aprovar → client_approved_at + notifica o
@@ -64,14 +65,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     return NextResponse.json({ ok: true, action: "approve" });
   }
 
-  // Ajuste: guarda o comentário (best-effort no card_comments) e notifica o time.
+  // AJUSTE — antes isto só inseria um comentário e uma notificação: o card continuava marcado como
+  // "entregue", a demanda do designer seguia "concluída" e a vigilância PARAVA de cobrar (ela usa
+  // designer_delivered_at). O pedido do cliente morria ali. Agora usa exatamente o mesmo caminho do
+  // WhatsApp: volta pro designer, reabre a demanda e registra o motivo no briefing.
+  const ok = await aplicarAjusteNoCard({
+    cardId, correcao: comment, clientId: client.id as string, clienteNome: nome,
+  });
   await supabaseAdmin.from("card_comments").insert({
     card_id: cardId, author: nome, role: "client", text: `(pelo portal) ${comment}`,
   }).then(() => {}, () => {});
-  await supabaseAdmin.from("notifications").insert({
-    type: "content", title: `✏️ ${nome} pediu ajuste`,
-    body: `"${titulo}": ${comment}`,
-    client_id: client.id as string,
-  }).then(() => {}, () => {});
+  if (!ok) {
+    // Card sumiu/arquivado: pelo menos avisa o time, pra não engolir o pedido do cliente.
+    await supabaseAdmin.from("notifications").insert({
+      type: "content", title: `✏️ ${nome} pediu ajuste`,
+      body: `"${titulo}": ${comment}`,
+      client_id: client.id as string,
+    }).then(() => {}, () => {});
+  }
   return NextResponse.json({ ok: true, action: "ajuste" });
 }

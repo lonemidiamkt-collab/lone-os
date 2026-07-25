@@ -134,6 +134,13 @@ export async function aplicarAjusteNoCard(opts: {
     column_entered_at: { in_production: nowIso },
   }).eq("id", opts.cardId);
   if (error) { console.error("[CS] aplicar ajuste no card:", error.message); return false; }
+  // Reabre a demanda do designer. Sem isto o board do DESIGNER continuava mostrando "Concluído"
+  // enquanto o card voltava pra produção — ele não via que tinha trabalho pra refazer. (O caminho de
+  // reprovação pelo social já fazia isso; o do cliente, não.)
+  await supabaseAdmin.from("design_requests")
+    .update({ status: "in_progress" })
+    .eq("content_card_id", opts.cardId).neq("status", "in_progress")
+    .then(() => {}, () => {});
   await supabaseAdmin.from("card_comments").insert({
     card_id: opts.cardId, author: "🤖 Agente CS", role: "system", text: `✏️ Ajuste do cliente: ${opts.correcao.slice(0, 400)}`,
   }).then(() => {}, () => {});
