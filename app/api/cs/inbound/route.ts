@@ -33,9 +33,10 @@ import { proximaPergunta, registrarEnvio, capturarResposta, textoParaEnvio } fro
 import { gerarCobrancaPendencias } from "@/lib/cs/cobranca";
 import { montarJornada } from "@/lib/cs/jornada";
 import { montarPrepReuniao, pontosPraReuniao, resumirReuniao, formatResumoReuniao, extrairNotasReuniao } from "@/lib/cs/reuniao";
+import { parseConfirmacaoPostagem } from "@/lib/cs/postagem";
 import { roteirosPdfHtml, loadLoneLogo } from "@/lib/cs/roteiro-pdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
-import { spNow } from "@/lib/cs/vigilancia";
+import { spNow, ymd } from "@/lib/cs/vigilancia";
 import { loadBriefingForClient, loadRoteiroPrefs, loadBriefingCombinado } from "@/lib/cs/load-briefing";
 import { ehComandoAusencia, parseAusencia } from "@/lib/cs/ausencia";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
@@ -205,6 +206,15 @@ function ehPedidoCobranca(text: string): boolean {
   return /\b(cobra|cobrar|cobran[çc]a)\b/.test(t) && /\b(pend[êe]ncia|pendencias|pend[êe]ncias)\b/.test(t);
 }
 // "Lone, prepara a reunião do X" → briefing do estado do cliente + pontos pra puxar (grupo interno).
+// Resposta ao fechamento do dia ("todos", "postou o Império", "só faltou a Farmácia"). NÃO exige
+// "lone" — é resposta a uma pergunta que o agente acabou de fazer no grupo. Só vale se houver card
+// pendente de HOJE (senão qualquer "ok" no grupo viraria confirmação de postagem).
+function ehRespostaFechamento(text: string): boolean {
+  const t = (text || "").toLowerCase().trim();
+  if (t.length > 120) return false;
+  return /\b(todos|todas|tudo postado|postamos|postou|postei|s[óo] faltou|s[óo] falta|menos o|exceto|fora o)\b/.test(t);
+}
+
 function ehPedidoPrepReuniao(text: string): boolean {
   const t = text.toLowerCase();
   if (!/\blone\b/.test(t)) return false;
@@ -975,6 +985,44 @@ export async function POST(req: NextRequest) {
 
   // ─── Agente "Lone": PREPARO de reunião ("Lone, prepara a reunião do X") ───
   // Briefing do estado do cliente (risco consolidado + atrasos + pendências + valor) + pontos pra puxar.
+  // ─── Fecho do dia: o time responde o que postou → marca os cards como publicados ───
+  // Post não marcado não conta em métrica nenhuma. Aqui a confirmação humana vira dado: o status vai
+  // pra 'published' e o TRIGGER do banco (migration 078) carimba o resto (histórico + data).
+  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehRespostaFechamento(msg.text)) {
+    const hojeKey = ymd(spNow());
+    const { data: pend } = await supabaseAdmin
+      .from("content_cards")
+      .select("id, client_id, title, clients(name, nome_fantasia)")
+      .eq("due_date", hojeKey).neq("status", "published").is("archived_at", null);
+
+    type P = { id: string; title: string | null; clients: { name: string | null; nome_fantasia: string | null } | null };
+    const lista = ((pend ?? []) as unknown as P[]).map((c) => ({
+      id: c.id,
+      cliente: (c.clients?.nome_fantasia || c.clients?.name || "—").trim(),
+    }));
+
+    if (lista.length) {
+      const nomes = [...new Set(lista.map((l) => l.cliente))];
+      const r = parseConfirmacaoPostagem(msg.text, nomes);
+      const confirmados = new Set(r.confirmados);
+      const marcar = lista.filter((l) => confirmados.has(l.cliente));
+
+      if (marcar.length) {
+        await supabaseAdmin.from("content_cards")
+          .update({ status: "published", publish_verified_by: msg.authorName || "equipe", social_confirmed_at: new Date().toISOString() })
+          .in("id", marcar.map((m) => m.id));
+
+        const faltam = nomes.filter((n) => !confirmados.has(n));
+        await csSendGroupText(msg.groupJid,
+          `✅ Marquei ${marcar.length} post${marcar.length > 1 ? "s" : ""} como publicado${marcar.length > 1 ? "s" : ""} (${[...confirmados].join(", ")}).` +
+          (faltam.length ? `\nFicou faltando: *${faltam.join(", ")}* — me avisa quando sair.` : "\nDia fechado! 🎯"));
+        console.log(`[CS] fechamento: ${marcar.length} cards marcados por ${msg.authorName}`);
+        return NextResponse.json({ ok: true, fechamento: marcar.length });
+      }
+    }
+    // Sem card pendente hoje ou sem nome reconhecido: não reivindica a mensagem — segue o fluxo normal.
+  }
+
   if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehPedidoPrepReuniao(msg.text)) {
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) { await csSendGroupText(msg.groupJid, "📅 Preparar a reunião de qual cliente? Me diz o nome."); return NextResponse.json({ ok: true, prep_reuniao: "sem_cliente" }); }

@@ -67,3 +67,65 @@ export function buildPostingReport(inp: PostingInput): string | null {
 
   return blocos.join("\n\n");
 }
+
+// ── FECHAMENTO DO DIA: "postou?" ─────────────────────────────────────────────
+// O furo que isto resolve: em 30 dias o designer entregou 156 artes e só 67 viraram "publicado" —
+// 89 ficaram paradas em aprovação/agendado. Quase sempre a arte FOI postada e ninguém moveu o card;
+// aí o post some de toda métrica. Em vez de adivinhar, o CS pergunta ao TIME no fim do dia
+// (decisão do Roberto: cobrar no grupo da EQUIPE, não no do cliente) e marca quando confirmam.
+
+export interface CardDoDia {
+  cardId: string;
+  cliente: string;
+  titulo: string;
+  temArte: boolean;    // designer já entregou
+}
+
+/** Mensagem do fechamento. null = nada pendente hoje (não posta, pra não virar ruído diário). */
+export function buildFechamentoDia(cards: CardDoDia[], diaLabel: string): string | null {
+  if (!cards.length) return null;
+
+  // Agrupa por cliente — o time responde por cliente, não por card.
+  const porCliente = new Map<string, CardDoDia[]>();
+  for (const c of cards) {
+    if (!porCliente.has(c.cliente)) porCliente.set(c.cliente, []);
+    porCliente.get(c.cliente)!.push(c);
+  }
+
+  const linhas = [`🌙 *Fechando o dia* (${diaLabel}) — esses tinham post hoje e ainda não estão marcados como publicados:`, ""];
+  for (const [cliente, lista] of porCliente) {
+    const semArte = lista.filter((c) => !c.temArte).length;
+    const detalhe = semArte === lista.length ? " _(sem arte ainda)_" : semArte ? ` _(${semArte} sem arte)_` : "";
+    linhas.push(`• *${cliente}* — ${lista.length} post${lista.length > 1 ? "s" : ""}${detalhe}`);
+  }
+  linhas.push(
+    "",
+    "Postaram? Responde aqui: *todos* · *postou Império e Contele* · *só faltou a Farmácia*",
+    "_Se não marcar, o post não entra em nenhuma métrica — nem na sua meta._",
+  );
+  return linhas.join("\n");
+}
+
+/** Entende a resposta do time. Retorna quem postou, ou "todos". */
+export function parseConfirmacaoPostagem(texto: string, clientesPendentes: string[]): {
+  todos: boolean; confirmados: string[]; excecoes: string[];
+} {
+  const t = (texto || "").toLowerCase().trim();
+  const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+  // "só faltou X" / "menos o X" — todos MENOS os citados.
+  const ehExcecao = /\b(s[óo] (faltou|falta|nao|n[ãa]o)|menos o?a?|exceto|fora o?a?)\b/.test(t);
+  const citados = clientesPendentes.filter((c) => {
+    const primeira = norm(c).split(/[\s\-–]/)[0];
+    return primeira.length >= 3 && norm(t).includes(primeira);
+  });
+
+  if (ehExcecao) {
+    return { todos: false, confirmados: clientesPendentes.filter((c) => !citados.includes(c)), excecoes: citados };
+  }
+  // "todos", "todos postaram", "tudo postado", "sim"
+  if (/\b(todos|todas|tudo|sim|postamos tudo|ok)\b/.test(t) && !citados.length) {
+    return { todos: true, confirmados: clientesPendentes, excecoes: [] };
+  }
+  return { todos: false, confirmados: citados, excecoes: [] };
+}
