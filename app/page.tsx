@@ -521,7 +521,7 @@ function AdminDashboard() {
   }, []);
 
   // Publicados do MÊS — do servidor (inclui arquivados), pois o board ao vivo não bate com a realidade.
-  const [publishedMonth, setPublishedMonth] = useState<{ total: number; byMember: Record<string, number>; byClient: Record<string, number>; artesProntas: Record<string, number>; semana?: { total: number }; historico?: { mes: string; label: string; total: number }[] } | null>(null);
+  const [publishedMonth, setPublishedMonth] = useState<{ total: number; byMember: Record<string, number>; byClient: Record<string, number>; artesProntas: Record<string, number>; semana?: { total: number }; historico?: { mes: string; label: string; total: number }[]; semanas?: { label: string; inicio: string; total: number; corrente: boolean }[]; meta?: { meta: number; clientes: number } } | null>(null);
   // Equipes pelo PAPEL (team_members) + suporte real do log — não deduzido dos clientes.
   const [equipes, setEquipes] = useState<{ social: { name: string; clientCount: number; published: number; publishedWeek: number }[]; trafego: { name: string; clientCount: number; supportDone: number; supportTotal: number }[]; semSocial: number } | null>(null);
   useEffect(() => {
@@ -670,6 +670,8 @@ function AdminDashboard() {
           semana={publishedMonth.semana?.total ?? 0}
           mes={publishedMonth.total}
           historico={publishedMonth.historico}
+          semanas={publishedMonth.semanas}
+          meta={publishedMonth.meta}
         />
       )}
 

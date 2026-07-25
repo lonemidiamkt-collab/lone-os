@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { postsMes, postsSemana, historicoMensal } from "@/lib/metrics/producao";
+import { postsMes, postsSemana, historicoMensal, semanasDoMes, metaDoMes } from "@/lib/metrics/producao";
 
 // GET /api/dashboard/published-month — métricas REAIS de produção (semana, mês e histórico).
 //
@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const meses = Math.min(Math.max(Number(req.nextUrl.searchParams.get("meses") ?? 6), 1), 24);
-  const [mes, semana, historico, { data: prontas }] = await Promise.all([
-    postsMes(), postsSemana(), historicoMensal(meses),
+  const [mes, semana, historico, semanas, meta, { data: prontas }] = await Promise.all([
+    postsMes(), postsSemana(), historicoMensal(meses), semanasDoMes(), metaDoMes(),
     // Arte ENTREGUE pelo designer e ainda não publicada: é produção feita que não virou post.
     // Sem isto, um cliente com 3 artes prontas na fila aparece como "0/12" — parecendo abandonado.
     supabaseAdmin.from("content_cards").select("client_id")
@@ -39,6 +39,8 @@ export async function GET(req: NextRequest) {
     byClient: mes.byClient,
     // Novos: a visão semanal e o histórico que o dono pediu.
     semana: { total: semana.total, byMember: semana.byMember, byClient: semana.byClient },
+    semanas,   // todas as semanas do mês corrente (S1…S5)
+    meta,      // { meta, clientes } — quantas artes eram esperadas no mês
     historico,
   });
 }

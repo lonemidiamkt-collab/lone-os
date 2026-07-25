@@ -377,8 +377,12 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .maybeSingle();
 
-    // Clear draft_status + sync all submission data to client record
-    const updatePayload: Record<string, unknown> = { draft_status: null };
+    // Clear draft_status + sync all submission data to client record.
+    // `status: "good"` PROMOVE o cliente para operação. Sem isto ele ficava `onboarding` PARA SEMPRE
+    // (a promoção automática só existia em código morto do AppStateContext) — em produção havia
+    // cliente há 18 meses "em onboarding". E `onboarding` exclui o cliente de quase toda métrica
+    // (traffic-metrics, cs-saude, contagem de carteira), então ele sumia do radar do time.
+    const updatePayload: Record<string, unknown> = { draft_status: null, status: "good" };
     if (subRow) {
       if (subRow.nome_fantasia) updatePayload.nome_fantasia = subRow.nome_fantasia;
       if (subRow.razao_social) updatePayload.razao_social = subRow.razao_social;

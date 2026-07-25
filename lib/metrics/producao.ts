@@ -109,3 +109,58 @@ export async function historicoMensal(nMeses = 6): Promise<MesHistorico[]> {
   }
   return saida;
 }
+
+export interface SemanaProducao { label: string; inicio: string; total: number; corrente: boolean }
+
+/**
+ * Todas as semanas do mês corrente (S1…S5), com o que foi publicado em cada uma.
+ * O card mostrava só o total da semana atual — não dava pra ver o ritmo dentro do mês.
+ */
+export async function semanasDoMes(base = spNow()): Promise<SemanaProducao[]> {
+  const ano = base.getFullYear(), mes = base.getMonth();
+  const primeiro = new Date(ano, mes, 1);
+  const ultimo = new Date(ano, mes + 1, 0);
+
+  // Semana começa na SEGUNDA. A 1ª "semana" do mês pode começar no meio.
+  const semanas: { inicio: Date; fim: Date }[] = [];
+  const cursor = new Date(primeiro);
+  while (cursor <= ultimo) {
+    const ini = new Date(cursor);
+    const diasAteDomingo = cursor.getDay() === 0 ? 0 : 7 - cursor.getDay();
+    const fim = new Date(cursor);
+    fim.setDate(fim.getDate() + diasAteDomingo);
+    semanas.push({ inicio: ini, fim: fim > ultimo ? new Date(ultimo) : fim });
+    cursor.setDate(fim.getDate() + 1);
+  }
+
+  const { data } = await supabaseAdmin
+    .from("content_card_transitions")
+    .select("card_id, transitioned_at")
+    .eq("to_status", "published")
+    .gte("transitioned_at", `${ymd(primeiro)}T00:00:00-03:00`);
+
+  const hojeKey = ymd(base);
+  return semanas.map((s, i) => {
+    const iniKey = ymd(s.inicio), fimKey = ymd(s.fim);
+    const cards = new Set<string>();
+    for (const r of data ?? []) {
+      const k = ymd(spNow(new Date(r.transitioned_at as string)));
+      if (k >= iniKey && k <= fimKey) cards.add(r.card_id as string);
+    }
+    return {
+      label: `S${i + 1}`,
+      inicio: iniKey,
+      total: cards.size,
+      corrente: hojeKey >= iniKey && hojeKey <= fimKey,
+    };
+  });
+}
+
+/** Meta do mês = soma do posts_goal dos clientes que estão em operação. */
+export async function metaDoMes(): Promise<{ meta: number; clientes: number }> {
+  const { data } = await supabaseAdmin
+    .from("clients").select("posts_goal")
+    .neq("status", "onboarding").neq("active", false).is("draft_status", null);
+  const meta = (data ?? []).reduce((s, c) => s + ((c.posts_goal as number) ?? 12), 0);
+  return { meta, clientes: (data ?? []).length };
+}

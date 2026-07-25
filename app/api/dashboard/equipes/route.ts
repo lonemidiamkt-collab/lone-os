@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   const hoje = ymd(spNow());
 
   const [{ data: membros }, { data: clients }, { data: suporte }, mes, semana] = await Promise.all([
-    supabaseAdmin.from("team_members").select("name, role").eq("active", true),
+    supabaseAdmin.from("team_members").select("name, role").eq("is_active", true),
     supabaseAdmin.from("clients").select("id, assigned_social, assigned_traffic")
       .is("draft_status", null).neq("active", false).neq("status", "onboarding"),
     supabaseAdmin.from("client_group_message_log")

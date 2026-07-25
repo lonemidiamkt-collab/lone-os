@@ -17,4 +17,4 @@ export { default as ClientStatusList } from "./ClientStatusList";
 export type { ClientStatusListProps, ClientRowData, StatusFilterValue } from "./ClientStatusList";
 
 export { default as ProducaoHistorico } from "./ProducaoHistorico";
-export type { ProducaoHistoricoProps, MesProducao } from "./ProducaoHistorico";
+export type { ProducaoHistoricoProps, MesProducao, SemanaProducao } from "./ProducaoHistorico";
