@@ -39,18 +39,7 @@ O trabalho aconteceu, o registro existia, e a tela olhava outro lugar.
 
 ## Aberto — ordenado por impacto
 
-### P0 — o time trabalha no escuro
-1. **Portal do cliente não mostra artes entregues.** `app/api/portal/[token]/content/route.ts:26` filtra `image_url`, mas a entrega padrão (multi-anexo) grava só em `card_attachments`. Cliente abre e não vê nada.
-2. **"Pedir ajuste" no portal morre num comentário.** `app/api/portal/[token]/approve/route.ts:69-77` não muda status, não limpa `designer_delivered_at`, não reabre a `design_request` — e a vigilância **para de cobrar**. Pelo WhatsApp o mesmo fluxo funciona (`lib/cs/card.ts:121-145`).
-3. **`cs-vigilancia` em MODO SECO** (`route.ts:7-9`): grava `dry_run=true` e não posta. A cobrança de card parado que o time acha que existe **não acontece**.
-4. **`cs-risco` exclui `status='at_risk'`** (`route.ts:23`): o alerta de churn ignora justamente quem já está marcado como risco.
-
-### P1 — agente CS perde informação
-5. **Áudio nunca entra no `cs_message_corpus`.** O insert está em `inbound:805`, antes da transcrição (`:867`). Cliente que fala por áudio é invisível para o aprendizado de estilo e briefing.
-6. **Sentimento não é persistido.** `checarSatisfacao` só manda WhatsApp + `notifications`. Sem histórico; o agente nunca atualiza `attention_level` → cliente bravo continua verde na jornada.
-7. **Nada dá baixa em `pendencias_cliente`.** A lista só cresce (merge aditivo) → o agente cobra de novo o que o cliente já entregou.
-8. **Cobrança não registra que cobrou** → possível cobrar o mesmo cliente 3× no dia; impossível medir eficácia.
-9. **Calendário por comando não persiste** (`lib/cs/motor.ts` não tem uma escrita sequer) — e a mensagem afirma que está em Planejamento, o que é falso.
+### P1 — agente CS ainda perde informação
 10. **`cs_estilo` ilhado:** perfis gerados e revisados, mas `getEstiloTime/Cliente` não são chamados no fluxo — o agente escreve com tom hardcoded.
 11. **Sem log de outbound:** nenhuma mensagem enviada pelo agente é registrada.
 12. **Pedido de ajuste do cliente não gera `cs_rework_events`** → o motivo real da reprovação não realimenta o briefing do designer.
