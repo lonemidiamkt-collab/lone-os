@@ -69,6 +69,9 @@ export async function POST(req: NextRequest) {
   const cardId = await criarCardDemanda({
     clientId, clienteNome: (d.cliente_nome as string) || "Cliente", responsavel: d.responsavel as string | null,
     titulo: resumo, urgencia: d.urgencia as string, briefing, tipo: d.tipo as string,
+    // Sem isto, um "ajuste_arte" confirmado PELO PAINEL abria card NOVO em vez de editar o existente
+    // (os dois caminhos do WhatsApp já passavam). Era a origem das duplicatas tipo "SEG 27" ×4.
+    ajusteCardId: (d.content_card_id as string) ?? null,
   });
   await supabaseAdmin.from("cs_demandas").update({
     status: "confirmada", content_card_id: cardId, briefing,

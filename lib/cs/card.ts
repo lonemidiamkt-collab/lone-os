@@ -54,6 +54,28 @@ export async function criarCardDemanda(opts: {
     return ok ? opts.ajusteCardId : null;
   }
   const pilot = csIsPilot();
+
+  // GUARDA DE DUPLICATA — protege os 4 caminhos de criação (inbound, decide, calendário, pauta) de
+  // uma vez. Sintoma real em produção: "SEG 27" da Madereira criado 4× no mesmo dia (16:28/17:27/
+  // 17:53/17:54), Tindaro 2×. Se já existe card não-arquivado do mesmo cliente, com o mesmo título e
+  // a mesma data de postagem, criado nas últimas 48h, devolve o existente em vez de duplicar.
+  const tituloNorm = opts.titulo.trim().toLowerCase();
+  const dueAlvo = opts.dueDate !== undefined ? opts.dueDate : dueDatePorUrgencia(opts.tipo, opts.urgencia);
+  const { data: recentes } = await supabaseAdmin
+    .from("content_cards")
+    .select("id, title, due_date")
+    .eq("client_id", opts.clientId)
+    .is("archived_at", null)
+    .gte("created_at", new Date(Date.now() - 48 * 3600_000).toISOString());
+  const gemeo = (recentes ?? []).find(
+    (c) => ((c.title as string) || "").trim().toLowerCase().replace(/^\[teste\]\s*/, "") === tituloNorm
+      && (c.due_date ?? null) === (dueAlvo ?? null),
+  );
+  if (gemeo) {
+    console.warn(`[CS] card duplicado evitado: "${opts.titulo}" (${opts.clienteNome}) → reusa ${gemeo.id}`);
+    return gemeo.id as string;
+  }
+
   const { data: cli } = await supabaseAdmin.from("clients").select("assigned_social").eq("id", opts.clientId).maybeSingle();
   const dono = ((cli?.assigned_social as string) || opts.responsavel || "").trim() || null;
   const { data: card, error } = await supabaseAdmin
@@ -65,7 +87,7 @@ export async function criarCardDemanda(opts: {
       social_media: dono,
       status: "ideas",
       priority: PRIO[opts.urgencia] ?? "medium",
-      due_date: opts.dueDate !== undefined ? opts.dueDate : dueDatePorUrgencia(opts.tipo, opts.urgencia),
+      due_date: dueAlvo,
       briefing: opts.briefing,
       requested_by_traffic: pilot ? "🤖 Agente CS (teste)" : "🤖 Agente CS",
       status_changed_at: new Date().toISOString(),
