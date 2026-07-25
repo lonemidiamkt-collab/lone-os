@@ -35,11 +35,11 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // `translate="no"` + notranslate: a tradução automática do navegador REESCREVE o DOM e quebra o
+  // React (bug conhecido do removeChild) — a tela para de atualizar, os contadores travam em zero e
+  // os cards ficam em branco. Aconteceu em produção: o Chrome traduziu a página que já é pt-BR e
+  // virou "Assinados"→"Assassinados", "Pipeline"→"Gasoduto", "Design"→"Projeto".
   return (
-    {/* `translate="no"` + notranslate: a tradução automática do navegador REESCREVE o DOM e quebra o
-        React (bug conhecido do removeChild) — a tela para de atualizar, os contadores travam em zero
-        e os cards ficam em branco. Aconteceu em produção: o Chrome traduziu a página que já é
-        pt-BR e virou "Assinados"→"Assassinados", "Pipeline"→"Gasoduto", "Design"→"Projeto". */}
     <html lang="pt-BR" translate="no" suppressHydrationWarning>
       <head>
         <meta name="google" content="notranslate" />
