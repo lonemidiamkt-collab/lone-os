@@ -2,6 +2,7 @@
 
 import Header from "@/components/Header";
 import MetricCard from "@/components/MetricCard";
+import MorningBriefing from "@/components/MorningBriefing";
 import {
   Users, TrendingUp, AlertTriangle, UserPlus,
   Activity, Megaphone, Clock, Bell, Send, X,
@@ -21,16 +22,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
 import type { ClientStatus } from "@/lib/types";
+import { mockAdCampaigns } from "@/lib/mockData";
 import { supabase } from "@/lib/supabase/client";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { getDashboardData } from "@/lib/dashboard/getDashboardData";
 import {
   DashboardHeader,
+  CriticalAlertBanner,
   QuickActions,
   TeamSection,
   WeeklyAttention,
-  type AttentionEntry,
-  ProducaoHistorico,
   ClientStatusList,
 } from "@/components/dashboard-v2";
 import { KPICard, PillBadge } from "@/components/lone-ui";
@@ -39,6 +39,7 @@ import PostCounter from "@/components/sector/PostCounter";
 import DesignQueue from "@/components/sector/DesignQueue";
 import BudgetAlert from "@/components/sector/BudgetAlert";
 import DesignDeliveriesAlert from "@/components/DesignDeliveriesAlert";
+import SmartAlerts from "@/components/SmartAlerts";
 import SystemAlertBanner from "@/components/SystemAlertBanner";
 import MetaHealthCard from "@/components/MetaHealthCard";
 import ClientHealthRadar from "@/components/ClientHealthRadar";
@@ -145,10 +146,10 @@ function NoticeFormBlock() {
                 onChange={(e) => setForm((p) => ({ ...p, urgent: e.target.checked }))}
                 className="w-3.5 h-3.5 accent-red-400"
               />
-              <span className="text-xs text-lone-danger">Urgente</span>
+              <span className="text-xs text-red-500">Urgente</span>
             </label>
             <div className="flex items-center gap-2">
-              {formSuccess && <span className="text-xs text-lone-success font-medium flex items-center gap-1"><CheckCircle2 size={12} /> Publicado!</span>}
+              {formSuccess && <span className="text-xs text-[#2b3cff] font-medium flex items-center gap-1"><CheckCircle2 size={12} /> Publicado!</span>}
               <button onClick={() => setShowForm(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
               <button onClick={handleAdd} disabled={formSuccess} className="btn-primary text-xs flex items-center gap-1 disabled:opacity-50"><Send size={11} /> Publicar</button>
             </div>
@@ -163,19 +164,19 @@ function NoticeFormBlock() {
           const catIcon = notice.category === "meeting" ? "📅" : notice.category === "deadline" ? "⏰" : notice.category === "reminder" ? "🔔" : "";
           return (
             <div key={notice.id} className={`p-3 rounded-lg border text-sm ${
-              notice.urgent ? "bg-lone-danger-bg border-lone-danger-border"
-              : notice.category === "meeting" ? "bg-lone-info-bg border-lone-info-border"
+              notice.urgent ? "bg-red-500/10 border-red-500/20"
+              : notice.category === "meeting" ? "bg-blue-500/5 border-[#2b3cff]/20"
               : "bg-muted border-transparent"
             }`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   {catIcon && <span className="text-xs">{catIcon}</span>}
-                  <p className={`font-medium text-xs ${notice.urgent ? "text-lone-danger" : "text-foreground"}`}>{notice.title}</p>
+                  <p className={`font-medium text-xs ${notice.urgent ? "text-red-500" : "text-foreground"}`}>{notice.title}</p>
                 </div>
                 {(role === "admin" || role === "manager") && (
                   <button
                     onClick={() => { if (window.confirm("Tem certeza que deseja excluir este aviso?")) deleteNotice(notice.id); }}
-                    className="text-muted-foreground/50 hover:text-lone-danger transition-colors shrink-0 p-0.5"
+                    className="text-muted-foreground/50 hover:text-red-500 transition-colors shrink-0 p-0.5"
                   >
                     <X size={12} />
                   </button>
@@ -185,7 +186,7 @@ function NoticeFormBlock() {
               <div className="flex items-center gap-2 mt-1">
                 <p className="text-muted-foreground/50 text-xs">por {notice.createdBy} · {notice.createdAt}</p>
                 {notice.scheduledAt && (
-                  <span className="text-xs text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                  <span className="text-xs text-[#2b3cff] bg-[#2b3cff]/10 px-1.5 py-0.5 rounded">
                     {new Date(notice.scheduledAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 )}
@@ -276,20 +277,10 @@ function EmployeeDashboard() {
   const greetingTime = new Date().getHours();
   const greeting = greetingTime < 12 ? "Bom dia" : greetingTime < 18 ? "Boa tarde" : "Boa noite";
 
-  // Tom semântico ÚNICO — a cor comunica ESTADO, via token (mesmo mapa no KPI e no anel; nunca HEX solto).
-  const TOM = {
-    bom:     { text: "text-lone-success", bg: "bg-lone-success-bg", stroke: "var(--lone-success)" },
-    atencao: { text: "text-lone-warning", bg: "bg-lone-warning-bg", stroke: "var(--lone-warning)" },
-    ruim:    { text: "text-lone-danger",  bg: "bg-lone-danger-bg",  stroke: "var(--lone-danger)" },
-    neutro:  { text: "text-primary",      bg: "bg-primary/10",      stroke: "var(--primary)" },
-  } as const;
-  const tomTaxa = performance.rate >= 80 ? TOM.bom : performance.rate >= 50 ? TOM.atencao : TOM.ruim;
-  const tomSuporte = performance.supportDone >= performance.supportTotal ? TOM.bom : TOM.neutro;
-
   return (
     <>
       {/* Greeting */}
-      <div className="bg-gradient-to-r from-primary/10 to-transparent border border-primary/20 rounded-2xl p-5">
+      <div className="bg-gradient-to-r from-[#2b3cff]/10 to-transparent border border-[#2b3cff]/20 rounded-2xl p-5">
         <h2 className="text-lg font-bold text-foreground">
           {greeting}, {currentUser.split(" ")[0]}!
         </h2>
@@ -316,13 +307,13 @@ function EmployeeDashboard() {
           label="Taxa de Conclusão"
           value={`${performance.rate}%`}
           sub={`${performance.done}/${performance.total} tarefas`}
-          iconColor={tomTaxa.text}
-          iconBg={tomTaxa.bg}
+          iconColor={performance.rate >= 80 ? "text-[#2b3cff]" : performance.rate >= 50 ? "text-[#2b3cff]" : "text-red-500"}
+          iconBg={performance.rate >= 80 ? "bg-[#2b3cff]/10" : performance.rate >= 50 ? "bg-[#2b3cff]/10" : "bg-red-500/10"}
           href="/calendar"
         />
         {role === "social" && (
           <>
-            <MetricCard icon={Instagram} label="Publicados" value={performance.published} sub="este mês" iconColor="text-primary" iconBg="bg-primary/10" href="/social" />
+            <MetricCard icon={Instagram} label="Publicados" value={performance.published} sub="este mês" iconColor="text-[#2b3cff]" iconBg="bg-[#2b3cff]/10" href="/social" />
             <MetricCard icon={FileText} label="No Pipeline" value={performance.inPipeline} sub="cards em andamento" iconColor="text-primary" iconBg="bg-primary/10" href="/social" />
           </>
         )}
@@ -334,15 +325,15 @@ function EmployeeDashboard() {
               label="Suporte Hoje"
               value={`${performance.supportDone}/${performance.supportTotal}`}
               sub="check-ins feitos"
-              iconColor={tomSuporte.text}
-              iconBg={tomSuporte.bg}
+              iconColor={performance.supportDone >= performance.supportTotal ? "text-[#2b3cff]" : "text-[#2b3cff]"}
+              iconBg={performance.supportDone >= performance.supportTotal ? "bg-[#2b3cff]/10" : "bg-[#2b3cff]/10"}
               href="/traffic"
             />
           </>
         )}
         {role === "designer" && (
           <>
-            <MetricCard icon={Palette} label="Na Fila" value={myDesignRequests.filter((r) => r.status === "queued").length} sub="pedidos aguardando" iconColor="text-primary" iconBg="bg-primary/10" href="/design" />
+            <MetricCard icon={Palette} label="Na Fila" value={myDesignRequests.filter((r) => r.status === "queued").length} sub="pedidos aguardando" iconColor="text-[#2b3cff]" iconBg="bg-[#2b3cff]/10" href="/design" />
             <MetricCard icon={Activity} label="Em Produção" value={myDesignRequests.filter((r) => r.status === "in_progress").length} sub="fazendo agora" iconColor="text-primary" iconBg="bg-primary/10" href="/design" />
           </>
         )}
@@ -385,9 +376,9 @@ function EmployeeDashboard() {
             {myTasks.slice(0, 8).map((task) => (
               <div key={task.id} className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
                 <span className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${
-                  task.priority === "critical" ? "bg-lone-danger" :
-                  task.priority === "high" ? "bg-lone-warning" :
-                  task.priority === "medium" ? "bg-lone-info" : "bg-muted-foreground"
+                  task.priority === "critical" ? "bg-red-500" :
+                  task.priority === "high" ? "bg-[#2b3cff]" :
+                  task.priority === "medium" ? "bg-blue-500" : "bg-zinc-500"
                 }`} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-foreground">{task.title}</p>
@@ -395,7 +386,7 @@ function EmployeeDashboard() {
                     <span className="text-[10px] text-muted-foreground">{task.clientName}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                       task.status === "in_progress" ? "bg-primary/10 text-primary" :
-                      task.status === "review" ? "bg-lone-info-bg text-lone-info" :
+                      task.status === "review" ? "bg-[#2b3cff]/10 text-[#2b3cff]" :
                       "bg-muted text-muted-foreground"
                     }`}>
                       {task.status === "pending" ? "Pendente" : task.status === "in_progress" ? "Em Progresso" : "Revisão"}
@@ -422,7 +413,7 @@ function EmployeeDashboard() {
                 <circle cx="50" cy="50" r="40" fill="none" stroke="var(--muted)" strokeWidth="8" />
                 <circle
                   cx="50" cy="50" r="40" fill="none"
-                  stroke={tomTaxa.stroke}
+                  stroke={performance.rate >= 80 ? "#22c55e" : performance.rate >= 50 ? "#eab308" : "#ef4444"}
                   strokeWidth="8"
                   strokeLinecap="round"
                   strokeDasharray={`${performance.rate * 2.51} 251`}
@@ -496,7 +487,6 @@ function AdminDashboard() {
   const clients = useClientsStore((s) => s.clients);
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
-  const notices = useOperationalStore((s) => s.notices);
   const tasks = useOperationalStore((s) => s.tasks);
   const updateTask = useOperationalStore((s) => s.updateTask);
   const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
@@ -520,36 +510,11 @@ function AdminDashboard() {
     return () => { mounted = false; };
   }, []);
 
-  // Publicados do MÊS — do servidor (inclui arquivados), pois o board ao vivo não bate com a realidade.
-  const [publishedMonth, setPublishedMonth] = useState<{ total: number; byMember: Record<string, number>; byClient: Record<string, number>; artesProntas: Record<string, number>; semana?: { total: number }; historico?: { mes: string; label: string; total: number }[]; semanas?: { label: string; inicio: string; total: number; corrente: boolean }[]; meta?: { meta: number; clientes: number } } | null>(null);
-  // Equipes pelo PAPEL (team_members) + suporte real do log — não deduzido dos clientes.
-  const [equipes, setEquipes] = useState<{ social: { name: string; clientCount: number; published: number; publishedWeek: number }[]; trafego: { name: string; clientCount: number; supportDone: number; supportTotal: number }[]; semSocial: number } | null>(null);
-  useEffect(() => {
-    authedFetch("/api/dashboard/equipes")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d) setEquipes(d); })
-      .catch(() => {});
-  }, []);
-  useEffect(() => {
-    authedFetch("/api/dashboard/published-month")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d) setPublishedMonth(d); })
-      .catch(() => {});
-  }, []);
-
-  // Pulso (atividade bidirecional) — substitui o "inativos 7 dias", que lia campos mortos.
-  const [pulse, setPulse] = useState<{ atencao: AttentionEntry[]; semSinal: { clientId: string; nome: string }[] } | null>(null);
-  useEffect(() => {
-    authedFetch("/api/dashboard/pulse")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d) setPulse(d); })
-      .catch(() => {});
-  }, []);
-
   const {
     activeClients, atRiskClients, onboardingClients, urgentTasks,
     pipelineCards, publishedThisMonth, stuckCards, pendingApproval,
     designQueued, designInProg, teamProductivity, trafficProductivity,
+    inactiveSevenDays,
   } = useMemo(
     () => getDashboardData({ clients, contentCards, designRequests, tasks, trafficRoutineChecks }),
     [clients, contentCards, designRequests, tasks, trafficRoutineChecks]
@@ -620,14 +585,25 @@ function AdminDashboard() {
       {/* Alertas de orçamento */}
       <BudgetAlert clients={clients} />
 
-      {/* CriticalAlertBanner removido: "Urgências do dia" duplicava o Pipeline (Parados 48h+/Aprovação)
-          e o DashboardInsights. Pipeline + Insights são a fonte desses números. */}
+      {/* Banner de urgências */}
+      <CriticalAlertBanner
+        alerts={[
+          { type: "clients_at_risk",   count: atRiskClients.length,    href: "/clients?filter=at_risk" },
+          { type: "stuck_cards",        count: stuckCards.length,        href: "/social" },
+          { type: "urgent_tasks",       count: urgentTasks.length,       href: "/calendar" },
+          { type: "expiring_contracts", count: contractStats.expiring,   href: "/clients" },
+          { type: "pending_approval",   count: pendingApproval,          href: "/social" },
+        ]}
+      />
 
       {/* Artes entregues pelo designer aguardando confirmação do social */}
       <DesignDeliveriesAlert cards={contentCards} />
 
-      {/* Health Radar (SmartAlerts removido: duplicava o DashboardInsights — server é a fonte única) */}
-      <ClientHealthRadar />
+      {/* Health Radar + Smart Alerts */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <ClientHealthRadar />
+        <SmartAlerts />
+      </div>
 
       {/* Resumo de contratos — somente admin */}
       {(contractStats.active > 0 || contractStats.pending > 0 || contractStats.expiring > 0) && (
@@ -654,45 +630,24 @@ function AdminDashboard() {
         </div>
       )}
 
+      {/* Ad Rejection Alert — oculto: dados dependem de mockAdCampaigns (ver BACKLOG #5) */}
+      {/* MorningBriefing (AI) — oculto: dados dependem de mockAdCampaigns (ver BACKLOG #5) */}
 
       {/* Pipeline Quick Stats */}
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
         <KPICard label="Pipeline"    value={pipelineCards.length}       caption="cards em andamento"   onClick={() => router.push("/social")} />
-        <KPICard label="Publicados"  value={publishedMonth?.total ?? publishedThisMonth} caption="este mês"    tone="success" onClick={() => router.push("/social")} />
+        <KPICard label="Publicados"  value={publishedThisMonth}         caption="este mês"             tone="success" onClick={() => router.push("/social")} />
         <KPICard label="Parados 48h+" value={stuckCards.length}         caption="SLA violado"          tone={stuckCards.length > 0 ? "danger" : "default"} onClick={() => router.push("/social")} />
         <KPICard label="Aprovação"   value={pendingApproval}            caption="aguardando review"    tone={pendingApproval > 0 ? "warning" : "default"} onClick={() => router.push("/social")} />
         <KPICard label="Design"      value={designQueued + designInProg} caption={`${designQueued} fila · ${designInProg} prod`} onClick={() => router.push("/design")} />
       </div>
 
-      {/* Produção: semana + mês + histórico mês a mês (janela móvel, se atualiza sozinha). */}
-      {publishedMonth?.historico && publishedMonth.historico.length > 0 && (
-        <ProducaoHistorico
-          semana={publishedMonth.semana?.total ?? 0}
-          mes={publishedMonth.total}
-          historico={publishedMonth.historico}
-          semanas={publishedMonth.semanas}
-          meta={publishedMonth.meta}
-        />
-      )}
+      {/* Equipes */}
+      <TeamSection socialTeam={teamProductivity} trafficTeam={trafficProductivity} />
 
-      {/* Equipes: papéis vêm de team_members e o suporte do log real de mensagens enviadas.
-          Antes a lista era deduzida de clients.assigned_social — o que colocava o Julio (manager de
-          tráfego) na Equipe Social e criava um membro fantasma com os clientes sem responsável. */}
-      <TeamSection
-        socialTeam={equipes?.social.map((m) => ({ ...m, inPipeline: 0 })) ?? teamProductivity}
-        trafficTeam={equipes?.trafego ?? trafficProductivity}
-      />
-      {equipes && equipes.semSocial > 0 && (
-        <p className="-mt-3 text-lone-caption font-inter text-lone-text-tertiary">
-          ⚠️ {equipes.semSocial} cliente{equipes.semSocial !== 1 ? "s" : ""} sem social responsável — defina em Clientes.
-        </p>
-      )}
-
-      {/* Avisos + Tarefas Urgentes — o grid se ajusta ao conteúdo: "Avisos" só ocupa 2/3 quando TEM
-          aviso. Vazio (o normal), ele encolhe pra 1/3 e as Tarefas Urgentes ganham o espaço, em vez
-          de sobrar meia tela com "Nenhum aviso". */}
+      {/* Avisos + Tarefas Urgentes */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className={notices.length > 0 ? "xl:col-span-2" : ""}>
+        <div className="xl:col-span-2">
           <NoticeFormBlock />
         </div>
         <div className="rounded-xl border border-lone-border bg-lone-bg-card p-4">
@@ -739,7 +694,7 @@ function AdminDashboard() {
         </div>
       </div>
 
-      <WeeklyAttention clients={pulse?.atencao ?? []} semSinal={pulse?.semSinal ?? []} />
+      <WeeklyAttention clients={inactiveSevenDays} />
 
       {/* Lista de status dos clientes */}
       <ClientStatusList
@@ -747,9 +702,8 @@ function AdminDashboard() {
           id: c.id,
           name: c.name,
           status: c.status,
-          postsThisMonth: publishedMonth?.byClient[c.id] ?? c.postsThisMonth ?? 0,
+          postsThisMonth: c.postsThisMonth ?? 0,
           postsGoal: c.postsGoal ?? 12,
-          artesProntas: publishedMonth?.artesProntas?.[c.id] ?? 0,
           assignedTraffic: c.assignedTraffic,
           assignedSocial: c.assignedSocial,
         }))}
@@ -798,11 +752,11 @@ export default function DashboardPage() {
         {notices.filter((n) => n.urgent).length > 0 && (
           <div className="space-y-2">
             {notices.filter((n) => n.urgent).slice(0, 2).map((n) => (
-              <div key={n.id} className="flex items-start gap-3 bg-lone-danger-bg border border-lone-danger-border rounded-xl px-4 py-3">
-                <Megaphone size={15} className="text-lone-danger shrink-0 mt-0.5" />
+              <div key={n.id} className="flex items-start gap-3 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+                <Megaphone size={15} className="text-red-500 shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-lone-danger">{n.title}</p>
-                  {n.body && <p className="text-xs text-lone-danger/80 mt-0.5">{n.body}</p>}
+                  <p className="text-sm font-semibold text-red-500">{n.title}</p>
+                  {n.body && <p className="text-xs text-red-500/80 mt-0.5">{n.body}</p>}
                   <p className="text-xs text-muted-foreground/50 mt-1">por {n.createdBy} · {n.createdAt}</p>
                 </div>
               </div>

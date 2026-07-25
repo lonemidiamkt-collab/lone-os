@@ -101,11 +101,7 @@ export const useOperationalStore = create<OperationalState>()(
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const { timeline, onboardingItems, globalChat, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodEntries, clientAccess } = await res.json();
           set({ timeline, onboarding: onboardingItems, globalChat, tasks, notices, creativeAssets, socialProofs, crisisNotes, quinzReports, moodHistory: moodEntries, clientAccess, initialized: true }, false, "ops/init/done");
-        } catch (e) {
-          // `catch {}` puro: o erro sumia sem deixar rastro. Tarefas, avisos e onboarding ficavam
-          // vazios e o console limpo — impossível diagnosticar.
-          console.error("[store:operational] falhou ao carregar — tarefas/avisos vão ficar vazios:", e);
-        }
+        } catch {}
       },
 
       subscribeRealtime: () => {

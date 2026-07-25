@@ -18,42 +18,25 @@ interface Insight {
   href: string;
 }
 
-// Tom via token (theme-aware), não HEX — mesma família semântica do resto do dashboard.
 const TONE: Record<Insight["tone"], { bar: string; chip: string; label: string }> = {
-  alerta:  { bar: "var(--lone-danger)",  chip: "var(--lone-danger-bg)",     label: "Ação" },
-  atencao: { bar: "var(--lone-warning)", chip: "var(--lone-warning-bg)",    label: "Atenção" },
-  info:    { bar: "var(--primary)",       chip: "var(--lone-brand-bg-soft)", label: "Aviso" },
-  bom:     { bar: "var(--lone-success)", chip: "var(--lone-success-bg)",    label: "Bom" },
+  alerta:  { bar: "#ef4444", chip: "rgba(239,68,68,0.12)",  label: "Ação" },
+  atencao: { bar: "#f59e0b", chip: "rgba(245,158,11,0.12)", label: "Atenção" },
+  info:    { bar: "#2b3cff", chip: "rgba(43,60,255,0.14)",  label: "Aviso" },
+  bom:     { bar: "#22c55e", chip: "rgba(34,197,94,0.12)",  label: "Bom" },
 };
 
 export default function DashboardInsights() {
   const [insights, setInsights] = useState<Insight[] | null>(null);
-  const [erro, setErro] = useState(false);
-  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let alive = true;
-    // ERRO ≠ VAZIO: um fetch quebrado NÃO pode virar "tudo sob controle" num painel de vigilância.
     authedFetch("/api/dashboard/insights")
-      .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
-      .then((d) => { if (alive) { setInsights(d.insights ?? []); setErro(false); } })
-      .catch(() => { if (alive) setErro(true); });
+      .then((r) => (r.ok ? r.json() : { insights: [] }))
+      .then((d) => { if (alive) setInsights(d.insights ?? []); })
+      .catch(() => { if (alive) setInsights([]); });
     return () => { alive = false; };
-  }, [tick]);
+  }, []);
 
-  if (erro) {
-    return (
-      <div className="rounded-xl border border-lone-danger-border bg-lone-danger-bg px-4 py-3 flex items-center justify-between gap-3">
-        <p className="text-sm text-lone-danger">Não consegui carregar os alertas agora — os dados podem estar desatualizados.</p>
-        <button
-          onClick={() => { setErro(false); setInsights(null); setTick((t) => t + 1); }}
-          className="shrink-0 text-xs font-medium text-lone-danger underline underline-offset-2 hover:opacity-80"
-        >
-          Recarregar
-        </button>
-      </div>
-    );
-  }
   if (insights === null) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">

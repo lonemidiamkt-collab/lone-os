@@ -50,9 +50,7 @@ const TeamSection = React.forwardRef<HTMLDivElement, TeamSectionProps>(
     return (
       <div
         ref={ref}
-        // `items-start` faz cada card ter a altura do próprio conteúdo. Sem isso o grid estica os
-        // dois pela linha mais alta — e a Equipe Tráfego (2 membros) ficava com metade do card vazia.
-        className={cn("grid grid-cols-1 xl:grid-cols-2 gap-4 items-start", className)}
+        className={cn("grid grid-cols-1 xl:grid-cols-2 gap-4", className)}
         {...props}
       >
         {/* Social Team */}

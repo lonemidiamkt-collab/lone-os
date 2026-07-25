@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { RoleProvider, useRole } from "@/lib/context/RoleContext";
 import { AppStateProvider } from "@/lib/context/AppStateContext";
 import { NavProvider, useNav } from "@/lib/context/NavContext";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
-import { SESSAO_EXPIRADA } from "@/lib/supabase/authed-fetch";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import LoginScreen from "@/components/LoginScreen";
@@ -39,37 +38,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated) return <LoginScreen />;
-  return <><SessaoExpiradaAviso />{children}</>;
-}
-
-/**
- * Sessão vencida ≠ "não tem dado". Quando o token do Supabase expira, o perfil local continua
- * mostrando o nome da pessoa (parece logada) mas toda chamada volta 401 e os stores viram listas
- * vazias — o painel exibia "0 clientes", "0 em risco" e cards em branco, sem nenhum aviso.
- * Aqui a recusa vira uma faixa explícita com o caminho de saída.
- */
-function SessaoExpiradaAviso() {
-  const [expirada, setExpirada] = useState(false);
-  const { logout } = useRole();
-
-  useEffect(() => {
-    const h = () => setExpirada(true);
-    window.addEventListener(SESSAO_EXPIRADA, h);
-    return () => window.removeEventListener(SESSAO_EXPIRADA, h);
-  }, []);
-
-  if (!expirada) return null;
-  return (
-    <div className="fixed inset-x-0 top-0 z-[300] flex items-center justify-center gap-3 bg-lone-danger-bg border-b border-lone-danger-border px-4 py-2.5 text-sm">
-      <span className="text-lone-danger font-medium">Sua sessão expirou — os dados desta tela podem estar desatualizados.</span>
-      <button
-        onClick={() => { void logout(); }}
-        className="rounded-lg bg-lone-danger px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
-      >
-        Entrar de novo
-      </button>
-    </div>
-  );
+  return <>{children}</>;
 }
 
 function MainLayout({ children }: { children: React.ReactNode }) {

@@ -153,22 +153,7 @@ export function getLiveTimeSpentMs(workStartedAt?: string, totalTimeSpentMs?: nu
 export const OVERTIME_THRESHOLD_MS = 8 * 60 * 60 * 1000;
 
 /** Unified Health Score calculation (0-100). Single source of truth. */
-/**
- * Saúde do cliente 0-100 (MAIOR = MAIS SAUDÁVEL).
- *
- * FONTE ÚNICA: prefere o score do cron `compute-health` (clients.current_health_score), que é o
- * cálculo completo (11 sinais). Ele vem invertido (lá, maior = mais RISCO), então inverte aqui.
- * Antes existiam 6 cálculos de saúde divergentes na base — dois com escala oposta — e este, o mais
- * pobre (3 campos), era o que aparecia no Radar, em /clients e no OKR.
- *
- * A fórmula antiga fica de fallback para cliente novo, antes da primeira rodada do cron (06h BRT).
- */
-export function calcHealthScore(
-  client: Pick<Client, "status" | "attentionLevel" | "lastPostDate"> & { currentHealthScore?: number },
-): number {
-  if (typeof client.currentHealthScore === "number") {
-    return Math.max(0, Math.min(100, 100 - client.currentHealthScore));
-  }
+export function calcHealthScore(client: Pick<Client, "status" | "attentionLevel" | "lastPostDate">): number {
   let score = 50;
   // Status
   if (client.status === "good") score += 20;

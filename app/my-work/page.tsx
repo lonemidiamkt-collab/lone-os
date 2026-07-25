@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import {
   Inbox, Check, Clock, AlertTriangle, FileText, Palette,
   TrendingUp, Instagram, ChevronRight, CheckCircle, Filter,
@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import { useContentStore } from "@/stores/useContentStore";
-import { useClientsStore } from "@/stores/useClientsStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
@@ -27,12 +26,6 @@ export default function MyWorkPage() {
   const markNotificationRead = useNotificationsStore((s) => s.markRead);
   const { role, currentUser } = useRole();
   const [filter, setFilter] = useState<FilterType>("all");
-
-  // Sem init a página dizia "Tudo em dia!" mesmo com dezenas de itens pendentes.
-  const initClients = useClientsStore((s) => s.init);
-  const initContent = useContentStore((s) => s.init);
-  const initOps = useOperationalStore((s) => s.init);
-  useEffect(() => { initClients(); initContent(); initOps(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isAdmin = role === "admin" || role === "manager";
   const pSort = (a: { priority: string }, b: { priority: string }) => {

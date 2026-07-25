@@ -101,12 +101,6 @@ function snakeToClient(row: Record<string, unknown>): Client {
     campaignBriefing: (row.campaign_briefing as string) ?? undefined,
     fixedBriefing: (row.fixed_briefing as string) ?? undefined,
     agenteAtivo: (row.agente_ativo as boolean) ?? true,
-    // Estas 4 colunas JÁ vinham do banco (estão em CLIENT_LEAN_COLS) mas não eram mapeadas — por isso
-    // o score que o cron compute-health calcula todo dia nunca chegava ao dashboard/Radar/clients.
-    currentHealthScore: (row.current_health_score as number) ?? undefined,
-    currentHealthLevel: (row.current_health_level as Client["currentHealthLevel"]) ?? undefined,
-    healthComputedAt: (row.health_computed_at as string) ?? undefined,
-    lastClientMsgAt: (row.last_client_msg_at as string) ?? undefined,
     metaAdAccountId: (row.meta_ad_account_id as string) ?? undefined,
     metaAdAccountName: (row.meta_ad_account_name as string) ?? undefined,
     cpfCnpj: (row.cpf_cnpj as string) ?? undefined,
@@ -560,14 +554,10 @@ export async function fetchNotifications(forUser?: string): Promise<AppNotificat
   }));
 }
 
-export async function insertNotification(n: { type: string; title: string; body?: string; clientId?: string; cardId?: string; targetUser?: string | null; read?: boolean }): Promise<void> {
-  // `targetUser` faltava na assinatura: TODA notificação criada pela UI (arte entregue, arte
-  // reprovada, "@fulano" num card) nascia GLOBAL e caía no sino do time inteiro. Em produção, 92%
-  // das notificações estão sem destinatário — o que fez todo mundo parar de olhar o sino.
+export async function insertNotification(n: { type: string; title: string; body?: string; clientId?: string; cardId?: string; read?: boolean }): Promise<void> {
   const { error } = await db.from("notifications").insert({
     type: n.type, title: n.title, body: n.body,
-    client_id: n.clientId, card_id: n.cardId ?? null,
-    target_user: n.targetUser ?? null, read: false,
+    client_id: n.clientId, card_id: n.cardId ?? null, read: false,
   });
   if (error) console.error("[DB] insertNotification:", error);
 }
@@ -577,15 +567,8 @@ export async function markNotificationReadDb(id: string): Promise<void> {
   if (error) console.error("[DB] markNotificationRead:", error);
 }
 
-/**
- * Marca como lidas SÓ as notificações de quem clicou (as dela + as globais).
- * Antes era um UPDATE sem filtro nenhum: o designer clicava em "marcar todas como lidas" às 9h e
- * apagava os avisos não lidos do time inteiro — CEO, social e tráfego perdiam o dia sem saber.
- */
-export async function markAllNotificationsReadDb(targetUser?: string | null): Promise<void> {
-  let q = db.from("notifications").update({ read: true }).eq("read", false);
-  q = targetUser ? q.or(`target_user.is.null,target_user.eq.${targetUser}`) : q.is("target_user", null);
-  const { error } = await q;
+export async function markAllNotificationsReadDb(): Promise<void> {
+  const { error } = await db.from("notifications").update({ read: true }).eq("read", false);
   if (error) console.error("[DB] markAllNotificationsRead:", error);
 }
 

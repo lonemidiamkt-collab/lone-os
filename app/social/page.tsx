@@ -163,13 +163,14 @@ function Confetti() {
       {items.map((item, i) => (
         <div
           key={i}
-          className="absolute w-2 h-2 rounded-sm animate-confetti-fall"
+          className="absolute w-2 h-2 rounded-sm animate-bounce opacity-80"
           style={{
             left: item.left,
             top: item.top,
             backgroundColor: item.color,
             animationDelay: item.delay,
             animationDuration: item.duration,
+            transform: `rotate(${item.rotate})`,
           }}
         />
       ))}
@@ -983,30 +984,22 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
     setRows(rows.map((r) => r.id === id ? { ...r, [field]: value } : r));
   };
 
-  // Trava de duplo-submit: sem ela, 2 cliques = 2× os cards (era uma das origens das duplicatas).
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSubmit = async () => {
-    if (!clientId || filledRows.length === 0 || submitting) return;
-    setSubmitting(true);
-    try {
-      await Promise.all(filledRows.map((row) =>
-        addContentCard({
-          title: row.title.trim(),
-          clientId,
-          clientName: selectedClient?.name ?? "",
-          socialMedia: role === "social" ? currentUser : (selectedClient?.assignedSocial ?? currentUser),
-          status: "ideas",
-          priority,
-          format: row.format,
-          dueDate: row.dueDate,
-          dueTime: row.dueTime,
-        }),
-      ));
-      onClose();
-    } finally {
-      setSubmitting(false);
-    }
+  const handleSubmit = () => {
+    if (!clientId || filledRows.length === 0) return;
+    filledRows.forEach((row) => {
+      addContentCard({
+        title: row.title.trim(),
+        clientId,
+        clientName: selectedClient?.name ?? "",
+        socialMedia: role === "social" ? currentUser : (selectedClient?.assignedSocial ?? currentUser),
+        status: "ideas",
+        priority,
+        format: row.format,
+        dueDate: row.dueDate,
+        dueTime: row.dueTime,
+      });
+    });
+    onClose();
   };
 
   return (
@@ -1130,7 +1123,7 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
           <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-card/5 transition-all">
             Cancelar
           </button>
-          <button onClick={handleSubmit} disabled={filledRows.length === 0 || submitting}
+          <button onClick={handleSubmit} disabled={filledRows.length === 0}
             className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/80 transition-all disabled:opacity-30">
             <Layers size={12} /> Criar {filledRows.length} Card(s)
           </button>

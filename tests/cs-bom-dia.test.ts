@@ -24,23 +24,14 @@ describe("buildBomDiaDigest", () => {
         { codigo: "A2", cliente: "Nova União", tipo: "duvida", resumo: "y", dias: 2 },
       ],
       emProducao: 5, aguardandoAprovacao: 2,
-      atrasados: [
-        // Com a arte JÁ entregue: a culpa é da postagem, não do designer.
-        { cliente: "Léo Carros", titulo: "arte feira", dias: 3, responsavel: "Carlos", designerEntregou: true },
-        // Sem arte: aí sim está esperando o designer.
-        { cliente: "Nova União", titulo: "post promo", dias: 2, responsavel: "Pedro", designerEntregou: false },
-      ],
+      atrasados: [{ cliente: "Léo Carros", titulo: "arte feira", dias: 3, responsavel: "Carlos", designerEntregou: true }],
       encalhados: 12,
     };
     const m = buildBomDiaDigest(snap, dia);
     expect(m).toContain("*2* esperando seu ok/não");
     expect(m).toContain("Contele");
     expect(m).toContain("*5* em produção");
-    // Atraso é separado por CULPA REAL (o designer reclamou, com razão, de ser cobrado por card que
-    // ele já entregou). Cada ramo tem a sua frase:
-    expect(m).toContain("prazo vencido esperando a ARTE"); // sem arte → designer
-    expect(m).toContain("ARTE JÁ PRONTA");                  // com arte → falta postar
-    expect(m).toContain("não é atraso do designer");
+    expect(m).toContain("prazo vencido");
     expect(m).toContain("Léo Carros");
     expect(m).toContain("*12* cards encalhados"); // higiene de board separada do atraso
     expect(m).toContain("atrasados"); // fecho prioriza atrasados

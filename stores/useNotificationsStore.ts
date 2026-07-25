@@ -12,8 +12,7 @@ interface NotificationsState {
   refresh: () => Promise<void>;
   subscribeRealtime: () => () => void;
 
-  /** `targetUser` = nome de quem deve ver. Sem ele, a notificação é GLOBAL (cai no sino de todos). */
-  push: (type: NotificationType, title: string, body: string, clientId?: string, cardId?: string, targetUser?: string) => Promise<void>;
+  push: (type: NotificationType, title: string, body: string, clientId?: string, cardId?: string) => Promise<void>;
   markRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
 }
@@ -93,7 +92,7 @@ export const useNotificationsStore = create<NotificationsState>()(
         return () => { supabase.removeChannel(channel); };
       },
 
-      push: async (type, title, body, clientId, cardId, targetUser) => {
+      push: async (type, title, body, clientId, cardId) => {
         const tempId = `temp-notif-${Date.now()}`;
         const optimistic: AppNotification = {
           id: tempId,
@@ -110,7 +109,7 @@ export const useNotificationsStore = create<NotificationsState>()(
           const res = await authedFetch("/api/data/notifications", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type, title, body, clientId, cardId, targetUser }),
+            body: JSON.stringify({ type, title, body, clientId, cardId }),
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
         } catch {

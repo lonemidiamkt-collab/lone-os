@@ -19,6 +19,13 @@ export interface TrafficMemberData {
   supportTotal: number;
 }
 
+export interface InactiveClientData {
+  id: string;
+  name: string;
+  industry?: string;
+  reason: "no_kanban_7d" | "no_posts" | "both";
+}
+
 export interface AdminDashboardData {
   activeClients: Client[];
   atRiskClients: Client[];
@@ -32,6 +39,7 @@ export interface AdminDashboardData {
   designInProg: number;
   teamProductivity: SocialMemberData[];
   trafficProductivity: TrafficMemberData[];
+  inactiveSevenDays: InactiveClientData[];
 }
 
 interface GetDashboardDataArgs {
@@ -98,9 +106,22 @@ export function getDashboardData({
     };
   });
 
-  // `inactiveSevenDays` foi REMOVIDO: lia dois campos que nunca eram escritos e, por tratar "não sei"
-  // como "ruim", marcava a carteira inteira (33 de 33) como inativa. O sinal agora vem do servidor,
-  // com atividade nos dois sentidos e motivo dominante: lib/pulse/ + /api/dashboard/pulse.
+  const sevenDaysAgo = Date.now() - 7 * 86400000;
+  const inactiveSevenDays: InactiveClientData[] = clients
+    .filter((c) => {
+      const noKanban =
+        !c.lastKanbanActivity ||
+        new Date(c.lastKanbanActivity).getTime() < sevenDaysAgo;
+      const noPost =
+        !c.lastPostDate || new Date(c.lastPostDate).getTime() < sevenDaysAgo;
+      return noKanban && noPost && c.status !== "onboarding";
+    })
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      industry: c.industry,
+      reason: "both" as const,
+    }));
 
   return {
     activeClients,
@@ -115,6 +136,6 @@ export function getDashboardData({
     designInProg,
     teamProductivity,
     trafficProductivity,
-
+    inactiveSevenDays,
   };
 }

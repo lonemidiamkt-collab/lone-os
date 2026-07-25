@@ -134,14 +134,6 @@ export default function CalendarPage() {
   const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
   const { role, currentUser } = useRole();
 
-  // Carrega os dados. Sem isto, abrir /calendar direto (favorito, F5, link de notificação) mostrava
-  // um calendário VAZIO — só funcionava se a pessoa tivesse passado antes pela Home na mesma sessão.
-  const initClients = useClientsStore((s) => s.init);
-  const initContent = useContentStore((s) => s.init);
-  const initOps = useOperationalStore((s) => s.init);
-  const initTraffic = useTrafficStore((s) => s.init);
-  useEffect(() => { initClients(); initContent(); initOps(); initTraffic(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());

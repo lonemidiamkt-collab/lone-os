@@ -6,16 +6,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { getServerUser } from "@/lib/supabase/auth-server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { montarJornada } from "@/lib/cs/jornada";
 import { checkinsRecentes, registrarRespostaManual } from "@/lib/cs/checkin";
 
-// GESTÃO apenas: `client_journey.notas` carrega a nota de handoff do comercial (valor negociado,
-// telefone e e-mail do lead) e o risco de churn. Antes qualquer logado — designer, SDR — lia tudo.
 export async function GET(req: NextRequest) {
-  const gate = await requireRole(req, GESTAO);
-  if (gate instanceof NextResponse) return gate;
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   // ?checkinsFor=<clientId> → os check-ins recentes daquele cliente (pra ficha expandida)
   const checkinsFor = req.nextUrl.searchParams.get("checkinsFor");
   if (checkinsFor) return NextResponse.json({ checkins: await checkinsRecentes(checkinsFor) });
@@ -24,9 +22,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const gate = await requireRole(req, GESTAO);
-  if (gate instanceof NextResponse) return gate;
-  const { user } = gate;
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const b = await req.json().catch(() => ({}));
   const clientId = b?.clientId as string;

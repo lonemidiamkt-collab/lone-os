@@ -186,8 +186,7 @@ function UploadArtModal({
         const nextAttachments = [...(dr?.attachments ?? []), ...deliveredUrls];
         await updateDesignRequest(card.designRequestId, { attachments: nextAttachments, status: "done" });
       }
-      // Direcionada ao social do card: antes caía no sino do time inteiro (inclusive do CEO).
-      pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmação.`, card.clientId, card.id, card.socialMedia);
+      pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmação.`, card.clientId, card.id);
       // REVISÃO AUTOMÁTICA na entrega (IA de visão): confere TODAS as artes contra o briefing —
       // preço/texto/localização/regras. Sempre roda (não só quem tem regra) — foi o gap que deixou
       // o preço errado do Imperio passar. Se achar problema, avisa no grupo de Artes + comenta no card.

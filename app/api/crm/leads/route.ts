@@ -2,30 +2,26 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireRole, type Papel } from "@/lib/api/require-role";
+import { getServerUser } from "@/lib/supabase/auth-server";
 import * as db from "@/lib/supabase/queries";
 
-// CRM comercial (SDR) — CRUD dos leads.
-// ESCOPO POR PAPEL: só comercial + gestão. Antes bastava estar logado e o escopo era "feito no menu"
-// — mas esconder o item no Sidebar não impede chamar a rota: o designer lia o funil inteiro
-// (contatos, valores negociados, motivo de perda).
+// CRM comercial (SDR) — CRUD dos leads. BFF: exige usuário logado; o escopo de quem VÊ a área
+// é feito no menu (papel "comercial"). Service role por baixo (queries.ts).
 //   GET                       → lista os leads
 //   POST   { ...campos }      → cria um lead (contatoNome obrigatório)
 //   PATCH  { id, ...campos }  → atualiza (ex.: mover de estágio, marcar reunião)
 //   DELETE ?id=…              → apaga
 
-const CRM_ROLES: Papel[] = ["admin", "manager", "comercial"];
-
 export async function GET(req: NextRequest) {
-  const gate = await requireRole(req, CRM_ROLES);
-  if (gate instanceof NextResponse) return gate;
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const leads = await db.fetchCrmLeads();
   return NextResponse.json({ leads });
 }
 
 export async function POST(req: NextRequest) {
-  const gate = await requireRole(req, CRM_ROLES);
-  if (gate instanceof NextResponse) return gate;
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const body = await req.json().catch(() => null);
   if (!body?.contatoNome?.trim()) return NextResponse.json({ error: "Nome do contato é obrigatório" }, { status: 400 });
   try {
@@ -37,8 +33,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const gate = await requireRole(req, CRM_ROLES);
-  if (gate instanceof NextResponse) return gate;
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const body = await req.json().catch(() => null);
   const { id, ...patch } = body ?? {};
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
@@ -80,8 +76,8 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const gate = await requireRole(req, CRM_ROLES);
-  if (gate instanceof NextResponse) return gate;
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   try {

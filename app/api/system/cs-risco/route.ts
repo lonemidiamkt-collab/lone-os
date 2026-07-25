@@ -21,10 +21,7 @@ export async function POST(req: NextRequest) {
 
   const { data: clients } = await supabaseAdmin
     .from("clients").select("id, name, nome_fantasia, assigned_social, last_client_msg_at, agente_ativo")
-    // NÃO filtra por status: antes era .in(["good","average","onboarding"]), o que EXCLUÍA
-    // justamente quem já está marcado como `at_risk` — o alerta de churn ignorava quem mais precisa.
-    // Cliente arquivado/inativo continua fora (o .or de active abaixo).
-    .neq("status", "churned").is("draft_status", null)
+    .in("status", ["good", "average", "onboarding"]).is("draft_status", null)
     .or("active.is.null,active.eq.true");
 
   // Reclamações recentes (14d) → set de client_id.

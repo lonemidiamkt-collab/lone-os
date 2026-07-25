@@ -90,8 +90,7 @@ export const useTrafficStore = create<TrafficState>()(
           const adAccounts = adAccountsRes.ok ? ((await adAccountsRes.json()).accounts ?? []) : [];
           const { trafficReports, trafficRoutineChecks } = trafficRes.ok ? await trafficRes.json() : { trafficReports: [], trafficRoutineChecks: [] };
           set({ adAccounts, trafficReports, trafficRoutineChecks, investmentData, initialized: true }, false, "traffic/init/done");
-        } catch (e) {
-          console.error("[store:traffic] falhou ao carregar — segue só com o dado local:", e);
+        } catch {
           set({ investmentData, initialized: true }, false, "traffic/init/done/partial");
         }
       },
