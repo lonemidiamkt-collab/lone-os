@@ -53,7 +53,8 @@ export async function getMetaHealth(): Promise<MetaHealthData> {
 
   const tokenValid = hasToken && (daysUntilExpiry === null || daysUntilExpiry > 0);
   const tokenExpiresSoon = daysUntilExpiry !== null && daysUntilExpiry <= 14;
-  const syncStale = hoursSinceSync !== null && hoursSinceSync > 2 && totalSnaps > 0;
+  // Só é "problema" se ficou >24h sem sync (o sync não roda de 2 em 2h — antes vivia vermelho à toa).
+  const syncStale = hoursSinceSync !== null && hoursSinceSync > 24 && totalSnaps > 0;
 
   let status: "green" | "yellow" | "red";
   if (!tokenValid || syncStale) {

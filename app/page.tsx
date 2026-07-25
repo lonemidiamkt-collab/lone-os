@@ -23,6 +23,7 @@ import { useState, useMemo, useEffect } from "react";
 import type { ClientStatus } from "@/lib/types";
 import { mockAdCampaigns } from "@/lib/mockData";
 import { supabase } from "@/lib/supabase/client";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { getDashboardData } from "@/lib/dashboard/getDashboardData";
 import {
   DashboardHeader,
@@ -517,6 +518,15 @@ function AdminDashboard() {
     return () => { mounted = false; };
   }, []);
 
+  // Publicados do MÊS — do servidor (inclui arquivados), pois o board ao vivo não bate com a realidade.
+  const [publishedMonth, setPublishedMonth] = useState<{ total: number; byMember: Record<string, number> } | null>(null);
+  useEffect(() => {
+    authedFetch("/api/dashboard/published-month")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setPublishedMonth(d); })
+      .catch(() => {});
+  }, []);
+
   const {
     activeClients, atRiskClients, onboardingClients, urgentTasks,
     pipelineCards, publishedThisMonth, stuckCards, pendingApproval,
@@ -630,14 +640,17 @@ function AdminDashboard() {
       {/* Pipeline Quick Stats */}
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
         <KPICard label="Pipeline"    value={pipelineCards.length}       caption="cards em andamento"   onClick={() => router.push("/social")} />
-        <KPICard label="Publicados"  value={publishedThisMonth}         caption="este mês"             tone="success" onClick={() => router.push("/social")} />
+        <KPICard label="Publicados"  value={publishedMonth?.total ?? publishedThisMonth} caption="este mês"    tone="success" onClick={() => router.push("/social")} />
         <KPICard label="Parados 48h+" value={stuckCards.length}         caption="SLA violado"          tone={stuckCards.length > 0 ? "danger" : "default"} onClick={() => router.push("/social")} />
         <KPICard label="Aprovação"   value={pendingApproval}            caption="aguardando review"    tone={pendingApproval > 0 ? "warning" : "default"} onClick={() => router.push("/social")} />
         <KPICard label="Design"      value={designQueued + designInProg} caption={`${designQueued} fila · ${designInProg} prod`} onClick={() => router.push("/design")} />
       </div>
 
-      {/* Equipes */}
-      <TeamSection socialTeam={teamProductivity} trafficTeam={trafficProductivity} />
+      {/* Equipes — "publicados" por social vem do servidor (mês real), não do board ao vivo */}
+      <TeamSection
+        socialTeam={publishedMonth ? teamProductivity.map((m) => ({ ...m, published: publishedMonth.byMember[m.name] ?? 0 })) : teamProductivity}
+        trafficTeam={trafficProductivity}
+      />
 
       {/* Avisos + Tarefas Urgentes */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
