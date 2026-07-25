@@ -26,7 +26,6 @@ import { supabase } from "@/lib/supabase/client";
 import { getDashboardData } from "@/lib/dashboard/getDashboardData";
 import {
   DashboardHeader,
-  CriticalAlertBanner,
   QuickActions,
   TeamSection,
   WeeklyAttention,
@@ -593,16 +592,8 @@ function AdminDashboard() {
       {/* Alertas de orçamento */}
       <BudgetAlert clients={clients} />
 
-      {/* Banner de urgências */}
-      <CriticalAlertBanner
-        alerts={[
-          { type: "clients_at_risk",   count: atRiskClients.length,    href: "/clients?filter=at_risk" },
-          { type: "stuck_cards",        count: stuckCards.length,        href: "/social" },
-          { type: "urgent_tasks",       count: urgentTasks.length,       href: "/calendar" },
-          { type: "expiring_contracts", count: contractStats.expiring,   href: "/clients" },
-          { type: "pending_approval",   count: pendingApproval,          href: "/social" },
-        ]}
-      />
+      {/* CriticalAlertBanner removido: "Urgências do dia" duplicava o Pipeline (Parados 48h+/Aprovação)
+          e o DashboardInsights. Pipeline + Insights são a fonte desses números. */}
 
       {/* Artes entregues pelo designer aguardando confirmação do social */}
       <DesignDeliveriesAlert cards={contentCards} />
