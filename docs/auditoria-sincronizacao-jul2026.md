@@ -21,6 +21,22 @@ O trabalho aconteceu, o registro existia, e a tela olhava outro lugar.
 
 ---
 
+## Corrigido na 2ª rodada (P0 + perdas do agente)
+
+| # | Problema | Correção |
+|---|---|---|
+| 6 | Portal do cliente não mostrava **nenhuma** arte | 60 cards entregues, 0 com `image_url`, 60 com anexo. Passa a resolver a capa por `card_attachments` e a excluir card arquivado. |
+| 7 | "Pedir ajuste" no portal morria num comentário | Reusa `aplicarAjusteNoCard` (o caminho do WhatsApp): volta pra produção, limpa `designer_delivered_at`, registra o motivo. |
+| 8 | Ajuste não reabria a demanda do designer | `aplicarAjusteNoCard` agora põe a `design_request` em `in_progress` — corrige portal **e** WhatsApp. |
+| 9 | `cs-risco` excluía `at_risk` | Só exclui `churned`. (Impacto hoje = 0: ninguém está `at_risk` — o status manual não reflete a realidade.) |
+| 10 | Áudio nunca entrava no corpus | Insert virou função chamada pós-transcrição e pós-visão, com guarda anti-duplicata. |
+| 11 | Sentimento sem persistência | Grava em `mood_entries` (inclusive positivo) e **escala** `attention_level` — só pra cima. |
+| 12 | Pendência nunca saía da lista | Comando "Lone, o X já mandou as fotos" (human-gated, desambigua quando há várias). |
+| 13 | Cobrança sem rastro | Grava em `cs_cobrancas`. |
+| 14 | Calendário por WhatsApp não persistia | Grava em `content_period_plans` (a tabela tinha 0 linhas) e a mensagem parou de afirmar que estava salvo quando não estava. |
+
+**Falso positivo da auditoria:** `cs-vigilancia` **não** está em modo seco — `VIGILANCIA_LIVE = true` desde 26/jun, com 208 cobranças postadas. O que enganou foi o comentário do cabeçalho, desatualizado (já corrigido).
+
 ## Aberto — ordenado por impacto
 
 ### P0 — o time trabalha no escuro
