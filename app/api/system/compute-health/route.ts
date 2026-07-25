@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { postsMes } from "@/lib/metrics/producao";
 import { computeChurnRiskScore, type HealthSignals } from "@/lib/health/compute";
 
 /**
@@ -23,7 +24,7 @@ import { computeChurnRiskScore, type HealthSignals } from "@/lib/health/compute"
 const SEVEN_DAYS_MS = 7 * 86400000;
 const NEGATIVE_MOODS = new Set(["angry", "frustrated", "sad", "anxious", "disappointed"]);
 
-async function buildSignalsFor(clientRow: Record<string, unknown>): Promise<HealthSignals> {
+async function buildSignalsFor(clientRow: Record<string, unknown>, postsReaisDoMes?: number): Promise<HealthSignals> {
   const clientId = clientRow.id as string;
   const today = new Date().toISOString().slice(0, 10);
   const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString();
@@ -117,7 +118,13 @@ async function buildSignalsFor(clientRow: Record<string, unknown>): Promise<Heal
     attentionLevel: (clientRow.attention_level as string) ?? "medium",
     lastPostDate: (clientRow.last_post_date as string) ?? null,
     lastKanbanActivity: (clientRow.last_kanban_activity as string) ?? null,
-    postsThisMonth: (clientRow.posts_this_month as number) ?? 0,
+    // Posts do mês REAIS (histórico de publicação). Antes vinha de clients.posts_this_month — um
+    // campo SEM NENHUM writer automático, portanto sempre 0. Como a fórmula pune meta não atingida
+    // (lib/health/compute.ts: +8 a partir do dia 15, +15 a partir do 25), TODA a base ganhava risco
+    // fantasma no fim do mês — e isso contamina /churn, Radar, /ceo, /jornada e /goals, que agora
+    // leem este score. A migration 079 ressuscitou last_post_date e last_kanban_activity, mas este
+    // campo ficou de fora; aqui ele é derivado da fonte única em vez de lido do banco.
+    postsThisMonth: postsReaisDoMes ?? (clientRow.posts_this_month as number) ?? 0,
     postsGoal,
     overdueTasksCount: overdueTasksCount ?? 0,
     staleOnboardingCount: staleOnboardingCount ?? 0,
@@ -148,6 +155,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Uma query só pra todos os clientes (a fonte única de produção), em vez de 1 por cliente.
+    const postsMesPorCliente = (await postsMes()).byClient;
+
     const results: Array<{ client: string; score: number; level: string; alerted: boolean }> = [];
     let alertsSent = 0;
 
@@ -155,7 +165,7 @@ export async function POST(req: NextRequest) {
       const clientId = c.id as string;
       const clientName = (c.nome_fantasia as string) || (c.name as string) || "(sem nome)";
 
-      const signals = await buildSignalsFor(c);
+      const signals = await buildSignalsFor(c, postsMesPorCliente[c.id as string] ?? 0);
       const { score, level, breakdown } = computeChurnRiskScore(signals);
 
       // Upsert histórico (unique em client_id + computed_for_date)

@@ -115,6 +115,9 @@ export default function ClientDetailPage() {
   const updateClientData = useClientsStore((s) => s.updateClient);
 
   const contentCards = useContentStore((s) => s.contentCards);
+  // Posts do MÊS e artes na fila — da fonte única (transições), não do board ao vivo nem do campo manual.
+  const [postsMesCliente, setPostsMesCliente] = useState<number | null>(null);
+  const [artesProntasCliente, setArtesProntasCliente] = useState(0);
   const designRequests = useContentStore((s) => s.designRequests);
   const addDesignRequest = useContentStore((s) => s.addDesignRequest);
 
@@ -154,6 +157,21 @@ export default function ClientDetailPage() {
       .catch(() => {});
     return () => { alive = false; };
   }, [clientId]);
+
+  // Produção real deste cliente (mês + artes na fila aguardando postagem).
+  useEffect(() => {
+    let alive = true;
+    authedFetch("/api/dashboard/published-month")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        setPostsMesCliente(d.byClient?.[clientId] ?? 0);
+        setArtesProntasCliente(d.artesProntas?.[clientId] ?? 0);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [clientId]);
+
   const client = useMemo(() => {
     if (!baseClient) return undefined;
     const SENSITIVE: (keyof Client)[] = [
@@ -997,7 +1015,10 @@ export default function ClientDetailPage() {
                 </h3>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   {(() => {
-                    const postsPublished = contentCards.filter((c) => c.clientId === clientId && c.status === "published").length;
+                    // Posts do MÊS (não o histórico). Antes contava tudo que já foi publicado: um
+                    // cliente com 67 posts no ano aparecia "67/12 — 100%" nesta tela, que é a usada
+                    // em reunião com o cliente. Fonte: /api/dashboard/published-month (transições).
+                    const postsPublished = postsMesCliente ?? 0;
                     const postsGoal = client.postsGoal ?? 12;
                     const postsPct = Math.min(100, Math.round((postsPublished / postsGoal) * 100));
 
@@ -1010,7 +1031,7 @@ export default function ClientDetailPage() {
                       { label: "Posts Publicados", value: `${postsPublished}/${postsGoal}`, pct: postsPct, color: postsPct >= 80 ? "bg-primary" : postsPct >= 50 ? "bg-lone-warning-bg" : "bg-destructive" },
                       { label: "Pipeline Ativo", value: `${cardsInPipeline}`, pct: Math.min(100, cardsInPipeline * 10), color: "bg-primary" },
                       { label: "Tarefas Concluídas", value: `${tasksCompleted}/${totalTasks}`, pct: taskPct, color: taskPct >= 80 ? "bg-primary" : "bg-lone-warning-bg" },
-                      { label: "Engajamento", value: client.postsThisMonth ? `${client.postsThisMonth} posts` : "—", pct: Math.min(100, (client.postsThisMonth ?? 0) * 8), color: "bg-primary" },
+                      { label: "Artes prontas", value: artesProntasCliente > 0 ? `${artesProntasCliente} aguardando` : "—", pct: Math.min(100, artesProntasCliente * 20), color: artesProntasCliente > 0 ? "bg-lone-warning-bg" : "bg-primary" },
                     ].map(({ label, value, pct, color }) => (
                       <div key={label} className="p-3 rounded-xl bg-muted/30 border border-border/50">
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
