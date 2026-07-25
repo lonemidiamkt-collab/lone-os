@@ -146,10 +146,10 @@ function NoticeFormBlock() {
                 onChange={(e) => setForm((p) => ({ ...p, urgent: e.target.checked }))}
                 className="w-3.5 h-3.5 accent-red-400"
               />
-              <span className="text-xs text-red-500">Urgente</span>
+              <span className="text-xs text-lone-danger">Urgente</span>
             </label>
             <div className="flex items-center gap-2">
-              {formSuccess && <span className="text-xs text-[#2b3cff] font-medium flex items-center gap-1"><CheckCircle2 size={12} /> Publicado!</span>}
+              {formSuccess && <span className="text-xs text-lone-success font-medium flex items-center gap-1"><CheckCircle2 size={12} /> Publicado!</span>}
               <button onClick={() => setShowForm(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
               <button onClick={handleAdd} disabled={formSuccess} className="btn-primary text-xs flex items-center gap-1 disabled:opacity-50"><Send size={11} /> Publicar</button>
             </div>
@@ -164,19 +164,19 @@ function NoticeFormBlock() {
           const catIcon = notice.category === "meeting" ? "📅" : notice.category === "deadline" ? "⏰" : notice.category === "reminder" ? "🔔" : "";
           return (
             <div key={notice.id} className={`p-3 rounded-lg border text-sm ${
-              notice.urgent ? "bg-red-500/10 border-red-500/20"
-              : notice.category === "meeting" ? "bg-blue-500/5 border-[#2b3cff]/20"
+              notice.urgent ? "bg-lone-danger-bg border-lone-danger-border"
+              : notice.category === "meeting" ? "bg-lone-info-bg border-lone-info-border"
               : "bg-muted border-transparent"
             }`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   {catIcon && <span className="text-xs">{catIcon}</span>}
-                  <p className={`font-medium text-xs ${notice.urgent ? "text-red-500" : "text-foreground"}`}>{notice.title}</p>
+                  <p className={`font-medium text-xs ${notice.urgent ? "text-lone-danger" : "text-foreground"}`}>{notice.title}</p>
                 </div>
                 {(role === "admin" || role === "manager") && (
                   <button
                     onClick={() => { if (window.confirm("Tem certeza que deseja excluir este aviso?")) deleteNotice(notice.id); }}
-                    className="text-muted-foreground/50 hover:text-red-500 transition-colors shrink-0 p-0.5"
+                    className="text-muted-foreground/50 hover:text-lone-danger transition-colors shrink-0 p-0.5"
                   >
                     <X size={12} />
                   </button>
@@ -186,7 +186,7 @@ function NoticeFormBlock() {
               <div className="flex items-center gap-2 mt-1">
                 <p className="text-muted-foreground/50 text-xs">por {notice.createdBy} · {notice.createdAt}</p>
                 {notice.scheduledAt && (
-                  <span className="text-xs text-[#2b3cff] bg-[#2b3cff]/10 px-1.5 py-0.5 rounded">
+                  <span className="text-xs text-primary bg-primary/10 px-1.5 py-0.5 rounded">
                     {new Date(notice.scheduledAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 )}
@@ -277,10 +277,20 @@ function EmployeeDashboard() {
   const greetingTime = new Date().getHours();
   const greeting = greetingTime < 12 ? "Bom dia" : greetingTime < 18 ? "Boa tarde" : "Boa noite";
 
+  // Tom semântico ÚNICO — a cor comunica ESTADO, via token (mesmo mapa no KPI e no anel; nunca HEX solto).
+  const TOM = {
+    bom:     { text: "text-lone-success", bg: "bg-lone-success-bg", stroke: "var(--lone-success)" },
+    atencao: { text: "text-lone-warning", bg: "bg-lone-warning-bg", stroke: "var(--lone-warning)" },
+    ruim:    { text: "text-lone-danger",  bg: "bg-lone-danger-bg",  stroke: "var(--lone-danger)" },
+    neutro:  { text: "text-primary",      bg: "bg-primary/10",      stroke: "var(--primary)" },
+  } as const;
+  const tomTaxa = performance.rate >= 80 ? TOM.bom : performance.rate >= 50 ? TOM.atencao : TOM.ruim;
+  const tomSuporte = performance.supportDone >= performance.supportTotal ? TOM.bom : TOM.neutro;
+
   return (
     <>
       {/* Greeting */}
-      <div className="bg-gradient-to-r from-[#2b3cff]/10 to-transparent border border-[#2b3cff]/20 rounded-2xl p-5">
+      <div className="bg-gradient-to-r from-primary/10 to-transparent border border-primary/20 rounded-2xl p-5">
         <h2 className="text-lg font-bold text-foreground">
           {greeting}, {currentUser.split(" ")[0]}!
         </h2>
@@ -307,13 +317,13 @@ function EmployeeDashboard() {
           label="Taxa de Conclusão"
           value={`${performance.rate}%`}
           sub={`${performance.done}/${performance.total} tarefas`}
-          iconColor={performance.rate >= 80 ? "text-[#2b3cff]" : performance.rate >= 50 ? "text-[#2b3cff]" : "text-red-500"}
-          iconBg={performance.rate >= 80 ? "bg-[#2b3cff]/10" : performance.rate >= 50 ? "bg-[#2b3cff]/10" : "bg-red-500/10"}
+          iconColor={tomTaxa.text}
+          iconBg={tomTaxa.bg}
           href="/calendar"
         />
         {role === "social" && (
           <>
-            <MetricCard icon={Instagram} label="Publicados" value={performance.published} sub="este mês" iconColor="text-[#2b3cff]" iconBg="bg-[#2b3cff]/10" href="/social" />
+            <MetricCard icon={Instagram} label="Publicados" value={performance.published} sub="este mês" iconColor="text-primary" iconBg="bg-primary/10" href="/social" />
             <MetricCard icon={FileText} label="No Pipeline" value={performance.inPipeline} sub="cards em andamento" iconColor="text-primary" iconBg="bg-primary/10" href="/social" />
           </>
         )}
@@ -325,15 +335,15 @@ function EmployeeDashboard() {
               label="Suporte Hoje"
               value={`${performance.supportDone}/${performance.supportTotal}`}
               sub="check-ins feitos"
-              iconColor={performance.supportDone >= performance.supportTotal ? "text-[#2b3cff]" : "text-[#2b3cff]"}
-              iconBg={performance.supportDone >= performance.supportTotal ? "bg-[#2b3cff]/10" : "bg-[#2b3cff]/10"}
+              iconColor={tomSuporte.text}
+              iconBg={tomSuporte.bg}
               href="/traffic"
             />
           </>
         )}
         {role === "designer" && (
           <>
-            <MetricCard icon={Palette} label="Na Fila" value={myDesignRequests.filter((r) => r.status === "queued").length} sub="pedidos aguardando" iconColor="text-[#2b3cff]" iconBg="bg-[#2b3cff]/10" href="/design" />
+            <MetricCard icon={Palette} label="Na Fila" value={myDesignRequests.filter((r) => r.status === "queued").length} sub="pedidos aguardando" iconColor="text-primary" iconBg="bg-primary/10" href="/design" />
             <MetricCard icon={Activity} label="Em Produção" value={myDesignRequests.filter((r) => r.status === "in_progress").length} sub="fazendo agora" iconColor="text-primary" iconBg="bg-primary/10" href="/design" />
           </>
         )}
@@ -376,9 +386,9 @@ function EmployeeDashboard() {
             {myTasks.slice(0, 8).map((task) => (
               <div key={task.id} className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
                 <span className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${
-                  task.priority === "critical" ? "bg-red-500" :
-                  task.priority === "high" ? "bg-[#2b3cff]" :
-                  task.priority === "medium" ? "bg-blue-500" : "bg-zinc-500"
+                  task.priority === "critical" ? "bg-lone-danger" :
+                  task.priority === "high" ? "bg-lone-warning" :
+                  task.priority === "medium" ? "bg-lone-info" : "bg-muted-foreground"
                 }`} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-foreground">{task.title}</p>
@@ -386,7 +396,7 @@ function EmployeeDashboard() {
                     <span className="text-[10px] text-muted-foreground">{task.clientName}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                       task.status === "in_progress" ? "bg-primary/10 text-primary" :
-                      task.status === "review" ? "bg-[#2b3cff]/10 text-[#2b3cff]" :
+                      task.status === "review" ? "bg-lone-info-bg text-lone-info" :
                       "bg-muted text-muted-foreground"
                     }`}>
                       {task.status === "pending" ? "Pendente" : task.status === "in_progress" ? "Em Progresso" : "Revisão"}
@@ -413,7 +423,7 @@ function EmployeeDashboard() {
                 <circle cx="50" cy="50" r="40" fill="none" stroke="var(--muted)" strokeWidth="8" />
                 <circle
                   cx="50" cy="50" r="40" fill="none"
-                  stroke={performance.rate >= 80 ? "#22c55e" : performance.rate >= 50 ? "#eab308" : "#ef4444"}
+                  stroke={tomTaxa.stroke}
                   strokeWidth="8"
                   strokeLinecap="round"
                   strokeDasharray={`${performance.rate * 2.51} 251`}
@@ -752,11 +762,11 @@ export default function DashboardPage() {
         {notices.filter((n) => n.urgent).length > 0 && (
           <div className="space-y-2">
             {notices.filter((n) => n.urgent).slice(0, 2).map((n) => (
-              <div key={n.id} className="flex items-start gap-3 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
-                <Megaphone size={15} className="text-red-500 shrink-0 mt-0.5" />
+              <div key={n.id} className="flex items-start gap-3 bg-lone-danger-bg border border-lone-danger-border rounded-xl px-4 py-3">
+                <Megaphone size={15} className="text-lone-danger shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-red-500">{n.title}</p>
-                  {n.body && <p className="text-xs text-red-500/80 mt-0.5">{n.body}</p>}
+                  <p className="text-sm font-semibold text-lone-danger">{n.title}</p>
+                  {n.body && <p className="text-xs text-lone-danger/80 mt-0.5">{n.body}</p>}
                   <p className="text-xs text-muted-foreground/50 mt-1">por {n.createdBy} · {n.createdAt}</p>
                 </div>
               </div>
