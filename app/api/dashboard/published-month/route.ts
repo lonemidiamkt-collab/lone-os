@@ -19,16 +19,19 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from("content_cards")
-    .select("social_media")
+    .select("social_media, client_id")
     .eq("status", "published")
     .gte("status_changed_at", inicioMes);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const byMember: Record<string, number> = {};
+  const byClient: Record<string, number> = {}; // posts/mês REAIS por cliente (a tabela mostrava 0/12 à toa)
   for (const c of data ?? []) {
     const m = (c.social_media as string)?.trim() || "—";
     byMember[m] = (byMember[m] || 0) + 1;
+    const cid = c.client_id as string;
+    if (cid) byClient[cid] = (byClient[cid] || 0) + 1;
   }
-  return NextResponse.json({ total: (data ?? []).length, byMember });
+  return NextResponse.json({ total: (data ?? []).length, byMember, byClient });
 }

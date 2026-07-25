@@ -519,7 +519,7 @@ function AdminDashboard() {
   }, []);
 
   // Publicados do MÊS — do servidor (inclui arquivados), pois o board ao vivo não bate com a realidade.
-  const [publishedMonth, setPublishedMonth] = useState<{ total: number; byMember: Record<string, number> } | null>(null);
+  const [publishedMonth, setPublishedMonth] = useState<{ total: number; byMember: Record<string, number>; byClient: Record<string, number> } | null>(null);
   useEffect(() => {
     authedFetch("/api/dashboard/published-month")
       .then((r) => (r.ok ? r.json() : null))
@@ -709,7 +709,7 @@ function AdminDashboard() {
           id: c.id,
           name: c.name,
           status: c.status,
-          postsThisMonth: c.postsThisMonth ?? 0,
+          postsThisMonth: publishedMonth?.byClient[c.id] ?? c.postsThisMonth ?? 0,
           postsGoal: c.postsGoal ?? 12,
           assignedTraffic: c.assignedTraffic,
           assignedSocial: c.assignedSocial,
