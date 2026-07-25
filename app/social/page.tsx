@@ -163,14 +163,13 @@ function Confetti() {
       {items.map((item, i) => (
         <div
           key={i}
-          className="absolute w-2 h-2 rounded-sm animate-bounce opacity-80"
+          className="absolute w-2 h-2 rounded-sm animate-confetti-fall"
           style={{
             left: item.left,
             top: item.top,
             backgroundColor: item.color,
             animationDelay: item.delay,
             animationDuration: item.duration,
-            transform: `rotate(${item.rotate})`,
           }}
         />
       ))}

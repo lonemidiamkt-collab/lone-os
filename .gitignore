@@ -84,3 +84,9 @@ docs/*.pdf
 
 # Artefatos de sistema
 Thumbs.db
+
+# Impeccable (contexto de design local, nao versionar)
+/PRODUCT.md
+/DESIGN.md
+/DESIGN.sidecar.md
+.impeccable/

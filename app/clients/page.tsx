@@ -337,7 +337,7 @@ export default function ClientsPage() {
                         )}
                         <button
                           onClick={() => handleReject(draft.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-zinc-500 text-xs hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-muted-foreground text-xs hover:text-destructive hover:bg-destructive/10 transition-colors"
                         >
                           <X size={10} /> Rejeitar
                         </button>
@@ -551,7 +551,7 @@ export default function ClientsPage() {
                     </div>
 
                     {client.notes && (
-                      <p className="mt-3 text-xs text-muted-foreground bg-muted rounded-lg px-3 py-2 border-l-2 border-zinc-600">
+                      <p className="mt-3 text-xs text-muted-foreground bg-muted rounded-lg px-3 py-2">
                         {client.notes}
                       </p>
                     )}

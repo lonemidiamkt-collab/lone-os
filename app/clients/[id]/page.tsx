@@ -927,7 +927,7 @@ export default function ClientDetailPage() {
                 {client.notes && (
                   <div className="mt-3 pt-3 border-t border-border">
                     <p className="text-xs text-muted-foreground mb-1">Observações</p>
-                    <p className="text-sm text-muted-foreground bg-muted rounded-lg p-3 border-l-2 border-border">{client.notes}</p>
+                    <p className="text-sm text-muted-foreground bg-muted rounded-lg p-3">{client.notes}</p>
                   </div>
                 )}
               </div>

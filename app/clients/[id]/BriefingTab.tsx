@@ -59,7 +59,7 @@ function BoolBadge({ label, value }: { label: string; value: boolean | null | un
   if (value === null || value === undefined) return null;
   return (
     <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full mr-2 mb-1 ${
-      value ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-500/10 text-zinc-400"
+      value ? "bg-lone-success-bg text-lone-success" : "bg-muted text-muted-foreground"
     }`}>
       {value ? "✓" : "✗"} {label}
     </span>

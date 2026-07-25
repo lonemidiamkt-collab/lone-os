@@ -347,7 +347,7 @@
   /* ─── TAGS ──────────────────────────────────────────────── */
   .tag-premium { @apply text-[#3b82f6] bg-[#2b3cff]/[0.08] border-[#2b3cff]/[0.12]; }
   .tag-risk    { @apply text-red-400 bg-red-500/[0.08] border-red-500/[0.12]; }
-  .tag-matcon  { @apply text-zinc-400 bg-zinc-500/[0.08] border-zinc-500/[0.12]; }
+  .tag-matcon  { @apply text-muted-foreground bg-zinc-500/[0.08] border-zinc-500/[0.12]; }
 
   /* ─── LED STATUS — smaller, no heavy glow ───────────────── */
   .led { @apply w-2 h-2 rounded-full shrink-0; }
@@ -356,7 +356,7 @@
   .led-critical { background: #ef4444; animation: pulse 2s ease-in-out infinite; }
 
   /* ─── ATTENTION LEVELS ─────────────────────────────────── */
-  .level-low      { @apply text-zinc-400 bg-zinc-500/[0.08] border-zinc-500/[0.12]; }
+  .level-low      { @apply text-muted-foreground bg-zinc-500/[0.08] border-zinc-500/[0.12]; }
   .level-medium   { @apply text-amber-400 bg-amber-500/[0.08] border-amber-500/[0.12]; }
   .level-high     { @apply text-[#2b3cff] bg-[#2b3cff]/[0.08] border-[#2b3cff]/[0.12]; }
   .level-critical { @apply text-red-400 bg-red-500/[0.08] border-red-500/[0.12]; }
@@ -424,6 +424,16 @@
 
 @keyframes ringPulse { 0% { transform: scale(0.85); opacity: 0.5; } 100% { transform: scale(1.7); opacity: 0; } }
 @keyframes floatY { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+/* Confete: cai e flutua (deceleração suave), não quica. Uma passada e some. */
+@keyframes confetti-fall {
+  0%   { transform: translateY(-10vh) rotate(0deg); opacity: 0.9; }
+  100% { transform: translateY(105vh) rotate(360deg); opacity: 0; }
+}
+.animate-confetti-fall {
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: forwards;
+}
 @keyframes auroraShift { 0%, 100% { opacity: 0.55; transform: translate(0, 0) scale(1); } 50% { opacity: 0.85; transform: translate(4%, -3%) scale(1.08); } }
 
 @layer utilities {
