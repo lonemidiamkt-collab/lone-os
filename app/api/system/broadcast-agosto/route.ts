@@ -37,11 +37,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const todayKeyBRT = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 
-// Uma pergunta só, aberta, sem prometer prazo nem inventar número. O nome do cliente entra
-// pra não soar disparo em massa.
-function mensagem(cliente: string): string {
+// Uma pergunta só, aberta, sem prometer prazo nem inventar número. SEM o nome da loja: o nome
+// cadastrado é o do sistema ("Farmacia - Arte em Manipulação", "BAZAR RIBEIRO" em caixa alta) e
+// soaria exatamente como o disparo em massa que a gente está tentando não parecer. O grupo já
+// diz quem é.
+function mensagem(): string {
   return (
-    `Oi, ${cliente}! 👋 Bom começo de semana!\n\n` +
+    `Oi, pessoal! 👋 Bom começo de semana!\n\n` +
     `Agosto tá chegando e tem uma data que movimenta MUITO o comércio: o *Dia dos Pais*, ` +
     `no dia *9 de agosto* (domingo). 👔\n\n` +
     `Vocês já pensaram em alguma *promoção, combo ou ação especial* pra essa data? ` +
@@ -78,7 +80,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: true, status: "dry_run", dispararia_em: DIA_DO_DISPARO,
         elegiveis: withGroup.length, semGrupo,
-        exemplo: mensagem(clientDisplayName(withGroup[0])),
+        exemplo: mensagem(),
         clientes: withGroup.map(clientDisplayName),
       });
     }
@@ -110,7 +112,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const res = await sendGroupText(jid, mensagem(nome));
+      const res = await sendGroupText(jid, mensagem());
       if (res.ok) {
         enviados++;
         gruposJaFalados.add(jid);
