@@ -30,6 +30,7 @@ import {
 } from "@/lib/traffic/weekly-report";
 import { mondayReportMessage, mondaySocialMessage, RESEND_REPORT_MESSAGE, supportMessageFor, socialMessageFor, type ClientMsgKind } from "@/lib/traffic/support-message";
 import { conferirEAvisar } from "@/lib/cs/entregas";
+import { montarMensagemCliente } from "@/lib/cs/mensagem-cliente";
 import { sendGroupText, sendMediaDocument } from "@/lib/whatsapp/evolution";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
@@ -37,6 +38,16 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function todayKeyBRT(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+/** Mensagem de qua/sex escrita a partir dos sinais do cliente (em vez do texto sorteado).
+ *  Default FALSE — só liga depois que o Roberto ler as mensagens no modo revisão. */
+async function mensagemIaLigada(): Promise<boolean> {
+  try {
+    const { data } = await supabaseAdmin
+      .from("agency_settings").select("value").eq("key", "cs_msg_ia_enabled").maybeSingle();
+    return (data?.value ?? "false") === "true";
+  } catch { return false; } // erro de leitura = fica no texto de sempre, nunca o contrário
 }
 
 async function clientMsgsEnabled(): Promise<boolean> {
@@ -173,7 +184,12 @@ export async function POST(req: NextRequest) {
         // Quarta/Sexta: texto do dia. Cliente com Meta → mensagem de tráfego;
         // só-social → mensagem social (foco em arte). Dedup por grupo evita o
         // texto duplicado quando dois clientes compartilham o mesmo grupo.
-        const text = c.meta_ad_account_id ? supportMessageFor(kind) : socialMessageFor(kind);
+        const neutro = c.meta_ad_account_id ? supportMessageFor(kind) : socialMessageFor(kind);
+        // Trava DESLIGADA por padrão: até o Roberto aprovar as mensagens no modo revisão
+        // (/api/system/cs-mensagem-preview), nada muda — continua o texto de sempre.
+        const text = (await mensagemIaLigada())
+          ? (await montarMensagemCliente(c.id, neutro, kind === "fri" ? "sexta" : "quarta")).texto
+          : neutro;
         const groupClientIds = jidToClientIds.get(jid) ?? [c.id];
         if (force || !(await groupTextAlreadySent(groupClientIds, dateKey))) {
           const res = await sendGroupText(jid, text);

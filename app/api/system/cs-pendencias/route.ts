@@ -32,13 +32,23 @@ export async function POST(req: NextRequest) {
   // Expira pendências que o time nunca decidiu (ok/não) há muito tempo. Sem isso a fila só cresce
   // (58 pendentes de 22 dias na vistoria), poluindo o board e a autoavaliação. 14 dias = morta.
   // Não conta como recusa (é 'expirada', não 'descartada') pra não sujar o falso-positivo.
+  // O UPDATE precisa devolver o que fez. Sem `.select()` o PostgREST não conta linha nenhuma e o
+  // erro ia pro lixo: o codigo estava deployado e mesmo assim 37 pendencias com mais de 14 dias
+  // continuavam "pendente", com updated_at NULL em TODAS — nunca tocou uma linha e ninguem viu.
+  // Mesma classe do bug do status `blocked`, que falhava calado no enum.
+  let expiradas = 0;
+  let erroExpirar: string | null = null;
   if (!previewOnly) {
     const morta = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-    await supabaseAdmin
+    const { data: mortas, error } = await supabaseAdmin
       .from("cs_demandas")
-      .update({ status: "expirada" })
+      .update({ status: "expirada", updated_at: new Date().toISOString() })
       .eq("status", "pendente")
-      .lt("created_at", morta);
+      .lt("created_at", morta)
+      .select("codigo");
+    if (error) erroExpirar = error.message;
+    else expiradas = mortas?.length ?? 0;
+    if (erroExpirar) console.error("[cs-pendencias] falha ao expirar pendencias:", erroExpirar);
   }
 
   const desde = new Date(Date.now() - JANELA_DIAS * 24 * 60 * 60 * 1000).toISOString();
@@ -73,5 +83,5 @@ export async function POST(req: NextRequest) {
   }
 
   console.log(`[cs-pendencias] dia=${ymd(now)} pendentes=${itens.length} postada=${postada}`);
-  return NextResponse.json({ ok: true, live: PENDENCIAS_LIVE, pendentes: itens.length, postada, preview: msg || "(nada pendente)" });
+  return NextResponse.json({ ok: true, live: PENDENCIAS_LIVE, pendentes: itens.length, expiradas, erroExpirar, postada, preview: msg || "(nada pendente)" });
 }

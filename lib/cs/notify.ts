@@ -2,10 +2,18 @@
 // EVOLUTION_*_NEW). Separado do lib/whatsapp/evolution.ts, que usa o número do gestor.
 // NUNCA lança — um WhatsApp fora do ar não pode derrubar o webhook.
 
+/** De onde saiu a mensagem — vira `origem` no cs_outbound. Opcional pra não quebrar quem já chama. */
+export interface CsSendMeta {
+  origem?: string;
+  destino?: "interno" | "cliente" | "setor";
+  clientId?: string | null;
+}
+
 export async function csSendGroupText(
   jid: string,
   text: string,
   quotedMsgId?: string, // se vier: a msg é um REPLY àquela mensagem (threading por demanda)
+  meta?: CsSendMeta,
 ): Promise<{ ok: boolean; error?: string; id?: string }> {
   const baseUrl = process.env.EVOLUTION_API_URL?.replace(/\/+$/, "");
   const apiKey = process.env.EVOLUTION_API_KEY_NEW;
@@ -21,14 +29,52 @@ export async function csSendGroupText(
       signal: AbortSignal.timeout(10_000),
     });
     const body = await res.text().catch(() => "");
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${body.slice(0, 120)}` };
+    if (!res.ok) {
+      const erro = `HTTP ${res.status}: ${body.slice(0, 120)}`;
+      await registrarSaida(jid, text, false, erro, meta);
+      return { ok: false, error: erro };
+    }
     // Devolve o id da msg enviada (pra casar o "reply" da equipe com a sugestão). Formato: { key: { id } }.
     let id: string | undefined;
     try { id = (JSON.parse(body) as { key?: { id?: string } })?.key?.id; } catch { /* resposta sem JSON */ }
+    await registrarSaida(jid, text, true, null, meta);
     return { ok: true, id };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "erro de conexão" };
+    const erro = err instanceof Error ? err.message : "erro de conexão";
+    await registrarSaida(jid, text, false, erro, meta);
+    return { ok: false, error: erro };
   }
+}
+
+/** Assinatura estável do conteúdo: ignora emoji, pontuação, número e caixa — o que sobra é o
+ *  ASSUNTO. Serve pra "isso eu já falei hoje" sem depender do texto sair igualzinho. */
+export function assinaturaMensagem(texto: string): string {
+  return (texto || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/).filter((w) => w.length > 3)
+    .slice(0, 24).join(" ");
+}
+
+/** Grava o que saiu. Best-effort ABSOLUTO: registro nunca pode derrubar um envio que deu certo. */
+async function registrarSaida(
+  jid: string, texto: string, enviado: boolean, erro: string | null, meta?: CsSendMeta,
+): Promise<void> {
+  try {
+    // import dinâmico: notify.ts é usado em caminhos que não querem carregar o client do Supabase.
+    const { supabaseAdmin } = await import("@/lib/supabase/server");
+    await supabaseAdmin.from("cs_outbound").insert({
+      origem: meta?.origem ?? "desconhecida",
+      group_jid: jid,
+      destino: meta?.destino ?? "interno",
+      client_id: meta?.clientId ?? null,
+      texto: texto.slice(0, 8000),
+      assinatura: assinaturaMensagem(texto),
+      enviado, erro,
+      dia: new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }),
+    });
+  } catch { /* registro é secundário — some em silêncio, nunca atrapalha */ }
 }
 
 /** Baixa a mídia (ex: nota de voz) de uma mensagem via Evolution (monitor[IA]) → base64. */
