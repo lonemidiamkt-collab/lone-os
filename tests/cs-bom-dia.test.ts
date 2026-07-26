@@ -31,7 +31,9 @@ describe("buildBomDiaDigest", () => {
     expect(m).toContain("*2* esperando seu ok/não");
     expect(m).toContain("Contele");
     expect(m).toContain("*5* em produção");
-    expect(m).toContain("prazo vencido");
+    // A mensagem separa "vencido por culpa do designer" de "arte pronta, falta o social postar" —
+    // o teste ficou preso na redação antiga ("prazo vencido") e vermelho sem ninguém notar.
+    expect(m).toContain("vencida(s) mas com ARTE JÁ PRONTA");
     expect(m).toContain("Léo Carros");
     expect(m).toContain("*12* cards encalhados"); // higiene de board separada do atraso
     expect(m).toContain("atrasados"); // fecho prioriza atrasados

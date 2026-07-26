@@ -32,6 +32,7 @@ import { buildClientCalendarHtml } from "@/lib/holidays/client-calendar-html";
 import { holidaysPdfFilename } from "@/lib/holidays/pdf-server";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { sendMediaDocument } from "@/lib/whatsapp/evolution";
+import { conferirEAvisar } from "@/lib/cs/entregas";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
 const REPORTS_BUCKET = "reports";
@@ -194,9 +195,15 @@ export async function POST(req: NextRequest) {
     }
 
     if (failed > 0) await notifyAdminFailure(`Calendário mensal (${mesNome}): ${failed} falha(s)`, errors.join("\n") || "—");
+
+    // Confere no grupo interno quem ficou sem o calendário (o e-mail acima ninguém lê).
+    const conferencia = onlyClientId ? null : await conferirEAvisar(
+      "calendar", dateKey, withGroup.map((c) => ({ id: c.id, nome: clientDisplayName(c) })),
+    );
+
     return NextResponse.json({
       ok: sent > 0, status: sent > 0 ? "sent" : "failed",
-      mes: `${mesNome}/${target.year}`, sent, failed, semGrupo, errors,
+      mes: `${mesNome}/${target.year}`, sent, failed, semGrupo, conferencia, errors,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

@@ -47,6 +47,10 @@ export interface IgSnapshot {
   conta?: { username: string; seguidores: number | null; posts: number | null };
   resumo?: {
     alcance: number | null;
+    /** Janela REAL do alcance em dias (a Meta só entrega dedup em 7 ou 28 — ver reachDedup).
+     *  O relatório rotula com ESTE número, não com o período pedido: pedir 14d e receber 28d
+     *  e escrever "últimos 14 dias" dobrava o alcance aos olhos do cliente. */
+    alcanceJanelaDias: number | null;
     seguidoresGanhos: number | null;
     curtidas: number;
     comentarios: number;
@@ -117,7 +121,11 @@ async function somaInsightDiario(igId: string, metric: string, since: string, un
 // infla (dava 108k p/ conta de 2,5k seguidores). A Meta só entrega reach dedup em janela ROLANTE de
 // 7d (period=week) ou 28d (period=days_28) — pego o ÚLTIMO valor da série (janela terminando hoje).
 // Não tem janela de 14d nativa → uso a de 28d como aproximação. Sem fallback pra soma (que mentia).
-async function reachDedup(igId: string, dias: number, token: string): Promise<number | null> {
+// Devolve o valor JUNTO com a janela que ele realmente representa (7 ou 28 dias). Quem exibe é
+// obrigado a usar essa janela no rótulo — era daí que saía o "alcance dos últimos 14 dias" que na
+// verdade eram 28.
+async function reachDedup(igId: string, dias: number, token: string): Promise<{ valor: number | null; janelaDias: number | null }> {
+  const janelaDias = dias <= 7 ? 7 : 28;
   const period = dias <= 7 ? "week" : "days_28";
   try {
     const r = await fetch(`${GRAPH}/${igId}/insights?metric=reach&period=${period}&access_token=${token}`);
@@ -125,10 +133,34 @@ async function reachDedup(igId: string, dias: number, token: string): Promise<nu
     if (!j?.error) {
       const vals = (j.data?.[0]?.values ?? []) as { value: number }[];
       const last = vals.length ? vals[vals.length - 1]?.value : undefined;
-      if (typeof last === "number") return last;
+      if (typeof last === "number") return { valor: last, janelaDias };
     }
   } catch { /* indisponível → null */ }
-  return null;
+  return { valor: null, janelaDias: null };
+}
+
+// Busca os posts do período PAGINANDO. Antes era um `limit=50` único filtrado no cliente: quem posta
+// muito (ou pede 30 dias) perdia post silenciosamente, e a contagem saía menor que a real.
+async function fetchMediaDoPeriodo(igId: string, desdeIso: string, token: string): Promise<Array<Record<string, unknown>>> {
+  const campos = "id,media_type,thumbnail_url,media_url,permalink,timestamp,like_count,comments_count";
+  let url: string | null = `${GRAPH}/${igId}/media?fields=${campos}&limit=50&access_token=${token}`;
+  const out: Array<Record<string, unknown>> = [];
+  for (let pagina = 0; pagina < 6 && url; pagina++) { // teto de 300 posts — trava de segurança
+    const r: Response = await fetch(url);
+    const j = await r.json().catch(() => ({}));
+    if (j?.error) break;
+    const lote = (j.data ?? []) as Array<Record<string, unknown>>;
+    if (!lote.length) break;
+    let passouDoPeriodo = false;
+    for (const m of lote) {
+      const ts = (m.timestamp as string) || "";
+      if (ts >= desdeIso) out.push(m);
+      else passouDoPeriodo = true; // a Meta devolve do mais novo pro mais velho
+    }
+    if (passouDoPeriodo) break;
+    url = (j.paging?.next as string) || null;
+  }
+  return out;
 }
 
 // business_discovery: dados PÚBLICOS de um perfil comercial pelo @, via a conta @lonemidia — pra
@@ -164,7 +196,7 @@ async function buildIgSnapshotPublico(handle: string, periodo: IgPeriod): Promis
     });
   posts.sort((a, b) => b.engajamento - a.engajamento);
   const resumo = {
-    alcance: null, seguidoresGanhos: null,
+    alcance: null, alcanceJanelaDias: null, seguidoresGanhos: null,
     curtidas: posts.reduce((s, p) => s + (p.curtidas || 0), 0),
     comentarios: posts.reduce((s, p) => s + (p.comentarios || 0), 0),
     engajamento: posts.reduce((s, p) => s + p.engajamento, 0),
@@ -241,13 +273,8 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
     buildAudiencia(igId, token),
   ]);
 
-  // Posts do período.
-  const mediaRes = await fetch(`${GRAPH}/${igId}/media?fields=id,media_type,thumbnail_url,media_url,permalink,timestamp,like_count,comments_count&limit=50&access_token=${token}`);
-  const mediaJson = await mediaRes.json().catch(() => ({}));
-  const media = ((mediaJson.data ?? []) as Array<Record<string, unknown>>).filter((m) => {
-    const ts = (m.timestamp as string) || "";
-    return ts >= desde.toISOString();
-  });
+  // Posts do período (paginado — ver fetchMediaDoPeriodo).
+  const media = await fetchMediaDoPeriodo(igId, desde.toISOString(), token);
 
   const posts: IgPost[] = await Promise.all(media.map(async (m) => {
     const tipo = (m.media_type as string) || "";
@@ -277,7 +304,8 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
   posts.sort((a, b) => b.engajamento - a.engajamento);
 
   const resumo = {
-    alcance,
+    alcance: alcance.valor,
+    alcanceJanelaDias: alcance.janelaDias,
     seguidoresGanhos,
     curtidas: posts.reduce((s, p) => s + (p.curtidas || 0), 0),
     comentarios: posts.reduce((s, p) => s + (p.comentarios || 0), 0),

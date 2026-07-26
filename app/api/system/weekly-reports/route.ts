@@ -20,6 +20,7 @@ import { sendEmail } from "@/lib/email/emailService";
 import { requireCron } from "@/lib/api/cron-guard";
 import { getMetaToken, getAlertSettings } from "@/lib/traffic/sync-core";
 import { sendMediaDocument } from "@/lib/whatsapp/evolution";
+import { csSendGroupText } from "@/lib/cs/notify";
 import {
   buildClientPdf, selectActiveMetaClients, periodLabelDays, slug,
 } from "@/lib/traffic/weekly-report";
@@ -158,6 +159,19 @@ export async function POST(req: NextRequest) {
     }
     if (sent === 0) {
       await notifyAdminFailure("Relatório semanal falhou", `0/${clients.length} enviados.\n${errors.join("\n")}`);
+    }
+
+    // Falha PARCIAL avisa no grupo interno. Antes só o e-mail de "0 enviados" existia: quando
+    // CIIL e Dumar ficaram de fora em 20/07 (35 de 37 enviados), ninguém ficou sabendo.
+    if (failed > 0 && !onlyClientId) {
+      const jid = process.env.CS_INTERNAL_GROUP_JID;
+      if (jid) {
+        const lista = errors.slice(0, 8).map((e) => `• ${e}`).join("\n");
+        await csSendGroupText(jid,
+          `⚠️ *Relatório ${escopoLabel} não saiu pra ${failed} de ${clients.length} clientes* — ${dateKey}\n\n${lista}` +
+          (errors.length > 8 ? `\n• …e mais ${errors.length - 8}` : "") +
+          `\n\n_Vale conferir antes que o cliente sinta falta._`);
+      }
     }
 
     return NextResponse.json({ ok: sent > 0, status, total: clients.length, sent, failed, errors: errors.slice(0, 10) });

@@ -29,6 +29,7 @@ import {
   type ReportClientRow,
 } from "@/lib/traffic/weekly-report";
 import { mondayReportMessage, mondaySocialMessage, RESEND_REPORT_MESSAGE, supportMessageFor, socialMessageFor, type ClientMsgKind } from "@/lib/traffic/support-message";
+import { conferirEAvisar } from "@/lib/cs/entregas";
 import { sendGroupText, sendMediaDocument } from "@/lib/whatsapp/evolution";
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
@@ -189,11 +190,28 @@ export async function POST(req: NextRequest) {
       await notifyAdminFailure(`Mensagens aos clientes (${kind}) falharam`, errors.join("\n") || "0 enviadas");
     }
 
+    // Confere o que REALMENTE chegou e avisa no grupo interno. O e-mail acima só dispara quando
+    // NADA sai — falha parcial (CIIL e Dumar em 20/07) passava batido, e ninguém lê e-mail.
+    let conferencia = null;
+    if (!onlyClientId) {
+      const elegiveis = withGroup.map((c) => ({ id: c.id, nome: clientDisplayName(c) }));
+      // Na segunda saem os dois tipos: relatório pra quem tem tráfego, texto pro resto.
+      const comRelatorio = withReport ? withGroup.filter((c) => c.meta_ad_account_id) : [];
+      const [confSup, confRel] = await Promise.all([
+        conferirEAvisar("support", dateKey, elegiveis.filter((e) => !comRelatorio.some((c) => c.id === e.id))),
+        comRelatorio.length
+          ? conferirEAvisar("report", dateKey, comRelatorio.map((c) => ({ id: c.id, nome: clientDisplayName(c) })))
+          : Promise.resolve(null),
+      ]);
+      conferencia = { support: confSup, report: confRel };
+    }
+
     return NextResponse.json({
       ok: totalSent > 0, status: totalSent > 0 ? "sent" : "failed", kind,
       support: { sent: supportSent, failed: supportFail },
       report: { sent: reportSent, failed: reportFail },
       semGrupo: withoutGroup,
+      conferencia,
       errors: errors.slice(0, 15),
     });
   } catch (err) {

@@ -7,7 +7,7 @@
 import { useState, useEffect } from "react";
 
 interface Post { id: string; tipo: string; thumb: string | null; permalink: string | null; curtidas: number | null; comentarios: number | null; views: number | null; alcance: number | null; engajamento: number }
-interface Resumo { alcance: number | null; seguidoresGanhos: number | null; curtidas: number; comentarios: number; engajamento: number; postsNoPeriodo: number }
+interface Resumo { alcance: number | null; alcanceJanelaDias?: number | null; seguidoresGanhos: number | null; curtidas: number; comentarios: number; engajamento: number; postsNoPeriodo: number }
 interface Audiencia { generoMascPct: number | null; generoFemPct: number | null; idades: { faixa: string; pct: number }[]; cidades: { nome: string; pct: number }[] }
 interface Snap { conta?: { username: string; seguidores: number | null; posts: number | null }; resumo?: Resumo; audiencia?: Audiencia; posts?: Post[]; fonte?: "owned" | "publico" }
 
@@ -55,7 +55,9 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
   const cards = [
     { l: "Seguidores", v: nf(data?.conta?.seguidores ?? null) },
     ...(isPublico ? [] : [{ l: "Seguidores ganhos", v: nfSigned(r?.seguidoresGanhos ?? null) }]),
-    ...(isPublico ? [] : [{ l: "Alcance", v: nf(r?.alcance ?? null) }]),
+    // A Meta só entrega alcance sem repetir pessoa em janela de 7 ou 28 dias. Escolher "14 dias" no
+    // seletor devolvia o número de 28 — rotulado como 14. O rótulo agora diz a janela que veio.
+    ...(isPublico ? [] : [{ l: r?.alcanceJanelaDias ? `Alcance da conta · ${r.alcanceJanelaDias} dias` : "Alcance da conta", v: nf(r?.alcance ?? null) }]),
     { l: "Engajamento", v: nf(r?.engajamento ?? null) },
     { l: "Curtidas", v: nf(r?.curtidas ?? null) },
     { l: "Comentários", v: nf(r?.comentarios ?? null) },
@@ -92,6 +94,21 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
       {isPublico && (
         <p className="text-[11px] mb-4" style={{ color: "#6B7280" }}>
           📊 Alcance, seguidores ganhos e público (gênero/idade/cidades) ficam disponíveis quando o perfil é conectado ao nosso Business Manager.
+        </p>
+      )}
+
+      {/* O alcance do perfil conta também quem chegou por anúncio — sem dizer isso, o cliente soma
+          com o alcance do relatório de tráfego e conta a mesma pessoa duas vezes. */}
+      {!isPublico && r?.alcance != null && (
+        <p className="text-[11px] mb-4" style={{ color: "#6B7280" }}>
+          O alcance do perfil inclui quem chegou pelos anúncios — não some com o alcance do tráfego pago.
+        </p>
+      )}
+
+      {/* Sem post no período, os números da conta sozinhos dão a impressão de que houve trabalho. */}
+      {!loading && data && (r?.postsNoPeriodo ?? 0) === 0 && (
+        <p className="text-[11px] mb-4" style={{ color: "#8b91a1" }}>
+          <strong style={{ color: "#c9ced9" }}>Nenhum post publicado neste período.</strong> Os números acima são do perfil como um todo.
         </p>
       )}
 

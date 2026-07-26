@@ -30,10 +30,15 @@ function kpiCard(label: string, value: string, accent = false): string {
 function igKpis(snap: IgSnapshot): string {
   const r = snap.resumo;
   const pub = snap.fonte === "publico"; // fonte pública não tem alcance nem seguidores-ganhos
+  // O alcance vem da Meta em janela fixa (7 ou 28 dias), que nem sempre é o período do relatório —
+  // então o rótulo diz a janela REAL. E é alcance da CONTA: inclui quem chegou por anúncio, por isso
+  // não pode ser somado com o alcance da página de tráfego (seria contar a mesma pessoa duas vezes).
+  const janela = r?.alcanceJanelaDias;
+  const rotuloAlcance = janela ? `Alcance da conta · ${janela} dias` : "Alcance da conta";
   return [
     kpiCard("Seguidores", fmtBR(snap.conta?.seguidores), true),
     ...(pub ? [] : [kpiCard("Seguidores ganhos", fmtSigned(r?.seguidoresGanhos ?? null))]),
-    ...(pub ? [] : [kpiCard("Alcance", fmtBR(r?.alcance ?? null))]),
+    ...(pub ? [] : [kpiCard(rotuloAlcance, fmtBR(r?.alcance ?? null))]),
     kpiCard("Engajamento total", fmtBR(r?.engajamento ?? null)),
     kpiCard("Curtidas", fmtBR(r?.curtidas ?? null)),
     kpiCard("Comentários", fmtBR(r?.comentarios ?? null)),
@@ -134,11 +139,27 @@ export function igSectionHtml(snap: IgSnapshot): string {
   const sub = snap.fonte === "publico"
     ? `Seguidores e engajamento dos seus posts nos últimos ${label} (dados públicos do perfil)`
     : `Alcance, seguidores, engajamento e público do seu perfil nos últimos ${label}`;
+  // Sem post no período, os números de conta (alcance/seguidores) continuam existindo — e sozinhos
+  // dão a impressão de que houve trabalho. Diz o que aconteceu de verdade.
+  const semPosts = (snap.resumo?.postsNoPeriodo ?? 0) === 0;
+  const aviso = semPosts
+    ? `<div style="margin:0 32px 14px;padding:11px 14px;border:1px solid ${C.border};border-left:3px solid ${IG};border-radius:8px;background:${C.card};font-size:10.5px;color:${C.muted};line-height:1.5;">
+         <b style="color:${C.text};">Nenhum post publicado neste período.</b> Os números acima são do perfil como um todo — não vieram de publicações da janela.
+       </div>`
+    : "";
+  // O alcance do perfil conta TAMBÉM quem chegou por anúncio. Sem esta nota, o cliente soma com o
+  // alcance da página de tráfego e conta a mesma pessoa duas vezes.
+  const notaAlcance = snap.fonte === "publico" ? "" :
+    `<div style="padding:0 32px;margin:-4px 0 14px;font-size:9.5px;color:${C.faint};line-height:1.5;">
+       O alcance do perfil inclui quem chegou pelos anúncios — não some com o alcance da página de tráfego.
+     </div>`;
   return `
   ${sectionBand("Instagram Orgânico · " + label, "@" + snap.conta.username, IG, sub)}
   <div style="padding:12px 32px 0;display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
     ${igKpis(snap)}
   </div>
+  ${notaAlcance}
+  ${aviso}
   ${snap.audiencia ? igAudienciaHtml(snap.audiencia) : ""}
   ${igPostsGrid(snap)}`;
 }
