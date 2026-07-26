@@ -12,7 +12,8 @@
 //   2. idempotência — date_key `2026-07-27-agosto` no client_group_message_log
 //   3. dedup por grupo — clientes que dividem grupo (Bazar Ribeiro) recebem uma vez só
 //
-//   ?dryRun=1   → lista quem receberia e mostra o texto (não envia)
+//   ?dryRun=1   → lista quem receberia e mostra o texto (não envia; ignora a trava de data)
+//   ?testJid=X  → manda a mensagem REAL num grupo só (ex.: o interno) pra conferir antes
 //   ?clientId=X → envia só pra esse cliente (teste pontual, ignora a trava de data)
 //   ?force=1    → ignora a trava de data e a idempotência
 //
@@ -62,10 +63,19 @@ export async function POST(req: NextRequest) {
   const dryRun = url.searchParams.get("dryRun") === "1";
   const force = url.searchParams.get("force") === "1";
   const onlyClientId = url.searchParams.get("clientId");
+  const testJid = url.searchParams.get("testJid");
 
   try {
+    // testJid: manda a mensagem REAL num grupo só (o interno), pro Roberto ver no WhatsApp
+    // exatamente o que os clientes vão receber — antes de ir pros 43.
+    if (testJid) {
+      const res = await sendGroupText(testJid, mensagem());
+      return NextResponse.json({ ok: res.ok, status: res.ok ? "test_sent" : "failed", testJid, error: res.error ?? null });
+    }
+
+    // A trava de data não vale pro dryRun — senão não dá pra conferir o texto antes do dia.
     const hoje = todayKeyBRT();
-    if (!force && !onlyClientId && hoje !== DIA_DO_DISPARO) {
+    if (!force && !onlyClientId && !dryRun && hoje !== DIA_DO_DISPARO) {
       return NextResponse.json({ ok: true, status: "skipped", message: `disparo único é ${DIA_DO_DISPARO}; hoje é ${hoje}` });
     }
 
