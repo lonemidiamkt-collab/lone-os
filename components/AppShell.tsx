@@ -45,7 +45,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { role } = useRole();
-  const { secondaryOpen, mobileOpen, setMobileOpen } = useNav();
+  const { secondaryOpen, sidebarExpanded, mobileOpen, setMobileOpen } = useNav();
 
   // O comercial (SDR) só trabalha no /crm e nem tem item de menu na Home. Ao cair em '/'
   // (login/atalho), manda direto pro funil — antes aterrissava numa dashboard que não é dele.
@@ -70,14 +70,17 @@ function MainLayout({ children }: { children: React.ReactNode }) {
     return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
   }, [initNotifs, refreshNotifs]);
 
-  // Secondary sidebar is 240px; primary is 72px
+  // Secondary sidebar is 240px; primary is 72px (200px com o menu expandido)
   const hasSecondaryRoute = SECONDARY_ROUTES.some(
     (r) => pathname === r || pathname.startsWith(r + "/")
   );
   const showSecondary = hasSecondaryRoute && secondaryOpen;
 
-  // Dynamic left offset for main content
-  const contentOffset = showSecondary ? "lg:pl-[312px]" : "lg:pl-[72px]";
+  // Recuo do conteúdo = barra principal + painel secundário (quando aberto). As 4 combinações estão
+  // escritas por extenso porque o Tailwind lê as classes no código-fonte — string montada não gera CSS.
+  const contentOffset = sidebarExpanded
+    ? (showSecondary ? "lg:pl-[440px]" : "lg:pl-[200px]")
+    : (showSecondary ? "lg:pl-[312px]" : "lg:pl-[72px]");
 
   return (
     <div className="flex min-h-screen bg-transparent relative">

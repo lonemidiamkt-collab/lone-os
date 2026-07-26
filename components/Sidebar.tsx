@@ -19,7 +19,7 @@ import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
-import { useNav } from "@/lib/context/NavContext";
+import { useNav, SIDEBAR_W, SIDEBAR_W_EXPANDED } from "@/lib/context/NavContext";
 import { useState, useEffect, useMemo } from "react";
 
 // ─── Primary nav config ────────────────────────────────────────
@@ -191,7 +191,7 @@ export default function Sidebar() {
   const tasks = useOperationalStore((s) => s.tasks);
   const onboarding = useOperationalStore((s) => s.onboarding);
   const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
-  const { secondaryOpen, setSecondaryOpen, setPendingTab, currentTab, mobileOpen, setMobileOpen } = useNav();
+  const { secondaryOpen, setSecondaryOpen, sidebarExpanded: expanded, setSidebarExpanded: setExpanded, setPendingTab, currentTab, mobileOpen, setMobileOpen } = useNav();
 
   const visibleItems = useMemo(
     () => PRIMARY_NAV.filter((item) => item.roles.includes(role)),
@@ -209,7 +209,8 @@ export default function Sidebar() {
 
   // Track which section is "active" in the secondary sidebar
   const [activePrimary, setActivePrimary] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  // `expanded` mora no NavContext: o painel secundário e o conteúdo da página precisam saber a
+  // largura da barra pra não ficarem por baixo dela (era o bug do menu com subitens).
 
   // Auto-open/close secondary based on current route
   useEffect(() => {
@@ -342,7 +343,12 @@ export default function Sidebar() {
         </button>
 
         {/* Nav icons */}
-        <nav className={cn("flex flex-col gap-0.5 flex-1 justify-start pt-1", expanded ? "w-full" : "items-center")}>
+        {/* `min-h-0` + `overflow-y-auto`: sem isso o flex-1 estica a nav além da tela e os últimos
+            itens (Área CEO, Metas) ficavam inalcançáveis — a roda do mouse não pegava em nada. */}
+        <nav className={cn(
+          "flex flex-col gap-0.5 flex-1 min-h-0 overflow-y-auto overscroll-contain no-scrollbar justify-start pt-1 pb-1 shrink",
+          expanded ? "w-full" : "items-center"
+        )}>
           {visibleItems.map((item) => {
             const isPage    = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             const isSection = activePrimary === item.href && secondaryOpen;
@@ -353,7 +359,7 @@ export default function Sidebar() {
                 onClick={() => handlePrimaryClick(item)}
                 title={expanded ? undefined : item.label}
                 className={cn(
-                  "relative rounded-xl flex items-center transition-all duration-200 ease-out group",
+                  "relative shrink-0 rounded-xl flex items-center transition-all duration-200 ease-out group",
                   expanded ? "w-full gap-3 px-3 h-10" : "w-10 h-10 justify-center",
                   isPage
                     ? "text-primary bg-lone-brand-bg-soft border border-primary"
@@ -423,8 +429,11 @@ export default function Sidebar() {
           SECONDARY SIDEBAR — 240 px, graphite, contextual nav
       ═══════════════════════════════════════════════════════════ */}
       <aside
+        style={{ left: expanded ? SIDEBAR_W_EXPANDED : SIDEBAR_W }}
         className={cn(
-          "fixed left-[72px] top-0 bottom-0 z-40 w-[240px] bg-sidebar border-r border-sidebar-border flex flex-col",
+          // O `left` acompanha a barra principal. Fixo em 72px, ao expandir o menu (200px) este
+          // painel ficava POR BAIXO dela: os rótulos dos subitens apareciam cortados pela metade.
+          "fixed top-0 bottom-0 z-40 w-[240px] bg-sidebar border-r border-sidebar-border flex flex-col",
           "transition-all duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform",
           secondaryOpen && secondaryConfig
             ? "translate-x-0 opacity-100"
@@ -478,7 +487,7 @@ export default function Sidebar() {
                         key={ii}
                         onClick={() => handleSecondaryItemClick(item)}
                         className={cn(
-                          "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all duration-150 ease-out group",
+                          "relative w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all duration-150 ease-out group",
                           isActive
                             ? "bg-accent text-foreground"
                             : "text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -486,7 +495,7 @@ export default function Sidebar() {
                       >
                         {/* Active left accent */}
                         {isActive && (
-                          <span className="absolute left-2 w-[2.5px] h-4 rounded-full bg-primary" />
+                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-full bg-primary" />
                         )}
 
                         <Icon
