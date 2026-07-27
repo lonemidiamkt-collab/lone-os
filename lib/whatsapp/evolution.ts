@@ -100,9 +100,23 @@ export async function sendText(to: string, text: string, delayMs?: number): Prom
   }, cfg);
 }
 
-/** Atalho semântico: envia para o JID de um grupo. */
-export async function sendGroupText(groupJid: string, text: string): Promise<EvoResult> {
-  return sendText(groupJid, text);
+/**
+ * Atalho semântico: envia para o JID de um grupo — e REGISTRA a saída.
+ *
+ * O registro existia só pro número do agente. Como relatório, suporte, calendário e broadcast
+ * saem por AQUI (número do gestor), metade da conversa com o cliente era invisível pro sistema.
+ * Foi assim que, em 27/07, o mesmo grupo recebeu "bom dia" às 08:48 com o relatório e "bom começo
+ * de semana" às 10:02 na pergunta de agosto: a segunda rotina não tinha como saber da primeira.
+ *
+ * `origem` diz qual rotina falou. Best-effort: registro nunca derruba envio.
+ */
+export async function sendGroupText(groupJid: string, text: string, origem = "gestor"): Promise<EvoResult> {
+  const r = await sendText(groupJid, text);
+  try {
+    const { registrarSaida } = await import("@/lib/cs/ja-falamos");
+    await registrarSaida(groupJid, text, r.ok, r.ok ? null : (r.error ?? null), { origem, destino: "cliente" });
+  } catch { /* registro é secundário */ }
+  return r;
 }
 
 /**
@@ -120,7 +134,7 @@ export async function sendMediaDocument(
   if (!cfg) return { ok: false, error: "Evolution não configurada (env ausente)" };
   if (!to) return { ok: false, error: "destino (número/JID) vazio" };
   if (!base64) return { ok: false, error: "documento vazio" };
-  return evoFetch(`/message/sendMedia/${encodeURIComponent(cfg.instance)}`, {
+  const r = await evoFetch<unknown>(`/message/sendMedia/${encodeURIComponent(cfg.instance)}`, {
     method: "POST",
     body: JSON.stringify({
       number: to,
@@ -131,6 +145,14 @@ export async function sendMediaDocument(
       ...(caption ? { caption } : {}),
     }),
   }, cfg, { retries: 1, timeoutMs: 60_000 });
+  // O PDF do relatório vai com a legenda de "bom dia" — é uma FALA no grupo e precisa contar
+  // como contato do dia, senão a próxima rotina cumprimenta como se fosse a primeira.
+  try {
+    const { registrarSaida } = await import("@/lib/cs/ja-falamos");
+    await registrarSaida(to, caption || `[documento] ${fileName}`, r.ok, r.ok ? null : (r.error ?? null),
+      { origem: "relatorio", destino: "cliente" });
+  } catch { /* registro é secundário */ }
+  return r;
 }
 
 /**

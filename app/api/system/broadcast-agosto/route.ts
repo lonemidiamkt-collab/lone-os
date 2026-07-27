@@ -29,6 +29,7 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { selectActiveClientsWithGroup, clientDisplayName } from "@/lib/traffic/weekly-report";
 import { sendGroupText } from "@/lib/whatsapp/evolution";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { contatosDeHoje } from "@/lib/cs/ja-falamos";
 
 const DIA_DO_DISPARO = "2026-07-27";
 /** Sufixo no date_key: o `kind` do log tem CHECK no banco (report|support|calendar) e um valor
@@ -42,9 +43,14 @@ const todayKeyBRT = () => new Date().toLocaleDateString("en-CA", { timeZone: "Am
 // cadastrado é o do sistema ("Farmacia - Arte em Manipulação", "BAZAR RIBEIRO" em caixa alta) e
 // soaria exatamente como o disparo em massa que a gente está tentando não parecer. O grupo já
 // diz quem é.
-function mensagem(): string {
+function mensagem(jaFalamosHoje = false): string {
+  // A abertura depende do que JÁ foi dito no grupo hoje. Em 27/07 o cliente recebeu "bom dia"
+  // às 08:48 com o relatório e "Bom começo de semana!" às 10:02 aqui — duas saudações de
+  // primeira conversa em 1h14. Quem já foi cumprimentado hoje recebe emenda, não saudação.
   return (
-    `Oi, pessoal! 👋 Bom começo de semana!\n\n` +
+    (jaFalamosHoje
+      ? `Ah, e aproveitando! 😊\n\n`
+      : `Oi, pessoal! 👋 Bom começo de semana!\n\n`) +
     `Agosto tá chegando e tem uma data que movimenta MUITO o comércio: o *Dia dos Pais*, ` +
     `no dia *9 de agosto* (domingo). 👔\n\n` +
     `Vocês já pensaram em alguma *promoção, combo ou ação especial* pra essa data? ` +
@@ -69,7 +75,7 @@ export async function POST(req: NextRequest) {
     // testJid: manda a mensagem REAL num grupo só (o interno), pro Roberto ver no WhatsApp
     // exatamente o que os clientes vão receber — antes de ir pros 43.
     if (testJid) {
-      const res = await sendGroupText(testJid, mensagem());
+      const res = await sendGroupText(testJid, mensagem(), "broadcast-agosto");
       return NextResponse.json({ ok: res.ok, status: res.ok ? "test_sent" : "failed", testJid, error: res.error ?? null });
     }
 
@@ -90,7 +96,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: true, status: "dry_run", dispararia_em: DIA_DO_DISPARO,
         elegiveis: withGroup.length, semGrupo,
-        exemplo: mensagem(),
+        exemplo_primeira_fala: mensagem(false),
+        exemplo_ja_falamos_hoje: mensagem(true),
         clientes: withGroup.map(clientDisplayName),
       });
     }
@@ -103,6 +110,9 @@ export async function POST(req: NextRequest) {
         .eq("date_key", DATE_KEY).eq("status", "sent");
       for (const r of data ?? []) jaEnviado.add(r.client_id as string);
     }
+
+    // Quem JÁ ouviu a gente hoje (relatório da manhã, suporte) recebe emenda, não saudação.
+    const jaFalados = await contatosDeHoje(withGroup.map((c) => c.whatsapp_group_jid!));
 
     let enviados = 0, falhas = 0;
     const gruposJaFalados = new Set<string>(); // dois clientes no mesmo grupo = uma mensagem só
@@ -122,7 +132,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const res = await sendGroupText(jid, mensagem());
+      const res = await sendGroupText(jid, mensagem(jaFalados.has(jid)), "broadcast-agosto");
       if (res.ok) {
         enviados++;
         gruposJaFalados.add(jid);
