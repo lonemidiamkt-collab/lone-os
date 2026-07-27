@@ -213,6 +213,49 @@ async function buildIgSnapshotPublico(handle: string, periodo: IgPeriod): Promis
 // ao ad account, e como a agência gerencia esse anúncio, o token tem acesso de DONO ao IG (métricas
 // completas). Roda no cron: todo cliente novo com anúncio (e sem IG) vincula sozinho. Retorna os
 // mapeados. Best-effort — falha de uma conta não derruba as outras.
+/**
+ * Acha o Instagram do cliente a partir da conta de anúncio.
+ *
+ * O jeito antigo perguntava só `/act_X/instagram_accounts` e desistia quando vinha vazio. Só que
+ * o Instagram normalmente NÃO fica pendurado na conta de anúncio — ele fica na PÁGINA. Foi assim
+ * que o Portuga ficou sem "Crescimento nas redes" no portal mesmo com a Meta conectada: o perfil
+ * (@portugaspneus, 1.846 seguidores) estava lá o tempo todo, ligado à Página, e ninguém olhava lá.
+ *
+ * Agora tenta na ordem: conta de anúncio → páginas promovidas por ela → Instagram da página.
+ */
+async function descobrirIg(actSemPrefixo: string, token: string): Promise<{ id: string; username?: string } | null> {
+  // 1. Direto na conta de anúncio (funciona em parte das contas).
+  try {
+    const r = await fetch(`${GRAPH}/act_${actSemPrefixo}/instagram_accounts?fields=id,username&access_token=${token}`);
+    const j = await r.json().catch(() => ({}));
+    const ig = j?.data?.[0] as { id?: string; username?: string } | undefined;
+    if (ig?.id) return { id: ig.id, username: ig.username };
+  } catch { /* segue pro próximo caminho */ }
+
+  // 2. Pela PÁGINA que a conta anuncia — o caminho que resolve a maioria.
+  try {
+    const rp = await fetch(`${GRAPH}/act_${actSemPrefixo}/promote_pages?fields=id,name&access_token=${token}`);
+    const jp = await rp.json().catch(() => ({}));
+    const paginas = (jp?.data ?? []) as Array<{ id?: string }>;
+    for (const p of paginas.slice(0, 3)) {
+      if (!p.id) continue;
+      const ri = await fetch(`${GRAPH}/${p.id}?fields=instagram_business_account,connected_instagram_account&access_token=${token}`);
+      const ji = await ri.json().catch(() => ({}));
+      const conta = (ji?.instagram_business_account ?? ji?.connected_instagram_account) as { id?: string } | undefined;
+      if (!conta?.id) continue;
+      // Busca o @ pra ficar legível na ficha (o id sozinho não diz nada a ninguém).
+      let username: string | undefined;
+      try {
+        const ru = await fetch(`${GRAPH}/${conta.id}?fields=username&access_token=${token}`);
+        username = (await ru.json().catch(() => ({})))?.username;
+      } catch { /* o @ é enfeite; o id é o que importa */ }
+      return { id: conta.id, username };
+    }
+  } catch { /* sem página acessível */ }
+
+  return null;
+}
+
 export async function reconcileIgFromAdAccounts(): Promise<string[]> {
   const token = await getMetaToken();
   if (!token) return [];
@@ -227,9 +270,7 @@ export async function reconcileIgFromAdAccounts(): Promise<string[]> {
     const act = ((c.meta_ad_account_id as string) || "").replace(/^act_/, "");
     if (!act) continue;
     try {
-      const r = await fetch(`${GRAPH}/act_${act}/instagram_accounts?fields=id,username&access_token=${token}`);
-      const j = await r.json().catch(() => ({}));
-      const ig = j?.data?.[0] as { id?: string; username?: string } | undefined;
+      const ig = await descobrirIg(act, token);
       if (ig?.id) {
         await supabaseAdmin.from("clients").update({ ig_business_account_id: ig.id, ig_username_cache: ig.username ?? null }).eq("id", c.id as string);
         mapeados.push(`${(c.nome_fantasia as string) || (c.name as string)} → @${ig.username || ig.id}`);
