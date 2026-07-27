@@ -1,25 +1,45 @@
 // Teste OFFLINE do setup dos 7 dias e da graduação de onboarding (só lógica pura).
 import { describe, it, expect } from "vitest";
-import { itensPara, montarCobrancaSetup, graduou, type StatusSetup } from "@/lib/cs/setup-7dias";
+import { itensPara, montarCobrancaSetup, graduou, escopoDe, type StatusSetup } from "@/lib/cs/setup-7dias";
+
+describe("escopoDe — o que o cliente contratou", () => {
+  it("mapeia os valores reais do cadastro", () => {
+    expect(escopoDe("assessoria_social")).toBe("social");
+    expect(escopoDe("trafego_pago")).toBe("trafego");
+    expect(escopoDe("assessoria_trafego")).toBe("trafego");
+    expect(escopoDe("lone_growth")).toBe("completo");
+    expect(escopoDe(null)).toBe("completo"); // sem escopo definido, cobra tudo
+  });
+});
 
 describe("itensPara — não cobra o que o cliente não contratou", () => {
-  it("cliente só-social não recebe item de anúncio", () => {
-    const chaves = itensPara({ temTrafego: false, gravaVideo: false }).map((i) => i.chave);
+  it("cliente só-social (Atlas, Dumar) não recebe item de anúncio", () => {
+    const chaves = itensPara({ escopo: "social", gravaVideo: false }).map((i) => i.chave);
     expect(chaves).toContain("logo");
     expect(chaves).toContain("fixados");
     expect(chaves).not.toContain("anuncio");
     expect(chaves).not.toContain("conta_meta");
-    expect(chaves).not.toContain("videos");
   });
 
-  it("cliente de tráfego recebe anúncio E a conta vinculada", () => {
-    const chaves = itensPara({ temTrafego: true, gravaVideo: false }).map((i) => i.chave);
+  it("cliente SÓ-ANÚNCIO (Paiva Shopp) não recebe bio/linktree/destaques — o perfil não é nosso", () => {
+    const chaves = itensPara({ escopo: "trafego", gravaVideo: false }).map((i) => i.chave);
     expect(chaves).toContain("anuncio");
+    expect(chaves).toContain("conta_meta");
+    expect(chaves).not.toContain("bio");
+    expect(chaves).not.toContain("linktree");
+    expect(chaves).not.toContain("destaques");
+    expect(chaves).not.toContain("fixados");
+  });
+
+  it("cliente completo recebe as duas frentes", () => {
+    const chaves = itensPara({ escopo: "completo", gravaVideo: false }).map((i) => i.chave);
+    expect(chaves).toContain("fixados");
     expect(chaves).toContain("conta_meta"); // o furo dos 9 clientes invisíveis
   });
 
-  it("quem grava vídeo recebe o item de vídeo", () => {
-    expect(itensPara({ temTrafego: false, gravaVideo: true }).map((i) => i.chave)).toContain("videos");
+  it("vídeo só pra quem é de social E grava", () => {
+    expect(itensPara({ escopo: "completo", gravaVideo: true }).map((i) => i.chave)).toContain("videos");
+    expect(itensPara({ escopo: "trafego", gravaVideo: true }).map((i) => i.chave)).not.toContain("videos");
   });
 });
 
@@ -64,20 +84,25 @@ describe("montarCobrancaSetup", () => {
   });
 });
 
-describe("graduou — sair de onboarding", () => {
+describe("graduou — a prova depende do que ele contratou", () => {
   it("só-social com arte entregue JÁ É CLIENTE (o caso do Atlas, 98 dias e 7 artes)", () => {
-    expect(graduou({ temTrafego: false, contaVinculada: false, artesEntregues: 7 })).toBe(true);
+    expect(graduou({ escopo: "social", contaVinculada: false, anuncioRodando: false, artesEntregues: 7 })).toBe(true);
   });
 
-  it("cliente de tráfego sem conta vinculada NÃO gradua — o sistema estaria cego pra ele", () => {
-    expect(graduou({ temTrafego: true, contaVinculada: false, artesEntregues: 6 })).toBe(false);
+  it("SÓ-ANÚNCIO gradua sem arte nenhuma — a gente não faz arte pra ele (Paiva Shopp)", () => {
+    expect(graduou({ escopo: "trafego", contaVinculada: true, anuncioRodando: true, artesEntregues: 0 })).toBe(true);
   });
 
-  it("cliente de tráfego com conta vinculada e arte entregue gradua", () => {
-    expect(graduou({ temTrafego: true, contaVinculada: true, artesEntregues: 4 })).toBe(true);
+  it("só-anúncio com conta vinculada mas SEM anúncio rodando não gradua", () => {
+    expect(graduou({ escopo: "trafego", contaVinculada: true, anuncioRodando: false, artesEntregues: 0 })).toBe(false);
   });
 
-  it("nada entregue nunca gradua, por mais antigo que seja (Dumar, 98 dias, 0 artes)", () => {
-    expect(graduou({ temTrafego: false, contaVinculada: false, artesEntregues: 0 })).toBe(false);
+  it("cliente completo precisa das DUAS frentes", () => {
+    expect(graduou({ escopo: "completo", contaVinculada: false, anuncioRodando: false, artesEntregues: 6 })).toBe(false);
+    expect(graduou({ escopo: "completo", contaVinculada: true, anuncioRodando: true, artesEntregues: 4 })).toBe(true);
+  });
+
+  it("só-social sem nada entregue nunca gradua, por mais antigo que seja (Dumar, 98 dias)", () => {
+    expect(graduou({ escopo: "social", contaVinculada: false, anuncioRodando: false, artesEntregues: 0 })).toBe(false);
   });
 });

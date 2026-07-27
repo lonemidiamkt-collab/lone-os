@@ -49,17 +49,38 @@ export function tituloTarefa(item: ItemSetup, cliente: string): string {
   return `${PREFIXO} ${item.titulo} — ${cliente}`;
 }
 
+/**
+ * ESCOPO DO CONTRATO. Vem de `clients.service_type`. Sem isso a cobrança pede bio, linktree e
+ * destaques de cliente de quem a gente **só cuida do anúncio** — o perfil dele nem é nosso — e
+ * espera "arte entregue" de quem nunca vai ter arte nossa.
+ */
+export type Escopo = "social" | "trafego" | "completo";
+
+export function escopoDe(serviceType?: string | null): Escopo {
+  switch ((serviceType || "").trim()) {
+    case "assessoria_social": return "social";
+    case "trafego_pago":
+    case "assessoria_trafego": return "trafego";
+    default: return "completo"; // lone_growth e qualquer coisa não mapeada
+  }
+}
+
+const cuidaDoSocial = (e: Escopo) => e !== "trafego";
+const cuidaDoTrafego = (e: Escopo) => e !== "social";
+
 export interface PerfilCliente {
-  temTrafego: boolean;  // contratou tráfego pago (tem gestor OU conta vinculada)
+  escopo: Escopo;
   gravaVideo: boolean;
 }
 
-/** Quais itens valem pra ESTE cliente. Não cobra anúncio de quem não contratou tráfego. */
+/** Quais itens valem pra ESTE cliente, pelo que ele contratou. */
 export function itensPara(perfil: PerfilCliente): ItemSetup[] {
   return CHECKLIST_SETUP.filter((i) => {
-    if (i.exige === "trafego") return perfil.temTrafego;
-    if (i.exige === "video") return perfil.gravaVideo;
-    return true;
+    if (i.exige === "trafego") return cuidaDoTrafego(perfil.escopo);
+    if (i.exige === "video") return cuidaDoSocial(perfil.escopo) && perfil.gravaVideo;
+    // Logo, bio, linktree, destaques e fixadas são trabalho de social. Cliente só-anúncio
+    // (Paiva Shopp) tem o próprio perfil — não é a gente que monta.
+    return cuidaDoSocial(perfil.escopo);
   });
 }
 
@@ -123,12 +144,22 @@ export function montarCobrancaSetup(status: StatusSetup[]): string {
 }
 
 /**
- * Cliente "graduou" de onboarding?
- * Regra do Roberto: conta de anúncio vinculada + demanda criada + arte entregue = já é cliente.
- * Cliente SÓ-SOCIAL gradua com a arte entregue — não faz sentido esperar conta de anúncio de quem
- * não contratou tráfego. Foi isso que deixou o Atlas 98 dias "em onboarding" tendo 7 artes entregues.
+ * Cliente "graduou" de onboarding? A prova depende do que ele CONTRATOU:
+ *
+ *  • social   → arte entregue (o Atlas ficou 98 dias "em onboarding" com 7 artes entregues)
+ *  • tráfego  → conta vinculada e anúncio rodando. Esperar "arte entregue" de cliente só-anúncio
+ *               era garantia de nunca graduar: a gente não faz arte pra ele.
+ *  • completo → as duas coisas
  */
-export function graduou(p: { temTrafego: boolean; contaVinculada: boolean; artesEntregues: number }): boolean {
-  if (p.artesEntregues < 1) return false;
-  return p.temTrafego ? p.contaVinculada : true;
+export function graduou(p: {
+  escopo: Escopo;
+  contaVinculada: boolean;
+  anuncioRodando: boolean;
+  artesEntregues: number;
+}): boolean {
+  const socialOk = p.artesEntregues >= 1;
+  const trafegoOk = p.contaVinculada && p.anuncioRodando;
+  if (p.escopo === "social") return socialOk;
+  if (p.escopo === "trafego") return trafegoOk;
+  return socialOk && trafegoOk;
 }

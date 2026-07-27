@@ -19,7 +19,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 import {
-  itensPara, tituloTarefa, montarCobrancaSetup, graduou, PREFIXO,
+  itensPara, tituloTarefa, montarCobrancaSetup, graduou, escopoDe, PREFIXO,
   type StatusSetup, type PapelSetup,
 } from "@/lib/cs/setup-7dias";
 
@@ -35,17 +35,21 @@ export async function POST(req: NextRequest) {
 
   const { data: clientes } = await supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, status, created_at, meta_ad_account_id, assigned_traffic, assigned_social, assigned_designer, perfil_conteudo")
+    .select("id, name, nome_fantasia, status, created_at, meta_ad_account_id, assigned_traffic, assigned_social, assigned_designer, perfil_conteudo, service_type")
     .eq("status", "onboarding").is("draft_status", null).or("active.is.null,active.eq.true");
 
   const alvo = (clientes ?? []).filter((c) => !/\(teste\)/i.test((c.name as string) || ""));
   if (!alvo.length) return NextResponse.json({ ok: true, status: "sem cliente em onboarding" });
 
   const ids = alvo.map((c) => c.id as string);
-  const [{ data: cards }, { data: tarefas }] = await Promise.all([
+  const trintaDias = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const [{ data: cards }, { data: tarefas }, { data: gastos }] = await Promise.all([
     supabaseAdmin.from("content_cards").select("client_id, designer_delivered_at").in("client_id", ids),
     supabaseAdmin.from("tasks").select("id, client_id, title, status").in("client_id", ids).ilike("title", `${PREFIXO}%`),
+    // Anúncio RODANDO = houve gasto nos últimos 30 dias. Conta vinculada sem verba é conta parada.
+    supabaseAdmin.from("metric_snapshots").select("client_id, spend").in("client_id", ids).gte("metric_date", trintaDias).gt("spend", 0),
   ]);
+  const rodando = new Set((gastos ?? []).map((g) => g.client_id as string));
 
   const entreguesPor = new Map<string, number>();
   for (const k of cards ?? []) {
@@ -64,16 +68,17 @@ export async function POST(req: NextRequest) {
     const nome = (c.nome_fantasia as string) || (c.name as string);
     const dias = diasDesde(c.created_at as string);
     const contaVinculada = !!c.meta_ad_account_id;
-    // "É de tráfego" = tem gestor atribuído OU já tem conta vinculada. Foi assim que o MAX e o
-    // Léo Carros apareceram como se fossem só-social: têm Julio no tráfego e conta nenhuma.
-    const temTrafego = !!c.assigned_traffic || contaVinculada;
+    // O que ele CONTRATOU manda — não o que foi atribuído por engano. Paiva Shopp é só anúncio;
+    // Dumar e Atlas são só Instagram. Cobrar bio/linktree de quem tem o próprio perfil, ou esperar
+    // arte de quem não contrata arte, é cobrança que nunca fecha.
+    const escopo = escopoDe(c.service_type as string);
     // Só cobra vídeo de quem o cadastro DIZ que grava. Com a regra invertida ("tudo que não é
     // arte"), os 45 clientes com perfil em branco viravam "grava vídeo" e recebiam a cobrança —
     // no banco só 6 têm perfil 'video'.
     const gravaVideo = (c.perfil_conteudo as string) === "video";
     const artesEntregues = entreguesPor.get(id) ?? 0;
 
-    if (graduou({ temTrafego, contaVinculada, artesEntregues })) {
+    if (graduou({ escopo, contaVinculada, anuncioRodando: rodando.has(id), artesEntregues })) {
       graduaram.push(nome);
       if (promover && !previewOnly) {
         const { error } = await supabaseAdmin.from("clients").update({ status: "good" }).eq("id", id).select("id");
@@ -82,7 +87,7 @@ export async function POST(req: NextRequest) {
       continue; // quem já é cliente não entra na cobrança de setup
     }
 
-    const itens = itensPara({ temTrafego, gravaVideo });
+    const itens = itensPara({ escopo, gravaVideo });
     const minhas = (tarefas ?? []).filter((t) => t.client_id === id);
     const donoDe: Record<PapelSetup, string | null> = {
       designer: (c.assigned_designer as string) || null,
