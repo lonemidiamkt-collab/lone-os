@@ -6,6 +6,22 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getIgSnapshotCached, reconcileIgFromAdAccounts, IG_PERIODS } from "@/lib/meta/igSnapshot";
 import { csSendGroupText } from "@/lib/cs/notify";
+import type { IgPost } from "@/lib/meta/igSnapshot";
+
+/** Acumula os posts reais em client_ig_posts. Best-effort: nunca derruba a geração do snapshot. */
+async function guardarPosts(clientId: string, posts: IgPost[]): Promise<void> {
+  try {
+    const linhas = posts
+      .filter((p) => p.id && p.data)
+      .map((p) => ({
+        media_id: p.id, client_id: clientId, posted_at: p.data,
+        tipo: p.tipo || null, permalink: p.permalink, thumb: p.thumb,
+        curtidas: p.curtidas, comentarios: p.comentarios,
+        atualizado_em: new Date().toISOString(),
+      }));
+    if (linhas.length) await supabaseAdmin.from("client_ig_posts").upsert(linhas, { onConflict: "media_id" });
+  } catch { /* histórico é secundário ao snapshot do dia */ }
+}
 
 // POST /api/system/ig-snapshots — pré-gera os relatórios de Instagram (semana + mês) de cada cliente
 // com IG mapeado, guardando no cache (client_ig_snapshots). Assim o portal/interno lê do cache e NÃO
@@ -34,7 +50,13 @@ export async function POST(req: NextRequest) {
     const nome = (c.nome_fantasia as string) || (c.name as string);
     for (const periodo of IG_PERIODS) {
       const snap = await getIgSnapshotCached(c.id as string, periodo, true); // force = gera fresco e grava
-      if (snap.mapped && !snap.error) feitos.push(`${nome}/${periodo}`);
+      if (snap.mapped && !snap.error) {
+        feitos.push(`${nome}/${periodo}`);
+        // O snapshot é uma JANELA e é sobrescrito: sozinho ele nunca responde "e em maio?".
+        // A janela de 30d alimenta o histórico post a post (client_ig_posts), que é a fonte
+        // de "postou ou não" — o board tinha 3 cards publicados contra 307 posts reais.
+        if (periodo === "30d" && snap.posts?.length) await guardarPosts(c.id as string, snap.posts);
+      }
       else falhas.push({ cliente: nome, periodo, motivo: snap.error || (snap.mapped ? "sem dados" : "Instagram não vinculado") });
       // pequeno respiro entre chamadas pra não estourar a cota da Meta
       await new Promise((r) => setTimeout(r, 1500));
