@@ -32,7 +32,20 @@ import { buildClientCalendarHtml } from "@/lib/holidays/client-calendar-html";
 import { holidaysPdfFilename } from "@/lib/holidays/pdf-server";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { sendMediaDocument } from "@/lib/whatsapp/evolution";
+import { csSendGroupDocument } from "@/lib/cs/notify";
+
 import { conferirEAvisar } from "@/lib/cs/entregas";
+
+/**
+ * O calendário do mês passa a sair pelo LONINHO (decisão do Roberto, 27/07): a pergunta da
+ * promoção é CONVERSA — quem manda precisa entender a resposta, e o agente lê o grupo.
+ * Se o agente não estiver naquele grupo, cai pro número do gestor em vez de o cliente ficar sem.
+ */
+async function enviarCalendario(jid: string, b64: string, fileName: string, caption: string) {
+  const r = await csSendGroupDocument(jid, b64, fileName, caption);
+  if (r.ok) return r;
+  return sendMediaDocument(jid, b64, fileName, caption);
+}
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
 const REPORTS_BUCKET = "reports";
@@ -188,7 +201,7 @@ export async function POST(req: NextRequest) {
       const name = clientDisplayName(c);
       const jid = c.whatsapp_group_jid!;
       if (!force && (await alreadySent(c.id, dateKey))) continue;
-      const res = await sendMediaDocument(jid, pdf.toString("base64"), fileName, renderCaption(template, name, mesNome));
+      const res = await enviarCalendario(jid, pdf.toString("base64"), fileName, renderCaption(template, name, mesNome));
       if (res.ok) { sent++; await logMsg(c.id, dateKey, "sent"); }
       else { failed++; errors.push(`${name}: ${res.error}`); await logMsg(c.id, dateKey, "failed", res.error); }
       if (i < withGroup.length - 1) await sleep(2500);

@@ -30,6 +30,7 @@ import {
 } from "@/lib/traffic/weekly-report";
 import { mondayReportMessage, mondaySocialMessage, RESEND_REPORT_MESSAGE, supportMessageFor, socialMessageFor, type ClientMsgKind } from "@/lib/traffic/support-message";
 import { conferirEAvisar } from "@/lib/cs/entregas";
+import { csSendGroupText } from "@/lib/cs/notify";
 import { montarMensagemCliente } from "@/lib/cs/mensagem-cliente";
 import { sendGroupText, sendMediaDocument } from "@/lib/whatsapp/evolution";
 
@@ -40,14 +41,47 @@ function todayKeyBRT(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 }
 
-/** Mensagem de qua/sex escrita a partir dos sinais do cliente (em vez do texto sorteado).
- *  Default FALSE — só liga depois que o Roberto ler as mensagens no modo revisão. */
-async function mensagemIaLigada(): Promise<boolean> {
+/**
+ * O SUPORTE passa a sair pelo LONINHO (número do agente), não pelo do gestor.
+ *
+ * Decisão do Roberto (27/07): o suporte é conversa, e conversa é do agente — ele sabe o que está
+ * acontecendo com o cliente (arte esperando aprovação, post que foi bem, promoção sem resposta) e
+ * LÊ o grupo, então entende a resposta. O número do gestor dispara e não escuta.
+ * O perfil do agente no WhatsApp já se chama "Lone Mídia": o cliente vê a agência, não um robô.
+ *
+ * O RELATÓRIO de segunda continua no número do gestor de propósito: é entrega de tom pessoal e
+ * mantém redundância — hoje mesmo o número do gestor caiu e o agente seguiu trabalhando. Um número
+ * só pra tudo faria uma queda silenciar a comunicação inteira com o cliente.
+ *
+ * Se o agente não estiver no grupo (faltam 2: Hentzy e Horto Naenc), CAI PRO GESTOR em vez de
+ * deixar o cliente sem mensagem.
+ */
+async function enviarSuporte(jid: string, texto: string, clientId: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await csSendGroupText(jid, texto, undefined, { origem: "suporte", destino: "cliente", clientId });
+  if (r.ok) return r;
+  const viaGestor = await sendGroupText(jid, texto, "suporte-fallback-gestor");
+  return viaGestor.ok
+    ? viaGestor
+    : { ok: false, error: `agente: ${r.error} | gestor: ${viaGestor.error}` };
+}
+
+/**
+ * Mensagem de qua/sex escrita a partir dos sinais do cliente, em três estágios:
+ *   "off"     → texto de sempre (default)
+ *   "revisao" → o agente escreve, mas quem lê é o TIME (grupo interno). O cliente segue no neutro.
+ *   "on"      → vai pro cliente
+ * Erro de leitura cai em "off": nunca o contrário.
+ */
+type ModoIa = "off" | "revisao" | "on";
+async function modoMensagemIa(): Promise<ModoIa> {
   try {
     const { data } = await supabaseAdmin
       .from("agency_settings").select("value").eq("key", "cs_msg_ia_enabled").maybeSingle();
-    return (data?.value ?? "false") === "true";
-  } catch { return false; } // erro de leitura = fica no texto de sempre, nunca o contrário
+    const v = (data?.value ?? "off").trim().toLowerCase();
+    if (v === "true" || v === "on") return "on";
+    if (v === "revisao" || v === "review") return "revisao";
+    return "off";
+  } catch { return "off"; }
 }
 
 async function clientMsgsEnabled(): Promise<boolean> {
@@ -147,6 +181,9 @@ export async function POST(req: NextRequest) {
     // Sem token, os relatórios falham por cliente — os social-puro seguem normal.
     const token = withReport ? await getMetaToken() : null;
 
+    // Mensagens escritas pela IA aguardando a leitura do Roberto (modo revisão).
+    const revisar: { cliente: string; texto: string; sinais: string[] }[] = [];
+
     let supportSent = 0, supportFail = 0, reportSent = 0, reportFail = 0;
     const errors: string[] = [];
 
@@ -176,7 +213,7 @@ export async function POST(req: NextRequest) {
         // Segunda, cliente SÓ-SOCIAL (sem Meta): mensagem de início de semana.
         const groupClientIds = jidToClientIds.get(jid) ?? [c.id];
         if (force || !(await groupTextAlreadySent(groupClientIds, dateKey))) {
-          const res = await sendGroupText(jid, mondaySocialMessage());
+          const res = await enviarSuporte(jid, mondaySocialMessage(), c.id);
           if (res.ok) { supportSent++; await logMsg(c.id, dateKey, "support", "sent"); }
           else { supportFail++; errors.push(`${name} (início de semana): ${res.error}`); await logMsg(c.id, dateKey, "support", "failed", res.error); }
         } else { await logMsg(c.id, dateKey, "support", "skipped", "grupo já recebeu o texto hoje (cliente compartilha grupo)"); }
@@ -185,14 +222,21 @@ export async function POST(req: NextRequest) {
         // só-social → mensagem social (foco em arte). Dedup por grupo evita o
         // texto duplicado quando dois clientes compartilham o mesmo grupo.
         const neutro = c.meta_ad_account_id ? supportMessageFor(kind) : socialMessageFor(kind);
-        // Trava DESLIGADA por padrão: até o Roberto aprovar as mensagens no modo revisão
-        // (/api/system/cs-mensagem-preview), nada muda — continua o texto de sempre.
-        const text = (await mensagemIaLigada())
-          ? (await montarMensagemCliente(c.id, neutro, kind === "fri" ? "sexta" : "quarta")).texto
-          : neutro;
+        // TRÊS ESTÁGIOS, nesta ordem — a mensagem só chega ao cliente depois de o Roberto ler:
+        //   desligado  → texto de sempre (o sorteio de 5 frases)
+        //   "revisao"  → o agente ESCREVE a contextual e manda pro GRUPO INTERNO; o cliente
+        //                continua recebendo o texto neutro. É o passo de leitura.
+        //   "true"     → a contextual vai pro cliente
+        const modo = await modoMensagemIa();
+        let text = neutro;
+        if (modo !== "off") {
+          const m = await montarMensagemCliente(c.id, neutro, kind === "fri" ? "sexta" : "quarta");
+          if (modo === "on") text = m.texto;
+          else if (m.origem === "ia") revisar.push({ cliente: name, texto: m.texto, sinais: m.sinaisUsados });
+        }
         const groupClientIds = jidToClientIds.get(jid) ?? [c.id];
         if (force || !(await groupTextAlreadySent(groupClientIds, dateKey))) {
-          const res = await sendGroupText(jid, text);
+          const res = await enviarSuporte(jid, text, c.id);
           if (res.ok) { supportSent++; await logMsg(c.id, dateKey, "support", "sent"); }
           else { supportFail++; errors.push(`${name} (suporte): ${res.error}`); await logMsg(c.id, dateKey, "support", "failed", res.error); }
         } else { await logMsg(c.id, dateKey, "support", "skipped", "grupo já recebeu o texto hoje (cliente compartilha grupo)"); }
@@ -204,6 +248,25 @@ export async function POST(req: NextRequest) {
     const totalSent = supportSent + reportSent;
     if (totalSent === 0 && !onlyClientId) {
       await notifyAdminFailure(`Mensagens aos clientes (${kind}) falharam`, errors.join("\n") || "0 enviadas");
+    }
+
+    // MODO REVISÃO: o time lê no grupo interno o que o agente escreveria pra cada cliente.
+    // Sai depois do envio real pra não atrasar a entrega — e num bloco só, não uma por cliente.
+    if (revisar.length) {
+      const jidInterno = process.env.CS_INTERNAL_GROUP_JID;
+      if (jidInterno) {
+        const l = [
+          `📝 *Revisão — mensagem do agente ao cliente* (${kind === "fri" ? "sexta" : "quarta"})`,
+          `_Isto NÃO foi enviado. O cliente recebeu o texto de sempre._`,
+          "",
+        ];
+        for (const r of revisar.slice(0, 6)) {
+          l.push(`*${r.cliente}*`, r.texto, "");
+        }
+        if (revisar.length > 6) l.push(`_…e mais ${revisar.length - 6} no painel._`, "");
+        l.push("Se estiver bom, me avisa que eu libero pro cliente.");
+        await csSendGroupText(jidInterno, l.join("\n"), undefined, { origem: "revisao-mensagem", destino: "interno" });
+      }
     }
 
     // Confere o que REALMENTE chegou e avisa no grupo interno. O e-mail acima só dispara quando
