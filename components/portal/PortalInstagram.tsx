@@ -45,7 +45,24 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, clientId, period]);
 
-  if (hide) return null;
+  // Sem Instagram vinculado, isto sumia INTEIRO e a aba "Crescimento nas redes" ficava em branco —
+  // o cliente clicava e via uma tela vazia, sem entender se era erro, se estava carregando ou se
+  // não havia resultado. Agora a aba explica o que falta e dá o caminho.
+  if (hide) {
+    return (
+      <div className="mb-6 lg:mb-8 rounded-xl p-6 text-center" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
+        <p className="text-sm font-semibold mb-1" style={{ color: "#c9ced9" }}>
+          Instagram ainda não conectado
+        </p>
+        <p className="text-xs leading-relaxed" style={{ color: "#8b91a1" }}>
+          Assim que a gente conectar o perfil, esta aba passa a mostrar seguidores, alcance,
+          engajamento e os posts que mais performaram.
+          <br />
+          Fala com a nossa equipe que a gente conecta rapidinho.
+        </p>
+      </div>
+    );
+  }
 
   const r = data?.resumo;
   const a = data?.audiencia;
