@@ -27,7 +27,9 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
   const [pecas, setPecas] = useState<Peca[]>([]);
   const [periodo, setPeriodo] = useState("");
   const [cliente, setCliente] = useState("");
-  const [modo, setModo] = useState<"semana" | "mes">("semana");
+  // Vinha travado em "Semana": no dia 20 o time pediu MENSAL quatro vezes e gerou SETE
+  // calendários semanais sem perceber o seletor. Agora tem quinzena e o rótulo é explícito.
+  const [modo, setModo] = useState<"semana" | "quinzena" | "mes">("semana");
   const [contexto, setContexto] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -51,7 +53,7 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
   };
 
   const gerar = async () => {
-    setLoading(true); setMsg(modo === "mes" ? "Planejando o mês… (pode levar 1-2 min)" : "Pensando…"); setPlano(null); setPecas([]);
+    setLoading(true); setMsg(modo === "mes" ? "Planejando o mês… (pode levar 1-2 min)" : modo === "quinzena" ? "Planejando a quinzena… (~1 min)" : "Planejando a semana…"); setPlano(null); setPecas([]);
     const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
     try {
       const res = await authedFetch(`/api/cs/calendario`, {
@@ -115,6 +117,7 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
         <div className="flex items-center gap-2">
           <div className="flex rounded-md border border-border overflow-hidden text-sm">
             <button onClick={() => setModo("semana")} className={`px-3 py-1.5 ${modo === "semana" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Semana</button>
+            <button onClick={() => setModo("quinzena")} className={`px-3 py-1.5 ${modo === "quinzena" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Quinzena</button>
             <button onClick={() => setModo("mes")} className={`px-3 py-1.5 ${modo === "mes" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Mês</button>
           </div>
           <Button onClick={gerar} disabled={loading}>{loading ? "Pensando…" : plano ? "Gerar de novo" : "Gerar calendário"}</Button>

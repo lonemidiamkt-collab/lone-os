@@ -11,11 +11,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { planejarPeriodo, executarPlano, pecaParaTexto, datasDoPeriodo, type PecaFinal } from "@/lib/cs/motor";
+import type { ModoPeriodo } from "@/lib/cs/motor";
 import { criarCardDemanda } from "@/lib/cs/card";
 import type { DecisaoDeConteudo, ObjetivoPeriodo, DiagnosticoEstrategico } from "@/lib/cs/pipeline";
 
 // Roda a geração em background e grava o resultado no job (fire-and-forget num server Node vivo).
-async function rodarGeracao(jobId: string, clientId: string, modo: "semana" | "mes", contexto?: string) {
+async function rodarGeracao(jobId: string, clientId: string, modo: ModoPeriodo, contexto?: string) {
   const finish = (patch: Record<string, unknown>) =>
     supabaseAdmin.from("content_calendar_jobs").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", jobId);
   try {
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── GERAR (assíncrono): cria o job e dispara em background ──
-  const modo = body?.modo === "mes" ? "mes" : "semana";
+  const modo: ModoPeriodo = body?.modo === "mes" ? "mes" : body?.modo === "quinzena" ? "quinzena" : "semana";
   const contexto = (body?.contexto as string) || undefined;
   const { data: job, error } = await supabaseAdmin.from("content_calendar_jobs")
     .insert({ client_id: clientId, modo, contexto: contexto ?? null, status: "running" }).select("id").maybeSingle();

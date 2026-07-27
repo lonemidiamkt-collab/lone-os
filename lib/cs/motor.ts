@@ -18,9 +18,23 @@ import type {
 const MODEL = "gpt-4o";
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
-// Datas de postagem do período (seg/qua/sex): próxima semana OU próximo mês inteiro.
-export function datasDoPeriodo(modo: "semana" | "mes"): { periodo: string; datas: string[] } {
+// Datas de postagem do período (seg/qua/sex), conforme o calendário do playbook (§2).
+// QUINZENA entrou a pedido do Roberto: entre "só a semana que vem" e "o mês inteiro" faltava o
+// meio-termo — planejar 15 dias é o que a maioria dos clientes consegue combinar de uma vez.
+export function datasDoPeriodo(modo: ModoPeriodo): { periodo: string; datas: string[] } {
   const now = spNow();
+  if (modo === "quinzena") {
+    // Duas semanas cheias a partir da próxima segunda — não "15 dias corridos a partir de hoje",
+    // que cairia no meio da semana e bagunçaria o seg/qua/sex.
+    const { segunda } = datasProximaSemana(now);
+    const datas: string[] = [];
+    for (let i = 0; i < 14; i++) {
+      const dt = new Date(segunda); dt.setDate(dt.getDate() + i);
+      if ([1, 3, 5].includes(dt.getDay())) datas.push(ymd(dt));
+    }
+    const fim = new Date(segunda); fim.setDate(fim.getDate() + 13);
+    return { periodo: `quinzena de ${ymd(segunda)} a ${ymd(fim)}`, datas };
+  }
   if (modo === "mes") {
     const nm = now.getMonth() === 11 ? 0 : now.getMonth() + 1;
     const ny = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
@@ -32,6 +46,8 @@ export function datasDoPeriodo(modo: "semana" | "mes"): { periodo: string; datas
   const { segunda, datas } = datasProximaSemana(now);
   return { periodo: `semana de ${ymd(segunda)}`, datas };
 }
+export type ModoPeriodo = "semana" | "quinzena" | "mes";
+
 const norm = (x: unknown): string[] => (Array.isArray(x) ? (x as string[]).filter(Boolean) : []);
 
 // ── Estágio 1 — DIAGNÓSTICO ──────────────────────────────────────────────────

@@ -27,6 +27,8 @@ import { detectarEventoFuturo, pareceTerData } from "@/lib/cs/evento";
 import { montarSnapshotCS } from "@/lib/cs/snapshot";
 import { ehPerguntaProLone, ehVisaoGeralDemandas } from "@/lib/cs/intent";
 import { gerarRoteiros, formatRoteiro, extrairPreferenciaRoteiro } from "@/lib/cs/criativo";
+import { revisarComoCS, textoDoVeredito, liberado } from "@/lib/cs/revisor";
+import { guardarPendente, planoPendenteDe, criarCardsDoPlano, fecharPendente, pediuParaCriar } from "@/lib/cs/plano-em-cards";
 import { planejarPeriodo, executarPlano, datasDoPeriodo } from "@/lib/cs/motor";
 import { calendarioPdfHtml } from "@/lib/cs/calendario-pdf";
 import { proximaPergunta, registrarEnvio, capturarResposta, textoParaEnvio } from "@/lib/cs/checkin";
@@ -202,8 +204,14 @@ function ehPedidoCalendario(text: string): boolean {
   if (!chamaOAgente(t)) return false;
   return /\b(calend[áa]rio|planejamento)\b/.test(t) && /\b(monta|montar|faz|fazer|gera|gerar|cria|criar|prepara|preparar|manda|mandar)\b/.test(t);
 }
-function modoCalendario(text: string): "semana" | "mes" {
-  return /\b(m[êe]s|mensal|do m[êe]s|pr[óo]ximo m[êe]s)\b/.test(text.toLowerCase()) ? "mes" : "semana";
+const rotuloModo = (m: "semana" | "quinzena" | "mes") =>
+  m === "mes" ? "mensal" : m === "quinzena" ? "quinzenal" : "da semana";
+
+function modoCalendario(text: string): "semana" | "quinzena" | "mes" {
+  const t = text.toLowerCase();
+  // Quinzena ANTES de mês: "planejamento quinzenal do mês que vem" é quinzena, não mês.
+  if (/\b(quinzen[aal]|quinzenal|15\s*dias|duas semanas|2 semanas)\b/.test(t)) return "quinzena";
+  return /\b(m[êe]s|mensal|do m[êe]s|pr[óo]ximo m[êe]s)\b/.test(t) ? "mes" : "semana";
 }
 // "Lone, faz o check-in do X" → pergunta de negócio (time ou cliente). "pro cliente" = grupo dele.
 function ehPedidoCheckin(text: string): boolean {
@@ -952,6 +960,23 @@ export async function POST(req: NextRequest) {
     demandaDaSugestao = await acharDemandaPorTexto(msg.quotedText);
   }
 
+  // ─── "cria" depois de um plano: transforma o planejamento em cards ───
+  // Vem ANTES do handler de calendário pra "cria" não ser lido como pedido de novo calendário.
+  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && pediuParaCriar(msg.text)) {
+    const pend = await planoPendenteDe(msg.groupJid);
+    if (pend) {
+      await csSendGroupText(msg.groupJid, `Fechou! Abrindo os cards do *${pend.clienteNome}*…`);
+      const res = await criarCardsDoPlano(pend);
+      await fecharPendente(pend.jobId);
+      const falta = res.falharam.length ? `\n_Não consegui ${res.falharam.length}: ${res.falharam.join(", ")}._` : "";
+      await csSendGroupText(msg.groupJid,
+        `✅ ${res.criados} de ${res.total} card(s) do *${pend.clienteNome}* no board, cada um na data.${falta}\n` +
+        `Já dá pro designer pegar.`);
+      return NextResponse.json({ ok: true, plano_em_cards: res.criados, cliente: pend.clienteNome });
+    }
+    // Sem plano pendente, segue o fluxo normal — "ok" também responde sugestão de demanda.
+  }
+
   // ─── Agente "Lone": pedido de CALENDÁRIO ("Lone, monta o calendário mensal do X") ───
   // Gera o calendário estratégico e manda o PDF no grupo. Geração é longa → ack + background.
   if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehPedidoCalendario(msg.text)) {
@@ -966,7 +991,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, calendario: "sem_cliente" });
     }
     const modo = modoCalendario(msg.text);
-    await csSendGroupText(msg.groupJid, `Fechou${quemCal ? `, ${quemCal}` : ""}! 📅 Montando o calendário ${modo === "mes" ? "mensal" : "da semana"} do *${alvo.nome}*… leva ~1 min, já te mando o PDF. 😉`);
+    await csSendGroupText(msg.groupJid, `Fechou${quemCal ? `, ${quemCal}` : ""}! 📅 Montando o calendário ${rotuloModo(modo)} do *${alvo.nome}*… leva ~1 min, já te mando o PDF. 😉`);
     void (async () => {
       try {
         const { periodo, datas } = datasDoPeriodo(modo);
@@ -991,10 +1016,28 @@ export async function POST(req: NextRequest) {
           }, { onConflict: "client_id,periodo" }).then(() => {}, () => {});
         }
 
+        // O LONINHO REVISA o plano antes de mostrar — mesmo papel que faz no roteiro.
+        const revPlano = await revisarComoCS({
+          peca: pecas.map((x) => `${x.data} — ${x.titulo}: ${x.objetivo_peca ?? ""}`).join("\n"),
+          tipo: "planejamento", cliente: alvo.nome, pedido: msg.text,
+          briefing: r.plano.objetivo ? `Objetivo do período: ${r.plano.objetivo.objetivoPrincipal}` : undefined,
+        });
+
         const pdf = await htmlToPdf(calendarioPdfHtml({ cliente: r.nome, nicho: alvo.nicho, periodo, modo, pecas }));
         if (pdf.ok && pdf.buffer) {
-          await csSendGroupText(msg.groupJid, `📅 Pronto! Calendário ${modo === "mes" ? "mensal" : "da semana"} do *${alvo.nome}* — ${pecas.length} peça(s), cada uma com direção de arte pro designer:`);
+          const ressalva = liberado(revPlano) ? "" : `\n\n${textoDoVeredito(revPlano, alvo.nome)}`;
+          await csSendGroupText(msg.groupJid, `📅 Pronto! Calendário ${rotuloModo(modo)} do *${alvo.nome}* — ${pecas.length} peça(s), cada uma com direção de arte pro designer:${ressalva}`);
           await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), `Calendario ${alvo.nome} - ${periodo}.pdf`);
+
+          // FECHA O CICLO. Antes o plano morria como PDF no grupo: 7 gerados na vida, ZERO cards.
+          // Continua human-gate — ele pergunta, não abre sozinho.
+          await guardarPendente(msg.groupJid, {
+            clientId: alvo.id, clienteNome: r.nome, periodo,
+            decisoes: r.plano.decisoes, pecas,
+          });
+          await csSendGroupText(msg.groupJid,
+            `Quer que eu já abra os *${r.plano.decisoes.length} cards* no board do social, cada um na data certa? ` +
+            `Responde *cria* que eu abro. 😉`);
         } else {
           await csSendGroupText(msg.groupJid, `Montei o calendário do *${alvo.nome}* mas o PDF falhou 😕 — o planejamento ficou salvo, abre em *Planejamento* na ficha do cliente.`);
         }
@@ -1212,12 +1255,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, roteiro: "precisa_briefing", cliente: alvo.nome });
     }
     const versoes = r.data.roteiros.slice(0, 2);
+
+    // ── O LONINHO REVISA ANTES DE MANDAR ────────────────────────────────────
+    // O executor (gerarRoteiros) produziu; quem decide se serve pra ESTE cliente é o CS.
+    // "ajustar"/"refazer" não seguram a entrega — o time recebe a peça COM a ressalva e decide.
+    // Segurar o roteiro esperando refação deixaria a pessoa sem nada, e ela pediu agora.
+    const revisao = await revisarComoCS({
+      peca: versoes.map((v, i) => formatRoteiro(v, alvo.nome, i + 1)).join("\n\n"),
+      tipo: "roteiro", cliente: alvo.nome, pedido: pedidoRoteiro, historico: preferencias,
+      // O briefing é estruturado; o revisor lê texto. Serializa em vez de despejar JSON cru,
+      // que a IA leria pior.
+      briefing: [
+        briefing.nicho && `Nicho: ${briefing.nicho}`,
+        briefing.resumoEstrategico && `Resumo: ${briefing.resumoEstrategico}`,
+        briefing.produtos?.length && `Vende: ${briefing.produtos.join(", ")}`,
+        briefing.publicoAlvo?.length && `Público: ${briefing.publicoAlvo.join(", ")}`,
+        briefing.posicionamento && `Posicionamento: ${briefing.posicionamento}`,
+        briefing.dores?.length && `Dores: ${briefing.dores.join("; ")}`,
+        briefing.tomVoz && `Tom de voz: ${briefing.tomVoz}`,
+        briefing.palavrasProibidas?.length && `NÃO usar: ${briefing.palavrasProibidas.join(", ")}`,
+      ].filter(Boolean).join("\n"),
+    });
+
     const obs = temBriefing ? "" : " _(ainda sem briefing salvo — fiz no meu melhor, vale revisar)_";
     const now = spNow();
     const dataLabel = `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}`;
     const logo = await loadLoneLogo();
     const pdf = await htmlToPdf(roteirosPdfHtml(alvo.nome, versoes, logo, dataLabel));
-    await csSendGroupText(msg.groupJid, `🎬 Bora${quem ? `, ${quem}` : ""}! Montei ${versoes.length > 1 ? `${versoes.length} versões` : "1 versão"} de roteiro pro *${alvo.nome}*${obs} — segue o PDF organizado pra já mandar pro cliente:`);
+    const prontoPraCliente = liberado(revisao);
+    const chamada = prontoPraCliente
+      ? `🎬 Bora${quem ? `, ${quem}` : ""}! Montei ${versoes.length > 1 ? `${versoes.length} versões` : "1 versão"} de roteiro pro *${alvo.nome}*${obs} — revisei aqui e tá pronto pro cliente:`
+      : `🎬 Montei o roteiro do *${alvo.nome}*${obs}, mas *revisei e não liberaria como está*:\n${textoDoVeredito(revisao, alvo.nome)}\n\nSegue pra você julgar:`;
+    await csSendGroupText(msg.groupJid, chamada);
     if (pdf.ok && pdf.buffer) {
       await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), `Roteiro ${alvo.nome} - ${dataLabel}.pdf`);
     } else {
