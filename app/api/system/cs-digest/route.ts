@@ -77,6 +77,31 @@ export async function POST(req: NextRequest) {
   }
 
   // formatDataCurta já devolve "*Nome* — dom 09/08" pronto.
+  // LEVA 3.2 — o calendário estratégico (tema, objetivo, textos, CTA, legenda pronta) existe
+  // inteiro e foi usado 7 vezes na vida: content_period_plans tem ZERO linhas. Não falta motor,
+  // falta entrar na rotina de alguém. Da metade do mês em diante, cliente sem plano do mês que
+  // vem vira item do SOCIAL dele aqui — em vez de virar mais uma mensagem separada no grupo.
+  if (agora.getDate() >= 15) {
+    const alvo = new Date(agora.getFullYear(), agora.getMonth() + 1, 1);
+    const periodo = `${alvo.getFullYear()}-${String(alvo.getMonth() + 1).padStart(2, "0")}`;
+    const [{ data: planos }, { data: socialClients }] = await Promise.all([
+      supabaseAdmin.from("content_period_plans").select("client_id").eq("periodo", periodo),
+      supabaseAdmin.from("clients").select("id, name, nome_fantasia, assigned_social")
+        .in("status", ["good", "average"]).is("draft_status", null)
+        .not("assigned_social", "is", null).or("active.is.null,active.eq.true"),
+    ]);
+    const comPlano = new Set((planos ?? []).map((p) => p.client_id as string));
+    for (const c of socialClients ?? []) {
+      if (comPlano.has(c.id as string)) continue;
+      itens.push({
+        responsavel: ((c.assigned_social as string) || "").trim().split(/\s+/)[0] || null,
+        cliente: (c.nome_fantasia as string) || (c.name as string),
+        peso: 50,
+        texto: `sem calendário de conteúdo pro mês que vem — dá pra gerar no painel`,
+      });
+    }
+  }
+
   const datas = proximasDatas(agora, 10).slice(0, 2).map(formatDataCurta);
 
   // Bloco da tarde: o que preparar pra amanhã (os cards de amanhã que ainda não têm arte).
