@@ -20,8 +20,8 @@ describe("buildBomDiaDigest", () => {
     const snap: SnapshotCS = {
       ...vazio,
       pendentes: [
-        { codigo: "A1", cliente: "Contele", tipo: "arte_nova", resumo: "x", dias: 1 },
-        { codigo: "A2", cliente: "Nova União", tipo: "duvida", resumo: "y", dias: 2 },
+        { codigo: "A1", cliente: "Contele", tipo: "arte_nova", resumo: "x", dias: 1, responsavel: "Carlos" },
+        { codigo: "A2", cliente: "Nova União", tipo: "duvida", resumo: "y", dias: 2, responsavel: null },
       ],
       emProducao: 5, aguardandoAprovacao: 2,
       atrasados: [{ cliente: "Léo Carros", titulo: "arte feira", dias: 3, responsavel: "Carlos", designerEntregou: true }],

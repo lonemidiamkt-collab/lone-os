@@ -70,3 +70,34 @@ describe("revisarMensagem — guarda-corpos", () => {
     expect(revisarMensagem("Oi, pessoal! ".repeat(80), com).ok).toBe(false);
   });
 });
+
+// ── Furos achados na PRIMEIRA revisão com dados reais (12 clientes) ──────────────
+describe("revisarMensagem — furos vistos na revisão real", () => {
+  const semArte: SinaisCliente = {
+    aguardandoAprovacao: 0, entreguesNaSemana: 1, diasSemFalar: 3,
+    promoDoMesSemResposta: true, destaqueIg: null, postsNaSemana: 2,
+  };
+
+  it("BARRA 'arte esperando seu OK' quando não há nenhuma (a IA inventou isso pro Bruno Tintas)", () => {
+    const r = revisarMensagem("Oi, pessoal! Temos uma arte esperando seu OK pra publicar.", semArte);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toContain("esperando aprovação");
+  });
+
+  it("BARRA falar de entrega quando não houve entrega nem arte parada", () => {
+    const nada: SinaisCliente = { ...semArte, entreguesNaSemana: 0, postsNaSemana: 0, promoDoMesSemResposta: true };
+    expect(revisarMensagem("Oi, pessoal! A arte nova ficou pronta, deem uma olhada!", nada).ok).toBe(false);
+  });
+
+  it("deixa passar quando a arte REALMENTE está esperando o OK", () => {
+    const comArte: SinaisCliente = { ...semArte, aguardandoAprovacao: 1 };
+    expect(revisarMensagem("Oi, pessoal! Ficou 1 arte esperando o OK de vocês pra publicar.", comArte).ok).toBe(true);
+  });
+
+  it("post com 1 curtida não vira destaque — não tem o que comemorar", () => {
+    // O piso vive em coletarSinais (precisa de banco), então aqui a checagem é do contrato:
+    // sem destaque, a mensagem não pode inventar número de engajamento.
+    const r = revisarMensagem("Oi, pessoal! O post que mais bombou teve 1 curtida, que legal!", semArte);
+    expect(r.ok).toBe(false);
+  });
+});

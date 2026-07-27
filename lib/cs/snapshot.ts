@@ -13,7 +13,7 @@ const DIAS_QUIETO = 7; // igual ao cs-esfriando: cliente que falava e sumiu há 
 const ATRASO_MAX = 30; // acima disso o card é "encalhado" (higiene), não atraso acionável do dia
 
 export interface SnapshotCS {
-  pendentes: { codigo: string; cliente: string; tipo: string; resumo: string; dias: number }[];
+  pendentes: { codigo: string; cliente: string; tipo: string; resumo: string; dias: number; responsavel: string | null }[];
   emProducao: number;
   aguardandoAprovacao: number;
   aguardandoDesigner: number;          // cards comprometidos onde o DESIGNER ainda não entregou a arte
@@ -50,7 +50,9 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       .select("id, name, nome_fantasia, last_client_msg_at, agente_ativo, assigned_social")
       .or("active.is.null,active.eq.true"),
     supabaseAdmin.from("cs_demandas")
-      .select("codigo, cliente_nome, client_id, tipo, resumo, created_at")
+      // `responsavel` entrou pro digest conseguir agrupar por QUEM decide — sem ele, as 58
+      // pendências caíam todas num balaio "sem dono" e ninguém se sentia dono de nenhuma.
+      .select("codigo, cliente_nome, client_id, tipo, resumo, created_at, responsavel")
       .eq("status", "pendente").order("created_at", { ascending: true }),
     supabaseAdmin.from("content_cards")
       .select("client_id, status, title, due_date, created_at, social_media, designer_delivered_at, social_confirmed_at")
@@ -76,6 +78,7 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       tipo: (d.tipo as string) || "demanda",
       resumo: ((d.resumo as string) || "").slice(0, 80),
       dias: diasDesde(d.created_at as string),
+      responsavel: (d.responsavel as string) || null,
     }));
 
   const cards = (cardsRes.data ?? []).filter((k) => !cardDeTeste(k.client_id as string));

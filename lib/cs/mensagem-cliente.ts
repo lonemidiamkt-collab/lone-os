@@ -33,6 +33,9 @@ export interface SinaisCliente {
   postsNaSemana: number | null;
 }
 
+/** Engajamento mínimo (curtidas + comentários) pra um post virar "destaque da semana". */
+const DESTAQUE_MINIMO = 10;
+
 const VAZIO: SinaisCliente = {
   aguardandoAprovacao: 0, entreguesNaSemana: 0, diasSemFalar: null,
   promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: null,
@@ -70,7 +73,11 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
       posts?: { curtidas: number | null; comentarios: number | null }[];
     } | undefined;
     const topo = ig?.posts?.[0]; // o snapshot já vem ordenado por engajamento
-    const destaqueIg = topo && (topo.curtidas ?? 0) > 0
+    // PISO DE DESTAQUE. Na primeira revisão a IA escreveu "o post que mais bombou teve 1 curtida,
+    // que legal!" pra quatro clientes. Comemorar número pequeno faz a agência parecer que não
+    // entende do próprio trabalho — pior que não falar nada. Abaixo do piso, o post não é destaque.
+    const engajamento = (topo?.curtidas ?? 0) + (topo?.comentarios ?? 0);
+    const destaqueIg = topo && engajamento >= DESTAQUE_MINIMO
       ? { curtidas: topo.curtidas ?? 0, comentarios: topo.comentarios ?? 0 }
       : null;
 
@@ -114,7 +121,9 @@ de um CLIENTE (uma loja/comércio do interior do Rio). Escreve como gente: calor
 brasileiro de agência. Curto: 2 a 4 frases, no máximo 2 emojis.
 
 # O que fazer
-Puxe assunto a partir dos FATOS que te derem, e termine com uma pergunta ou um convite leve.
+Escolha UM assunto principal — o mais importante da lista — e construa a mensagem em cima dele.
+Os outros fatos entram só se couberem naturalmente. NÃO faça uma lista do que aconteceu.
+Termine com uma pergunta ou um convite leve.
 - Tem arte esperando o OK dele → lembre com leveza, sem cobrar.
 - A gente entregou artes essa semana → reconheça o movimento e ofereça o próximo.
 - Post foi bem → comemore com o número que te deram.
@@ -129,6 +138,14 @@ Puxe assunto a partir dos FATOS que te derem, e termine com uma pergunta ou um c
 - Dizer que "os resultados melhoraram/pioraram" sem número que comprove.
 - Falar de assunto interno (designer, card, board, prazo da equipe, sistema).
 - Escrever o nome cadastrado da loja — cumprimente com "Oi, pessoal!" ou parecido.
+- Afirmar QUALQUER coisa que não esteja nos fatos. Se não te disseram que tem arte esperando o OK
+  dele, NÃO diga que tem. "Entregamos uma arte" e "tem arte esperando seu OK" são coisas
+  DIFERENTES — não troque uma pela outra.
+- Comemorar número pequeno. Se o desempenho foi modesto, não elogie e não cite — puxe outro
+  assunto. Elogio falso queima a confiança mais rápido que silêncio.
+- Fórmula batida. Nunca use "Vamos juntos fazer acontecer", "Vamos nessa", "bora fazer barulho".
+  Varie a abertura e o fecho — clientes diferentes não podem receber a mesma frase.
+- Inventar gíria. Escreva português normal do dia a dia; na dúvida, seja simples.
 
 Responda APENAS no JSON do schema (campo "mensagem").`;
 
@@ -149,7 +166,6 @@ function numerosPermitidos(s: SinaisCliente): Set<string> {
   const add = (n: number | null | undefined) => { if (n != null) ok.add(String(n)); };
   add(s.aguardandoAprovacao); add(s.entreguesNaSemana); add(s.postsNaSemana);
   add(s.destaqueIg?.curtidas); add(s.destaqueIg?.comentarios); add(s.diasSemFalar);
-  ok.add("9"); ok.add("2"); // dia dos pais / datas do calendário corrente citadas no contexto
   return ok;
 }
 
@@ -170,6 +186,29 @@ export function revisarMensagem(texto: string, s: SinaisCliente): RevisaoMensage
   const permitidos = numerosPermitidos(s);
   for (const n of t.match(/\d+/g) ?? []) {
     if (!permitidos.has(n)) return { ok: false, motivo: `número sem fonte: ${n}` };
+  }
+
+  // AFIRMAÇÃO sem fonte. Na primeira revisão a IA escreveu "temos uma arte esperando seu OK" pra
+  // um cliente que NÃO tinha nenhuma, e chamou de "esperando o OK" duas artes que estavam
+  // ENTREGUES. Checar número não pega isso — a frase inteira era falsa. Cada afirmação que o
+  // cliente pode conferir precisa do sinal correspondente.
+  const afirmaEsperandoOk = /(esperando|aguardando|falta).{0,24}(ok|aprova|seu aval)|(ok|aprova\w*).{0,20}(de voc[êe]s|seu)/i.test(t);
+  if (afirmaEsperandoOk && s.aguardandoAprovacao === 0) {
+    return { ok: false, motivo: "diz que tem arte esperando aprovação e não tem" };
+  }
+  const afirmaEntrega = /(entregam|entregue|arte nova|ficou pronta|prontinha)/i.test(t);
+  if (afirmaEntrega && s.entreguesNaSemana === 0 && s.aguardandoAprovacao === 0) {
+    return { ok: false, motivo: "fala de arte entregue e não houve entrega na semana" };
+  }
+  // O número pode ser LEGÍTIMO e a frase ainda ser falsa: "1 arte entregue" libera o "1", e a IA
+  // usou esse mesmo "1" pra escrever "o post que mais bombou teve 1 curtida, que legal!". Se não
+  // há destaque, a mensagem não fala de curtida/comentário — com número nenhum.
+  if (!s.destaqueIg && /\d+\s*(curtida|like|coment|engajamento)/i.test(t)) {
+    return { ok: false, motivo: "cita engajamento sem post em destaque" };
+  }
+  const afirmaPost = /(post\w*|publica\w+)/i.test(t);
+  if (afirmaPost && !s.postsNaSemana && !s.destaqueIg && s.entreguesNaSemana === 0 && s.aguardandoAprovacao === 0) {
+    return { ok: false, motivo: "fala de post publicado sem sinal de publicação" };
   }
   return { ok: true };
 }
