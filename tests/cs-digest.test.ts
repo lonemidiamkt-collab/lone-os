@@ -75,3 +75,44 @@ describe("montarDigest", () => {
     expect(m).not.toMatch(/\n{3,}/);
   });
 });
+
+// Furo visto no preview real: o Carlos recebia 5 linhas iguais do mesmo cliente
+// ("Mr.distribuidora MDF — arte pronta há 11d"), uma por produto — comia a cota dele
+// inteira e escondia os outros clientes.
+describe("compactação — mesma coisa no mesmo cliente vira uma linha", () => {
+  const arte = (cliente: string, dias: number, titulo: string): ItemAcao => ({
+    responsavel: "Carlos", cliente, peso: 100 + dias,
+    texto: `arte pronta há ${dias}d, falta postar — _${titulo}_`,
+    categoria: "pronta-pra-postar",
+    resumirVarios: (n) => `*${n} artes* prontas há até ${dias}d, falta postar`,
+  });
+
+  it("junta as 5 do mesmo cliente e libera espaço pros outros", () => {
+    const m = montarDigest("manha", "seg, 27/07", {
+      itens: [
+        arte("Mr.distribuidora MDF", 11, "Furadeira"),
+        arte("Mr.distribuidora MDF", 11, "Motoesmeril"),
+        arte("Mr.distribuidora MDF", 11, "Parafusadeira"),
+        arte("Mr.distribuidora MDF", 11, "Serra"),
+        arte("Mr.distribuidora MDF", 11, "Esmerilhadeira"),
+        arte("CIIL", 3, "Post da feira"),
+      ],
+    });
+    expect(m).toContain("*5 artes* prontas");
+    expect(m).not.toContain("Furadeira");
+    expect(m).toContain("CIIL"); // o outro cliente deixa de ser espremido pra fora
+  });
+
+  it("cliente com uma só continua mostrando o título da arte", () => {
+    const m = montarDigest("manha", "seg, 27/07", { itens: [arte("CIIL", 3, "Post da feira")] });
+    expect(m).toContain("Post da feira");
+    expect(m).not.toContain("*1 artes*");
+  });
+
+  it("item sem categoria passa intacto (não force agrupamento onde não cabe)", () => {
+    const m = montarDigest("manha", "seg, 27/07", {
+      itens: [{ responsavel: "Pedro", cliente: "X", texto: "sem falar há 8d — vale um oi", peso: 40 }],
+    });
+    expect(m).toContain("vale um oi");
+  });
+});

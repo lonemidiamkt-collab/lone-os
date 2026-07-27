@@ -51,6 +51,8 @@ export async function POST(req: NextRequest) {
     itens.push({
       responsavel: a.responsavel, cliente: a.cliente, peso: 100 + a.dias,
       texto: `arte pronta há ${a.dias}d, falta postar — _${a.titulo}_`,
+      categoria: "pronta-pra-postar",
+      resumirVarios: (n) => `*${n} artes* prontas há até ${a.dias}d, falta postar`,
     });
   }
   // Atraso onde a arte ainda não saiu: cobra a produção.
@@ -58,6 +60,8 @@ export async function POST(req: NextRequest) {
     itens.push({
       responsavel: a.responsavel, cliente: a.cliente, peso: 90 + a.dias,
       texto: `prazo vencido há ${a.dias}d e a arte não saiu — _${a.titulo}_`,
+      categoria: "atrasado-sem-arte",
+      resumirVarios: (n) => `*${n} artes* com prazo vencido e nenhuma produzida`,
     });
   }
   // Sugestão do agente esperando ok/não — a fila de 58 nasceu de ninguém decidir.
@@ -65,6 +69,8 @@ export async function POST(req: NextRequest) {
     itens.push({
       responsavel: p.responsavel ?? null, cliente: p.cliente, peso: 60 + p.dias,
       texto: `esperando seu ok/não há ${p.dias}d — _${p.resumo}_ (\`${p.codigo}\`)`,
+      categoria: "pendencia",
+      resumirVarios: (n) => `*${n} sugestões* esperando seu ok/não (a mais velha há ${p.dias}d)`,
     });
   }
   // Cliente que falava e sumiu.

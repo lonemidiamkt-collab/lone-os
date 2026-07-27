@@ -24,6 +24,10 @@ export interface ItemAcao {
   texto: string;
   /** Quanto pesa. Ordena dentro da pessoa e decide quem sobrevive ao corte. */
   peso: number;
+  /** Tipo da ação. Mesmo tipo + mesmo cliente = uma linha só ("5 artes prontas"). */
+  categoria?: string;
+  /** Como escrever quando N do mesmo tipo caem no mesmo cliente. Recebe a quantidade. */
+  resumirVarios?: (n: number) => string;
 }
 
 /** Acima disso vira "+N no painel" — a parede de nomes era o principal motivo do time desligar. */
@@ -53,8 +57,32 @@ function ordenarPessoas(por: Map<string, ItemAcao[]>): string[] {
   });
 }
 
+/**
+ * Junta o que é a MESMA coisa no MESMO cliente numa linha só.
+ * No preview real o Carlos recebia cinco linhas "Mr.distribuidora MDF — arte pronta há 11d",
+ * uma por produto: ocupava a cota inteira dele e escondia os outros clientes.
+ */
+function compactar(itens: ItemAcao[]): ItemAcao[] {
+  const grupos = new Map<string, ItemAcao[]>();
+  const soltos: ItemAcao[] = [];
+  for (const it of itens) {
+    if (!it.categoria || !it.cliente || !it.resumirVarios) { soltos.push(it); continue; }
+    const k = `${it.categoria}|${it.cliente}`;
+    const arr = grupos.get(k) ?? [];
+    arr.push(it);
+    grupos.set(k, arr);
+  }
+  const saida = [...soltos];
+  for (const [, arr] of grupos) {
+    if (arr.length === 1) { saida.push(arr[0]); continue; }
+    const chefe = arr.reduce((a, b) => (b.peso > a.peso ? b : a));
+    saida.push({ ...chefe, texto: chefe.resumirVarios!(arr.length) });
+  }
+  return saida;
+}
+
 function blocoPorPessoa(itens: ItemAcao[]): string[] {
-  const por = agrupar(itens);
+  const por = agrupar(compactar(itens));
   const linhas: string[] = [];
   for (const pessoa of ordenarPessoas(por)) {
     const lista = por.get(pessoa)!;
