@@ -2006,36 +2006,63 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
             <p className="text-sm text-muted-foreground py-8">Nenhum cliente na carteira.</p>
           )}
           {clients.map((client) => {
-            const cards = [...contentCards.filter((c) => c.clientId === client.id)].sort(
-              (a, b) =>
-                CONTENT_COLUMNS.findIndex((s) => s.id === a.status) -
-                CONTENT_COLUMNS.findIndex((s) => s.id === b.status),
-            );
+            // ARTE NOVA VEM PRIMEIRO (pedido do Roberto): o social abria o board e a arte que
+            // acabou de chegar podia estar no fim da coluna, misturada com card antigo. O que
+            // exige ação agora fica no topo; o resto segue a ordem do fluxo.
+            const ehNova = (c: typeof contentCards[number]) => !!c.designerDeliveredAt && !c.socialConfirmedAt;
+            const cards = [...contentCards.filter((c) => c.clientId === client.id)].sort((a, b) => {
+              if (ehNova(a) !== ehNova(b)) return ehNova(a) ? -1 : 1;
+              // Entre as novas, a que chegou primeiro vem antes — não deixa a mais antiga esperando.
+              if (ehNova(a) && ehNova(b)) return (a.designerDeliveredAt ?? "").localeCompare(b.designerDeliveredAt ?? "");
+              return CONTENT_COLUMNS.findIndex((s) => s.id === a.status) -
+                     CONTENT_COLUMNS.findIndex((s) => s.id === b.status);
+            });
             const activeCount = cards.filter((c) => c.status !== "published").length;
+            // ARTE NOVA = o designer entregou e o social ainda não confirmou. Era o buraco: a
+            // miniatura aparecia igual à de uma arte antiga e ninguém sabia o que tinha chegado.
+            const novas = cards.filter((c) => c.designerDeliveredAt && !c.socialConfirmedAt).length;
             return (
-              <div key={client.id} className="w-72 shrink-0 flex flex-col bg-muted/20 border border-border rounded-xl">
+              <div key={client.id} className={`w-72 shrink-0 flex flex-col bg-muted/20 border rounded-xl ${novas > 0 ? "border-[var(--chart-4)]/50" : "border-border"}`}>
                 <div className="flex items-center gap-2 p-3 border-b border-border rounded-t-xl bg-muted/40">
                   <div className="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs font-bold shrink-0">
                     {client.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold text-foreground truncate">{client.name}</p>
                     <p className="text-[10px] text-muted-foreground">{activeCount} ativos · {cards.length} total</p>
                   </div>
+                  {novas > 0 && (
+                    <span
+                      title={`${novas} arte(s) que o designer entregou e você ainda não conferiu`}
+                      className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[var(--chart-4)]/20 text-[var(--chart-4)]"
+                    >
+                      <Palette size={10} /> {novas} nova{novas > 1 ? "s" : ""}
+                    </span>
+                  )}
                 </div>
                 <div className="p-2 space-y-2 overflow-y-auto" style={{ maxHeight: "68vh" }}>
                   {cards.length === 0 && (
                     <p className="text-[10px] text-muted-foreground/50 text-center py-6">Sem produções</p>
                   )}
-                  {cards.map((card) => (
+                  {cards.map((card) => {
+                    // Arte que chegou e ninguém conferiu ainda. É o que o social não conseguia ver.
+                    const arteNova = !!card.designerDeliveredAt && !card.socialConfirmedAt;
+                    return (
                     <div
                       key={card.id}
                       onClick={() => onCardClick(card)}
-                      className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary/40 transition-colors cursor-pointer"
+                      className={`bg-card border rounded-lg overflow-hidden transition-colors cursor-pointer ${
+                        arteNova ? "border-[var(--chart-4)] ring-1 ring-[var(--chart-4)]/40" : "border-border hover:border-primary/40"
+                      }`}
                     >
                       {card.imageUrl && (
                         <div className="aspect-square w-full overflow-hidden bg-muted relative">
                           <SignedImage src={card.imageUrl!} alt={card.title} className="w-full h-full object-cover" />
+                          {arteNova && (
+                            <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[var(--chart-4)] text-black shadow">
+                              <Palette size={10} /> ARTE NOVA
+                            </span>
+                          )}
                           {(card.cardAttachments?.length ?? 0) > 1 && (
                             <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-black/70 text-white">
                               <ImageIcon size={10} /> {card.cardAttachments!.length}
@@ -2065,13 +2092,20 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                             )}
                           </div>
                         )}
+                        {/* Quem entregou e quando — o social precisa saber de quem cobrar/agradecer. */}
+                        {arteNova && (
+                          <p className="mt-1 text-[10px] text-[var(--chart-4)] font-medium">
+                            Entregue{card.designerDeliveredBy ? ` por ${card.designerDeliveredBy}` : ""} — confira e siga
+                          </p>
+                        )}
                         <div className="flex items-center justify-between mt-1">
                           <span className="text-[10px] text-muted-foreground">{card.format}</span>
                           {card.dueDate && <span className="text-[10px] text-muted-foreground">{card.dueDate}</span>}
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
