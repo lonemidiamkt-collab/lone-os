@@ -1,7 +1,7 @@
 // Teste OFFLINE dos guarda-corpos da mensagem ao cliente (sem banco/IA).
 // Essa mensagem vai DIRETO pro grupo do cliente — é a última barreira antes dele ler.
 import { describe, it, expect } from "vitest";
-import { revisarMensagem, temAssunto, descreverSinais, type SinaisCliente } from "@/lib/cs/mensagem-cliente";
+import { revisarMensagem, temAssunto, descreverSinais, anguloPara, type SinaisCliente } from "@/lib/cs/mensagem-cliente";
 
 const sem: SinaisCliente = {
   aguardandoAprovacao: 0, entreguesNaSemana: 0, diasSemFalar: 2,
@@ -99,5 +99,21 @@ describe("revisarMensagem — furos vistos na revisão real", () => {
     // sem destaque, a mensagem não pode inventar número de engajamento.
     const r = revisarMensagem("Oi, pessoal! O post que mais bombou teve 1 curtida, que legal!", semArte);
     expect(r.ok).toBe(false);
+  });
+});
+
+// A revisão real mostrou dois clientes recebendo a MESMA mensagem palavra por palavra.
+describe("ângulo de abertura — mensagens não podem sair iguais", () => {
+  it("clientes diferentes recebem ângulos diferentes na mesma semana", () => {
+    const ids = ["ee36bf6f-fe68-47c5-9536-e29d4d282b41", "5bfb7cfd-1e4f-4a6a-b5ac-993713f53994",
+                 "6a147097-b464-4092-94a8-5a22af569671", "7af62768-f06b-4979-91fa-3eac3174953a"];
+    const quando = new Date(2026, 6, 29);
+    const angulos = new Set(ids.map((id) => anguloPara(id, quando)));
+    expect(angulos.size).toBeGreaterThan(1);
+  });
+
+  it("o MESMO cliente mantém o ângulo dentro da semana (reenvio não muda o tom)", () => {
+    const id = "ee36bf6f-fe68-47c5-9536-e29d4d282b41";
+    expect(anguloPara(id, new Date(2026, 6, 29))).toBe(anguloPara(id, new Date(2026, 6, 29, 20)));
   });
 });

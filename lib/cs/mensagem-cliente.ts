@@ -143,8 +143,11 @@ Termine com uma pergunta ou um convite leve.
   DIFERENTES — não troque uma pela outra.
 - Comemorar número pequeno. Se o desempenho foi modesto, não elogie e não cite — puxe outro
   assunto. Elogio falso queima a confiança mais rápido que silêncio.
-- Fórmula batida. Nunca use "Vamos juntos fazer acontecer", "Vamos nessa", "bora fazer barulho".
-  Varie a abertura e o fecho — clientes diferentes não podem receber a mesma frase.
+- A FÓRMULA "vamos/bora + verbo + juntos". Nada de "vamos juntos fazer acontecer", "vamos fazer
+  barulho juntos", "vamos nessa", "bora fazer algo incrível". Em qualquer ordem das palavras.
+  Fecha com uma pergunta de verdade sobre o negócio dele, não com incentivo genérico.
+- Repetir a mensagem de outro cliente. Dois clientes com os mesmos números NÃO podem receber o
+  mesmo texto — siga o ângulo de abertura que te derem.
 - Inventar gíria. Escreva português normal do dia a dia; na dúvida, seja simples.
 
 Responda APENAS no JSON do schema (campo "mensagem").`;
@@ -167,6 +170,27 @@ function numerosPermitidos(s: SinaisCliente): Set<string> {
   add(s.aguardandoAprovacao); add(s.entreguesNaSemana); add(s.postsNaSemana);
   add(s.destaqueIg?.curtidas); add(s.destaqueIg?.comentarios); add(s.diasSemFalar);
   return ok;
+}
+
+// ÂNGULOS DE ABERTURA. Sem isso, dois clientes com os mesmos sinais recebiam a mensagem IDÊNTICA,
+// palavra por palavra (Bruno Tintas Araruama e Body Skin, na revisão real) — e o fecho caía sempre
+// no mesmo "vamos juntos fazer X". O ângulo é sorteado de forma ESTÁVEL por cliente e por semana:
+// muda entre clientes, não muda no meio da semana (se o envio repetir, o tom é o mesmo).
+const ANGULOS = [
+  "Comece perguntando como está o movimento na loja, e só depois puxe o assunto.",
+  "Vá direto ao ponto, sem rodeio de saudação longa.",
+  "Comece pelo que a gente fez por eles, em uma frase, e termine perguntando o que vem agora.",
+  "Puxe pelo lado do cliente final deles: o que o público andou procurando.",
+  "Fale como quem está pensando junto no negócio — traga uma sugestão curta e pergunte o que acham.",
+  "Comece leve com o dia da semana e emende no assunto sem enrolar.",
+];
+
+/** Hash estável e barato — mesmo cliente + mesma semana = mesmo ângulo. */
+export function anguloPara(clientId: string, agora = new Date()): string {
+  const semana = Math.floor(agora.getTime() / (7 * 86400000));
+  let h = semana;
+  for (let i = 0; i < clientId.length; i++) h = (h * 31 + clientId.charCodeAt(i)) >>> 0;
+  return ANGULOS[h % ANGULOS.length];
 }
 
 export interface RevisaoMensagem {
@@ -245,6 +269,8 @@ export async function montarMensagemCliente(
     "",
     "FATOS (só isto é verdade; qualquer número fora daqui é invenção):",
     ...usados.map((u) => `- ${u}`),
+    "",
+    `ÂNGULO DE ABERTURA desta mensagem: ${anguloPara(clientId)}`,
     estilo ? `\nComo o cliente costuma falar (use SÓ pra calibrar formalidade — não copie gírias): ${estilo.slice(0, 300)}` : "",
   ].filter(Boolean).join("\n");
 
