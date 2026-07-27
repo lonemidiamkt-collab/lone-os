@@ -4,17 +4,31 @@ import { describe, it, expect } from "vitest";
 import { revisarMensagem, temAssunto, descreverSinais, escolherFoco, type SinaisCliente } from "@/lib/cs/mensagem-cliente";
 
 const sem: SinaisCliente = {
-  aguardandoAprovacao: 0, entreguesNaSemana: 0, diasSemFalar: 2,
+  aguardandoAprovacao: 0, aprovouRecentemente: false, entreguesNaSemana: 0, diasSemFalar: 2,
   promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: null,
 };
 const com: SinaisCliente = {
-  aguardandoAprovacao: 2, entreguesNaSemana: 3, diasSemFalar: 4,
+  aguardandoAprovacao: 2, aprovouRecentemente: false, entreguesNaSemana: 3, diasSemFalar: 4,
   promoDoMesSemResposta: true, destaqueIg: { curtidas: 41, comentarios: 6 }, postsNaSemana: 3,
 };
 
 describe("temAssunto", () => {
   it("cliente sem nada acontecendo → não força papo", () => {
     expect(temAssunto(sem)).toBe(false);
+  });
+
+  it("quem JÁ APROVOU não entra na cobrança de aprovação", () => {
+    // O status do card atrasa: ele aprova no grupo e ninguém move o card. Cobrar aprovação de
+    // quem já aprovou passa a impressão de que a gente não presta atenção nele.
+    const f = escolherFoco({ ...sem, aguardandoAprovacao: 0, aprovouRecentemente: true })!;
+    expect(f.objetivo).not.toBe("aprovar_arte");
+  });
+
+  it("nada pendente → mensagem de PRESENÇA, não silêncio nem texto genérico", () => {
+    const f = escolherFoco({ ...sem, aprovouRecentemente: true })!;
+    expect(f.objetivo).toBe("presenca");
+    expect(f.fatos).toHaveLength(0);            // sem número pra inventar
+    expect(f.missao).toContain("NÃO cite arte");
   });
   it("silêncio longo já é assunto por si só", () => {
     expect(temAssunto({ ...sem, diasSemFalar: 12 })).toBe(true);
@@ -74,7 +88,7 @@ describe("revisarMensagem — guarda-corpos", () => {
 // ── Furos achados na PRIMEIRA revisão com dados reais (12 clientes) ──────────────
 describe("revisarMensagem — furos vistos na revisão real", () => {
   const semArte: SinaisCliente = {
-    aguardandoAprovacao: 0, entreguesNaSemana: 1, diasSemFalar: 3,
+    aguardandoAprovacao: 0, aprovouRecentemente: false, entreguesNaSemana: 1, diasSemFalar: 3,
     promoDoMesSemResposta: true, destaqueIg: null, postsNaSemana: 2,
   };
 
@@ -107,16 +121,18 @@ describe("revisarMensagem — furos vistos na revisão real", () => {
 // A correção é estrutural: o código escolhe UM objetivo e a IA só vê os fatos daquele objetivo.
 describe("escolherFoco — uma mensagem, um propósito", () => {
   const zerado: SinaisCliente = {
-    aguardandoAprovacao: 0, entreguesNaSemana: 0, diasSemFalar: 2,
+    aguardandoAprovacao: 0, aprovouRecentemente: false, entreguesNaSemana: 0, diasSemFalar: 2,
     promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: 0,
   };
 
-  it("sem assunto nenhum → não força mensagem", () => {
-    expect(escolherFoco(zerado)).toBeNull();
+  it("sem assunto nenhum → PRESENÇA (o Roberto pediu: bom dia, estamos de olho, à disposição)", () => {
+    const f = escolherFoco(zerado)!;
+    expect(f.objetivo).toBe("presenca");
+    expect(f.fatos).toHaveLength(0);
   });
 
   it("arte parada ganha de tudo — é trabalho feito esperando o cliente", () => {
-    const f = escolherFoco({ ...zerado, aguardandoAprovacao: 2, promoDoMesSemResposta: true,
+    const f = escolherFoco({ ...zerado, aguardandoAprovacao: 2, aprovouRecentemente: false, promoDoMesSemResposta: true,
       destaqueIg: { curtidas: 80, comentarios: 9 }, entreguesNaSemana: 3 })!;
     expect(f.objetivo).toBe("aprovar_arte");
     // O ponto todo: os outros fatos NÃO chegam na IA.

@@ -19,8 +19,12 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getEstiloCliente } from "./estilo";
 
 export interface SinaisCliente {
-  /** Artes esperando o OK do cliente (ele precisa agir). */
+  /** Artes REALMENTE esperando o OK dele: status de aprovação E sem carimbo de aprovado.
+   *  Só o status não basta — ele atrasa em relação à realidade (o cliente aprova no grupo e o
+   *  card fica pra trás). Cobrar aprovação de quem já aprovou é o pior erro possível aqui. */
   aguardandoAprovacao: number;
+  /** Aprovou alguma arte nos últimos 7 dias — sinal de que ele está presente e respondendo. */
+  aprovouRecentemente: boolean;
   /** Artes entregues nos últimos 7 dias (a gente produziu). */
   entreguesNaSemana: number;
   /** Dias desde a última mensagem do cliente no grupo. null = nunca falou / sem registro. */
@@ -37,7 +41,7 @@ export interface SinaisCliente {
 const DESTAQUE_MINIMO = 10;
 
 const VAZIO: SinaisCliente = {
-  aguardandoAprovacao: 0, entreguesNaSemana: 0, diasSemFalar: null,
+  aguardandoAprovacao: 0, aprovouRecentemente: false, entreguesNaSemana: 0, diasSemFalar: null,
   promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: null,
 };
 
@@ -47,7 +51,7 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
     const seteDias = new Date(Date.now() - 7 * 86400000).toISOString();
     const [cards, cli, igRow, calendario] = await Promise.all([
       supabaseAdmin.from("content_cards")
-        .select("status, designer_delivered_at")
+        .select("status, designer_delivered_at, client_approved_at")
         .eq("client_id", clientId).is("archived_at", null),
       supabaseAdmin.from("clients").select("last_client_msg_at").eq("id", clientId).maybeSingle(),
       supabaseAdmin.from("client_ig_snapshots").select("data").eq("client_id", clientId).eq("period_kind", "7d").maybeSingle(),
@@ -56,8 +60,12 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
         .order("sent_at", { ascending: false }).limit(1),
     ]);
 
-    const linhas = (cards.data ?? []) as { status: string; designer_delivered_at: string | null }[];
-    const aguardandoAprovacao = linhas.filter((c) => c.status === "client_approval").length;
+    const linhas = (cards.data ?? []) as { status: string; designer_delivered_at: string | null; client_approved_at: string | null }[];
+    // CONFERE SE ELE REALMENTE NÃO APROVOU. Card pode estar em "aguardando aprovação" e já ter o
+    // carimbo de aprovado — o cliente respondeu no grupo e ninguém moveu o card. Cobrar aprovação
+    // de quem já aprovou passa a impressão de que a gente não presta atenção nele.
+    const aguardandoAprovacao = linhas.filter((c) => c.status === "client_approval" && !c.client_approved_at).length;
+    const aprovouRecentemente = linhas.some((c) => c.client_approved_at && c.client_approved_at >= seteDias);
     const entreguesNaSemana = linhas.filter((c) => c.designer_delivered_at && c.designer_delivered_at >= seteDias).length;
 
     const ultimaMsg = (cli.data?.last_client_msg_at as string | null) ?? null;
@@ -82,7 +90,7 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
       : null;
 
     return {
-      aguardandoAprovacao, entreguesNaSemana, diasSemFalar, promoDoMesSemResposta, destaqueIg,
+      aguardandoAprovacao, aprovouRecentemente, entreguesNaSemana, diasSemFalar, promoDoMesSemResposta, destaqueIg,
       postsNaSemana: ig?.resumo?.postsNoPeriodo ?? null,
     };
   } catch {
@@ -197,7 +205,59 @@ export type Objetivo =
   | "promo_do_mes"      // perguntamos a promoção e ele não respondeu
   | "reengajar"         // sumiu do grupo
   | "comemorar_post"    // um post foi bem de verdade
-  | "oferecer_proximo"; // a semana rendeu; puxa o que vem agora
+  | "oferecer_proximo"  // a semana rendeu; puxa o que vem agora
+  | "presenca";         // nada pendente: mostra que a gente está de olho e disponível
+
+/**
+ * VARIAÇÕES por objetivo. A missão (o SENTIDO) é sempre a mesma; muda só o jeito de dizer.
+ *
+ * Foi assim que o Roberto pediu: "crie variações sempre em cima de conversas que são repetitivas
+ * pra não ficar robótica, mas ter um padrão de sentido". A tentativa anterior variava o ÂNGULO e
+ * quebrava o sentido ("como está a procura por novidades na loja?"). Aqui o objetivo é fixo e a
+ * variação é de forma — o cliente que recebe a mesma conversa três semanas seguidas não lê a
+ * mesma frase, mas continua entendendo a mesma coisa.
+ */
+const VARIACOES: Record<Objetivo, string[]> = {
+  aprovar_arte: [
+    "Pergunte direto se ele conseguiu dar uma olhada na arte.",
+    "Diga que a arte está pronta esperando o retorno dele pra subir.",
+    "Pergunte se está tudo certo com a arte ou se ele quer ajustar algo antes.",
+  ],
+  promo_do_mes: [
+    "Retome a pergunta da promoção lembrando que dá tempo de preparar com calma.",
+    "Pergunte se já definiram a oferta, dizendo que a equipe pode ir adiantando as artes.",
+    "Pergunte o que vai ser destaque no mês, pra já entrar no planejamento.",
+  ],
+  reengajar: [
+    "Pergunte como está o movimento na loja.",
+    "Pergunte se tem alguma novidade por aí que valha divulgar.",
+    "Diga que faz um tempo que não conversam e pergunte como estão as coisas.",
+  ],
+  comemorar_post: [
+    "Comemore o resultado e pergunte se ele quer mais conteúdo nessa linha.",
+    "Conte o número e pergunte o que ele acha de repetir o formato.",
+    "Destaque que esse tipo de post conversou com o público e pergunte a opinião dele.",
+  ],
+  oferecer_proximo: [
+    "Reconheça o movimento da semana e pergunte o que ele quer divulgar na próxima.",
+    "Diga que a semana rendeu e pergunte se tem novidade chegando.",
+    "Pergunte o que ele quer colocar no ar em seguida.",
+  ],
+  presenca: [
+    "Reforce que a equipe está acompanhando de perto e se coloque à disposição.",
+    "Diga que está tudo sendo monitorado por aqui e pergunte se ele precisa de algo.",
+    "Mostre que a gente segue de olho nos resultados e abra espaço pra qualquer pedido.",
+  ],
+};
+
+/** Estável por cliente e por semana: varia entre clientes, não muda no meio da semana. */
+function variacaoPara(objetivo: Objetivo, clientId: string, agora = new Date()): string {
+  const opcoes = VARIACOES[objetivo];
+  const semana = Math.floor(agora.getTime() / (7 * 86400000));
+  let h = semana;
+  for (let i = 0; i < clientId.length; i++) h = (h * 31 + clientId.charCodeAt(i)) >>> 0;
+  return opcoes[h % opcoes.length];
+}
 
 export interface Foco {
   objetivo: Objetivo;
@@ -255,7 +315,17 @@ export function escolherFoco(s: SinaisCliente): Foco | null {
       missao: "Reconhecer o movimento da semana em UMA frase e perguntar o que ele quer divulgar na próxima.",
     };
   }
-  return null;
+  // 6. PRESENÇA — nada pendente e ele está respondendo. Em vez do texto genérico de antes, a
+  // mensagem mostra que a equipe está de olho e disponível. Foi o que o Roberto pediu pra quem
+  // JÁ APROVOU: não citar arte, dar bom dia, falar do fechamento da semana, reforçar que a gente
+  // acompanha a campanha e que estamos aqui pro que precisar.
+  return {
+    objetivo: "presenca",
+    fatos: [],
+    missao:
+      "Mostrar presença: a equipe está acompanhando de perto e disponível. NÃO cite arte, número " +
+      "nem pendência — não há nenhuma. Fale do momento da semana e se coloque à disposição.",
+  };
 }
 
 export interface RevisaoMensagem {
@@ -333,9 +403,16 @@ export async function montarMensagemCliente(
     diaDaSemana === "quarta" ? "Meio de semana." : "Fechando a semana, fim de semana chegando.",
     "",
     `MISSÃO DESTA MENSAGEM: ${foco.missao}`,
+    `JEITO DE DIZER (siga este, é o que evita repetir a mesma frase toda semana): ${variacaoPara(foco.objetivo, clientId)}`,
     "",
-    "FATOS que você pode usar (não há outros; qualquer número fora daqui é invenção):",
+    foco.fatos.length
+      ? "FATOS que você pode usar (não há outros; qualquer número fora daqui é invenção):"
+      : "SEM FATOS pra citar: não invente número, entrega nem pendência. A mensagem é de relacionamento.",
     ...foco.fatos.map((f) => `- ${f}`),
+    "",
+    diaDaSemana === "sexta"
+      ? "É sexta: dá pra falar do fechamento da semana e do fim de semana chegando."
+      : "É quarta: meio de semana, dá pra falar do ritmo da semana.",
     "",
     "Escreva SÓ sobre a missão. Nenhum outro assunto entra.",
     estilo ? `\nComo o cliente costuma falar (use SÓ pra calibrar formalidade — não copie gírias): ${estilo.slice(0, 300)}` : "",
