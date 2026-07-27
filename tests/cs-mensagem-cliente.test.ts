@@ -1,7 +1,7 @@
 // Teste OFFLINE dos guarda-corpos da mensagem ao cliente (sem banco/IA).
 // Essa mensagem vai DIRETO pro grupo do cliente — é a última barreira antes dele ler.
 import { describe, it, expect } from "vitest";
-import { revisarMensagem, temAssunto, descreverSinais, anguloPara, type SinaisCliente } from "@/lib/cs/mensagem-cliente";
+import { revisarMensagem, temAssunto, descreverSinais, escolherFoco, type SinaisCliente } from "@/lib/cs/mensagem-cliente";
 
 const sem: SinaisCliente = {
   aguardandoAprovacao: 0, entreguesNaSemana: 0, diasSemFalar: 2,
@@ -102,18 +102,60 @@ describe("revisarMensagem — furos vistos na revisão real", () => {
   });
 });
 
-// A revisão real mostrou dois clientes recebendo a MESMA mensagem palavra por palavra.
-describe("ângulo de abertura — mensagens não podem sair iguais", () => {
-  it("clientes diferentes recebem ângulos diferentes na mesma semana", () => {
-    const ids = ["ee36bf6f-fe68-47c5-9536-e29d4d282b41", "5bfb7cfd-1e4f-4a6a-b5ac-993713f53994",
-                 "6a147097-b464-4092-94a8-5a22af569671", "7af62768-f06b-4979-91fa-3eac3174953a"];
-    const quando = new Date(2026, 6, 29);
-    const angulos = new Set(ids.map((id) => anguloPara(id, quando)));
-    expect(angulos.size).toBeGreaterThan(1);
+// O Roberto leu a mensagem do Body Skin e disse "não entendi o sentido". Era colagem de fatos:
+// "entregamos uma arte e publicamos 2 posts, MAS ainda estamos curiosos sobre a promoção".
+// A correção é estrutural: o código escolhe UM objetivo e a IA só vê os fatos daquele objetivo.
+describe("escolherFoco — uma mensagem, um propósito", () => {
+  const zerado: SinaisCliente = {
+    aguardandoAprovacao: 0, entreguesNaSemana: 0, diasSemFalar: 2,
+    promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: 0,
+  };
+
+  it("sem assunto nenhum → não força mensagem", () => {
+    expect(escolherFoco(zerado)).toBeNull();
   });
 
-  it("o MESMO cliente mantém o ângulo dentro da semana (reenvio não muda o tom)", () => {
-    const id = "ee36bf6f-fe68-47c5-9536-e29d4d282b41";
-    expect(anguloPara(id, new Date(2026, 6, 29))).toBe(anguloPara(id, new Date(2026, 6, 29, 20)));
+  it("arte parada ganha de tudo — é trabalho feito esperando o cliente", () => {
+    const f = escolherFoco({ ...zerado, aguardandoAprovacao: 2, promoDoMesSemResposta: true,
+      destaqueIg: { curtidas: 80, comentarios: 9 }, entreguesNaSemana: 3 })!;
+    expect(f.objetivo).toBe("aprovar_arte");
+    // O ponto todo: os outros fatos NÃO chegam na IA.
+    expect(f.fatos).toHaveLength(1);
+    expect(f.fatos[0]).toContain("2 arte");
+    expect(f.fatos.join(" ")).not.toContain("promoção");
+    expect(f.fatos.join(" ")).not.toContain("curtidas");
+  });
+
+  it("silêncio longo vem antes de pedir qualquer coisa", () => {
+    const f = escolherFoco({ ...zerado, diasSemFalar: 15, promoDoMesSemResposta: true })!;
+    expect(f.objetivo).toBe("reengajar");
+    expect(f.missao).toContain("SEM cobrar");
+  });
+
+  it("post que foi bem vira comemoração, sozinho", () => {
+    const f = escolherFoco({ ...zerado, destaqueIg: { curtidas: 76, comentarios: 10 }, entreguesNaSemana: 2 })!;
+    expect(f.objetivo).toBe("comemorar_post");
+    expect(f.fatos).toHaveLength(1);
+    expect(f.fatos[0]).toContain("76");
+  });
+
+  it("promoção sem resposta é a mensagem inteira, não um apêndice", () => {
+    const f = escolherFoco({ ...zerado, promoDoMesSemResposta: true })!;
+    expect(f.objetivo).toBe("promo_do_mes");
+    expect(f.missao).toContain("única coisa");
+  });
+
+  it("semana que rendeu: reconhece e oferece o próximo", () => {
+    const f = escolherFoco({ ...zerado, entreguesNaSemana: 2, postsNaSemana: 3 })!;
+    expect(f.objetivo).toBe("oferecer_proximo");
+    expect(f.fatos.join(" ")).toContain("2 arte");
+    expect(f.fatos.join(" ")).toContain("3 post");
+  });
+
+  it("clientes em situações diferentes recebem OBJETIVOS diferentes — a variedade vem daí", () => {
+    const a = escolherFoco({ ...zerado, aguardandoAprovacao: 1 })!;
+    const b = escolherFoco({ ...zerado, promoDoMesSemResposta: true })!;
+    const c = escolherFoco({ ...zerado, diasSemFalar: 20 })!;
+    expect(new Set([a.objetivo, b.objetivo, c.objetivo]).size).toBe(3);
   });
 });

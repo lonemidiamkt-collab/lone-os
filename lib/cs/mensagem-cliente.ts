@@ -121,14 +121,13 @@ de um CLIENTE (uma loja/comércio do interior do Rio). Escreve como gente: calor
 brasileiro de agência. Curto: 2 a 4 frases, no máximo 2 emojis.
 
 # O que fazer
-Escolha UM assunto principal — o mais importante da lista — e construa a mensagem em cima dele.
-Os outros fatos entram só se couberem naturalmente. NÃO faça uma lista do que aconteceu.
-Termine com uma pergunta ou um convite leve.
-- Tem arte esperando o OK dele → lembre com leveza, sem cobrar.
-- A gente entregou artes essa semana → reconheça o movimento e ofereça o próximo.
-- Post foi bem → comemore com o número que te deram.
-- Ele não fala há muitos dias → puxe conversa com carinho, sem cobrança nem culpa.
-- Promoção do mês sem resposta → retome a pergunta com jeito, uma vez só.
+Você recebe UMA MISSÃO e os fatos dela. A mensagem inteira serve àquela missão — nada mais.
+
+Estrutura: cumprimento curto · o assunto em uma ou duas frases · uma pergunta de verdade.
+2 a 4 frases no total. Máximo 2 emojis.
+
+NÃO acrescente outro assunto. NÃO liste o que aconteceu na semana. Se um fato não serve à
+missão, ele não entra — mesmo que seja verdade.
 
 # PROIBIDO (o cliente lê isso; errar aqui custa a relação)
 - Inventar QUALQUER número. Só use os números que te derem, exatamente como vieram.
@@ -146,6 +145,11 @@ Termine com uma pergunta ou um convite leve.
 - A FÓRMULA "vamos/bora + verbo + juntos". Nada de "vamos juntos fazer acontecer", "vamos fazer
   barulho juntos", "vamos nessa", "bora fazer algo incrível". Em qualquer ordem das palavras.
   Fecha com uma pergunta de verdade sobre o negócio dele, não com incentivo genérico.
+- COLAR ASSUNTOS COM "mas", "e também", "além disso", "aproveitando". Se você precisou de um
+  conector pra emendar dois temas, a mensagem tem dois temas — e devia ter um.
+- Pergunta vaga que não pede resposta ("o que acham de compartilhar algo especial?"). Pergunte a
+  coisa concreta que a missão precisa saber.
+- Frase de efeito sem significado ("como está a procura por novidades na loja?").
 - Repetir a mensagem de outro cliente. Dois clientes com os mesmos números NÃO podem receber o
   mesmo texto — siga o ângulo de abertura que te derem.
 - Inventar gíria. Escreva português normal do dia a dia; na dúvida, seja simples.
@@ -172,25 +176,86 @@ function numerosPermitidos(s: SinaisCliente): Set<string> {
   return ok;
 }
 
-// ÂNGULOS DE ABERTURA. Sem isso, dois clientes com os mesmos sinais recebiam a mensagem IDÊNTICA,
-// palavra por palavra (Bruno Tintas Araruama e Body Skin, na revisão real) — e o fecho caía sempre
-// no mesmo "vamos juntos fazer X". O ângulo é sorteado de forma ESTÁVEL por cliente e por semana:
-// muda entre clientes, não muda no meio da semana (se o envio repetir, o tom é o mesmo).
-const ANGULOS = [
-  "Comece perguntando como está o movimento na loja, e só depois puxe o assunto.",
-  "Vá direto ao ponto, sem rodeio de saudação longa.",
-  "Comece pelo que a gente fez por eles, em uma frase, e termine perguntando o que vem agora.",
-  "Puxe pelo lado do cliente final deles: o que o público andou procurando.",
-  "Fale como quem está pensando junto no negócio — traga uma sugestão curta e pergunte o que acham.",
-  "Comece leve com o dia da semana e emende no assunto sem enrolar.",
-];
+// ═══ UM OBJETIVO POR MENSAGEM ═══════════════════════════════════════════════
+//
+// A revisão do Roberto derrubou a versão anterior. A mensagem que saiu pro Body Skin:
+//
+//   "Como está a procura por novidades na loja? A gente entregou uma arte essa semana e já
+//    publicamos 2 posts no Instagram, MAS ainda estamos curiosos sobre a promoção do mês..."
+//
+// Ele leu e disse: "não entendi o sentido". Com razão — é colagem de fatos, não mensagem.
+// Entregar 4 sinais e pedir pra "puxar assunto com todos" produz frankenstein: a IA costura
+// coisas sem relação com "mas"/"e" e nenhuma frase tem propósito. O "como está a procura por
+// novidades" veio de um ÂNGULO que eu tinha inventado pra dar variedade — variedade às custas
+// de sentido.
+//
+// Agora o CÓDIGO escolhe um objetivo, e a IA recebe SÓ os dados daquele objetivo. Os outros
+// sinais nem entram no prompt. Assim é estruturalmente impossível colar fatos soltos.
 
-/** Hash estável e barato — mesmo cliente + mesma semana = mesmo ângulo. */
-export function anguloPara(clientId: string, agora = new Date()): string {
-  const semana = Math.floor(agora.getTime() / (7 * 86400000));
-  let h = semana;
-  for (let i = 0; i < clientId.length; i++) h = (h * 31 + clientId.charCodeAt(i)) >>> 0;
-  return ANGULOS[h % ANGULOS.length];
+export type Objetivo =
+  | "aprovar_arte"      // tem arte parada esperando o OK dele
+  | "promo_do_mes"      // perguntamos a promoção e ele não respondeu
+  | "reengajar"         // sumiu do grupo
+  | "comemorar_post"    // um post foi bem de verdade
+  | "oferecer_proximo"; // a semana rendeu; puxa o que vem agora
+
+export interface Foco {
+  objetivo: Objetivo;
+  /** SÓ os fatos deste objetivo. É o que a IA vai ver. */
+  fatos: string[];
+  /** O que a mensagem tem que conseguir. */
+  missao: string;
+}
+
+/**
+ * Escolhe o assunto pela urgência real, não por quantidade de sinal.
+ * Ordem: o que TRAVA o trabalho vem antes do que é conversa.
+ */
+export function escolherFoco(s: SinaisCliente): Foco | null {
+  // 1. Arte parada é o que mais custa: trabalho feito, esperando ele.
+  if (s.aguardandoAprovacao > 0) {
+    return {
+      objetivo: "aprovar_arte",
+      fatos: [`${s.aguardandoAprovacao} arte(s) esperando o OK dele pra poder publicar`],
+      missao: "Lembrar com leveza que tem arte esperando o retorno dele, e perguntar se pode publicar.",
+    };
+  }
+  // 2. Silêncio longo: antes de pedir qualquer coisa, reatar contato.
+  if (s.diasSemFalar !== null && s.diasSemFalar >= 10) {
+    return {
+      objetivo: "reengajar",
+      fatos: [`ele não fala no grupo há ${s.diasSemFalar} dias`],
+      missao: "Puxar conversa com carinho e perguntar como está o movimento da loja. SEM cobrar, sem citar os dias.",
+    };
+  }
+  // 3. Post que foi bem de verdade (o piso de destaque já filtrou os fracos).
+  if (s.destaqueIg) {
+    return {
+      objetivo: "comemorar_post",
+      fatos: [`o post que mais engajou na semana teve ${s.destaqueIg.curtidas} curtidas e ${s.destaqueIg.comentarios} comentários`],
+      missao: "Comemorar esse resultado e perguntar se ele quer explorar mais esse tipo de conteúdo.",
+    };
+  }
+  // 4. Promoção do mês sem resposta — pergunta que a gente precisa da resposta.
+  if (s.promoDoMesSemResposta) {
+    return {
+      objetivo: "promo_do_mes",
+      fatos: ["a gente perguntou qual seria a promoção/oferta do mês e ele ainda não respondeu"],
+      missao: "Retomar a pergunta da promoção do mês, uma vez, com jeito. É a única coisa da mensagem.",
+    };
+  }
+  // 5. Rendeu a semana: reconhece e oferece o próximo.
+  if (s.entreguesNaSemana > 0 || (s.postsNaSemana ?? 0) > 0) {
+    const f: string[] = [];
+    if (s.entreguesNaSemana > 0) f.push(`${s.entreguesNaSemana} arte(s) entregue(s) nos últimos 7 dias`);
+    if ((s.postsNaSemana ?? 0) > 0) f.push(`${s.postsNaSemana} post(s) publicados no Instagram dele`);
+    return {
+      objetivo: "oferecer_proximo",
+      fatos: f,
+      missao: "Reconhecer o movimento da semana em UMA frase e perguntar o que ele quer divulgar na próxima.",
+    };
+  }
+  return null;
 }
 
 export interface RevisaoMensagem {
@@ -256,10 +321,10 @@ export async function montarMensagemCliente(
   diaDaSemana: "quarta" | "sexta",
 ): Promise<MensagemCliente> {
   const sinais = await coletarSinais(clientId);
-  const usados = descreverSinais(sinais);
+  const foco = escolherFoco(sinais);
 
-  if (!temAssunto(sinais)) {
-    return { texto: textoNeutro, origem: "neutro", motivoNeutro: "sem sinal nenhum", sinaisUsados: [] };
+  if (!foco) {
+    return { texto: textoNeutro, origem: "neutro", motivoNeutro: "sem assunto concreto", sinaisUsados: [] };
   }
 
   const estilo = await getEstiloCliente(clientId);
@@ -267,10 +332,12 @@ export async function montarMensagemCliente(
     `Dia: ${diaDaSemana}-feira.`,
     diaDaSemana === "quarta" ? "Meio de semana." : "Fechando a semana, fim de semana chegando.",
     "",
-    "FATOS (só isto é verdade; qualquer número fora daqui é invenção):",
-    ...usados.map((u) => `- ${u}`),
+    `MISSÃO DESTA MENSAGEM: ${foco.missao}`,
     "",
-    `ÂNGULO DE ABERTURA desta mensagem: ${anguloPara(clientId)}`,
+    "FATOS que você pode usar (não há outros; qualquer número fora daqui é invenção):",
+    ...foco.fatos.map((f) => `- ${f}`),
+    "",
+    "Escreva SÓ sobre a missão. Nenhum outro assunto entra.",
     estilo ? `\nComo o cliente costuma falar (use SÓ pra calibrar formalidade — não copie gírias): ${estilo.slice(0, 300)}` : "",
   ].filter(Boolean).join("\n");
 
@@ -279,12 +346,12 @@ export async function montarMensagemCliente(
     schema: SCHEMA, schemaName: "mensagem_cliente", maxTokens: 300,
   });
   if (!r.ok || !r.data?.mensagem) {
-    return { texto: textoNeutro, origem: "neutro", motivoNeutro: r.ok ? "IA devolveu vazio" : `IA falhou: ${r.error}`, sinaisUsados: usados };
+    return { texto: textoNeutro, origem: "neutro", motivoNeutro: r.ok ? "IA devolveu vazio" : `IA falhou: ${r.error}`, sinaisUsados: foco.fatos };
   }
 
   const rev = revisarMensagem(r.data.mensagem, sinais);
   if (!rev.ok) {
-    return { texto: textoNeutro, origem: "neutro", motivoNeutro: rev.motivo, sinaisUsados: usados };
+    return { texto: textoNeutro, origem: "neutro", motivoNeutro: rev.motivo, sinaisUsados: foco.fatos };
   }
-  return { texto: r.data.mensagem.trim(), origem: "ia", sinaisUsados: usados };
+  return { texto: r.data.mensagem.trim(), origem: "ia", sinaisUsados: foco.fatos };
 }
