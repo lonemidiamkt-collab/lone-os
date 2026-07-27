@@ -53,7 +53,10 @@ export async function getMetaHealth(): Promise<MetaHealthData> {
 
   const tokenValid = hasToken && (daysUntilExpiry === null || daysUntilExpiry > 0);
   const tokenExpiresSoon = daysUntilExpiry !== null && daysUntilExpiry <= 14;
-  const syncStale = hoursSinceSync !== null && hoursSinceSync > 2 && totalSnaps > 0;
+  // O sync roda 1×/DIA (generate-snapshots, 6h BRT). O limite de 2h dizia "problema detectado"
+  // durante ~22 das 24 horas, todo dia, sem haver problema nenhum — alarme que sempre toca é
+  // alarme que ninguém escuta. 26h dá folga pra um atraso do cron sem gritar à toa.
+  const syncStale = hoursSinceSync !== null && hoursSinceSync > 26;
 
   let status: "green" | "yellow" | "red";
   if (!tokenValid || syncStale) {

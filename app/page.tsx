@@ -41,7 +41,6 @@ import BudgetAlert from "@/components/sector/BudgetAlert";
 import DesignDeliveriesAlert from "@/components/DesignDeliveriesAlert";
 import SmartAlerts from "@/components/SmartAlerts";
 import SystemAlertBanner from "@/components/SystemAlertBanner";
-import MetaHealthCard from "@/components/MetaHealthCard";
 import ClientHealthRadar from "@/components/ClientHealthRadar";
 import PlatformUpdatesWidget from "@/components/PlatformUpdatesWidget";
 
@@ -746,7 +745,10 @@ export default function DashboardPage() {
         {/* Platform updates widget — aparece quando tem novidade nao lida */}
         <PlatformUpdatesWidget />
         {isAdmin && <SystemAlertBanner />}
-        {isAdmin && <MetaHealthCard />}
+        {/* MetaHealthCard saiu do dashboard a pedido do Roberto: "essa parte de meta conectado não
+            deveria estar". Ele vivia vermelho ("Problema detectado") sem haver problema — a regra
+            considerava sync com mais de 2h como falha, e o sync roda 1×/dia às 6h. O componente
+            continua existindo pra /settings; o alarme de token vencido chega por outro caminho. */}
 
         {/* Urgent broadcast banner — visible to all */}
         {notices.filter((n) => n.urgent).length > 0 && (
