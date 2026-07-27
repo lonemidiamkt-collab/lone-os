@@ -74,10 +74,16 @@ export async function POST(req: NextRequest) {
 
     // Instagram manda. Sem Instagram vinculado, o board é o que existe.
     const total = temIg ? (igNoMes.get(id) ?? 0) : (cardMes.get(id) ?? 0);
-    const ultimo = temIg ? (igUltimo.get(id) ?? null) : (cardUltimo.get(id) ?? null);
+    const calculado = temIg ? (igUltimo.get(id) ?? null) : (cardUltimo.get(id) ?? null);
 
     const antesTotal = (c.posts_this_month as number) ?? 0;
     const antesUltimo = (c.last_post_date as string) ?? null;
+
+    // NUNCA APAGAR DATA SEM TER OUTRA MELHOR. Sem esta guarda, MAX Contabilidade, Maicon e
+    // Atlas — que não têm Instagram vinculado e não têm card publicado — perderiam a data que
+    // alguém preencheu na mão, e ficariam com "nunca postou". Substituir dado fraco por dado
+    // bom é conserto; substituir dado fraco por NADA é destruir informação.
+    const ultimo = calculado ?? antesUltimo;
     if (antesTotal === total && antesUltimo === ultimo) continue;
 
     mudancas.push({
