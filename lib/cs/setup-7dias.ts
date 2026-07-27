@@ -68,6 +68,10 @@ export interface StatusSetup {
   diasDeCasa: number;
   feitos: string[];   // títulos curtos
   abertos: { titulo: string; papel: PapelSetup; responsavel: string | null }[];
+  /** Cliente que já existia antes deste checklist: NINGUÉM marcou nada ainda porque não havia
+   *  onde marcar. Sem esta distinção a mensagem diz "0/8, 90d além do prazo" pro CIIL, que tem
+   *  9 artes entregues — acusa o time de não ter feito o que ele fez e o sistema não registrou. */
+  nuncaConferido?: boolean;
 }
 
 const ROTULO_PAPEL: Record<PapelSetup, string> = { designer: "designer", social: "social", traffic: "tráfego" };
@@ -84,7 +88,12 @@ export function montarCobrancaSetup(status: StatusSetup[]): string {
 
   const l: string[] = ["🚀 *Setup de cliente novo* — os 7 primeiros dias", ""];
 
-  for (const s of pendentes.sort((a, b) => b.diasDeCasa - a.diasDeCasa)) {
+  // Cliente que nunca passou pelo checklist não pode ser tratado como atrasado: a lista é nova,
+  // não havia onde marcar. Ele entra numa seção separada, pedindo confirmação do que já está feito.
+  const novos = pendentes.filter((s) => !s.nuncaConferido);
+  const aConferir = pendentes.filter((s) => s.nuncaConferido);
+
+  for (const s of novos.sort((a, b) => b.diasDeCasa - a.diasDeCasa)) {
     const total = s.feitos.length + s.abertos.length;
     const prazo = s.diasDeCasa <= 7
       ? `dia ${s.diasDeCasa} de 7`
@@ -95,6 +104,17 @@ export function montarCobrancaSetup(status: StatusSetup[]): string {
       l.push(`• ${a.titulo} — ${dono}`);
     }
     if (s.abertos.length > 6) l.push(`• _…e mais ${s.abertos.length - 6}_`);
+    l.push("");
+  }
+
+  if (aConferir.length) {
+    l.push("📋 *Checklist novo — só confirmar o que já está pronto*");
+    l.push("_Estes clientes são anteriores a esta lista. Muita coisa já deve estar feita; ninguém marcou porque não havia onde._");
+    l.push("");
+    for (const s of aConferir.sort((a, b) => b.diasDeCasa - a.diasDeCasa)) {
+      const donos = [...new Set(s.abertos.map((a) => a.responsavel).filter(Boolean))].join(", ");
+      l.push(`• *${s.cliente}* (${s.diasDeCasa}d de casa) — ${s.abertos.length} itens${donos ? ` · ${donos}` : " · _sem responsável definido_"}`);
+    }
     l.push("");
   }
 

@@ -67,7 +67,10 @@ export async function POST(req: NextRequest) {
     // "É de tráfego" = tem gestor atribuído OU já tem conta vinculada. Foi assim que o MAX e o
     // Léo Carros apareceram como se fossem só-social: têm Julio no tráfego e conta nenhuma.
     const temTrafego = !!c.assigned_traffic || contaVinculada;
-    const gravaVideo = ((c.perfil_conteudo as string) || "") !== "arte";
+    // Só cobra vídeo de quem o cadastro DIZ que grava. Com a regra invertida ("tudo que não é
+    // arte"), os 45 clientes com perfil em branco viravam "grava vídeo" e recebiam a cobrança —
+    // no banco só 6 têm perfil 'video'.
+    const gravaVideo = (c.perfil_conteudo as string) === "video";
     const artesEntregues = entreguesPor.get(id) ?? 0;
 
     if (graduou({ temTrafego, contaVinculada, artesEntregues })) {
@@ -114,7 +117,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (abertos.length) status.push({ cliente: nome, diasDeCasa: dias, feitos, abertos });
+    // Nenhuma tarefa do checklist existe pra este cliente = ele é anterior à lista.
+    if (abertos.length) status.push({ cliente: nome, diasDeCasa: dias, feitos, abertos, nuncaConferido: minhas.length === 0 });
   }
 
   // ── §14 — marcos de contrato (3 e 6 meses) ────────────────────────────────
