@@ -811,10 +811,13 @@ export default function ClientDetailPage() {
                     Conta Meta Ads
                   </span>
                   <div className="flex items-center gap-2">
-                    {client.metaAdAccountName ? (
+                    {/* Cai no ID quando não há nome: a conta pode ter sido vinculada por fora da
+                        UI (import, correção no banco) e aí só o ID existe. Antes, nesse caso a tela
+                        dizia "Nenhuma vinculada" com a conta vinculada — e alguém ia vincular de novo. */}
+                    {client.metaAdAccountName || client.metaAdAccountId ? (
                       <span className="text-sm text-foreground font-medium flex items-center gap-1.5">
                         <Link2 size={12} className="text-primary" />
-                        {client.metaAdAccountName}
+                        {client.metaAdAccountName || client.metaAdAccountId}
                       </span>
                     ) : (
                       <span className="text-sm text-muted-foreground italic">Nenhuma vinculada</span>
@@ -865,6 +868,22 @@ export default function ClientDetailPage() {
                           </div>
                         )}
                         <div className="max-h-48 overflow-y-auto py-1">
+                          {/* SEM ISTO O SELETOR ABRIA VAZIO, sem dizer nada: quando a Meta não está
+                              conectada nesta sessão, a lista cai em mockAdAccounts — que é []. Quem
+                              abria concluía que "não dá pra conectar a conta do cliente". */}
+                          {filteredAdAccounts.length === 0 && (
+                            <div className="px-3 py-4 text-center">
+                              <p className="text-xs text-muted-foreground mb-1">
+                                {metaSearch ? "Nenhuma conta com esse nome." : "Nenhuma conta de anúncio disponível."}
+                              </p>
+                              {!metaSearch && (
+                                <p className="text-[10px] text-muted-foreground/80 leading-relaxed">
+                                  Conecte a Meta em <span className="text-primary">Configurações → Integrações</span> pra
+                                  listar as contas do Gerenciador aqui.
+                                </p>
+                              )}
+                            </div>
+                          )}
                           {filteredAdAccounts.map((account: any) => {
                             const isSelected = client.metaAdAccountId === account.id;
                             return (
