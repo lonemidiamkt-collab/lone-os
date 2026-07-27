@@ -168,9 +168,25 @@ function pareceNovoPedido(text: string): boolean {
 
 // ── Agente "Lone": pedido de ROTEIRO no grupo. Dispara só quando CHAMAM o Lone + falam de roteiro
 // (evita falso-positivo, já que "Lone" aparece muito em conversa). Ex.: "Lone, faz um roteiro pro Império".
+/**
+ * O TIME CHAMA ELE DE "LONINHO". A regra era `\blone\b`, que exige a palavra terminar ali —
+ * em "loninho" vem "i" depois, então NÃO casava e o agente ficava mudo.
+ *
+ * Casos reais que se perderam assim:
+ *   27/07 12:01  "loninho faz planejamento da semana para o portuga pneus"  → sem resposta
+ *   14/07        "loninho, voce ta vendo as atualizacoes do lone os?"       → sem resposta
+ *
+ * Aceita: lone, loninho, lonezinho, lone cs. Continua ignorando "Lone Mídia" (o nome da agência,
+ * que aparece em conversa normal e não é chamada pro agente).
+ */
+const CHAMA_AGENTE = /\blon(e|inho|ezinho)\b/;
+function chamaOAgente(t: string): boolean {
+  return CHAMA_AGENTE.test(t) && !/\blone\s*m[íi]dia\b/.test(t);
+}
+
 function ehPedidoRoteiro(text: string): boolean {
   const t = text.toLowerCase();
-  if (!/\blone\b/.test(t)) return false;
+  if (!chamaOAgente(t)) return false;
   if (/\b(roteiro|roteiros|vsl|script)\b/.test(t)) return true; // inequívoco
   // "anúncio/criativo" só é ROTEIRO com verbo de GERAÇÃO e sem contexto de mover/status de card
   // (evita "Lone, marca o criativo do X como pronto" ser sequestrado pelo handler de roteiro).
@@ -183,7 +199,7 @@ function ehPedidoRoteiro(text: string): boolean {
 // "Lone, monta/faz o calendário [mensal/semanal] do X" → gera o calendário estratégico e manda o PDF.
 function ehPedidoCalendario(text: string): boolean {
   const t = text.toLowerCase();
-  if (!/\blone\b/.test(t)) return false;
+  if (!chamaOAgente(t)) return false;
   return /\b(calend[áa]rio|planejamento)\b/.test(t) && /\b(monta|montar|faz|fazer|gera|gerar|cria|criar|prepara|preparar|manda|mandar)\b/.test(t);
 }
 function modoCalendario(text: string): "semana" | "mes" {
@@ -192,7 +208,7 @@ function modoCalendario(text: string): "semana" | "mes" {
 // "Lone, faz o check-in do X" → pergunta de negócio (time ou cliente). "pro cliente" = grupo dele.
 function ehPedidoCheckin(text: string): boolean {
   const t = text.toLowerCase();
-  if (!/\blone\b/.test(t)) return false;
+  if (!chamaOAgente(t)) return false;
   return /\bcheck[\s-]?in\b/.test(t) && /\b(faz|fazer|manda|mandar|inicia|iniciar|pergunta|perguntar|roda|rodar|abre|abrir)\b/.test(t);
 }
 function checkinProCliente(text: string): boolean {
@@ -201,7 +217,7 @@ function checkinProCliente(text: string): boolean {
 // "Lone, cobra as pendências do X" → cobra o cliente (com impacto) sobre o que ele deve (na ficha).
 function ehPedidoCobranca(text: string): boolean {
   const t = text.toLowerCase();
-  if (!/\blone\b/.test(t)) return false;
+  if (!chamaOAgente(t)) return false;
   return /\b(cobra|cobrar|cobran[çc]a)\b/.test(t) && /\b(pend[êe]ncia|pendencias|pend[êe]ncias)\b/.test(t);
 }
 // "Lone, o X já mandou as fotos" / "pode tirar a pendência do X" → dá BAIXA numa pendência do cliente.
@@ -209,7 +225,7 @@ function ehPedidoCobranca(text: string): boolean {
 // apagar pendência ainda aberta. Aqui alguém do time confirma que chegou.
 function ehBaixaPendencia(text: string): boolean {
   const t = text.toLowerCase();
-  if (!/\blone\b/.test(t)) return false;
+  if (!chamaOAgente(t)) return false;
   return /\b(pend[êe]ncia|pendencias|pend[êe]ncias)\b/.test(t)
     && /\b(tira|tirar|remove|remover|baixa|dar baixa|resolvid|entregou|mandou|ja (mandou|enviou|entregou)|chegou|recebi)\b/.test(t);
 }
@@ -217,13 +233,13 @@ function ehBaixaPendencia(text: string): boolean {
 // "Lone, prepara a reunião do X" → briefing do estado do cliente + pontos pra puxar (grupo interno).
 function ehPedidoPrepReuniao(text: string): boolean {
   const t = text.toLowerCase();
-  if (!/\blone\b/.test(t)) return false;
+  if (!chamaOAgente(t)) return false;
   return /\b(reuni[ãa]o|reuniao|call|meeting)\b/.test(t) && /\b(prepar|prep|briefing|monta|montar|antes d)/.test(t);
 }
 // "Lone, resumo da reunião do X: <notas>" → IA extrai decisões/ações/pendências e ALIMENTA a ficha.
 function ehPedidoResumoReuniao(text: string): boolean {
   const t = text.toLowerCase();
-  if (!/\blone\b/.test(t)) return false;
+  if (!chamaOAgente(t)) return false;
   return /\b(reuni[ãa]o|reuniao|call|meeting)\b/.test(t) && /\b(resumo|resumir|resume|ata|registra|anota)\b/.test(t);
 }
 
@@ -256,7 +272,7 @@ const STOP_NOME = new Set([
 // grupo interno — a pessoa mandava "?" e nada. Resposta determinística, sem IA.
 function ehPerguntaStatus(text: string): boolean {
   const t = text.toLowerCase();
-  if (!/\blone\b/.test(t)) return false;
+  if (!chamaOAgente(t)) return false;
   return /\b(status|andamento|cad[êe]|foi feit[ao]|j[áa] foi|j[áa] fez|j[áa] saiu|j[áa] criou|j[áa] criaram|como (t[áa]|est[áa])|sabe (me )?dizer|ficou pront[oa]|t[áa] pront[oa]|entregue|entregaram|entregou)\b/.test(t);
 }
 
@@ -270,7 +286,7 @@ const STATUS_CARD_LABEL: Record<string, string> = {
 // Exige verbo + alvo (card/arte) + status claro — sem status, NÃO age (evita mexer no card errado).
 function ehComandoMoverCard(text: string): { status: string; delivered: boolean } | null {
   const t = text.toLowerCase();
-  if (!/\blone\b/.test(t)) return null;
+  if (!chamaOAgente(t)) return null;
   const verbo = /\b(marca|marque|move|mover|manda|mande|passa|passe|p[õo]e|poe|coloca|coloque|bota|finaliza|conclui)\b/.test(t);
   const alvo = /\b(card|arte|post|criativo|pe[çc]a|demanda)\b/.test(t);
   if (!verbo || !alvo) return null;
@@ -286,7 +302,7 @@ function ehComandoMoverCard(text: string): { status: string; delivered: boolean 
 // Resumo completo do cliente (demandas, produção, entregas, reclamação, atividade). Determinístico.
 function ehPedidoRaioX(text: string): boolean {
   const t = text.toLowerCase();
-  if (!/\blone\b/.test(t)) return false;
+  if (!chamaOAgente(t)) return false;
   return /\b(raio-?x|panorama|resum[oã]|me (fala|conta|resume) (sobre|do|da)|como (anda|vai|est[áa] indo))\b/.test(t);
 }
 
@@ -294,7 +310,7 @@ function ehPedidoRaioX(text: string): boolean {
 // conversacional: se ninguém dos comandos casou, ela responde no tom da casa em vez de ficar muda.
 function ehFalaComAgente(text: string): boolean {
   const t = (text || "").toLowerCase();
-  return /\blone\b/.test(t) && !/\blone\s*m[íi]dia\b/.test(t);
+  return chamaOAgente(t);
 }
 
 // Continuidade de conversa: quem a Lone respondeu e quando (memória do PROCESSO — o app é 1 container
@@ -517,14 +533,14 @@ async function responderPapo(p: {
 // Radar de datas ("Lone, que datas vêm aí?" / "datas comemorativas do mês"). Determinístico.
 function ehPerguntaDatas(text: string): boolean {
   const t = (text || "").toLowerCase();
-  if (!/\blone\b/.test(t)) return false;
+  if (!chamaOAgente(t)) return false;
   return /(datas? comemorativ|que datas|datas (da semana|do m[eê]s|chegando|vindo|v[eê]m)|pr[oó]ximas? datas|calend[aá]rio de datas|alguma data (boa|chegando|vindo|a[ií]))/.test(t);
 }
 
 // Ideias de post ("Lone, me dá ideias de post pro Contele" / "o que postar na Farmácia?").
 function ehPedidoIdeias(text: string): boolean {
   const t = (text || "").toLowerCase();
-  if (!/\blone\b/.test(t)) return false;
+  if (!chamaOAgente(t)) return false;
   return /(ideias? (de|pra|para) (post|conte[uú]do)|me d[aá] (uma[s]? )?ideia|inspira[çc][aã]o|sugest([aã]o|[oõ]es) de (post|conte[uú]do)|o que postar)/.test(t);
 }
 
@@ -532,7 +548,7 @@ function ehPedidoIdeias(text: string): boolean {
 // Roda DEPOIS do roteiro (roteiro tem precedência em "anúncio/criativo").
 function ehPedidoCriarDemanda(text: string): boolean {
   const t = text.toLowerCase();
-  if (!/\blone\b/.test(t)) return false;
+  if (!chamaOAgente(t)) return false;
   const acao = /\b(cria|criar|crie|cadastra|cadastrar|abre|abrir|abra|monta|montar|adiciona|adicionar|coloca|colocar|registra|registrar|lan[çc]a|lan[çc]ar)\b/.test(t);
   const obj = /\b(demanda|demandas|card|cards|pedido|tarefa|pe[çc]a|cria[çc][aã]o|arte|post|story|stories|panfleto|banner|reels|v[íi]deo)\b/.test(t);
   return acao && obj;
