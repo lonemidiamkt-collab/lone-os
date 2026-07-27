@@ -25,6 +25,9 @@ export interface SinaisCliente {
   aguardandoAprovacao: number;
   /** Aprovou alguma arte nos últimos 7 dias — sinal de que ele está presente e respondendo. */
   aprovouRecentemente: boolean;
+  /** Desde quando a arte mais antiga está esperando ele. Sem isso não dá pra separar resposta
+   *  à arte de conversa anterior. */
+  esperandoDesde: string | null;
   /** Artes entregues nos últimos 7 dias (a gente produziu). */
   entreguesNaSemana: number;
   /** Dias desde a última mensagem do cliente no grupo. null = nunca falou / sem registro. */
@@ -41,7 +44,7 @@ export interface SinaisCliente {
 const DESTAQUE_MINIMO = 10;
 
 const VAZIO: SinaisCliente = {
-  aguardandoAprovacao: 0, aprovouRecentemente: false, entreguesNaSemana: 0, diasSemFalar: null,
+  aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 0, diasSemFalar: null,
   promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: null,
 };
 
@@ -51,7 +54,7 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
     const seteDias = new Date(Date.now() - 7 * 86400000).toISOString();
     const [cards, cli, igRow, calendario] = await Promise.all([
       supabaseAdmin.from("content_cards")
-        .select("status, designer_delivered_at, client_approved_at")
+        .select("status, designer_delivered_at, client_approved_at, status_changed_at")
         .eq("client_id", clientId).is("archived_at", null),
       supabaseAdmin.from("clients").select("last_client_msg_at").eq("id", clientId).maybeSingle(),
       supabaseAdmin.from("client_ig_snapshots").select("data").eq("client_id", clientId).eq("period_kind", "7d").maybeSingle(),
@@ -60,12 +63,17 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
         .order("sent_at", { ascending: false }).limit(1),
     ]);
 
-    const linhas = (cards.data ?? []) as { status: string; designer_delivered_at: string | null; client_approved_at: string | null }[];
+    const linhas = (cards.data ?? []) as { status: string; designer_delivered_at: string | null; client_approved_at: string | null; status_changed_at: string | null }[];
     // CONFERE SE ELE REALMENTE NÃO APROVOU. Card pode estar em "aguardando aprovação" e já ter o
     // carimbo de aprovado — o cliente respondeu no grupo e ninguém moveu o card. Cobrar aprovação
     // de quem já aprovou passa a impressão de que a gente não presta atenção nele.
     const aguardandoAprovacao = linhas.filter((c) => c.status === "client_approval" && !c.client_approved_at).length;
     const aprovouRecentemente = linhas.some((c) => c.client_approved_at && c.client_approved_at >= seteDias);
+    // Quando a arte mais antiga entrou em "esperando o cliente" — marco pra ler a conversa depois.
+    const esperando = linhas
+      .filter((c) => c.status === "client_approval" && !c.client_approved_at && c.status_changed_at)
+      .map((c) => c.status_changed_at as string).sort();
+    const esperandoDesde = esperando[0] ?? null;
     const entreguesNaSemana = linhas.filter((c) => c.designer_delivered_at && c.designer_delivered_at >= seteDias).length;
 
     const ultimaMsg = (cli.data?.last_client_msg_at as string | null) ?? null;
@@ -90,7 +98,7 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
       : null;
 
     return {
-      aguardandoAprovacao, aprovouRecentemente, entreguesNaSemana, diasSemFalar, promoDoMesSemResposta, destaqueIg,
+      aguardandoAprovacao, aprovouRecentemente, esperandoDesde, entreguesNaSemana, diasSemFalar, promoDoMesSemResposta, destaqueIg,
       postsNaSemana: ig?.resumo?.postsNoPeriodo ?? null,
     };
   } catch {
@@ -250,13 +258,23 @@ const VARIACOES: Record<Objetivo, string[]> = {
   ],
 };
 
-/** Estável por cliente e por semana: varia entre clientes, não muda no meio da semana. */
-function variacaoPara(objetivo: Objetivo, clientId: string, agora = new Date()): string {
+/**
+ * Varia por cliente, por semana E POR DIA DA SEMANA.
+ *
+ * O Roberto: "tomar cuidado com as variações das mensagens sendo segunda, quarta e sexta."
+ * Estava errado: a chave era só cliente+semana, então quarta e sexta do MESMO cliente na MESMA
+ * semana recebiam a MESMA frase. O cliente leria a mesma coisa duas vezes em três dias — o
+ * oposto do que a variação existe pra resolver.
+ */
+export function variacaoPara(objetivo: Objetivo, clientId: string, dia: "quarta" | "sexta", agora = new Date()): string {
   const opcoes = VARIACOES[objetivo];
   const semana = Math.floor(agora.getTime() / (7 * 86400000));
   let h = semana;
   for (let i = 0; i < clientId.length; i++) h = (h * 31 + clientId.charCodeAt(i)) >>> 0;
-  return opcoes[h % opcoes.length];
+  // O deslocamento do dia vai DEPOIS do hash. Antes ele entrava na semente e sumia na conta:
+  // multiplicar por 31 a cada caractere fazia a diferença virar múltiplo do nº de opções, e
+  // quarta e sexta caíam na MESMA frase. O teste pegou; o cálculo estava elegante e errado.
+  return opcoes[(h + (dia === "sexta" ? 1 : 0)) % opcoes.length];
 }
 
 export interface Foco {
@@ -271,14 +289,26 @@ export interface Foco {
  * Escolhe o assunto pela urgência real, não por quantidade de sinal.
  * Ordem: o que TRAVA o trabalho vem antes do que é conversa.
  */
-export function escolherFoco(s: SinaisCliente): Foco | null {
+export async function escolherFoco(s: SinaisCliente, clientId?: string): Promise<Foco> {
   // 1. Arte parada é o que mais custa: trabalho feito, esperando ele.
+  //    ANTES DE COBRAR, lê o que ele falou no grupo desde que a arte foi pro lado dele. Se ele já
+  //    respondeu (aprovou ou pediu ajuste) e ninguém mexeu no card, perguntar "deu uma olhada?"
+  //    mostra que a gente não lê o que ele escreve. Na dúvida, não cobra.
   if (s.aguardandoAprovacao > 0) {
-    return {
-      objetivo: "aprovar_arte",
-      fatos: [`${s.aguardandoAprovacao} arte(s) esperando o OK dele pra poder publicar`],
-      missao: "Lembrar com leveza que tem arte esperando o retorno dele, e perguntar se pode publicar.",
-    };
+    let cobra = true;
+    if (clientId && s.esperandoDesde) {
+      const { clienteFalouDaArte } = await import("./leu-a-arte");
+      const leitura = await clienteFalouDaArte(clientId, s.esperandoDesde);
+      cobra = leitura.podeCobrar;
+    }
+    if (cobra) {
+      return {
+        objetivo: "aprovar_arte",
+        fatos: [`${s.aguardandoAprovacao} arte(s) esperando o OK dele pra poder publicar`],
+        missao: "Lembrar com leveza que tem arte esperando o retorno dele, e perguntar se pode publicar.",
+      };
+    }
+    // Ele já se manifestou: segue pros outros objetivos, sem tocar no assunto da arte.
   }
   // 2. Silêncio longo: antes de pedir qualquer coisa, reatar contato.
   if (s.diasSemFalar !== null && s.diasSemFalar >= 10) {
@@ -391,7 +421,7 @@ export async function montarMensagemCliente(
   diaDaSemana: "quarta" | "sexta",
 ): Promise<MensagemCliente> {
   const sinais = await coletarSinais(clientId);
-  const foco = escolherFoco(sinais);
+  const foco = await escolherFoco(sinais, clientId);
 
   if (!foco) {
     return { texto: textoNeutro, origem: "neutro", motivoNeutro: "sem assunto concreto", sinaisUsados: [] };
@@ -403,7 +433,7 @@ export async function montarMensagemCliente(
     diaDaSemana === "quarta" ? "Meio de semana." : "Fechando a semana, fim de semana chegando.",
     "",
     `MISSÃO DESTA MENSAGEM: ${foco.missao}`,
-    `JEITO DE DIZER (siga este, é o que evita repetir a mesma frase toda semana): ${variacaoPara(foco.objetivo, clientId)}`,
+    `JEITO DE DIZER (siga este, é o que evita repetir a mesma frase toda semana): ${variacaoPara(foco.objetivo, clientId, diaDaSemana)}`,
     "",
     foco.fatos.length
       ? "FATOS que você pode usar (não há outros; qualquer número fora daqui é invenção):"
