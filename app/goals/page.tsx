@@ -17,6 +17,7 @@ import { useOKRData } from "@/lib/hooks/useOKRData";
 import { useCollaboratorScores } from "@/lib/hooks/useCollaboratorScores";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useRole } from "@/lib/context/RoleContext";
+import { useCockpit, valorOu, variacaoBoa } from "@/lib/hooks/useCockpit";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -178,6 +179,9 @@ export default function GoalsPage() {
   const metrics = useOKRMetrics(Object.keys(dbTargets).length > 0 ? dbTargets : undefined);
   const collaborators = useCollaboratorScores(teamMembers);
   const { currentSnapshot, previousSnapshot, deltas, feedback, churnAlerts, saveCurrentSnapshot } = useSnapshots();
+  // Cockpit REAL, do servidor. O useSnapshots acima ainda alimenta o resto da tela; a seção de
+  // evolução passa a usar este, que compara com mês fechado de verdade (ver lib/hooks/useCockpit).
+  const cockpit = useCockpit();
   const pageRef = useRef<HTMLDivElement>(null);
   const [activeLayer, setActiveLayer] = useState<"strategy" | "operations">("strategy");
 
@@ -994,49 +998,69 @@ export default function GoalsPage() {
               </div>
             )}
 
-            {/* Delta Grid */}
-            {deltas.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-xs font-semibold text-foreground flex items-center gap-2">
-                  <TrendingUp size={12} className="text-primary" />
-                  Evolucao vs Periodo Anterior ({previousSnapshot?.period ?? "—"})
-                </h3>
+            {/* Evolução — números do servidor, comparação com mês REALMENTE fechado */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-foreground flex items-center gap-2">
+                <TrendingUp size={12} className="text-primary" />
+                Como estamos{cockpit.data?.atual?.periodo ? ` — ${cockpit.data.atual.periodo}` : ""}
+              </h3>
+
+              {cockpit.loading && <p className="text-xs text-muted-foreground">Calculando…</p>}
+              {cockpit.erro && (
+                <p className="text-xs text-destructive">Não consegui carregar os números: {cockpit.erro}</p>
+              )}
+
+              {/* Sem mês fechado, diz isso — em vez de desenhar seta contra número inventado. */}
+              {cockpit.data && !cockpit.data.temComparacao && (
+                <p className="text-[11px] text-muted-foreground bg-muted/40 border border-border rounded-lg px-3 py-2">
+                  {cockpit.data.motivoSemComparacao}
+                </p>
+              )}
+
+              {cockpit.data && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {deltas.map((d) => (
-                    <div key={d.metric} className="card p-4">
-                      <p className="text-[10px] text-muted-foreground mb-1">{d.label}</p>
-                      <div className="flex items-end gap-2">
-                        <span className="text-lg font-bold text-foreground tabular-nums">
-                          {d.current}{d.unit !== "pts" ? d.unit : ""}
-                        </span>
-                        {d.direction !== "stable" && (
-                          <span className={`flex items-center gap-0.5 text-[11px] font-medium mb-0.5 ${
-                            d.isGood ? "text-lone-success" : d.severity === "critical" ? "text-destructive" : "text-lone-warning"
-                          }`}>
-                            {d.direction === "up" ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
-                            {Math.abs(d.delta).toFixed(1)}%
-                          </span>
+                  {cockpit.data.deltas.map((d) => {
+                    const boa = variacaoBoa(d);
+                    return (
+                      <div key={d.chave} className="card p-4">
+                        <p className="text-[10px] text-muted-foreground mb-1">{d.rotulo}</p>
+                        <div className="flex items-end gap-2">
+                          <span className="text-lg font-bold text-foreground tabular-nums">{valorOu(d.atual)}</span>
+                          {d.variacaoPct !== null && (
+                            <span className={`flex items-center gap-0.5 text-[11px] font-medium mb-0.5 ${
+                              boa ? "text-lone-success" : "text-lone-warning"
+                            }`}>
+                              {d.variacaoPct > 0 ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
+                              {Math.abs(d.variacaoPct).toFixed(1)}%
+                            </span>
+                          )}
+                        </div>
+                        {/* Métrica sem fonte diz POR QUE não sabe, em vez de mostrar 0 ou -0,3. */}
+                        {d.semFonte && (
+                          <p className="text-[10px] text-muted-foreground/80 mt-1 leading-snug">{d.semFonte}</p>
                         )}
-                        {d.direction === "stable" && (
-                          <span className="text-[11px] text-muted-foreground mb-0.5">estavel</span>
+                        {d.variacaoPct === null && !d.semFonte && d.anterior === null && (
+                          <p className="text-[10px] text-muted-foreground/60 mt-1">sem mês anterior pra comparar</p>
                         )}
                       </div>
-                      <div className="mt-2 h-1 rounded-full bg-card overflow-hidden">
-                        <div className={`h-full rounded-full transition-all duration-700 ${
-                          d.isGood ? "bg-lone-success-bg" : d.severity === "critical" ? "bg-destructive" : "bg-lone-warning-bg"
-                        }`} style={{ width: `${Math.min(100, Math.max(5, 50 + d.delta))}%` }} />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-              </div>
-            )}
+              )}
+
+              {cockpit.data && (
+                <p className="text-[10px] text-muted-foreground/70">
+                  Health calculado sobre {cockpit.data.atual.cobertura.health} de {cockpit.data.atual.clientes} clientes ·
+                  silêncio sobre {cockpit.data.atual.cobertura.interacao} com conversa registrada
+                </p>
+              )}
+            </div>
 
             {/* Operational KPIs (when Operations tab is active) */}
             {activeLayer === "operations" && (
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  { label: "Posts Publicados", value: currentSnapshot.postsPublished, target: currentSnapshot.postsTarget, unit: `/${currentSnapshot.postsTarget}`, icon: Instagram },
+                  { label: "Posts Publicados", value: cockpit.data?.atual?.postsPublicados?.valor ?? 0, target: cockpit.data?.atual?.postsMeta ?? 0, unit: `/${cockpit.data?.atual?.postsMeta ?? "—"}`, icon: Instagram },
                   { label: "SLA Compliance", value: currentSnapshot.slaCompliancePct, target: 85, unit: "%", icon: Clock },
                   { label: "Design no Prazo", value: currentSnapshot.designOnTimePct, target: 90, unit: "%", icon: Palette },
                   { label: "Tasks Vencidas", value: currentSnapshot.tasksOverdue, target: 0, unit: "", icon: AlertTriangle },
