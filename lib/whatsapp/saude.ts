@@ -81,11 +81,17 @@ async function estadoDeclarado(n: Numero): Promise<string | null> {
 async function socketResponde(n: Numero): Promise<{ ok: boolean; erro?: string }> {
   if (!n.grupoTeste) return { ok: false, erro: "sem grupo de teste configurado" };
   try {
+    // A INSTÂNCIA VAI NO CAMINHO. Sem ela a Evolution responde 404 e o teste lia como "caído" —
+    // este check ia acusar os dois números todo dia às 7h50 com os dois no ar. Alarme falso diário
+    // é pior que alarme nenhum: o time aprende a ignorar e não vê a queda de verdade.
     const r = await fetch(
-      `${base()}/group/findGroupInfos?groupJid=${encodeURIComponent(n.grupoTeste)}`,
+      `${base()}/group/findGroupInfos/${encodeURIComponent(n.instancia)}?groupJid=${encodeURIComponent(n.grupoTeste)}`,
       { headers: { apikey: n.apiKey }, signal: AbortSignal.timeout(20_000) },
     );
     const txt = await r.text().catch(() => "");
+    // 404 aqui é ROTA errada da nossa parte, não número caído. Marcar como queda faria o time
+    // reconectar um WhatsApp que está funcionando — e desconfiar do alerta na próxima.
+    if (r.status === 404) return { ok: false, erro: "rota de teste inválida (erro do Lone OS, não do WhatsApp)" };
     if (!r.ok) return { ok: false, erro: `HTTP ${r.status}: ${txt.slice(0, 90)}` };
     // "Connection Closed" volta com 200 em algumas versões — por isso olha o corpo também.
     if (/connection closed|connection lost/i.test(txt)) return { ok: false, erro: "Connection Closed" };
