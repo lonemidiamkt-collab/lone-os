@@ -749,9 +749,42 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
   // card e na busca do board), e id sem cliente na lista gravaria a demanda com o nome em branco.
   const canSubmit = title.trim() && clientId && selectedClient && dueDate && dueTime && priority;
 
-  const handleSubmit = () => {
-    if (!canSubmit) return;
-    addContentCard({
+  // REFERÊNCIA JÁ NA CRIAÇÃO (pedido do social, 03/08). Antes só dava pra anexar DEPOIS: criava a
+  // demanda, reabria, e só então subia a imagem — três passos pra uma coisa só, e no meio disso o
+  // designer já podia ter puxado o card sem a referência.
+  // Sobe DEPOIS de criar porque o upload precisa do id do card; se o upload falhar, a demanda
+  // continua criada (perder o card por causa de um anexo seria pior) e a pessoa é avisada.
+  const [refs, setRefs] = useState<File[]>([]);
+  const [subindoRef, setSubindoRef] = useState(false);
+  const [erroRef, setErroRef] = useState<string | null>(null);
+  // Ler `erroRef` logo após o await devolveria o valor ANTIGO (state não muda no meio da função).
+  const erroRefRef = useRef<string | null>(null);
+
+  const anexarReferencias = async (cardId: string) => {
+    if (!refs.length) return;
+    setSubindoRef(true); setErroRef(null); erroRefRef.current = null;
+    const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+    for (const f of refs) {
+      const fd = new FormData();
+      fd.append("file", f);
+      fd.append("cardId", cardId);
+      try {
+        const r = await authedFetch("/api/upload-art", { method: "POST", body: fd });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      } catch {
+        const msg = `Demanda criada, mas a referência "${f.name}" não subiu. Abra o card e anexe de novo.`;
+        erroRefRef.current = msg; setErroRef(msg);
+      }
+    }
+    setSubindoRef(false);
+  };
+
+  const handleSubmit = async () => {
+    if (!canSubmit || subindoRef) return;
+    // COM REFERÊNCIA, O MODAL ESPERA. Fechando na hora, o upload virava órfão: se falhasse,
+    // ninguém via o aviso e a demanda ia pro designer sem a imagem — que é justamente o problema
+    // que este campo veio resolver. Sem referência, fecha na hora como antes.
+    const criado = await addContentCard({
       title: title.trim(),
       clientId,
       clientName: selectedClient?.name ?? "",
@@ -762,8 +795,15 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
       dueDate,
       dueTime,
       briefing: briefing.trim() || undefined,
-    } as Omit<ContentCard, "id">);
+    } as Omit<ContentCard, "id">).catch(() => null);
+    if (criado?.id && refs.length) {
+      await anexarReferencias(criado.id);
+      // Falhou algum anexo: mantém o modal aberto com o aviso — a demanda já existe, mas a pessoa
+      // precisa saber que a referência não foi junto.
+      if (erroRefRef.current) return;
+    }
     setTitle("");
+    setRefs([]);
     setClientId(defaultClient?.id ?? "");
     setFormat("Post");
     setPriority("medium");
@@ -890,6 +930,25 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
             <p className="text-[10px] text-muted-foreground mt-1">Markdown puro. Designer vê formatado.</p>
           </div>
 
+          {/* Referência JÁ aqui — antes só dava pra anexar reabrindo a demanda depois de criada. */}
+          <div>
+            <Label className="mb-1.5 block">Referências <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+            <input
+              type="file" accept="image/*" multiple
+              onChange={(e) => { setRefs(Array.from(e.target.files ?? [])); setErroRef(null); }}
+              className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary hover:file:bg-primary/20"
+            />
+            {refs.length > 0 && (
+              <p className="text-[10px] text-primary mt-1">
+                {refs.length} {refs.length === 1 ? "imagem anexada" : "imagens anexadas"} — sobem junto com a demanda.
+              </p>
+            )}
+            {erroRef && <p className="text-[10px] text-destructive mt-1">{erroRef}</p>}
+            <p className="text-[10px] text-muted-foreground mt-1">
+              O designer vê as referências junto do briefing, sem precisar pedir.
+            </p>
+          </div>
+
           {/* Drive link auto-recovered */}
           {selectedClient && (
             <div className={`rounded-lg p-3 ${selectedClient.driveLink ? "bg-primary/[0.04] border border-primary/[0.1]" : "bg-lone-warning-bg/[0.04] border border-lone-warning-border/[0.1]"}`}>
@@ -921,7 +980,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
 
         <DialogFooter className="px-6 py-4 shrink-0 border-t border-border">
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
+          <Button onClick={handleSubmit} disabled={!canSubmit || subindoRef}>
             Criar Conteúdo
           </Button>
         </DialogFooter>
