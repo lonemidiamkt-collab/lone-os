@@ -123,7 +123,17 @@ export async function buildClientPdf(
         demographics = demo ?? undefined;
       } catch { /* demografia é opcional */ }
       // Alcance deduplicado no nível da conta (não somar campanha a campanha).
-      const accountReach = await fetchAccountReach(token, accountId, periodDays);
+      // TENTA DUAS VEZES antes de desistir: sem ele o PDF omite a métrica, e perder o alcance do
+      // relatório do cliente por um soluço de rede seria bobo. Se falhar de novo, fica sem — e
+      // aparece no log, porque relatório saindo torto em silêncio foi o problema de junho.
+      let accountReach = await fetchAccountReach(token, accountId, periodDays);
+      if (accountReach == null) {
+        await new Promise((r) => setTimeout(r, 1500));
+        accountReach = await fetchAccountReach(token, accountId, periodDays);
+        if (accountReach == null) {
+          console.error(`[relatorio] ${clientName}: alcance deduplicado indisponível — PDF sai SEM a métrica de alcance`);
+        }
+      }
       const reportData = buildTrafficReportData(clientName, campaigns, periodo, undefined, demographics, undefined, periodDays, accountReach ?? undefined);
       trafficHtml = buildClientReportHtml(reportData);
     }

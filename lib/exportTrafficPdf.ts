@@ -15,7 +15,9 @@ export interface TrafficReportData {
   clientName: string;
   period: string;
   periodDays?: number;
-  reach: number;
+  /** Alcance DEDUPLICADO da conta. null quando a Meta não respondeu — ver comentário em
+   *  buildTrafficReportData. Nesse caso o PDF OMITE a métrica em vez de mostrar a soma. */
+  reach: number | null;
   impressions: number;
   clicks: number;
   messages: number;
@@ -154,7 +156,7 @@ export function buildTrafficReportHtml(data: TrafficReportData, autoPrint = fals
 
   // ── KPI rows (numbered, like "cenas") ───────────────────────────────────
   const kpiItems: { label: string; value: string; sub?: string; champion?: boolean }[] = [
-    { label: "Alcance", value: fmtNum(data.reach) + " pessoas" },
+    ...(data.reach != null ? [{ label: "Alcance", value: fmtNum(data.reach) + " pessoas" }] : []),
     { label: "Impressões", value: fmtNum(data.impressions) },
     { label: "Cliques no link", value: fmtNum(data.clicks) },
     { label: "Mensagens iniciadas", value: fmtNum(data.messages) },
@@ -595,7 +597,7 @@ export function buildClientReportHtml(data: TrafficReportData, autoPrint = false
     { label: "Mensagens recebidas", value: fmtNum(data.messages), accent: true },
     { label: "Investimento", value: fmt(data.spend), accent: false },
     { label: "Custo por conversa", value: safeVal(data.costPerMessage), accent: false },
-    { label: "Pessoas alcançadas", value: fmtNum(data.reach), accent: false },
+    ...(data.reach != null ? [{ label: "Pessoas alcançadas", value: fmtNum(data.reach), accent: false }] : []),
   ];
 
   const kpiCards = kpis.map(k => `
@@ -837,8 +839,12 @@ export function buildTrafficReportData(
     clientName,
     period: periodLabel,
     periodDays,
-    // Alcance da CONTA (deduplicado) quando disponível; senão, soma das campanhas (super-conta).
-    reach: accountReach != null ? accountReach : totalReach,
+    // ALCANCE SÓ SE FOR O DEDUPLICADO DA CONTA. A soma campanha a campanha conta a mesma pessoa
+    // uma vez por campanha — foi o bug que inflou ~50% em todo cliente em junho (Imperio: 86,7k
+    // virou 52,2k depois do conserto). O código caía nessa soma calado sempre que a Meta falhava,
+    // e o cliente recebia número inflado sem ninguém saber. Sem o dedup, não mostra: relatório com
+    // uma métrica a menos é melhor que relatório com uma métrica errada.
+    reach: accountReach ?? null,
     impressions: totalImpressions,
     clicks: totalClicks,
     messages: totalMessages,
