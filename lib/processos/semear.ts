@@ -35,8 +35,11 @@ async function semearUm(p: ProcessoSeed, autor: string): Promise<"criado" | "exi
   }).select("id").maybeSingle();
   if (e1 || !proc) throw new Error(e1?.message || "não consegui criar o processo");
 
+  // NASCE RASCUNHO E SÓ DEPOIS VIRA ATIVA. Na primeira tentativa eu criava já ativa e inseria os
+  // passos em seguida — o gatilho de imutabilidade barrou, com razão: passo é conteúdo de versão,
+  // e versão no ar não muda. A ordem certa é montar tudo enquanto é rascunho e então publicar.
   const { data: ver, error: e2 } = await supabaseAdmin.from("process_versions").insert({
-    process_id: proc.id, version: "1.0", status: "active",
+    process_id: proc.id, version: "1.0", status: "draft",
     objective: p.objetivo, problem: p.problema, scope: p.escopo, out_of_scope: p.foraDeEscopo,
     trigger_event: p.gatilho, frequency: p.frequencia,
     inputs: p.entradas, outputs: p.saidas,
@@ -56,10 +59,18 @@ async function semearUm(p: ProcessoSeed, autor: string): Promise<"criado" | "exi
         evidence_required: !s.opcional && !!s.evidencia, optional: !!s.opcional,
       })),
     );
-    if (e3) throw new Error(`passos: ${e3.message}`);
+    // MEIO PROCESSO É PIOR QUE PROCESSO NENHUM: sem os passos, o registro fica no banco, o seed
+    // idempotente pula ele pra sempre e o time abre um processo vazio achando que é o oficial.
+    // Falhou no meio, desfaz — na próxima rodada ele entra inteiro.
+    if (e3) {
+      await supabaseAdmin.from("processes").delete().eq("id", proc.id);
+      throw new Error(`passos: ${e3.message}`);
+    }
   }
 
-  // O ponteiro da versão ativa vem depois: a versão precisa existir pra ser apontada.
+  // Agora sim publica: versão completa vira a que está no ar, e o processo aponta pra ela.
+  await supabaseAdmin.from("process_versions")
+    .update({ status: "active", approved_at: new Date().toISOString() }).eq("id", ver.id);
   await supabaseAdmin.from("processes").update({ active_version_id: ver.id }).eq("id", proc.id);
   return "criado";
 }
