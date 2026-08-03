@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { fatoSemPauta } from "@/lib/cs/porta-voz";
 import {
   spNow, ymd, addDays, isBusinessDay, isBusinessHour, isFirmPostingDay, isPostingDay, proximoDiaFirme, businessHoursSince, spDateKeyOf,
 } from "@/lib/cs/vigilancia";
@@ -363,7 +364,12 @@ export async function POST(req: NextRequest) {
         vigilancia: 2, client_id: null, card_id: null, pessoa_cobrada: pessoa, chave, mensagem: msgDigest, dry_run: false,
       });
       if (!insErr) {
-        const r = await csSendGroupText(internalJid, msgDigest, undefined, { origem: "cs-vigilancia", destino: "interno" });
+        // Declara o "sem pauta hoje" de cada um. Esta mensagem é NOMINAL e roda antes do
+        // cs-postagem das 8h30 — então ela ganha, e o disparo pro grupo inteiro cala.
+        const r = await csSendGroupText(internalJid, msgDigest, undefined, {
+          origem: "cs-vigilancia", destino: "interno",
+          fatos: nomes.map((n) => fatoSemPauta(n, hoje)),
+        });
         if (r.ok) postadas++; else console.error("[cs-vigilancia] digest pauta falhou:", r.error);
       } else if (insErr.code !== "23505") console.error("[cs-vigilancia] digest insert:", insErr.message);
     }

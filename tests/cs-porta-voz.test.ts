@@ -24,7 +24,7 @@ vi.mock("@/lib/supabase/server", () => ({
   },
 }));
 
-import { avaliarFala, fatoEsfriando, fatoArteParada } from "@/lib/cs/porta-voz";
+import { avaliarFala, fatoEsfriando, fatoArteParada, fatoSemPauta } from "@/lib/cs/porta-voz";
 
 beforeEach(() => { linhas.length = 0; });
 
@@ -70,6 +70,32 @@ describe("porta-voz — o que ele NÃO cala (o mais importante)", () => {
   it("assunto diferente não colide: esfriando e arte parada do MESMO cliente convivem", async () => {
     linhas.push({ fatos: [fatoEsfriando("Paradise Suplementos")] });
     const v = await avaliarFala([fatoArteParada("Paradise Suplementos")], "interno");
+    expect(v.pode).toBe(true);
+  });
+});
+
+describe("o caso real que motivou tudo: pauta de hoje dita duas vezes", () => {
+  it("a vigilância cobra pelo nome às 8h e o disparo pro grupo das 8h30 cala", async () => {
+    // 8h — vigilância manda "Oi Carlos! não vi card pra: Império, Dijana".
+    linhas.push({ fatos: [fatoSemPauta("Império Material", "2026-08-03"), fatoSemPauta("DIJANA", "2026-08-03")] });
+    // 8h30 — cs-postagem ia dizer a MESMA coisa pro grupo inteiro.
+    const v = await avaliarFala(
+      [fatoSemPauta("Império Material", "2026-08-03"), fatoSemPauta("DIJANA", "2026-08-03")], "interno",
+    );
+    expect(v.pode).toBe(false);
+  });
+
+  it("cliente que só o disparo do grupo pegou continua sendo avisado", async () => {
+    linhas.push({ fatos: [fatoSemPauta("Império Material", "2026-08-03")] });
+    const v = await avaliarFala(
+      [fatoSemPauta("Império Material", "2026-08-03"), fatoSemPauta("Tindaro Solar", "2026-08-03")], "interno",
+    );
+    expect(v.pode).toBe(true);
+  });
+
+  it("o mesmo cliente em DIAS diferentes são fatos diferentes — véspera não é hoje", async () => {
+    linhas.push({ fatos: [fatoSemPauta("Império Material", "2026-08-03")] });
+    const v = await avaliarFala([fatoSemPauta("Império Material", "2026-08-04")], "interno");
     expect(v.pode).toBe(true);
   });
 });

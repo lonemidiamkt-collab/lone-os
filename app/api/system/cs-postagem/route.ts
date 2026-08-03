@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { fatoSemPauta } from "@/lib/cs/porta-voz";
 import { spNow, ymd, isWeekday } from "@/lib/cs/vigilancia";
 import { buildPostingReport, type PostingClient } from "@/lib/cs/postagem";
 
@@ -65,7 +66,18 @@ export async function POST(req: NextRequest) {
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let postada = false;
   if (msg && POSTAGEM_LIVE && internalJid && !previewOnly) {
-    const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-postagem", destino: "interno" });
+    // Os MESMOS fatos que a vigilância declara no digest nominal. Se ela já cobrou cada um pelo
+    // nome (roda desde as 8h, esta às 8h30), este disparo pro grupo inteiro não acrescenta nada.
+    // Declarar só quem está devendo: quem já postou não é fato pendente.
+    // MAS: na segunda esta mensagem carrega TAMBÉM o lembrete dos roteiros de quarta. Calar por
+    // repetição da pauta mataria junto um aviso que ninguém mais dá. Quando há carona, não declara
+    // fato nenhum — o portão só pode engolir mensagem cujo conteúdo inteiro já foi dito.
+    const semPauta = videoQuarta?.length
+      ? []
+      : lista.filter((c) => c.esperado && !c.temPost).map((c) => fatoSemPauta(c.nome, hoje));
+    const r = await csSendGroupText(internalJid, msg, undefined, {
+      origem: "cs-postagem", destino: "interno", fatos: semPauta,
+    });
     postada = r.ok;
     if (!r.ok) console.error("[cs-postagem] post falhou:", r.error);
   }
