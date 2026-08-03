@@ -4,6 +4,7 @@
 
 import type { SnapshotCS } from "@/lib/cs/snapshot";
 import { linhaDataBomDia } from "@/lib/cs/datas";
+import { coletarItens, agruparPorDono, textoPorDono } from "@/lib/cs/cobranca-nominal";
 
 const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 
@@ -57,6 +58,12 @@ export function buildBomDiaDigest(snap: SnapshotCS, now: Date): string {
     l.push(`📭 *${snap.semPostsSemana.length}* sem nenhum post planejado ${snap.semPostsLabel} — ${top}${snap.semPostsSemana.length > 5 ? "…" : ""} — ninguém fica pra trás!`);
   }
   if (linhaData) l.push(linhaData);
+
+  // OS MESMOS FATOS, COM DESTINATÁRIO. Os totais acima dizem o tamanho do problema; esta seção
+  // diz de quem ele é. Sem ela o digest era um mural: "50 artes prontas" há semanas, sem ninguém
+  // se sentir dono de nenhuma.
+  const porDono = textoPorDono(agruparPorDono(coletarItens(snap)));
+  if (porDono) l.push(porDono);
 
   const fecho = snap.atrasados.length
     ? `\nComeça pelos atrasados que a gente fecha o dia tranquilo. Tamo junto! 🤝`
