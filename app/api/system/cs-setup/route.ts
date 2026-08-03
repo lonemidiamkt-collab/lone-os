@@ -17,6 +17,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { diagnosticar as diagnosticarAnuncio, paraCobrar, textoCobranca, textoIndefinidos } from "@/lib/cs/anuncio-no-ar";
+import { fatoSemAnuncio } from "@/lib/cs/porta-voz";
+import { getMetaToken } from "@/lib/traffic/sync-core";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 import {
   itensPara, tituloTarefa, montarCobrancaSetup, graduou, escopoDe, PREFIXO,
@@ -130,13 +133,33 @@ export async function POST(req: NextRequest) {
   const marcos = await marcosDeContrato();
 
   const textoSetup = montarCobrancaSetup(status);
-  const partes = [textoSetup, marcos.texto].filter(Boolean);
+
+  // ANÚNCIO NO AR — conferido na META, não na caixinha. Caixinha marcada não é campanha rodando:
+  // dá pra marcar com tudo pausado, ou esquecer de marcar com tudo no ar. Só a Meta sabe.
+  // Entra AQUI, dentro da mensagem que já existe, em vez de virar cron novo — o problema que a
+  // gente está resolvendo hoje é excesso de disparo.
+  const tokenMeta = await getMetaToken().catch(() => null);
+  const candidatos = (clientes ?? []).filter((c) => escopoDe(c.service_type as string) !== "social");
+  const diagsAnuncio = await Promise.all(candidatos.map((c) => diagnosticarAnuncio({
+    id: c.id as string,
+    nome: (c.nome_fantasia as string) || (c.name as string) || "Cliente",
+    criadoEm: c.created_at as string,
+    contaAnuncio: (c.meta_ad_account_id as string) || null,
+  }, tokenMeta)));
+  const semAnuncio = paraCobrar(diagsAnuncio);
+  const textoAnuncio = textoCobranca(semAnuncio);
+  const textoDuvida = textoIndefinidos(diagsAnuncio);
+
+  const partes = [textoSetup, textoAnuncio, textoDuvida, marcos.texto].filter(Boolean);
   const texto = partes.join("\n\n———\n\n");
 
   const jid = process.env.CS_INTERNAL_GROUP_JID;
   let postada = false;
   if (texto && jid && !previewOnly) {
-    const r = await csSendGroupText(jid, texto, undefined, { origem: "setup-7dias", destino: "interno" });
+    const r = await csSendGroupText(jid, texto, undefined, {
+      origem: "setup-7dias", destino: "interno",
+      fatos: semAnuncio.map((d) => fatoSemAnuncio(d.cliente)),
+    });
     postada = r.ok;
   }
 
