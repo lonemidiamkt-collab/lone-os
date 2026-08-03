@@ -19,6 +19,7 @@ import {
   ExternalLink, BarChart2, Plus, Calendar, ArrowRight, XCircle, RotateCcw, Search,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
+import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
 import type { Client, ContentCard, DesignRequest, CardAttachment } from "@/lib/types";
@@ -2624,6 +2625,17 @@ function NewTaskModal({
   // sobe com o id da demanda, não o do card.
   const [refs, setRefs] = useState<File[]>([]);
   const [erroRef, setErroRef] = useState<string | null>(null);
+  const [arrastando, setArrastando] = useState(false);
+
+  // COLAR VALE EM TODO O MODAL, não só no campo. A pessoa copia a arte e dá Ctrl+V sem pensar
+  // onde o cursor está — exigir foco num input seria uma regra invisível.
+  // Só intercepta quando o que veio É imagem: senão quebraria colar texto no briefing.
+  const aoColar = (e: React.ClipboardEvent) => {
+    const imgs = imagensDoPaste(e);
+    if (!imgs.length) return;
+    e.preventDefault();
+    setRefs((r) => [...r, ...imgs]); setErroRef(null);
+  };
   // Ler `erroRef` logo após o await devolveria o valor ANTIGO — state não muda no meio da função.
   const erroRefRef = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -2693,6 +2705,10 @@ function NewTaskModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
       <div
+        onPaste={aoColar}
+        onDragOver={(e) => { e.preventDefault(); setArrastando(true); }}
+        onDragLeave={() => setArrastando(false)}
+        onDrop={(e) => { e.preventDefault(); setArrastando(false); const i = imagensDoDrop(e); if (i.length) { setRefs((r) => [...r, ...i]); setErroRef(null); } }}
         className="w-full max-w-lg bg-card border border-border rounded-2xl overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -2812,7 +2828,7 @@ function NewTaskModal({
             )}
             {erroRef && <p className="text-[10px] text-destructive mt-1">{erroRef}</p>}
             <p className="text-[10px] text-muted-foreground mt-1">
-              O designer abre a demanda e já vê a referência, sem precisar pedir.
+              Pode <strong>colar (Ctrl+V)</strong> ou arrastar a imagem aqui.
             </p>
           </div>
         </div>

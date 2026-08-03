@@ -29,6 +29,7 @@ import {
   Palette, Search,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
+import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
 import { useRole } from "@/lib/context/RoleContext";
 // AppStateContext removed — all state from Zustand stores
 import { useNav } from "@/lib/context/NavContext";
@@ -755,7 +756,17 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
   // Sobe DEPOIS de criar porque o upload precisa do id do card; se o upload falhar, a demanda
   // continua criada (perder o card por causa de um anexo seria pior) e a pessoa é avisada.
   const [refs, setRefs] = useState<File[]>([]);
+  const [arrastando, setArrastando] = useState(false);
   const [subindoRef, setSubindoRef] = useState(false);
+
+  // Ctrl+V em qualquer ponto do modal. Só age quando veio imagem — colar texto no briefing segue
+  // funcionando normal.
+  const aoColar = (e: React.ClipboardEvent) => {
+    const imgs = imagensDoPaste(e);
+    if (!imgs.length) return;
+    e.preventDefault();
+    setRefs((r) => [...r, ...imgs]); setErroRef(null);
+  };
   const [erroRef, setErroRef] = useState<string | null>(null);
   // Ler `erroRef` logo após o await devolveria o valor ANTIGO (state não muda no meio da função).
   const erroRefRef = useRef<string | null>(null);
@@ -815,7 +826,13 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <DialogContent
+        onPaste={aoColar}
+        onDragOver={(e) => { e.preventDefault(); setArrastando(true); }}
+        onDragLeave={() => setArrastando(false)}
+        onDrop={(e) => { e.preventDefault(); setArrastando(false); const i = imagensDoDrop(e); if (i.length) { setRefs((r) => [...r, ...i]); setErroRef(null); } }}
+        className={`max-w-md max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden ${arrastando ? "ring-2 ring-primary" : ""}`}
+      >
         <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <ImageIcon size={16} className="text-primary" />
@@ -945,7 +962,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
             )}
             {erroRef && <p className="text-[10px] text-destructive mt-1">{erroRef}</p>}
             <p className="text-[10px] text-muted-foreground mt-1">
-              O designer vê as referências junto do briefing, sem precisar pedir.
+              Pode <strong>colar (Ctrl+V)</strong> ou arrastar a imagem aqui.
             </p>
           </div>
 
