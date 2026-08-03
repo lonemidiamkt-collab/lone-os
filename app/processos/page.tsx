@@ -8,6 +8,15 @@
 //
 // Todo papel com login VÊ tudo — processo escondido é processo não seguido. Escrever é do setor
 // da área; publicar é só da gestão (lib/processos/permissoes.ts).
+//
+// DESIGN: idioma da casa (components/lone-ui). Card = rounded-[10px] border p-[14px] em
+// bg-lone-bg-card; eyebrow em uppercase tracking-[1.5px]; classes lone-* do tailwind.config,
+// nunca var(--lone-*) cru — a primeira versão desta tela inventou quatro tokens que não existem
+// (--lone-bg-surface, --lone-border, --lone-text-muted, --lone-bg-base) e por isso saiu sem
+// borda e sem hierarquia. Token que não existe não avisa: só resolve pra nada.
+//
+// COR TEM UM DONO SÓ: aqui ela significa "precisa de atenção" (rascunho, descontinuado). Processo
+// no ar é o caso normal e fica sem selo nenhum — se tudo é destacado, nada é.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -15,16 +24,16 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { PillBadge } from "@/components/lone-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BookOpen, Search, Plus, Loader2, AlertCircle } from "lucide-react";
+import { BookOpen, Search, Plus, Loader2, AlertCircle, ListChecks } from "lucide-react";
 import NovoProcessoDialog from "@/components/processos/NovoProcessoDialog";
 
 interface Processo {
   id: string; code: string; slug: string; title: string;
   area: string; doc_type: string; status: string;
-  summary: string | null; tags: string[] | null;
+  summary: string | null; tags: string[] | null; passos: number;
 }
 
-const AREAS: { chave: string; rotulo: string }[] = [
+const AREAS = [
   { chave: "", rotulo: "Todas" },
   { chave: "social", rotulo: "Social" },
   { chave: "traffic", rotulo: "Tráfego" },
@@ -36,12 +45,19 @@ const AREAS: { chave: string; rotulo: string }[] = [
 const ROTULO_AREA: Record<string, string> = {
   social: "Social", traffic: "Tráfego", cs: "CS", comercial: "Comercial", geral: "Geral",
 };
+const ORDEM_AREA = ["social", "traffic", "cs", "comercial", "geral"];
 
-const TOM_STATUS: Record<string, "success" | "warning" | "default" | "info"> = {
-  active: "success", draft: "warning", in_review: "info", deprecated: "default", archived: "default",
+const ROTULO_TIPO: Record<string, string> = {
+  sop: "Passo a passo", checklist: "Checklist", processo: "Processo",
+  playbook: "Playbook", politica: "Política", template: "Modelo",
 };
-const ROTULO_STATUS: Record<string, string> = {
-  active: "No ar", draft: "Rascunho", in_review: "Em revisão", deprecated: "Descontinuado", archived: "Arquivado",
+
+/** Só o que FOGE do normal ganha cor. Processo no ar não precisa de selo — é o esperado. */
+const SELO: Record<string, { rotulo: string; tone: "warning" | "info" | "default" }> = {
+  draft: { rotulo: "Rascunho", tone: "warning" },
+  in_review: { rotulo: "Em revisão", tone: "info" },
+  deprecated: { rotulo: "Descontinuado", tone: "default" },
+  archived: { rotulo: "Arquivado", tone: "default" },
 };
 
 export default function ProcessosPage() {
@@ -57,7 +73,13 @@ export default function ProcessosPage() {
   const carregar = () => {
     setCarregando(true);
     authedFetch("/api/processos")
-      .then(async (r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(async (r) => {
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(j?.error || `HTTP ${r.status}`);
+        }
+        return r.json();
+      })
       .then((d) => { setProcessos(d.processos ?? []); setPapel(d.papel ?? null); setErro(null); })
       // Erro vira mensagem, não lista vazia: "não tem processo" e "não consegui carregar" são
       // coisas diferentes e o time precisa saber qual das duas está vendo.
@@ -94,113 +116,145 @@ export default function ProcessosPage() {
       if (!m.has(p.area)) m.set(p.area, []);
       m.get(p.area)!.push(p);
     }
-    return [...m.entries()];
+    return [...m.entries()].sort((a, b) => ORDEM_AREA.indexOf(a[0]) - ORDEM_AREA.indexOf(b[0]));
   }, [filtrados]);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-start justify-between gap-4 mb-1">
-        <div className="flex items-center gap-3">
-          <BookOpen className="w-6 h-6 text-[var(--lone-brand-soft)]" />
-          <h1 className="text-2xl font-brand font-semibold text-[var(--lone-text-primary)]">Processos</h1>
+      {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
+      <header className="mb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <span className="flex items-center gap-1.5 text-lone-eyebrow font-inter font-medium uppercase tracking-[1.5px] text-lone-text-tertiary mb-2">
+              <BookOpen className="w-3.5 h-3.5" aria-hidden /> Operação
+            </span>
+            <h1 className="text-lone-hero font-brand text-lone-text-primary">Processos</h1>
+            <p className="text-lone-body font-inter text-lone-text-secondary mt-1.5 max-w-2xl">
+              Como a Lone trabalha: quem faz, em que ordem, com que prazo e como se prova que ficou
+              pronto. Para entender o <em>sistema</em> — o que cada tela faz —, veja{" "}
+              <Link href="/sobre" className="text-lone-brand-soft hover:underline">Sobre o Sistema</Link>.
+            </p>
+          </div>
+          {papel && (
+            <Button onClick={() => setNovoAberto(true)} className="gap-2 shrink-0">
+              <Plus className="w-4 h-4" aria-hidden /> Novo processo
+            </Button>
+          )}
         </div>
-        {papel && (
-          <Button onClick={() => setNovoAberto(true)} className="gap-2">
-            <Plus className="w-4 h-4" /> Novo processo
-          </Button>
-        )}
-      </div>
-      <p className="text-sm text-[var(--lone-text-secondary)] mb-6">
-        Como a Lone trabalha: quem faz, em que ordem, com que prazo e como se prova que ficou pronto.
-        {" "}Para entender o <em>sistema</em> (o que cada tela faz), veja{" "}
-        <Link href="/sobre" className="text-[var(--lone-brand-soft)] hover:underline">Sobre o Sistema</Link>.
-      </p>
+      </header>
 
-      <div className="flex flex-wrap items-center gap-2 mb-6">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--lone-text-muted)]" />
+      {/* ── Busca e filtro ────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-2 mb-7">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-lone-text-tertiary pointer-events-none" aria-hidden />
           <Input value={busca} onChange={(e) => setBusca(e.target.value)}
+            aria-label="Buscar processo"
             placeholder="Buscar por título, código ou assunto…" className="pl-9" />
         </div>
-        <div className="flex gap-1 flex-wrap">
-          {AREAS.map((a) => (
-            <button key={a.chave} onClick={() => setArea(a.chave)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                area === a.chave
-                  ? "bg-[var(--lone-brand-bg-soft)] text-[var(--lone-brand-soft)]"
-                  : "text-[var(--lone-text-secondary)] hover:bg-[var(--lone-bg-elevated)]"
-              }`}>
-              {a.rotulo}
-            </button>
-          ))}
+        <div className="flex gap-1 flex-wrap" role="group" aria-label="Filtrar por área">
+          {AREAS.map((a) => {
+            const ativo = area === a.chave;
+            return (
+              <button key={a.chave} onClick={() => setArea(a.chave)} aria-pressed={ativo}
+                className={`px-3 py-1.5 rounded-full text-lone-caption font-inter font-medium transition-colors ${
+                  ativo
+                    ? "bg-lone-brand-bg-soft text-lone-brand-soft"
+                    : "text-lone-text-secondary hover:bg-lone-bg-elevated"
+                }`}>
+                {a.rotulo}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {carregando && (
-        <div className="flex items-center gap-2 text-sm text-[var(--lone-text-secondary)] py-12 justify-center">
-          <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
+        <div className="flex items-center justify-center gap-2 py-16 text-lone-body font-inter text-lone-text-secondary">
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> Carregando…
         </div>
       )}
 
       {erro && !carregando && (
-        <div className="flex items-start gap-3 p-4 rounded-lg bg-[var(--lone-danger-bg)] text-[var(--lone-danger)]">
-          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium">Não consegui carregar os processos.</p>
-            <p className="text-sm opacity-80">{erro}</p>
+        <div role="alert" className="flex items-start gap-3 rounded-[10px] border border-lone-danger-border bg-lone-danger-bg p-[14px]">
+          <AlertCircle className="w-5 h-5 shrink-0 text-lone-danger mt-0.5" aria-hidden />
+          <div className="min-w-0">
+            <p className="text-lone-h2 font-inter text-lone-danger">Não consegui carregar os processos.</p>
+            {/* Sem /80: opacidade sobre token sólido não gera classe no build desta config. */}
+            <p className="text-lone-caption font-inter text-lone-danger mt-1">{erro}</p>
           </div>
         </div>
       )}
 
       {/* Vazio GUIADO: explica o que é a aba e oferece o caminho, em vez de deixar a tela muda. */}
       {!carregando && !erro && processos.length === 0 && (
-        <div className="text-center py-16 px-6 rounded-xl border border-dashed border-[var(--lone-border)]">
-          <BookOpen className="w-10 h-10 mx-auto mb-4 text-[var(--lone-text-muted)]" />
-          <h2 className="text-lg font-medium text-[var(--lone-text-primary)] mb-2">Nenhum processo aqui ainda</h2>
-          <p className="text-sm text-[var(--lone-text-secondary)] max-w-md mx-auto mb-6">
+        <div className="rounded-[10px] border border-dashed border-lone-border px-6 py-16 text-center">
+          <BookOpen className="w-10 h-10 mx-auto mb-4 text-lone-text-tertiary" aria-hidden />
+          <h2 className="text-lone-h1 font-brand text-lone-text-primary mb-2">Nenhum processo aqui ainda</h2>
+          <p className="text-lone-body font-inter text-lone-text-secondary max-w-md mx-auto mb-6">
             Esta aba guarda o jeito da Lone trabalhar, para que quem chega consiga executar sem
-            depender de alguém explicar. Já existem cinco processos escritos a partir do playbook
-            e do fluxo real do sistema.
+            depender de alguém explicar.
           </p>
           {gestao ? (
             <Button onClick={semearIniciais} disabled={semeando} className="gap-2">
-              {semeando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              {semeando ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Plus className="w-4 h-4" aria-hidden />}
               Trazer os processos já escritos
             </Button>
           ) : (
-            <p className="text-xs text-[var(--lone-text-muted)]">Peça à gestão para publicar os primeiros.</p>
+            <p className="text-lone-caption font-inter text-lone-text-tertiary">
+              Peça à gestão para publicar os primeiros.
+            </p>
           )}
         </div>
       )}
 
       {!carregando && !erro && processos.length > 0 && filtrados.length === 0 && (
-        <p className="text-sm text-[var(--lone-text-secondary)] py-12 text-center">
+        <p className="py-16 text-center text-lone-body font-inter text-lone-text-secondary">
           Nenhum processo bate com esse filtro.
         </p>
       )}
 
+      {/* ── Lista ─────────────────────────────────────────────────────────── */}
       <div className="space-y-8">
         {porArea.map(([chave, lista]) => (
           <section key={chave}>
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--lone-text-muted)] mb-3">
+            <h2 className="flex items-baseline gap-2 text-lone-eyebrow font-inter font-medium uppercase tracking-[1.5px] text-lone-text-tertiary mb-3">
               {ROTULO_AREA[chave] ?? chave}
+              <span className="text-lone-text-disabled normal-case tracking-normal">{lista.length}</span>
             </h2>
             <div className="grid gap-3 sm:grid-cols-2">
-              {lista.map((p) => (
-                <Link key={p.id} href={`/processos/${p.slug}`}
-                  className="block p-4 rounded-xl border border-[var(--lone-border)] bg-[var(--lone-bg-surface)] hover:border-[var(--lone-brand-soft)] transition-colors">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[11px] font-mono text-[var(--lone-text-muted)]">{p.code}</span>
-                    <PillBadge tone={TOM_STATUS[p.status] ?? "default"}>
-                      {ROTULO_STATUS[p.status] ?? p.status}
-                    </PillBadge>
-                  </div>
-                  <h3 className="font-medium text-[var(--lone-text-primary)] mb-1">{p.title}</h3>
-                  {p.summary && (
-                    <p className="text-sm text-[var(--lone-text-secondary)] line-clamp-2">{p.summary}</p>
-                  )}
-                </Link>
-              ))}
+              {lista.map((p) => {
+                const selo = SELO[p.status];
+                return (
+                  <Link key={p.id} href={`/processos/${p.slug}`}
+                    className="group relative flex flex-col gap-2 rounded-[10px] border border-lone-border bg-lone-bg-card p-[14px] transition-colors duration-150 hover:border-lone-border-strong hover:bg-lone-bg-elevated">
+                    {/* Faixa de atenção só no que não está no ar. */}
+                    {selo && <span className="absolute inset-y-0 left-0 w-[3px] rounded-l-[10px] bg-lone-warning" aria-hidden />}
+
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-lone-eyebrow tracking-[1px] text-lone-text-tertiary">{p.code}</span>
+                      <span className="text-lone-text-disabled" aria-hidden>·</span>
+                      <span className="text-lone-eyebrow font-inter uppercase tracking-[1.5px] text-lone-text-tertiary">
+                        {ROTULO_TIPO[p.doc_type] ?? p.doc_type}
+                      </span>
+                      {selo && <PillBadge tone={selo.tone} className="ml-auto">{selo.rotulo}</PillBadge>}
+                    </div>
+
+                    <h3 className="text-lone-h2 font-inter text-lone-text-primary group-hover:text-lone-brand-soft transition-colors">
+                      {p.title}
+                    </h3>
+
+                    {p.summary && (
+                      <p className="text-lone-body font-inter text-lone-text-secondary line-clamp-2">{p.summary}</p>
+                    )}
+
+                    {/* Quanto custa ler: a pessoa decide antes de abrir. */}
+                    <span className="mt-auto pt-1 flex items-center gap-1.5 text-lone-caption font-inter text-lone-text-tertiary">
+                      <ListChecks className="w-3.5 h-3.5" aria-hidden />
+                      {p.passos} {p.passos === 1 ? "passo" : "passos"}
+                    </span>
+                  </Link>
+                );
+              })}
             </div>
           </section>
         ))}

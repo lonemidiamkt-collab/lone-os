@@ -72,11 +72,11 @@ export default function NovoProcessoDialog({ onClose, onCriado }: { onClose: () 
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-[var(--lone-bg-surface)] rounded-2xl border border-[var(--lone-border)] w-full max-w-2xl max-h-[85vh] overflow-y-auto"
+      <div className="bg-lone-bg-card rounded-2xl border border-lone-border w-full max-w-2xl max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-[var(--lone-border)] sticky top-0 bg-[var(--lone-bg-surface)]">
-          <h2 className="font-brand font-semibold text-lg text-[var(--lone-text-primary)]">Novo processo</h2>
-          <button onClick={onClose} className="text-[var(--lone-text-muted)] hover:text-[var(--lone-text-primary)]">
+        <div className="flex items-center justify-between p-5 border-b border-lone-border sticky top-0 bg-lone-bg-card">
+          <h2 className="font-brand font-semibold text-lg text-lone-text-primary">Novo processo</h2>
+          <button onClick={onClose} className="text-lone-text-tertiary hover:text-lone-text-primary">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -86,35 +86,35 @@ export default function NovoProcessoDialog({ onClose, onCriado }: { onClose: () 
             <>
               <div className="flex gap-3">
                 <label className="flex-1 text-sm">
-                  <span className="block text-xs font-medium text-[var(--lone-text-secondary)] mb-1">Área</span>
+                  <span className="block text-xs font-medium text-lone-text-secondary mb-1">Área</span>
                   <select value={area} onChange={(e) => setArea(e.target.value)}
-                    className="w-full rounded-lg border border-[var(--lone-border)] bg-[var(--lone-bg-base)] px-3 py-2 text-sm text-[var(--lone-text-primary)]">
+                    className="w-full rounded-lg border border-lone-border bg-lone-bg-primary px-3 py-2 text-sm text-lone-text-primary">
                     {AREAS.map((a) => <option key={a.chave} value={a.chave}>{a.rotulo}</option>)}
                   </select>
                 </label>
                 <label className="flex-1 text-sm">
-                  <span className="block text-xs font-medium text-[var(--lone-text-secondary)] mb-1">Tipo</span>
+                  <span className="block text-xs font-medium text-lone-text-secondary mb-1">Tipo</span>
                   <select value={tipo} onChange={(e) => setTipo(e.target.value)}
-                    className="w-full rounded-lg border border-[var(--lone-border)] bg-[var(--lone-bg-base)] px-3 py-2 text-sm text-[var(--lone-text-primary)]">
+                    className="w-full rounded-lg border border-lone-border bg-lone-bg-primary px-3 py-2 text-sm text-lone-text-primary">
                     {TIPOS.map((t) => <option key={t.chave} value={t.chave}>{t.rotulo}</option>)}
                   </select>
                 </label>
               </div>
 
               <label className="block text-sm">
-                <span className="block text-xs font-medium text-[var(--lone-text-secondary)] mb-1">
+                <span className="block text-xs font-medium text-lone-text-secondary mb-1">
                   Conte como se faz hoje — do jeito que você explicaria pra um colega novo
                 </span>
                 <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={8}
                   placeholder="Ex.: quando o cliente pede uma arte no grupo, eu confiro se tem preço e produto definidos, abro o card no board do designer com a data da postagem…"
-                  className="w-full rounded-lg border border-[var(--lone-border)] bg-[var(--lone-bg-base)] px-3 py-2 text-sm text-[var(--lone-text-primary)] leading-relaxed" />
+                  className="w-full rounded-lg border border-lone-border bg-lone-bg-primary px-3 py-2 text-sm text-lone-text-primary leading-relaxed" />
               </label>
 
               <Button onClick={redigir} disabled={ocupado || texto.trim().length < 40} className="gap-2 w-full">
                 {ocupado ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                 Organizar no padrão
               </Button>
-              <p className="text-xs text-[var(--lone-text-muted)]">
+              <p className="text-xs text-lone-text-tertiary">
                 Você lê e corrige antes de salvar. Nada vira processo oficial sem a gestão publicar.
               </p>
             </>
@@ -123,13 +123,13 @@ export default function NovoProcessoDialog({ onClose, onCriado }: { onClose: () 
           {rascunho && (
             <>
               <div>
-                <h3 className="font-medium text-[var(--lone-text-primary)]">{rascunho.titulo}</h3>
-                <p className="text-sm text-[var(--lone-text-secondary)] mt-1">{rascunho.objetivo}</p>
+                <h3 className="font-medium text-lone-text-primary">{rascunho.titulo}</h3>
+                <p className="text-sm text-lone-text-secondary mt-1">{rascunho.objetivo}</p>
               </div>
 
               {/* O que a IA NÃO soube — aparece como pergunta pra pessoa, não como texto inventado. */}
               {pendencias.length > 0 && (
-                <div className="p-3 rounded-lg bg-[var(--lone-warning-bg)] text-[var(--lone-warning)]">
+                <div className="p-3 rounded-lg bg-lone-warning-bg text-lone-warning">
                   <p className="text-sm font-medium flex items-center gap-2 mb-1">
                     <AlertTriangle className="w-4 h-4" /> Faltou informação
                   </p>
@@ -141,10 +141,10 @@ export default function NovoProcessoDialog({ onClose, onCriado }: { onClose: () 
 
               <ol className="space-y-2">
                 {rascunho.passos?.map((s, i) => (
-                  <li key={i} className="p-3 rounded-lg border border-[var(--lone-border)]">
-                    <p className="text-sm font-medium text-[var(--lone-text-primary)]">{s.seq}. {s.titulo}</p>
-                    <p className="text-xs text-[var(--lone-text-secondary)] mt-1">{s.instrucao}</p>
-                    <p className="text-xs text-[var(--lone-text-muted)] mt-1">
+                  <li key={i} className="p-3 rounded-lg border border-lone-border">
+                    <p className="text-sm font-medium text-lone-text-primary">{s.seq}. {s.titulo}</p>
+                    <p className="text-xs text-lone-text-secondary mt-1">{s.instrucao}</p>
+                    <p className="text-xs text-lone-text-tertiary mt-1">
                       {s.papel}{s.evidencia ? ` · prova: ${s.evidencia}` : ""}
                     </p>
                   </li>
@@ -162,7 +162,7 @@ export default function NovoProcessoDialog({ onClose, onCriado }: { onClose: () 
             </>
           )}
 
-          {erro && <p className="text-sm text-[var(--lone-danger)]">{erro}</p>}
+          {erro && <p className="text-sm text-lone-danger">{erro}</p>}
         </div>
       </div>
     </div>

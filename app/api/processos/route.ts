@@ -63,7 +63,25 @@ export async function GET(req: NextRequest) {
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ processos: data ?? [], papel: gate.papel });
+  // Quantos passos cada um tem — a pergunta que a pessoa faz ANTES de abrir ("dá pra ler agora
+  // ou deixo pra depois?"). Sem isso ela abre os cinco pra descobrir. Uma consulta só, em lote.
+  const versoes = (data ?? []).map((p) => p.active_version_id).filter(Boolean) as string[];
+  const passosPorVersao = new Map<string, number>();
+  if (versoes.length) {
+    const { data: passos } = await supabaseAdmin
+      .from("process_steps").select("version_id").in("version_id", versoes);
+    for (const s of passos ?? []) {
+      const k = s.version_id as string;
+      passosPorVersao.set(k, (passosPorVersao.get(k) ?? 0) + 1);
+    }
+  }
+
+  return NextResponse.json({
+    processos: (data ?? []).map((p) => ({
+      ...p, passos: passosPorVersao.get(p.active_version_id as string) ?? 0,
+    })),
+    papel: gate.papel,
+  });
 }
 
 export async function POST(req: NextRequest) {

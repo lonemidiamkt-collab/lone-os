@@ -8,6 +8,10 @@
 //               uma vez, na chegada.
 //
 // A separação existe porque quem já sabe o processo não quer reler a teoria pra achar o passo 4.
+//
+// DESIGN: classes lone-* do tailwind.config (a primeira versão usava var(--lone-*) inventados e
+// saía sem borda). Os passos têm TRILHA ligando os números — sem ela a lista lê como itens soltos,
+// e a ordem é justamente a informação principal aqui.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -15,7 +19,7 @@ import { useParams } from "next/navigation";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { PillBadge } from "@/components/lone-ui";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Loader2, AlertCircle, CheckCircle2, Camera, Clock, User } from "lucide-react";
+import { ArrowLeft, Loader2, AlertCircle, Camera, Clock, User, Monitor } from "lucide-react";
 
 interface Passo {
   id: string; seq: number; title: string; instruction: string;
@@ -41,20 +45,38 @@ interface Dados {
 const ROTULO_AREA: Record<string, string> = {
   social: "Social", traffic: "Tráfego", cs: "CS", comercial: "Comercial", geral: "Geral",
 };
-const ROTULO_STATUS: Record<string, string> = {
-  active: "No ar", draft: "Rascunho", in_review: "Em revisão", deprecated: "Descontinuado", archived: "Arquivado",
+const ROTULO_TIPO: Record<string, string> = {
+  sop: "Passo a passo", checklist: "Checklist", processo: "Processo",
+  playbook: "Playbook", politica: "Política", template: "Modelo",
 };
-const TOM_STATUS: Record<string, "success" | "warning" | "default" | "info"> = {
-  active: "success", draft: "warning", in_review: "info", deprecated: "default", archived: "default",
+/** Só o que foge do normal ganha selo — processo no ar é o esperado. */
+const SELO: Record<string, { rotulo: string; tone: "warning" | "info" | "default" }> = {
+  draft: { rotulo: "Rascunho", tone: "warning" },
+  in_review: { rotulo: "Em revisão", tone: "info" },
+  deprecated: { rotulo: "Descontinuado", tone: "default" },
+  archived: { rotulo: "Arquivado", tone: "default" },
 };
 
 function Campo({ rotulo, valor }: { rotulo: string; valor: string | null | undefined }) {
   if (!valor?.trim()) return null;
   return (
     <div>
-      <dt className="text-xs font-semibold uppercase tracking-wider text-[var(--lone-text-muted)] mb-1">{rotulo}</dt>
-      <dd className="text-sm text-[var(--lone-text-primary)] leading-relaxed whitespace-pre-line">{valor}</dd>
+      <dt className="text-lone-eyebrow font-inter font-medium uppercase tracking-[1.5px] text-lone-text-tertiary mb-1.5">
+        {rotulo}
+      </dt>
+      <dd className="text-lone-body font-inter text-lone-text-primary leading-relaxed whitespace-pre-line">
+        {valor}
+      </dd>
     </div>
+  );
+}
+
+/** Metadado do passo: quieto, mas legível. Ícone sem texto vira adivinhação. */
+function Meta({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-lone-caption font-inter text-lone-text-tertiary">
+      <span className="shrink-0" aria-hidden>{icon}</span>{children}
+    </span>
   );
 }
 
@@ -71,7 +93,10 @@ export default function ProcessoPage() {
     authedFetch(`/api/processos/${slug}`)
       .then(async (r) => {
         if (r.status === 404) throw new Error("Processo não encontrado.");
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(j?.error || `HTTP ${r.status}`);
+        }
         return r.json();
       })
       .then((j) => { setD(j as Dados); setErro(null); })
@@ -93,111 +118,137 @@ export default function ProcessoPage() {
     } finally { setPublicando(false); }
   };
 
+  const voltar = (
+    <Link href="/processos"
+      className="inline-flex items-center gap-1 text-lone-caption font-inter text-lone-text-secondary hover:text-lone-text-primary transition-colors mb-5">
+      <ArrowLeft className="w-3.5 h-3.5" aria-hidden /> Processos
+    </Link>
+  );
+
   if (carregando) {
-    return <div className="p-6 flex items-center gap-2 text-sm text-[var(--lone-text-secondary)]">
-      <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
-    </div>;
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        {voltar}
+        <div className="flex items-center gap-2 py-16 justify-center text-lone-body font-inter text-lone-text-secondary">
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> Carregando…
+        </div>
+      </div>
+    );
   }
   if (erro || !d) {
     return (
-      <div className="p-6 max-w-3xl mx-auto">
-        <Link href="/processos" className="inline-flex items-center gap-1 text-sm text-[var(--lone-text-secondary)] hover:text-[var(--lone-text-primary)] mb-4">
-          <ArrowLeft className="w-4 h-4" /> Processos
-        </Link>
-        <div className="flex items-start gap-3 p-4 rounded-lg bg-[var(--lone-danger-bg)] text-[var(--lone-danger)]">
-          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-          <p>{erro}</p>
+      <div className="p-6 max-w-4xl mx-auto">
+        {voltar}
+        <div role="alert" className="flex items-start gap-3 rounded-[10px] border border-lone-danger-border bg-lone-danger-bg p-[14px]">
+          <AlertCircle className="w-5 h-5 shrink-0 text-lone-danger mt-0.5" aria-hidden />
+          <p className="text-lone-body font-inter text-lone-danger">{erro}</p>
         </div>
       </div>
     );
   }
 
   const { processo: p, versao: v, passos, permissoes } = d;
+  const selo = SELO[p.status];
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <Link href="/processos" className="inline-flex items-center gap-1 text-sm text-[var(--lone-text-secondary)] hover:text-[var(--lone-text-primary)] mb-4">
-        <ArrowLeft className="w-4 h-4" /> Processos
-      </Link>
+      {voltar}
 
-      <div className="flex items-start justify-between gap-4 mb-2">
+      {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
+      <header className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className="text-[11px] font-mono text-[var(--lone-text-muted)]">{p.code}</span>
-            <PillBadge tone={TOM_STATUS[p.status] ?? "default"}>{ROTULO_STATUS[p.status] ?? p.status}</PillBadge>
-            <PillBadge>{ROTULO_AREA[p.area] ?? p.area}</PillBadge>
-            {v && <span className="text-[11px] text-[var(--lone-text-muted)]">v{v.version}</span>}
+            <span className="font-mono text-lone-eyebrow tracking-[1px] text-lone-text-tertiary">{p.code}</span>
+            <span className="text-lone-text-disabled" aria-hidden>·</span>
+            <span className="text-lone-eyebrow font-inter uppercase tracking-[1.5px] text-lone-text-tertiary">
+              {ROTULO_AREA[p.area] ?? p.area} · {ROTULO_TIPO[p.doc_type] ?? p.doc_type}
+            </span>
+            {selo && <PillBadge tone={selo.tone}>{selo.rotulo}</PillBadge>}
           </div>
-          <h1 className="text-2xl font-brand font-semibold text-[var(--lone-text-primary)]">{p.title}</h1>
-          {p.summary && <p className="text-sm text-[var(--lone-text-secondary)] mt-1">{p.summary}</p>}
+          <h1 className="text-lone-hero font-brand text-lone-text-primary">{p.title}</h1>
+          {p.summary && (
+            <p className="text-lone-body font-inter text-lone-text-secondary mt-1.5 max-w-2xl">{p.summary}</p>
+          )}
         </div>
         {permissoes.publicar && p.status !== "active" && (
           <Button onClick={publicar} disabled={publicando} className="gap-2 shrink-0">
-            {publicando && <Loader2 className="w-4 h-4 animate-spin" />} Publicar
+            {publicando && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Publicar
           </Button>
         )}
-      </div>
+      </header>
 
       {p.status === "draft" && (
-        <p className="text-xs text-[var(--lone-warning)] bg-[var(--lone-warning-bg)] rounded-lg px-3 py-2 mt-4">
+        <p className="mt-4 rounded-[10px] border border-lone-warning-border bg-lone-warning-bg px-[14px] py-2.5 text-lone-caption font-inter text-lone-warning">
           Este é um rascunho — ainda não é o processo oficial. Só a gestão publica.
         </p>
       )}
 
-      <div className="flex gap-1 border-b border-[var(--lone-border)] mt-6 mb-6">
+      {/* ── Abas ──────────────────────────────────────────────────────────── */}
+      <div className="flex gap-1 border-b border-lone-border mt-7 mb-6" role="tablist">
         {([["executar", `Executar (${passos.length})`], ["entender", "Entender"]] as const).map(([k, rotulo]) => (
-          <button key={k} onClick={() => setAba(k)}
-            className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
+          <button key={k} onClick={() => setAba(k)} role="tab" aria-selected={aba === k}
+            className={`px-4 py-2.5 text-lone-body font-inter font-medium -mb-px border-b-2 transition-colors ${
               aba === k
-                ? "border-[var(--lone-brand-soft)] text-[var(--lone-text-primary)]"
-                : "border-transparent text-[var(--lone-text-secondary)] hover:text-[var(--lone-text-primary)]"
+                ? "border-lone-brand text-lone-text-primary"
+                : "border-transparent text-lone-text-secondary hover:text-lone-text-primary"
             }`}>
             {rotulo}
           </button>
         ))}
       </div>
 
+      {/* ── Executar ──────────────────────────────────────────────────────── */}
       {aba === "executar" && (
         passos.length === 0 ? (
-          <p className="text-sm text-[var(--lone-text-secondary)] py-8 text-center">
+          <p className="py-16 text-center text-lone-body font-inter text-lone-text-secondary">
             Este processo ainda não tem passos escritos.
           </p>
         ) : (
-          <ol className="space-y-3">
-            {passos.map((s) => (
-              <li key={s.id} className="flex gap-4 p-4 rounded-xl border border-[var(--lone-border)] bg-[var(--lone-bg-surface)]">
-                <span className="shrink-0 w-7 h-7 rounded-full bg-[var(--lone-brand-bg-soft)] text-[var(--lone-brand-soft)] text-xs font-semibold flex items-center justify-center">
-                  {s.seq}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-medium text-[var(--lone-text-primary)]">
-                    {s.title}
-                    {s.optional && <span className="ml-2 text-xs font-normal text-[var(--lone-text-muted)]">(opcional)</span>}
-                  </h3>
-                  <p className="text-sm text-[var(--lone-text-secondary)] leading-relaxed mt-1 whitespace-pre-line">{s.instruction}</p>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-[var(--lone-text-muted)]">
-                    {s.role && <span className="inline-flex items-center gap-1"><User className="w-3 h-3" /> {s.role}</span>}
-                    {s.system_ref && <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> {s.system_ref}</span>}
-                    {/* A prova é o que separa processo de intenção — por isso aparece no passo, não num anexo. */}
-                    {s.evidence_type && (
-                      <span className="inline-flex items-center gap-1">
-                        <Camera className="w-3 h-3" /> prova: {s.evidence_type}
-                      </span>
-                    )}
-                    {s.sla_minutes != null && (
-                      <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {s.sla_minutes} min</span>
+          <ol className="relative">
+            {passos.map((s, i) => {
+              const ultimo = i === passos.length - 1;
+              return (
+                <li key={s.id} className="relative flex gap-4 pb-3 last:pb-0">
+                  {/* Trilha: o número e a linha que liga ao próximo. É a ordem virando desenho. */}
+                  <div className="relative flex flex-col items-center shrink-0">
+                    <span className="z-10 w-7 h-7 rounded-full bg-lone-brand-bg-soft text-lone-brand-soft text-lone-caption font-inter font-semibold flex items-center justify-center tabular-nums">
+                      {s.seq}
+                    </span>
+                    {!ultimo && <span className="w-px flex-1 bg-lone-border mt-1" aria-hidden />}
+                  </div>
+
+                  <div className="min-w-0 flex-1 rounded-[10px] border border-lone-border bg-lone-bg-card p-[14px]">
+                    <h3 className="text-lone-h2 font-inter text-lone-text-primary">
+                      {s.title}
+                      {s.optional && (
+                        <span className="ml-2 text-lone-caption font-normal text-lone-text-tertiary">(opcional)</span>
+                      )}
+                    </h3>
+                    <p className="text-lone-body font-inter text-lone-text-secondary leading-relaxed mt-1.5 whitespace-pre-line">
+                      {s.instruction}
+                    </p>
+
+                    {(s.role || s.system_ref || s.evidence_type || s.sla_minutes != null) && (
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-lone-border">
+                        {s.role && <Meta icon={<User className="w-3.5 h-3.5" />}>{s.role}</Meta>}
+                        {s.system_ref && <Meta icon={<Monitor className="w-3.5 h-3.5" />}>{s.system_ref}</Meta>}
+                        {/* A prova é o que separa processo de intenção — por isso fica no passo. */}
+                        {s.evidence_type && <Meta icon={<Camera className="w-3.5 h-3.5" />}>prova: {s.evidence_type}</Meta>}
+                        {s.sla_minutes != null && <Meta icon={<Clock className="w-3.5 h-3.5" />}>{s.sla_minutes} min</Meta>}
+                      </div>
                     )}
                   </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ol>
         )
       )}
 
+      {/* ── Entender ──────────────────────────────────────────────────────── */}
       {aba === "entender" && v && (
-        <div className="space-y-6">
-          <dl className="grid gap-5 sm:grid-cols-2">
+        <div className="space-y-8">
+          <dl className="grid gap-6 sm:grid-cols-2">
             <Campo rotulo="Objetivo" valor={v.objective} />
             <Campo rotulo="Problema que resolve" valor={v.problem} />
             <Campo rotulo="Quando acontece" valor={v.trigger_event} />
@@ -213,13 +264,23 @@ export default function ProcessoPage() {
 
           {!!v.kpis?.length && (
             <section>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--lone-text-muted)] mb-3">Como medimos</h2>
+              <h2 className="text-lone-eyebrow font-inter font-medium uppercase tracking-[1.5px] text-lone-text-tertiary mb-3">
+                Como medimos
+              </h2>
               <div className="space-y-2">
                 {v.kpis.map((k, i) => (
-                  <div key={i} className="p-3 rounded-lg border border-[var(--lone-border)] bg-[var(--lone-bg-surface)]">
-                    <p className="text-sm font-medium text-[var(--lone-text-primary)]">{k.nome} — meta: {k.meta}</p>
-                    <p className="text-xs text-[var(--lone-text-secondary)] mt-1">{k.definicao} <span className="text-[var(--lone-text-muted)]">· fonte: {k.fonte}</span></p>
-                    {k.acaoAbaixo && <p className="text-xs text-[var(--lone-warning)] mt-1">Abaixo da meta: {k.acaoAbaixo}</p>}
+                  <div key={i} className="rounded-[10px] border border-lone-border bg-lone-bg-card p-[14px]">
+                    <p className="text-lone-h2 font-inter text-lone-text-primary">
+                      {k.nome} <span className="text-lone-text-tertiary font-normal">— meta: {k.meta}</span>
+                    </p>
+                    <p className="text-lone-body font-inter text-lone-text-secondary mt-1.5">
+                      {k.definicao} <span className="text-lone-text-tertiary">· fonte: {k.fonte}</span>
+                    </p>
+                    {k.acaoAbaixo && (
+                      <p className="text-lone-caption font-inter text-lone-warning mt-2">
+                        Abaixo da meta: {k.acaoAbaixo}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -228,13 +289,19 @@ export default function ProcessoPage() {
 
           {!!v.exceptions?.length && (
             <section>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--lone-text-muted)] mb-3">Quando foge do normal</h2>
+              <h2 className="text-lone-eyebrow font-inter font-medium uppercase tracking-[1.5px] text-lone-text-tertiary mb-3">
+                Quando foge do normal
+              </h2>
               <div className="space-y-2">
                 {v.exceptions.map((e, i) => (
-                  <div key={i} className="p-3 rounded-lg border border-[var(--lone-border)] bg-[var(--lone-bg-surface)]">
-                    <p className="text-sm font-medium text-[var(--lone-text-primary)]">{e.situacao}</p>
-                    <p className="text-xs text-[var(--lone-text-secondary)] mt-1">{e.tratamento}</p>
-                    {e.escalonarPara && <p className="text-xs text-[var(--lone-text-muted)] mt-1">Escalar para: {e.escalonarPara}</p>}
+                  <div key={i} className="rounded-[10px] border border-lone-border bg-lone-bg-card p-[14px]">
+                    <p className="text-lone-h2 font-inter text-lone-text-primary">{e.situacao}</p>
+                    <p className="text-lone-body font-inter text-lone-text-secondary mt-1.5">{e.tratamento}</p>
+                    {e.escalonarPara && (
+                      <p className="text-lone-caption font-inter text-lone-text-tertiary mt-2">
+                        Escalar para: {e.escalonarPara}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
