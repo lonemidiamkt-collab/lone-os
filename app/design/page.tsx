@@ -497,7 +497,7 @@ export default function DesignPage() {
       setTimeout(() => setNoteSaved(false), 2000);
       if (note) {
         pushNotification("content", "Designer comentou na demanda",
-          `"${briefingReq.title}" (${briefingReq.clientName}) — ${currentUser}: ${note.slice(0, 80)}`, briefingReq.clientId);
+          `"${briefingReq.title}" (${briefingReq.clientName}) — ${currentUser}: ${note.slice(0, 80)}`, briefingReq.clientId, briefingReq.contentCardId ?? undefined);
       }
     } catch {
       /* o store reverte otimista sozinho */
@@ -578,13 +578,17 @@ export default function DesignPage() {
             ...(created.length === 0 ? { imageUrl: artUrl } : {}),
           }, { bypassWorkflow: true });
         }
-        pushNotification("content", "Arte entregue pelo Designer", `"${briefingReq.title}" (${briefingReq.clientName}) — arte pronta para confirmação.`, briefingReq.clientId);
+        // O CARD, NÃO SÓ O CLIENTE. Sem cardId a notificação cai no cadastro do cliente em vez de
+        // abrir a arte (NotificationCenter usa /social?card=… e só cai em /clients/… como último
+        // recurso). Eram 478 avisos de "Arte entregue" assim, todos levando ao lugar errado —
+        // `linkedCard` já estava aqui no escopo, só não era usado.
+        pushNotification("content", "Arte entregue pelo Designer", `"${briefingReq.title}" (${briefingReq.clientName}) — arte pronta para confirmação.`, briefingReq.clientId, linkedCard?.id);
         import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
       } else {
         // Social media / outros adicionam referência — anexa e notifica designer
         updateDesignRequest(briefingReq.id, { attachments: nextAttachments });
         setBriefingReq({ ...briefingReq, attachments: nextAttachments });
-        pushNotification("content", "Referência enviada", `"${briefingReq.title}" (${briefingReq.clientName}) — ${currentUser} enviou uma imagem de referência.`, briefingReq.clientId);
+        pushNotification("content", "Referência enviada", `"${briefingReq.title}" (${briefingReq.clientName}) — ${currentUser} enviou uma imagem de referência.`, briefingReq.clientId, linkedCard?.id);
       }
 
       setBriefingUploadOk(true);

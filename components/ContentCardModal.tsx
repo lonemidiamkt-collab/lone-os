@@ -258,7 +258,8 @@ export default function ContentCardModal({ card, onClose }: Props) {
     addCardComment(card.id, currentUser, role, prefix + body);
     // Notifica cada pessoa marcada pra ela ver rápido (notificação global, mas endereçada).
     mentions.forEach((name) => {
-      pushNotification("content", `📌 ${name}, você foi marcado`, `${currentUser} te marcou em "${card.title}" (${card.clientName}): "${body.slice(0, 80)}${body.length > 80 ? "..." : ""}"`, card.clientId);
+      // Com o card: quem foi marcado abre o comentário, não a ficha do cliente.
+      pushNotification("content", `📌 ${name}, você foi marcado`, `${currentUser} te marcou em "${card.title}" (${card.clientName}): "${body.slice(0, 80)}${body.length > 80 ? "..." : ""}"`, card.clientId, card.id);
     });
     setCommentText("");
     setMentions([]);
@@ -876,7 +877,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 })
                   .then((req) => {
                     updateContentCard(card.id, { designRequestId: req.id });
-                    pushNotification("content", "Design solicitado", `Pedido de arte para "${card.title}" enviado ao designer.`, card.clientId);
+                    pushNotification("content", "Design solicitado", `Pedido de arte para "${card.title}" enviado ao designer.`, card.clientId, card.id);
                   })
                   .catch(() => {
                     pushNotification("system", "Falha ao solicitar design", `Não deu pra enviar "${card.title}" pro designer. Tente de novo.`, card.clientId);

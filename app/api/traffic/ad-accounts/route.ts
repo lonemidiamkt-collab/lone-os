@@ -95,11 +95,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "clientId e metaAccountId são obrigatórios" }, { status: 400 });
     }
 
+    // UMA GRAFIA SÓ. A tabela guarda com `act_`; quem digita o número no painel manda sem. Sem
+    // normalizar aqui, a checagem de duplicata não casa (deixa cadastrar a mesma conta duas vezes)
+    // e o alerta de saldo procura por uma chave que não existe.
+    const conta = metaAccountId.startsWith("act_") ? metaAccountId : `act_${metaAccountId}`;
+
     // Check for duplicates
     const { data: existing } = await supabaseAdmin
       .from("ad_accounts")
       .select("id")
-      .eq("meta_account_id", metaAccountId)
+      .eq("meta_account_id", conta)
       .single();
 
     if (existing) {
@@ -110,8 +115,8 @@ export async function POST(req: NextRequest) {
     let resolvedIsPrepaid = isPrepaid ?? true;
     const token = await getMetaToken();
     if (token) {
-      const metaData = await fetchAccountBalances(token, [metaAccountId]);
-      const raw = metaData.get(metaAccountId);
+      const metaData = await fetchAccountBalances(token, [conta]);
+      const raw = metaData.get(conta);
       if (raw && !("error" in raw)) {
         const detected = detectAccountType(raw);
         if (detected !== "unknown") resolvedIsPrepaid = detected === "prepaid";
@@ -122,7 +127,7 @@ export async function POST(req: NextRequest) {
       .from("ad_accounts")
       .insert({
         client_id:      clientId,
-        meta_account_id: metaAccountId,
+        meta_account_id: conta,
         account_name:   accountName || null,
         is_prepaid:     resolvedIsPrepaid,
         billing_type_source: token ? "auto" : null,
@@ -134,7 +139,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: insErr.message }, { status: 500 });
     }
 
-    return NextResponse.json({ id: inserted.id, synced: false });
+    // A FICHA DO CLIENTE TAMBÉM. `ad_accounts` alimenta alerta de saldo e pacing, mas o painel de
+    // resultados, o relatório e o snapshot do Instagram leem `clients.meta_ad_account_id`. Gravar
+    // só num lado é o bug que fez o Portuga P'Neus ficar semanas sem dado no painel com a conta
+    // "cadastrada" — na época eu corrigi o cliente na mão e deixei a causa de pé.
+    // Prefixo `act_` porque é assim que o resto do sistema consulta a Graph API.
+    const { error: fichaErr } = await supabaseAdmin
+      .from("clients").update({ meta_ad_account_id: conta }).eq("id", clientId);
+
+    return NextResponse.json({
+      id: inserted.id, synced: false,
+      // Se a ficha falhar, quem chamou precisa saber: a conta "existe" mas o cliente segue
+      // invisível no painel. Silêncio aqui foi o que escondeu o problema antes.
+      fichaAtualizada: !fichaErr, ...(fichaErr ? { avisoFicha: fichaErr.message } : {}),
+    });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
