@@ -43,7 +43,7 @@ export interface ClienteParado {
 export async function clientesSemPostar(): Promise<ClienteParado[]> {
   const { data: clientes } = await supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, assigned_social")
+    .select("id, name, nome_fantasia, assigned_social, ig_business_account_id, ig_public_username")
     .or("active.is.null,active.eq.true")
     .not("assigned_social", "is", null);
   if (!clientes?.length) return [];
@@ -62,14 +62,21 @@ export async function clientesSemPostar(): Promise<ClienteParado[]> {
   }
 
   const parados: ClienteParado[] = [];
+  const semIg: string[] = [];
   for (const c of clientes) {
     const nome = (c.nome_fantasia as string) || (c.name as string) || "Cliente";
     if (/\(teste\)/i.test(nome)) continue; // cliente de teste não é operação
 
+    // SEM INSTAGRAM LIGADO NÃO É "PAROU DE POSTAR" — é cadastro incompleto, e acusar o social por
+    // isso queimaria o alerta inteiro: na primeira lista com cinco nomes errados o time aprende a
+    // ignorar, e aí o Bazar de 35 dias volta a passar batido. Esse caso sai em `semInstagram`.
+    const temIg = !!(c.ig_business_account_id || c.ig_public_username);
+    if (!temIg) { semIg.push(nome); continue; }
+
     const q = ultimo.get(c.id as string);
     const dias = q ? Math.floor((Date.now() - new Date(q).getTime()) / 86_400_000) : null;
 
-    // NUNCA POSTOU ENTRA COMO GRAVE. Foi a brecha que deixou o Bazar 35 dias invisível.
+    // NUNCA POSTOU, TENDO INSTAGRAM: é grave de verdade. Foi a brecha que deixou o Bazar invisível.
     if (dias === null) {
       parados.push({ clientId: c.id as string, cliente: nome, responsavel: (c.assigned_social as string) ?? null, diasSemPostar: null, gravidade: "grave" });
       continue;
@@ -82,7 +89,21 @@ export async function clientesSemPostar(): Promise<ClienteParado[]> {
   }
 
   // Pior primeiro; "nunca postou" na frente de todos.
-  return parados.sort((a, b) => (b.diasSemPostar ?? 9999) - (a.diasSemPostar ?? 9999));
+  parados.sort((a, b) => (b.diasSemPostar ?? 9999) - (a.diasSemPostar ?? 9999));
+  return parados;
+}
+
+/** Clientes de social sem Instagram vinculado — o sistema é CEGO pra eles. Problema real, mas de
+ *  cadastro, não de postagem: vai num aviso próprio pra não contaminar a cobrança do social. */
+export async function clientesSemInstagram(): Promise<string[]> {
+  const { data } = await supabaseAdmin
+    .from("clients").select("name, nome_fantasia")
+    .or("active.is.null,active.eq.true")
+    .not("assigned_social", "is", null)
+    .is("ig_business_account_id", null).is("ig_public_username", null);
+  return (data ?? [])
+    .map((c) => (c.nome_fantasia as string) || (c.name as string) || "Cliente")
+    .filter((n) => !/\(teste\)/i.test(n));
 }
 
 const rotuloDias = (d: number | null) => (d === null ? "sem NENHUM post registrado" : `${d} dias sem postar`);

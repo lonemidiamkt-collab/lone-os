@@ -7,7 +7,7 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow } from "@/lib/cs/vigilancia";
 import { avaliarSaude, formatSaudeDigest, type SinaisSaude } from "@/lib/cs/saude";
-import { clientesSemPostar, textoCobranca as cobrancaSemPostar, textoEscalada as escaladaSemPostar } from "@/lib/cs/sem-postar";
+import { clientesSemPostar, clientesSemInstagram, textoCobranca as cobrancaSemPostar, textoEscalada as escaladaSemPostar } from "@/lib/cs/sem-postar";
 
 // POST /api/system/cs-saude — 3ª função: scan de saúde/risco de churn. Avalia sinais por cliente
 // (reclamação 14d, status, retração, dias sem postagem) e posta o digest dos em risco no grupo.
@@ -63,7 +63,14 @@ export async function POST(req: NextRequest) {
   // antigo dependia do time mover card pra "publicado" (ninguém move) e ignorava quem não tinha
   // NENHUM post — foi assim que o Bazar Ribeiro passou 35 dias invisível.
   const parados = await clientesSemPostar();
-  const txtParados = cobrancaSemPostar(parados);
+  // Cliente de social SEM Instagram vinculado: o sistema é cego pra ele. É problema de cadastro,
+  // não de postagem — vai num aviso curto e à parte, pra não acusar o social de algo que não é
+  // dele e queimar a credibilidade da cobrança de verdade.
+  const semIg = await clientesSemInstagram();
+  const txtParados = [
+    cobrancaSemPostar(parados),
+    semIg.length ? `👁️ _Sem Instagram vinculado (não consigo conferir postagem): ${semIg.slice(0, 6).join(", ")}${semIg.length > 6 ? ` e mais ${semIg.length - 6}` : ""}._` : "",
+  ].filter(Boolean).join("\n\n");
   const txtEscalada = escaladaSemPostar(parados);
 
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
@@ -86,6 +93,6 @@ export async function POST(req: NextRequest) {
   console.log(`[cs-saude] clientes=${clientes.length} emRisco=${emRisco} semPostar=${parados.length} escalado=${escalado} dry=${dry}`);
   return NextResponse.json({
     ok: true, dry, enviado, escalado, clientes: clientes.length, emRisco,
-    semPostar: parados.length, texto, textoSemPostar: txtParados, textoEscalada: txtEscalada,
+    semPostar: parados.length, semInstagram: semIg.length, texto, textoSemPostar: txtParados, textoEscalada: txtEscalada,
   });
 }
