@@ -59,7 +59,14 @@ export function getDashboardData({
 }: GetDashboardDataArgs): AdminDashboardData {
   const activeClients = clients.filter((c) => c.status !== "onboarding");
   const atRiskClients = clients.filter((c) => c.status === "at_risk");
-  const onboardingClients = clients.filter((c) => c.status === "onboarding");
+  // ONBOARDING É QUEM ACABOU DE CHEGAR — só quem tem menos de 7 dias de casa (pedido do Roberto).
+  // Antes bastava o status "onboarding", e o número inchava com cliente de 40+ dias que ninguém
+  // tinha promovido: o card virou paisagem justamente por nunca zerar. Sem data de entrada, entra
+  // (o registro é antigo e provavelmente esqueceram de promover — some seria pior que mostrar).
+  const DIAS_ONBOARDING = 7;
+  const limiteOnboarding = Date.now() - DIAS_ONBOARDING * 86_400_000;
+  const onboardingClients = clients.filter((c) =>
+    c.status === "onboarding" && (!c.createdAt || new Date(c.createdAt).getTime() >= limiteOnboarding));
   const urgentTasks = tasks.filter((t) => t.priority === "critical" && t.status !== "done");
 
   const pipelineCards = contentCards.filter((c) => c.status !== "published");

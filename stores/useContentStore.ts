@@ -271,7 +271,10 @@ export const useContentStore = create<ContentState>()(
             }
             if (card) {
               import("@/stores/useNotificationsStore").then(({ useNotificationsStore }) => {
-                useNotificationsStore.getState().push("content", "Conteúdo reprovado", `"${card.title}" de ${card.clientName} foi reprovado: ${reason}`, card.clientId);
+                // COM O CARD: o designer clica na reprova e cai NA ARTE que precisa refazer.
+                // Sem isso ele caía no cadastro do cliente e tinha que garimpar o card no board —
+                // parte do "as alterações não estão chegando" que o time reportou.
+                useNotificationsStore.getState().push("content", "Conteúdo reprovado", `"${card.title}" de ${card.clientName} foi reprovado: ${reason}`, card.clientId, card.id);
               });
             }
           })

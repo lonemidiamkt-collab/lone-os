@@ -261,7 +261,14 @@ export function useSnapshots() {
     const overdue = tasks.filter((t) => t.status !== "done" && t.dueDate && t.dueDate < todayStr);
 
     // Onboarding
-    const onboardingClients = clients.filter((c) => c.status === "onboarding");
+    // ONBOARDING É QUEM ACABOU DE CHEGAR — só quem tem menos de 7 dias de casa (pedido do Roberto).
+  // Antes bastava o status "onboarding", e o número inchava com cliente de 40+ dias que ninguém
+  // tinha promovido: o card virou paisagem justamente por nunca zerar. Sem data de entrada, entra
+  // (o registro é antigo e provavelmente esqueceram de promover — some seria pior que mostrar).
+  const DIAS_ONBOARDING = 7;
+  const limiteOnboarding = Date.now() - DIAS_ONBOARDING * 86_400_000;
+  const onboardingClients = clients.filter((c) =>
+    c.status === "onboarding" && (!c.createdAt || new Date(c.createdAt).getTime() >= limiteOnboarding));
     const completedOnboarding = clients.filter((c) => c.status !== "onboarding" && c.joinDate);
     const avgOnboardingDays = completedOnboarding.length > 0
       ? completedOnboarding.reduce((sum, c) => {

@@ -358,11 +358,23 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
     const [gy, gm] = goal.month.split("-").map(Number);
     const now = new Date();
     const monthsLeft = (gy - now.getFullYear()) * 12 + (gm - (now.getMonth() + 1));
-    // META DE MÊS FUTURO NÃO SE DECLARA BATIDA. O Roberto pôs meta pra setembro e o painel já
-    // dizia "Meta batida! 🎉 Hora de propor um novo patamar" em agosto — comemorando um prazo que
-    // nem chegou. Acima do alvo antes da hora é ÓTIMO, mas é "adiantado", não "cumprido".
+    // A PLATAFORMA NÃO SABE SE A META FOI BATIDA — E NÃO DEVE FINGIR QUE SABE.
+    //
+    // Não existe integração com o caixa do cliente: o faturamento aqui é o que alguém DIGITOU,
+    // mês a mês, sempre depois do mês fechar. Então enquanto o mês da meta não terminar, não há
+    // resposta — nem "batida" nem "faltando". Mostrar 69% no meio do caminho dá a impressão de um
+    // acompanhamento diário que não existe (Roberto, 03/08).
+    //
+    // Só depois que o mês da meta passa é que o número lançado vira veredito: bateu ou não bateu.
+    const mesJaFechou = monthsLeft < 0;
     const noAlvo = latest >= goal.value;
-    return { latest, pct, monthsLeft, batido: monthsLeft <= 0 && noAlvo, adiantado: monthsLeft > 0 && noAlvo };
+    return {
+      latest, pct, monthsLeft,
+      aguardando: !mesJaFechou,                       // ainda não dá pra dizer nada
+      batido: mesJaFechou && noAlvo,
+      naoBatido: mesJaFechou && !noAlvo,
+      adiantado: false,
+    };
   })();
   const growthCls = growth == null ? "" : growth > 0 ? "bg-lone-success-bg text-lone-success" : growth < 0 ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
 
@@ -447,17 +459,25 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
                  : goalProgress.monthsLeft === 0 ? <span className="text-lone-warning"> · é este mês</span>
                  : <span className="text-destructive"> · prazo passou</span>}
               </p>
-              <span className={`text-sm font-bold ${goalProgress.batido || goalProgress.adiantado ? "text-lone-success" : "text-primary"}`}>{goalProgress.pct}%</span>
+              {/* Percentual e barra SÓ com veredito. No meio do mês eles sugerem um acompanhamento
+                  em tempo real que não existe — o faturamento entra aqui digitado, depois do
+                  fechamento. Enquanto isso, a resposta honesta é "aguardando". */}
+              <span className={`text-sm font-bold ${goalProgress.batido ? "text-lone-success" : goalProgress.naoBatido ? "text-destructive" : "text-muted-foreground"}`}>
+                {goalProgress.aguardando ? "aguardando" : goalProgress.batido ? "bateu" : "não bateu"}
+              </span>
             </div>
             <div className="h-2 rounded-full bg-muted overflow-hidden">
-              <div className={`h-full rounded-full ${goalProgress.batido || goalProgress.adiantado ? "bg-lone-success" : "bg-primary"}`} style={{ width: `${Math.min(100, goalProgress.pct)}%` }} />
+              {!goalProgress.aguardando && (
+                <div className={`h-full rounded-full ${goalProgress.batido ? "bg-lone-success" : "bg-destructive"}`}
+                     style={{ width: `${Math.min(100, goalProgress.pct)}%` }} />
+              )}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1.5">
-              {goalProgress.batido
-                ? "Meta batida! 🎉 Hora de propor um novo patamar."
-                : goalProgress.adiantado
-                  ? `Já está no patamar da meta, e o prazo ainda nem chegou. Último mês: ${brl(goalProgress.latest)}.`
-                  : `Último mês registrado: ${brl(goalProgress.latest)}.`}
+              {goalProgress.aguardando
+                ? `O veredito sai quando ${mLabel(goal.month)} fechar e o faturamento do mês for lançado aqui. Último mês registrado: ${brl(goalProgress.latest)}.`
+                : goalProgress.batido
+                  ? `Meta batida! 🎉 ${mLabel(goal.month)} fechou em ${brl(goalProgress.latest)}. Hora de propor um novo patamar.`
+                  : `Meta não batida em ${mLabel(goal.month)}: fechou em ${brl(goalProgress.latest)}, alvo era ${brl(goal.value)}.`}
             </p>
           </div>
         ) : (
