@@ -2618,15 +2618,23 @@ function NewTaskModal({
   const [format, setFormat] = useState("Post");
   const [priority, setPriority] = useState<"low" | "medium" | "high" | "critical">("medium");
   const [deadline, setDeadline] = useState("");
+  // REFERÊNCIA JÁ NA CRIAÇÃO (pedido do Roberto). Antes: criava a demanda, reabria e só então
+  // anexava — e nesse meio-tempo o designer já podia ter puxado a tarefa sem a referência.
+  // A referência da DEMANDA mora em design_requests.attachments (é o que o designer vê), por isso
+  // sobe com o id da demanda, não o do card.
+  const [refs, setRefs] = useState<File[]>([]);
+  const [erroRef, setErroRef] = useState<string | null>(null);
+  // Ler `erroRef` logo após o await devolveria o valor ANTIGO — state não muda no meio da função.
+  const erroRefRef = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const client = clients.find((c) => c.id === clientId);
   const canSubmit = !!clientId && title.trim().length > 0;
 
-  const handleSubmit = () => {
-    if (!canSubmit || !client) return;
-    setSaving(true);
-    addDesignRequest({
+  const handleSubmit = async () => {
+    if (!canSubmit || !client || saving) return;
+    setSaving(true); setErroRef(null); erroRefRef.current = null;
+    const criada = await addDesignRequest({
       title: title.trim(),
       clientId: client.id,
       clientName: client.nomeFantasia || client.name,
@@ -2637,6 +2645,38 @@ function NewTaskModal({
       briefing: briefing.trim(),
       deadline: deadline || undefined,
     });
+
+    // Sobe as referências DEPOIS de criar (o upload precisa do id da demanda). Se falhar, a
+    // demanda continua criada — perdê-la por causa de um anexo seria pior — e o aviso aparece.
+    if (criada?.id && refs.length) {
+      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+      const urls: string[] = [];
+      for (const f of refs) {
+        const fd = new FormData();
+        fd.append("file", f); fd.append("cardId", criada.id);
+        try {
+          const r = await authedFetch("/api/upload-art", { method: "POST", body: fd });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok || !d?.url) throw new Error("upload");
+          urls.push(d.url as string);
+        } catch {
+          const m = `Demanda criada, mas a referência "${f.name}" não subiu. Abra a demanda e anexe de novo.`;
+          erroRefRef.current = m; setErroRef(m);
+        }
+      }
+      if (urls.length) {
+        await authedFetch("/api/design-requests/update", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: criada.id, attachments: [...(criada.attachments ?? []), ...urls] }),
+        }).catch(() => {
+          const m = "As referências subiram mas não vincularam à demanda. Abra e anexe de novo.";
+          erroRefRef.current = m; setErroRef(m);
+        });
+      }
+      // Falhou algo: segura o modal aberto pra pessoa ver o aviso.
+      if (erroRefRef.current) { setSaving(false); return; }
+    }
+
     // Toast de confirmacao visivel na aba de notificacoes (sino)
     pushNotification(
       "content",
@@ -2753,6 +2793,27 @@ function NewTaskModal({
               minHeight={120}
               className="bg-muted"
             />
+          </div>
+
+          {/* Referência JÁ aqui — antes só dava pra anexar reabrindo a demanda depois de criada. */}
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+              Artes de referência <span className="font-normal">(opcional)</span>
+            </label>
+            <input
+              type="file" accept="image/*" multiple
+              onChange={(e) => { setRefs(Array.from(e.target.files ?? [])); setErroRef(null); }}
+              className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary hover:file:bg-primary/20"
+            />
+            {refs.length > 0 && (
+              <p className="text-[10px] text-primary mt-1">
+                {refs.length} {refs.length === 1 ? "imagem" : "imagens"} — sobem junto com a demanda.
+              </p>
+            )}
+            {erroRef && <p className="text-[10px] text-destructive mt-1">{erroRef}</p>}
+            <p className="text-[10px] text-muted-foreground mt-1">
+              O designer abre a demanda e já vê a referência, sem precisar pedir.
+            </p>
           </div>
         </div>
 
