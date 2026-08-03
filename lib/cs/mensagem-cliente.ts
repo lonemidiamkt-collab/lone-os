@@ -38,6 +38,8 @@ export interface SinaisCliente {
   destaqueIg: { curtidas: number; comentarios: number } | null;
   /** Posts publicados no Instagram nos últimos 7 dias (do snapshot). */
   postsNaSemana: number | null;
+  /** Loja de construção/varejo E hoje é segunda: o assunto da semana é produto/preço novo. */
+  pedirProdutosHoje: boolean;
 }
 
 /** Engajamento mínimo (curtidas + comentários) pra um post virar "destaque da semana". */
@@ -45,7 +47,7 @@ const DESTAQUE_MINIMO = 10;
 
 const VAZIO: SinaisCliente = {
   aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 0, diasSemFalar: null,
-  promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: null,
+  promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: null, pedirProdutosHoje: false,
 };
 
 /** Junta os sinais de UM cliente. Nunca lança — sem sinal, a mensagem cai no texto neutro. */
@@ -56,7 +58,7 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
       supabaseAdmin.from("content_cards")
         .select("status, designer_delivered_at, client_approved_at, status_changed_at")
         .eq("client_id", clientId).is("archived_at", null),
-      supabaseAdmin.from("clients").select("last_client_msg_at").eq("id", clientId).maybeSingle(),
+      supabaseAdmin.from("clients").select("last_client_msg_at, pergunta_produtos_semana").eq("id", clientId).maybeSingle(),
       supabaseAdmin.from("client_ig_snapshots").select("data").eq("client_id", clientId).eq("period_kind", "7d").maybeSingle(),
       supabaseAdmin.from("client_group_message_log")
         .select("sent_at").eq("client_id", clientId).eq("kind", "calendar").eq("status", "sent")
@@ -97,9 +99,13 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
       ? { curtidas: topo.curtidas ?? 0, comentarios: topo.comentarios ?? 0 }
       : null;
 
+    // Segunda-feira em SP — o servidor roda em UTC e à noite viraria o dia errado.
+    const ehSegunda = new Date(`${new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" })}T12:00:00Z`).getUTCDay() === 1;
+
     return {
       aguardandoAprovacao, aprovouRecentemente, esperandoDesde, entreguesNaSemana, diasSemFalar, promoDoMesSemResposta, destaqueIg,
       postsNaSemana: ig?.resumo?.postsNoPeriodo ?? null,
+      pedirProdutosHoje: ehSegunda && !!cli.data?.pergunta_produtos_semana,
     };
   } catch {
     return VAZIO;
@@ -214,6 +220,7 @@ export type Objetivo =
   | "reengajar"         // sumiu do grupo
   | "comemorar_post"    // um post foi bem de verdade
   | "oferecer_proximo"  // a semana rendeu; puxa o que vem agora
+  | "produtos_semana"   // SEGUNDA, loja de construção/varejo: o que chegou de novo e a que preço
   | "presenca";         // nada pendente: mostra que a gente está de olho e disponível
 
 /**
@@ -226,6 +233,17 @@ export type Objetivo =
  * mesma frase, mas continua entendendo a mesma coisa.
  */
 const VARIACOES: Record<Objetivo, string[]> = {
+  // SEGUNDA DE LOJA. Em construção e varejo a semana começa com produto novo chegando e preço
+  // mudando — é a matéria-prima do conteúdo da semana, e é o dono da loja quem tem. Perguntar na
+  // segunda é chegar antes de a semana virar improviso (foi a falta de assunto que deixou os dois
+  // Bazar parados). Pergunta ABERTA e curta: pedir tabela inteira vira tarefa e ninguém responde.
+  produtos_semana: [
+    "Pergunte se chegou produto novo essa semana e se tem preço pra divulgar.",
+    "Pergunte o que tem de novidade na loja essa semana pra vocês já montarem o conteúdo.",
+    "Pergunte se tem produto novo ou preço especial que valha divulgar nos próximos dias.",
+    "Pergunte o que ele quer destacar essa semana — produto novo, oferta, o que estiver saindo mais.",
+    "Pergunte se entrou mercadoria nova ou se algum preço mudou, pra vocês aproveitarem no conteúdo.",
+  ],
   aprovar_arte: [
     "Pergunte direto se ele conseguiu dar uma olhada na arte.",
     "Diga que a arte está pronta esperando o retorno dele pra subir.",
@@ -310,7 +328,19 @@ export async function escolherFoco(s: SinaisCliente, clientId?: string): Promise
     }
     // Ele já se manifestou: segue pros outros objetivos, sem tocar no assunto da arte.
   }
-  // 2. Silêncio longo: antes de pedir qualquer coisa, reatar contato.
+  // 2. SEGUNDA DE LOJA. Vem antes de promoção/presença porque é o assunto que gera o conteúdo da
+  //    semana inteira — perguntar na quinta já é tarde. Fica DEPOIS de arte parada (trabalho feito
+  //    esperando ele custa mais) e depois do silêncio longo (não se pede nada a quem sumiu antes
+  //    de reatar).
+  if (s.pedirProdutosHoje && (s.diasSemFalar === null || s.diasSemFalar < 10)) {
+    return {
+      objetivo: "produtos_semana",
+      fatos: [],
+      missao: "Perguntar, de forma curta e aberta, o que chegou de novo na loja essa semana e se tem preço pra divulgar.",
+    };
+  }
+
+  // 3. Silêncio longo: antes de pedir qualquer coisa, reatar contato.
   if (s.diasSemFalar !== null && s.diasSemFalar >= 10) {
     return {
       objetivo: "reengajar",

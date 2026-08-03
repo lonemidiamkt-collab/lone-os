@@ -5,11 +5,11 @@ import { revisarMensagem, temAssunto, descreverSinais, escolherFoco, variacaoPar
 
 const sem: SinaisCliente = {
   aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 0, diasSemFalar: 2,
-  promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: null,
+  promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: null, pedirProdutosHoje: false,
 };
 const com: SinaisCliente = {
   aguardandoAprovacao: 2, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 3, diasSemFalar: 4,
-  promoDoMesSemResposta: true, destaqueIg: { curtidas: 41, comentarios: 6 }, postsNaSemana: 3,
+  promoDoMesSemResposta: true, destaqueIg: { curtidas: 41, comentarios: 6 }, postsNaSemana: 3, pedirProdutosHoje: false,
 };
 
 describe("temAssunto", () => {
@@ -89,7 +89,7 @@ describe("revisarMensagem — guarda-corpos", () => {
 describe("revisarMensagem — furos vistos na revisão real", () => {
   const semArte: SinaisCliente = {
     aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 1, diasSemFalar: 3,
-    promoDoMesSemResposta: true, destaqueIg: null, postsNaSemana: 2,
+    promoDoMesSemResposta: true, destaqueIg: null, postsNaSemana: 2, pedirProdutosHoje: false,
   };
 
   it("BARRA 'arte esperando seu OK' quando não há nenhuma (a IA inventou isso pro Bruno Tintas)", () => {
@@ -99,7 +99,7 @@ describe("revisarMensagem — furos vistos na revisão real", () => {
   });
 
   it("BARRA falar de entrega quando não houve entrega nem arte parada", () => {
-    const nada: SinaisCliente = { ...semArte, entreguesNaSemana: 0, postsNaSemana: 0, promoDoMesSemResposta: true };
+    const nada: SinaisCliente = { ...semArte, entreguesNaSemana: 0, postsNaSemana: 0, pedirProdutosHoje: false, promoDoMesSemResposta: true };
     expect(revisarMensagem("Oi, pessoal! A arte nova ficou pronta, deem uma olhada!", nada).ok).toBe(false);
   });
 
@@ -122,7 +122,7 @@ describe("revisarMensagem — furos vistos na revisão real", () => {
 describe("escolherFoco — uma mensagem, um propósito", async () => {
   const zerado: SinaisCliente = {
     aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 0, diasSemFalar: 2,
-    promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: 0,
+    promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: 0, pedirProdutosHoje: false,
   };
 
   it("sem assunto nenhum → PRESENÇA (o Roberto pediu: bom dia, estamos de olho, à disposição)", async () => {
@@ -162,7 +162,7 @@ describe("escolherFoco — uma mensagem, um propósito", async () => {
   });
 
   it("semana que rendeu: reconhece e oferece o próximo", async () => {
-    const f = await escolherFoco({ ...zerado, entreguesNaSemana: 2, postsNaSemana: 3 })!;
+    const f = await escolherFoco({ ...zerado, entreguesNaSemana: 2, postsNaSemana: 3 , pedirProdutosHoje: false})!;
     expect(f.objetivo).toBe("oferecer_proximo");
     expect(f.fatos.join(" ")).toContain("2 arte");
     expect(f.fatos.join(" ")).toContain("3 post");
@@ -207,5 +207,35 @@ describe("variacaoPara — quarta e sexta não repetem a mesma frase", () => {
       variacaoPara("presenca", outro, "quarta", semana),
     ]);
     expect(frases.size).toBeGreaterThan(1);
+  });
+});
+
+// SEGUNDA DE LOJA (construção/varejo): perguntar o que chegou de novo é o que alimenta o conteúdo
+// da semana. O risco é a pergunta atropelar assunto mais urgente — ou ir pra quem sumiu do grupo.
+describe("pedido de produto/preço na segunda", () => {
+  const base = {
+    aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null,
+    entreguesNaSemana: 0, diasSemFalar: 2, promoDoMesSemResposta: false,
+    destaqueIg: null, postsNaSemana: 0, pedirProdutosHoje: true,
+  };
+
+  it("na segunda, em loja marcada, o assunto é produto novo", async () => {
+    const f = await escolherFoco({ ...base });
+    expect(f?.objetivo).toBe("produtos_semana");
+  });
+
+  it("NÃO atropela arte parada — trabalho feito esperando o cliente custa mais", async () => {
+    const f = await escolherFoco({ ...base, aguardandoAprovacao: 2, esperandoDesde: null });
+    expect(f?.objetivo).toBe("aprovar_arte");
+  });
+
+  it("NÃO pede nada a quem sumiu do grupo — reatar vem antes", async () => {
+    const f = await escolherFoco({ ...base, diasSemFalar: 15 });
+    expect(f?.objetivo).toBe("reengajar");
+  });
+
+  it("cliente fora da lista não recebe a pergunta", async () => {
+    const f = await escolherFoco({ ...base, pedirProdutosHoje: false });
+    expect(f?.objetivo).not.toBe("produtos_semana");
   });
 });
