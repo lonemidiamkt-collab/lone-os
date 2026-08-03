@@ -339,6 +339,17 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   const refLabel = goal ? "Meta " + brlBar(goal.value) : "R$ 1M";
   const toneColor = insight?.tone === "up" ? "text-lone-success" : insight?.tone === "down" ? "text-destructive" : "text-primary";
 
+  // Meta mil vezes menor que o faturamento real é quase sempre o mesmo engano: a pessoa pensa em
+  // "230 mil" e digita "230". Foi o que gerou "80724% — meta batida!" na Dijana. Em vez de aceitar
+  // calado (o número fica no painel, e o painel vira piada) ou adivinhar por conta própria (meta é
+  // decisão de negócio, não palpite meu), pergunto uma vez e ofereço o valor provável num clique.
+  const metaSuspeita = (() => {
+    const v = parseFatBR(goalVal);
+    const atual = allWithData.length ? allWithData[allWithData.length - 1].revenue : 0;
+    if (!(v > 0) || !(atual > 0)) return null;
+    return v * 10 < atual ? { digitado: v, provavel: v * 1000 } : null;
+  })();
+
   // Progresso da meta: último mês COM dado (série contínua) vs a meta + meses restantes até o prazo.
   const goalProgress = (() => {
     if (!goal) return null;
@@ -347,7 +358,11 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
     const [gy, gm] = goal.month.split("-").map(Number);
     const now = new Date();
     const monthsLeft = (gy - now.getFullYear()) * 12 + (gm - (now.getMonth() + 1));
-    return { latest, pct, monthsLeft, batido: latest >= goal.value };
+    // META DE MÊS FUTURO NÃO SE DECLARA BATIDA. O Roberto pôs meta pra setembro e o painel já
+    // dizia "Meta batida! 🎉 Hora de propor um novo patamar" em agosto — comemorando um prazo que
+    // nem chegou. Acima do alvo antes da hora é ÓTIMO, mas é "adiantado", não "cumprido".
+    const noAlvo = latest >= goal.value;
+    return { latest, pct, monthsLeft, batido: monthsLeft <= 0 && noAlvo, adiantado: monthsLeft > 0 && noAlvo };
   })();
   const growthCls = growth == null ? "" : growth > 0 ? "bg-lone-success-bg text-lone-success" : growth < 0 ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
 
@@ -412,6 +427,15 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
                 className="bg-surface border border-border rounded-md px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/50" />
             </div>
             <button onClick={salvarMeta} disabled={goalSaving} className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40">{goalSaving ? "Salvando…" : "Salvar"}</button>
+            {metaSuspeita && (
+              <p className="basis-full text-[11px] text-lone-warning">
+                {brl(metaSuspeita.digitado)} é bem abaixo do que este cliente já fatura por mês.
+                {" "}Quis dizer{" "}
+                <button onClick={() => setGoalVal(String(metaSuspeita.provavel))} className="underline font-semibold">
+                  {brl(metaSuspeita.provavel)}
+                </button>?
+              </p>
+            )}
             {goal && <button onClick={() => { setGoalVal(""); setGoalMonth(""); salvarMeta(); }} className="rounded-md px-2 py-1.5 text-xs text-destructive hover:underline">Remover</button>}
           </div>
         ) : goal && goalProgress ? (
@@ -423,13 +447,17 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
                  : goalProgress.monthsLeft === 0 ? <span className="text-lone-warning"> · é este mês</span>
                  : <span className="text-destructive"> · prazo passou</span>}
               </p>
-              <span className={`text-sm font-bold ${goalProgress.batido ? "text-lone-success" : "text-primary"}`}>{goalProgress.pct}%</span>
+              <span className={`text-sm font-bold ${goalProgress.batido || goalProgress.adiantado ? "text-lone-success" : "text-primary"}`}>{goalProgress.pct}%</span>
             </div>
             <div className="h-2 rounded-full bg-muted overflow-hidden">
-              <div className={`h-full rounded-full ${goalProgress.batido ? "bg-lone-success" : "bg-primary"}`} style={{ width: `${Math.min(100, goalProgress.pct)}%` }} />
+              <div className={`h-full rounded-full ${goalProgress.batido || goalProgress.adiantado ? "bg-lone-success" : "bg-primary"}`} style={{ width: `${Math.min(100, goalProgress.pct)}%` }} />
             </div>
             <p className="text-[11px] text-muted-foreground mt-1.5">
-              {goalProgress.batido ? "Meta batida! 🎉 Hora de propor um novo patamar." : `Último mês registrado: ${brl(goalProgress.latest)}.`}
+              {goalProgress.batido
+                ? "Meta batida! 🎉 Hora de propor um novo patamar."
+                : goalProgress.adiantado
+                  ? `Já está no patamar da meta, e o prazo ainda nem chegou. Último mês: ${brl(goalProgress.latest)}.`
+                  : `Último mês registrado: ${brl(goalProgress.latest)}.`}
             </p>
           </div>
         ) : (
