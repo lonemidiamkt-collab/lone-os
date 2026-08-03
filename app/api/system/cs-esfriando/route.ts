@@ -7,6 +7,7 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow, ymd, isBusinessDay } from "@/lib/cs/vigilancia";
 import { buildEsfriandoDigest, type ClienteQuieto } from "@/lib/cs/esfriando";
+import { fatoEsfriando } from "@/lib/cs/porta-voz";
 
 // POST /api/system/cs-esfriando — detector de "cliente esfriando" (churn precoce): cliente que
 // FALAVA no grupo (last_client_msg_at não-nulo) e sumiu por >= N dias. Alerta interno pro time
@@ -47,7 +48,10 @@ export async function POST(req: NextRequest) {
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let postada = false;
   if (ESFRIANDO_LIVE && internalJid && !previewOnly && msg) {
-    const r = await csSendGroupText(internalJid, msg);
+    const r = await csSendGroupText(internalJid, msg, undefined, {
+      origem: "cs-esfriando", destino: "interno",
+      fatos: clientes.map((c) => fatoEsfriando(c.nome)),
+    });
     postada = r.ok;
     if (!r.ok) console.error("[cs-esfriando] post falhou:", r.error);
   }

@@ -7,6 +7,10 @@ export interface CsSendMeta {
   origem?: string;
   destino?: "interno" | "cliente" | "setor";
   clientId?: string | null;
+  /** O que esta mensagem AFIRMA (chaves de lib/cs/porta-voz.ts). Declarar liga o "já falei isso
+   *  hoje": o bom-dia cita os esfriando e o cron de esfriando repetia os mesmos clientes 1h30
+   *  depois. Sem fato declarado a mensagem sai normal — o portão nunca cala no escuro. */
+  fatos?: string[];
 }
 
 export async function csSendGroupText(
@@ -19,6 +23,19 @@ export async function csSendGroupText(
   const apiKey = process.env.EVOLUTION_API_KEY_NEW;
   const instance = process.env.EVOLUTION_INSTANCE_NEW;
   if (!baseUrl || !apiKey || !instance) return { ok: false, error: "Evolution (monitor[IA]) não configurada" };
+
+  // PORTÃO: repetir o que já foi dito hoje é pior que não falar — o time aprende a ignorar o
+  // grupo e perde junto o aviso que importava. Só avalia mensagem interna COM fatos declarados.
+  if (meta?.fatos?.length) {
+    const { avaliarFala } = await import("./porta-voz");
+    const v = await avaliarFala(meta.fatos, meta.destino ?? "interno");
+    if (!v.pode) {
+      console.log(`[porta-voz] calei ${meta.origem ?? "?"}: ${v.motivo}`);
+      await registrarSaida(jid, text, false, `porta-voz: ${v.motivo}`, meta);
+      return { ok: true, error: v.motivo };
+    }
+  }
+
   try {
     const payload: Record<string, unknown> = { number: jid, text };
     if (quotedMsgId) payload.quoted = { key: { id: quotedMsgId } };
@@ -71,6 +88,7 @@ async function registrarSaida(
       client_id: meta?.clientId ?? null,
       texto: texto.slice(0, 8000),
       assinatura: assinaturaMensagem(texto),
+      fatos: meta?.fatos?.length ? meta.fatos : null,
       enviado, erro,
       dia: new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }),
     });

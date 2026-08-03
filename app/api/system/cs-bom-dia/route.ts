@@ -7,6 +7,7 @@ import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow, ymd, isBusinessDay } from "@/lib/cs/vigilancia";
 import { montarSnapshotCS } from "@/lib/cs/snapshot";
 import { buildBomDiaDigest } from "@/lib/cs/bom-dia";
+import { fatoEsfriando } from "@/lib/cs/porta-voz";
 
 // POST /api/system/cs-bom-dia — "bom dia" diário da Lone no grupo interno: raio-x rápido do dia
 // (pendências esperando ok/não, produção, atrasados, quem esfriou) pro time começar sabendo o que
@@ -30,7 +31,11 @@ export async function POST(req: NextRequest) {
   const internalJid = process.env.CS_TEAM_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID || null;
   let postada = false;
   if (BOM_DIA_LIVE && internalJid && !previewOnly) {
-    const r = await csSendGroupText(internalJid, msg);
+    // Declara os esfriando que o texto JÁ cita — assim o cron das 9h30 não repete os mesmos.
+    const r = await csSendGroupText(internalJid, msg, undefined, {
+      origem: "cs-bom-dia", destino: "interno",
+      fatos: snap.esfriando.map((e) => fatoEsfriando(e.cliente)),
+    });
     postada = r.ok;
     if (!r.ok) console.error("[cs-bom-dia] post falhou:", r.error);
   }
