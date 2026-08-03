@@ -2992,7 +2992,7 @@ export default function SocialPage() {
               </button>
             </div>
 
-            <DailyClosePanel cards={filteredCards} />
+            <DailyClosePanel cards={filteredCards} clientes={filteredClients.map((c) => ({ id: c.id, name: c.nomeFantasia || c.name }))} />
 
             <CsAgentInbox cards={filteredCards} onOpen={setSelectedCard} />
 

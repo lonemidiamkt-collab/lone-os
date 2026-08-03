@@ -28,13 +28,23 @@ interface ClienteDia {
   prontas: number;
 }
 
-export default function DailyClosePanel({ cards }: { cards: ContentCard[] }) {
+export default function DailyClosePanel({ cards, clientes }: { cards: ContentCard[]; clientes: { id: string; name: string }[] }) {
   const [aberto, setAberto] = useState(false);
 
-  const { lista, prontosCount, comPost } = useMemo(() => {
+  const { lista, prontosCount, comPost, semCard } = useMemo(() => {
     const hoje = hojeLocal();
     const doDia = cards.filter((c) => c.dueDate === hoje);
     const map = new Map<string, ClienteDia>();
+
+    // A CARTEIRA INTEIRA É A BASE, NÃO SÓ QUEM TEM CARD. Antes o denominador contava apenas os
+    // clientes COM card do dia: quem foi esquecido não entrava na conta e o painel mostrava
+    // "15/16" parecendo quase perfeito, escondendo 14 clientes sem nada. Foi assim que dois
+    // clientes ficaram semanas sem post sem ninguém ver (Bazar Ribeiro, 35 dias).
+    // Esquecer de criar o card É a falha — então ela tem que aparecer, não sumir.
+    for (const cl of clientes) {
+      map.set(cl.id, { clientId: cl.id, clientName: cl.name || "Cliente", total: 0, prontas: 0 });
+    }
+
     for (const c of doDia) {
       const cur = map.get(c.clientId) ?? { clientId: c.clientId, clientName: c.clientName || "Cliente", total: 0, prontas: 0 };
       cur.total += 1;
@@ -42,21 +52,23 @@ export default function DailyClosePanel({ cards }: { cards: ContentCard[] }) {
       map.set(c.clientId, cur);
     }
     const lista = [...map.values()].sort((a, b) => {
-      const af = a.prontas >= a.total ? 1 : 0;
-      const bf = b.prontas >= b.total ? 1 : 0;
-      if (af !== bf) return af - bf; // pendentes primeiro
-      return a.clientName.localeCompare(b.clientName);
+      // Sem card nenhum é o pior caso — vai no topo, antes até de quem tem arte pendente.
+      const rank = (c: ClienteDia) => (c.total === 0 ? 0 : c.prontas >= c.total ? 2 : 1);
+      const d = rank(a) - rank(b);
+      return d !== 0 ? d : a.clientName.localeCompare(b.clientName);
     });
-    const prontosCount = lista.filter((c) => c.prontas >= c.total).length;
-    return { lista, prontosCount, comPost: lista.length };
-  }, [cards]);
+    const prontosCount = lista.filter((c) => c.total > 0 && c.prontas >= c.total).length;
+    const semCard = lista.filter((c) => c.total === 0).length;
+    return { lista, prontosCount, comPost: lista.length, semCard };
+  }, [cards, clientes]);
 
-  // Sem post programado pra hoje → não mostra nada (não polui o board em dia sem agenda).
   if (comPost === 0) return null;
 
-  const tudoPronto = prontosCount === comPost;
+  const tudoPronto = prontosCount === comPost && semCard === 0;
   const pct = Math.round((prontosCount / comPost) * 100);
-  const pendentes = lista.filter((c) => c.prontas < c.total);
+  // Quem não tem card NENHUM também é pendência — e a mais grave: as outras esperam arte, essa
+  // esperou alguém lembrar do cliente.
+  const pendentes = lista.filter((c) => c.total === 0 || c.prontas < c.total);
 
   return (
     <div className={`card border ${tudoPronto ? "border-lone-success-border/40" : "border-lone-warning/30"}`}>
@@ -73,6 +85,9 @@ export default function DailyClosePanel({ cards }: { cards: ContentCard[] }) {
             <span className="text-sm font-semibold text-foreground">Fechamento do dia</span>
             <span className={`text-[11px] font-bold ${tudoPronto ? "text-lone-success" : "text-lone-warning"}`}>
               {prontosCount}/{comPost} clientes com arte
+              {semCard > 0 && (
+                <span className="ml-2 text-destructive">· {semCard} sem card nenhum</span>
+              )}
             </span>
           </div>
           <div className="mt-1.5 h-1.5 w-full rounded-full bg-muted overflow-hidden">
@@ -96,12 +111,17 @@ export default function DailyClosePanel({ cards }: { cards: ContentCard[] }) {
             </p>
           ) : (
             <>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Faltando arte hoje ({pendentes.length})</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Pendentes hoje ({pendentes.length})</p>
               {pendentes.map((c) => (
-                <div key={c.clientId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-lone-warning/[0.06] border border-lone-warning/20">
+                <div key={c.clientId} className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border ${
+                  c.total === 0
+                    ? "bg-destructive/[0.08] border-destructive/30"
+                    : "bg-lone-warning/[0.06] border-lone-warning/20"
+                }`}>
                   <span className="text-xs font-medium text-foreground truncate">{c.clientName}</span>
                   <span className="text-[11px] text-lone-warning flex items-center gap-1 shrink-0">
-                    <Clock size={11} /> {c.total - c.prontas} de {c.total} sem arte
+                    <Clock size={11} />
+                    {c.total === 0 ? "sem card pra hoje" : `${c.total - c.prontas} de ${c.total} sem arte`}
                   </span>
                 </div>
               ))}

@@ -7,6 +7,7 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow } from "@/lib/cs/vigilancia";
 import { avaliarSaude, formatSaudeDigest, type SinaisSaude } from "@/lib/cs/saude";
+import { clientesSemPostar, textoCobranca as cobrancaSemPostar, textoEscalada as escaladaSemPostar } from "@/lib/cs/sem-postar";
 
 // POST /api/system/cs-saude — 3ª função: scan de saúde/risco de churn. Avalia sinais por cliente
 // (reclamação 14d, status, retração, dias sem postagem) e posta o digest dos em risco no grupo.
@@ -58,12 +59,33 @@ export async function POST(req: NextRequest) {
   const texto = formatSaudeDigest(avaliacoes, label);
   const emRisco = avaliacoes.filter((a) => a.risco !== "baixo").length;
 
+  // CLIENTE SEM POSTAR — pelos posts REAIS do Instagram, não pelo status do quadro. O medidor
+  // antigo dependia do time mover card pra "publicado" (ninguém move) e ignorava quem não tinha
+  // NENHUM post — foi assim que o Bazar Ribeiro passou 35 dias invisível.
+  const parados = await clientesSemPostar();
+  const txtParados = cobrancaSemPostar(parados);
+  const txtEscalada = escaladaSemPostar(parados);
+
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let enviado = false;
-  if (!dry && internalJid && emRisco > 0) {
-    const r = await csSendGroupText(internalJid, texto, undefined, { origem: "cs-saude", destino: "interno" });
+  if (!dry && internalJid && (emRisco > 0 || txtParados)) {
+    const corpo = [emRisco > 0 ? texto : "", txtParados].filter(Boolean).join("\n\n———\n\n");
+    const r = await csSendGroupText(internalJid, corpo, undefined, { origem: "cs-saude", destino: "interno" });
     enviado = r.ok;
   }
-  console.log(`[cs-saude] clientes=${clientes.length} emRisco=${emRisco} dry=${dry}`);
-  return NextResponse.json({ ok: true, dry, enviado, clientes: clientes.length, emRisco, texto });
+
+  // O GRAVE VAI SEPARADO PRO DONO. Misturado no digest do time, "35 dias sem postar" tem o mesmo
+  // peso de "responder ok/não" — e foi exatamente assim que passou despercebido.
+  const jidDono = process.env.CS_OWNER_JID || null;
+  let escalado = false;
+  if (!dry && jidDono && txtEscalada) {
+    const r = await csSendGroupText(jidDono, txtEscalada, undefined, { origem: "cs-saude-escalada", destino: "interno" });
+    escalado = r.ok;
+  }
+
+  console.log(`[cs-saude] clientes=${clientes.length} emRisco=${emRisco} semPostar=${parados.length} escalado=${escalado} dry=${dry}`);
+  return NextResponse.json({
+    ok: true, dry, enviado, escalado, clientes: clientes.length, emRisco,
+    semPostar: parados.length, texto, textoSemPostar: txtParados, textoEscalada: txtEscalada,
+  });
 }
