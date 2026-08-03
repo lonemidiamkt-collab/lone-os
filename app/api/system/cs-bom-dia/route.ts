@@ -8,6 +8,7 @@ import { spNow, ymd, isBusinessDay } from "@/lib/cs/vigilancia";
 import { montarSnapshotCS } from "@/lib/cs/snapshot";
 import { buildBomDiaDigest } from "@/lib/cs/bom-dia";
 import { fatoEsfriando } from "@/lib/cs/porta-voz";
+import { supabaseAdmin } from "@/lib/supabase/server";
 
 // POST /api/system/cs-bom-dia — "bom dia" diário da Lone no grupo interno: raio-x rápido do dia
 // (pendências esperando ok/não, produção, atrasados, quem esfriou) pro time começar sabendo o que
@@ -26,7 +27,11 @@ export async function POST(req: NextRequest) {
   }
 
   const snap = await montarSnapshotCS();
-  const msg = buildBomDiaDigest(snap, now);
+    // O time real, pra "Carlos" e "Carlos Augusto" não virarem dois blocos (o snapshot encurta
+  // o dono do card e mantém o completo na pendência).
+  const { data: membros } = await supabaseAdmin.from("team_members").select("name");
+  const time = (membros ?? []).map((m) => m.name as string).filter(Boolean);
+  const msg = buildBomDiaDigest(snap, now, time);
   // Bom dia vai pro grupo da EQUIPE (onde a Lone é "do time"); cai no grupo de artes se não houver.
   const internalJid = process.env.CS_TEAM_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID || null;
   let postada = false;

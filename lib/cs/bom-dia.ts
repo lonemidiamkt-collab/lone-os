@@ -8,7 +8,7 @@ import { coletarItens, agruparPorDono, textoPorDono } from "@/lib/cs/cobranca-no
 
 const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 
-export function buildBomDiaDigest(snap: SnapshotCS, now: Date): string {
+export function buildBomDiaDigest(snap: SnapshotCS, now: Date, time: string[] = []): string {
   const data = `${DIAS[now.getDay()]}, ${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}`;
   const linhaData = linhaDataBomDia(now); // data comemorativa hoje/amanhã ("" se não tem)
   const temAlgo = snap.pendentes.length || snap.emProducao || snap.aguardandoAprovacao || snap.prontasPraPostar.length || snap.atrasados.length || snap.encalhados || snap.esfriando.length || snap.semPostsSemana.length;
@@ -62,7 +62,7 @@ export function buildBomDiaDigest(snap: SnapshotCS, now: Date): string {
   // OS MESMOS FATOS, COM DESTINATÁRIO. Os totais acima dizem o tamanho do problema; esta seção
   // diz de quem ele é. Sem ela o digest era um mural: "50 artes prontas" há semanas, sem ninguém
   // se sentir dono de nenhuma.
-  const porDono = textoPorDono(agruparPorDono(coletarItens(snap)));
+  const porDono = textoPorDono(agruparPorDono(coletarItens(snap), time));
   if (porDono) l.push(porDono);
 
   const fecho = snap.atrasados.length

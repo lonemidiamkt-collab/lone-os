@@ -45,6 +45,29 @@ export interface BlocoDono {
 
 const SEM_DONO = "sem dono";
 
+/**
+ * Mesma pessoa, grafias diferentes. O snapshot encurta o dono dos CARDS pro primeiro nome
+ * (primeiroNome(social_media)) e mantém o nome completo nas PENDÊNCIAS — então "Carlos" e
+ * "Carlos Augusto" viravam dois blocos no digest, com o mesmo sujeito cobrado duas vezes.
+ *
+ * Não dá pra só cortar no primeiro nome: existe "Carlos Melo" nos cards antigos, que colidiria
+ * com o Carlos Augusto e juntaria trabalho de duas pessoas. Por isso a canonização casa contra
+ * o TIME REAL, e só encurta quando o primeiro nome pertence a exatamente um integrante.
+ */
+export function canonizarDono(nome: string | null, time: string[]): string | null {
+  const n = (nome ?? "").trim();
+  if (!n) return null;
+  const igual = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  // Já é alguém do time, escrito por extenso.
+  const exato = time.find((t) => igual(t, n));
+  if (exato) return exato;
+  // É o primeiro nome de alguém — só vale se não houver dois com o mesmo primeiro nome.
+  const candidatos = time.filter((t) => igual(t.split(/\s+/)[0], n));
+  if (candidatos.length === 1) return candidatos[0];
+  // Nome que não é do time (ex.: "Carlos Melo", que saiu) fica como veio — some seria pior.
+  return n;
+}
+
 /** Junta o que precisa de ação HOJE, de todas as origens, com o verbo já decidido. */
 export function coletarItens(snap: SnapshotCS): ItemCobranca[] {
   const itens: ItemCobranca[] = [];
@@ -82,9 +105,10 @@ function semRepetir(itens: ItemCobranca[]): ItemCobranca[] {
 }
 
 /** Agrupa por dono, o mais velho primeiro — dentro da pessoa e entre pessoas. */
-export function agruparPorDono(itens: ItemCobranca[]): BlocoDono[] {
+export function agruparPorDono(itens: ItemCobranca[], time: string[] = []): BlocoDono[] {
+  const canonizados = itens.map((i) => ({ ...i, dono: canonizarDono(i.dono, time) }));
   const mapa = new Map<string, ItemCobranca[]>();
-  for (const i of semRepetir(itens)) {
+  for (const i of semRepetir(canonizados)) {
     const k = i.dono?.trim() || SEM_DONO;
     if (!mapa.has(k)) mapa.set(k, []);
     mapa.get(k)!.push(i);

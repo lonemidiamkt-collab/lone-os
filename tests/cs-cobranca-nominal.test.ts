@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
-  coletarItens, agruparPorDono, paraEscalar, textoPorDono, DIAS_PRA_ESCALAR,
+  coletarItens, agruparPorDono, paraEscalar, textoPorDono, canonizarDono, DIAS_PRA_ESCALAR,
 } from "@/lib/cs/cobranca-nominal";
 import type { SnapshotCS } from "@/lib/cs/snapshot";
 
@@ -102,5 +102,36 @@ describe("escalada — por TEMPO, não por volume", () => {
 describe("dia limpo", () => {
   it("sem nada pendente, não inventa seção", () => {
     expect(textoPorDono(agruparPorDono(coletarItens(vazio)))).toBe("");
+  });
+});
+
+describe("canonizar dono — mesma pessoa, grafias diferentes", () => {
+  // O time real da Lone, como está em team_members.
+  const TIME = ["Carlos Augusto", "Pedro Henrique", "Julio", "Rodrigo", "Lucas Bueno", "Roberto Lino"];
+
+  it('junta "Carlos" e "Carlos Augusto" num bloco só', () => {
+    const snap: SnapshotCS = { ...vazio,
+      // O snapshot encurta o dono do CARD…
+      prontasPraPostar: [{ cliente: "Mr.distribuidora", titulo: "a", dias: 18, responsavel: "Carlos" }],
+      // …e mantém o completo na PENDÊNCIA. Antes viravam duas pessoas no digest.
+      pendentes: [{ codigo: "x", cliente: "Nova União", tipo: "pauta", resumo: "", dias: 9, responsavel: "Carlos Augusto" }],
+    };
+    const blocos = agruparPorDono(coletarItens(snap), TIME);
+    expect(blocos).toHaveLength(1);
+    expect(blocos[0].dono).toBe("Carlos Augusto");
+    expect(blocos[0].itens).toHaveLength(2);
+  });
+
+  it('NÃO funde "Carlos Melo" com "Carlos Augusto" — são pessoas diferentes', () => {
+    expect(canonizarDono("Carlos Melo", TIME)).toBe("Carlos Melo");
+    expect(canonizarDono("Carlos", TIME)).toBe("Carlos Augusto");
+  });
+
+  it("sem lista do time, não inventa: deixa o nome como veio", () => {
+    expect(canonizarDono("Carlos", [])).toBe("Carlos");
+  });
+
+  it("primeiro nome ambíguo fica como veio — fundir seria pior que separar", () => {
+    expect(canonizarDono("Carlos", ["Carlos Augusto", "Carlos Melo"])).toBe("Carlos");
   });
 });
