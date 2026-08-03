@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
 
   let q = supabaseAdmin
     .from("processes")
-    .select("id, code, slug, title, area, doc_type, owner_role, status, summary, tags, updated_at, active_version_id")
+    .select("id, code, slug, title, area, doc_type, status, summary, tags, updated_at, active_version_id")
     .is("deleted_at", null)
     .order("area").order("code");
   if (area && AREAS.includes(area as AreaProcesso)) q = q.eq("area", area);
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
   const { data: proc, error: e1 } = await supabaseAdmin.from("processes").insert({
     code, slug: `${slugify(rascunho.titulo)}-${code.toLowerCase()}`,
     title: rascunho.titulo, area, doc_type: tipo,
-    owner_role: rascunho.donoPapel?.trim() || null, status: "draft",
+    status: "draft",
     summary: rascunho.objetivo?.slice(0, 240) ?? null,
     created_by: autor,
   }).select("id, slug, code").maybeSingle();
