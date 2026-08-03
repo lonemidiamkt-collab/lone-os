@@ -745,7 +745,9 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
   const [briefing, setBriefing] = useState("");
 
   const selectedClient = visibleClients.find((c) => c.id === clientId);
-  const canSubmit = title.trim() && clientId && dueDate && dueTime && priority;
+  // Exige o cliente RESOLVIDO, não só o id preenchido: clientName é desnormalizado (aparece no
+  // card e na busca do board), e id sem cliente na lista gravaria a demanda com o nome em branco.
+  const canSubmit = title.trim() && clientId && selectedClient && dueDate && dueTime && priority;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -1716,11 +1718,13 @@ interface KanbanByClientProps {
   onMoveCard: (cardId: string, toStatus: string) => void;
   onDeleteCard?: (card: ContentCard) => void;
   onSendToDesigner: (card: ContentCard) => void;
+  /** Abre "novo conteúdo" com o cliente JÁ escolhido (o "+" do cabeçalho da coluna). */
+  onNewCard?: (client: Client) => void;
   currentUser: string;
   role: string;
 }
 
-function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, onDeleteCard, onSendToDesigner, currentUser, role }: KanbanByClientProps) {
+function KanbanByClient({ clients, allClients, contentCards, designRequests, onCardClick, onConfirmArt, onNonDelivery, onMoveCard, onDeleteCard, onSendToDesigner, onNewCard, currentUser, role }: KanbanByClientProps) {
   const [activeClientId, setActiveClientId] = useState(clients[0]?.id ?? "");
   const [viewMode, setViewMode] = useState<"single" | "unified">("single"); // cliente único vs visão unificada (todos os clientes em colunas)
   const isReadOnly = role === "designer"; // Designer só visualiza; seletor vira etiqueta estática
@@ -2039,6 +2043,19 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                       <Palette size={10} /> {novas} nova{novas > 1 ? "s" : ""}
                     </span>
                   )}
+                  {/* PEDIDO DO SOCIAL: criar conteúdo daqui, com o cliente já escolhido. Antes era
+                      abrir "Novo conteúdo" no topo e caçar o cliente numa lista de 40 — na visão
+                      unificada a pessoa JÁ está olhando pra coluna dele. */}
+                  {!isReadOnly && onNewCard && (
+                    <button
+                      onClick={() => onNewCard(client)}
+                      title={`Novo conteúdo para ${client.name}`}
+                      aria-label={`Novo conteúdo para ${client.name}`}
+                      className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-primary/15 hover:text-primary transition-colors"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  )}
                 </div>
                 <div className="p-2 space-y-2 overflow-y-auto" style={{ maxHeight: "68vh" }}>
                   {cards.length === 0 && (
@@ -2143,6 +2160,8 @@ export default function SocialPage() {
   const [onboardingCompleteClient, setOnboardingCompleteClient] = useState<Client | null>(null);
   const [calendarSelectedDay, setCalendarSelectedDay] = useState<number | null>(null);
   const [newCardDate, setNewCardDate] = useState<string | null>(null);
+  // Cliente já escolhido quando o "novo conteúdo" vem do "+" da coluna dele (visão unificada).
+  const [newCardClient, setNewCardClient] = useState<Client | null>(null);
   const [verifyingCard, setVerifyingCard] = useState<ContentCard | null>(null);
   const [verifyChecks, setVerifyChecks] = useState({ postLive: false, copyCorrect: false });
   const [showBatchCreate, setShowBatchCreate] = useState(false);
@@ -2574,7 +2593,8 @@ export default function SocialPage() {
       {newCardDate !== null && (
         <NewContentCardModal
           defaultDate={newCardDate}
-          onClose={() => setNewCardDate(null)}
+          defaultClient={newCardClient ?? undefined}
+          onClose={() => { setNewCardDate(null); setNewCardClient(null); }}
         />
       )}
       {showBatchCreate && (
@@ -2907,6 +2927,7 @@ export default function SocialPage() {
               contentCards={filteredCards}
               designRequests={designRequests}
               onCardClick={setSelectedCard}
+              onNewCard={(client) => { setNewCardClient(client); setNewCardDate(todaySP()); }}
               onConfirmArt={(card) => {
                 // Confirmar a arte já avança pra Aprovação (Social Media) se ainda estava em produção.
                 const advance = ["ideas", "script", "in_production", "blocked"].includes(card.status);
