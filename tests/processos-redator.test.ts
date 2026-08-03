@@ -39,16 +39,17 @@ describe("validarProcesso — o que impede de salvar", () => {
     expect(podeSalvar(p)).toBe(true);
   });
 
-  it("BLOQUEIA processo sem dono — ninguém segue processo sem dono", () => {
+  // O "dono do processo" saiu do produto: em time de seis, quem executa é o responsável, e o
+  // responsável mora em cada PASSO. Dono separado do executor era campo pra ninguém preencher.
+  it("processo SEM dono salva normal — quem responde está em cada passo", () => {
     const p = validarProcesso({ ...bom, donoPapel: "" });
-    expect(podeSalvar(p)).toBe(false);
-    expect(p.some((x) => x.campo === "donoPapel")).toBe(true);
+    expect(podeSalvar(p)).toBe(true);
   });
 
-  it("BLOQUEIA nome de pessoa como dono — gente entra e sai, o papel fica", () => {
+  it("nome de pessoa no campo dono vira aviso, não trava — gente entra e sai, o papel fica", () => {
     const p = validarProcesso({ ...bom, donoPapel: "Carlos Augusto" });
-    expect(podeSalvar(p)).toBe(false);
-    expect(p.find((x) => x.campo === "donoPapel")?.mensagem).toContain("não é um papel");
+    expect(podeSalvar(p)).toBe(true);
+    expect(p.find((x) => x.campo === "donoPapel")?.gravidade).toBe("aviso");
   });
 
   it("BLOQUEIA passo sem responsável", () => {

@@ -440,9 +440,12 @@ export async function montarMensagemCliente(
       : "SEM FATOS pra citar: não invente número, entrega nem pendência. A mensagem é de relacionamento.",
     ...foco.fatos.map((f) => `- ${f}`),
     "",
-    diaDaSemana === "sexta"
-      ? "É sexta: dá pra falar do fechamento da semana e do fim de semana chegando."
-      : "É quarta: meio de semana, dá pra falar do ritmo da semana.",
+    // O CONTEXTO DO DIA NÃO PODE SER A ABERTURA DE TODO MUNDO. Quando eu mandava "é sexta, fale
+    // do fim de semana", a IA repetia quase literal: "Sexta-feira chegou e o fim de semana está
+    // batendo à porta" saiu em 4 de 6 mensagens. Agora o dia é informação de fundo, e citar é
+    // exceção — a abertura tem que vir do assunto do cliente, não do calendário.
+    `Hoje é ${diaDaSemana}-feira. Isso é só contexto: NÃO comece a mensagem falando do dia nem do ` +
+    `fim de semana — abra pelo assunto. Só mencione o dia se ele fizer diferença pro que você tem a dizer.`,
     "",
     "Escreva SÓ sobre a missão. Nenhum outro assunto entra.",
     estilo ? `\nComo o cliente costuma falar (use SÓ pra calibrar formalidade — não copie gírias): ${estilo.slice(0, 300)}` : "",

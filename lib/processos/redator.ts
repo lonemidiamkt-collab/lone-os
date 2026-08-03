@@ -43,7 +43,8 @@ export interface ProcessoRascunho {
   criterioPronto: string;
   criteriosQualidade: string;
   sla: string;
-  donoPapel: string;
+  /** Opcional: a quem recorrer quando o processo trava. O responsável de cada passo é que manda. */
+  donoPapel?: string;
   passos: PassoRascunho[];
   kpis: { nome: string; definicao: string; fonte: string; meta: string; acaoAbaixo: string }[];
   riscos: { risco: string; controle: string; escalonamento: string }[];
@@ -67,7 +68,7 @@ const SCHEMA: Record<string, unknown> = {
   additionalProperties: false,
   required: ["titulo", "objetivo", "problema", "escopo", "foraDeEscopo", "gatilho", "frequencia",
     "preRequisitos", "entradas", "saidas", "criterioPronto", "criteriosQualidade", "sla",
-    "donoPapel", "passos", "kpis", "riscos", "excecoes"],
+    "passos", "kpis", "riscos", "excecoes"],
   properties: {
     titulo: { type: "string" }, objetivo: { type: "string" }, problema: { type: "string" },
     escopo: { type: "string" }, foraDeEscopo: { type: "string" }, gatilho: { type: "string" },
@@ -144,7 +145,6 @@ BOM:   "Toda segunda, o gestor de tráfego compara custo por resultado, volume e
 # Proibido
 - "acompanhar", "otimizar", "melhorar", "monitorar" sem frequência, critério e responsável
 - passo que termina sem evidência
-- processo sem dono
 - documentação genérica que serviria pra qualquer agência
 
 Responda APENAS no JSON do schema.`;
@@ -206,10 +206,12 @@ export function validarProcesso(p: ProcessoRascunho): Problema[] {
   exigir("gatilho", p.gatilho, "Falta o gatilho: quando este processo começa?");
   exigir("criterioPronto", p.criterioPronto, "Falta o critério de pronto: o que comprova que terminou?");
 
-  if (!p.donoPapel || !p.donoPapel.trim()) {
-    out.push({ campo: "donoPapel", gravidade: "bloqueia", mensagem: "Processo sem dono não é seguido por ninguém." });
-  } else if (!(PAPEIS as readonly string[]).includes(p.donoPapel.trim().toLowerCase())) {
-    out.push({ campo: "donoPapel", gravidade: "bloqueia", mensagem: `"${p.donoPapel}" não é um papel do sistema. Use: ${PAPEIS.join(", ")}.` });
+  // DONO DO PROCESSO NÃO BLOQUEIA. Num time de seis, quem executa é o responsável — um "dono"
+  // separado do executor vira campo que ninguém preenche e ninguém consulta (foi a correção do
+  // Roberto quando viu a primeira versão). O responsável REAL está em cada passo, e ali sim é
+  // obrigatório. Aqui o campo sobrevive como sugestão de a quem recorrer, quando a IA souber.
+  if (p.donoPapel?.trim() && !(PAPEIS as readonly string[]).includes(p.donoPapel.trim().toLowerCase())) {
+    out.push({ campo: "donoPapel", gravidade: "aviso", mensagem: `"${p.donoPapel}" não é um papel do sistema — deixei em branco.` });
   }
 
   if (VAGO.test(p.frequencia || "")) {

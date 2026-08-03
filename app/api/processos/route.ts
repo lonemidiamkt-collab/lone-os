@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
   const { data: proc, error: e1 } = await supabaseAdmin.from("processes").insert({
     code, slug: `${slugify(rascunho.titulo)}-${code.toLowerCase()}`,
     title: rascunho.titulo, area, doc_type: tipo,
-    owner_role: rascunho.donoPapel, status: "draft",
+    owner_role: rascunho.donoPapel?.trim() || null, status: "draft",
     summary: rascunho.objetivo?.slice(0, 240) ?? null,
     created_by: autor,
   }).select("id, slug, code").maybeSingle();
