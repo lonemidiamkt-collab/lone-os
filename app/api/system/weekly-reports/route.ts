@@ -58,10 +58,27 @@ export async function POST(req: NextRequest) {
   const onlyClientId = url.searchParams.get("clientId");
   // ?period=month → relatório de 30 dias (mensal); padrão = 7 dias (semanal).
   const periodDays = url.searchParams.get("period") === "month" ? 30 : 7;
-  const escopoLabel = periodDays === 30 ? "30 dias" : "7 dias";
+
+  // INTERVALO EXATO (?since=&until=, YYYY-MM-DD). Serve pra "relatório de julho fechado" em vez de
+  // "últimos 30 dias" — rodando dia 3, o preset pegaria 04/07 a 02/08, que não é julho.
+  // Só os ANÚNCIOS aceitam intervalo; o bloco de Instagram continua no preset (a API não tem mês
+  // fechado) e já escreve a própria janela no PDF.
+  const ISO = /^\d{4}-\d{2}-\d{2}$/;
+  const since = url.searchParams.get("since") || "";
+  const until = url.searchParams.get("until") || "";
+  const intervalo = ISO.test(since) && ISO.test(until) && since <= until;
+  if ((since || until) && !intervalo) {
+    return NextResponse.json({ error: "since/until precisam ser YYYY-MM-DD com since <= until." }, { status: 400 });
+  }
+  const dateFrom = intervalo ? since : undefined;
+  const dateTo = intervalo ? until : undefined;
+
+  const escopoLabel = intervalo
+    ? `${since.split("-").reverse().join("/")} a ${until.split("-").reverse().join("/")}`
+    : periodDays === 30 ? "30 dias" : "7 dias";
   // Chave de idempotência separada por escopo — semanal e mensal não colidem no mesmo dia.
   // Sufixo com hífen (não ":") — dois-pontos quebra o nome do arquivo no Storage/URL.
-  const dateKey = todayKeyBRT() + (periodDays === 30 ? "-mensal" : "");
+  const dateKey = todayKeyBRT() + (intervalo ? `-${since}_${until}` : periodDays === 30 ? "-mensal" : "");
 
   try {
     const settings = await getAlertSettings();
@@ -88,7 +105,7 @@ export async function POST(req: NextRequest) {
     // Preview de 1 cliente: gera o PDF e salva no Storage, devolve a URL (não envia no grupo).
     if (dryRun && onlyClientId) {
       const c = clients[0];
-      const pdf = await buildClientPdf(token, c, periodDays);
+      const pdf = await buildClientPdf(token, c, periodDays, dateFrom, dateTo);
       if (!pdf.ok || !pdf.buffer) {
         return NextResponse.json({ ok: false, status: "failed", client: c.nome_fantasia || c.name, error: pdf.error }, { status: 200 });
       }
@@ -136,7 +153,7 @@ export async function POST(req: NextRequest) {
         if (jaEnviou && jaEnviou.length > 0) continue;
       }
       try {
-        const pdf = await buildClientPdf(token, c, periodDays);
+        const pdf = await buildClientPdf(token, c, periodDays, dateFrom, dateTo);
         if (!pdf.ok || !pdf.buffer) { failed++; errors.push(`${clientName}: ${pdf.error}`); continue; }
 
         const caption = `📊 *Relatório ${escopoLabel} — ${clientName}*\nPeríodo: ${period}`;

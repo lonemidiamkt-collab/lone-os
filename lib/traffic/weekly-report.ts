@@ -34,6 +34,13 @@ export function periodLabelDays(n: number): string {
   since.setDate(since.getDate() - n);
   return `${since.toLocaleDateString("pt-BR")} – ${until.toLocaleDateString("pt-BR")}`;
 }
+/** "01/07/2026 – 31/07/2026" a partir de datas ISO. Sem fuso: são datas puras, não instantes —
+ *  usar new Date("2026-07-01") daria 30/06 no Brasil. */
+export function rotuloIntervalo(de: string, ate: string): string {
+  const br = (iso: string) => iso.split("-").reverse().join("/");
+  return `${br(de)} – ${br(ate)}`;
+}
+
 export function periodLabel7d(): string {
   // Rodando na segunda, isso é exatamente segunda → domingo da semana passada.
   return periodLabelDays(7);
@@ -95,10 +102,18 @@ export async function buildClientPdf(
   token: string,
   client: ReportClientRow,
   periodDays = 7,
+  /** Intervalo EXATO (YYYY-MM-DD). Quando vem, manda nos anúncios em vez do preset de N dias —
+   *  é como se pede "julho fechado" em vez de "últimos 30 dias".
+   *  O Instagram NÃO acompanha: a API só oferece janelas fixas (7d/28d), então o bloco de IG
+   *  continua no preset e o PDF passa a escrever o período de CADA bloco, pra ninguém ler um
+   *  número de julho ao lado de um número de 28 dias achando que são a mesma janela. */
+  dateFrom?: string,
+  dateTo?: string,
 ): Promise<{ ok: boolean; buffer?: Buffer; error?: string }> {
   const accountId = client.meta_ad_account_id;
   const clientName = clientDisplayName(client);
-  const periodo = periodLabelDays(periodDays);
+  const intervaloExato = !!(dateFrom && dateTo);
+  const periodo = intervaloExato ? rotuloIntervalo(dateFrom!, dateTo!) : periodLabelDays(periodDays);
   const igPeriodo = IG_PERIOD_FOR_DAYS[periodDays] ?? "7d";
 
   // ── Instagram orgânico (do cache; não bate na Meta ao vivo). Vale p/ conta no BM (owned) OU
@@ -114,22 +129,22 @@ export async function buildClientPdf(
   // ── Tráfego (anúncios) ──
   let trafficHtml: string | null = null;
   if (accountId) {
-    const raw = await fetchCampaignInsights(token, accountId, periodDays);
+    const raw = await fetchCampaignInsights(token, accountId, periodDays, dateFrom, dateTo);
     const campaigns = (raw as Array<{ error?: boolean }>).filter((c) => !c.error) as unknown as AdCampaign[];
     if (campaigns.length > 0) {
       let demographics: ReturnType<typeof buildTrafficReportData>["demographics"] | undefined;
       try {
-        const demo = await fetchAccountDemographics(token, accountId, periodDays);
+        const demo = await fetchAccountDemographics(token, accountId, periodDays, dateFrom, dateTo);
         demographics = demo ?? undefined;
       } catch { /* demografia é opcional */ }
       // Alcance deduplicado no nível da conta (não somar campanha a campanha).
       // TENTA DUAS VEZES antes de desistir: sem ele o PDF omite a métrica, e perder o alcance do
       // relatório do cliente por um soluço de rede seria bobo. Se falhar de novo, fica sem — e
       // aparece no log, porque relatório saindo torto em silêncio foi o problema de junho.
-      let accountReach = await fetchAccountReach(token, accountId, periodDays);
+      let accountReach = await fetchAccountReach(token, accountId, periodDays, dateFrom, dateTo);
       if (accountReach == null) {
         await new Promise((r) => setTimeout(r, 1500));
-        accountReach = await fetchAccountReach(token, accountId, periodDays);
+        accountReach = await fetchAccountReach(token, accountId, periodDays, dateFrom, dateTo);
         if (accountReach == null) {
           console.error(`[relatorio] ${clientName}: alcance deduplicado indisponível — PDF sai SEM a métrica de alcance`);
         }
