@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let enviado = false;
   if (!dry && internalJid && emRisco > 0) {
-    const r = await csSendGroupText(internalJid, texto);
+    const r = await csSendGroupText(internalJid, texto, undefined, { origem: "cs-saude", destino: "interno" });
     enviado = r.ok;
   }
   console.log(`[cs-saude] clientes=${clientes.length} emRisco=${emRisco} dry=${dry}`);

@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
 
     if (internalJid) {
       const msg = buildPautaSugestao((c.assigned_social as string) || null, nome, itens, r.data.observacao);
-      const sent = await csSendGroupText(internalJid, msg);
+      const sent = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-pauta", destino: "interno" });
       if (sent.ok && sent.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: sent.id }).eq("id", dem.id);
     }
     sugeridas++;

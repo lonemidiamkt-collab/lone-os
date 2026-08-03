@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
 
   let postada = false;
   if (PENDENCIAS_LIVE && internalJid && !previewOnly && msg) {
-    const r = await csSendGroupText(internalJid, msg);
+    const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-pendencias", destino: "interno" });
     postada = r.ok;
     if (!r.ok) console.error("[cs-pendencias] post falhou:", r.error);
   }

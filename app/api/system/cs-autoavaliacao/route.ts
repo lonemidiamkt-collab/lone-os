@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let enviado = false;
   if (!dry && internalJid) {
-    const r = await csSendGroupText(internalJid, texto);
+    const r = await csSendGroupText(internalJid, texto, undefined, { origem: "cs-autoavaliacao", destino: "interno" });
     enviado = r.ok;
   }
   console.log(`[cs-autoavaliacao] total=${stats.total} aprov=${stats.aprovadas} recus=${stats.recusadas} dry=${dry}`);

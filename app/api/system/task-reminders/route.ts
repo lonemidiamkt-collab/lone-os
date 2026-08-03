@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
   }
 
   const dest = process.env.CS_TEAM_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID;
-  if (dest) await csSendGroupText(dest, msg).catch(() => {});
+  if (dest) await csSendGroupText(dest, msg, undefined, { origem: "task-reminders", destino: "interno" }).catch(() => {});
 
   // Marca last_reminded_at (dedup 1x/dia).
   const nowIso = new Date().toISOString();

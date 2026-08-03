@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
   if (riscos.length > 0 && internalJid && !previewOnly) {
     const linhas = riscos.slice(0, 12).map((r) => `• *${r.nome}*${r.social ? ` (${r.social})` : ""} — ${r.motivos.join(", ")}`);
     const msg = `🚨 *Clientes em risco* — vale um contato antes de perder:\n\n${linhas.join("\n")}\n\n_Sinais cruzados: sumiço do grupo + reclamação + Instagram parado._`;
-    const r = await csSendGroupText(internalJid, msg);
+    const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-risco", destino: "interno" });
     postada = r.ok;
     // Notificação por cliente pro social responsável.
     for (const risco of riscos.slice(0, 12)) {

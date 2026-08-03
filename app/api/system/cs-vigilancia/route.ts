@@ -334,7 +334,7 @@ export async function POST(req: NextRequest) {
     const novo = !insErr;
     if (insErr && insErr.code !== "23505") console.error("[cs-vigilancia] insert:", insErr.message);
     if (novo && live && internalJid) {
-      const r = await csSendGroupText(internalJid, msg);
+      const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-vigilancia", destino: "interno" });
       if (r.ok) postadas++; else console.error("[cs-vigilancia] post falhou:", r.error);
     }
     detalhe.push({ vig: cob.vigilancia, cliente: nome, pessoa: pessoa || null, live, motivo: cob.motivo });
@@ -363,7 +363,7 @@ export async function POST(req: NextRequest) {
         vigilancia: 2, client_id: null, card_id: null, pessoa_cobrada: pessoa, chave, mensagem: msgDigest, dry_run: false,
       });
       if (!insErr) {
-        const r = await csSendGroupText(internalJid, msgDigest);
+        const r = await csSendGroupText(internalJid, msgDigest, undefined, { origem: "cs-vigilancia", destino: "interno" });
         if (r.ok) postadas++; else console.error("[cs-vigilancia] digest pauta falhou:", r.error);
       } else if (insErr.code !== "23505") console.error("[cs-vigilancia] digest insert:", insErr.message);
     }

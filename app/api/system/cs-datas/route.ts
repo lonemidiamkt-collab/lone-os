@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let postada = false;
   if (DATAS_LIVE && internalJid && !previewOnly && msg) {
-    const r = await csSendGroupText(internalJid, msg);
+    const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-datas", destino: "interno" });
     postada = r.ok;
     if (!r.ok) console.error("[cs-datas] post falhou:", r.error);
   }

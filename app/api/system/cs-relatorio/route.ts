@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let postada = false;
   if (RELATORIO_LIVE && internalJid && !previewOnly) {
-    const r = await csSendGroupText(internalJid, msg);
+    const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-relatorio", destino: "interno" });
     postada = r.ok;
     if (!r.ok) console.error("[cs-relatorio] post falhou:", r.error);
   }
