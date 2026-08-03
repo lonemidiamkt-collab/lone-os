@@ -73,6 +73,12 @@ export async function POST(req: NextRequest) {
   const dateFrom = intervalo ? since : undefined;
   const dateTo = intervalo ? until : undefined;
 
+  // PRA QUEM VAI. O padrão histórico desta rota é mandar TODOS os PDFs pro grupo de alertas
+  // (traffic_alert_group_jid) — é um digest interno pro gestor conferir, e foi por isso que os 42
+  // relatórios de julho caíram no grupo do Julio. `?destino=cliente` manda cada PDF pro grupo DO
+  // CLIENTE, que é o que o Roberto quer quando o relatório é pra entregar.
+  const paraCliente = url.searchParams.get("destino") === "cliente";
+
   const escopoLabel = intervalo
     ? `${since.split("-").reverse().join("/")} a ${until.split("-").reverse().join("/")}`
     : periodDays === 30 ? "30 dias" : "7 dias";
@@ -156,9 +162,24 @@ export async function POST(req: NextRequest) {
         const pdf = await buildClientPdf(token, c, periodDays, dateFrom, dateTo);
         if (!pdf.ok || !pdf.buffer) { failed++; errors.push(`${clientName}: ${pdf.error}`); continue; }
 
-        const caption = `📊 *Relatório ${escopoLabel} — ${clientName}*\nPeríodo: ${period}`;
+        // A LEGENDA DIZIA DUAS JANELAS DIFERENTES: o título trazia o intervalo pedido e a linha
+        // "Período" trazia o rótulo do preset — saiu "Relatório 01/07 a 31/07 / Período: 27/07 a
+        // 02/08" no grupo. Com intervalo exato, a janela é UMA só e não se repete.
+        const janela = intervalo ? escopoLabel : period;
+        const caption = paraCliente
+          // Pro CLIENTE: quem lê é o dono do negócio, não o gestor. Sem jargão de janela no topo,
+          // com a porta aberta pra dúvida — o relatório é começo de conversa, não protocolo.
+          ? `Olá, pessoal! 😊 Estou enviando o relatório do mês de vocês.\n\n`
+            + `📊 *${clientName}* — ${janela}\n\n`
+            + `Qualquer dúvida sobre os números, é só chamar a gente por aqui que explicamos com calma. `
+            + `Bom mês pra vocês! 🚀`
+          : `📊 *Relatório ${janela} — ${clientName}*`;
         const fileName = `relatorio-${slug(clientName)}-${dateKey}.pdf`;
-        const res = await sendMediaDocument(settings.groupJid, pdf.buffer.toString("base64"), fileName, caption);
+        // Sem grupo do cliente, NÃO cai no grupo interno: mandar o relatório de um cliente pro
+        // canal errado é pior que não mandar. Vira erro nomeado no resultado.
+        const destinoJid = paraCliente ? (c.whatsapp_group_jid as string | null) : settings.groupJid;
+        if (!destinoJid) { failed++; errors.push(`${clientName}: sem grupo de WhatsApp cadastrado`); continue; }
+        const res = await sendMediaDocument(destinoJid, pdf.buffer.toString("base64"), fileName, caption);
         if (res.ok) { sent++; await supabaseAdmin.from("weekly_report_log").insert({ week_key: clientKey, status: "sent", message: clientName }).then(() => {}, () => {}); } else { failed++; errors.push(`${clientName}: envio ${res.error}`); }
       } catch (e) {
         failed++; errors.push(`${clientName}: ${e instanceof Error ? e.message : String(e)}`);

@@ -32,3 +32,23 @@ describe("por que o preset não servia", () => {
     expect(periodLabelDays(30)).toMatch(/^\d{2}\/\d{2}\/\d{4} – \d{2}\/\d{2}\/\d{4}$/);
   });
 });
+
+// A janela do Instagram sai do INTERVALO, não do periodDays. No primeiro envio de julho os
+// anúncios vieram do mês fechado e o bloco de IG veio de 7 dias, no MESMO PDF — porque o chamador
+// passou since/until e esqueceu period=month. Derivar do intervalo tira a pegadinha.
+function igDoIntervalo(de: string, ate: string): "7d" | "14d" | "30d" {
+  const dias = Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86_400_000) + 1;
+  return dias >= 21 ? "30d" : dias >= 11 ? "14d" : "7d";
+}
+
+describe("janela do Instagram derivada do intervalo", () => {
+  it("mês fechado pede a janela de 30 dias, não a de 7", () => {
+    expect(igDoIntervalo("2026-07-01", "2026-07-31")).toBe("30d");
+    expect(igDoIntervalo("2026-02-01", "2026-02-28")).toBe("30d");
+  });
+
+  it("quinzena e semana caem na janela proporcional", () => {
+    expect(igDoIntervalo("2026-07-01", "2026-07-15")).toBe("14d");
+    expect(igDoIntervalo("2026-07-01", "2026-07-07")).toBe("7d");
+  });
+});

@@ -114,7 +114,15 @@ export async function buildClientPdf(
   const clientName = clientDisplayName(client);
   const intervaloExato = !!(dateFrom && dateTo);
   const periodo = intervaloExato ? rotuloIntervalo(dateFrom!, dateTo!) : periodLabelDays(periodDays);
-  const igPeriodo = IG_PERIOD_FOR_DAYS[periodDays] ?? "7d";
+  // A JANELA DO INSTAGRAM SAI DO INTERVALO, NÃO DO periodDays. No primeiro envio de julho eu
+  // passei só since/until e esqueci o period=month: os anúncios vieram do mês fechado e o bloco de
+  // IG veio de 7 DIAS, no mesmo PDF. Derivar do intervalo tira essa pegadinha do chamador.
+  // (A API do IG só tem janelas fixas — pega a mais próxima do tamanho pedido.)
+  const diasDoIntervalo = intervaloExato
+    ? Math.round((Date.parse(`${dateTo}T00:00:00Z`) - Date.parse(`${dateFrom}T00:00:00Z`)) / 86_400_000) + 1
+    : periodDays;
+  const igPeriodo: "7d" | "14d" | "30d" =
+    diasDoIntervalo >= 21 ? "30d" : diasDoIntervalo >= 11 ? "14d" : "7d";
 
   // ── Instagram orgânico (do cache; não bate na Meta ao vivo). Vale p/ conta no BM (owned) OU
   //    perfil público via @ (business_discovery). ──
