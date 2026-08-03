@@ -16,22 +16,18 @@ import { csSendGroupText, csSendGroupImage } from "@/lib/cs/notify";
 const isImageUrl = (u: string) => /^https?:\/\//.test(u) && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u);
 const MAX_ARTES = 20;
 
-// Extrai o NOME do produto/tema a partir do título do card (ex.: "Mesa Fontana e Cadeira Horizonte").
-// Tira sufixos internos ("(Post triplo)") e prefixos redundantes ("Artes de", "Post de"). Mantém a
-// grafia original (é nome de produto). Vazio = título genérico → manda sem nome.
-function nomeProduto(titulo?: string): string {
-  let t = (titulo || "").trim();
-  if (!t) return "";
-  t = t.replace(/\s*\(.*?\)\s*/g, " ").replace(/\s+/g, " ").trim();          // remove "(Post triplo)"
-  t = t.replace(/^(artes?|posts?|cards?|criativos?)\s+(d[eoa]s?\s+)?/i, "").trim(); // remove "Artes de"
-  return t.length < 2 ? "" : t;
-}
-
-// 5 variações da mensagem de aprovação, tom EDUCADO falando COM o cliente e citando o produto.
-// Pede pro cliente verificar. Concorda em número. Escolhe uma aleatória.
-function mensagemAprovacao(nArtes: number, nome: string): string {
-  const artes = nArtes > 1 ? `as ${nArtes} artes` : "a arte";
-  const alvo = nome ? `${artes} do produto *${nome}*` : artes; // "as 8 artes do produto *Mesa Fontana*"
+// O TÍTULO DO CARD NÃO VAI PRO CLIENTE (pedido do Roberto, 03/08).
+//
+// A mensagem citava o produto extraído do título — e o título é campo livre do board, escrito pra
+// uso INTERNO. Foi assim que o grupo do Madeirão Móveis recebeu "as 2 artes do produto *03 SEG -
+// Mesa Londrina com 4 cadeiras*": "03 SEG" é a notação de agendamento do social, não nome de
+// produto. Dava pra ir limpando prefixo por prefixo, mas seria correr atrás de cada convenção que
+// alguém inventar — campo livre sempre vence. Texto padrão resolve de vez.
+//
+// A arte já mostra o produto: ela vai anexada, com o nome escrito nela. Repetir no texto nunca foi
+// necessário — só arriscado.
+function mensagemAprovacao(nArtes: number): string {
+  const alvo = nArtes > 1 ? `as ${nArtes} artes` : "a arte";
   const variacoes = [
     `Pessoal, estou enviando ${alvo}. Vocês poderiam verificar se está tudo certinho, por favor? 🙌`,
     `Oi, pessoal! Seguem ${alvo}. Poderiam conferir pra mim se está tudo ok pra publicar? 😊`,
@@ -79,7 +75,7 @@ export async function POST(req: NextRequest) {
   // Envio MISTO (texto + mídia juntos): a mensagem de aprovação vai como LEGENDA da 1ª arte, e as
   // demais artes seguem na sequência. Assim o cliente recebe uma mensagem única e coesa (texto colado
   // na 1ª imagem) em vez de um balão de texto solto + várias imagens avulsas.
-  const texto = mensagemAprovacao(urls.length, nomeProduto(card.title as string));
+  const texto = mensagemAprovacao(urls.length);
   let enviadas = 0;
   const falhas: string[] = [];
   for (let i = 0; i < urls.length; i++) {
