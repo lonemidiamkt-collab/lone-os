@@ -20,7 +20,10 @@ async function rodarGeracao(jobId: string, clientId: string, modo: ModoPeriodo, 
   const finish = (patch: Record<string, unknown>) =>
     supabaseAdmin.from("content_calendar_jobs").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", jobId);
   try {
-    const { periodo, datas } = datasDoPeriodo(modo);
+    // Quarta é dia de vídeo: cliente que não grava só posta seg/sex.
+    const { data: perfil } = await supabaseAdmin.from("clients").select("perfil_conteudo").eq("id", clientId).maybeSingle();
+    const fazVideo = (perfil?.perfil_conteudo as string | null) === "video";
+    const { periodo, datas } = datasDoPeriodo(modo, fazVideo);
 
     const r = await planejarPeriodo(clientId, periodo, datas, undefined, contexto);
     if (!r.ok || !r.plano || !r.nome) { await finish({ status: "error", error: r.error ?? "Falha ao planejar" }); return; }

@@ -963,7 +963,10 @@ export async function POST(req: NextRequest) {
   // ─── "cria" depois de um plano: transforma o planejamento em cards ───
   // Vem ANTES do handler de calendário pra "cria" não ser lido como pedido de novo calendário.
   if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && pediuParaCriar(msg.text)) {
-    const pend = await planoPendenteDe(msg.groupJid);
+    // Aprovação de PLANEJAMENTO/CALENDÁRIO busca numa janela de uma semana: o mensal sai dia 1º e
+    // o social só aprova depois do cliente responder.
+    const falaDePeriodo = /\b(planejamento|calend[áa]rio|linha editorial|quinzenal?|mensal|do m[êe]s)\b/i.test(msg.text || "");
+    const pend = await planoPendenteDe(msg.groupJid, falaDePeriodo);
     if (pend) {
       await csSendGroupText(msg.groupJid, `Fechou! Abrindo os cards do *${pend.clienteNome}*…`);
       const res = await criarCardsDoPlano(pend);

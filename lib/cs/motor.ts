@@ -21,8 +21,16 @@ const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julh
 // Datas de postagem do período (seg/qua/sex), conforme o calendário do playbook (§2).
 // QUINZENA entrou a pedido do Roberto: entre "só a semana que vem" e "o mês inteiro" faltava o
 // meio-termo — planejar 15 dias é o que a maioria dos clientes consegue combinar de uma vez.
-export function datasDoPeriodo(modo: ModoPeriodo): { periodo: string; datas: string[] } {
+/**
+ * @param fazVideo cliente grava vídeo? Quarta é dia de VÍDEO (playbook §4.3). Quem não grava não
+ *   posta na quarta — incluir a data pra ele geraria peça que nunca vira card e, pior, faria o
+ *   Fechamento do dia cobrar arte de um dia em que aquele cliente não publica.
+ *   Padrão `true` mantém o comportamento de quem chama sem informar.
+ */
+export function datasDoPeriodo(modo: ModoPeriodo, fazVideo = true): { periodo: string; datas: string[] } {
   const now = spNow();
+  // Seg e sex sempre; quarta só pra quem grava vídeo.
+  const diasValidos = fazVideo ? [1, 3, 5] : [1, 5];
   if (modo === "quinzena") {
     // Duas semanas cheias a partir da próxima segunda — não "15 dias corridos a partir de hoje",
     // que cairia no meio da semana e bagunçaria o seg/qua/sex.
@@ -30,7 +38,7 @@ export function datasDoPeriodo(modo: ModoPeriodo): { periodo: string; datas: str
     const datas: string[] = [];
     for (let i = 0; i < 14; i++) {
       const dt = new Date(segunda); dt.setDate(dt.getDate() + i);
-      if ([1, 3, 5].includes(dt.getDay())) datas.push(ymd(dt));
+      if (diasValidos.includes(dt.getDay())) datas.push(ymd(dt));
     }
     const fim = new Date(segunda); fim.setDate(fim.getDate() + 13);
     return { periodo: `quinzena de ${ymd(segunda)} a ${ymd(fim)}`, datas };
@@ -40,7 +48,7 @@ export function datasDoPeriodo(modo: ModoPeriodo): { periodo: string; datas: str
     const ny = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
     const dias = new Date(ny, nm + 1, 0).getDate();
     const datas: string[] = [];
-    for (let d = 1; d <= dias; d++) { const dt = new Date(ny, nm, d); if ([1, 3, 5].includes(dt.getDay())) datas.push(ymd(dt)); }
+    for (let d = 1; d <= dias; d++) { const dt = new Date(ny, nm, d); if (diasValidos.includes(dt.getDay())) datas.push(ymd(dt)); }
     return { periodo: `${MESES[nm]}/${ny}`, datas };
   }
   const { segunda, datas } = datasProximaSemana(now);

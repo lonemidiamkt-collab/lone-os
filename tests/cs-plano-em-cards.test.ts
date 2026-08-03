@@ -31,3 +31,27 @@ describe("pediuParaCriar — o 'ok' que fecha o ciclo", () => {
     expect(pediuParaCriar("loninho monta o calendario mensal do max")).toBe(false);
   });
 });
+
+// Como o time REALMENTE aprova o calendário (Roberto, 03/08): "o planejamento do cliente X está
+// aprovado". Antes só o imperativo funcionava ("cria os cards"), então a aprovação do mensal não
+// virava nada e alguém abria card a card na mão.
+describe("aprovação de planejamento vira card", () => {
+  it("entende a frase do dia a dia", () => {
+    expect(pediuParaCriar("Lone, o planejamento do Bazar Ribeiro está aprovado")).toBe(true);
+    expect(pediuParaCriar("o calendário do mês da Dijana foi aprovado pelo cliente")).toBe(true);
+    expect(pediuParaCriar("aprovei a linha editorial do Quero Tintas")).toBe(true);
+    expect(pediuParaCriar("o quinzenal do Portuga tá ok, pode seguir")).toBe(true);
+  });
+
+  it("continua entendendo o jeito antigo", () => {
+    expect(pediuParaCriar("cria os cards")).toBe(true);
+    expect(pediuParaCriar("ok")).toBe(true);
+  });
+
+  it("NÃO dispara com aprovação de outra coisa — card errado no board é retrabalho", () => {
+    // "aprovado" sozinho pode ser sobre a ARTE, não sobre o planejamento.
+    expect(pediuParaCriar("a arte do Bazar foi aprovada pelo cliente")).toBe(false);
+    expect(pediuParaCriar("o orçamento está aprovado")).toBe(false);
+    expect(pediuParaCriar("o cliente aprovou o post de ontem")).toBe(false);
+  });
+});
