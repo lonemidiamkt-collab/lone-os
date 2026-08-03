@@ -9,6 +9,14 @@ import type { ContentCard } from "@/lib/types";
 // ou já tem imagem/capa, ou o card já está agendado/publicado. Puramente client-side (usa os cards
 // que a página já carregou); não bate no banco.
 
+/** Postagem é seg/qua/sex (playbook §4). Terça e quinta ninguém deve ter card — e sem isso o
+ *  painel gritaria "22 sem card nenhum" toda terça, que é o tipo de alarme falso que faz o time
+ *  parar de olhar justamente o painel criado pra evitar cliente esquecido. */
+const DIAS_DE_POSTAGEM = new Set([1, 3, 5]);
+/** Quarta é dia LEVE: nem todo cliente posta (playbook — quarta é vídeo pra quem grava). Cobrar
+ *  card de todo mundo na quarta acusaria gente que está certa. */
+const DIA_FIRME = new Set([1, 5]);
+
 const hojeLocal = (): string => {
   // YYYY-MM-DD no fuso LOCAL do navegador (BRT) — due_date é uma date "seca".
   const d = new Date();
@@ -31,6 +39,10 @@ interface ClienteDia {
 export default function DailyClosePanel({ cards, clientes }: { cards: ContentCard[]; clientes: { id: string; name: string }[] }) {
   const [aberto, setAberto] = useState(false);
 
+  const diaSemana = new Date().getDay();
+  const ehDiaDePostagem = DIAS_DE_POSTAGEM.has(diaSemana);
+  const cobraTodos = DIA_FIRME.has(diaSemana);
+
   const { lista, prontosCount, comPost, semCard } = useMemo(() => {
     const hoje = hojeLocal();
     const doDia = cards.filter((c) => c.dueDate === hoje);
@@ -41,8 +53,12 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
     // "15/16" parecendo quase perfeito, escondendo 14 clientes sem nada. Foi assim que dois
     // clientes ficaram semanas sem post sem ninguém ver (Bazar Ribeiro, 35 dias).
     // Esquecer de criar o card É a falha — então ela tem que aparecer, não sumir.
-    for (const cl of clientes) {
-      map.set(cl.id, { clientId: cl.id, clientName: cl.name || "Cliente", total: 0, prontas: 0 });
+    // Só nos dias FIRMES (seg/sex) a carteira inteira entra na conta. Na quarta o painel volta a
+    // olhar apenas quem tem card, porque quarta nem todo cliente posta.
+    if (cobraTodos) {
+      for (const cl of clientes) {
+        map.set(cl.id, { clientId: cl.id, clientName: cl.name || "Cliente", total: 0, prontas: 0 });
+      }
     }
 
     for (const c of doDia) {
@@ -60,9 +76,10 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
     const prontosCount = lista.filter((c) => c.total > 0 && c.prontas >= c.total).length;
     const semCard = lista.filter((c) => c.total === 0).length;
     return { lista, prontosCount, comPost: lista.length, semCard };
-  }, [cards, clientes]);
+  }, [cards, clientes, cobraTodos]);
 
-  if (comPost === 0) return null;
+  // Terça e quinta não são dia de postagem: o painel some em vez de acusar o dia inteiro.
+  if (!ehDiaDePostagem || comPost === 0) return null;
 
   const tudoPronto = prontosCount === comPost && semCard === 0;
   const pct = Math.round((prontosCount / comPost) * 100);
