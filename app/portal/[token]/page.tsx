@@ -43,7 +43,10 @@ export default async function PortalPage({
   await supabaseAdmin.from("public_report_access_log").insert({
     client_id: client.id,
     token_used: token,
-    ip_truncated: ipTruncated || null,
+    // A coluna se chama ip_prefix. Com o nome errado o insert falhava calado (supabase-js devolve
+    // erro, não lança) e o log de acesso do portal ficou VAZIO desde sempre — a gente não sabia se
+    // o cliente tinha aberto o link nem quando.
+    ip_prefix: ipTruncated || null,
     user_agent: userAgent || null,
     was_valid: true,
   });

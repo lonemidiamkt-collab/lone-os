@@ -1379,3 +1379,37 @@ export async function isDbAvailable(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Acha o card de um aviso a partir do título citado entre aspas no corpo.
+ *
+ * Existe porque a notificação precisa levar à ARTE, e o cardId nem sempre chega: aba antiga do
+ * time roda o JS de antes do conserto e manda o aviso sem vínculo. Resolver no servidor tira essa
+ * dependência — funciona com qualquer versão da tela.
+ *
+ * Tenta duas rotas porque o título citado varia: nos avisos do DESIGNER é o da demanda
+ * ("Arte: TER 28"), nos do SOCIAL é o do card ("TER 28").
+ *
+ * Devolve null quando há mais de um candidato: abrir o card errado é pior que abrir o cadastro.
+ */
+export async function resolverCardPorTitulo(clientId: string, titulo: string): Promise<string | null> {
+  const t = (titulo || "").trim();
+  if (!t || !clientId) return null;
+  try {
+    const porCard = await db.from("content_cards").select("id")
+      .eq("client_id", clientId).eq("title", t).is("archived_at", null).limit(2);
+    if (porCard.data?.length === 1) return porCard.data[0].id as string;
+
+    const dr = await db.from("design_requests").select("id, content_card_id")
+      .eq("client_id", clientId).eq("title", t).limit(2);
+    if (dr.data?.length !== 1) return null;
+    const d = dr.data[0] as { id: string; content_card_id: string | null };
+    if (d.content_card_id) return d.content_card_id;
+
+    const porDr = await db.from("content_cards").select("id")
+      .eq("design_request_id", d.id).is("archived_at", null).limit(2);
+    return porDr.data?.length === 1 ? (porDr.data[0].id as string) : null;
+  } catch {
+    return null; // sem vínculo é pior que nada, mas quebrar o aviso é pior ainda
+  }
+}

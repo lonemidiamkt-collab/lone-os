@@ -38,7 +38,21 @@ export async function POST(req: NextRequest) {
   } else if (action === "markAllRead") {
     await db.markAllNotificationsReadDb();
   } else {
-    await db.insertNotification({ type, title, body: msgBody, clientId, cardId, read: false });
+    // RESOLVE O CARD NO SERVIDOR QUANDO NÃO VEIO.
+    //
+    // A tela já manda o cardId, mas depender disso significa depender de TODA aba do time estar
+    // com o JS novo — e aba velha não recarrega sozinha. Enquanto isso, cada aviso nascia sem
+    // vínculo e levava o designer pro cadastro do cliente em vez da arte.
+    //
+    // O corpo do aviso sempre cita o item entre aspas: "TER 28" (Cliente) — arte pronta…
+    // Esse título é o da DEMANDA nos avisos do designer e o do CARD nos do social, então tento os
+    // dois caminhos. Só aceita casamento ÚNICO: mandar pro card errado é pior que pro cadastro.
+    let resolvido = cardId as string | undefined;
+    if (!resolvido && clientId && typeof msgBody === "string") {
+      const m = /"([^"]+)"/.exec(msgBody);
+      if (m) resolvido = (await db.resolverCardPorTitulo(clientId as string, m[1])) ?? undefined;
+    }
+    await db.insertNotification({ type, title, body: msgBody, clientId, cardId: resolvido, read: false });
   }
 
   return NextResponse.json({ ok: true });
