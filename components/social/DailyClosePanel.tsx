@@ -34,6 +34,9 @@ interface ClienteDia {
   clientName: string;
   total: number;
   prontas: number;
+  /** Próxima data JÁ agendada por ele (YYYY-MM-DD), quando não há card pra hoje. Quem adiantou
+   *  arte pra quarta não está esquecido — é o contrário, está na frente. */
+  proxima?: string;
 }
 
 export default function DailyClosePanel({ cards, clientes }: { cards: ContentCard[]; clientes: { id: string; name: string }[] }) {
@@ -43,9 +46,18 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
   const ehDiaDePostagem = DIAS_DE_POSTAGEM.has(diaSemana);
   const cobraTodos = DIA_FIRME.has(diaSemana);
 
-  const { lista, prontosCount, comPost, semCard } = useMemo(() => {
+  const { lista, prontosCount, comPost, semCard, adiantados } = useMemo(() => {
     const hoje = hojeLocal();
     const doDia = cards.filter((c) => c.dueDate === hoje);
+    // O QUE ELE JÁ AGENDOU PRA FRENTE. O painel julgava só pelo dia de hoje: quem adiantou arte
+    // pra quarta aparecia igualzinho a quem não fez nada. São situações opostas — uma é
+    // organização, a outra é esquecimento — e tratá-las igual ensina o time a ignorar a lista.
+    const futuroPorCliente = new Map<string, string>();
+    for (const c of cards) {
+      if (!c.dueDate || c.dueDate <= hoje) continue;
+      const atual = futuroPorCliente.get(c.clientId);
+      if (!atual || c.dueDate < atual) futuroPorCliente.set(c.clientId, c.dueDate);
+    }
     const map = new Map<string, ClienteDia>();
 
     // A CARTEIRA INTEIRA É A BASE, NÃO SÓ QUEM TEM CARD. Antes o denominador contava apenas os
@@ -57,7 +69,10 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
     // olhar apenas quem tem card, porque quarta nem todo cliente posta.
     if (cobraTodos) {
       for (const cl of clientes) {
-        map.set(cl.id, { clientId: cl.id, clientName: cl.name || "Cliente", total: 0, prontas: 0 });
+        map.set(cl.id, {
+          clientId: cl.id, clientName: cl.name || "Cliente", total: 0, prontas: 0,
+          proxima: futuroPorCliente.get(cl.id),
+        });
       }
     }
 
@@ -69,23 +84,30 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
     }
     const lista = [...map.values()].sort((a, b) => {
       // Sem card nenhum é o pior caso — vai no topo, antes até de quem tem arte pendente.
-      const rank = (c: ClienteDia) => (c.total === 0 ? 0 : c.prontas >= c.total ? 2 : 1);
+      // 0 = não tem nada (pior) · 1 = tem card hoje faltando arte · 2 = adiantou pra frente
+      // 3 = pronto. "Adiantado" fica ANTES de "pronto" só pra ficar visível, não como cobrança.
+      const rank = (c: ClienteDia) =>
+        c.total === 0 ? (c.proxima ? 2 : 0) : c.prontas >= c.total ? 3 : 1;
       const d = rank(a) - rank(b);
       return d !== 0 ? d : a.clientName.localeCompare(b.clientName);
     });
     const prontosCount = lista.filter((c) => c.total > 0 && c.prontas >= c.total).length;
-    const semCard = lista.filter((c) => c.total === 0).length;
-    return { lista, prontosCount, comPost: lista.length, semCard };
+    // "Sem card" agora é só quem não tem NADA — nem hoje, nem agendado pra frente.
+    const semCard = lista.filter((c) => c.total === 0 && !c.proxima).length;
+    const adiantados = lista.filter((c) => c.total === 0 && !!c.proxima).length;
+    return { lista, prontosCount, comPost: lista.length, semCard, adiantados };
   }, [cards, clientes, cobraTodos]);
 
   // Terça e quinta não são dia de postagem: o painel some em vez de acusar o dia inteiro.
   if (!ehDiaDePostagem || comPost === 0) return null;
 
-  const tudoPronto = prontosCount === comPost && semCard === 0;
   const pct = Math.round((prontosCount / comPost) * 100);
   // Quem não tem card NENHUM também é pendência — e a mais grave: as outras esperam arte, essa
   // esperou alguém lembrar do cliente.
-  const pendentes = lista.filter((c) => c.total === 0 || c.prontas < c.total);
+  // Quem adiantou pra frente sai da lista de pendência — cobrar quem se organizou é o caminho
+  // mais rápido pro time deixar de confiar no painel.
+  const pendentes = lista.filter((c) => (c.total === 0 && !c.proxima) || (c.total > 0 && c.prontas < c.total));
+  const tudoPronto = pendentes.length === 0;
 
   return (
     <div className={`card border ${tudoPronto ? "border-lone-success-border/40" : "border-lone-warning/30"}`}>
@@ -104,6 +126,9 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
               {prontosCount}/{comPost} clientes com arte
               {semCard > 0 && (
                 <span className="ml-2 text-destructive">· {semCard} sem card nenhum</span>
+              )}
+              {adiantados > 0 && (
+                <span className="ml-2 text-lone-success">· {adiantados} adiantado{adiantados > 1 ? "s" : ""}</span>
               )}
             </span>
           </div>
@@ -144,7 +169,23 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
               ))}
             </>
           )}
-          {lista.some((c) => c.prontas >= c.total) && (
+          {adiantados > 0 && (
+            <div className="pt-1">
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-1.5">
+                Adiantados ({adiantados})
+              </p>
+              {lista.filter((c) => c.total === 0 && c.proxima).map((c) => (
+                <div key={c.clientId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-lone-success/[0.06] border border-lone-success/20 mb-1.5">
+                  <span className="text-xs font-medium text-foreground truncate">{c.clientName}</span>
+                  <span className="text-[11px] text-lone-success shrink-0">
+                    já agendado p/ {c.proxima!.split("-").reverse().slice(0, 2).join("/")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {lista.some((c) => c.total > 0 && c.prontas >= c.total) && (
             <>
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium pt-1.5">Prontos</p>
               <div className="flex flex-wrap gap-1.5">

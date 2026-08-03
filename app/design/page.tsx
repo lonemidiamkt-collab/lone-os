@@ -2641,7 +2641,10 @@ function NewTaskModal({
   const [saving, setSaving] = useState(false);
 
   const client = clients.find((c) => c.id === clientId);
-  const canSubmit = !!clientId && title.trim().length > 0;
+  // DATA OBRIGATÓRIA (Roberto, 03/08). Sem ela a demanda não entra em nenhum controle: o
+  // Fechamento do dia se guia pela data escolhida, e card sem data é trabalho que ninguém cobra
+  // e ninguém vê faltar. Era o único formulário que ainda deixava passar.
+  const canSubmit = !!clientId && title.trim().length > 0 && !!deadline;
 
   const handleSubmit = async () => {
     if (!canSubmit || !client || saving) return;
@@ -2750,8 +2753,15 @@ function NewTaskModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex: Rebranding de capa Instagram"
-              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+              className={`w-full bg-muted border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 ${
+                deadline ? "border-border" : "border-destructive/40"
+              }`}
             />
+            {!deadline && (
+              <p className="text-[10px] text-destructive mt-1">
+                Sem data a demanda não entra no Fechamento do dia — ninguém vê que ela está faltando.
+              </p>
+            )}
           </div>
 
           {/* Formato + Prioridade */}
@@ -2789,14 +2799,21 @@ function NewTaskModal({
           {/* Prazo */}
           <div className="space-y-1.5">
             <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-              <Calendar size={10} /> Prazo (opcional)
+              <Calendar size={10} /> Data de entrega <span className="text-destructive">*</span>
             </label>
             <input
               type="date"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
-              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+              className={`w-full bg-muted border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50 ${
+                deadline ? "border-border" : "border-destructive/40"
+              }`}
             />
+            {!deadline && (
+              <p className="text-[10px] text-destructive mt-1">
+                Sem data a demanda não entra no Fechamento do dia — ninguém vê que ela está faltando.
+              </p>
+            )}
           </div>
 
           {/* Briefing — Markdown */}
