@@ -47,6 +47,8 @@ services:
       CS_TEST_CLIENT_ID: ${CS_TEST_CLIENT_ID}
       # Grupo interno onde o agente posta as sugestões e recebe "ok/nao <código>".
       CS_INTERNAL_GROUP_JID: ${CS_INTERNAL_GROUP_JID}
+      CS_CADASTRO_GROUP_JID: ${CS_CADASTRO_GROUP_JID}
+      CS_OWNER_JID: ${CS_OWNER_JID}
       CS_TRAFFIC_GROUP_JID: ${CS_TRAFFIC_GROUP_JID}
       CS_TEAM_GROUP_JID: ${CS_TEAM_GROUP_JID}
       # Grupos SANDBOX de teste: ali o agente trata msg da equipe como pedido e classifica mesmo
