@@ -5,6 +5,18 @@ import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { csSendGroupText } from "@/lib/cs/notify";
+
+/**
+ * Grupo de CADASTRO. Os avisos de onboarding (handoff do comercial, cadastro concluído, cliente
+ * ativado) iam pro grupo da equipe, misturados com cobrança de arte e pauta — e cadastro tem
+ * público próprio, que é quem confere e ativa (pedido do Roberto, 04/08).
+ *
+ * Sem o grupo configurado, volta pro interno: perder o aviso seria pior que mandar no lugar
+ * menos ideal.
+ */
+function jidCadastro(): string | undefined {
+  return process.env.CS_CADASTRO_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID;
+}
 import { montarNotaHandoff, montarMensagemGrupoHandoff } from "@/lib/cs/handoff";
 import { randomBytes } from "crypto";
 
@@ -144,8 +156,9 @@ export async function POST(req: NextRequest) {
           updated_at: new Date().toISOString(),
         }, { onConflict: "client_id" });
 
-        const jid = process.env.CS_INTERNAL_GROUP_JID;
-        if (jid) await csSendGroupText(jid, montarMensagemGrupoHandoff(leadHandoff));
+        const jid = jidCadastro();
+        if (jid) await csSendGroupText(jid, montarMensagemGrupoHandoff(leadHandoff), undefined,
+          { origem: "onboarding-handoff", destino: "interno" });
       } catch (e) {
         console.error("[onboarding] handoff comercial→CS falhou (segue):", e);
       }
@@ -330,7 +343,7 @@ export async function POST(req: NextRequest) {
           cli?.assigned_designer ? `designer *${cli.assigned_designer}*` : null,
           cli?.assigned_traffic ? `tráfego *${cli.assigned_traffic}*` : null,
         ].filter(Boolean).join(" · ");
-        const jid = process.env.CS_INTERNAL_GROUP_JID;
+        const jid = jidCadastro();
         if (jid) {
           const msg = `🎉 *${clientName}* concluiu o cadastro do onboarding (100%)!\n${time ? `Time: ${time} — já podem se preparar.\n` : ""}Falta só revisar e ativar em *Clientes → Cadastros Pendentes* (botão "Revisar").`;
           // Fire-and-forget: não segura a resposta ao cliente (Evolution pode levar até ~21s no pior
@@ -455,14 +468,15 @@ export async function POST(req: NextRequest) {
       // Aviso no WhatsApp do grupo interno, nomeando o time escalado (social/designer/tráfego) —
       // é o momento em que eles devem começar o setup deste cliente.
       try {
-        const jid = process.env.CS_INTERNAL_GROUP_JID;
+        const jid = jidCadastro();
         const timeAtivo = [
           clientRow?.assigned_social ? `social *${clientRow.assigned_social}*` : null,
           clientRow?.assigned_designer ? `designer *${clientRow.assigned_designer}*` : null,
           clientRow?.assigned_traffic ? `tráfego *${clientRow.assigned_traffic}*` : null,
         ].filter(Boolean).join(" · ");
         if (jid && timeAtivo) {
-          await csSendGroupText(jid, `✅ *${clientName}* ativado e escalado!\n${timeAtivo} — bora começar o setup deste cliente. 🚀`);
+          await csSendGroupText(jid, `✅ *${clientName}* ativado e escalado!\n${timeAtivo} — bora começar o setup deste cliente. 🚀`,
+            undefined, { origem: "onboarding-ativado", destino: "interno" });
         }
       } catch (e) {
         console.error("[onboarding setup] aviso ao time falhou:", e);
