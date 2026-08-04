@@ -104,6 +104,9 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [savingMonth, setSavingMonth] = useState<string | null>(null);
   const [savedMonth, setSavedMonth] = useState<string | null>(null);
+  // Erro de gravação PRECISA aparecer. Antes o upsert falhava e a tela mostrava o ✓ do mesmo
+  // jeito — o Roberto digitava, via "salvo", saía da tela e o dado não existia.
+  const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
   const [goalOpen, setGoalOpen] = useState(false);
   const [goalVal, setGoalVal] = useState("");
@@ -197,14 +200,31 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
   const saveMonth = useCallback(async (month: string) => {
     const r = byMonth.get(month);
     if (!r) return;
-    if (!r.revenue && r.vendas == null) return;
-    setSavingMonth(month);
-    await supabase.from("client_financial_results").upsert({
+    // ZERAR TAMBÉM É INFORMAÇÃO. A guarda antiga (`!r.revenue && r.vendas == null`) fazia o mês
+    // voltar calado quando a pessoa apagava o valor — não dava pra corrigir um número errado
+    // pra vazio. Só ignora quando os DOIS campos estão vazios de verdade.
+    if (r.revenue == null && r.vendas == null) return;
+
+    setSavingMonth(month); setErroSalvar(null);
+    // `recorded_by` é NOT NULL e a tela não mandava — por isso mês NOVO nunca era criado (o
+    // Postgres recusava) enquanto mês existente atualizava normal. Era o "salva alguns e outros
+    // não". Quem grava é quem está logado; sem sessão, fica registrado como "painel".
+    const { data: sessao } = await supabase.auth.getUser();
+    const quem = sessao?.user?.email || "painel";
+
+    const { error } = await supabase.from("client_financial_results").upsert({
       client_id: clientId, month,
-      revenue: r.revenue, vendas: r.vendas,
-      investment: r.investment, roi: r.roi, strategy_note: r.strategy_note,
+      revenue: r.revenue ?? 0, vendas: r.vendas,
+      investment: r.investment ?? 0, roi: r.roi, strategy_note: r.strategy_note,
+      recorded_by: quem,
     }, { onConflict: "client_id,month" });
+
     setSavingMonth(null);
+    if (error) {
+      // Nunca mais mostrar ✓ em cima de falha: a pessoa precisa saber pra digitar de novo.
+      setErroSalvar(`Não consegui salvar ${month}: ${error.message}`);
+      return;
+    }
     setSavedMonth(month);
     setTimeout(() => setSavedMonth((m) => (m === month ? null : m)), 1500);
   }, [byMonth, clientId]);
@@ -629,6 +649,9 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
         <div>
           <h3 className="text-lone-h2 font-semibold">Dados de {year}, mês a mês</h3>
           <p className="text-lone-caption text-muted-foreground">Digite faturamento e vendas — o ticket é calculado. Salva ao sair do campo. Use o seletor de ano acima pra outro ano.</p>
+          {erroSalvar && (
+            <p className="mt-1.5 text-lone-caption text-destructive" role="alert">{erroSalvar}</p>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
