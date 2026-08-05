@@ -23,19 +23,31 @@ export const selectUnreadCount = (s: NotificationsState) =>
 export const selectUnreadNotifications = (s: NotificationsState) =>
   s.notifications.filter((n) => !n.read);
 
+/** Mais novo primeiro, pelo createdAt. Empate desempata por id pra a lista não dançar. */
+function ordenar(l: AppNotification[]): AppNotification[] {
+  return [...l].sort((a, b) => {
+    const d = Date.parse(b.createdAt) - Date.parse(a.createdAt);
+    return d !== 0 ? d : (a.id < b.id ? 1 : -1);
+  });
+}
+
 export const useNotificationsStore = create<NotificationsState>()(
   devtools(
     subscribeWithSelector((set, get) => ({
       notifications: [],
       initialized: false,
 
+      // ORDEM É PELO HORÁRIO DO SERVIDOR, SEMPRE. Concatenar listas sem reordenar deixava o item
+      // otimista preso no topo (relógio do navegador) acima de avisos mais novos — foi o "ordem
+      // errada depois das entregas". Mais novo primeiro; empate desempata por id pra a ordem não
+      // dançar entre renders.
       init: async () => {
         if (get().initialized) return;
         try {
           const res = await authedFetch("/api/data/notifications");
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const { notifications } = await res.json();
-          set({ notifications, initialized: true }, false, "notifs/init/done");
+          set({ notifications: ordenar(notifications), initialized: true }, false, "notifs/init/done");
         } catch {}
       },
 
@@ -49,8 +61,13 @@ export const useNotificationsStore = create<NotificationsState>()(
           set((s) => {
             // Banco é a verdade; preserva locais recém-empurrados que ainda não voltaram dele.
             const dbIds = new Set((notifications as AppNotification[]).map((n) => n.id));
-            const localOnly = s.notifications.filter((n) => !dbIds.has(n.id));
-            return { notifications: [...localOnly, ...notifications], initialized: true };
+            // Só sobrevive o local que AINDA está subindo. O temporário que já virou linha no banco
+            // não é reconhecido pelo id (o banco gera outro), então some por idade — senão ele
+            // duplicaria o aviso real e ficaria colado no topo pra sempre.
+            const localOnly = s.notifications.filter(
+              (n) => !dbIds.has(n.id) && (!n.id.startsWith("temp-") || Date.now() - Date.parse(n.createdAt) < 30_000),
+            );
+            return { notifications: ordenar([...localOnly, ...notifications]), initialized: true };
           }, false, "notifs/refresh");
         } catch {}
       },
@@ -112,6 +129,17 @@ export const useNotificationsStore = create<NotificationsState>()(
             body: JSON.stringify({ type, title, body, clientId, cardId }),
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          // TROCA o otimista pela linha do banco: id e horário reais. Sem isso o temp nunca casa
+          // com o registro que volta na próxima leitura e o aviso aparece duas vezes.
+          const j = await res.json().catch(() => ({}));
+          const real = j?.notification as AppNotification | undefined;
+          set((s) => ({
+            notifications: ordenar(
+              real
+                ? [real, ...s.notifications.filter((n) => n.id !== tempId)]
+                : s.notifications.filter((n) => n.id !== tempId),
+            ),
+          }), false, "notifs/push/confirmado");
         } catch {
           set((s) => ({ notifications: s.notifications.filter((n) => n.id !== tempId) }), false, "notifs/push/rollback");
         }

@@ -554,12 +554,27 @@ export async function fetchNotifications(forUser?: string): Promise<AppNotificat
   }));
 }
 
-export async function insertNotification(n: { type: string; title: string; body?: string; clientId?: string; cardId?: string; read?: boolean }): Promise<void> {
-  const { error } = await db.from("notifications").insert({
+/** Devolve a linha criada — a tela precisa dela pra TROCAR o item otimista pelo real. Sem isso o
+ *  temporário (id "temp-…") nunca casa com o id do banco: fica preso no topo da lista pra sempre
+ *  e ainda duplica o aviso que volta na próxima leitura. */
+export async function insertNotification(n: { type: string; title: string; body?: string; clientId?: string; cardId?: string; read?: boolean }): Promise<AppNotification | null> {
+  const { data, error } = await db.from("notifications").insert({
     type: n.type, title: n.title, body: n.body,
     client_id: n.clientId, card_id: n.cardId ?? null, read: false,
-  });
-  if (error) console.error("[DB] insertNotification:", error);
+  }).select("*").maybeSingle();
+  if (error) { console.error("[DB] insertNotification:", error); return null; }
+  if (!data) return null;
+  const row = data as Record<string, unknown>;
+  return {
+    id: row.id as string,
+    type: (row.type as AppNotification["type"]) ?? "system",
+    title: row.title as string,
+    body: (row.body as string) ?? "",
+    clientId: (row.client_id as string) ?? undefined,
+    cardId: (row.card_id as string) ?? undefined,
+    read: (row.read as boolean) ?? false,
+    createdAt: row.created_at as string,
+  };
 }
 
 export async function markNotificationReadDb(id: string): Promise<void> {

@@ -52,7 +52,9 @@ export async function POST(req: NextRequest) {
       const m = /"([^"]+)"/.exec(msgBody);
       if (m) resolvido = (await db.resolverCardPorTitulo(clientId as string, m[1])) ?? undefined;
     }
-    await db.insertNotification({ type, title, body: msgBody, clientId, cardId: resolvido, read: false });
+    const criada = await db.insertNotification({ type, title, body: msgBody, clientId, cardId: resolvido, read: false });
+    // Devolve a linha pra tela trocar o item otimista pelo real (id e horário do SERVIDOR).
+    return NextResponse.json({ ok: true, notification: criada });
   }
 
   return NextResponse.json({ ok: true });
