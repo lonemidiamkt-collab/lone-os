@@ -19,13 +19,20 @@ export const ORIGEM_OFERTA = "contrato-oferta";
 /** Depois disso a oferta esfria: responder hoje a uma oferta de semana passada é outra conversa. */
 const VALIDADE_HORAS = 48;
 
-/** Registra que o agente ofereceu gerar o contrato de um cliente naquele grupo. */
+/**
+ * Registra que o agente ofereceu gerar o contrato de um cliente naquele grupo.
+ *
+ * `dia` é NOT NULL na tabela — omitir derruba o insert, e como o supabase-js devolve `{error}` em
+ * vez de lançar, a oferta simplesmente não existiria e o silêncio voltaria pelo mesmo caminho.
+ */
 export async function registrarOferta(groupJid: string, clientId: string, cliente: string) {
+  const { ymd, spNow } = await import("@/lib/cs/vigilancia");
   const { error } = await supabaseAdmin.from("cs_outbound").insert({
     origem: ORIGEM_OFERTA,
     group_jid: groupJid,
     destino: "interno",
     client_id: clientId,
+    dia: ymd(spNow()),
     texto: `(oferta de contrato registrada — ${cliente})`,
     enviado: true,
   });
