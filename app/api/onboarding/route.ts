@@ -352,8 +352,9 @@ export async function POST(req: NextRequest) {
           const msg = `🎉 *${clientName}* concluiu o cadastro do onboarding (100%)!\n`
             + `${time ? `Time: ${time} — já podem se preparar.\n` : ""}`
             + `Falta só revisar e ativar em *Clientes → Cadastros Pendentes* (botão "Revisar").\n\n`
-            + `📄 *Quer que eu gere o contrato?* Me manda *valor mensal, duração e dia de pagamento* `
-            + `— ex: _"gera o contrato: 2500, 12 meses, dia 10"_ — que eu monto com os dados que ele preencheu.`;
+            + `📄 *Quer que eu gere o contrato?* Me manda *valor mensal e dia de vencimento* `
+            + `— ex: _"gera o contrato: 2500, dia 10"_ — que eu monto com os dados que ele preencheu.\n`
+            + `_Vigência é a padrão: ciclos de 3 meses com renovação automática. Se for teste de prazo fechado, diga "teste de 1 mês"._`;
           // Fire-and-forget: não segura a resposta ao cliente (Evolution pode levar até ~21s no pior
           // caso). O servidor Node é persistente (VPS), então o envio completa em background.
           void csSendGroupText(jid, msg).catch((e) => console.error("[onboarding submit] aviso no grupo falhou:", e));
