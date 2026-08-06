@@ -98,8 +98,11 @@ const isInternalCmdGroup = (jid: string) => jid === internalGroupJid() || jid ==
 // Conversa sim; comandos de demanda (ok/não) não. Não classifica demanda de cliente.
 const teamGroupJid = () => process.env.CS_TEAM_GROUP_JID || null;
 const isTeamGroup = (jid: string) => !!teamGroupJid() && jid === teamGroupJid();
-// Onde a Lone NÃO trata mensagem como pedido de cliente (grupos internos + equipe).
-const isNaoClassifica = (jid: string) => isInternalCmdGroup(jid) || isTeamGroup(jid);
+// Grupo de CADASTRO: onde o agente avisa cliente novo e oferece gerar o contrato.
+const cadastroGroupJid = () => process.env.CS_CADASTRO_GROUP_JID || null;
+const isCadastroGroup = (jid: string) => !!cadastroGroupJid() && jid === cadastroGroupJid();
+// Onde a Lone NÃO trata mensagem como pedido de cliente (grupos internos + equipe + cadastro).
+const isNaoClassifica = (jid: string) => isInternalCmdGroup(jid) || isTeamGroup(jid) || isCadastroGroup(jid);
 // Grupos SANDBOX (fase de teste): ali o agente trata mensagem da EQUIPE como se fosse pedido de
 // cliente (ignora o filtro de equipe) e CLASSIFICA demanda mesmo sendo o grupo interno — pra o time
 // testar o fluxo inteiro (inclusive imagem) num grupo só. Vazio em produção real.
@@ -958,6 +961,72 @@ export async function POST(req: NextRequest) {
   // pelo cliente/resumo citado — corrige "dei ok num reply de ontem e ele ignorou".
   if (!demandaDaSugestao && msg.quotedText && isInternalCmdGroup(msg.groupJid)) {
     demandaDaSugestao = await acharDemandaPorTexto(msg.quotedText);
+  }
+
+  // ─── CONTRATO no grupo de cadastro: "gera o contrato: 2500, 12 meses, dia 10" ───
+  // Vem cedo porque a frase tem números e nomes de cliente — se cair no classificador de demanda
+  // vira card de arte. Só vale no grupo de CADASTRO, que é onde a oferta foi feita.
+  if (isCadastroGroup(msg.groupJid)) {
+    const { lerPedido } = await import("@/lib/contracts/pedido-contrato");
+    const pedido = lerPedido(msg.text);
+    if (pedido.querContrato) {
+      const { acharClientePorNome } = await import("@/lib/cs/achar-cliente");
+      const alvo = await acharClientePorNome(msg.text);
+      if (!alvo) {
+        await csSendGroupText(msg.groupJid,
+          "Qual cliente? Me diz o nome junto — ex: _\"gera o contrato do Bruno Tintas: 2500, 12 meses, dia 10\"_.",
+          undefined, { origem: "contrato-falta-cliente", destino: "interno" });
+        return NextResponse.json({ ok: true, acao: "contrato_sem_cliente" });
+      }
+      if (pedido.faltando.length) {
+        // NÃO CHUTA NÚMERO DE CONTRATO. Pede o que falta e mostra o que já entendeu.
+        const entendi = [
+          pedido.valorMensal ? `valor ${pedido.valorMensal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}` : null,
+          pedido.duracaoMeses ? `${pedido.duracaoMeses} meses` : null,
+          pedido.diaPagamento ? `dia ${pedido.diaPagamento}` : null,
+        ].filter(Boolean).join(" · ");
+        await csSendGroupText(msg.groupJid,
+          `Pra montar o contrato do *${alvo.nome}* ainda falta: *${pedido.faltando.join(", ")}*.`
+          + (entendi ? `\n_Já entendi: ${entendi}._` : ""),
+          undefined, { origem: "contrato-falta-dado", destino: "interno" });
+        return NextResponse.json({ ok: true, acao: "contrato_incompleto", faltando: pedido.faltando });
+      }
+
+      await csSendGroupText(msg.groupJid, `Montando o contrato do *${alvo.nome}*…`, undefined,
+        { origem: "contrato-gerando", destino: "interno" });
+
+      // Chama a biblioteca DIRETO. Um fetch pra própria rota bateria em 401: ela exige gestão
+      // logada, e aqui quem fala é o webhook do WhatsApp — não há sessão pra apresentar.
+      const { montarContratoHtml } = await import("@/lib/contracts/contratoPdf");
+      const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
+      const { csSendGroupDocument } = await import("@/lib/cs/notify");
+
+      const montado = await montarContratoHtml(alvo.id, {
+        valorMensal: pedido.valorMensal!, duracaoMeses: pedido.duracaoMeses!, diaPagamento: pedido.diaPagamento!,
+      });
+      if (!montado.ok || !montado.html) {
+        await csSendGroupText(msg.groupJid,
+          montado.faltando?.length
+            ? `Não consigo gerar o contrato do *${alvo.nome}* ainda: falta no cadastro *${montado.faltando.join(", ")}*.`
+            : `Não consegui montar: ${montado.erro ?? "erro"}`,
+          undefined, { origem: "contrato-incompleto", destino: "interno" });
+        return NextResponse.json({ ok: true, acao: "contrato_faltando", faltando: montado.faltando });
+      }
+
+      const pdf = await htmlToPdf(montado.html);
+      if (!pdf.ok || !pdf.buffer) {
+        await csSendGroupText(msg.groupJid, `Não consegui gerar o PDF: ${pdf.error ?? "erro"}`,
+          undefined, { origem: "contrato-erro", destino: "interno" });
+        return NextResponse.json({ ok: true, acao: "contrato_erro_pdf" });
+      }
+
+      const legenda = `📄 *Contrato — ${montado.cliente}*\n`
+        + `${pedido.valorMensal!.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês · `
+        + `${pedido.duracaoMeses} meses · vencimento dia ${pedido.diaPagamento}\n\n`
+        + `_Confira antes de mandar pro cliente. O .docx oficial pro D4Sign continua saindo em Contratos._`;
+      await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), montado.nomeArquivo!, legenda);
+      return NextResponse.json({ ok: true, acao: "contrato", cliente: alvo.nome });
+    }
   }
 
   // ─── "cria" depois de um plano: transforma o planejamento em cards ───
