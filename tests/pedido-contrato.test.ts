@@ -60,12 +60,12 @@ describe("os três números", () => {
 describe("o que ele se recusa a adivinhar", () => {
   it("faltando um número, DIZ qual falta em vez de chutar", () => {
     const r = extrairNumeros("2500 por 12 meses");
-    expect(r.faltando).toContain("dia de pagamento");
+    expect(r.faltando).toContain("dia de vencimento");
     expect(r.diaPagamento).toBeUndefined();
   });
 
-  it("pedido sem número nenhum lista os três", () => {
-    expect(extrairNumeros("gera o contrato").faltando).toHaveLength(3);
+  it("pedido sem número nenhum cobra valor e vencimento", () => {
+    expect(extrairNumeros("gera o contrato").faltando).toEqual(["valor mensal", "dia de vencimento"]);
   });
 
   it("dia 31 não vale — não existe em fevereiro", () => {
@@ -79,6 +79,24 @@ describe("o que ele se recusa a adivinhar", () => {
 
   it("prazo absurdo idem", () => {
     expect(extrairNumeros("2500, 120 meses, dia 10").duracaoMeses).toBeUndefined();
+  });
+});
+
+describe("ciclos são o padrão; prazo determinado precisa ser dito", () => {
+  it("sem dizer nada, é o contrato padrão da casa — duração NÃO é cobrada", () => {
+    const r = extrairNumeros("2500, dia 10");
+    expect(r.modalidade).toBe("ciclos");
+    expect(r.faltando).toEqual([]);   // ciclo de 3 meses vem do padrão, não da mensagem
+  });
+
+  it('"teste de 1 mês" vira prazo determinado', () => {
+    const r = extrairNumeros("1200, 1 mes, dia 10, teste");
+    expect(r.modalidade).toBe("determinado");
+    expect(r.duracaoMeses).toBe(1);
+  });
+
+  it("prazo determinado SEM prazo não gera — aí a duração faz falta", () => {
+    expect(extrairNumeros("1200, dia 10, prazo determinado").faltando).toContain("prazo (em meses)");
   });
 });
 

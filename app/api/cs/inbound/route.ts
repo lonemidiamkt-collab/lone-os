@@ -1007,7 +1007,8 @@ export async function POST(req: NextRequest) {
       const { csSendGroupDocument } = await import("@/lib/cs/notify");
 
       const montado = await montarContratoHtml(alvo.id, {
-        valorMensal: pedido.valorMensal!, duracaoMeses: pedido.duracaoMeses!, diaPagamento: pedido.diaPagamento!,
+        valorMensal: pedido.valorMensal!, diaPagamento: pedido.diaPagamento!,
+        duracaoMeses: pedido.duracaoMeses, modalidade: pedido.modalidade,
       });
       if (!montado.ok || !montado.html) {
         await csSendGroupText(msg.groupJid,
@@ -1027,7 +1028,8 @@ export async function POST(req: NextRequest) {
 
       const legenda = `📄 *Contrato — ${montado.cliente}*\n`
         + `${pedido.valorMensal!.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês · `
-        + `${pedido.duracaoMeses} meses · vencimento dia ${pedido.diaPagamento}\n\n`
+        + `${pedido.modalidade === "ciclos" ? "ciclos de 3 meses (renovação automática)" : `${pedido.duracaoMeses} meses, sem renovação`} · `
+        + `vencimento dia ${pedido.diaPagamento}\n\n`
         + `_Confira antes de mandar pro cliente. O .docx oficial pro D4Sign continua saindo em Contratos._`;
       await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), montado.nomeArquivo!, legenda);
       return NextResponse.json({ ok: true, acao: "contrato", cliente: alvo.nome });

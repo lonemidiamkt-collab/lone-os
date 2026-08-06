@@ -12,6 +12,12 @@ export interface PedidoContrato {
   valorMensal?: number;
   duracaoMeses?: number;
   diaPagamento?: number;
+  /**
+   * "ciclos" é o padrão da casa: 3 meses com renovação automática, sem fidelidade. Só vira
+   * "determinado" quando a pessoa DIZ que é teste/prazo fechado — misturar os dois modelos no
+   * mesmo documento cria contradição que o cliente usa contra a agência.
+   */
+  modalidade: "ciclos" | "determinado";
   /** O que ainda falta pra poder gerar. Vazio = dá pra seguir. */
   faltando: string[];
 }
@@ -71,11 +77,20 @@ export function extrairNumeros(texto: string): Omit<PedidoContrato, "querContrat
   if (valorMensal !== undefined && (valorMensal < 100 || valorMensal > 200_000)) valorMensal = undefined;
   if (duracaoMeses !== undefined && (duracaoMeses < 1 || duracaoMeses > 60)) duracaoMeses = undefined;
 
-  if (valorMensal === undefined) faltando.push("valor mensal");
-  if (duracaoMeses === undefined) faltando.push("duração (em meses)");
-  if (diaPagamento === undefined) faltando.push("dia de pagamento");
+  // Prazo determinado é EXCEÇÃO e precisa ser dito. O contrato padrão da casa roda em ciclos de
+  // 3 meses com renovação automática — não é uma "duração" que a pessoa escolhe na mensagem.
+  const determinado = /\b(prazo determinado|prazo fechado|sem renova|nao renova|não renova|teste|experi[êe]ncia|pontual|projeto fechado)\b/.test(t);
 
-  return { valorMensal, duracaoMeses, diaPagamento, faltando };
+  if (valorMensal === undefined) faltando.push("valor mensal");
+  if (diaPagamento === undefined) faltando.push("dia de vencimento");
+  // Só no prazo determinado a duração é obrigatória — nos ciclos ela vem do padrão.
+  if (determinado && duracaoMeses === undefined) faltando.push("prazo (em meses)");
+
+  return {
+    valorMensal, duracaoMeses, diaPagamento,
+    modalidade: determinado ? "determinado" : "ciclos",
+    faltando,
+  };
 }
 
 /** Interpreta a mensagem inteira. */

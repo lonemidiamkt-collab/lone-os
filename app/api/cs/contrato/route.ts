@@ -28,16 +28,20 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const clientId = body?.clientId as string;
   const valorMensal = Number(body?.valorMensal);
-  const duracaoMeses = Number(body?.duracaoMeses);
+  const duracaoMeses = body?.duracaoMeses != null ? Number(body.duracaoMeses) : undefined;
   const diaPagamento = Number(body?.diaPagamento);
+  const modalidade = body?.modalidade === "determinado" ? "determinado" as const : "ciclos" as const;
   const groupJid = (body?.groupJid as string) || "";
 
   if (!clientId) return NextResponse.json({ error: "clientId obrigatório" }, { status: 400 });
-  if (!(valorMensal > 0) || !(duracaoMeses > 0) || !(diaPagamento >= 1 && diaPagamento <= 28)) {
-    return NextResponse.json({ error: "Informe valor mensal, duração em meses e dia de pagamento (1 a 28)." }, { status: 400 });
+  if (!(valorMensal > 0) || !(diaPagamento >= 1 && diaPagamento <= 28)) {
+    return NextResponse.json({ error: "Informe valor mensal e dia de vencimento (1 a 28)." }, { status: 400 });
+  }
+  if (modalidade === "determinado" && !(Number(duracaoMeses) > 0)) {
+    return NextResponse.json({ error: "Prazo determinado exige a duração em meses." }, { status: 400 });
   }
 
-  const montado = await montarContratoHtml(clientId, { valorMensal, duracaoMeses, diaPagamento });
+  const montado = await montarContratoHtml(clientId, { valorMensal, duracaoMeses, diaPagamento, modalidade });
   if (!montado.ok || !montado.html) {
     return NextResponse.json({
       ok: false,
@@ -66,7 +70,8 @@ export async function POST(req: NextRequest) {
   const legenda =
     `📄 *Contrato — ${montado.cliente}*\n` +
     `${valorMensal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês · ` +
-    `${duracaoMeses} meses · vencimento dia ${diaPagamento}\n\n` +
+    `${modalidade === "ciclos" ? "ciclos de 3 meses (renovação automática)" : `${duracaoMeses} meses, sem renovação`} · ` +
+    `vencimento dia ${diaPagamento}\n\n` +
     `_Confira antes de mandar pro cliente. O .docx oficial pro D4Sign continua saindo em Contratos._`;
 
   const env = await csSendGroupDocument(groupJid, pdf.buffer.toString("base64"), montado.nomeArquivo!, legenda);
