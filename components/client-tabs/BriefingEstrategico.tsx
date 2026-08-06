@@ -41,6 +41,36 @@ export default function BriefingEstrategico({ clientId }: { clientId: string }) 
   const [fontes, setFontes] = useState<Record<string, boolean> | null>(null);
   const [msg, setMsg] = useState("");
   const [material, setMaterial] = useState("");
+  const [lendoPdf, setLendoPdf] = useState(false);
+  const [avisoPdf, setAvisoPdf] = useState<string | null>(null);
+
+  /**
+   * PDF vira TEXTO e cai no mesmo campo do que é colado — daí pra frente o caminho é um só.
+   * O social recebe tabela de preço e catálogo em PDF; antes ele redigitava à mão, ou não
+   * redigitava, e o agente montava roteiro sem saber o que a loja vende.
+   * Acrescenta ao que já está escrito em vez de substituir: dá pra juntar 2 PDFs + anotação.
+   */
+  const lerPdfs = async (arquivos: File[]) => {
+    const pdfs = arquivos.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    if (!pdfs.length) return;
+    setLendoPdf(true); setAvisoPdf(null);
+    const partes: string[] = [];
+    for (const f of pdfs) {
+      const fd = new FormData();
+      fd.append("file", f);
+      try {
+        const res = await authedFetch("/api/cs/ler-pdf", { method: "POST", body: fd });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok || !j?.texto) { setAvisoPdf(j?.error || `Não consegui ler "${f.name}".`); continue; }
+        partes.push(`--- ${f.name} (${j.paginas} pág.) ---\n${j.texto}`);
+        if (j.cortado) setAvisoPdf(`"${f.name}" é grande — usei o começo do documento.`);
+      } catch {
+        setAvisoPdf(`Falha de conexão ao ler "${f.name}".`);
+      }
+    }
+    if (partes.length) setMaterial((m) => [m.trim(), ...partes].filter(Boolean).join("\n\n"));
+    setLendoPdf(false);
+  };
 
   const gerar = async () => {
     setLoading(true); setMsg("");
@@ -88,10 +118,27 @@ export default function BriefingEstrategico({ clientId }: { clientId: string }) 
         <Button onClick={gerar} disabled={loading}>{loading ? "Gerando…" : r ? "Gerar de novo" : "Gerar rascunho"}</Button>
       </div>
 
-      <div className="space-y-1">
-        <Label>Material novo do cliente <span className="text-muted-foreground">(opcional — cole aqui o briefing/infos que o cliente mandou; é fonte prioritária)</span></Label>
-        <Textarea value={material} onChange={(e) => setMaterial(e.target.value)} rows={3}
-          placeholder="Cole aqui o material novo trazido do cliente. A IA prioriza isto sobre o que já está no sistema." />
+      <div className="space-y-1"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); void lerPdfs(Array.from(e.dataTransfer?.files ?? [])); }}>
+        <Label>Material novo do cliente <span className="text-muted-foreground">(cole o texto ou solte o PDF — é fonte prioritária)</span></Label>
+        <Textarea value={material} onChange={(e) => setMaterial(e.target.value)} rows={5}
+          onPaste={(e) => {
+            // PDF colado (Ctrl+V) também vale — o clipboard traz como arquivo.
+            const fs = Array.from(e.clipboardData?.files ?? []);
+            if (fs.some((f) => /pdf/i.test(f.type) || /\.pdf$/i.test(f.name))) { e.preventDefault(); void lerPdfs(fs); }
+          }}
+          placeholder="Cole o material do cliente aqui — ou arraste o PDF (tabela de preço, catálogo, apresentação)." />
+        <div className="flex items-center gap-3 flex-wrap">
+          <input type="file" accept="application/pdf" multiple disabled={lendoPdf}
+            onChange={(e) => { void lerPdfs(Array.from(e.target.files ?? [])); e.currentTarget.value = ""; }}
+            className="block text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary hover:file:bg-primary/20" />
+          {lendoPdf && <span className="text-xs text-primary">Lendo o PDF…</span>}
+        </div>
+        {avisoPdf && <p className="text-xs text-lone-warning">{avisoPdf}</p>}
+        <p className="text-[10px] text-muted-foreground">
+          O texto do PDF entra aqui e vira base do briefing — é o que o agente usa pra roteiro e planejamento.
+        </p>
       </div>
 
       {fontes && (
