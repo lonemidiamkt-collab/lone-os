@@ -2346,6 +2346,12 @@ export default function SocialPage() {
       setNewCardDate(todaySP());
       router.replace(pathname, { scroll: false });
     }
+    // Atalho ?arquivadas=1 (vindo do aviso "Demanda arquivada"): abre a lista de Arquivadas —
+    // é lá que se desarquiva. Mandar pro cadastro do cliente era beco sem saída.
+    if (searchParams.get("arquivadas")) {
+      setShowArchived(true);
+      router.replace(pathname, { scroll: false });
+    }
     // Atalho ?card=<id> (vindo do bloco "Artes prontas" da Home): abre o card direto.
     const cardId = searchParams.get("card");
     if (cardId) {

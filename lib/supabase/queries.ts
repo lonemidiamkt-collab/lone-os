@@ -381,7 +381,12 @@ export function snakeToContentCard(row: Record<string, unknown>): ContentCard {
 }
 
 export async function fetchContentCards(filter?: { socialMedia?: string; archived?: boolean }): Promise<ContentCard[]> {
-  let query = db.from("content_cards").select("*").order("created_at", { ascending: false });
+  // A LISTA DE ARQUIVADAS ORDENA POR QUANDO FOI ARQUIVADA, não por quando o card nasceu.
+  // Ordenar por created_at fazia um card antigo arquivado HOJE aparecer embaixo de um card novo
+  // arquivado semana passada — e quem arquivou sem querer procura o item no topo, não no meio de
+  // uma lista de 200. Foi o "aparece um arquivado semana passada na frente dos recentes".
+  const campoOrdem = filter?.archived ? "archived_at" : "created_at";
+  let query = db.from("content_cards").select("*").order(campoOrdem, { ascending: false });
   if (filter?.socialMedia) query = query.eq("social_media", filter.socialMedia);
   // Por padrão o board mostra só demandas ativas. archived=true traz só as arquivadas (tela "Arquivadas").
   query = filter?.archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);

@@ -31,9 +31,15 @@ export default function NotificationCenter() {
 
   // Clique na notificação: marca como lida e ABRE o alvo — card direto no board (/social?card=)
   // ou a ficha do cliente. Sem alvo, só marca como lida.
-  const abrir = (notif: { id: string; read: boolean; cardId?: string; clientId?: string }) => {
+  const abrir = (notif: { id: string; read: boolean; title?: string; cardId?: string; clientId?: string }) => {
     if (!notif.read) markNotificationRead(notif.id);
-    const destino = notif.cardId ? `/social?card=${notif.cardId}` : notif.clientId ? `/clients/${notif.clientId}` : null;
+    // Card arquivado NÃO abre no quadro (ele não está lá) — abre a lista de Arquivadas, que é
+    // onde a pessoa desarquiva. Mandar pro cadastro do cliente era um beco sem saída.
+    const arquivada = /arquivad/i.test(notif.title ?? "");
+    const destino = arquivada
+      ? "/social?arquivadas=1"
+      : notif.cardId ? `/social?card=${notif.cardId}`
+      : notif.clientId ? `/clients/${notif.clientId}` : null;
     if (destino) { setOpen(false); router.push(destino); }
   };
 

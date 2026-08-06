@@ -52,6 +52,10 @@ export async function POST(req: NextRequest) {
         title: "🖼️ Novo card de conteúdo pra você",
         body: `${body.title}${body.clientName ? ` — ${body.clientName}` : ""}${quando}`,
         client_id: body.clientId,
+        // COM O CARD: o social clica no aviso e cai NO card que acabaram de abrir pra ele. Sem
+        // isso caía no cadastro do cliente e ele tinha que garimpar no quadro. Aqui o id existe
+        // (acabou de ser criado) — não dependia de resolver nada.
+        card_id: data.id,
         target_user: body.socialMedia,
       }).then(() => {}, () => {});
     }
