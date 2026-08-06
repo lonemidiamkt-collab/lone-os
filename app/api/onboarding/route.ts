@@ -357,7 +357,13 @@ export async function POST(req: NextRequest) {
             + `_Vigência é a padrão: ciclos de 3 meses com renovação automática. Se for teste de prazo fechado, diga "teste de 1 mês"._`;
           // Fire-and-forget: não segura a resposta ao cliente (Evolution pode levar até ~21s no pior
           // caso). O servidor Node é persistente (VPS), então o envio completa em background.
-          void csSendGroupText(jid, msg).catch((e) => console.error("[onboarding submit] aviso no grupo falhou:", e));
+          void csSendGroupText(jid, msg, undefined, { origem: "contrato-oferta-aviso", destino: "interno", clientId: formData.clientId })
+            .catch((e) => console.error("[onboarding submit] aviso no grupo falhou:", e));
+          // Registra DE QUEM é a oferta. Sem isso, responder "1797, dia 10" não tem cliente:
+          // quem responde uma pergunta não repete o assunto, e o agente ficava mudo.
+          void import("@/lib/contracts/oferta")
+            .then((m) => m.registrarOferta(jid, formData.clientId, clientName))
+            .catch((e) => console.error("[onboarding submit] oferta não registrada:", e));
         }
       } catch (e) {
         console.error("[onboarding submit] aviso no grupo falhou:", e);

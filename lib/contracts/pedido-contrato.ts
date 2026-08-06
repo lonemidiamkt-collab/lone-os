@@ -22,14 +22,36 @@ export interface PedidoContrato {
   faltando: string[];
 }
 
-/** "gera o contrato", "manda o contrato", "pode gerar o contrato do X" — e o "sim" seco à oferta. */
+/**
+ * "gera o contrato", "manda o contrato", "pode gerar o contrato do X", o "sim" seco à oferta — e,
+ * o que faltava: a RESPOSTA à pergunta.
+ *
+ * O agente pergunta "quer que eu gere o contrato? me manda valor e vencimento". Quem responde
+ * "dia de vencimento dia 10, sao 3 meses de contrato no valor de 1797" não escreve verbo de
+ * comando nenhum — está respondendo. Exigir "gera" ali era transformar a própria pergunta do
+ * agente numa armadilha, e o silêncio que veio depois foi pior que uma recusa.
+ */
 export function pediuContrato(texto: string): boolean {
   const t = (texto || "").toLowerCase();
   const verbo = /\b(gera|gerar|monta|montar|manda|mandar|envia|enviar|faz|fazer|quero)\b/.test(t);
   const objeto = /\bcontrato\b/.test(t);
   if (verbo && objeto) return true;
   // Resposta curta logo depois da oferta ("quer que eu gere o contrato?").
-  return /^(sim|isso|pode|pode ser|manda|envia|quero|bora)\b/.test(t.trim()) && t.trim().length <= 30;
+  if (/^(sim|isso|pode|pode ser|manda|envia|quero|bora)\b/.test(t.trim()) && t.trim().length <= 30) return true;
+  // Fala em contrato E traz os números que só fazem sentido pra gerar um: é a resposta à oferta.
+  // "o contrato dele vence em setembro" não entra aqui — não tem valor nem vencimento.
+  return objeto && trouxeOsNumeros(t);
+}
+
+/**
+ * A mensagem carrega valor E dia de vencimento? Então é resposta à oferta, mesmo sem a palavra
+ * "contrato" — depois da pergunta, "1797, dia 10" é uma frase completa.
+ *
+ * Usado pelo webhook no grupo de cadastro, onde a oferta acabou de ser feita.
+ */
+export function trouxeOsNumeros(texto: string): boolean {
+  const n = extrairNumeros(texto);
+  return n.valorMensal !== undefined && n.diaPagamento !== undefined;
 }
 
 /**

@@ -5,7 +5,7 @@
 // não gerar nada. Por isso metade dos testes é sobre NÃO chutar.
 
 import { describe, it, expect } from "vitest";
-import { lerPedido, pediuContrato, extrairNumeros } from "@/lib/contracts/pedido-contrato";
+import { lerPedido, pediuContrato, extrairNumeros, trouxeOsNumeros } from "@/lib/contracts/pedido-contrato";
 
 describe("reconhecer o pedido", () => {
   it("entende o jeito que se fala no grupo", () => {
@@ -22,6 +22,31 @@ describe("reconhecer o pedido", () => {
   it("não confunde conversa sobre contrato com pedido de gerar", () => {
     expect(pediuContrato("o cliente ainda não assinou o contrato")).toBe(false);
     expect(pediuContrato("o contrato dele vence em setembro")).toBe(false);
+  });
+});
+
+describe("responder a pergunta É pedir (o silêncio de 06/08)", () => {
+  // Real: o agente perguntou "quer que eu gere o contrato? me manda valor e vencimento" e o
+  // Roberto respondeu isto. Não havia verbo de comando nenhum — e o agente ficou MUDO.
+  const resposta = "dia de vencimento dia 10, sao 3 meses de contrato no valor de 1797";
+
+  it("entende a resposta como pedido", () => {
+    expect(pediuContrato(resposta)).toBe(true);
+  });
+
+  it("tira os números certos dela", () => {
+    expect(extrairNumeros(resposta)).toMatchObject({ valorMensal: 1797, diaPagamento: 10, duracaoMeses: 3 });
+  });
+
+  it('sem a palavra "contrato", valor + vencimento já é a resposta', () => {
+    expect(trouxeOsNumeros("1797, dia 10")).toBe(true);
+    expect(trouxeOsNumeros("pode ser 2500 todo dia 5")).toBe(true);
+  });
+
+  it("conversa sobre contrato sem números continua não sendo pedido", () => {
+    expect(pediuContrato("o contrato dele vence em setembro")).toBe(false);
+    expect(pediuContrato("o cliente ainda não assinou o contrato")).toBe(false);
+    expect(trouxeOsNumeros("o contrato venceu")).toBe(false);
   });
 });
 

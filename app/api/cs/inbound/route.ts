@@ -972,14 +972,21 @@ export async function POST(req: NextRequest) {
   // Vem cedo porque a frase tem números e nomes de cliente — se cair no classificador de demanda
   // vira card de arte. Só vale no grupo de CADASTRO, que é onde a oferta foi feita.
   if (isCadastroGroup(msg.groupJid)) {
-    const { lerPedido } = await import("@/lib/contracts/pedido-contrato");
+    const { lerPedido, trouxeOsNumeros } = await import("@/lib/contracts/pedido-contrato");
     const pedido = lerPedido(msg.text);
-    if (pedido.querContrato) {
+    // Depois da oferta, "1797, dia 10" é frase completa — não precisa repetir a palavra contrato.
+    const respondendoOferta = !pedido.querContrato && trouxeOsNumeros(msg.text);
+    if (pedido.querContrato || respondendoOferta) {
       const { acharClientePorNome } = await import("@/lib/cs/achar-cliente");
-      const alvo = await acharClientePorNome(msg.text);
+      const { ofertaPendente } = await import("@/lib/contracts/oferta");
+      // Nome citado manda. Sem nome, herda o cliente da oferta que o agente acabou de fazer ali —
+      // quem responde uma pergunta não repete o assunto.
+      const citado = await acharClientePorNome(msg.text);
+      const daOferta = citado ? null : await ofertaPendente(msg.groupJid);
+      const alvo = citado ?? (daOferta ? { id: daOferta.clientId, nome: daOferta.cliente } : null);
       if (!alvo) {
         await csSendGroupText(msg.groupJid,
-          "Qual cliente? Me diz o nome junto — ex: _\"gera o contrato do Bruno Tintas: 2500, 12 meses, dia 10\"_.",
+          "De qual cliente é esse contrato? Me diz o nome que eu monto — ex: _\"gera o contrato do Bruno Tintas: 2500, dia 10\"_.",
           undefined, { origem: "contrato-falta-cliente", destino: "interno" });
         return NextResponse.json({ ok: true, acao: "contrato_sem_cliente" });
       }
@@ -997,8 +1004,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, acao: "contrato_incompleto", faltando: pedido.faltando });
       }
 
-      await csSendGroupText(msg.groupJid, `Montando o contrato do *${alvo.nome}*…`, undefined,
-        { origem: "contrato-gerando", destino: "interno" });
+      await csSendGroupText(msg.groupJid,
+        citado
+          ? `Montando o contrato do *${alvo.nome}*…`
+          : `Montando o contrato do *${alvo.nome}* (o do cadastro que avisei aqui) — se for outro cliente, me diz.`,
+        undefined, { origem: "contrato-gerando", destino: "interno" });
 
       // Chama a biblioteca DIRETO. Um fetch pra própria rota bateria em 401: ela exige gestão
       // logada, e aqui quem fala é o webhook do WhatsApp — não há sessão pra apresentar.
