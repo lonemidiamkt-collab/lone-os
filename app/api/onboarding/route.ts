@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { espelharNoCofre } from "@/lib/cofre/espelhar";
 
 /**
  * Grupo de CADASTRO. Os avisos de onboarding (handoff do comercial, cadastro concluído, cliente
@@ -424,6 +425,20 @@ export async function POST(req: NextRequest) {
     const { error } = await supabase.from("clients").update(updatePayload).eq("id", clientId);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // ESPELHA A SENHA NO COFRE DO SOCIAL. Aqui era o vazamento: a ativação gravava a senha só em
+    // `clients` (criptografada, só admin lê) e o social/gestor ficavam sem — "é como se não
+    // existisse, mas no painel admin tem". Usa os valores em TEXTO do formulário (subRow), nunca
+    // o criptografado: espelhar o cifrado encheria o cofre de string ilegível.
+    if (subRow) {
+      const esp = await espelharNoCofre(clientId, {
+        instagram_login: subRow.instagram_login as string | null,
+        instagram_password: subRow.instagram_password as string | null,
+        facebook_login: subRow.meta_login as string | null,
+        facebook_password: subRow.meta_password as string | null,
+      });
+      if (!esp.ok) console.error("[onboarding] espelho do cofre falhou:", esp.erro);
+    }
 
     // Generate onboarding checklist items based on service type
     const allItems = [

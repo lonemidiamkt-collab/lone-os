@@ -7,15 +7,55 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { papelDoUsuario } from "@/lib/api/require-role";
+
+/**
+ * Gestão vê qualquer cliente; o SOCIAL só os da carteira dele.
+ *
+ * Antes a rota exigia isAdmin puro — e o briefing é justamente o que o social precisa manter
+ * (é dele que sai roteiro e planejamento). Deixar só pra gestão obrigava o Roberto a ser o
+ * gargalo de todo briefing.
+ *
+ * A checagem é por CLIENTE, não só por papel: sem isso um social poderia ler e reescrever o
+ * briefing de cliente que não é dele mandando outro clientId na mão.
+ */
+async function podeMexerNoBriefing(
+  user: { email: string; isAdmin: boolean },
+  clientId: string,
+): Promise<boolean> {
+  if (user.isAdmin) return true;
+  const papel = await papelDoUsuario(user as never);
+  if (papel === "admin" || papel === "manager") return true;
+  if (papel !== "social") return false;
+  const { data: membro } = await supabaseAdmin
+    .from("team_members").select("name").eq("email", (user.email || "").toLowerCase()).maybeSingle();
+  const nome = (membro?.name as string) || "";
+  if (!nome) return false;
+  const { data: cli } = await supabaseAdmin
+    .from("clients").select("assigned_social").eq("id", clientId).maybeSingle();
+  return (cli?.assigned_social as string | null) === nome;
+}
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { coletarMateriaPrima, enriquecerBriefing, type BriefingEstruturado } from "@/lib/cs/enriquecer-briefing";
 
 export async function GET(req: NextRequest) {
   const user = await getServerUser(req);
-  if (!user?.isAdmin) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const clientId = req.nextUrl.searchParams.get("clientId");
   if (!clientId) return NextResponse.json({ error: "clientId obrigatório" }, { status: 400 });
+  if (!(await podeMexerNoBriefing(user, clientId))) {
+    return NextResponse.json({ error: "Este cliente não está na sua carteira." }, { status: 403 });
+  }
+
+  // ?atual=1 → devolve o briefing VIGENTE pra edição, sem passar pela IA. Corrigir uma linha
+  // errada não deveria custar uma regeração inteira (nem o risco de a IA mudar o resto).
+  if (req.nextUrl.searchParams.get("atual") === "1") {
+    const { data: atual } = await supabaseAdmin
+      .from("client_briefings").select("*").eq("client_id", clientId).eq("is_current", true).maybeSingle();
+    if (!atual) return NextResponse.json({ error: "Este cliente ainda não tem briefing salvo." }, { status: 404 });
+    return NextResponse.json({ rascunho: atual, versaoAtual: atual.version });
+  }
 
   const mp = await coletarMateriaPrima(clientId);
   if (!mp) return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
@@ -37,12 +77,15 @@ export async function GET(req: NextRequest) {
 //   { clientId, rascunho }        → SALVA o rascunho revisado como nova versão (human-gated).
 export async function POST(req: NextRequest) {
   const user = await getServerUser(req);
-  if (!user?.isAdmin) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
   const clientId = body?.clientId as string;
   const b = body?.rascunho as BriefingEstruturado | undefined;
   if (!clientId) return NextResponse.json({ error: "clientId obrigatório" }, { status: 400 });
+  if (!(await podeMexerNoBriefing(user, clientId))) {
+    return NextResponse.json({ error: "Este cliente não está na sua carteira." }, { status: 403 });
+  }
 
   // Modo GERAR (sem rascunho): junta material (+ o novo colado) e devolve o rascunho.
   if (!b) {

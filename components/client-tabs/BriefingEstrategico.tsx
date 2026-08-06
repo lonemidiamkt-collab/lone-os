@@ -72,6 +72,20 @@ export default function BriefingEstrategico({ clientId }: { clientId: string }) 
     setLendoPdf(false);
   };
 
+  const [carregando, setCarregando] = useState(false);
+
+  /** Abre o briefing VIGENTE nos campos, pra editar e salvar como nova versão. */
+  const carregarAtual = async () => {
+    setCarregando(true); setMsg("");
+    try {
+      const res = await authedFetch(`/api/cs/enriquecer-briefing?clientId=${clientId}&atual=1`);
+      const j = await res.json();
+      if (!res.ok) { setMsg(j.error || "Não consegui abrir o briefing atual"); return; }
+      setR(j.rascunho); setFontes(null);
+      setMsg(`Editando a versão v${j.versaoAtual}. Ao salvar, vira uma nova versão.`);
+    } catch { setMsg("Erro de conexão"); } finally { setCarregando(false); }
+  };
+
   const gerar = async () => {
     setLoading(true); setMsg("");
     try {
@@ -115,7 +129,14 @@ export default function BriefingEstrategico({ clientId }: { clientId: string }) 
           <h3 className="font-semibold">Briefing estratégico (IA)</h3>
           <p className="text-sm text-muted-foreground">Junta o material do cliente e monta o briefing com diagnóstico. Revise antes de salvar.</p>
         </div>
-        <Button onClick={gerar} disabled={loading}>{loading ? "Gerando…" : r ? "Gerar de novo" : "Gerar rascunho"}</Button>
+        <div className="flex items-center gap-2">
+          {/* EDITAR o que já existe, sem passar pela IA. Corrigir uma linha errada não deveria
+              custar uma regeração inteira — nem o risco de a IA mudar o resto junto. */}
+          <Button variant="outline" onClick={carregarAtual} disabled={loading || carregando}>
+            {carregando ? "Abrindo…" : "Editar briefing atual"}
+          </Button>
+          <Button onClick={gerar} disabled={loading}>{loading ? "Gerando…" : r ? "Gerar de novo" : "Gerar rascunho"}</Button>
+        </div>
       </div>
 
       <div className="space-y-1"
