@@ -39,9 +39,12 @@ export async function POST(req: NextRequest) {
   if (!ehPdf) return NextResponse.json({ error: "Só leio PDF por aqui." }, { status: 415 });
 
   try {
-    // Import dinâmico: a lib lê o disco no topo do módulo e quebraria o build do Next se
-    // carregada estaticamente.
-    const pdfParse = (await import("pdf-parse")).default as (b: Buffer, o?: Record<string, unknown>) => Promise<{ text: string; numpages: number }>;
+    // IMPORTA O MÓDULO INTERNO, NÃO O index.js. O index da pdf-parse tem um modo de depuração
+    // (`isDebugMode = !module.parent`) que, quando a lib é empacotada, tenta ler um PDF de teste
+    // do próprio pacote — que não existe em produção. O erro sai como "ENOENT: ./test/data/
+    // 05-versions-space.pdf" e parece problema do arquivo do cliente, não da biblioteca.
+    // Peguei isso testando em produção; o `lib/pdf-parse.js` é a mesma função, sem o wrapper.
+    const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default as (b: Buffer, o?: Record<string, unknown>) => Promise<{ text: string; numpages: number }>;
     const buf = Buffer.from(await file.arrayBuffer());
     const r = await pdfParse(buf, { max: MAX_PAGINAS });
 
