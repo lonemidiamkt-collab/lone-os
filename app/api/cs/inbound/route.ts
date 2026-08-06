@@ -918,8 +918,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // A ALLOWLIST É SOBRE GRUPO DE CLIENTE, NÃO SOBRE OS NOSSOS. Ela existe pra limitar em quais
+  // grupos de CLIENTE o piloto atua. Grupo interno (artes, tráfego, equipe, cadastro) é canal
+  // próprio do agente e não deveria depender dela — o de cadastro nasceu hoje, ficou fora da
+  // lista, e o comando de contrato morria em "fora da allowlist" sem nenhum sinal.
   const allow = pilotGroupAllowlist();
-  if (allow.length > 0 && !allow.includes(msg.groupJid)) {
+  const grupoNosso = isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid) || isCadastroGroup(msg.groupJid);
+  if (!grupoNosso && allow.length > 0 && !allow.includes(msg.groupJid)) {
     return NextResponse.json({ ok: true, skip: "fora da allowlist do piloto" });
   }
 
