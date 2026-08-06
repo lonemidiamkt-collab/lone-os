@@ -1,14 +1,16 @@
 "use client";
 
-// /meus-clientes — a carteira do social, com o BRIEFING de cada cliente.
+// /meus-clientes — a carteira de QUEM EXECUTA (social, tráfego, designer), com o briefing.
 //
-// POR QUE UMA TELA NOVA E NÃO ABRIR /clients (Roberto, 05/08). A tela de Clientes é da gestão:
-// mostra cofre de acessos, contratos, dados de cobrança. Liberar ela pro social pra resolver o
-// briefing entregaria junto um monte de coisa que não é dele. Aqui vai só o que ele precisa —
-// a carteira e o briefing.
+// POR QUE UMA TELA NOVA E NÃO ABRIR /clients (Roberto, 05/08). A tela de Clientes é da GESTÃO:
+// cofre de acessos, contratos, dados de cobrança. Liberar ela pra resolver o briefing entregaria
+// junto um monte de coisa que não é do time de execução. Aqui vai só a carteira e o briefing.
+//
+// E POR ISSO A GESTÃO NÃO VÊ ESTA ABA: ela já tem /clients, com tudo. Duas abas de cliente pro
+// admin era duplicidade — foi o que o Roberto apontou na primeira versão.
 //
 // O BRIEFING É O PONTO. É dele que o agente tira roteiro e planejamento; briefing pobre vira
-// roteiro genérico. Agora o social cola o texto OU solta o PDF que o cliente mandou (tabela de
+// roteiro genérico. Aqui a pessoa cola o texto OU solta o PDF que o cliente mandou (tabela de
 // preço, catálogo), o sistema lê e isso vira base do conteúdo.
 
 import { useEffect, useMemo, useState } from "react";
@@ -27,10 +29,19 @@ export default function MeusClientesPage() {
 
   useEffect(() => { initClients(); }, [initClients]);
 
-  // SÓ A CARTEIRA DELE. Gestão vê todos — é quem cobre férias e ausência e precisa enxergar tudo.
+  // CADA PAPEL TEM SUA CARTEIRA, EM CAMPO DIFERENTE. Filtrar sempre por assignedSocial deixaria
+  // tráfego e designer com a aba vazia — eles têm cliente atribuído em outra coluna.
+  // A gestão não usa esta tela (tem /clients); se cair aqui, vê tudo em vez de nada.
   const meus = useMemo(() => {
-    const gestao = role === "admin" || role === "manager";
-    const base = clients.filter((c) => gestao || c.assignedSocial === currentUser);
+    const carteiraDe = (c: (typeof clients)[number]) =>
+      role === "traffic" ? c.assignedTraffic
+      : role === "designer" ? c.assignedDesigner
+      : role === "social" ? c.assignedSocial
+      : null; // gestão: sem filtro
+    const base = clients.filter((c) => {
+      const dono = carteiraDe(c);
+      return dono === null || dono === currentUser;
+    });
     const t = busca.trim().toLowerCase();
     return base
       .filter((c) => !t || (c.nomeFantasia || c.name).toLowerCase().includes(t))

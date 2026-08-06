@@ -26,14 +26,23 @@ async function podeMexerNoBriefing(
   if (user.isAdmin) return true;
   const papel = await papelDoUsuario(user as never);
   if (papel === "admin" || papel === "manager") return true;
-  if (papel !== "social") return false;
+
+  // CADA PAPEL TEM SUA COLUNA DE CARTEIRA. Checar sempre `assigned_social` daria 403 pro tráfego
+  // e pro designer, que também mantêm briefing dos clientes deles.
+  const coluna =
+    papel === "social" ? "assigned_social"
+    : papel === "traffic" ? "assigned_traffic"
+    : papel === "designer" ? "assigned_designer"
+    : null;
+  if (!coluna) return false;
+
   const { data: membro } = await supabaseAdmin
     .from("team_members").select("name").eq("email", (user.email || "").toLowerCase()).maybeSingle();
   const nome = (membro?.name as string) || "";
   if (!nome) return false;
   const { data: cli } = await supabaseAdmin
-    .from("clients").select("assigned_social").eq("id", clientId).maybeSingle();
-  return (cli?.assigned_social as string | null) === nome;
+    .from("clients").select(coluna).eq("id", clientId).maybeSingle();
+  return ((cli as Record<string, unknown> | null)?.[coluna] as string | null) === nome;
 }
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { coletarMateriaPrima, enriquecerBriefing, type BriefingEstruturado } from "@/lib/cs/enriquecer-briefing";

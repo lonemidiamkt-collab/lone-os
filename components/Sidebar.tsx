@@ -38,7 +38,7 @@ export const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/processos",     icon: BookOpen,        label: "Processos",  roles: ["admin","manager","traffic","social","designer","comercial"] },
   { href: "/traffic",       icon: TrendingUp,      label: "Tráfego",    roles: ["admin","manager","traffic"],                    hasSecondary: true },
   { href: "/social",        icon: Instagram,       label: "Social",     roles: ["admin","manager","social","designer"],          hasSecondary: true },
-  { href: "/meus-clientes", icon: Users,           label: "Meus Clientes", roles: ["admin","manager","social"] },
+  { href: "/meus-clientes", icon: Users,           label: "Meus Clientes", roles: ["traffic","social","designer"] },
   { href: "/planejamento",  icon: CalendarClock,   label: "Planejamento", roles: ["admin","manager","social"] },
   { href: "/design",        icon: Palette,         label: "Designer",   roles: ["admin","manager","designer","social"],          hasSecondary: true },
   { href: "/clients",       icon: Users,           label: "Clientes",   roles: ["admin","manager"],                              hasSecondary: true },
