@@ -14,12 +14,11 @@ export class TokenExpiredError extends Error {
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID ?? "";
 const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}/traffic` : "";
 // Inclui Instagram orgânico (permissões já adicionadas ao app na Meta em 10/jul).
-// NÃO ACRESCENTE instagram_content_publish / pages_manage_posts AQUI (tentado 09/08). O Facebook
-// respondeu "Invalid Scopes" e a tela de consentimento passou a BLOQUEAR o login — ou seja, pedir
-// uma permissão que o app não tem habilitada não é inofensivo: quebra a reconexão inteira.
-// Essas duas primeiro precisam ser habilitadas no painel do app (developers.facebook.com →
-// App Review → Permissions and Features). Só depois voltam pra esta linha.
-const SCOPES = "ads_read,ads_management,business_management,instagram_basic,instagram_manage_insights,pages_read_engagement,pages_show_list";
+// As duas últimas dependem do produto Instagram estar habilitado no painel do app. Em 09/08 elas
+// foram pedidas SEM isso e o Facebook respondeu "Invalid Scopes", travando o login inteiro — pedir
+// permissão que o app não tem não é inofensivo. Se a tela de consentimento voltar a falhar, remova
+// as duas daqui antes de qualquer outra coisa: sem isso ninguém reconecta a Meta.
+const SCOPES = "ads_read,ads_management,business_management,instagram_basic,instagram_manage_insights,pages_read_engagement,pages_show_list,instagram_content_publish,pages_manage_posts";
 
 // ─── Supabase-backed global token storage ─────────────────────────────────
 
