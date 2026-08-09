@@ -69,7 +69,11 @@ async function clearGlobalToken() {
 /** Exchange a short-lived token for a long-lived one (~60 days) via server-side API route */
 async function exchangeForLongLivedToken(shortToken: string): Promise<"ok" | "failed"> {
   try {
-    const res = await fetch("/api/meta/exchange-token", {
+    // authedFetch, NÃO fetch puro: a rota exige admin logado (ela usa o META_APP_SECRET). Com fetch
+    // puro ela devolvia 401, a troca falhava em silêncio e ficava salvo o token CURTO do Facebook —
+    // que dura ~1h. Era essa a causa do painel de resultados "caindo sozinho": não era o link, era
+    // o token da Meta morrendo na mesma tarde em que era criado.
+    const res = await authedFetch("/api/meta/exchange-token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ short_lived_token: shortToken }),
