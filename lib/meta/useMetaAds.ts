@@ -14,11 +14,12 @@ export class TokenExpiredError extends Error {
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID ?? "";
 const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}/traffic` : "";
 // Inclui Instagram orgânico (permissões já adicionadas ao app na Meta em 10/jul).
-// PUBLICAR exige as duas últimas. Tudo o que já roda aqui (ler o IG de 40 clientes, gerenciar as
-// contas de anúncio) funciona em ACESSO PADRÃO — o app só tem email/public_profile em acesso
-// avançado. Se a regra valer igual pra publicação, basta reconectar; se a Meta exigir App Review,
-// ela recusa no consentimento e a gente descobre na hora, sem quebrar nada do que já funciona.
-const SCOPES = "ads_read,ads_management,business_management,instagram_basic,instagram_manage_insights,pages_read_engagement,pages_show_list,instagram_content_publish,pages_manage_posts";
+// NÃO ACRESCENTE instagram_content_publish / pages_manage_posts AQUI (tentado 09/08). O Facebook
+// respondeu "Invalid Scopes" e a tela de consentimento passou a BLOQUEAR o login — ou seja, pedir
+// uma permissão que o app não tem habilitada não é inofensivo: quebra a reconexão inteira.
+// Essas duas primeiro precisam ser habilitadas no painel do app (developers.facebook.com →
+// App Review → Permissions and Features). Só depois voltam pra esta linha.
+const SCOPES = "ads_read,ads_management,business_management,instagram_basic,instagram_manage_insights,pages_read_engagement,pages_show_list";
 
 // ─── Supabase-backed global token storage ─────────────────────────────────
 
