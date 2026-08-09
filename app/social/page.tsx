@@ -779,6 +779,9 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
       const fd = new FormData();
       fd.append("file", f);
       fd.append("cardId", cardId);
+      // O que o social anexa AQUI é referência pro designer, não arte pronta. Sem esta marca, a
+      // publicação automática mandaria o print de referência pro Instagram do cliente.
+      fd.append("tipo", "referencia");
       try {
         const r = await authedFetch("/api/upload-art", { method: "POST", body: fd });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);

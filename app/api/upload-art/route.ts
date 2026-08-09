@@ -128,6 +128,11 @@ export async function POST(req: NextRequest) {
   const rawCardId = (formData.get("cardId") as string | null)?.trim() ?? "misc";
   const isCardMode = UUID_RE.test(rawCardId);
   const cardId = rawCardId.replace(/[^a-zA-Z0-9_-]/g, "");
+  // REFERÊNCIA x ENTREGA. Sem isso as duas coisas ficam iguais no banco, e a publicação automática
+  // manda pro Instagram do cliente a referência que o social anexou achando que é a arte final.
+  // Quem não declara fica NULL (legado/indefinido) — e a publicação recusa NULL de propósito.
+  const tipoBruto = formData.get("tipo");
+  const tipo = tipoBruto === "referencia" || tipoBruto === "entrega" ? tipoBruto : null;
 
   const files = formData.getAll("file").filter((f): f is File => f instanceof File);
   if (files.length === 0) {
@@ -140,7 +145,7 @@ export async function POST(req: NextRequest) {
     // content_cards seguem o fluxo de anexos. Evita o falso "Card não encontrado".
     const { data: contentCard } = await supabaseAdmin
       .from("content_cards").select("id").eq("id", cardId).maybeSingle();
-    if (contentCard) return handleCardUpload(cardId, files);
+    if (contentCard) return handleCardUpload(cardId, files, tipo);
     const { data: designReq } = await supabaseAdmin
       .from("design_requests").select("id").eq("id", cardId).maybeSingle();
     if (designReq) return handleMiscUpload(cardId, files[0]);
@@ -151,7 +156,7 @@ export async function POST(req: NextRequest) {
 
 // ── CARD MODE ─────────────────────────────────────────────────────────────────
 
-async function handleCardUpload(cardId: string, files: File[]): Promise<NextResponse> {
+async function handleCardUpload(cardId: string, files: File[], tipo: "referencia" | "entrega" | null): Promise<NextResponse> {
   if (files.length > MAX_CARD_ATTACHMENTS) {
     return NextResponse.json({
       error: `Máximo ${MAX_CARD_ATTACHMENTS} arquivos por upload`,
@@ -257,7 +262,7 @@ async function handleCardUpload(cardId: string, files: File[]): Promise<NextResp
 
     const { data: attachment, error: dbErr } = await supabaseAdmin
       .from("card_attachments")
-      .insert({ card_id: cardId, url, path, position })
+      .insert({ card_id: cardId, url, path, position, tipo })
       .select()
       .single();
 

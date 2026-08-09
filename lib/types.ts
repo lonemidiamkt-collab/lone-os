@@ -277,6 +277,12 @@ export interface CardAttachment {
   path: string;
   position: number;
   created_at: string; // ISO
+  /**
+   * O que este anexo É. Antes referência e entrega ficavam iguais no banco, e a publicação
+   * automática mandava a referência pro Instagram do cliente achando que era a arte final.
+   * `null` = legado, anexado antes desta separação — a publicação recusa e pede classificação.
+   */
+  tipo?: "referencia" | "entrega" | null;
 }
 
 // Do's & don'ts estruturados do Agente CS (tabela cs_client_rules).

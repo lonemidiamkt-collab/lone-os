@@ -48,18 +48,41 @@ async function preparar(cardId: string): Promise<Preparo> {
   }
 
   const { data: anexos } = await supabaseAdmin
-    .from("card_attachments").select("url, created_at").eq("card_id", cardId)
-    .order("created_at", { ascending: true });
+    .from("card_attachments").select("url, tipo, position, created_at").eq("card_id", cardId)
+    .order("position", { ascending: true });
 
-  const artes = [
-    ...(card.image_url ? [card.image_url as string] : []),
-    ...((anexos ?? []).map((a) => a.url as string)),
-  ].filter((u, i, arr) => u && arr.indexOf(u) === i);
+  // SÓ ENTREGA VAI PRO AR. Referência e entrega moravam no mesmo lugar, e como a referência é a
+  // mais antiga, ela seria a capa do post — o Instagram do cliente receberia o print que o social
+  // anexou pro designer se inspirar. É o erro mais caro que esta rota pode cometer, porque parece
+  // ter funcionado.
+  const entregas = (anexos ?? []).filter((a) => a.tipo === "entrega");
+  const referencias = (anexos ?? []).filter((a) => a.tipo === "referencia");
+  const semTipo = (anexos ?? []).filter((a) => !a.tipo);
 
-  if (!artes.length) return { ok: false, cliente, erro: "card sem nenhuma arte" };
+  if (!entregas.length) {
+    // NULL é legado: pode ser referência, pode ser entrega, e não dá pra saber. Adivinhar aqui
+    // publica a coisa errada no perfil do cliente — recusar custa um clique.
+    if (semTipo.length) {
+      return {
+        ok: false, cliente,
+        erro: `card tem ${semTipo.length} anexo(s) sem classificação (referência ou entrega). `
+            + `Abra o card e marque qual é a arte final — não vou adivinhar e publicar a referência.`,
+      };
+    }
+    return {
+      ok: false, cliente,
+      erro: referencias.length
+        ? `card só tem referência (${referencias.length}), o designer ainda não entregou a arte`
+        : "card sem nenhuma arte",
+    };
+  }
+
+  const artes = entregas.map((a) => a.url as string)
+    .filter((u, i, arr) => u && arr.indexOf(u) === i);
 
   const legenda = ((card.caption as string) || "").trim();
   const avisos: string[] = [];
+  if (referencias.length) avisos.push(`${referencias.length} referência(s) do social ficam de fora — só a entrega vai ao ar`);
   // Legenda vazia não impede o post, mas quem confirma precisa saber que vai sair sem texto.
   if (!legenda) avisos.push("card SEM legenda — o post sairia sem texto");
   if (artes.length > 10) avisos.push(`card tem ${artes.length} artes; o carrossel só aceita 10 — as demais ficariam de fora`);

@@ -187,6 +187,27 @@ export default function CardArtAttachments({
   const [isFocused, setIsFocused] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
 
+  // REFERÊNCIA x ENTREGA. Sem essa marca, a publicação automática manda pro Instagram do cliente
+  // a referência que o social anexou pro designer. Fica clicável na própria arte porque quem sabe
+  // qual é qual é quem está olhando o card — e há 782 anexos antigos sem classificação.
+  const [marcando, setMarcando] = useState<string | null>(null);
+  const marcarTipo = async (att: CardAttachment, tipo: "referencia" | "entrega") => {
+    setMarcando(att.id);
+    try {
+      const r = await authedFetch(`/api/cards/${cardId}/attachments/${att.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setAttachments((prev) => prev.map((a) => (a.id === att.id ? { ...a, tipo } : a)));
+    } catch {
+      setGlobalError("Não consegui marcar o tipo da arte. Tenta de novo.");
+    } finally {
+      setMarcando(null);
+    }
+  };
+
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -396,6 +417,46 @@ export default function CardArtAttachments({
                 alt={`Arte ${idx + 1}`}
                 className="w-full h-full object-cover"
               />
+              {/* Etiqueta: o que esta arte É. Sem classificação aparece em vermelho, porque é o
+                  estado que impede a publicação — e o conserto é clicar em "entrega". */}
+              {!art.id.startsWith("legacy_") && !readOnly && (
+                <div
+                  className="absolute top-1 left-1 flex gap-0.5 z-10"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {(["referencia", "entrega"] as const).map((t) => {
+                    const ativo = art.tipo === t;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        disabled={marcando === art.id}
+                        onClick={() => marcarTipo(art, t)}
+                        title={t === "referencia"
+                          ? "Referência que o social passou pro designer — NÃO vai pro Instagram"
+                          : "Arte final do designer — é esta que a publicação usa"}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide transition-all disabled:opacity-40 ${
+                          ativo
+                            ? t === "entrega"
+                              ? "bg-lone-success text-white"
+                              : "bg-amber-500 text-white"
+                            : "bg-black/55 text-white/70 hover:bg-black/75"
+                        }`}
+                      >
+                        {t === "referencia" ? "ref" : "entrega"}
+                      </button>
+                    );
+                  })}
+                  {!art.tipo && (
+                    <span
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-600 text-white"
+                      title="Sem classificação — a publicação automática recusa até você marcar"
+                    >
+                      ?
+                    </span>
+                  )}
+                </div>
+              )}
               {/* Ações no hover: baixar + (ampliar via clique no card) */}
               <a
                 href={art.url}

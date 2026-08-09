@@ -538,6 +538,9 @@ export default function DesignPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("cardId", asCardAttachment ? linkedCard!.id : briefingReq.id);
+      // ENTREGA: é a arte final do designer, a única que a publicação automática pode mandar
+      // pro Instagram. Referência do social é marcada como "referencia" na criação da demanda.
+      formData.append("tipo", "entrega");
       const { authedFetch } = await import("@/lib/supabase/authed-fetch");
       const res = await authedFetch("/api/upload-art", { method: "POST", body: formData });
       const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
@@ -2668,7 +2671,8 @@ function NewTaskModal({
       const urls: string[] = [];
       for (const f of refs) {
         const fd = new FormData();
-        fd.append("file", f); fd.append("cardId", criada.id);
+        // Referência do pedido, não entrega — mesma regra do board social.
+        fd.append("file", f); fd.append("cardId", criada.id); fd.append("tipo", "referencia");
         try {
           const r = await authedFetch("/api/upload-art", { method: "POST", body: fd });
           const d = await r.json().catch(() => ({}));

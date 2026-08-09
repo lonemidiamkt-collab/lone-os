@@ -87,3 +87,46 @@ export async function DELETE(
 
   return NextResponse.json({ ok: true });
 }
+
+/**
+ * PATCH /api/cards/[id]/attachments/[attachmentId]  { tipo: "referencia" | "entrega" }
+ *
+ * Diz o que o anexo É: referência que o social passou pro designer, ou a arte final entregue.
+ *
+ * Existe porque as duas coisas moravam no mesmo lugar e nada as distinguia — a publicação
+ * automática pegaria a referência (mais antiga, portanto a capa) e mandaria pro Instagram do
+ * cliente como se fosse a arte. Os 782 anexos anteriores a esta separação estão sem classificação,
+ * e é por aqui que eles são acertados, um clique por arte.
+ *
+ * Auth: qualquer usuário autenticado — quem trabalha no card é quem sabe qual é qual.
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; attachmentId: string }> },
+) {
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Sessão inválida ou ausente" }, { status: 401 });
+
+  const { id: cardId, attachmentId } = await params;
+  const body = await req.json().catch(() => ({}));
+  const tipo = body?.tipo;
+  if (tipo !== "referencia" && tipo !== "entrega") {
+    return NextResponse.json({ error: 'tipo deve ser "referencia" ou "entrega"' }, { status: 400 });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("card_attachments")
+    .update({ tipo })
+    .eq("id", attachmentId)
+    .eq("card_id", cardId)   // impede mexer em anexo de outro card por id solto
+    .select("id, tipo")
+    .maybeSingle();
+
+  if (error) {
+    Sentry.captureException(error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!data) return NextResponse.json({ error: "anexo não encontrado neste card" }, { status: 404 });
+
+  return NextResponse.json({ ok: true, attachment: data });
+}

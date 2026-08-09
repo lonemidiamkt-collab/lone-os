@@ -27,7 +27,7 @@ export async function GET(
 
   const { data, error } = await supabaseAdmin
     .from("card_attachments")
-    .select("id, card_id, url, path, position, created_at")
+    .select("id, card_id, url, path, position, created_at, tipo")
     .eq("card_id", cardId)
     .order("position", { ascending: true });
 
