@@ -97,6 +97,31 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
   const isAdmin = role === "admin" || role === "manager";
 
   const [phase, setPhase] = useState<Phase>("pf");
+
+  // CONEXÕES NO CADASTRO (pedido do Roberto, 10/08). Antes a conta de anúncio só existia no modal
+  // de EDIÇÃO, como campo de texto pra digitar "act_1734129041237105" na mão — e o grupo do
+  // WhatsApp não existia em tela nenhuma. Resultado: Óticas Raki e Império Material ficaram meses
+  // sem receber relatório, suporte ou mensagem de data comemorativa, porque ninguém lembrou de
+  // voltar depois pra ligar as duas pontas. Cadastrar tem que deixar o cliente PRONTO.
+  const [contas, setContas] = useState<{ id: string; name: string }[]>([]);
+  const [grupos, setGrupos] = useState<{ id: string; subject: string }[]>([]);
+  const [carregandoConexoes, setCarregandoConexoes] = useState(true);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+      const [c, g] = await Promise.all([
+        authedFetch("/api/traffic/ad-accounts").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        authedFetch("/api/clients/group-mapping").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ]);
+      if (!vivo) return;
+      setContas(c?.accounts ?? []);
+      setGrupos(g?.groups ?? []);
+      setCarregandoConexoes(false);
+    })();
+    return () => { vivo = false; };
+  }, []);
   const [error, setError] = useState("");
   const [successState, setSuccessState] = useState(false);
   const [linkGenerated, setLinkGenerated] = useState<string | null>(null);
@@ -121,6 +146,10 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
     // Docs
     docContratoSocial: "",
     docIdentidade: "",
+    // Conexões (conta de anúncio e grupo do WhatsApp) — ver o bloco "Conexões" no formulário
+    metaAdAccountId: "",
+    whatsappGroupJid: "",
+    whatsappGroupName: "",
     // Servico
     serviceType: "lone_growth" as import("@/lib/types").ServiceType,
     paymentMethod: "pix" as Client["paymentMethod"],
@@ -205,7 +234,22 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
       notes: form.notes || undefined,
       docContratoSocial: form.docContratoSocial || undefined,
       docIdentidade: form.docIdentidade || undefined,
+      metaAdAccountId: form.metaAdAccountId || undefined,
     });
+
+    // O grupo entra pela rota que já existe (o tipo Client não carrega esses campos, e duplicar o
+    // caminho de escrita é como se criam dois lugares que discordam). Falhar aqui NÃO derruba o
+    // cadastro — o cliente já existe; o que fica faltando é a ligação, e ela aparece na tela.
+    if (form.whatsappGroupJid && newClient?.id) {
+      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+      const r = await authedFetch("/api/clients/group-mapping", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mappings: [{
+          clientId: newClient.id, groupJid: form.whatsappGroupJid, groupName: form.whatsappGroupName,
+        }] }),
+      }).catch(() => null);
+      if (!r?.ok) setError("Cliente cadastrado, mas o grupo do WhatsApp NÃO foi vinculado. Ligue em Clientes → Grupos.");
+    }
 
     // Auto-generate tasks
     const today = new Date().toISOString().slice(0, 10);
@@ -469,6 +513,53 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
                     </Select>
                   </div>
                 ))}
+              </div>
+
+              {/* CONEXÕES — é o que faz o cliente existir pras automações. Sem conta de anúncio
+                  não há relatório; sem grupo, o relatório não tem pra onde ir. Ficava fora do
+                  cadastro e alguém tinha que lembrar de voltar depois: dois clientes passaram
+                  meses sem receber nada por causa disso. */}
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider pt-4">
+                Conexões <span className="normal-case tracking-normal">— sem isto o cliente não recebe relatório nem mensagem automática</span>
+              </p>
+              <div className="space-y-3">
+                {needsTraffic && (
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5">Conta de anúncio (Meta)</Label>
+                    <Select value={form.metaAdAccountId} onValueChange={(v) => set("metaAdAccountId", v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={carregandoConexoes ? "Carregando as contas…" : contas.length ? "Escolha a conta" : "Nenhuma conta disponível"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {contas.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground">
+                      Só aparecem contas ainda não ligadas a outro cliente. Dá pra escolher depois em Editar.
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">Grupo do WhatsApp</Label>
+                  <Select
+                    value={form.whatsappGroupJid}
+                    onValueChange={(v) => {
+                      set("whatsappGroupJid", v);
+                      set("whatsappGroupName", grupos.find((g) => g.id === v)?.subject ?? "");
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={carregandoConexoes ? "Carregando os grupos…" : grupos.length ? "Escolha o grupo" : "Nenhum grupo encontrado"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {grupos.map((g) => <SelectItem key={g.id} value={g.id}>{g.subject}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground">
+                    É por onde saem relatório, suporte e datas comemorativas. O agente já precisa estar no grupo.
+                  </p>
+                </div>
               </div>
             </div>
           )}
