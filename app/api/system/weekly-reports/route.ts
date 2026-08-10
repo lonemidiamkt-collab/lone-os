@@ -73,11 +73,17 @@ export async function POST(req: NextRequest) {
   const dateFrom = intervalo ? since : undefined;
   const dateTo = intervalo ? until : undefined;
 
-  // PRA QUEM VAI. O padrão histórico desta rota é mandar TODOS os PDFs pro grupo de alertas
-  // (traffic_alert_group_jid) — é um digest interno pro gestor conferir, e foi por isso que os 42
-  // relatórios de julho caíram no grupo do Julio. `?destino=cliente` manda cada PDF pro grupo DO
-  // CLIENTE, que é o que o Roberto quer quando o relatório é pra entregar.
-  const paraCliente = url.searchParams.get("destino") === "cliente";
+  // PRA QUEM VAI — O CLIENTE, POR PADRÃO.
+  //
+  // Esta rota nasceu mandando tudo pro grupo interno de tráfego: um digest pro gestor conferir.
+  // Esse padrão já causou o mesmo erro DUAS vezes — os relatórios de julho caíram no grupo do
+  // Julio, e hoje (10/08) eu repeti, mandando 42 PDFs pro grupo de tráfego enquanto os clientes
+  // ficavam sem. Quem dispara sempre quer entregar ao cliente; o digest interno é a exceção.
+  //
+  // O Roberto foi direto: "não faz sentido enviar no grupo tráfego e no grupo do cliente, é melhor
+  // enviar apenas no cliente". Então o padrão inverteu. Quem quiser o digest interno pede
+  // explicitamente com `?destino=interno` — e assim o esquecimento erra pro lado certo.
+  const paraCliente = url.searchParams.get("destino") !== "interno";
 
   const escopoLabel = intervalo
     ? `${since.split("-").reverse().join("/")} a ${until.split("-").reverse().join("/")}`
