@@ -57,16 +57,28 @@ export function slug(s: string): string {
     .toLowerCase();
 }
 
-/** Clientes ativos com conta Meta de ANÚNCIO **ou** Instagram orgânico vinculado (mesma noção de
- *  "ativo" dos broadcasts). O relatório monta o que o cliente tiver: tráfego, IG, ou os dois juntos. */
-export async function selectActiveMetaClients(onlyClientId?: string | null): Promise<ReportClientRow[]> {
+/**
+ * Clientes ativos com conta Meta de ANÚNCIO **ou** Instagram orgânico vinculado.
+ * O relatório monta o que o cliente tiver: tráfego, IG, ou os dois juntos.
+ *
+ * @param apenasTrafego exige conta de anúncios. É o que vale no relatório SEMANAL: o contrato de
+ *   `assessoria_social` promete relatório MENSAL, não semanal. Sem isso o CIIL — que é só social,
+ *   sem conta de anúncios, mas com Instagram vinculado — recebia relatório toda segunda, e o
+ *   Roberto pegou: "a automação mandou relatório para CIIL, CIIL não é tráfego".
+ */
+export async function selectActiveMetaClients(
+  onlyClientId?: string | null,
+  apenasTrafego = false,
+): Promise<ReportClientRow[]> {
   let q = supabaseAdmin
     .from("clients")
     .select("id, name, nome_fantasia, meta_ad_account_id, ig_business_account_id, ig_public_username, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
-    .or("meta_ad_account_id.not.is.null,ig_business_account_id.not.is.null,ig_public_username.not.is.null")
     .in("status", ["good", "average", "onboarding"])
     .is("draft_status", null)
     .order("nome_fantasia");
+  q = apenasTrafego
+    ? q.not("meta_ad_account_id", "is", null)
+    : q.or("meta_ad_account_id.not.is.null,ig_business_account_id.not.is.null,ig_public_username.not.is.null");
   if (onlyClientId) q = q.eq("id", onlyClientId);
   const { data, error } = await q;
   if (error) throw new Error(error.message);

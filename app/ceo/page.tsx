@@ -267,24 +267,39 @@ export default function CEOPage() {
     return name.slice(0, 2).toUpperCase();
   };
 
-  const handleAddMember = useCallback(() => {
+  // CRIAR MEMBRO GRAVA DE VERDADE (10/08). Antes isto só empilhava um objeto no estado: a tela
+  // mostrava a pessoa, o banco não sabia dela, e ao definir a senha vinha "Usuário não encontrado
+  // no Auth". A rota cria a linha em team_members E o login, ou não cria nada.
+  const [erroEquipe, setErroEquipe] = useState<string | null>(null);
+  const [salvandoEquipe, setSalvandoEquipe] = useState(false);
+
+  const handleAddMember = useCallback(async () => {
     if (!newName.trim() || !newEmail.trim()) return;
-    const member: TeamMember = {
-      id: `member-${Date.now()}`,
-      name: newName.trim(),
-      email: newEmail.trim().toLowerCase(),
-      role: newRole,
-      initials: generateInitials(newName),
-      password: newPassword || "1234",
-      active: true,
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
-    setTeamMembers((prev) => [...prev, member]);
-    setNewName("");
-    setNewEmail("");
-    setNewRole("social");
-    setNewPassword("1234");
-    setShowAddForm(false);
+    setSalvandoEquipe(true); setErroEquipe(null);
+    try {
+      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+      const r = await authedFetch("/api/team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newName.trim(), email: newEmail.trim().toLowerCase(),
+          role: newRole, password: newPassword,
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setErroEquipe(d?.error ?? `Falha (HTTP ${r.status})`); return; }
+      setTeamMembers((prev) => [...prev, {
+        id: d.member.id, name: d.member.name, email: d.member.email, role: d.member.role,
+        initials: d.member.initials, password: "", active: true,
+        createdAt: new Date().toISOString().slice(0, 10),
+      } as TeamMember]);
+      setNewName(""); setNewEmail(""); setNewRole("social"); setNewPassword("");
+      setShowAddForm(false);
+    } catch {
+      setErroEquipe("Não consegui falar com o servidor. Tenta de novo.");
+    } finally {
+      setSalvandoEquipe(false);
+    }
   }, [newName, newEmail, newRole, newPassword]);
 
   const handleStartEdit = useCallback((member: TeamMember) => {
@@ -314,6 +329,19 @@ export default function CEOPage() {
     );
     // Save avatar
     setUserAvatar(editingId, editAvatar);
+
+    // NOME E PAPEL AGORA PERSISTEM. Antes só a senha ia pro servidor: trocar o papel de alguém
+    // parecia funcionar, e voltava ao recarregar — com a pessoa seguindo com o acesso antigo.
+    {
+      const r = await authedFetch("/api/team", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingId, name: editName.trim(), role: editRole }),
+      }).catch(() => null);
+      if (!r?.ok) {
+        const d = r ? await r.json().catch(() => ({})) : {};
+        setErroEquipe(`Nome/função NÃO salvos: ${d?.error ?? "falha no servidor"}`);
+      }
+    }
     // Senha nova → atualiza DE VERDADE no Supabase Auth (o campo antes só mexia no estado local
     // da lista e a troca "não pegava" no login).
     if (editPassword.trim()) {
@@ -335,11 +363,23 @@ export default function CEOPage() {
     setEditingId(null);
   }, [editingId, editName, editEmail, editRole, editPassword, editAvatar]);
 
-  const handleToggleActive = useCallback((id: string) => {
-    setTeamMembers((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, active: !m.active } : m))
-    );
-  }, []);
+  const handleToggleActive = useCallback(async (id: string) => {
+    const atual = teamMembers.find((m) => m.id === id);
+    if (!atual) return;
+    const novo = !atual.active;
+    setTeamMembers((prev) => prev.map((m) => (m.id === id ? { ...m, active: novo } : m)));
+    const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+    const r = await authedFetch("/api/team", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, is_active: novo }),
+    }).catch(() => null);
+    // Reverte o que a tela mostrou se o banco recusou — mostrar "desativado" sem ter desativado é
+    // pior que o erro, porque ninguém confere depois.
+    if (!r?.ok) {
+      setTeamMembers((prev) => prev.map((m) => (m.id === id ? { ...m, active: atual.active } : m)));
+      setErroEquipe("Não consegui salvar a mudança de status.");
+    }
+  }, [teamMembers]);
 
   const handleDeleteMember = useCallback((id: string) => {
     setTeamMembers((prev) => prev.filter((m) => m.id !== id));
@@ -1177,6 +1217,13 @@ export default function CEOPage() {
                       <X size={16} />
                     </button>
                   </div>
+                  {/* O erro do servidor precisa APARECER. O bug que trouxe isto aqui foi um
+                      cadastro que pareceu dar certo e não existia em lugar nenhum. */}
+                  {erroEquipe && (
+                    <div className="mb-3 rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-lone-danger">
+                      {erroEquipe}
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs text-muted-foreground font-medium block mb-1.5">Nome completo *</label>
@@ -1415,8 +1462,8 @@ export default function CEOPage() {
               <div className="flex items-start gap-3 bg-lone-warning-bg border border-lone-warning-border rounded-xl px-4 py-3">
                 <AlertTriangle size={16} className="text-lone-warning mt-0.5 shrink-0" />
                 <div className="text-xs text-muted-foreground space-y-1">
-                  <p><strong className="text-foreground">Atenção — só a senha é salva de verdade.</strong> Adicionar, remover, desativar ou editar nome/função aqui vale <strong>apenas nesta sessão</strong>: ao recarregar a página, volta ao estado do banco. Só a troca de senha persiste (via Supabase Auth).</p>
-                  <p>Para alterar a equipe de forma permanente, é preciso ligar essas ações a um endpoint real de <code>team_members</code> (ainda não existe).</p>
+                  <p><strong className="text-foreground">Adicionar cria o login junto.</strong> Ao cadastrar alguém aqui, o sistema grava na equipe <em>e</em> cria o acesso com a senha informada — as duas coisas, ou nenhuma. Nome, função e ativo/inativo também são salvos no banco.</p>
+                  <p><strong className="text-foreground">Remover</strong> só tira da lista desta sessão. Para desligar alguém de verdade, use <strong>desativar</strong>: preserva o histórico de quem fez o quê e bloqueia o acesso.</p>
                 </div>
               </div>
             </div>

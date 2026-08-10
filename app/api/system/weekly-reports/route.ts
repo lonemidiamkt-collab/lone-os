@@ -100,7 +100,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Clientes ativos com Meta vinculada
-    const clients = await selectActiveMetaClients(onlyClientId);
+    // SEMANAL É SÓ PRA QUEM TEM TRÁFEGO. Cliente de `assessoria_social` tem relatório MENSAL no
+    // contrato, não semanal — o CIIL vinha recebendo toda segunda por ter Instagram vinculado.
+    // No mensal (periodDays 30) e no intervalo fechado, o social entra normalmente.
+    const semanal = !intervalo && periodDays <= 7;
+    const clients = await selectActiveMetaClients(onlyClientId, semanal);
 
     if (clients.length === 0) {
       return NextResponse.json({ ok: true, status: "skipped", message: "Nenhum cliente ativo com Meta" });
