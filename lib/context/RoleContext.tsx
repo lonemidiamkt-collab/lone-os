@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase/client";
 import type { Role } from "@/lib/types";
 
@@ -14,7 +14,15 @@ export interface UserProfile {
   teamMemberId?: string; // UUID from team_members table
 }
 
-// Hardcoded profiles for the login dropdown (emails match seed.sql)
+// LISTA DE RESERVA — a de verdade vem de /api/team/roster (tabela team_members).
+//
+// Ela existe só pra tela de login não morrer se a busca falhar: sem rede, ninguém entra, e um
+// sistema que não deixa a equipe trabalhar por causa de uma consulta é pior que um nome
+// desatualizado. Fora esse caso, quem manda é o banco.
+//
+// NÃO ADICIONE GENTE AQUI. Cadastro é na tela de Equipe, que grava em team_members e cria o login
+// junto. Foi manter esta lista em paralelo com a tabela que fez a saída do Pedro Henrique virar
+// caça a cinco arquivos — e por pouco não deixou o substituto sem acesso.
 export const USER_PROFILES: UserProfile[] = [
   // Socios ADM (Full Access)
   { id: "roberto",  name: "Roberto Lino",    role: "admin",    initials: "RL", color: "text-[#0d4af5]", email: "lonemidiamkt@gmail.com" },
@@ -41,6 +49,8 @@ const ROLE_LABELS: Record<Role, string> = {
 };
 
 interface RoleContextValue {
+  /** A equipe de verdade (banco). Use isto em vez de importar USER_PROFILES. */
+  profiles: UserProfile[];
   role: Role;
   currentUser: string;
   currentProfile: UserProfile;
@@ -57,6 +67,7 @@ interface RoleContextValue {
 const DEFAULT_PROFILE = USER_PROFILES[0];
 
 const RoleContext = createContext<RoleContextValue>({
+  profiles: USER_PROFILES,
   role: "admin",
   currentUser: "Roberto Lino",
   currentProfile: DEFAULT_PROFILE,
@@ -84,6 +95,35 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [currentProfile, setCurrentProfileState] = useState<UserProfile>(DEFAULT_PROFILE);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  // A equipe de verdade, do banco. Começa na reserva pra tela ter o que mostrar no primeiro quadro.
+  const [profiles, setProfiles] = useState<UserProfile[]>(USER_PROFILES);
+
+  // O ouvinte de sessão vive o tempo todo e foi criado uma vez. Sem ref ele consultaria pra sempre
+  // a lista do primeiro quadro — e alguém que entrasse no time hoje não seria reconhecido até dar
+  // F5. É o mesmo tipo de armadilha que criou este bug, agora dentro do React.
+  const profilesRef = useRef<UserProfile[]>(USER_PROFILES);
+  useEffect(() => { profilesRef.current = profiles; }, [profiles]);
+
+  /** Quem é o dono deste e-mail. Tenta a lista viva; cai na reserva se não achar. */
+  const acharPorEmail = useCallback((email?: string | null): UserProfile | undefined => {
+    const e = (email ?? "").trim().toLowerCase();
+    if (!e) return undefined;
+    return profilesRef.current.find((p) => p.email.toLowerCase() === e)
+        ?? USER_PROFILES.find((p) => p.email.toLowerCase() === e);
+  }, []);
+
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/team/roster")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const lista = d?.profiles as UserProfile[] | undefined;
+        // Lista vazia = consulta falhou. Fica na reserva: melhor nome velho que tela sem ninguém.
+        if (vivo && lista?.length) setProfiles(lista);
+      })
+      .catch(() => { /* sem rede: segue na reserva */ });
+    return () => { vivo = false; };
+  }, []);
 
   // Restore session from Supabase on mount
   useEffect(() => {
@@ -95,7 +135,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         const { data: { session } } = await supabase.auth.getSession();
 
         if (session?.user && mounted) {
-          const profile = USER_PROFILES.find((p) => p.email === session.user.email);
+          const profile = acharPorEmail(session.user.email);
           if (profile) {
             const teamMemberId = await fetchTeamMemberId(session.user.id);
             setCurrentProfileState({ ...profile, teamMemberId });
@@ -114,9 +154,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
                   return false;
                 });
               } else if (event === "SIGNED_IN" && session?.user) {
-                const profile = USER_PROFILES.find(
-                  (p) => p.email === session.user.email
-                );
+                const profile = acharPorEmail(session.user.email);
                 if (profile) {
                   const teamMemberId = await fetchTeamMemberId(session.user.id);
                   setCurrentProfileState({ ...profile, teamMemberId });
@@ -185,6 +223,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   return (
     <RoleContext.Provider
       value={{
+        profiles,
         role: currentProfile.role,
         currentUser: currentProfile.name,
         currentProfile,

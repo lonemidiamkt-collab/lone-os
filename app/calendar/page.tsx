@@ -32,7 +32,7 @@ import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
-import { useRole, USER_PROFILES } from "@/lib/context/RoleContext";
+import { useRole } from "@/lib/context/RoleContext";
 import DriveButton from "@/components/DriveButton";
 import type { ContentCard, Task, TrafficRoutineCheck, TaskStatus, Priority, Reminder, Role } from "@/lib/types";
 import HolidaysPdfButton from "@/components/HolidaysPdfButton";
@@ -1215,6 +1215,7 @@ function QuickCreateModal({
   onCreateReminder: (rem: Omit<Reminder, "id">) => void;
   onSaveAndOpen: (task: Omit<Task, "id">) => void;
 }) {
+  const { profiles } = useRole();   // equipe do banco, não lista em arquivo
   const [createType, setCreateType] = useState<CreateType>("task");
   // Social/designer/traffic só veem seus próprios clientes na carteira
   const visibleClients = useMemo(() => {
@@ -1465,7 +1466,7 @@ function QuickCreateModal({
                 Colaborador{assignees.length > 1 ? `es (${assignees.length})` : ""}
               </label>
               <div className="flex flex-wrap gap-1.5">
-                {USER_PROFILES.map((p) => {
+                {profiles.map((p) => {
                   const on = assignees.includes(p.name);
                   return (
                     <button
@@ -1493,7 +1494,7 @@ function QuickCreateModal({
                 className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
               >
                 <option value="">{selectedClient?.assignedSocial ? `Padrão do cliente (${selectedClient.assignedSocial})` : "— Escolher —"}</option>
-                {USER_PROFILES.filter((p) => ["social", "admin", "manager"].includes(p.role)).map((p) => (
+                {profiles.filter((p) => ["social", "admin", "manager"].includes(p.role)).map((p) => (
                   <option key={p.id} value={p.name}>{p.name}</option>
                 ))}
               </select>

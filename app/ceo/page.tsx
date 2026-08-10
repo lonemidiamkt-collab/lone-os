@@ -17,7 +17,8 @@ import {
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { USER_PROFILES } from "@/lib/context/RoleContext";
+import { useRole } from "@/lib/context/RoleContext";
+
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import MedievalAvatar, { AVATAR_OPTIONS, getUserAvatar, setUserAvatar, type AvatarType } from "@/components/MedievalAvatars";
 import type { Role, Client } from "@/lib/types";
@@ -55,6 +56,7 @@ function churnRiskScore(client: Client): number {
 }
 
 export default function CEOPage() {
+  const { profiles } = useRole();   // equipe do banco, não lista em arquivo
   const router = useRouter();
   const clients = useClientsStore((s) => s.clients);
   const contentCards = useContentStore((s) => s.contentCards);
@@ -141,7 +143,7 @@ export default function CEOPage() {
 
   // Employee delivery metrics
   const teamMetrics = useMemo(() => {
-    const employees = USER_PROFILES.filter((p) => p.role !== "admin");
+    const employees = profiles.filter((p) => p.role !== "admin");
 
     return employees.map((profile) => {
       const memberTasks = tasks.filter((t) => t.assignedTo === profile.name);
@@ -232,7 +234,7 @@ export default function CEOPage() {
   }
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() =>
-    USER_PROFILES.map((p) => ({
+    profiles.map((p) => ({
       id: p.id,
       name: p.name,
       email: p.email,

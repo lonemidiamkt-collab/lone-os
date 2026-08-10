@@ -9,7 +9,14 @@ import Header from "@/components/Header";
 import EmptyState from "@/components/ui/EmptyState";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useClientsStore } from "@/stores/useClientsStore";
-import { useRole, USER_PROFILES } from "@/lib/context/RoleContext";
+import { useRole } from "@/lib/context/RoleContext";
+
+/** Colaboradores vêm da equipe VIVA (banco), não de lista em arquivo — foi lista em arquivo que
+ *  deixou o substituto do Pedro Henrique invisível pro sistema em 10/08. */
+function useColaboradores() {
+  const { profiles } = useRole();
+  return profiles.map((p) => ({ name: p.name, role: p.role }));
+}
 import { getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import type { Priority, Role, Task } from "@/lib/types";
 import { toast } from "sonner";
@@ -25,9 +32,10 @@ const fmtData = (iso?: string) => {
   return `${d}/${m}`;
 };
 // Colaboradores que podem receber tarefa (todos os perfis do time).
-const COLABORADORES = USER_PROFILES.map((p) => ({ name: p.name, role: p.role }));
+
 
 export default function TarefasPage() {
+  const COLABORADORES = useColaboradores();
   const tasks = useOperationalStore((s) => s.tasks);
   const addTask = useOperationalStore((s) => s.addTask);
   const updateTask = useOperationalStore((s) => s.updateTask);
@@ -194,6 +202,7 @@ function NovaTarefaModal({
   clients: { id: string; name: string }[]; currentUser: string;
   onClose: () => void; onCriar: (t: Omit<Task, "id">) => void;
 }) {
+  const COLABORADORES = useColaboradores();
   const [title, setTitle] = useState("");
   const [assignedTo, setAssignedTo] = useState(COLABORADORES[0]?.name ?? "");
   const [dueDate, setDueDate] = useState("");

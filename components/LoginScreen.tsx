@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRole, USER_PROFILES } from "@/lib/context/RoleContext";
+import { useRole } from "@/lib/context/RoleContext";
 import { Logo } from "@/components/ui/Logo";
 import { Eye, EyeOff, ArrowRight, ChevronDown, Check, Loader2 } from "lucide-react";
 
@@ -26,7 +26,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export default function LoginScreen() {
-  const { login } = useRole();
+  const { login, profiles } = useRole();
   const [selectedUser, setSelectedUser] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -48,7 +48,7 @@ export default function LoginScreen() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const selectedProfile = USER_PROFILES.find((p) => p.id === selectedUser);
+  const selectedProfile = profiles.find((p) => p.id === selectedUser);
 
   const handleSelectUser = (userId: string) => {
     setSelectedUser(userId);
@@ -68,7 +68,7 @@ export default function LoginScreen() {
         setError("Senha incorreta. Verifique e tente novamente.");
         setPassword("");
       } else {
-        const profile = USER_PROFILES.find((p) => p.id === selectedUser);
+        const profile = profiles.find((p) => p.id === selectedUser);
         if (profile) setWelcomeState({ show: true, name: profile.name.split(" ")[0], role: profile.role });
       }
     } catch (err: unknown) {
@@ -195,7 +195,7 @@ export default function LoginScreen() {
 
               {showDropdown && (
                 <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-60 overflow-y-auto rounded-xl border border-border bg-popover py-1.5 shadow-2xl animate-fade-in">
-                  {USER_PROFILES.map((profile) => {
+                  {profiles.map((profile) => {
                     const active = selectedUser === profile.id;
                     return (
                       <button
