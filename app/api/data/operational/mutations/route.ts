@@ -63,7 +63,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     case "upsertClientAccess": {
-      await db.upsertClientAccess(body.clientId, body.access, body.actor);
+      // CIFRA ANTES DE GRAVAR. queries.ts é compartilhado com o navegador e não pode importar
+      // cripto; a chave vive aqui, no servidor. Sem isto, cada edição no cofre reabria o buraco.
+      const CAMPOS_SENHA = ["instagramPassword", "facebookPassword", "tiktokPassword",
+                            "linkedinPassword", "youtubePassword", "mlabsPassword"] as const;
+      const acesso = { ...(body.access ?? {}) } as Record<string, unknown>;
+      for (const campo of CAMPOS_SENHA) {
+        const v = acesso[campo];
+        if (typeof v === "string" && v.trim()) acesso[campo] = encryptVault(v.trim());
+      }
+      await db.upsertClientAccess(body.clientId, acesso, body.actor);
       await syncAccessToClients(body.clientId, body.access);
       return NextResponse.json({ ok: true });
     }

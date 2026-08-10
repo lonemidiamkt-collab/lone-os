@@ -955,15 +955,11 @@ export async function insertQuinzReport(report: Omit<QuinzReport, "id" | "create
 export async function fetchClientAccess(): Promise<Record<string, ClientAccess>> {
   const { data, error } = await db.from("client_access").select("*");
   if (error) { console.error("[DB] fetchClientAccess:", error); return {}; }
-  const decifrar = (v: unknown): string | undefined => {
-    const raw = (v as string) ?? "";
-    if (!raw) return undefined;
-    if (typeof window !== "undefined") return raw;   // navegador não tem a chave
-    try {
-      const { decryptVault } = require("@/lib/crypto/vault");
-      return decryptVault(raw) ?? undefined;
-    } catch { return raw; }
-  };
+  // NÃO DECIFRA AQUI. Este arquivo é importado por página de cliente (app/clients/page.tsx), então
+  // qualquer referência a node:crypto vai parar no pacote do navegador — o build quebra, e se
+  // passasse seria pior: a chave do cofre indo pro lado de fora. Quem decifra é a rota de servidor
+  // (app/api/data/operational), que é onde a chave existe e nunca sai.
+  const decifrar = (v: unknown): string | undefined => ((v as string) || undefined);
   const result: Record<string, ClientAccess> = {};
   for (const row of data ?? []) {
     const clientId = row.client_id as string;
@@ -992,8 +988,8 @@ export async function fetchClientAccess(): Promise<Record<string, ClientAccess>>
 }
 
 export async function upsertClientAccess(clientId: string, access: Partial<ClientAccess>, actor: string): Promise<void> {
-  // NO NAVEGADOR, NÃO ESCREVE DIRETO. A chave é do servidor, então gravar daqui só produziria
-  // texto puro de novo — desfazendo a cifra a cada edição. Vai pela rota, que cifra lá.
+  // NO NAVEGADOR, NÃO ESCREVE DIRETO. A chave é do servidor; gravar daqui produziria texto puro
+  // de novo, desfazendo a cifra a cada edição. Vai pela rota, que cifra lá.
   if (typeof window !== "undefined") {
     const { authedFetch } = await import("@/lib/supabase/authed-fetch");
     const r = await authedFetch("/api/data/operational/mutations", {
@@ -1004,8 +1000,9 @@ export async function upsertClientAccess(clientId: string, access: Partial<Clien
     return;
   }
 
-  const { encryptVault } = await import("@/lib/crypto/vault");
-  const cifrar = (v: string | undefined) => (v ? encryptVault(v) : v);
+  // Quem chama do servidor já manda o valor CIFRADO (a rota de mutations cuida disso). Este
+  // arquivo não importa cripto: ele é compartilhado com o navegador.
+  const cifrar = (v: string | undefined) => v;
   const row: Record<string, unknown> = { client_id: clientId, updated_by: actor, updated_at: new Date().toISOString() };
   if (access.instagramLogin !== undefined) row.instagram_login = access.instagramLogin;
   if (access.instagramPassword !== undefined) row.instagram_password = cifrar(access.instagramPassword);
