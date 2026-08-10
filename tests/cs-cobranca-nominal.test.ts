@@ -135,3 +135,25 @@ describe("canonizar dono — mesma pessoa, grafias diferentes", () => {
     expect(canonizarDono("Carlos", ["Carlos Augusto", "Carlos Melo"])).toBe("Carlos");
   });
 });
+
+describe("sucessão: quem saiu, quem herdou (10/08)", () => {
+  // O Pedro Henrique saiu e o Thiago assumiu os 17 clientes. Cards e demandas antigos seguem
+  // marcados com o nome do Pedro — cobrar ele seria cobrar um fantasma, e o trabalho ficaria
+  // parado sem ninguém responsável. Isto NÃO reescreve histórico: o registro do que ele fez
+  // continua no nome dele; só a cobrança de hoje muda de destinatário.
+  const time = ["Carlos Augusto", "Thiago", "Rodrigo"];
+
+  it("cobra o Thiago pelo que estava no nome do Pedro", () => {
+    expect(canonizarDono("Pedro Henrique", time)).toBe("Thiago");
+    expect(canonizarDono("pedro henrique", time)).toBe("Thiago");
+  });
+
+  it("não confunde com contato de cliente de sobrenome parecido", () => {
+    expect(canonizarDono("Aquiles Alves Pedrosa", time)).toBe("Aquiles Alves Pedrosa");
+  });
+
+  it("quem está no time continua resolvendo normal", () => {
+    expect(canonizarDono("Carlos", time)).toBe("Carlos Augusto");
+    expect(canonizarDono("Thiago", time)).toBe("Thiago");
+  });
+});

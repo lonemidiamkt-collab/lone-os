@@ -54,9 +54,23 @@ const SEM_DONO = "sem dono";
  * com o Carlos Augusto e juntaria trabalho de duas pessoas. Por isso a canonização casa contra
  * o TIME REAL, e só encurta quando o primeiro nome pertence a exatamente um integrante.
  */
+/**
+ * Quem saiu, e quem herdou a carteira. Item antigo continua marcado com o nome de quem estava
+ * na cadeira — a cobrança tem que ir pra quem está nela HOJE, senão o agente cobra um fantasma
+ * e o trabalho fica sem dono.
+ *
+ * Não é o mesmo que reescrever o histórico: o registro do que a pessoa fez continua com o nome
+ * dela. Isto aqui é só pra onde a cobrança de hoje deve chegar.
+ */
+const SUCESSAO: Record<string, string> = {
+  "pedro henrique": "Thiago",   // saiu em 10/08/2026; Thiago assumiu os 17 clientes
+};
+
 export function canonizarDono(nome: string | null, time: string[]): string | null {
   const n = (nome ?? "").trim();
   if (!n) return null;
+  const herdeiro = SUCESSAO[n.toLowerCase()];
+  if (herdeiro) return herdeiro;
   const igual = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
   // Já é alguém do time, escrito por extenso.
   const exato = time.find((t) => igual(t, n));
