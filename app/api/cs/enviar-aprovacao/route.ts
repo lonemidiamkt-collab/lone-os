@@ -62,12 +62,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `${clienteNome} não tem grupo de WhatsApp mapeado. Vincule em Configurações → Grupos.` }, { status: 400 });
   }
 
-  // Artes a enviar: anexos na ordem (carrossel), fallback pra capa.
+  // REFERÊNCIA NÃO VAI PRO CLIENTE. O social anexa print de inspiração pro designer no mesmo card
+  // em que a arte final é entregue. Isto aqui mandava tudo junto — o cliente recebia, pra aprovar,
+  // o print que copiamos de outra marca. Constrangedor, e a pessoa nem entende o que está vendo.
   const { data: atts } = await supabaseAdmin
-    .from("card_attachments").select("url, position").eq("card_id", cardId).order("position", { ascending: true });
-  let urls = (atts ?? []).map((a) => a.url as string).filter(isImageUrl);
+    .from("card_attachments").select("url, position, tipo").eq("card_id", cardId).order("position", { ascending: true });
+
+  const todos = atts ?? [];
+  const entregas = todos.filter((a) => a.tipo === "entrega");
+  const referencias = todos.filter((a) => a.tipo === "referencia");
+  const semTipo = todos.filter((a) => !a.tipo);
+
+  // Com entrega marcada, é só ela. Sem NENHUMA marcada, manda o que não é referência: 782 anexos
+  // são anteriores a essa separação, e recusar todos travaria a equipe hoje pra resolver ontem.
+  // O que nunca acontece, em nenhum caso, é referência sair.
+  const escolhidos = entregas.length ? entregas : semTipo;
+  let urls = escolhidos.map((a) => a.url as string).filter(isImageUrl);
   if (urls.length === 0 && isImageUrl((card.image_url as string) || "")) urls = [card.image_url as string];
   urls = urls.slice(0, MAX_ARTES);
+  if (urls.length === 0 && referencias.length) {
+    return NextResponse.json({
+      error: `este card só tem referência (${referencias.length}) — o designer ainda não entregou a arte.`,
+    }, { status: 400 });
+  }
   if (urls.length === 0) {
     return NextResponse.json({ error: "não há arte com imagem direta pra enviar (pode estar como link do Drive)." }, { status: 400 });
   }
@@ -102,7 +119,10 @@ export async function POST(req: NextRequest) {
   const nomeQuem = (user.email as string)?.split("@")[0] || "equipe";
   await supabaseAdmin.from("card_comments").insert({
     card_id: cardId, author: "🤖 CS", role: "system",
-    text: `📤 Enviei ${enviadas}/${urls.length} arte(s) pro grupo de *${clienteNome}* aprovar (por ${nomeQuem}).${falhas.length ? ` Falhas: ${falhas.join("; ")}` : ""}`,
+    text: `📤 Enviei ${enviadas}/${urls.length} arte(s) pro grupo de *${clienteNome}* aprovar (por ${nomeQuem}).`
+      + (referencias.length ? ` ${referencias.length} referência(s) ficaram de fora, como deve ser.` : "")
+      + (!entregas.length && semTipo.length ? ` ⚠️ As artes deste card não estão marcadas como "entrega" — confere se não foi referência junto.` : "")
+      + (falhas.length ? ` Falhas: ${falhas.join("; ")}` : ""),
   }).then(() => {}, () => {});
 
   // AVANÇA o card automaticamente: mandar as artes pro cliente = arte confirmada pelo social e agora

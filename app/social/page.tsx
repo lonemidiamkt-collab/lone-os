@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
+import CampoReferencias from "@/components/social/CampoReferencias";
 import { useRole } from "@/lib/context/RoleContext";
 // AppStateContext removed — all state from Zustand stores
 import { useNav } from "@/lib/context/NavContext";
@@ -846,7 +847,10 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
           )}
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 space-y-4 py-2">
+        {/* TRÊS BLOCOS, NÃO DEZ CAMPOS IGUAIS. Antes tudo tinha o mesmo peso: o cliente (que
+            decide a carteira e o briefing fixo) parecia tão secundário quanto o formato. Agora a
+            pessoa lê "o quê / quando / como fazer" e sabe onde está. */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 space-y-5 py-2">
           {/* Title */}
           <div>
             <Label className="mb-1.5 block">Título do Conteúdo *</Label>
@@ -876,6 +880,8 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
               <p className="text-[10px] text-lone-warning mt-1">Você ainda não tem clientes na sua carteira. Fale com a gerência.</p>
             )}
           </div>
+
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider pt-1">Quando vai ao ar</p>
 
           {/* Format + Priority row */}
           <div className="grid grid-cols-2 gap-3">
@@ -935,8 +941,12 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
           </div>
 
           {(!dueDate || !dueTime) && (
-            <p className="text-xs text-destructive">Data e horário são obrigatórios para enviar a demanda ao designer.</p>
+            <p className="text-[10px] text-destructive -mt-3.5">
+              Sem data e horário a demanda não segue pro designer.
+            </p>
           )}
+
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider pt-1">Como fazer</p>
 
           {/* Briefing — Markdown editor (Trello-like) */}
           <div>
@@ -951,23 +961,12 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
           </div>
 
           {/* Referência JÁ aqui — antes só dava pra anexar reabrindo a demanda depois de criada. */}
-          <div>
-            <Label className="mb-1.5 block">Referências <span className="text-muted-foreground font-normal">(opcional)</span></Label>
-            <input
-              type="file" accept="image/*" multiple
-              onChange={(e) => { setRefs(Array.from(e.target.files ?? [])); setErroRef(null); }}
-              className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary hover:file:bg-primary/20"
-            />
-            {refs.length > 0 && (
-              <p className="text-[10px] text-primary mt-1">
-                {refs.length} {refs.length === 1 ? "imagem anexada" : "imagens anexadas"} — sobem junto com a demanda.
-              </p>
-            )}
-            {erroRef && <p className="text-[10px] text-destructive mt-1">{erroRef}</p>}
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Pode <strong>colar (Ctrl+V)</strong> ou arrastar a imagem aqui.
-            </p>
-          </div>
+          <CampoReferencias
+            arquivos={refs}
+            onChange={(f) => { setRefs(f); setErroRef(null); }}
+            erro={erroRef}
+            ocupado={subindoRef}
+          />
 
           {/* Drive link auto-recovered */}
           {selectedClient && (
