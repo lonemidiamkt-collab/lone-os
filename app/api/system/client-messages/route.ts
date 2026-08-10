@@ -142,6 +142,18 @@ export async function POST(req: NextRequest) {
   const resend = url.searchParams.get("resend") === "1";
   const dateKey = todayKeyBRT();
 
+  // UMA RODADA POR DIA. Dois crons de segunda disparavam junto e os dois mandavam o relatório —
+  // 161 envios pra 40 grupos, e o dobro de chamadas na Meta (que estoura a cota e derruba a
+  // rodada seguinte). `force=1` continua passando por cima, pra reenvio manual.
+  const { reservarRodada, fecharRodada } = await import("@/lib/system/trava-rodada");
+  const chaveTrava = `client-messages:${kind}`;
+  if (!dryRun && !force) {
+    const reserva = await reservarRodada(chaveTrava, dateKey);
+    if (!reserva.conseguiu) {
+      return NextResponse.json({ ok: true, status: "skip", motivo: reserva.motivo, kind, dateKey });
+    }
+  }
+
   try {
     // Trava global (a menos que seja teste de 1 cliente)
     if (!onlyClientId && !dryRun && !(await clientMsgsEnabled())) {
@@ -174,6 +186,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (withGroup.length === 0) {
+      if (!dryRun && !force) await fecharRodada(chaveTrava, dateKey, true, "nenhum cliente com grupo");
       return NextResponse.json({ ok: true, status: "skipped", message: "Nenhum cliente com grupo confirmado", withoutGroup });
     }
 
@@ -285,6 +298,11 @@ export async function POST(req: NextRequest) {
       conferencia = { support: confSup, report: confRel };
     }
 
+    if (!dryRun && !force) {
+      await fecharRodada(chaveTrava, dateKey, totalSent > 0,
+        `suporte ${supportSent}/${supportSent + supportFail} · relatório ${reportSent}/${reportSent + reportFail}`);
+    }
+
     return NextResponse.json({
       ok: totalSent > 0, status: totalSent > 0 ? "sent" : "failed", kind,
       support: { sent: supportSent, failed: supportFail },
@@ -296,6 +314,8 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[client-messages] erro:", msg);
+    // Fecha a reserva mesmo com exceção — senão a rotina fica trancada até o destrave de 90 min.
+    if (!dryRun && !force) await fecharRodada(chaveTrava, dateKey, false, msg);
     await notifyAdminFailure("Mensagens aos clientes — exceção", msg);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
