@@ -19,12 +19,15 @@ export type ClientMsgKind = "monday" | "wed" | "fri";
 const pick = (a: string[]): string => a[Math.floor(Math.random() * a.length)];
 
 // ── SEGUNDA — tráfego (legenda do relatório de 7 dias) ──
+// SEGUNDA SEMPRE DESEJA A SEMANA (pedido do Roberto, 10/08): semana abençoada e com vendas. É o
+// tom da casa no começo da semana. O que varia é o jeito de dizer — repetir a mesma frase toda
+// segunda em 40 grupos vira carimbo, e carimbo o cliente para de ler.
 const MONDAY_REPORT: string[] = [
-  "Bom dia! Segue o relatório da semana passada. Qualquer dúvida sobre os números, é só chamar.",
-  "Oi, pessoal. Mandando aqui o relatório dos últimos 7 dias. Se quiser que eu explique algum número, me chama.",
-  "Bom dia. Relatório da semana aí. Dá uma olhada e me fala se surgir alguma dúvida.",
-  "Oi, gente. Segue o resumo da semana pra vocês acompanharem. Estou por aqui se precisar.",
-  "Bom dia! Relatório da última semana. Qualquer coisa é só falar.",
+  "Bom dia! Segue o relatório da semana passada. Que essa semana seja abençoada e cheia de vendas pra vocês. Qualquer dúvida nos números, é só chamar.",
+  "Oi, pessoal. Mandando o relatório dos últimos 7 dias. Desejo uma semana abençoada e com muita venda. Se quiser que eu explique algum número, me chama.",
+  "Bom dia. Relatório da semana aí. Que a semana seja de bênção e de bons resultados pra vocês. Me fala se surgir alguma dúvida.",
+  "Oi, gente. Segue o resumo da semana. Uma semana abençoada e com as vendas em alta pra vocês. Estou por aqui se precisar.",
+  "Bom dia! Relatório da última semana pra vocês acompanharem. Que Deus abençoe a semana e que venha muita venda. Qualquer coisa é só falar.",
 ];
 
 /** Reenvio: relatório corrigido após instabilidade da Meta (mensagem específica, sem variação). */
@@ -35,11 +38,11 @@ export const RESEND_REPORT_MESSAGE =
 
 // ── SEGUNDA — só-social: início de semana + oferta de arte ──
 const MONDAY_SOCIAL: string[] = [
-  "Bom dia! Começando a semana por aqui. Tem alguma promoção ou novidade pra divulgar? Me manda que eu preparo a arte.",
-  "Oi, pessoal. Se tiver algo pra postar essa semana — oferta, aviso, novidade — manda aqui que a gente faz.",
-  "Bom dia. Alguma novidade pra essa semana? Se tiver, me passa que eu já coloco na fila.",
-  "Oi, gente. Tem alguma data ou promoção essa semana que vocês queiram divulgar?",
-  "Bom dia! Me conta se tem algo pra postar essa semana que eu já preparo.",
+  "Bom dia! Que essa semana seja abençoada e cheia de vendas pra vocês. Tem alguma promoção ou novidade pra divulgar? Me manda que eu preparo a arte.",
+  "Oi, pessoal. Semana nova começando — que seja abençoada e com muita venda. Se tiver algo pra postar, manda aqui que a gente faz.",
+  "Bom dia. Uma semana abençoada e de bons negócios pra vocês. Tem novidade pra essa semana? Me passa que eu já coloco na fila.",
+  "Oi, gente. Que a semana seja de bênção e de vendas boas. Tem alguma data ou promoção que vocês queiram divulgar?",
+  "Bom dia! Que Deus abençoe a semana de vocês e traga muita venda. Me conta se tem algo pra postar que eu já preparo.",
 ];
 
 // ── QUARTA — tráfego: meio de semana, disponibilidade (NÃO pergunta resultado) ──
