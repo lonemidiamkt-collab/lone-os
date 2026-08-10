@@ -22,7 +22,10 @@ export const USER_PROFILES: UserProfile[] = [
   // Gestao e Operacao
   { id: "julio",    name: "Julio",           role: "manager",  initials: "JL", color: "text-[#0d4af5]", email: "julio@lonemidia.com" },
   { id: "carlos",   name: "Carlos Augusto",  role: "social",   initials: "CA", color: "text-[#3b6ff5]", email: "carlos@lonemidia.com" },
-  { id: "pedro",    name: "Pedro Henrique",  role: "social",   initials: "PH", color: "text-[#3b6ff5]", email: "pedro@lonemidia.com" },
+  // Thiago assumiu a carteira do Pedro Henrique em 10/08/2026 (mesmo registro, renomeado, pra não
+  // perder os 17 clientes). Esta lista é o mapa de login: nome errado aqui = pessoa entra e o
+  // sistema não sabe quem ela é.
+  { id: "thiago",   name: "Thiago",          role: "social",   initials: "TH", color: "text-[#3b6ff5]", email: "thiago@lonemidia.com" },
   { id: "rodrigo",  name: "Rodrigo",         role: "designer", initials: "RD", color: "text-[#3b6ff5]", email: "rodrigo@lonemidia.com" },
   // Comercial (SDR) — login escopado que vê SÓ o CRM.
   { id: "maria",    name: "Maria Luiza",     role: "comercial", initials: "ML", color: "text-[#0d4af5]", email: "marialuiza@lonemidia.com" },

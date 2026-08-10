@@ -91,7 +91,7 @@ export default function SobrePage() {
               trabalham integrados, com dados em tempo real e automações reduzindo retrabalho.
             </InfoCard>
             <InfoCard title="Quem usa">
-              Time Lone Mídia: Roberto (CEO), Lucas (admin), Julio (tráfego), Carlos & Pedro (social), Rodrigo (designer).
+              Time Lone Mídia: Roberto (CEO), Lucas (admin), Julio (tráfego), Carlos & Thiago (social), Rodrigo (designer).
               Cada cargo vê apenas o que precisa pra executar.
             </InfoCard>
             <InfoCard title="Diferencial">
@@ -519,10 +519,10 @@ const MODULES: Module[] = [
     title: "Social Media",
     shortDesc: "Kanban editorial de conteúdo + calendário + aprovação",
     whoUses: "Admin, Manager, Social, Designer",
-    context: "Onde o time de social produz, aprova e agenda conteúdo. Cada post passa por um pipeline: ideia → roteiro → produção → aprovação interna → aprovação do cliente → agendado → publicado. Permite que Carlos e Pedro organizem o trabalho sem misturar com outros departamentos.",
+    context: "Onde o time de social produz, aprova e agenda conteúdo. Cada post passa por um pipeline: ideia → roteiro → produção → aprovação interna → aprovação do cliente → agendado → publicado. Permite que Carlos e Thiago organizem o trabalho sem misturar com outros departamentos.",
     howItWorks: [
       "Em /social, o kanban mostra todos os cards de conteúdo do mês.",
-      "Filtro automático: Carlos vê só os 12 clientes dele, Pedro vê os 14 dele.",
+      "Filtro automático: cada social vê só os clientes da carteira dele.",
       "Arrasta cards entre colunas conforme avança (de Ideias pra Roteiro, depois Em Produção, etc).",
       "Quando o card chega em 'Aprovação', dispara notificação pro admin aprovar.",
       "Depois de aprovado pelo cliente, vai pra 'Agendado' — indica que já está programado na ferramenta de agendamento.",

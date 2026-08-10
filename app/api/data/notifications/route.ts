@@ -12,7 +12,7 @@ const EMAIL_TO_NAME: Record<string, string> = {
   "lucas@lonemidia.com": "Lucas Bueno",
   "julio@lonemidia.com": "Julio",
   "carlos@lonemidia.com": "Carlos Augusto",
-  "pedro@lonemidia.com": "Pedro Henrique",
+  "thiago@lonemidia.com": "Thiago",
   "rodrigo@lonemidia.com": "Rodrigo",
   "marialuiza@lonemidia.com": "Maria Luiza",
 };

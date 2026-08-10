@@ -176,7 +176,7 @@ function initNotifications(): AppNotification[] {
 function initSocialTeam(): SocialTeamMember[] {
   return [
     { id: "sm-1", name: "Carlos", password: "00" },
-    { id: "sm-2", name: "Pedro", password: "00" },
+    { id: "sm-2", name: "Thiago", password: "00" },
   ];
 }
 
