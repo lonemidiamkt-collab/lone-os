@@ -941,26 +941,46 @@ export async function insertQuinzReport(report: Omit<QuinzReport, "id" | "create
 // CLIENT ACCESS (Credentials Vault)
 // ═══════════════════════════════════════════════════════════
 
+/**
+ * SENHA SAI DO BANCO CIFRADA e é aberta aqui, no servidor.
+ *
+ * O cofre do admin (`clients`) já guardava cifrado desde junho; este, que é o que o social e o
+ * gestor enxergam, ficou pra trás — 46 de 47 linhas em texto puro. Quem tivesse um dump do banco
+ * tinha a senha do Instagram e do Facebook de 46 clientes, prontas pra usar. A chave (VAULT_KEY)
+ * mora no ambiente do servidor, nunca no banco: dump sem chave não abre nada.
+ *
+ * `decifrar` aceita valor antigo em texto puro sem quebrar — a migração é gradual e ninguém fica
+ * sem acesso enquanto ela acontece.
+ */
 export async function fetchClientAccess(): Promise<Record<string, ClientAccess>> {
   const { data, error } = await db.from("client_access").select("*");
   if (error) { console.error("[DB] fetchClientAccess:", error); return {}; }
+  const decifrar = (v: unknown): string | undefined => {
+    const raw = (v as string) ?? "";
+    if (!raw) return undefined;
+    if (typeof window !== "undefined") return raw;   // navegador não tem a chave
+    try {
+      const { decryptVault } = require("@/lib/crypto/vault");
+      return decryptVault(raw) ?? undefined;
+    } catch { return raw; }
+  };
   const result: Record<string, ClientAccess> = {};
   for (const row of data ?? []) {
     const clientId = row.client_id as string;
     result[clientId] = {
       clientId,
       instagramLogin: (row.instagram_login as string) ?? undefined,
-      instagramPassword: (row.instagram_password as string) ?? undefined,
+      instagramPassword: decifrar(row.instagram_password),
       facebookLogin: (row.facebook_login as string) ?? undefined,
-      facebookPassword: (row.facebook_password as string) ?? undefined,
+      facebookPassword: decifrar(row.facebook_password),
       tiktokLogin: (row.tiktok_login as string) ?? undefined,
-      tiktokPassword: (row.tiktok_password as string) ?? undefined,
+      tiktokPassword: decifrar(row.tiktok_password),
       linkedinLogin: (row.linkedin_login as string) ?? undefined,
-      linkedinPassword: (row.linkedin_password as string) ?? undefined,
+      linkedinPassword: decifrar(row.linkedin_password),
       youtubeLogin: (row.youtube_login as string) ?? undefined,
-      youtubePassword: (row.youtube_password as string) ?? undefined,
+      youtubePassword: decifrar(row.youtube_password),
       mlabsLogin: (row.mlabs_login as string) ?? undefined,
-      mlabsPassword: (row.mlabs_password as string) ?? undefined,
+      mlabsPassword: decifrar(row.mlabs_password),
       canvaLink: (row.canva_link as string) ?? undefined,
       driveLink: (row.drive_link as string) ?? undefined,
       otherNotes: (row.other_notes as string) ?? undefined,
@@ -972,19 +992,33 @@ export async function fetchClientAccess(): Promise<Record<string, ClientAccess>>
 }
 
 export async function upsertClientAccess(clientId: string, access: Partial<ClientAccess>, actor: string): Promise<void> {
+  // NO NAVEGADOR, NÃO ESCREVE DIRETO. A chave é do servidor, então gravar daqui só produziria
+  // texto puro de novo — desfazendo a cifra a cada edição. Vai pela rota, que cifra lá.
+  if (typeof window !== "undefined") {
+    const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+    const r = await authedFetch("/api/data/operational/mutations", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "upsertClientAccess", clientId, access, actor }),
+    }).catch(() => null);
+    if (!r?.ok) console.error("[DB] upsertClientAccess: rota recusou");
+    return;
+  }
+
+  const { encryptVault } = await import("@/lib/crypto/vault");
+  const cifrar = (v: string | undefined) => (v ? encryptVault(v) : v);
   const row: Record<string, unknown> = { client_id: clientId, updated_by: actor, updated_at: new Date().toISOString() };
   if (access.instagramLogin !== undefined) row.instagram_login = access.instagramLogin;
-  if (access.instagramPassword !== undefined) row.instagram_password = access.instagramPassword;
+  if (access.instagramPassword !== undefined) row.instagram_password = cifrar(access.instagramPassword);
   if (access.facebookLogin !== undefined) row.facebook_login = access.facebookLogin;
-  if (access.facebookPassword !== undefined) row.facebook_password = access.facebookPassword;
+  if (access.facebookPassword !== undefined) row.facebook_password = cifrar(access.facebookPassword);
   if (access.tiktokLogin !== undefined) row.tiktok_login = access.tiktokLogin;
-  if (access.tiktokPassword !== undefined) row.tiktok_password = access.tiktokPassword;
+  if (access.tiktokPassword !== undefined) row.tiktok_password = cifrar(access.tiktokPassword);
   if (access.linkedinLogin !== undefined) row.linkedin_login = access.linkedinLogin;
-  if (access.linkedinPassword !== undefined) row.linkedin_password = access.linkedinPassword;
+  if (access.linkedinPassword !== undefined) row.linkedin_password = cifrar(access.linkedinPassword);
   if (access.youtubeLogin !== undefined) row.youtube_login = access.youtubeLogin;
-  if (access.youtubePassword !== undefined) row.youtube_password = access.youtubePassword;
+  if (access.youtubePassword !== undefined) row.youtube_password = cifrar(access.youtubePassword);
   if (access.mlabsLogin !== undefined) row.mlabs_login = access.mlabsLogin;
-  if (access.mlabsPassword !== undefined) row.mlabs_password = access.mlabsPassword;
+  if (access.mlabsPassword !== undefined) row.mlabs_password = cifrar(access.mlabsPassword);
   if (access.canvaLink !== undefined) row.canva_link = access.canvaLink;
   if (access.driveLink !== undefined) row.drive_link = access.driveLink;
   if (access.otherNotes !== undefined) row.other_notes = access.otherNotes;

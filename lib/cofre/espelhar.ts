@@ -41,9 +41,15 @@ export async function espelharNoCofre(
   clientId: string,
   senhas: SenhasParaEspelhar,
 ): Promise<{ ok: boolean; campos: string[]; erro?: string }> {
+  // CIFRA ANTES DE ESPELHAR. Este espelho existe pra levar a senha do cadastro admin até quem
+  // trabalha — mas o cofre de origem guarda cifrado e o destino guardava em texto puro. O espelho
+  // estava, na prática, DESFAZENDO a cifra a cada cliente novo. Aqui roda sempre no servidor, onde
+  // a chave existe; se ela faltar, é melhor falhar do que gravar senha aberta achando que salvou.
+  const { encryptVault } = await import("@/lib/crypto/vault");
   const row: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(senhas)) {
-    if (typeof v === "string" && v.trim()) row[k] = v.trim();
+    if (typeof v !== "string" || !v.trim()) continue;
+    row[k] = k.endsWith("_password") ? encryptVault(v.trim()) : v.trim();
   }
   const campos = Object.keys(row);
   if (!clientId || !campos.length) return { ok: true, campos: [] };
