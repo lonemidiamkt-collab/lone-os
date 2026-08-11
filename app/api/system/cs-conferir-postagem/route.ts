@@ -25,8 +25,10 @@ export async function POST(req: NextRequest) {
   const url = new URL(req.url);
   const dryRun = url.searchParams.get("dryRun") === "1";
   const social = url.searchParams.get("social") ?? undefined;
+  // ?dia=YYYY-MM-DD — conferir um dia passado. Útil pra testar e pra refazer depois de uma falha.
+  const dia = url.searchParams.get("dia") ?? undefined;
 
-  const r = await conferirPostagem(social);
+  const r = await conferirPostagem(social, dia);
   if ("erro" in r) return NextResponse.json({ ok: false, erro: r.erro }, { status: 502 });
 
   const texto = textoResumo(r);
@@ -44,19 +46,19 @@ export async function POST(req: NextRequest) {
   // UMA RODADA POR DIA. Sem isto, um disparo manual junto do cron manda o mesmo resumo duas vezes
   // — foi o que aconteceu com o relatório de segunda.
   const { reservarRodada, fecharRodada } = await import("@/lib/system/trava-rodada");
-  const dia = ymd(spNow());
-  const reserva = await reservarRodada("cs-conferir-postagem", dia);
+  const diaTrava = dia || ymd(spNow());
+  const reserva = await reservarRodada("cs-conferir-postagem", diaTrava);
   if (!reserva.conseguiu) {
     return NextResponse.json({ ok: true, status: "skip", motivo: reserva.motivo });
   }
 
   // Declara os FATOS: se o bom-dia já citou os mesmos clientes parados hoje, o porta-voz cala.
-  const fatos = r.faltaram.map((f) => `sem-post:${f.cliente.toLowerCase().replace(/\s+/g, "-")}:${dia}`);
+  const fatos = r.faltaram.map((f) => `sem-post:${f.cliente.toLowerCase().replace(/\s+/g, "-")}:${diaTrava}`);
   const env = await csSendGroupText(jid, texto, undefined, {
     origem: "cs-conferir-postagem", destino: "interno", fatos,
   });
 
-  await fecharRodada("cs-conferir-postagem", dia, env.ok,
+  await fecharRodada("cs-conferir-postagem", diaTrava, env.ok,
     `${r.postaram.length} postaram, ${r.faltaram.length} não`);
 
   return NextResponse.json({

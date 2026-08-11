@@ -55,3 +55,31 @@ Você de Araruama está construindo?`;
     expect(p.conteudo.length).toBeLessThan(30);   // a rota recusa abaixo de 30
   });
 });
+
+describe("deduzir o tipo quando o pedido não diz", () => {
+  // O Roberto mandou o roteiro e o PDF saiu com "Documento" no cabeçalho — porque a mensagem dele
+  // não tinha a palavra "roteiro". Um roteiro rotulado como "Documento" chega genérico no cliente.
+  it('texto com "Duração" e "Texto na tela" é roteiro, mesmo sem a palavra', () => {
+    const p = lerPedidoPdf(`transforma em pdf pro varejão
+
+1. Vídeo de venda
+
+Duração: 30 segundos
+
+Você de Araruama está construindo?
+
+Texto na tela:
+Envie sua lista`);
+    expect(p.tipo).toBe("Roteiro de Vídeo");
+  });
+
+  it("o que o pedido DIZ ainda ganha do que o conteúdo parece", () => {
+    const p = lerPedidoPdf(`monta a proposta em pdf
+
+Duração: 30 segundos
+
+Texto na tela:
+qualquer coisa`);
+    expect(p.tipo).toBe("Proposta");
+  });
+});

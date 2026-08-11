@@ -45,6 +45,15 @@ export function lerPedidoPdf(texto: string): PedidoPdf {
   const restantes = linhas.filter((l) => !pediuPdf(l));
   const conteudo = restantes.join("\n").trim();
 
-  const alvo = TIPOS.find(([rx]) => rx.test(bruto));
-  return { quer: true, conteudo, tipo: alvo ? alvo[1] : "Documento" };
+  // O tipo vem do PEDIDO quando ele diz ("transforma esse ROTEIRO em pdf"). Quando não diz, vem do
+  // CONTEÚDO: um texto com "Duração:" e "Texto na tela:" é roteiro de vídeo, e sair rotulado como
+  // "Documento" faz o cliente receber algo com cara de genérico.
+  const doPedido = TIPOS.find(([rx]) => rx.test(bruto.replace(conteudo, " ")));
+  if (doPedido) return { quer: true, conteudo, tipo: doPedido[1] };
+
+  const pareceRoteiro = /dura[çc][ãa]o\s*:/i.test(conteudo) && /texto\s+na\s+tela/i.test(conteudo);
+  if (pareceRoteiro) return { quer: true, conteudo, tipo: "Roteiro de Vídeo" };
+
+  const doConteudo = TIPOS.find(([rx]) => rx.test(conteudo));
+  return { quer: true, conteudo, tipo: doConteudo ? doConteudo[1] : "Documento" };
 }

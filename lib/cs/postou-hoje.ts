@@ -63,7 +63,10 @@ async function ultimoPost(igId: string, t: string): Promise<{ data: string | nul
  *
  * @param apenasSocial limita a um social media (o nome como está em `assigned_social`).
  */
-export async function conferirPostagem(apenasSocial?: string): Promise<ResumoPostagem | { erro: string }> {
+export async function conferirPostagem(
+  apenasSocial?: string,
+  diaAlvo?: string,
+): Promise<ResumoPostagem | { erro: string }> {
   const t = await token();
   if (!t) return { erro: "token da Meta ausente ou vencido" };
 
@@ -73,7 +76,10 @@ export async function conferirPostagem(apenasSocial?: string): Promise<ResumoPos
   if (apenasSocial) q = q.eq("assigned_social", apenasSocial);
   const { data: clientes } = await q;
 
-  const hoje = ymd(spNow());
+  // `diaAlvo` serve pra conferir um dia passado (teste, ou rodar de novo depois de uma falha). Sem
+  // ele, é hoje. Uma chamada por cliente de qualquer jeito — a API devolve o último post, e a
+  // comparação é de data.
+  const hoje = diaAlvo || ymd(spNow());
   const resumo: ResumoPostagem = { dia: hoje, postaram: [], faltaram: [], semInstagram: [], comErro: [] };
 
   for (const c of clientes ?? []) {

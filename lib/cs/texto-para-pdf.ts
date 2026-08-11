@@ -81,7 +81,15 @@ export function lerBlocos(texto: string): Bloco[] {
 const esc = (s: string) =>
   String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-const BRAND = "#0d4af5";
+const BRAND = "#2b3cff";
+// Paleta escura da plataforma (app/globals.css, bloco html.dark) — o documento que sai pro cliente
+// usa as MESMAS cores da tela que a equipe olha o dia inteiro. Cor inventada aqui viraria "quase" a
+// marca, que é pior que outra marca.
+const FUNDO = "#060814";
+const TEXTO = "#eef0f6";
+const SUAVE = "#8b91a1";
+const CARTAO = "#0b0e1e";
+const LINHA = "#1a1f33";
 
 /** Monta o A4 com a marca da Lone. `tipo` vira o rótulo do cabeçalho ("Roteiro de Vídeo"). */
 export function blocosPdfHtml(
@@ -109,28 +117,35 @@ export function blocosPdfHtml(
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>
   @page { margin: 0; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:#111118; padding:44px 52px; font-size:14px; }
-  .head { display:flex; align-items:center; justify-content:space-between; border-bottom:3px solid ${BRAND}; padding-bottom:16px; margin-bottom:20px; }
+  /* FUNDO ESCURO EM TODA A PÁGINA. Só pintar o body deixaria faixa branca embaixo quando o
+     conteúdo não enche a folha — e é exatamente o caso de um roteiro curto. */
+  html, body { background:${FUNDO}; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:${TEXTO}; padding:44px 52px; font-size:14px; min-height:100vh; }
+  .head { display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid ${BRAND}; padding-bottom:16px; margin-bottom:20px; }
   .head img { height:38px; }
-  .head .meta { text-align:right; color:#6b7280; font-size:11px; line-height:1.5; }
-  h1 { font-size:23px; color:${BRAND}; margin-bottom:22px; letter-spacing:-.01em; }
+  .head .meta { text-align:right; color:${SUAVE}; font-size:11px; line-height:1.5; }
+  /* Azul da marca sobre fundo escuro perde legibilidade no título grande — o branco carrega o
+     nome do cliente e o azul fica nos detalhes, onde ainda contrasta. */
+  h1 { font-size:23px; color:${TEXTO}; margin-bottom:22px; letter-spacing:-.01em; }
   /* O bloco não se parte no meio — roteiro cortado vira dois pela metade quando alguém imprime.
      Mas também NÃO força página nova a cada um: com três roteiros curtos isso deixava três
      páginas quase vazias, e um documento que o cliente recebe cheio de branco parece rascunho.
      Quem decide a quebra é o conteúdo. */
   section.bloco { page-break-inside: avoid; margin-bottom:30px; }
-  .cab { display:flex; align-items:baseline; gap:10px; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #e8eaee; }
+  .cab { display:flex; align-items:baseline; gap:10px; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid ${LINHA}; }
   .num { color:${BRAND}; font-weight:800; font-size:13px; letter-spacing:.04em; }
-  .cab h2 { font-size:16px; font-weight:700; flex:1; }
-  .dur { color:#6b7280; font-size:11px; white-space:nowrap; }
-  p { font-size:14.5px; line-height:1.6; margin-bottom:10px; }
-  .tela { margin-top:14px; background:#f4f6fb; border-left:3px solid ${BRAND}; border-radius:0 8px 8px 0; padding:12px 16px; }
+  .cab h2 { font-size:16px; font-weight:700; flex:1; color:${TEXTO}; }
+  .dur { color:${SUAVE}; font-size:11px; white-space:nowrap; }
+  /* Um pouco mais de entrelinha que no claro: texto claro sobre fundo escuro "borra" quando as
+     linhas ficam apertadas, e este documento é lido em voz alta na gravação. */
+  p { font-size:14.5px; line-height:1.7; margin-bottom:11px; color:${TEXTO}; }
+  .tela { margin-top:14px; background:${CARTAO}; border-left:3px solid ${BRAND}; border-radius:0 8px 8px 0; padding:12px 16px; }
   .tela-tit { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:${BRAND}; font-weight:700; margin-bottom:6px; }
-  .tela-l { font-size:13.5px; line-height:1.5; color:#374151; }
-  .foot { margin-top:26px; border-top:1px solid #e5e7eb; padding-top:12px; color:#9ca3af; font-size:10px; text-align:center; }
+  .tela-l { font-size:13.5px; line-height:1.6; color:${TEXTO}; }
+  .foot { margin-top:26px; border-top:1px solid ${LINHA}; padding-top:12px; color:${SUAVE}; font-size:10px; text-align:center; }
   </style></head><body>
     <div class="head">
-      ${logoDataUri ? `<img src="${logoDataUri}" alt="Lone Mídia">` : `<div style="font-weight:800;color:${BRAND};font-size:20px;">Lone Mídia</div>`}
+      ${logoDataUri ? `<img src="${logoDataUri}" alt="Lone Mídia">` : `<div style="font-weight:800;color:${TEXTO};font-size:20px;">Lone Mídia</div>`}
       <div class="meta">${esc(tipo)}<br>${esc(dataLabel)}</div>
     </div>
     <h1>${esc(cliente)}</h1>
