@@ -92,7 +92,7 @@ export function blocosPdfHtml(
   tipo = "Roteiro de Vídeo",
 ): string {
   const secoes = blocos.map((b, i) => `
-    <section class="bloco${i > 0 ? " brk" : ""}">
+    <section class="bloco">
       <div class="cab">
         <span class="num">${String(i + 1).padStart(2, "0")}</span>
         <h2>${esc(b.titulo || "Roteiro")}</h2>
@@ -114,10 +114,11 @@ export function blocosPdfHtml(
   .head img { height:38px; }
   .head .meta { text-align:right; color:#6b7280; font-size:11px; line-height:1.5; }
   h1 { font-size:23px; color:${BRAND}; margin-bottom:22px; letter-spacing:-.01em; }
-  /* Cada roteiro inteiro numa página: bloco partido no meio vira dois roteiros pela metade
-     quando alguém imprime. */
-  section.bloco { page-break-inside: avoid; margin-bottom:26px; }
-  section.brk { page-break-before: always; padding-top:6px; }
+  /* O bloco não se parte no meio — roteiro cortado vira dois pela metade quando alguém imprime.
+     Mas também NÃO força página nova a cada um: com três roteiros curtos isso deixava três
+     páginas quase vazias, e um documento que o cliente recebe cheio de branco parece rascunho.
+     Quem decide a quebra é o conteúdo. */
+  section.bloco { page-break-inside: avoid; margin-bottom:30px; }
   .cab { display:flex; align-items:baseline; gap:10px; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #e8eaee; }
   .num { color:${BRAND}; font-weight:800; font-size:13px; letter-spacing:.04em; }
   .cab h2 { font-size:16px; font-weight:700; flex:1; }
