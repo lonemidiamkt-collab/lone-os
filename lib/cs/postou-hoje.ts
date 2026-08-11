@@ -70,9 +70,18 @@ export async function conferirPostagem(
   const t = await token();
   if (!t) return { erro: "token da Meta ausente ou vencido" };
 
+  // SÓ QUEM TEM POSTAGEM CONTRATADA. Cliente de tráfego puro não tem social no contrato — cobrar
+  // post dele é cobrar por algo que ninguém vendeu, e o resumo perde a autoridade: quem lê aprende
+  // que metade da lista é ruído. O Roberto pegou isso no primeiro teste (6 dos 9 "faltando" eram
+  // só tráfego).
+  //
+  // A exceção existe de propósito: cliente de tráfego COM social atribuído à mão significa que
+  // alguém decidiu que ele tem postagem. O `assigned_social` preenchido manda mais que o
+  // service_type.
   let q = supabaseAdmin.from("clients")
-    .select("name, nome_fantasia, ig_business_account_id, assigned_social")
-    .or("active.is.null,active.eq.true");
+    .select("name, nome_fantasia, ig_business_account_id, assigned_social, service_type")
+    .or("active.is.null,active.eq.true")
+    .or("service_type.in.(lone_growth,assessoria_social),assigned_social.not.is.null");
   if (apenasSocial) q = q.eq("assigned_social", apenasSocial);
   const { data: clientes } = await q;
 
