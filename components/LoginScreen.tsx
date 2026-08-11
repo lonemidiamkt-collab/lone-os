@@ -73,7 +73,11 @@ export default function LoginScreen() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message.toLowerCase() : "";
-      if (msg.includes("fetch") || msg.includes("network") || msg.includes("timeout")) {
+      if (msg.includes("perfil-nao-encontrado")) {
+        // Não é senha. Falar "senha incorreta" aqui faz a pessoa trocar a senha à toa.
+        setError("Não encontrei esse perfil no sistema. Recarregue a página — se persistir, é falha nossa, me avise.");
+        setPassword("");
+      } else if (msg.includes("fetch") || msg.includes("network") || msg.includes("timeout")) {
         setError("Sem conexão com o servidor. O sistema funcionará em modo local.");
       } else {
         setError("Erro inesperado. Tente novamente em instantes.");

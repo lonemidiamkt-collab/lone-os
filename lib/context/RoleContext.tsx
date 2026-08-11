@@ -193,8 +193,23 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (userId: string, password: string): Promise<boolean> => {
-    const profile = USER_PROFILES.find((p) => p.id === userId);
-    if (!profile) return false;
+    // PROCURA NA LISTA VIVA, não na de reserva. Quando a equipe passou a vir do banco, o id de
+    // cada perfil mudou (o do Roberto era "roberto" e virou "lonemidiamkt", derivado do e-mail) —
+    // e esta busca continuou na lista chumbada. Resultado: o perfil não era encontrado, a função
+    // devolvia false ANTES de testar a senha, e a tela dizia "Senha incorreta". Ele ficou de fora
+    // com a senha certa na mão, procurando um erro que não existia.
+    //
+    // Casa por id OU por e-mail: o e-mail é o que não muda quando a forma do id mudar de novo.
+    const acha = (lista: UserProfile[]) =>
+      lista.find((p) => p.id === userId) ??
+      lista.find((p) => p.email.toLowerCase() === userId.toLowerCase());
+    const profile = acha(profilesRef.current) ?? acha(USER_PROFILES);
+    if (!profile) {
+      // Distingue "não achei esse perfil" de "senha errada". Dizer senha incorreta quando o
+      // problema é outro manda a pessoa procurar no lugar errado — foi o que aconteceu aqui.
+      console.error("[login] perfil não encontrado:", userId);
+      throw new Error("perfil-nao-encontrado");
+    }
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
