@@ -968,6 +968,51 @@ export async function POST(req: NextRequest) {
     demandaDaSugestao = await acharDemandaPorTexto(msg.quotedText);
   }
 
+  // ─── "loninho, transforma esse roteiro em pdf pro varejão" ───
+  // Vem cedo porque a mensagem carrega um TEXTO GRANDE com nome de cliente dentro. Se caísse no
+  // classificador de demanda, o roteiro inteiro viraria briefing de arte.
+  if (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid) || isCadastroGroup(msg.groupJid)) {
+    const { lerPedidoPdf } = await import("@/lib/cs/pedido-pdf");
+    const pedidoPdf = lerPedidoPdf(msg.text);
+    if (pedidoPdf.quer) {
+      if (pedidoPdf.conteudo.length < 30) {
+        await csSendGroupText(msg.groupJid,
+          "Manda o texto junto (ou logo abaixo) que eu monto o PDF. Só com o pedido eu faria um documento de uma linha.",
+          undefined, { origem: "pdf-sem-texto", destino: "interno" });
+        return NextResponse.json({ ok: true, acao: "pdf_sem_texto" });
+      }
+
+      const { acharClientePorNome } = await import("@/lib/cs/achar-cliente");
+      const alvoCli = await acharClientePorNome(msg.text);
+      const nomeCliente = alvoCli?.nome ?? "Lone Mídia";
+
+      await csSendGroupText(msg.groupJid, `Montando o ${pedidoPdf.tipo.toLowerCase()} do *${nomeCliente}*…`,
+        undefined, { origem: "pdf-gerando", destino: "interno" });
+
+      const { lerBlocos, blocosPdfHtml } = await import("@/lib/cs/texto-para-pdf");
+      const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
+      const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
+      const { csSendGroupDocument } = await import("@/lib/cs/notify");
+
+      const blocos = lerBlocos(pedidoPdf.conteudo);
+      const agora = spNow();
+      const dataLabel = `${String(agora.getDate()).padStart(2, "0")}/${String(agora.getMonth() + 1).padStart(2, "0")}/${agora.getFullYear()}`;
+      const logoPdf = await loadLoneLogo().catch(() => "");
+      const arquivo = await htmlToPdf(blocosPdfHtml(nomeCliente, blocos, logoPdf, dataLabel, pedidoPdf.tipo));
+
+      if (!arquivo.ok || !arquivo.buffer) {
+        await csSendGroupText(msg.groupJid, `Não consegui gerar o PDF: ${arquivo.error ?? "erro"}`,
+          undefined, { origem: "pdf-erro", destino: "interno" });
+        return NextResponse.json({ ok: true, acao: "pdf_erro" });
+      }
+
+      const nomeArq = `${pedidoPdf.tipo.toLowerCase().replace(/[^a-z]+/g, "-")}-${nomeCliente.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf`;
+      await csSendGroupDocument(msg.groupJid, arquivo.buffer.toString("base64"), nomeArq,
+        `📄 *${pedidoPdf.tipo} — ${nomeCliente}*\n${blocos.length} ${blocos.length === 1 ? "bloco" : "blocos"} · ${dataLabel}`);
+      return NextResponse.json({ ok: true, acao: "pdf", cliente: nomeCliente, blocos: blocos.length });
+    }
+  }
+
   // ─── CONTRATO no grupo de cadastro: "gera o contrato: 2500, 12 meses, dia 10" ───
   // Vem cedo porque a frase tem números e nomes de cliente — se cair no classificador de demanda
   // vira card de arte. Só vale no grupo de CADASTRO, que é onde a oferta foi feita.
