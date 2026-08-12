@@ -34,7 +34,20 @@ export interface AgencyAction {
   icon: string | null;
 }
 
+/** Confiança do bloco de anúncios deste snapshot. Existe porque "o cliente não gastou nada" e
+ *  "a Meta não respondeu" produziam exatamente o mesmo resultado na tela: tudo zero.
+ *   - ok           → dados completos, pode cachear e mostrar.
+ *   - parcial      → o essencial (verba/mensagens/alcance) veio; algo secundário falhou
+ *                    (criativos ou público). Mostra, mas não vira cache bom.
+ *   - indisponivel → não deu pra buscar o essencial. NÃO grava, NÃO mostra como se fosse zero.
+ *   - sem_conta    → cliente sem conta de anúncio/token: zero aqui é a verdade. */
+export type AdsStatus = "ok" | "parcial" | "indisponivel" | "sem_conta";
+
 export interface SnapshotData {
+  /** Ausente em snapshots gravados antes desta mudança — tratar como "ok". */
+  ads_status?: AdsStatus;
+  /** Quando o portal cai de volta num snapshot antigo por falha da Meta, guarda de quando ele é. */
+  stale_since?: string | null;
   period: {
     kind: PeriodKind;
     start: string;

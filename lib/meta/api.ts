@@ -2,6 +2,7 @@
 
 import { META_CONFIG, getGraphUrl } from "./config";
 import { getDateRangeBRT } from "./timezone";
+import { metaJson } from "./fetch";
 
 interface TokenResponse {
   access_token: string;
@@ -193,9 +194,9 @@ export async function getInsightsByDateRange(
     time_increment: "1",
     limit: "100",
   });
-  const res = await fetch(`${url}?${params}`);
-  if (!res.ok) throw new Error(`Meta insights failed for ${accountId}`);
-  const data = await res.json();
+  const data = await metaJson<{ data?: MetaInsight[] }>(`${url}?${params}`, {
+    label: `insights ${accountId} ${since}→${until}`,
+  });
   return data.data ?? [];
 }
 
@@ -216,9 +217,12 @@ export async function getTopAdInsights(
     sort: "spend_descending",
     limit: String(limit),
   });
-  const res = await fetch(`${url}?${params}`);
-  if (!res.ok) return [];
-  const data = await res.json();
+  // LANÇA em vez de devolver []. Antes, uma recusa da Meta virava "este cliente não teve criativo
+  // nenhum" e o portal mostrava os números certos com a seção de criativos vazia — sem ninguém
+  // saber que tinha falhado. Quem chama decide o que fazer com o erro.
+  const data = await metaJson<{ data?: MetaAdInsight[] }>(`${url}?${params}`, {
+    label: `top ads ${accountId} ${since}→${until}`,
+  });
   return data.data ?? [];
 }
 
@@ -231,10 +235,18 @@ export async function getAdThumbnail(
     access_token: accessToken,
     fields: "creative{thumbnail_url}",
   });
-  const res = await fetch(`${url}?${params}`);
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data?.creative?.thumbnail_url ?? null;
+  // Thumbnail é acessório: sem ela o card do criativo ainda mostra nome, verba e resultado. Segue
+  // tolerante (null), só ganhou timeout pra não segurar a página do cliente.
+  try {
+    const data = await metaJson<{ creative?: { thumbnail_url?: string } }>(`${url}?${params}`, {
+      label: `thumbnail ${adId}`,
+      timeoutMs: 6_000,
+      tentativas: 2,
+    });
+    return data?.creative?.thumbnail_url ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getDemographicBreakdown(
@@ -251,8 +263,9 @@ export async function getDemographicBreakdown(
     time_range: JSON.stringify({ since, until }),
     limit: "100",
   });
-  const res = await fetch(`${url}?${params}`);
-  if (!res.ok) return [];
-  const data = await res.json();
+  // Também LANÇA: perfil de público vazio e perfil que não deu pra buscar são coisas diferentes.
+  const data = await metaJson<{ data?: MetaDemographicRow[] }>(`${url}?${params}`, {
+    label: `demografia ${accountId} ${since}→${until}`,
+  });
   return data.data ?? [];
 }

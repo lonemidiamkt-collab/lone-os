@@ -5,6 +5,7 @@
 // ⚠️ Manter em sync com useMetaAds.ts se a lógica de insights/campanhas mudar.
 
 import { countMessagesFromActions } from "@/lib/meta/messages";
+import { metaJson } from "@/lib/meta/fetch";
 
 export class TokenExpiredError extends Error {
   constructor(message: string) {
@@ -108,9 +109,11 @@ export async function fetchAccountReach(
         : { time_range: JSON.stringify({ since: dateFrom ?? "", until: dateTo ?? "" }) }),
       limit: "1",
     });
-    const res = await fetch(`https://graph.facebook.com/v21.0/${accountId}/insights?${params}`);
-    if (!res.ok) return null;
-    const data = await res.json();
+    // Segue devolvendo null em falha (o chamador tem fallback), mas agora com timeout e retry:
+    // sem timeout, uma engasgada da Meta segurava a página do cliente até o socket morrer.
+    const data = await metaJson<any>(`https://graph.facebook.com/v21.0/${accountId}/insights?${params}`, {
+      label: `alcance ${accountId}`,
+    });
     const reach = safeInt(data.data?.[0]?.reach);
     return reach > 0 ? reach : null;
   } catch {

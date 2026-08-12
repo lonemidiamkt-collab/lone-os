@@ -66,9 +66,15 @@ export default async function PortalPage({
     if (cached) {
       initialData = cached.data;
     } else {
-      initialData = await buildSnapshot({ clientId: client.id as string, periodKind: "last_week" });
+      // Sem cache: gera na hora. Se a Meta não responder o essencial, é melhor abrir sem dado
+      // (o painel pede pra tentar de novo) do que abrir uma tela de zeros que o cliente lê como
+      // "não rodou anúncio nenhum".
+      const fresco = await buildSnapshot({ clientId: client.id as string, periodKind: "last_week" });
+      initialData = fresco.ads_status === "indisponivel" ? null : fresco;
     }
-  } catch {}
+  } catch (err) {
+    console.error("[portal] falhou o snapshot inicial:", client.id, String(err));
+  }
 
   return (
     <>

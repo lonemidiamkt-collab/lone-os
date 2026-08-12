@@ -74,22 +74,42 @@ export async function POST(
   Sentry.setTag("portal_endpoint", "true");
   const data = await buildSnapshot({ clientId: client.id as string, periodKind, now });
 
+  // A Meta não respondeu o essencial. Este snapshot é uma tela de zeros — se a gente gravasse,
+  // ele viraria "a verdade" pelas próximas 6 horas, e o cliente passaria o dia achando que não
+  // rodou anúncio nenhum. Melhor mostrar o último dado bom, avisando que está velho.
+  if (data.ads_status === "indisponivel") {
+    if (cached) {
+      return NextResponse.json({
+        ...(cached.data as object),
+        stale_since: cached.generated_at as string,
+      });
+    }
+    return NextResponse.json(
+      { error: "Não consegui buscar os resultados agora. Tente de novo em instantes." },
+      { status: 503 },
+    );
+  }
+
   // Calcula period_start/end para o upsert
   const { period } = data;
 
-  await supabaseAdmin
-    .from("client_report_snapshots")
-    .upsert(
-      {
-        client_id: client.id,
-        period_kind: periodKind,
-        period_start: period.start,
-        period_end: period.end,
-        data,
-        generated_at: now.toISOString(),
-      },
-      { onConflict: "client_id,period_kind,period_start" },
-    );
+  // "parcial" (faltou criativo ou público, mas os números vieram) a gente mostra — só não deixa
+  // virar cache de 6h, pra próxima visita tentar completar.
+  if (data.ads_status !== "parcial") {
+    await supabaseAdmin
+      .from("client_report_snapshots")
+      .upsert(
+        {
+          client_id: client.id,
+          period_kind: periodKind,
+          period_start: period.start,
+          period_end: period.end,
+          data,
+          generated_at: now.toISOString(),
+        },
+        { onConflict: "client_id,period_kind,period_start" },
+      );
+  }
 
   return NextResponse.json(data);
 }

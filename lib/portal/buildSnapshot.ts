@@ -9,7 +9,7 @@ import {
 import { countMessagesFromActions } from "@/lib/meta/messages";
 import { fetchAccountReach } from "@/lib/meta/insights-server";
 import { toBRTDateStr } from "@/lib/meta/timezone";
-import type { PeriodKind, SnapshotData, CreativeItem, DemographicRow } from "./types";
+import type { PeriodKind, SnapshotData, CreativeItem, DemographicRow, AdsStatus } from "./types";
 
 const THUMBNAIL_BUCKET = "meta-thumbnails";
 
@@ -181,6 +181,8 @@ export async function buildSnapshot(params: {
 
   if (!metaToken || !metaAccountId) {
     return {
+      // Zero aqui é a verdade: o cliente não tem tráfego conosco (ex.: pacote só de social).
+      ads_status: "sem_conta",
       period: { kind: params.periodKind, ...period },
       kpis: { messages: emptyKpi, spend: emptyKpi, cpa: emptyKpi, reach: emptyKpi },
       chart: emptyChart,
@@ -209,6 +211,32 @@ export async function buildSnapshot(params: {
   const demo = demographics.status === "fulfilled" ? demographics.value : [];
   const curReachDedup  = curReachR.status === "fulfilled" ? curReachR.value : null;
   const prevReachDedup = prevReachR.status === "fulfilled" ? prevReachR.value : null;
+
+  // ── Este snapshot é confiável? ────────────────────────────────────────────
+  // O período ATUAL é o que o cliente lê na tela. Se ele falhou, o snapshot inteiro é lixo: verba
+  // R$0, 0 mensagens, gráfico vazio — indistinguível de "não anunciamos nada essa semana". Foi o
+  // que aconteceu em 19/07 e 10/08 com todos os clientes de uma vez.
+  //
+  // Repare que o comparativo (período anterior) NÃO entra aqui: sem ele o painel perde só a seta
+  // de variação, e isso não justifica esconder os números do cliente.
+  const falhouEssencial = currentInsights.status === "rejected";
+  const falhouSecundario = adInsights.status === "rejected" || demographics.status === "rejected";
+
+  const ads_status: AdsStatus = falhouEssencial ? "indisponivel" : falhouSecundario ? "parcial" : "ok";
+
+  if (falhouEssencial || falhouSecundario) {
+    const motivos = [
+      currentInsights.status === "rejected" && `atual: ${currentInsights.reason}`,
+      prevInsights.status === "rejected" && `anterior: ${prevInsights.reason}`,
+      adInsights.status === "rejected" && `criativos: ${adInsights.reason}`,
+      demographics.status === "rejected" && `demografia: ${demographics.reason}`,
+    ].filter(Boolean).join(" | ");
+    console.error(`[buildSnapshot] ${params.clientId} ${params.periodKind} → ${ads_status}: ${motivos}`);
+    Sentry.captureMessage(`Portal: snapshot ${ads_status}`, {
+      level: falhouEssencial ? "error" : "warning",
+      extra: { clientId: params.clientId, periodKind: params.periodKind, motivos },
+    });
+  }
 
   // ── KPIs período atual ────────────────────────────────────────────────────
   const sumNum = (rows: typeof cur, field: keyof typeof cur[0]) =>
@@ -304,6 +332,7 @@ export async function buildSnapshot(params: {
     }));
 
   return {
+    ads_status,
     period: { kind: params.periodKind, ...period },
     kpis: {
       messages: { value: curMessages, ...delta(curMessages, prevMessages) },

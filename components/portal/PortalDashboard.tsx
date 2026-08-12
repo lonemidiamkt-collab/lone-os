@@ -48,6 +48,13 @@ function fmtDate(d: string): string {
     day: "2-digit", month: "short",
   });
 }
+/** Timestamp completo (ISO) em horário de Brasília — usado no aviso de dado desatualizado. */
+function fmtDataHora(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  });
+}
 
 
 function Thumbnail({ url, path, name }: { url: string | null; path: string | null; name: string }) {
@@ -121,6 +128,11 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   const [period, setPeriod]         = useState<PeriodKind>("last_week");
   const [data, setData]             = useState<SnapshotData | null>(initialData);
   const [loading, setLoading]       = useState(false);
+  // Sem dado no primeiro render = a busca do servidor não completou. Já abre avisando, em vez de
+  // pintar a tela de zeros.
+  const [erro, setErro]             = useState<string | null>(
+    initialData ? null : "Não consegui carregar seus resultados agora.",
+  );
   const [metric, setMetric]         = useState<MetricKey>("messages");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [chartHeight, setChartHeight]     = useState(240);
@@ -146,15 +158,26 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
     return () => window.removeEventListener("resize", update);
   }, []);
 
+  // Buscar resultado pode falhar (a Meta recusa em rajada, ou demora). Antes era
+  // `if (res.ok) setData(...)` e mais nada: quando falhava, o spinner sumia e ficava na tela o
+  // período ANTERIOR, calado — o cliente lia número de outra semana achando que era o pedido.
   const fetchPeriod = useCallback(async (p: PeriodKind) => {
     setLoading(true);
+    setErro(null);
     try {
       const res = await fetch(`/api/portal/${token}/snapshot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ period_kind: p }),
       });
-      if (res.ok) setData(await res.json());
+      if (res.ok) {
+        setData(await res.json());
+      } else {
+        const corpo = await res.json().catch(() => ({}));
+        setErro(corpo?.error || "Não consegui buscar os resultados agora.");
+      }
+    } catch {
+      setErro("Não consegui buscar os resultados agora. Verifique sua conexão.");
     } finally {
       setLoading(false);
     }
@@ -281,6 +304,27 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
             </button>
           ))}
         </div>
+
+        {/* Falhou a busca: fala com o cliente em vez de mostrar zeros ou o período anterior. */}
+        {erro && !loading && (
+          <div className="rounded-xl px-4 py-3.5 mb-5 flex flex-wrap items-center gap-3 text-sm"
+               style={{ background: "#1E1206", border: "1px solid #7C4A11", color: "#F0B357" }}>
+            <span className="flex-1 min-w-[200px]">{erro} Os dados continuam guardados — é só tentar de novo.</span>
+            <button onClick={() => fetchPeriod(period)}
+              className="rounded-lg px-3.5 py-2 text-xs font-semibold min-h-[40px]"
+              style={{ background: "#7C4A11", color: "#fff" }}>
+              Tentar de novo
+            </button>
+          </div>
+        )}
+
+        {/* Caiu de volta no último dado bom porque a Meta não respondeu: mostra, mas datado. */}
+        {!erro && data?.stale_since && (
+          <div className="rounded-xl px-4 py-3 mb-5 text-sm"
+               style={{ background: "#0B0E1E", border: "1px solid #1A1F33", color: "#8b91a1" }}>
+            Mostrando os últimos resultados que conseguimos buscar, de {fmtDataHora(data.stale_since)}. Estamos atualizando.
+          </div>
+        )}
 
         {/* ── KPIs — sempre 4 colunas no desktop, 2 no tablet, 1 no mobile */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6 lg:mb-7">

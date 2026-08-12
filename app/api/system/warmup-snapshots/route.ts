@@ -37,6 +37,13 @@ export async function POST(req: NextRequest) {
     for (const period of PERIODS) {
       try {
         const snap = await buildSnapshot({ clientId: c.id, periodKind: period, now });
+
+        // Mesma regra do generate-snapshots: zero por falha da Meta não vira cache.
+        if (snap.ads_status === "indisponivel") {
+          log.push({ client: clientName, period, status: "error", error: "Meta indisponível" });
+          continue;
+        }
+
         await supabaseAdmin
           .from("client_report_snapshots")
           .upsert(
