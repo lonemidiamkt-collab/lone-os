@@ -979,7 +979,12 @@ export async function POST(req: NextRequest) {
     // NÃO EXISTE, o que veio junto é matéria-prima. Diagramar isso devolvia o texto cru do jeito
     // que chegou ("1 bloco"), como se fosse a peça pronta. Deixa seguir pro fluxo de roteiro, que
     // lê o briefing do cliente, escreve, revisa e também entrega em PDF.
-    const vaiEscreverRoteiro = pedidoPdf.modo === "criar" && ehPedidoRoteiro(msg.text);
+    //
+    // A CONDIÇÃO TEM QUE SER A MESMA DO `pedeRot` LÁ EMBAIXO. Quando eram diferentes (aqui só o
+    // modo, lá também o grupo), o pedido do Roberto no grupo da EQUIPE caiu no vão: este handler
+    // desistiu de diagramar e o fluxo de roteiro não o alcançava — sobrou o papo respondendo
+    // "Anotado! vou criar" sem criar nada. Só solta o pedido pra quem de fato vai atendê-lo.
+    const vaiEscreverRoteiro = pedidoPdf.modo === "criar" && grupoNosso && ehPedidoRoteiro(msg.text);
 
     if (pedidoPdf.quer && !vaiEscreverRoteiro) {
       if (pedidoPdf.conteudo.length < 30) {
@@ -1334,7 +1339,11 @@ export async function POST(req: NextRequest) {
   // ─── Agente "Lone": pedido de ROTEIRO no grupo interno ("Lone, faz um roteiro pro [cliente]") ───
   // Reconhece o pedido, acha o cliente, lê o briefing e devolve os roteiros. Se faltar briefing, pede.
   // Cada pedido vira corpus (cs_roteiro_pedidos) p/ ir aprendendo o estilo de cada cliente.
-  const pedeRot = !demandaDaSugestao && isInternalCmdGroup(msg.groupJid) && ehPedidoRoteiro(msg.text);
+  // Vale em TODOS os nossos grupos (artes, tráfego, equipe, cadastro) — não só nos de comando.
+  // O Roberto pede roteiro no grupo da EQUIPE, e ali o pedido não era atendido: caía no papo, que
+  // respondia "Anotado! vou criar e te aviso" e não criava nada. `ehPedidoRoteiro` já exige chamar
+  // o agente pelo nome, então ampliar aqui não sequestra conversa solta.
+  const pedeRot = !demandaDaSugestao && grupoNosso && ehPedidoRoteiro(msg.text);
   // "ajusta/muda/troca…" só é ajuste de ROTEIRO se EXISTE roteiro recente (30 min). Checar ANTES
   // de reivindicar a mensagem: sem contexto, o fluxo segue (antes: return silencioso que engolia
   // respostas de demanda e poluía o corpus cs_roteiro_pedidos).
