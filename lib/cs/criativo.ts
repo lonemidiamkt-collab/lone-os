@@ -153,6 +153,45 @@ Gere 2-3 roteiros com ÂNGULOS diferentes (ex.: PAS direto, BAB visual, AIDCA co
 framework, gatilhos (2-3), arquétipo, estágio do funil, as 8 etapas com o texto falado, scorecard, pontos
 fortes e sugestões. Responda só no JSON do schema.`;
 
+/**
+ * Regras EXTRAS que só valem quando a equipe mandou informação junto do pedido.
+ *
+ * Vão no SYSTEM, não no user: no teste real (WT Shopping, 12/08) a instrução estava só no user e
+ * perdeu a queda de braço com duas regras do system — "gere 2-3 roteiros com ÂNGULOS diferentes" e
+ * "escolha o produto em destaque do briefing". Resultado: a Versão 1 falou de ração a R$49,99 e
+ * delivery, sem uma palavra sobre a castração que o Roberto tinha mandado. Ele resumiu bem: "veio
+ * sem contexto algum".
+ */
+function regrasDoContexto(): string {
+  return `
+
+# ASSUNTO OBRIGATÓRIO DESTA RODADA (a equipe mandou a informação junto)
+Existe um bloco "INFORMAÇÕES QUE A EQUIPE PASSOU" na mensagem do usuário. Quem pediu JÁ ESCOLHEU o
+assunto — sua autonomia aqui é só sobre COMO falar dele.
+- TODAS as versões falam DESSE assunto. Varie ângulo, framework e gancho; NUNCA o tema.
+- Devolver uma versão sobre outro produto/serviço do briefing é ERRO GRAVE, mesmo que aquele produto
+  seja o destaque atual. A regra de "escolher o produto mais forte do briefing" NÃO vale nesta rodada.
+- O briefing entra pra tom de voz, público, região, CTA e o que a empresa é — não pra trocar o tema.
+- Os FATOS saem do bloco da equipe. Não contradiga nem "melhore" o que está lá.`;
+}
+
+/** Vale sempre: o modelo inventava prova social mesmo com a regra na etapa 7. */
+const ANTI_INVENCAO = `
+
+# NÚMERO INVENTADO É LINHA VERMELHA (o erro mais caro que você pode cometer)
+Quantidade, estatística, tempo de mercado ou prova social SÓ existem se estiverem LITERALMENTE no
+briefing ou nas informações passadas. É o cliente que vai ao ar dizendo isso — número inventado vira
+promessa falsa dele, não sua.
+PROIBIDO sem o dado na mão: "mais de 1000 clientes", "centenas de", "milhares de", "X anos de
+mercado", "a mais procurada da região", "nº 1 em", "milhares de pets atendidos".
+Sem prova real: troque a etapa PROVA por credibilidade VERDADEIRA e sem número (o que a empresa faz,
+como faz, quem executa) e anote em "sugestoes" que vale pedir uma prova real ao cliente.`;
+
+/** Exportado só pra teste: garante que as regras entram no SYSTEM (e não se perdem no user). */
+export function buildSystem(inp: CriativoInput): string {
+  return CRIATIVO_SYSTEM + ANTI_INVENCAO + (inp.contexto?.trim() ? regrasDoContexto() : "");
+}
+
 function buildUser(inp: CriativoInput): string {
   const b = inp.briefing;
   const arr = (a?: string[]) => (a && a.length ? a.join(" · ") : "(não informado)");
@@ -170,7 +209,11 @@ function buildUser(inp: CriativoInput): string {
     `Palavras PROIBIDAS (não usar): ${arr(b.palavrasProibidas)}`,
     `Concorrentes a NÃO mencionar: ${arr(b.concorrentesEvitar)}`,
     ``,
-    `Pedido do social/tráfego: ${inp.pedido?.trim() || "(não especificado — você escolhe: use o produto em destaque ou o mais forte do briefing e GERE, não peça info)"}`,
+    // Com contexto, o fallback NÃO pode mandar "escolha o produto em destaque do briefing": foi por
+    // aí que a Versão 1 do WT Shopping virou anúncio de ração enquanto o pedido era sobre castração.
+    `Pedido do social/tráfego: ${inp.pedido?.trim() || (inp.contexto?.trim()
+      ? "(o pedido é o assunto das INFORMAÇÕES abaixo — escreva todas as versões sobre ele)"
+      : "(não especificado — você escolhe: use o produto em destaque ou o mais forte do briefing e GERE, não peça info)")}`,
     `Estágio do funil: ${inp.estagioFunil?.trim() || "(inferir do contexto)"}`,
     // Quando a equipe manda a informação junto ("como funciona a castração aqui"), ela é a FONTE
     // DOS FATOS. Inventar detalhe técnico em cima disso é o pior erro possível: vira promessa que
@@ -196,7 +239,7 @@ export async function gerarRoteiros(inp: CriativoInput): Promise<OpenAiResult<Cr
     schema: CRIATIVO_SCHEMA,
     maxTokens: 3000,
     temperature: 0.6,
-    system: CRIATIVO_SYSTEM,
+    system: buildSystem(inp),
     user: buildUser(inp),
   });
 }
