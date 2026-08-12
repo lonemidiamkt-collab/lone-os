@@ -32,7 +32,14 @@ export default async function PortalPage({
   // Anúncios só aparece se o pacote permite E existe conta de anúncio DE VERDADE — senão o botão vinha
   // vazio (ex.: Dumar, pacote lone_growth mas sem conta de anúncio → só social). Robusto p/ todos.
   const hasAds = !socialOnly && !!client.meta_ad_account_id;
-  const hasSocial = ["lone_growth", "assessoria_social", "assessoria_design", "trafego_social_site"].includes(st);
+  // Instagram/artes aparecem quando o PACOTE prevê OU quando existe Instagram vinculado DE VERDADE.
+  // Mesma lição do hasAds logo acima: lista fixa de pacote escondia valor que já estava pronto —
+  // 6 clientes (assessoria_trafego e trafego_pago) tinham perfil vinculado, com seguidores e alcance
+  // guardados, e o portal deles simplesmente não mostrava a aba. Do lado do cliente isso parecia
+  // "o Instagram caiu". A seção de artes some sozinha quando não há entrega, então liberar aqui não
+  // cria tela vazia pra quem só tem tráfego.
+  const hasSocial = ["lone_growth", "assessoria_social", "assessoria_design", "trafego_social_site"].includes(st)
+    || !!client.ig_business_account_id;
 
   // Log de acesso
   const hdrs = await headers();

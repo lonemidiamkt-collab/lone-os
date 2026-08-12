@@ -32,6 +32,9 @@ export interface CriativoInput {
   estagioFunil?: string;
   /** Preferências de estilo APRENDIDAS deste cliente (loop de feedback) — a IA deve respeitar. */
   preferencias?: string[];
+  /** Informação CRUA que a equipe passou junto do pedido ("o pet passa por exame pré-operatório…").
+   *  É matéria-prima factual: manda no conteúdo, mas o briefing continua mandando no jeito de falar. */
+  contexto?: string;
 }
 
 export interface Etapa { tempo: string; nome: string; texto: string; }
@@ -169,6 +172,14 @@ function buildUser(inp: CriativoInput): string {
     ``,
     `Pedido do social/tráfego: ${inp.pedido?.trim() || "(não especificado — você escolhe: use o produto em destaque ou o mais forte do briefing e GERE, não peça info)"}`,
     `Estágio do funil: ${inp.estagioFunil?.trim() || "(inferir do contexto)"}`,
+    // Quando a equipe manda a informação junto ("como funciona a castração aqui"), ela é a FONTE
+    // DOS FATOS. Inventar detalhe técnico em cima disso é o pior erro possível: vira promessa que
+    // o cliente não cumpre. O briefing continua mandando no tom, no público e na CTA.
+    inp.contexto?.trim()
+      ? `\nINFORMAÇÕES QUE A EQUIPE PASSOU (use como base factual do roteiro — NÃO invente dado ` +
+        `técnico, preço, prazo ou garantia que não esteja aqui nem no briefing; pode reescrever ` +
+        `para virar fala de anúncio, mas o CONTEÚDO tem que sair daqui):\n"""\n${inp.contexto.trim().slice(0, 4000)}\n"""`
+      : ``,
     inp.preferencias && inp.preferencias.length
       ? `\nPREFERÊNCIAS APRENDIDAS deste cliente (a equipe já pediu — RESPEITE em todas as versões):\n${inp.preferencias.map((p) => `- ${p}`).join("\n")}`
       : ``,

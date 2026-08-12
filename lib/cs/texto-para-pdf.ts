@@ -14,7 +14,11 @@
 
 export interface Bloco {
   titulo: string;
+  /** Rótulo próprio da peça ("Criativo 1", "Vídeo 2"). Quando existe, substitui o número de ordem. */
+  rotulo?: string;
   duracao?: string;
+  /** "Ângulo: loja próxima + variedade" — a estratégia daquela peça, acima das falas. */
+  angulo?: string;
   /** Falas/parágrafos, na ordem em que foram escritos. */
   paragrafos: string[];
   /** Linhas do "Texto na tela" — vão num bloco à parte, como no roteiro de verdade. */
@@ -22,8 +26,22 @@ export interface Bloco {
 }
 
 const RX_TITULO = /^\s*(\d{1,2})[.)]\s*(.+)$/;
+
+// Como a casa escreve de verdade: "Criativo 1 — Araruama, Saquarema e São Pedro".
+//
+// Antes só "1." e "1)" abriam bloco novo, então dois criativos numa mensagem viravam UM bloco só —
+// o PDF do Imperio dos Pisos (12/08) saiu com Criativo 1 e Criativo 2 emendados num muro de texto.
+// Aceita o travessão, dois-pontos ou nada depois do número, com ou sem markdown (**Criativo 1**).
+const RX_PECA = /^\s*\**\s*(criativos?|v[íi]deos?|reels?|roteiros?|op[çc][õo]es?|op[çc][ãa]o|vers[ãa]o|varia[çc][ãa]o|an[úu]ncios?|posts?|st(?:ories|ory))\s*(\d{1,2})\s*\**\s*[—–\-:.)]*\s*(.*)$/i;
+
 const RX_DURACAO = /^\s*dura[çc][ãa]o\s*:\s*(.+)$/i;
+const RX_ANGULO = /^\s*\**\s*[âa]ngulo\s*\**\s*:\s*(.+)$/i;
 const RX_TELA = /^\s*texto\s+na\s+tela\s*:?\s*(.*)$/i;
+
+/** Tira negrito/itálico do WhatsApp e do markdown, que no PDF apareceriam como asterisco cru. */
+function semMarcacao(s: string): string {
+  return s.replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1").replace(/_{1,2}([^_]+)_{1,2}/g, "$1").trim();
+}
 
 /**
  * Quebra o texto colado em blocos.
@@ -37,23 +55,47 @@ export function lerBlocos(texto: string): Bloco[] {
   let atual: Bloco | null = null;
   let naTela = false;
 
-  const novo = (titulo: string): Bloco => ({ titulo, paragrafos: [], textoNaTela: [] });
+  const novo = (titulo: string, rotulo?: string): Bloco => ({ titulo, rotulo, paragrafos: [], textoNaTela: [] });
+
+  // Duração escrita ANTES do primeiro criativo ("Duração: 30–35s" no topo) vale pra todas as peças
+  // — é como a equipe escreve: define o tempo uma vez e depois lista os criativos.
+  let duracaoGeral: string | undefined;
 
   for (const linhaBruta of linhas) {
     const linha = linhaBruta.replace(/\s+$/, "");
     const vazia = !linha.trim();
 
+    // "Criativo 1 — Araruama…" abre peça nova e guarda o rótulo próprio.
+    const mPeca = RX_PECA.exec(linha);
+    if (mPeca) {
+      if (atual) blocos.push(atual);
+      const familia = semMarcacao(mPeca[1]);
+      const rotulo = `${familia.charAt(0).toUpperCase()}${familia.slice(1).toLowerCase()} ${mPeca[2]}`;
+      atual = novo(semMarcacao(mPeca[3] || "").replace(/^["“”]|["“”]$/g, ""), rotulo);
+      naTela = false;
+      continue;
+    }
+
     const mTitulo = RX_TITULO.exec(linha);
     if (mTitulo && mTitulo[2].trim().length > 3) {
       if (atual) blocos.push(atual);
-      atual = novo(mTitulo[2].trim());
+      atual = novo(semMarcacao(mTitulo[2]));
       naTela = false;
       continue;
     }
     if (!atual) atual = novo("");
 
     const mDur = RX_DURACAO.exec(linha);
-    if (mDur) { atual.duracao = mDur[1].trim(); naTela = false; continue; }
+    if (mDur) {
+      atual.duracao = mDur[1].trim();
+      // Sem título e sem falas ainda = cabeçalho do documento, não peça. Vale pra todas.
+      if (!atual.titulo && !atual.rotulo && !atual.paragrafos.length) duracaoGeral = atual.duracao;
+      naTela = false;
+      continue;
+    }
+
+    const mAng = RX_ANGULO.exec(linha);
+    if (mAng) { atual.angulo = semMarcacao(mAng[1]); naTela = false; continue; }
 
     const mTela = RX_TELA.exec(linha);
     if (mTela) {
@@ -69,13 +111,18 @@ export function lerBlocos(texto: string): Bloco[] {
     }
 
     // Aspas curvas do WhatsApp viram retas: no PDF elas aparecem como caixinha em algumas fontes.
-    const limpa = linha.trim().replace(/[""]/g, '"').replace(/['']/g, "'");
+    const limpa = semMarcacao(linha.trim()).replace(/[""]/g, '"').replace(/['']/g, "'");
     if (naTela) atual.textoNaTela.push(limpa);
     else atual.paragrafos.push(limpa);
   }
   if (atual) blocos.push(atual);
 
-  return blocos.filter((b) => b.titulo || b.paragrafos.length || b.textoNaTela.length);
+  const cheios = blocos.filter((b) => b.titulo || b.rotulo || b.paragrafos.length || b.textoNaTela.length);
+
+  // Espalha a duração do topo pras peças que não declararam a sua.
+  if (duracaoGeral) for (const b of cheios) if (!b.duracao) b.duracao = duracaoGeral;
+
+  return cheios;
 }
 
 const esc = (s: string) =>
@@ -102,10 +149,11 @@ export function blocosPdfHtml(
   const secoes = blocos.map((b, i) => `
     <section class="bloco">
       <div class="cab">
-        <span class="num">${String(i + 1).padStart(2, "0")}</span>
-        <h2>${esc(b.titulo || "Roteiro")}</h2>
+        <span class="num">${esc(b.rotulo || String(i + 1).padStart(2, "0"))}</span>
+        <h2>${esc(b.titulo || (b.rotulo ? "" : "Roteiro"))}</h2>
         ${b.duracao ? `<span class="dur">${esc(b.duracao)}</span>` : ""}
       </div>
+      ${b.angulo ? `<div class="ang"><span>Ângulo</span> ${esc(b.angulo)}</div>` : ""}
       ${b.paragrafos.map((p) => `<p>${esc(p)}</p>`).join("")}
       ${b.textoNaTela.length ? `
         <div class="tela">
@@ -133,9 +181,14 @@ export function blocosPdfHtml(
      Quem decide a quebra é o conteúdo. */
   section.bloco { page-break-inside: avoid; margin-bottom:30px; }
   .cab { display:flex; align-items:baseline; gap:10px; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid ${LINHA}; }
-  .num { color:${BRAND}; font-weight:800; font-size:13px; letter-spacing:.04em; }
+  /* Cabe tanto "01" quanto "Criativo 1" — sem quebrar a linha do título ao lado. */
+  .num { color:${BRAND}; font-weight:800; font-size:13px; letter-spacing:.04em; white-space:nowrap; }
   .cab h2 { font-size:16px; font-weight:700; flex:1; color:${TEXTO}; }
   .dur { color:${SUAVE}; font-size:11px; white-space:nowrap; }
+  /* O ângulo é a ESTRATÉGIA da peça, não fala pra gravar. Fica claramente separado do texto falado
+     pra ninguém ler "loja próxima + variedade + preço" no vídeo. */
+  .ang { font-size:12px; color:${SUAVE}; margin:-4px 0 12px; line-height:1.5; }
+  .ang span { color:${BRAND}; font-weight:700; text-transform:uppercase; font-size:10px; letter-spacing:.06em; margin-right:6px; }
   /* Um pouco mais de entrelinha que no claro: texto claro sobre fundo escuro "borra" quando as
      linhas ficam apertadas, e este documento é lido em voz alta na gravação. */
   p { font-size:14.5px; line-height:1.7; margin-bottom:11px; color:${TEXTO}; }

@@ -974,7 +974,14 @@ export async function POST(req: NextRequest) {
   if (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid) || isCadastroGroup(msg.groupJid)) {
     const { lerPedidoPdf } = await import("@/lib/cs/pedido-pdf");
     const pedidoPdf = lerPedidoPdf(msg.text);
-    if (pedidoPdf.quer) {
+
+    // "cria um roteiro pro WT Shopping COM ESSAS INFORMAÇÕES" não é diagramação — o roteiro ainda
+    // NÃO EXISTE, o que veio junto é matéria-prima. Diagramar isso devolvia o texto cru do jeito
+    // que chegou ("1 bloco"), como se fosse a peça pronta. Deixa seguir pro fluxo de roteiro, que
+    // lê o briefing do cliente, escreve, revisa e também entrega em PDF.
+    const vaiEscreverRoteiro = pedidoPdf.modo === "criar" && ehPedidoRoteiro(msg.text);
+
+    if (pedidoPdf.quer && !vaiEscreverRoteiro) {
       if (pedidoPdf.conteudo.length < 30) {
         await csSendGroupText(msg.groupJid,
           "Manda o texto junto (ou logo abaixo) que eu monto o PDF. Só com o pedido eu faria um documento de uma linha.",
@@ -1376,7 +1383,22 @@ export async function POST(req: NextRequest) {
     }
     const { briefing, temBriefing } = await loadBriefingForClient({ clientId: alvo.id, nome: alvo.nome, nicho: alvo.nicho });
     const preferencias = await loadRoteiroPrefs(alvo.id); // estilo já aprendido deste cliente
-    const r = await gerarRoteiros({ briefing, pedido: pedidoRoteiro, preferencias });
+
+    // A equipe costuma colar a informação junto do pedido ("o pet passa por exame pré-operatório…").
+    // Esse texto é a BASE FACTUAL do roteiro: vai separado do pedido pra IA saber que ali estão os
+    // fatos que ela não pode inventar — o briefing continua mandando no tom, no público e na CTA.
+    let contextoRoteiro: string | undefined;
+    if (pedeRot) {
+      const { lerPedidoPdf: lerCtx } = await import("@/lib/cs/pedido-pdf");
+      const ctx = lerCtx(msg.text);
+      if (ctx.modo === "criar" && ctx.conteudo.length >= 60) {
+        contextoRoteiro = ctx.conteudo;
+        // Sem isto o contexto inteiro iria DUAS vezes no prompt (como pedido e como base factual).
+        pedidoRoteiro = msg.text.split("\n").filter((l) => !ctx.conteudo.includes(l.trim()) || !l.trim()).join(" ").trim() || msg.text;
+      }
+    }
+
+    const r = await gerarRoteiros({ briefing, pedido: pedidoRoteiro, preferencias, contexto: contextoRoteiro });
     if (!r.ok || !r.data) {
       await csSendGroupText(msg.groupJid, `Eita, não consegui montar o roteiro do *${alvo.nome}* agora 😕 me chama de novo daqui a pouco?`);
       return NextResponse.json({ ok: true, roteiro: "erro", cliente: alvo.nome });
