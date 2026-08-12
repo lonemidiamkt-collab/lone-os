@@ -506,6 +506,7 @@ const MODULES: Module[] = [
       "Seletor de conta filtrado (só mostra contas dos clientes da carteira)",
       "Relatório semanal automático em PDF — combina anúncios + Instagram orgânico num arquivo só quando o cliente tem os dois pacotes (só-tráfego recebe só tráfego; só-social recebe só Instagram)",
       "Relatório INTERNO da produção do time (toda sexta, no grupo interno) — PDF branded com entregas por designer (no prazo), publicações/demandas por social, não-entregas, e o trabalho do Julio no tráfego: rotina registrada + em quais clientes a verba se moveu na semana (o sistema lê/sincroniza a Meta, não registra edição campanha-a-campanha)",
+      "Painel de resultados do cliente (link público por token) — os 4 períodos (7 dias, 2 semanas, este mês, mês passado) são preparados de madrugada, então trocar de período abre instantâneo. Se a Meta recusar as chamadas, o painel NÃO zera: mantém o último resultado bom, mostra a data dele na tela e avisa o time no grupo — dado que falhou nunca vira cache nem sobrescreve o do dia anterior",
     ],
     tips: [
       "Rode análise IA pelo menos 1x por semana por cliente — o histórico de scores mostra se está evoluindo.",
