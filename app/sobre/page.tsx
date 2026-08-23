@@ -464,6 +464,7 @@ const MODULES: Module[] = [
       "Briefing editável por todos os roles (tom de voz, fixo, campanha)",
       "Aba 'Análise IA' com histórico navegável de pareceres automáticos",
       "10 abas por cliente: Overview, Dados, Resultados, Análise IA, Contratos, Chat, Histórico, Tarefas, Conteúdo, Onboarding",
+      "Memória do cliente (as REGRAS que o agente aprende): o Loninho anota o que muda o jeito de fazer a próxima peça — identidade visual, o que a legenda deve dizer, dado operacional (endereço/horário) e proibições. Preço e promoção NÃO viram regra: mudam toda semana e poluiriam o briefing. Ele aprende de três lugares: as conversas do grupo, as CORREÇÕES do cliente ('o endereço está errado' vira regra com o dado certo) e o que a equipe escreve nos briefings e comentários dos cards. Na entrega do designer, a arte é conferida contra essas regras e o time é avisado antes da peça ir pro cliente",
     ],
     tips: [
       "Antes de gerar link, verifique se o cliente já não existe — o sistema tem dedup por CNPJ/email.",
