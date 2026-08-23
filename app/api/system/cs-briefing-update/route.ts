@@ -7,23 +7,13 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 import { sincronizarBriefingAprendido } from "@/lib/cs/briefing-sync";
 import { chatJson, isOpenAIConfigured } from "@/lib/ai/openai";
+import { DEFINICAO_DE_REGRA, SCHEMA_REGRAS, filtrarRegras, ESCOPO_POR_TIPO } from "@/lib/cs/regras";
 
 // POST /api/system/cs-briefing-update — a IA "percebe" as conversas dos grupos e ENRIQUECE o briefing
 // dos clientes: extrai FATOS de negócio/produto novos (lançou produto X, faz entrega em Y, promoção
 // até Z) e grava como regra APRENDIDA (escopo negócio) → briefing-sync joga na seção "🧠 Aprendido".
 // Lê o corpus cs_message_corpus (mensagens do CLIENTE, is_team=false). ?dry=1 não grava.
 // Cron sugerido: 1x/dia. ?clientId=… roda só um cliente.
-
-const SCHEMA = {
-  type: "object", additionalProperties: false, required: ["fatos"],
-  properties: {
-    fatos: {
-      type: "array",
-      items: { type: "string" },
-      description: "Fatos CONCRETOS e ÚTEIS sobre o negócio/produtos do cliente que valem estar no briefing. Vazio se não houver nada novo.",
-    },
-  },
-};
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req); if (denied) return denied;
@@ -49,23 +39,32 @@ export async function POST(req: NextRequest) {
     if (!msgs || msgs.length < 8) continue; // pouco material → pula (sem IA)
 
     const conversa = msgs.map((m) => `- ${(m.text as string).slice(0, 300)}`).join("\n").slice(0, 6000);
-    const r = await chatJson<{ fatos: string[] }>({
+    // O prompt ANTIGO pedia "fatos CONCRETOS e verificáveis" e mandava ignorar "pedido de arte ou
+    // opinião". Preço é concreto e verificável, correção de arte é "pedido de arte" — resultado:
+    // 96 preços guardados como regra eterna e a correção do cliente jogada fora. Agora a pergunta
+    // é outra: isso muda o que a gente faz na PRÓXIMA peça deste cliente?
+    const r = await chatJson<{ regras: { texto: string; tipo: string }[] }>({
       model: "gpt-4o-mini",
-      system: "Você lê mensagens do GRUPO de um cliente de uma agência de marketing e extrai FATOS de negócio/produto que valem estar no briefing dele (novos produtos/serviços, promoções com prazo, público, diferencial, área de entrega, horário, forma de contato). Regras: só fatos CONCRETOS e verificáveis ditos pelo cliente; NADA de fofoca, saudação, pedido de arte ou opinião; frases curtas e diretas; se não houver fato novo, retorne lista vazia. Máximo 6 fatos.",
+      system: `Você lê mensagens do GRUPO de WhatsApp de um cliente de uma agência de marketing e extrai as REGRAS duráveis daquele cliente.\n\n${DEFINICAO_DE_REGRA}\n\nMáximo 5 regras. O normal é voltar pouca coisa ou nada — só devolva o que passar no teste.`,
       user: conversa,
-      schema: SCHEMA, schemaName: "briefing_fatos", maxTokens: 500,
+      schema: SCHEMA_REGRAS, schemaName: "briefing_regras", maxTokens: 600,
     });
     if (!r.ok || !r.data) continue;
 
     const existentes = (await fetchClientCsRules(c.id as string)).map((x) => x.texto.toLowerCase().trim());
-    const novos = (r.data.fatos ?? [])
-      .map((f) => f.trim())
-      .filter((f) => f.length >= 6 && !existentes.some((e) => e.includes(f.toLowerCase()) || f.toLowerCase().includes(e)))
-      .slice(0, 6);
+    // filtrarRegras aplica o portão determinístico (catálogo/promoção/efêmero/narrativa) por cima
+    // do que a IA devolveu — cinto e suspensório, porque é ela que erra pro lado de guardar demais.
+    const novos = filtrarRegras(r.data.regras)
+      .filter((g) => !existentes.some((e) => e.includes(g.texto.toLowerCase()) || g.texto.toLowerCase().includes(e)))
+      .slice(0, 5);
 
     if (novos.length && !dry) {
       await supabaseAdmin.from("cs_client_rules").insert(
-        novos.map((texto) => ({ client_id: c.id, texto, escopo: "sempre", origem: "aprendido", author: "IA (conversas)" }))
+        novos.map((g) => ({
+          client_id: c.id, texto: g.texto,
+          escopo: ESCOPO_POR_TIPO[g.tipo],   // cada regra no escopo certo — antes ia tudo em "sempre"
+          origem: "aprendido", author: "IA (conversas)",
+        }))
       );
       await sincronizarBriefingAprendido(c.id as string);
     }

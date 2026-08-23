@@ -57,6 +57,19 @@ export async function POST(req: NextRequest) {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // ─── CONFERE A ARTE CONTRA AS REGRAS DO CLIENTE, NA ENTREGA ───────────────
+    // A verificação existia (api/cs/verificar-arte-regras) e NUNCA era chamada — zero notificações
+    // na base inteira. É aqui que ela faz sentido: no instante em que o designer marca a entrega,
+    // antes da peça ir pro cliente. Se o cliente já corrigiu o endereço uma vez, essa regra está
+    // guardada e o time é avisado ANTES de errar de novo.
+    // Não bloqueia a entrega e não espera: erro aqui não pode impedir o designer de entregar.
+    if (row.designer_delivered_at) {
+      void import("@/lib/cs/verificar-arte")
+        .then(({ verificarArteDoCard }) => verificarArteDoCard(id as string))
+        .then((r) => { if (r.status === "alertado") console.warn(`[content-cards] arte pode violar regra (${id}): ${r.resumo}`); })
+        .catch((e) => console.error("[content-cards] verificação de arte falhou (ignorado):", e));
+    }
+
     // Sincroniza briefing E prazo pro card do DESIGNER: ele lê design_requests.briefing/deadline
     // (uma CÓPIA feita quando a arte foi solicitada). Sem isso, o social edita o briefing ou remarca
     // a data e o designer continua vendo o texto/prazo antigo — foi o bug reportado. O card mostra a

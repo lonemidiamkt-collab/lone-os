@@ -2562,6 +2562,50 @@ export async function POST(req: NextRequest) {
     console.log(`[CS/inbound] info_operacional → memória (${clienteNome}): ${texto}`);
   }
 
+  // ─── CORREÇÃO DO CLIENTE VIRA REGRA ─────────────────────────────────────────
+  // Pedido do Roberto (22/08): "se o cliente diz 'legenda errada o endereço não está certo' ele
+  // deve notar e cobrar atenção nisso". Antes a correção virava card, o designer consertava, e a
+  // lição morria — 29 correções em 60 dias tinham produzido 1 regra. Roda em PARALELO à criação do
+  // card (não substitui): o conserto continua acontecendo, o aprendizado é o que estava faltando.
+  const correcoes = res.data.itens.filter((i) => i.tipo === "ajuste_arte" || i.tipo === "reclamacao");
+  if (correcoes.length && c.id && isOpenAIConfigured()) {
+    try {
+      const { aprenderDaCorrecao, pareceReincidencia } = await import("@/lib/cs/aprender-correcao");
+      const { gravarRegras, ROTULO_TIPO } = await import("@/lib/cs/regras");
+      const { fetchClientCsRules } = await import("@/lib/supabase/queries");
+      const regrasAtuais = (await fetchClientCsRules(c.id as string)).map((r) => r.texto);
+
+      for (const it of correcoes.slice(0, 2)) {
+        const achadas = await aprenderDaCorrecao({
+          clienteNome, resumo: it.resumo, mensagem: msg.text,
+          briefing: clienteBriefing, regrasAtuais,
+        });
+        if (!achadas.length) continue;
+
+        const { gravadas } = await gravarRegras(c.id as string, achadas, {
+          author: `correção do ${clienteNome}`, sourceMessage: msg.text,
+        });
+        if (!gravadas.length) continue;
+
+        // Reincidência ("de novo", "já falei") muda o tom do aviso: aí não é aprendizado novo, é
+        // a casa repetindo um erro que o cliente já tinha apontado — e o time precisa sentir isso.
+        const repetiu = pareceReincidencia(msg.text);
+        if (internalJid) {
+          const linhas = gravadas.map((g) => `• _${g.texto}_  (${ROTULO_TIPO[g.tipo]})`).join("\n");
+          await csSendGroupText(internalJid,
+            repetiu
+              ? `⚠️ O *${clienteNome}* corrigiu isso *de novo*. Anotei como regra fixa — daqui pra frente eu cobro:\n${linhas}`
+              : `🧠 Aprendi com a correção do *${clienteNome}*:\n${linhas}\n\nVou cobrar isso nas próximas artes e legendas.`,
+            undefined, { origem: "regra-de-correcao", destino: "interno" });
+        }
+        console.log(`[CS/inbound] correção → ${gravadas.length} regra(s) (${clienteNome}): ${gravadas.map((g) => g.texto).join(" | ")}`);
+      }
+    } catch (err) {
+      // Aprender é bônus: se falhar, o card da correção segue normalmente.
+      console.error("[CS/inbound] falhou ao aprender da correção:", String(err));
+    }
+  }
+
   for (const it of res.data.itens.filter((i) => i.is_demanda && i.confianca >= 0.6)) {
     // A2 — verificador cético só nos AMBÍGUOS (confiança < A2_TRUST_FROM). Refuta falso-positivo
     // antes de incomodar a equipe. Fail-open: erro de API no A2 não bloqueia o pipeline.
