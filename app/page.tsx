@@ -24,6 +24,7 @@ import { useState, useMemo, useEffect } from "react";
 import type { ClientStatus } from "@/lib/types";
 import { mockAdCampaigns } from "@/lib/mockData";
 import { supabase } from "@/lib/supabase/client";
+import { emOperacao } from "@/lib/clients/operacao";
 import { getDashboardData } from "@/lib/dashboard/getDashboardData";
 import {
   DashboardHeader,
@@ -256,7 +257,7 @@ function EmployeeDashboard() {
     let supportTotal = 0;
     if (role === "traffic") {
       const today = new Date().toISOString().slice(0, 10);
-      const memberClients = clients.filter((c) => c.assignedTraffic === currentUser && c.status !== "onboarding");
+      const memberClients = clients.filter((c) => c.assignedTraffic === currentUser && emOperacao(c));
       supportTotal = memberClients.length;
       supportDone = trafficRoutineChecks.filter((c) => c.date === today && c.completedBy === currentUser && c.type === "support").length;
     }
@@ -284,7 +285,7 @@ function EmployeeDashboard() {
           {greeting}, {currentUser.split(" ")[0]}!
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          {role === "traffic" && `Você tem ${myClients.filter((c) => c.status !== "onboarding").length} clientes e ${myTasks.length} tarefas pendentes.`}
+          {role === "traffic" && `Você tem ${myClients.filter(emOperacao).length} clientes e ${myTasks.length} tarefas pendentes.`}
           {role === "social" && `Você tem ${myCards.filter((c) => c.status !== "published").length} cards no pipeline e ${myTasks.length} tarefas pendentes.`}
           {role === "designer" && `Você tem ${myDesignRequests.length} pedidos de design na fila e ${myTasks.length} tarefas pendentes.`}
         </p>
@@ -318,7 +319,7 @@ function EmployeeDashboard() {
         )}
         {role === "traffic" && (
           <>
-            <MetricCard icon={Users} label="Meus Clientes" value={myClients.filter((c) => c.status !== "onboarding").length} sub="em operação" iconColor="text-primary" iconBg="bg-primary/10" href="/clients" />
+            <MetricCard icon={Users} label="Meus Clientes" value={myClients.filter(emOperacao).length} sub="em operação" iconColor="text-primary" iconBg="bg-primary/10" href="/clients" />
             <MetricCard
               icon={Zap}
               label="Suporte Hoje"
@@ -340,7 +341,7 @@ function EmployeeDashboard() {
 
       {/* Sector-specific widgets */}
       {role === "traffic" && myClients.length > 0 && (
-        <TrafficChecklist clients={myClients.filter((c) => c.status !== "onboarding")} currentUser={currentUser} />
+        <TrafficChecklist clients={myClients.filter(emOperacao)} currentUser={currentUser} />
       )}
       {role === "social" && (
         <DesignDeliveriesAlert cards={contentCards.filter((c) => c.socialMedia === currentUser)} />
@@ -510,7 +511,7 @@ function AdminDashboard() {
   }, []);
 
   const {
-    activeClients, atRiskClients, onboardingClients, urgentTasks,
+    activeClients, atRiskClients, onboardingClients, onboardingEsquecidos, urgentTasks,
     pipelineCards, publishedThisMonth, stuckCards, pendingApproval,
     designQueued, designInProg, teamProductivity, trafficProductivity,
     inactiveSevenDays,
@@ -548,6 +549,25 @@ function AdminDashboard() {
         <KPICard label="Onboarding" value={onboardingClients.length} caption="novos clientes" tone={onboardingClients.length > 0 ? "warning" : "default"} accent icon={<UserPlus size={12} />} onClick={() => router.push("/clients?filter=onboarding")} />
         <KPICard label="Tarefas Urgentes" value={urgentTasks.length} caption="prioridade crítica" tone={urgentTasks.length > 0 ? "warning" : "default"} accent icon={<Zap size={12} />} onClick={() => router.push("/my-work")} />
       </div>
+
+      {/* Status parado no tempo: cliente marcado como "onboarding" que já opera há semanas. Some
+          sozinho quando o time promover — não é alerta perpétuo. */}
+      {onboardingEsquecidos.length > 0 && (
+        <button
+          onClick={() => router.push("/clients?filter=onboarding")}
+          className="w-full text-left rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-4 py-3 hover:bg-amber-500/[0.12] transition-colors"
+        >
+          <p className="text-xs font-semibold text-amber-500 mb-0.5">
+            {onboardingEsquecidos.length} {onboardingEsquecidos.length === 1 ? "cliente segue" : "clientes seguem"} marcados como onboarding
+          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Já estão operando (grupo, anúncios ou posts) mas o cadastro nunca foi promovido:{" "}
+            {onboardingEsquecidos.slice(0, 4).map((c) => c.name).join(", ")}
+            {onboardingEsquecidos.length > 4 ? ` e mais ${onboardingEsquecidos.length - 4}` : ""}.
+            Eles contam como ativos aqui — mas vale acertar o cadastro.
+          </p>
+        </button>
+      )}
 
       {/* Ações rápidas */}
       <QuickActions

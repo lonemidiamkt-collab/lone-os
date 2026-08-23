@@ -1,4 +1,5 @@
 import type { Client, ContentCard, DesignRequest, Task, TrafficRoutineCheck } from "@/lib/types";
+import { emSetupInicial, onboardingDesatualizado } from "@/lib/clients/operacao";
 
 function hoursSince(isoString?: string): number {
   if (!isoString) return 9999;
@@ -30,6 +31,8 @@ export interface AdminDashboardData {
   activeClients: Client[];
   atRiskClients: Client[];
   onboardingClients: Client[];
+  /** Status "onboarding" mas já operando há tempo — alguém esqueceu de promover. */
+  onboardingEsquecidos: Client[];
   urgentTasks: Task[];
   pipelineCards: ContentCard[];
   publishedThisMonth: number;
@@ -57,16 +60,16 @@ export function getDashboardData({
   tasks,
   trafficRoutineChecks,
 }: GetDashboardDataArgs): AdminDashboardData {
-  const activeClients = clients.filter((c) => c.status !== "onboarding");
+  // A CONTAGEM ESTAVA ERRADA (Roberto, 23/08): "já temos mais cliente do que contabiliza".
+  // `status !== "onboarding"` escondia 17 clientes — Dumar com 125 dias de casa, grupo, conta de
+  // anúncio, portal e cards, ainda marcado como onboarding. E eles também não apareciam no card de
+  // Onboarding (só mostra os de menos de 7 dias), então sumiam das DUAS contagens: 32 de 49.
+  // O critério agora mora em lib/clients/operacao.ts e é o mesmo em todo o sistema.
+  const activeClients = clients.filter((c) => !emSetupInicial(c));
   const atRiskClients = clients.filter((c) => c.status === "at_risk");
-  // ONBOARDING É QUEM ACABOU DE CHEGAR — só quem tem menos de 7 dias de casa (pedido do Roberto).
-  // Antes bastava o status "onboarding", e o número inchava com cliente de 40+ dias que ninguém
-  // tinha promovido: o card virou paisagem justamente por nunca zerar. Sem data de entrada, entra
-  // (o registro é antigo e provavelmente esqueceram de promover — some seria pior que mostrar).
-  const DIAS_ONBOARDING = 7;
-  const limiteOnboarding = Date.now() - DIAS_ONBOARDING * 86_400_000;
-  const onboardingClients = clients.filter((c) =>
-    c.status === "onboarding" && (!c.createdAt || new Date(c.createdAt).getTime() >= limiteOnboarding));
+  const onboardingClients = clients.filter(emSetupInicial);
+  // Sinaliza o cadastro desatualizado em vez de escondê-lo — senão o número volta a divergir.
+  const onboardingEsquecidos = clients.filter(onboardingDesatualizado);
   const urgentTasks = tasks.filter((t) => t.priority === "critical" && t.status !== "done");
 
   const pipelineCards = contentCards.filter((c) => c.status !== "published");
@@ -132,6 +135,7 @@ export function getDashboardData({
 
   return {
     activeClients,
+    onboardingEsquecidos,
     atRiskClients,
     onboardingClients,
     urgentTasks,

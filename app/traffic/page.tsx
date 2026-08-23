@@ -27,6 +27,7 @@ import {
   Wallet, CreditCard, Banknote, AlertOctagon, Info, Palette,
 } from "lucide-react";
 import { getAttentionColor, getAttentionLabel, getPriorityColor, getPriorityLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS, todaySP } from "@/lib/utils";
+import { emOperacao } from "@/lib/clients/operacao";
 import type { Client, Task, TrafficMonthlyReport, AdCampaign, AdAccount, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
 import { mockAdAccounts, mockAdCampaigns } from "@/lib/mockData";
 import { fetchClientGroupMessageLog, type ClientGroupMessageLogRow } from "@/lib/supabase/queries";
@@ -323,7 +324,7 @@ export default function TrafficPage() {
                 {tab.key === "rotina" && (() => {
                   const today = getTodayStr();
                   const todayChecks = trafficRoutineChecks.filter((c) => c.date === today && (effectiveFilter === "all" || c.completedBy === effectiveFilter));
-                  const activeClients = filteredClients.filter((c) => c.status !== "onboarding");
+                  const activeClients = filteredClients.filter(emOperacao);
                   const pending = activeClients.length - todayChecks.filter((c) => c.type === "support").length;
                   return pending > 0 ? (
                     <span className="ml-1 text-xs bg-destructive/20 text-destructive px-1.5 py-0.5 rounded-full">{pending}</span>
@@ -1009,7 +1010,7 @@ function RoutineTab({
 }) {
   const today = getTodayStr();
   const dayOfWeek = getDayOfWeek();
-  const activeClients = clients.filter((c) => c.status !== "onboarding");
+  const activeClients = clients.filter(emOperacao);
 
   const todayChecks = routineChecks.filter(
     (c) => c.date === today && (effectiveFilter === "all" || c.completedBy === effectiveFilter)
@@ -1411,7 +1412,7 @@ function MonthlyReportsTab({
   const [showForm, setShowForm] = useState(false);
   const [editingReport, setEditingReport] = useState<TrafficMonthlyReport | null>(null);
 
-  const activeClients = clients.filter((c) => c.status !== "onboarding");
+  const activeClients = clients.filter(emOperacao);
   const clientReports = useMemo(
     () => reports.filter((r) => r.clientId === selectedClient).sort((a, b) => a.month.localeCompare(b.month)),
     [reports, selectedClient]
