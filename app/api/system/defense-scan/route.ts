@@ -115,7 +115,19 @@ export async function POST(req: NextRequest) {
         const current: CurrentMetric = buildMetric(currentInsight);
         const history: HistoricalMetric[] = insights.map(buildMetric);
 
-        // 3. Persiste snapshot
+        // 3. Persiste snapshot — UMA linha por cliente/dia, sobrescrita a cada scan.
+        //
+        // Este scan roda a cada 15 min, e o insert cru criava uma linha NOVA toda vez: 392.819
+        // linhas para 4.001 combinações reais de cliente+dia, ou seja 98 cópias do mesmo número.
+        // Sozinha, a tabela era 121 MB de um banco de 199 MB — e todo consumidor precisava lembrar
+        // de deduplicar na leitura, o que já causou métrica errada antes.
+        // Apaga-e-insere em vez de upsert: funciona com ou sem índice único, então não depende de
+        // migration pra entrar no ar sem quebrar o scan.
+        await supabaseAdmin.from("metric_snapshots")
+          .delete()
+          .eq("client_id", clientId)
+          .eq("metric_date", currentDate);
+
         await supabaseAdmin.from("metric_snapshots").insert({
           client_id: clientId,
           meta_ad_account_id: accountId,

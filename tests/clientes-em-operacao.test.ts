@@ -7,7 +7,7 @@ import type { Client } from "@/lib/types";
 // sido promovidos — e que também não apareciam no card de Onboarding (só mostra <7 dias).
 
 const base = (over: Partial<Client>): Client => ({
-  id: "x", name: "Cliente", status: "active", assignedTraffic: "", assignedSocial: "",
+  id: "x", name: "Cliente", status: "good", assignedTraffic: "", assignedSocial: "",
   assignedDesigner: "", joinDate: "2026-01-01", paymentMethod: "pix",
   ...over,
 } as Client);
@@ -43,7 +43,7 @@ describe("quem está em operação", () => {
   });
 
   it("cliente normal segue contando", () => {
-    expect(emOperacao(base({ status: "active" }))).toBe(true);
+    expect(emOperacao(base({ status: "good" }))).toBe(true);
     expect(emOperacao(base({ status: "at_risk" }))).toBe(true);
   });
 
@@ -58,7 +58,7 @@ describe("quem está em operação", () => {
     const carteira = [
       base({ status: "onboarding", createdAt: diasAtras(125), metaAdAccountId: "a" }), // preso
       base({ status: "onboarding", createdAt: diasAtras(2) }),                          // setup real
-      base({ status: "active" }),
+      base({ status: "good" }),
       base({ status: "at_risk" }),
     ];
     const ativos = carteira.filter(emOperacao).length;
