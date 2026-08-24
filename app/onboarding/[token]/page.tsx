@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { SEP_DOCS, listaDocs } from "@/lib/onboarding/docs";
 import { useParams } from "next/navigation";
 import {
   User, FileText, Shield, Upload, Camera, Check, Loader2,
@@ -104,14 +105,19 @@ function InputField({ label, value, onChange, placeholder, required, type = "tex
   );
 }
 
-function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, previewRound, required, missing, onToast }: {
+function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, previewRound, required, missing, onToast, multiplo }: {
   label: string; docType: string; clientId: string; token: string; onUploaded: (url: string) => void; uploaded?: string;
   previewRound?: boolean; required?: boolean; missing?: boolean; onToast?: (msg: string) => void;
+  /** Cartão CNPJ e RG costumam ter mais de uma página/lado (Roberto, 24/08). */
+  multiplo?: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Uploads em sequência liam o `uploaded` da closure ANTIGA e um sobrescrevia o outro.
+  const uploadedRef = useRef(uploaded);
+  useEffect(() => { uploadedRef.current = uploaded; }, [uploaded]);
 
   const handleFile = async (file: File) => {
     setError("");
@@ -131,8 +137,12 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
       const res = await fetch("/api/onboarding/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Erro no servidor."); setPreview(null); return; }
-      onUploaded(data.url);
-      onToast?.(`${label} salvo com sucesso`);
+      // Acumula em vez de substituir: o cartão CNPJ costuma ter 2-3 páginas, e antes a segunda
+      // apagava a primeira sem aviso — o cliente achava que tinha mandado e só uma chegava.
+      const jaTem = listaDocs(uploadedRef.current);
+      onUploaded(multiplo ? [...jaTem, data.url].join(SEP_DOCS) : data.url);
+      setPreview(null);
+      onToast?.(`${label} salvo com sucesso${multiplo && jaTem.length ? ` (${jaTem.length + 1} arquivos)` : ""}`);
     } catch {
       setError("Falha na conexao."); setPreview(null);
     } finally { setUploading(false); }
@@ -156,33 +166,31 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
         <p className="text-[10px] text-red-400 -mt-1">Este arquivo e essencial para a geracao do seu contrato.</p>
       )}
       {(() => {
-        const previewSrc = preview || (uploaded && !uploaded.startsWith("legal://") ? uploaded : null);
-        if (previewSrc) {
-          return (
-            <div className="flex justify-center">
-              <img src={previewSrc} alt={label}
+        const enviados = listaDocs(uploaded);
+        const itens = [...enviados, ...(preview ? [preview] : [])];
+        if (!itens.length) return null;
+        return (
+          <div className="flex flex-wrap justify-center gap-2">
+            {itens.map((src, i) => src.startsWith("legal://") ? (
+              <div key={i} className="flex items-center gap-2 p-3 rounded-lg bg-[#0a0a0c] border border-[#1e1e2a]">
+                <Check size={14} className="text-emerald-500" />
+                <span className="text-xs text-zinc-400">Arquivo {itens.length > 1 ? i + 1 : ""} salvo com seguranca</span>
+              </div>
+            ) : (
+              <img key={i} src={src} alt={`${label} ${i + 1}`}
                 className={`max-h-24 object-contain ${previewRound ? "w-20 h-20 rounded-full border-2 border-[#2b3cff]/30" : "rounded-lg border border-[#1e1e2a]"}`} />
-            </div>
-          );
-        }
-        if (uploaded && uploaded.startsWith("legal://")) {
-          return (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-[#0a0a0c] border border-[#1e1e2a]">
-              <Check size={14} className="text-emerald-500" />
-              <span className="text-xs text-zinc-400">Arquivo privado salvo com seguranca</span>
-            </div>
-          );
-        }
-        return null;
+            ))}
+          </div>
+        );
       })()}
-      {uploaded ? (
+      {uploaded && !multiplo ? (
         <p className="text-xs text-emerald-400">Enviado com sucesso</p>
       ) : (
         <div className="flex gap-2">
           <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#2b3cff]/30 text-zinc-400 hover:text-white transition-all text-xs">
             {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            {uploading ? "Enviando..." : "Selecionar Arquivo"}
+            {uploading ? "Enviando..." : listaDocs(uploaded).length ? "Adicionar outro arquivo" : (multiplo ? "Selecionar Arquivos" : "Selecionar Arquivo")}
           </button>
           <button type="button" disabled={uploading} onClick={() => {
             const input = document.createElement("input");
@@ -195,11 +203,21 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
           </button>
         </div>
       )}
-      <input ref={fileRef} type="file" accept="image/*,.pdf,.heic,.heif" className="hidden" onChange={(e) => {
-        const f = e.target.files?.[0]; if (f) handleFile(f);
+      <input ref={fileRef} type="file" accept="image/*,.pdf,.heic,.heif" multiple={multiplo} className="hidden" onChange={async (e) => {
+        const fs = Array.from(e.target.files ?? []);
+        // Em série, não em paralelo: cada upload precisa enxergar o que o anterior já salvou.
+        for (const f of fs) await handleFile(f);
+        e.target.value = ""; // permite reenviar o mesmo arquivo depois de remover
       }} />
       {error && <p className="text-xs text-red-400">{error}</p>}
-      <p className="text-[10px] text-zinc-600">JPG, PNG ou PDF — maximo 10MB</p>
+      <p className="text-[10px] text-zinc-600">
+        JPG, PNG ou PDF — maximo 10MB{multiplo ? " por arquivo. Pode enviar mais de um (frente e verso, varias paginas)." : ""}
+      </p>
+      {multiplo && listaDocs(uploaded).length > 0 && (
+        <p className="text-xs text-emerald-400">
+          {listaDocs(uploaded).length} arquivo{listaDocs(uploaded).length > 1 ? "s" : ""} enviado{listaDocs(uploaded).length > 1 ? "s" : ""}
+        </p>
+      )}
     </div>
   );
 }
@@ -722,10 +740,10 @@ export default function ExternalOnboardingPage() {
             <p className="text-xs text-zinc-500">Envie os documentos abaixo. Voce pode selecionar um arquivo ou tirar uma foto.</p>
             <FileUpload label="Logo da Empresa" docType="logo" clientId={submission.client_id} token={token} onUploaded={setDocLogo} uploaded={docLogo} previewRound
               required missing={showValidation && missingRequired.docLogo} onToast={setUploadToast} />
-            <FileUpload label="Contrato Social (PDF ou Foto)" docType="contrato_social" clientId={submission.client_id} token={token} onUploaded={setDocContrato} uploaded={docContrato}
-              required missing={showValidation && missingRequired.docContrato} onToast={setUploadToast} />
+            <FileUpload label="Contrato Social / Cartao CNPJ (PDF ou Foto)" docType="contrato_social" clientId={submission.client_id} token={token} onUploaded={setDocContrato} uploaded={docContrato}
+              required missing={showValidation && missingRequired.docContrato} onToast={setUploadToast} multiplo />
             <FileUpload label="Documento com Foto (RG ou CNH)" docType="identidade" clientId={submission.client_id} token={token} onUploaded={setDocIdentidade} uploaded={docIdentidade}
-              onToast={setUploadToast} />
+              onToast={setUploadToast} multiplo />
           </div>
         )}
 

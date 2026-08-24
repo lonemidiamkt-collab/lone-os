@@ -1029,18 +1029,56 @@ export async function POST(req: NextRequest) {
   // Vem cedo porque a frase tem números e nomes de cliente — se cair no classificador de demanda
   // vira card de arte. Só vale no grupo de CADASTRO, que é onde a oferta foi feita.
   if (isCadastroGroup(msg.groupJid)) {
-    const { lerPedido, trouxeOsNumeros } = await import("@/lib/contracts/pedido-contrato");
-    const pedido = lerPedido(msg.text);
+    const { lerPedido, trouxeOsNumeros, extrairNumeros } = await import("@/lib/contracts/pedido-contrato");
+    const { ofertaPendente, parcialPendente, registrarParcial, limparParcial, mesclarParcial } =
+      await import("@/lib/contracts/oferta");
+    const pedidoCru = lerPedido(msg.text);
     // Depois da oferta, "1797, dia 10" é frase completa — não precisa repetir a palavra contrato.
-    const respondendoOferta = !pedido.querContrato && trouxeOsNumeros(msg.text);
-    if (pedido.querContrato || respondendoOferta) {
+    const respondendoOferta = !pedidoCru.querContrato && trouxeOsNumeros(msg.text);
+
+    // COMPLETANDO o que ficou faltando. O agente perguntou "falta o dia de vencimento", a resposta
+    // foi "vencimento dia 24" — que sozinha não tem valor nem a palavra contrato, então era lida
+    // como pedido novo e incompleto, e ele repetia a pergunta pra sempre (24/08).
+    const parcial = await parcialPendente(msg.groupJid);
+    const numerosAgora = extrairNumeros(msg.text);
+    const trouxeAlgumNumero = numerosAgora.valorMensal !== undefined
+      || numerosAgora.diaPagamento !== undefined || numerosAgora.duracaoMeses !== undefined;
+    const completandoContrato = !!parcial && !pedidoCru.querContrato && trouxeAlgumNumero;
+
+    // "montou?", "e aí?", "saiu?" com contrato pendente: responde o que falta em vez de ignorar.
+    if (parcial && !trouxeAlgumNumero && !pedidoCru.querContrato
+        && /^\s*(mont(ou|aste)|saiu|e a[íi]|ficou pronto|cad[êe]|gerou)\s*\??\s*$/i.test(msg.text.trim())) {
+      const faltam = [
+        parcial.valorMensal === undefined ? "valor mensal" : null,
+        parcial.diaPagamento === undefined ? "dia de vencimento" : null,
+      ].filter(Boolean);
+      await csSendGroupText(msg.groupJid,
+        faltam.length
+          ? `Ainda não — pra fechar o contrato do *${parcial.cliente}* falta: *${faltam.join(", ")}*.`
+          : `Tô montando o contrato do *${parcial.cliente}*, já mando aqui.`,
+        undefined, { origem: "contrato-status", destino: "interno" });
+      return NextResponse.json({ ok: true, acao: "contrato_status", faltando: faltam });
+    }
+
+    // Junta o que já se sabia com o que veio agora, e recalcula o que falta em cima do conjunto.
+    const juntos = mesclarParcial(parcial, numerosAgora);
+    const faltandoAgora = [
+      juntos.valorMensal === undefined ? "valor mensal" : null,
+      juntos.diaPagamento === undefined ? "dia de vencimento" : null,
+      pedidoCru.modalidade === "determinado" && juntos.duracaoMeses === undefined ? "prazo (em meses)" : null,
+    ].filter(Boolean) as string[];
+    const pedido = { ...pedidoCru, ...juntos, faltando: faltandoAgora };
+
+    if (pedido.querContrato || respondendoOferta || completandoContrato) {
       const { acharClientePorNome } = await import("@/lib/cs/achar-cliente");
-      const { ofertaPendente } = await import("@/lib/contracts/oferta");
       // Nome citado manda. Sem nome, herda o cliente da oferta que o agente acabou de fazer ali —
       // quem responde uma pergunta não repete o assunto.
       const citado = await acharClientePorNome(msg.text);
+      // Ordem: nome citado > contrato que já estava sendo montado > oferta recente do agente.
       const daOferta = citado ? null : await ofertaPendente(msg.groupJid);
-      const alvo = citado ?? (daOferta ? { id: daOferta.clientId, nome: daOferta.cliente } : null);
+      const alvo = citado
+        ?? (parcial ? { id: parcial.clientId, nome: parcial.cliente } : null)
+        ?? (daOferta ? { id: daOferta.clientId, nome: daOferta.cliente } : null);
       if (!alvo) {
         await csSendGroupText(msg.groupJid,
           "De qual cliente é esse contrato? Me diz o nome que eu monto — ex: _\"gera o contrato do Bruno Tintas: 2500, dia 10\"_.",
@@ -1054,6 +1092,10 @@ export async function POST(req: NextRequest) {
           pedido.duracaoMeses ? `${pedido.duracaoMeses} meses` : null,
           pedido.diaPagamento ? `dia ${pedido.diaPagamento}` : null,
         ].filter(Boolean).join(" · ");
+        // GUARDA o que já entendeu: sem isto a próxima resposta ("dia 24") recomeça do zero.
+        await registrarParcial(msg.groupJid, alvo.id, alvo.nome, {
+          valorMensal: pedido.valorMensal, duracaoMeses: pedido.duracaoMeses, diaPagamento: pedido.diaPagamento,
+        });
         await csSendGroupText(msg.groupJid,
           `Pra montar o contrato do *${alvo.nome}* ainda falta: *${pedido.faltando.join(", ")}*.`
           + (entendi ? `\n_Já entendi: ${entendi}._` : ""),
@@ -1061,6 +1103,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, acao: "contrato_incompleto", faltando: pedido.faltando });
       }
 
+      await limparParcial(msg.groupJid); // assunto fechado — o que estava pendente não vale mais
       await csSendGroupText(msg.groupJid,
         citado
           ? `Montando o contrato do *${alvo.nome}*…`

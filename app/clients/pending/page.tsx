@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Header from "@/components/Header";
+import { listaDocs, adicionarDoc } from "@/lib/onboarding/docs";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { supabase } from "@/lib/supabase/client";
@@ -121,8 +122,9 @@ export default function PendingClientsPage() {
   const [approving, setApproving] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [reviewChecks, setReviewChecks] = useState({ docs: false, access: false, data: false });
-  const [resolvedContrato, setResolvedContrato] = useState<string | null>(null);
-  const [resolvedIdentidade, setResolvedIdentidade] = useState<string | null>(null);
+  // LISTAS: cartão CNPJ tem várias páginas e RG tem frente e verso (Roberto, 24/08).
+  const [resolvedContrato, setResolvedContrato] = useState<string[]>([]);
+  const [resolvedIdentidade, setResolvedIdentidade] = useState<string[]>([]);
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -185,8 +187,8 @@ export default function PendingClientsPage() {
 
   // Resolve legal:// (private bucket) paths to signed URLs when a client is selected
   useEffect(() => {
-    setResolvedContrato(null);
-    setResolvedIdentidade(null);
+    setResolvedContrato([]);
+    setResolvedIdentidade([]);
     if (!selected) return;
     const sub = submissions[selected.id];
     const rawContrato = sub?.doc_contrato_social || selected.docContratoSocial || null;
@@ -210,7 +212,10 @@ export default function PendingClientsPage() {
       } catch { return null; }
     }
 
-    Promise.all([resolve(rawContrato), resolve(rawIdentidade)]).then(([c, i]) => {
+    const resolverTodos = async (bruto: string | null) =>
+      (await Promise.all(listaDocs(bruto).map(resolve))).filter((x): x is string => !!x);
+
+    Promise.all([resolverTodos(rawContrato), resolverTodos(rawIdentidade)]).then(([c, i]) => {
       setResolvedContrato(c);
       setResolvedIdentidade(i);
     });
@@ -258,11 +263,19 @@ export default function PendingClientsPage() {
       if (!res.ok) { setUploadError(data.error || "Erro no upload."); return; }
       const newUrl: string = data.url;
       const field = docType === "contrato_social" ? "doc_contrato_social" : "doc_identidade";
-      await supabase.from("client_onboarding_submissions").update({ [field]: newUrl }).eq("client_id", selected.id);
+      // ACUMULA. Substituir apagava a página anterior do cartão CNPJ sem avisar — o mesmo problema
+      // que o cliente tinha no formulário de cadastro.
+      const anterior = (submissions[selected.id] as Submission | undefined)?.[field] as string | undefined;
+      const valorFinal = adicionarDoc(anterior, newUrl);
+      await supabase.from("client_onboarding_submissions").update({ [field]: valorFinal }).eq("client_id", selected.id);
       setSubmissions((prev) => {
         const existing = prev[selected.id] ?? {} as Submission;
-        return { ...prev, [selected.id]: { ...existing, [field]: newUrl } };
+        return { ...prev, [selected.id]: { ...existing, [field]: valorFinal } };
       });
+      const anexar = (url: string) => {
+        if (docType === "contrato_social") setResolvedContrato((prev) => [...prev, url]);
+        else setResolvedIdentidade((prev) => [...prev, url]);
+      };
       if (newUrl.startsWith("legal://")) {
         const res2 = await authedFetch("/api/storage/signed-url", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -270,12 +283,10 @@ export default function PendingClientsPage() {
         });
         if (res2.ok) {
           const d = await res2.json();
-          if (docType === "contrato_social") setResolvedContrato(d.url ?? null);
-          else setResolvedIdentidade(d.url ?? null);
+          if (d.url) anexar(d.url as string);
         }
       } else {
-        if (docType === "contrato_social") setResolvedContrato(newUrl);
-        else setResolvedIdentidade(newUrl);
+        anexar(newUrl);
       }
     } catch {
       setUploadError("Falha na conexão. Tente novamente.");
@@ -531,41 +542,56 @@ export default function PendingClientsPage() {
                     { label: "Contrato Social", docType: "contrato_social" as const, resolved: docContrato },
                     { label: "Documento c/ Foto (RG/CNH)", docType: "identidade" as const, resolved: docIdentidade },
                   ]).map(({ label, docType, resolved }) => (
-                    <div key={docType} className={`p-3 rounded-lg border bg-card space-y-2 ${resolved ? "border-border" : "border-lone-warning-border"}`}>
+                    <div key={docType} className={`p-3 rounded-lg border bg-card space-y-2 ${resolved.length ? "border-border" : "border-lone-warning-border"}`}>
                       <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground font-medium">{label}</p>
-                        {resolved
+                        <p className="text-xs text-muted-foreground font-medium">
+                          {label}
+                          {resolved.length > 1 && (
+                            <span className="ml-1.5 text-[10px] text-muted-foreground/70">({resolved.length} arquivos)</span>
+                          )}
+                        </p>
+                        {resolved.length
                           ? <Check size={12} className="text-lone-success" />
                           : <span className="text-[10px] text-lone-warning flex items-center gap-1"><AlertTriangle size={9} /> Pendente</span>
                         }
                       </div>
-                      {resolved && resolved.match(/\.(jpg|jpeg|png|webp|heic)$/i) && (
-                        <div className="relative w-full h-24 rounded-lg overflow-hidden bg-card border border-border">
-                          <img src={resolved} alt={label} className="w-full h-full object-cover" />
+                      {/* Cada arquivo com sua miniatura e seus botões — antes só o primeiro aparecia
+                          e as outras páginas do CNPJ ficavam invisíveis pra quem revisa. */}
+                      {resolved.map((url, idx) => (
+                        <div key={idx} className="space-y-1.5">
+                          {url.match(/\.(jpg|jpeg|png|webp|heic)$/i) && (
+                            <div className="relative w-full h-24 rounded-lg overflow-hidden bg-card border border-border">
+                              <img src={url} alt={`${label} ${idx + 1}`} className="w-full h-full object-cover" />
+                            </div>
+                          )}
+                          <div className="flex gap-1.5 items-center">
+                            {resolved.length > 1 && (
+                              <span className="text-[10px] text-muted-foreground/60 w-4 shrink-0">{idx + 1}.</span>
+                            )}
+                            <button onClick={() => setLightbox(url)}
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all">
+                              <Eye size={10} /> Visualizar
+                            </button>
+                            <a href={url} download target="_blank" rel="noopener noreferrer"
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all">
+                              <Download size={10} /> Baixar
+                            </a>
+                          </div>
                         </div>
-                      )}
-                      {resolved ? (
-                        <div className="flex gap-1.5">
-                          <button onClick={() => setLightbox(resolved)}
-                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all">
-                            <Eye size={10} /> Visualizar
-                          </button>
-                          <a href={resolved} download target="_blank" rel="noopener noreferrer"
-                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-border text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all">
-                            <Download size={10} /> Baixar
-                          </a>
-                        </div>
-                      ) : null}
+                      ))}
                       {/* Upload recebido via WhatsApp */}
                       <label className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed text-[11px] transition-all cursor-pointer ${
-                        resolved
+                        resolved.length
                           ? "border-border text-muted-foreground hover:border-border hover:text-muted-foreground"
                           : "border-lone-warning-border text-lone-warning hover:border-primary/40 hover:text-foreground bg-lone-warning-bg/[0.03]"
                       }`}>
                         {uploadingDoc === docType ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
-                        {uploadingDoc === docType ? "Enviando..." : resolved ? "Substituir" : "Enviar do WhatsApp"}
-                        <input type="file" accept="image/*,.pdf,.heic,.heif" className="hidden"
-                          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAdminDocUpload(f, docType); e.target.value = ""; }} />
+                        {uploadingDoc === docType ? "Enviando..." : resolved.length ? "Adicionar outro" : "Enviar do WhatsApp"}
+                        <input type="file" accept="image/*,.pdf,.heic,.heif" multiple className="hidden"
+                          onChange={async (e) => {
+                            for (const f of Array.from(e.target.files ?? [])) await handleAdminDocUpload(f, docType);
+                            e.target.value = "";
+                          }} />
                       </label>
                     </div>
                   ))}
