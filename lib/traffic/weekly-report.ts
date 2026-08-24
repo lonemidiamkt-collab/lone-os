@@ -91,11 +91,17 @@ export async function selectActiveMetaClients(
  * (ex.: CIIL/Portuga, sem conta de anúncio vinculada).
  */
 export async function selectActiveClientsWithGroup(onlyClientId?: string | null): Promise<ReportClientRow[]> {
+  // NÃO filtra por grupo aqui de propósito. Quem chama separa em withGroup/withoutGroup e REPORTA
+  // quem ficou sem — com o filtro na query, `semGrupo` vinha sempre vazio e 4 clientes reais
+  // (Veneza Estofados, UNAFER, Varejão da Construção, Dr. Junior Vargas — todos com conta Meta)
+  // simplesmente não recebiam o relatório de segunda, sem ninguém saber. Roberto pegou na mão.
+  //
+  // `at_risk` também entra: era excluído pela lista de status, então o cliente que MAIS precisa de
+  // atenção era justamente o que parava de receber relatório.
   let q = supabaseAdmin
     .from("clients")
     .select("id, name, nome_fantasia, meta_ad_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
-    .not("whatsapp_group_jid", "is", null)
-    .in("status", ["good", "average", "onboarding"])
+    .in("status", ["good", "average", "onboarding", "at_risk"])
     .is("draft_status", null)
     .neq("active", false) // ex-clientes (churned) não recebem mensagem/relatório
     .order("nome_fantasia");

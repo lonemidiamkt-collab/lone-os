@@ -263,6 +263,27 @@ export async function POST(req: NextRequest) {
       await notifyAdminFailure(`Mensagens aos clientes (${kind}) falharam`, errors.join("\n") || "0 enviadas");
     }
 
+    // CLIENTE SEM GRUPO NÃO PODE FALHAR EM SILÊNCIO (Roberto, 24/08: "Veneza Estofados não recebeu
+    // o relatório"). A lista era calculada e nunca chegava a ninguém, porque a própria consulta já
+    // descartava quem não tinha grupo — então o relatório dizia "40 enviados, 0 falhas" enquanto
+    // 4 clientes com conta de anúncio ativa não recebiam nada. Agora o time fica sabendo.
+    if (withoutGroup.length > 0 && !onlyClientId && !dryRun) {
+      try {
+        const jidInterno = process.env.CS_INTERNAL_GROUP_JID || "";
+        if (jidInterno) {
+          const { csSendGroupText } = await import("@/lib/cs/notify");
+          await csSendGroupText(jidInterno, [
+            `⚠️ *${withoutGroup.length} ${withoutGroup.length === 1 ? "cliente ficou" : "clientes ficaram"} sem a mensagem de hoje* — falta o grupo de WhatsApp no cadastro:`,
+            withoutGroup.map((n) => `• ${n}`).join("\n"),
+            "",
+            "É só cadastrar o grupo em /clients que eles entram na próxima rodada.",
+          ].join("\n"), undefined, { origem: "clientes-sem-grupo", destino: "interno" });
+        }
+      } catch (err) {
+        console.error("[client-messages] falhou o aviso de sem-grupo:", String(err));
+      }
+    }
+
     // MODO REVISÃO: o time lê no grupo interno o que o agente escreveria pra cada cliente.
     // Sai depois do envio real pra não atrasar a entrega — e num bloco só, não uma por cliente.
     if (revisar.length) {
