@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
   // Mesma classe do bug do status `blocked`, que falhava calado no enum.
   let expiradas = 0;
   let erroExpirar: string | null = null;
+  let mortasHoje: { cliente: string; resumo: string }[] = [];
   if (!previewOnly) {
     const morta = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
     const { data: mortas, error } = await supabaseAdmin
@@ -45,9 +46,14 @@ export async function POST(req: NextRequest) {
       .update({ status: "expirada", updated_at: new Date().toISOString() })
       .eq("status", "pendente")
       .lt("created_at", morta)
-      .select("codigo");
+      .select("codigo, cliente_nome, resumo");
     if (error) erroExpirar = error.message;
-    else expiradas = mortas?.length ?? 0;
+    else {
+      expiradas = mortas?.length ?? 0;
+      mortasHoje = (mortas ?? [])
+        .filter((d) => !/\(teste\)/i.test((d.cliente_nome as string) ?? ""))
+        .map((d) => ({ cliente: (d.cliente_nome as string) || "Cliente", resumo: (d.resumo as string) || "demanda" }));
+    }
     if (erroExpirar) console.error("[cs-pendencias] falha ao expirar pendencias:", erroExpirar);
   }
 
@@ -75,6 +81,25 @@ export async function POST(req: NextRequest) {
   const msg = buildPendenciasDigest(itens);
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
 
+  // MORRER EM SILÊNCIO ERA O PIOR DESFECHO. A expiração limpava a fila sem contar a ninguém: em 60
+  // dias, 89 sugestões sumiram assim, e a checagem manual mostrou que a maioria era pedido REAL de
+  // cliente (confiança média 0.85) que nunca virou trabalho. O número só apareceu numa auditoria.
+  // Agora o time vê o que está sendo perdido, no dia em que se perde — e pode ressuscitar.
+  if (mortasHoje.length && PENDENCIAS_LIVE && internalJid && !previewOnly) {
+    const linhas = mortasHoje.slice(0, 10).map((m) => `• *${m.cliente}* — ${m.resumo.slice(0, 80)}`);
+    const texto = [
+      mortasHoje.length === 1
+        ? "🗑️ *Um pedido de cliente foi arquivado por falta de decisão* (14 dias sem ok nem não):"
+        : `🗑️ *${mortasHoje.length} pedidos de cliente foram arquivados por falta de decisão* (14 dias sem ok nem não):`,
+      "",
+      linhas.join("\n"),
+      mortasHoje.length > 10 ? `\n_e mais ${mortasHoje.length - 10}._` : "",
+      "",
+      "Se algum ainda vale, me diz o cliente e o que era que eu crio o card agora.",
+    ].filter(Boolean).join("\n");
+    await csSendGroupText(internalJid, texto, undefined, { origem: "cs-pendencias-expiradas", destino: "interno" });
+  }
+
   let postada = false;
   if (PENDENCIAS_LIVE && internalJid && !previewOnly && msg) {
     const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-pendencias", destino: "interno" });
@@ -83,5 +108,5 @@ export async function POST(req: NextRequest) {
   }
 
   console.log(`[cs-pendencias] dia=${ymd(now)} pendentes=${itens.length} postada=${postada}`);
-  return NextResponse.json({ ok: true, live: PENDENCIAS_LIVE, pendentes: itens.length, expiradas, erroExpirar, postada, preview: msg || "(nada pendente)" });
+  return NextResponse.json({ ok: true, live: PENDENCIAS_LIVE, pendentes: itens.length, expiradas, avisadas: mortasHoje.length, erroExpirar, postada, preview: msg || "(nada pendente)" });
 }
