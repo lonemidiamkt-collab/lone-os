@@ -2250,6 +2250,23 @@ export async function POST(req: NextRequest) {
         if (v.descricao) await autoAvancarPorArteNoGrupo(msg.groupJid, msg.authorName);
       })();
     }
+    // O TIME RESPONDEU: fecha a pendência aberta daquele cliente. "Bom dia" não conta — quem
+    // responde uma pergunta diz alguma coisa. Sem isto o alerta cobraria resposta já dada.
+    if (msg.text?.trim()) {
+      void (async () => {
+        try {
+          const { data: cl } = await supabaseAdmin.from("clients")
+            .select("id").eq("whatsapp_group_jid", msg.groupJid).limit(1).maybeSingle();
+          if (!cl?.id) return;
+          const { fecharPorResposta } = await import("@/lib/cs/requests");
+          const n = await fecharPorResposta({
+            clientId: cl.id as string, texto: msg.text,
+            messageId: msg.messageId, autor: msg.authorName ?? undefined,
+          });
+          if (n) console.log(`[CS/requests] time respondeu — ${n} pendência(s) fechada(s)`);
+        } catch (err) { console.error("[CS/requests] fechar falhou:", String(err)); }
+      })();
+    }
     return NextResponse.json({ ok: true, skip: "autor = equipe Lone" });
   }
   // O grupo INTERNO é coordenação da equipe — nada aqui é demanda de cliente (já passou pelos
@@ -2603,6 +2620,24 @@ export async function POST(req: NextRequest) {
     if (!temporario) await sincronizarBriefingAprendido(c.id as string); // fato durável → enriquece o briefing
     if (internalJid) await csSendGroupText(internalJid, `🧠 Anotei do *${clienteNome}*: _${texto}_ — vou lembrar disso.${temporario ? " (por 2 semanas — parece coisa temporária)" : ""}`);
     console.log(`[CS/inbound] info_operacional → memória (${clienteNome}): ${texto}`);
+  }
+
+  // ─── A PERGUNTA DO CLIENTE VIRA PENDÊNCIA COM PRAZO ─────────────────────────
+  // Uma mensagem é algo que aconteceu; uma pendência continua existindo até alguém resolver. Sem
+  // esta linha, "está aberto há 37 minutos e ninguém assumiu" precisava ser reconstruído do
+  // histórico toda vez. Roda em paralelo à classificação: não muda nada do que já acontece hoje,
+  // só passa a registrar o estado. Só abre no expediente e uma por cliente por vez.
+  if (c.id && msg.text?.trim()) {
+    void (async () => {
+      try {
+        const { abrirRequest } = await import("@/lib/cs/requests");
+        const id = await abrirRequest({
+          clientId: c.id as string, groupJid: msg.groupJid, messageId: msg.messageId,
+          texto: msg.text, autor: msg.authorName ?? undefined,
+        });
+        if (id) console.log(`[CS/requests] pendência aberta (${clienteNome}): ${msg.text.slice(0, 60)}`);
+      } catch (err) { console.error("[CS/requests] abrir falhou:", String(err)); }
+    })();
   }
 
   // ─── CORREÇÃO DO CLIENTE VIRA REGRA ─────────────────────────────────────────
