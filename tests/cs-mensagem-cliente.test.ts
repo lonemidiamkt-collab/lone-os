@@ -3,14 +3,20 @@
 import { describe, it, expect } from "vitest";
 import { revisarMensagem, temAssunto, descreverSinais, escolherFoco, variacaoPara, type SinaisCliente } from "@/lib/cs/mensagem-cliente";
 
-const sem: SinaisCliente = {
+/** Base neutra — cada teste sobrescreve só o sinal que está exercitando. Com literais soltos,
+ *  todo sinal novo quebrava os testes por omissão em vez de por comportamento. */
+const BASE: SinaisCliente = {
   aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 0, diasSemFalar: 2,
   promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: null, pedirProdutosHoje: false,
+  conversasDoAnuncio: null, melhorDia: null,
 };
-const com: SinaisCliente = {
-  aguardandoAprovacao: 2, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 3, diasSemFalar: 4,
-  promoDoMesSemResposta: true, destaqueIg: { curtidas: 41, comentarios: 6 }, postsNaSemana: 3, pedirProdutosHoje: false,
-};
+const sinais = (over: Partial<SinaisCliente> = {}): SinaisCliente => ({ ...BASE, ...over });
+
+const sem: SinaisCliente = sinais();
+const com: SinaisCliente = sinais({
+  aguardandoAprovacao: 2, entreguesNaSemana: 3, diasSemFalar: 4,
+  promoDoMesSemResposta: true, destaqueIg: { curtidas: 41, comentarios: 6 }, postsNaSemana: 3,
+});
 
 describe("temAssunto", () => {
   it("cliente sem nada acontecendo → não força papo", () => {
@@ -87,10 +93,9 @@ describe("revisarMensagem — guarda-corpos", () => {
 
 // ── Furos achados na PRIMEIRA revisão com dados reais (12 clientes) ──────────────
 describe("revisarMensagem — furos vistos na revisão real", () => {
-  const semArte: SinaisCliente = {
-    aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 1, diasSemFalar: 3,
-    promoDoMesSemResposta: true, destaqueIg: null, postsNaSemana: 2, pedirProdutosHoje: false,
-  };
+  const semArte: SinaisCliente = sinais({
+    entreguesNaSemana: 1, diasSemFalar: 3, promoDoMesSemResposta: true, postsNaSemana: 2,
+  });
 
   it("BARRA 'arte esperando seu OK' quando não há nenhuma (a IA inventou isso pro Bruno Tintas)", () => {
     const r = revisarMensagem("Oi, pessoal! Temos uma arte esperando seu OK pra publicar.", semArte);
@@ -120,10 +125,7 @@ describe("revisarMensagem — furos vistos na revisão real", () => {
 // "entregamos uma arte e publicamos 2 posts, MAS ainda estamos curiosos sobre a promoção".
 // A correção é estrutural: o código escolhe UM objetivo e a IA só vê os fatos daquele objetivo.
 describe("escolherFoco — uma mensagem, um propósito", async () => {
-  const zerado: SinaisCliente = {
-    aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 0, diasSemFalar: 2,
-    promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: 0, pedirProdutosHoje: false,
-  };
+  const zerado: SinaisCliente = sinais({ postsNaSemana: 0 });
 
   it("sem assunto nenhum → PRESENÇA (o Roberto pediu: bom dia, estamos de olho, à disposição)", async () => {
     const f = await escolherFoco(zerado)!;
@@ -213,11 +215,7 @@ describe("variacaoPara — quarta e sexta não repetem a mesma frase", () => {
 // SEGUNDA DE LOJA (construção/varejo): perguntar o que chegou de novo é o que alimenta o conteúdo
 // da semana. O risco é a pergunta atropelar assunto mais urgente — ou ir pra quem sumiu do grupo.
 describe("pedido de produto/preço na segunda", () => {
-  const base = {
-    aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null,
-    entreguesNaSemana: 0, diasSemFalar: 2, promoDoMesSemResposta: false,
-    destaqueIg: null, postsNaSemana: 0, pedirProdutosHoje: true,
-  };
+  const base = sinais({ postsNaSemana: 0, pedirProdutosHoje: true });
 
   it("na segunda, em loja marcada, o assunto é produto novo", async () => {
     const f = await escolherFoco({ ...base });
@@ -237,5 +235,37 @@ describe("pedido de produto/preço na segunda", () => {
   it("cliente fora da lista não recebe a pergunta", async () => {
     const f = await escolherFoco({ ...base, pedirProdutosHoje: false });
     expect(f?.objetivo).not.toBe("produtos_semana");
+  });
+});
+
+// ── Resultado do anúncio como assunto (Roberto, 24/08) ──────────────────────────
+// O sistema media quantas conversas o anúncio gerou e escrevia ao cliente sem citar. O exemplo que
+// ele deu: "Sim Vanessa, tivemos mais de 30 mensagens hoje! a loja como está?".
+describe("resultado do anúncio", () => {
+  it("com conversas suficientes, o assunto é o resultado — e vem antes do post", async () => {
+    const f = await escolherFoco(sinais({ conversasDoAnuncio: 49, destaqueIg: { curtidas: 41, comentarios: 6 } }));
+    expect(f?.objetivo).toBe("resultado_anuncio");
+    expect(f?.fatos.join(" ")).toContain("49 conversas");
+  });
+
+  it("o melhor dia entra como segundo fato, quando existe", async () => {
+    const f = await escolherFoco(sinais({ conversasDoAnuncio: 49, melhorDia: { dia: "terça-feira", conversas: 14 } }));
+    expect(f?.fatos.join(" ")).toContain("terça-feira");
+  });
+
+  it("cliente sem tráfego não vira assunto de anúncio", async () => {
+    const f = await escolherFoco(sinais({ conversasDoAnuncio: null, postsNaSemana: 2 }));
+    expect(f?.objetivo).not.toBe("resultado_anuncio");
+  });
+
+  it("arte parada continua ganhando do resultado — trabalho esperando o cliente custa mais", async () => {
+    const f = await escolherFoco(sinais({ conversasDoAnuncio: 49, aguardandoAprovacao: 2 }));
+    expect(f?.objetivo).toBe("aprovar_arte");
+  });
+
+  it("o número citado é sempre o medido, nunca arredondado", async () => {
+    const f = await escolherFoco(sinais({ conversasDoAnuncio: 37 }));
+    expect(f?.fatos.join(" ")).toContain("37");
+    expect(f?.fatos.join(" ")).not.toMatch(/mais de|cerca de|aproximadamente|quase/);
   });
 });

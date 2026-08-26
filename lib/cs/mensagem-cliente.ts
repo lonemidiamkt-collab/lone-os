@@ -40,6 +40,11 @@ export interface SinaisCliente {
   postsNaSemana: number | null;
   /** Loja de construção/varejo E hoje é segunda: o assunto da semana é produto/preço novo. */
   pedirProdutosHoje: boolean;
+  /** Conversas que o anúncio gerou nos últimos 7 dias, do snapshot diário da Meta. null = cliente
+   *  sem tráfego, ou sem número confiável. NUNCA estimado — é a soma do que foi medido. */
+  conversasDoAnuncio: number | null;
+  /** Dia da semana com mais conversas, quando há um pico claro. Assunto melhor que o total. */
+  melhorDia: { dia: string; conversas: number } | null;
 }
 
 /** Engajamento mínimo (curtidas + comentários) pra um post virar "destaque da semana". */
@@ -48,13 +53,20 @@ const DESTAQUE_MINIMO = 10;
 const VAZIO: SinaisCliente = {
   aguardandoAprovacao: 0, aprovouRecentemente: false, esperandoDesde: null, entreguesNaSemana: 0, diasSemFalar: null,
   promoDoMesSemResposta: false, destaqueIg: null, postsNaSemana: null, pedirProdutosHoje: false,
+  conversasDoAnuncio: null, melhorDia: null,
 };
+
+/** Abaixo disso não vira assunto: "tivemos 2 conversas essa semana" soa a desculpa, não a resultado. */
+const CONVERSAS_MINIMO = 8;
 
 /** Junta os sinais de UM cliente. Nunca lança — sem sinal, a mensagem cai no texto neutro. */
 export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
   try {
     const seteDias = new Date(Date.now() - 7 * 86400000).toISOString();
-    const [cards, cli, igRow, calendario] = await Promise.all([
+    // Métrica de anúncio dos últimos 7 dias. A varredura grava uma linha por cliente/dia a cada
+    // 15 min; aqui só somamos o que já foi medido — nada é estimado ou projetado.
+    const seteDiasData = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const [cards, cli, igRow, calendario, metricas] = await Promise.all([
       supabaseAdmin.from("content_cards")
         .select("status, designer_delivered_at, client_approved_at, status_changed_at")
         .eq("client_id", clientId).is("archived_at", null),
@@ -63,6 +75,9 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
       supabaseAdmin.from("client_group_message_log")
         .select("sent_at").eq("client_id", clientId).eq("kind", "calendar").eq("status", "sent")
         .order("sent_at", { ascending: false }).limit(1),
+      supabaseAdmin.from("metric_snapshots")
+        .select("metric_date, conversions").eq("client_id", clientId)
+        .gte("metric_date", seteDiasData).order("metric_date", { ascending: false }),
     ]);
 
     const linhas = (cards.data ?? []) as { status: string; designer_delivered_at: string | null; client_approved_at: string | null; status_changed_at: string | null }[];
@@ -77,6 +92,20 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
       .map((c) => c.status_changed_at as string).sort();
     const esperandoDesde = esperando[0] ?? null;
     const entreguesNaSemana = linhas.filter((c) => c.designer_delivered_at && c.designer_delivered_at >= seteDias).length;
+
+    // ── Resultado do anúncio ──────────────────────────────────────────────────
+    // O sistema sabia quantas conversas o anúncio gerou e escrevia ao cliente sem citar. Agora o
+    // número entra como FATO — e só quando é grande o bastante pra ser notícia boa.
+    const dias = (metricas.data ?? []) as { metric_date: string; conversions: number | null }[];
+    const totalConversas = dias.reduce((acc, d) => acc + (Number(d.conversions) || 0), 0);
+    const conversasDoAnuncio = totalConversas >= CONVERSAS_MINIMO ? totalConversas : null;
+
+    // O melhor dia é assunto melhor que o total: dá pra perguntar o que aconteceu naquele dia.
+    const topoDia = [...dias].sort((a, b) => (Number(b.conversions) || 0) - (Number(a.conversions) || 0))[0];
+    const melhorDia = conversasDoAnuncio !== null && topoDia && (Number(topoDia.conversions) || 0) >= CONVERSAS_MINIMO / 2
+      ? { dia: new Date(`${topoDia.metric_date}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long", timeZone: "America/Sao_Paulo" }),
+          conversas: Number(topoDia.conversions) || 0 }
+      : null;
 
     const ultimaMsg = (cli.data?.last_client_msg_at as string | null) ?? null;
     const diasSemFalar = ultimaMsg ? Math.floor((Date.now() - new Date(ultimaMsg).getTime()) / 86400000) : null;
@@ -106,6 +135,7 @@ export async function coletarSinais(clientId: string): Promise<SinaisCliente> {
       aguardandoAprovacao, aprovouRecentemente, esperandoDesde, entreguesNaSemana, diasSemFalar, promoDoMesSemResposta, destaqueIg,
       postsNaSemana: ig?.resumo?.postsNoPeriodo ?? null,
       pedirProdutosHoje: ehSegunda && !!cli.data?.pergunta_produtos_semana,
+      conversasDoAnuncio, melhorDia,
     };
   } catch {
     return VAZIO;
@@ -221,6 +251,7 @@ export type Objetivo =
   | "comemorar_post"    // um post foi bem de verdade
   | "oferecer_proximo"  // a semana rendeu; puxa o que vem agora
   | "produtos_semana"   // SEGUNDA, loja de construção/varejo: o que chegou de novo e a que preço
+  | "resultado_anuncio" // o anúncio deu conversa de verdade: fala do resultado e puxa o negócio
   | "presenca";         // nada pendente: mostra que a gente está de olho e disponível
 
 /**
@@ -258,6 +289,15 @@ const VARIACOES: Record<Objetivo, string[]> = {
     "Pergunte como está o movimento na loja.",
     "Pergunte se tem alguma novidade por aí que valha divulgar.",
     "Diga que faz um tempo que não conversam e pergunte como estão as coisas.",
+  ],
+  // RESULTADO DO ANÚNCIO. A pergunta vem sempre voltada pro NEGÓCIO dele, não pro anúncio: o
+  // número a agência já tem, o que falta saber é se aquilo virou venda do outro lado do balcão.
+  resultado_anuncio: [
+    "Conte o número de conversas e pergunte como isso está chegando na loja.",
+    "Diga quantas conversas os anúncios trouxeram e pergunte se o movimento acompanhou.",
+    "Comente o resultado da semana e pergunte se o time está dando conta do atendimento.",
+    "Fale do melhor dia e pergunte o que ele acha que puxou o movimento naquele dia.",
+    "Traga o número e pergunte se o perfil de quem está chamando é o cliente que ele quer.",
   ],
   comemorar_post: [
     "Comemore o resultado e pergunte se ele quer mais conteúdo nessa linha.",
@@ -348,7 +388,21 @@ export async function escolherFoco(s: SinaisCliente, clientId?: string): Promise
       missao: "Puxar conversa com carinho e perguntar como está o movimento da loja. SEM cobrar, sem citar os dias.",
     };
   }
-  // 3. Post que foi bem de verdade (o piso de destaque já filtrou os fracos).
+  // 3. RESULTADO DO ANÚNCIO. Vem antes do post porque conversa gerada é dinheiro entrando; curtida
+  // é sinal. O número sai do que a varredura mediu — se não houver, este bloco nem existe.
+  if (s.conversasDoAnuncio !== null) {
+    const fatos = [`os anúncios geraram ${s.conversasDoAnuncio} conversas no WhatsApp nos últimos 7 dias`];
+    if (s.melhorDia) fatos.push(`o melhor dia foi ${s.melhorDia.dia}, com ${s.melhorDia.conversas} conversas`);
+    return {
+      objetivo: "resultado_anuncio",
+      fatos,
+      // A pergunta é a parte que importa: número sem pergunta é relatório, e ele já recebe um na
+      // segunda. O que a agência não sabe é o que aconteceu do outro lado — se virou venda.
+      missao: "Contar o resultado em UMA frase e perguntar como está chegando na loja: se o movimento "
+        + "acompanhou, se o atendimento está dando conta. Sem prometer nada e sem falar de verba.",
+    };
+  }
+  // 4. Post que foi bem de verdade (o piso de destaque já filtrou os fracos).
   if (s.destaqueIg) {
     return {
       objetivo: "comemorar_post",
@@ -356,7 +410,7 @@ export async function escolherFoco(s: SinaisCliente, clientId?: string): Promise
       missao: "Comemorar esse resultado e perguntar se ele quer explorar mais esse tipo de conteúdo.",
     };
   }
-  // 4. Promoção do mês sem resposta — pergunta que a gente precisa da resposta.
+  // 5. Promoção do mês sem resposta — pergunta que a gente precisa da resposta.
   if (s.promoDoMesSemResposta) {
     return {
       objetivo: "promo_do_mes",
@@ -364,7 +418,7 @@ export async function escolherFoco(s: SinaisCliente, clientId?: string): Promise
       missao: "Retomar a pergunta da promoção do mês, uma vez, com jeito. É a única coisa da mensagem.",
     };
   }
-  // 5. Rendeu a semana: reconhece e oferece o próximo.
+  // 6. Rendeu a semana: reconhece e oferece o próximo.
   if (s.entreguesNaSemana > 0 || (s.postsNaSemana ?? 0) > 0) {
     const f: string[] = [];
     if (s.entreguesNaSemana > 0) f.push(`${s.entreguesNaSemana} arte(s) entregue(s) nos últimos 7 dias`);
@@ -375,7 +429,7 @@ export async function escolherFoco(s: SinaisCliente, clientId?: string): Promise
       missao: "Reconhecer o movimento da semana em UMA frase e perguntar o que ele quer divulgar na próxima.",
     };
   }
-  // 6. PRESENÇA — nada pendente e ele está respondendo. Em vez do texto genérico de antes, a
+  // 7. PRESENÇA — nada pendente e ele está respondendo. Em vez do texto genérico de antes, a
   // mensagem mostra que a equipe está de olho e disponível. Foi o que o Roberto pediu pra quem
   // JÁ APROVOU: não citar arte, dar bom dia, falar do fechamento da semana, reforçar que a gente
   // acompanha a campanha e que estamos aqui pro que precisar.
