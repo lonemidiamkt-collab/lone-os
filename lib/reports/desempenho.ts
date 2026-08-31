@@ -22,17 +22,45 @@ export interface BlocoFuncao {
 
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0);
 
-/** Semana fechada: segunda a domingo anteriores. Sexta olhando pra trás vê a semana inteira. */
+/**
+ * A semana que está FECHANDO, em horário de Brasília.
+ *
+ * O relatório sai na sexta à tarde, quando a semana corrente (seg→sex) acabou de acontecer — essa é
+ * a janela certa ali. Mas rodando em qualquer outro dia, "esta semana" pode ser um pedaço vazio: o
+ * primeiro teste, feito numa segunda de manhã, deu "31/08 a 06/09" e o PDF saiu com zero pessoas
+ * porque a semana tinha acabado de começar. Sexta e sábado olham a semana corrente; qualquer outro
+ * dia olha a última semana completa.
+ *
+ * Tudo aqui é aritmética de CALENDÁRIO (dia a dia), nunca de milissegundos: a máquina de
+ * desenvolvimento roda em America/Santiago, que troca o relógio no começo de setembro, e um
+ * `- 864e5` atravessando essa fronteira devolvia o dia errado. O fim da janela é montado com o
+ * offset fixo de Brasília (−03:00, sem horário de verão desde 2019) em vez de `toISOString()` sobre
+ * uma data local, que no VPS em UTC apontaria para as 21h do dia anterior.
+ */
 export function janelaSemana(agora = new Date()): { de: string; ate: string; rotulo: string } {
-  const hoje = new Date(agora.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-  const diaSem = hoje.getDay();               // 0=dom
-  const segunda = new Date(hoje);
-  segunda.setDate(hoje.getDate() - ((diaSem + 6) % 7)); // segunda desta semana
-  segunda.setHours(0, 0, 0, 0);
-  const fim = new Date(segunda); fim.setDate(segunda.getDate() + 7);
-  const f = (d: Date) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-  return { de: segunda.toISOString(), ate: fim.toISOString(), rotulo: `${f(segunda)} a ${f(new Date(fim.getTime() - 864e5))}` };
+  const emSp = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric", month: "2-digit", day: "2-digit", weekday: "short",
+  }).formatToParts(agora);
+  const parte = (t: string) => emSp.find((p) => p.type === t)!.value;
+  const DIAS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const diaSem = DIAS.indexOf(parte("weekday"));
+
+  // UTC como calendário puro: sem fuso, sem DST, só contas de dia.
+  const hoje = new Date(Date.UTC(+parte("year"), +parte("month") - 1, +parte("day")));
+  const recuo = ((diaSem + 6) % 7) + (diaSem === 5 || diaSem === 6 ? 0 : 7);
+  const segunda = new Date(hoje); segunda.setUTCDate(hoje.getUTCDate() - recuo);
+  const domingo = new Date(segunda); domingo.setUTCDate(segunda.getUTCDate() + 6);
+
+  const iso = (d: Date, hora: string) => `${d.toISOString().slice(0, 10)}T${hora}-03:00`;
+  const f = (d: Date) => `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  return {
+    de: new Date(iso(segunda, "00:00:00")).toISOString(),
+    ate: new Date(iso(domingo, "23:59:59")).toISOString(),
+    rotulo: `${f(segunda)} a ${f(domingo)}`,
+  };
 }
+
 
 // ── DESIGNER ────────────────────────────────────────────────────────────────
 // O que dói hoje: 27% das artes voltam. O resto está saudável (1 dia de entrega, 85% no prazo).
