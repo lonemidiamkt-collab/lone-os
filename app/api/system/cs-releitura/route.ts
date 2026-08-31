@@ -66,8 +66,11 @@ export async function POST(req: NextRequest) {
     const [cardsRes, reworkRes, comentRes] = await Promise.all([
       supabaseAdmin.from("content_cards")
         .select("id, title, briefing, designer_delivered_at, client_approved_at, created_at")
-        .eq("client_id", clientId).gte("created_at", desde).is("archived_at", null)
-        .order("created_at", { ascending: false }).limit(40),
+        // INCLUI ARQUIVADOS. Arquivar é o que se faz DEPOIS de publicar — 445 dos 517 cards de 90
+        // dias estão assim. Filtrar por archived_at null deixava a releitura lendo só o trabalho em
+        // andamento e ignorando 86% da história, que é exatamente o que uma releitura existe pra ler.
+        .eq("client_id", clientId).gte("created_at", desde)
+        .order("created_at", { ascending: false }).limit(60),
       supabaseAdmin.from("cs_rework_events")
         .select("card_id, reason, created_at").eq("client_id", clientId)
         .gte("created_at", desde).not("reason", "is", null).order("created_at", { ascending: true }),
