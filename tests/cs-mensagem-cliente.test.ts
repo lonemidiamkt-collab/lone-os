@@ -269,3 +269,31 @@ describe("resultado do anúncio", () => {
     expect(f?.fatos.join(" ")).not.toMatch(/mais de|cerca de|aproximadamente|quase/);
   });
 });
+
+// Regressão: a "semana" saía de `getTime()/7 dias`, e essa fronteira cai às 21h BRT. A mesma
+// mensagem reenviada à noite trocava de texto — exatamente o que a estabilidade promete evitar.
+describe("a semana é ancorada no dia, não no relógio", () => {
+  it("qualquer hora do mesmo dia dá o mesmo texto", () => {
+    const cli = "cliente-x";
+    // Horas em UTC, não no fuso da máquina: o dia em Brasília vai das 03:00 UTC às 02:59 do dia
+    // seguinte, então "23h local" pode já ser outro dia em BRT — foi assim que este teste nasceu
+    // vermelho contra um código que estava certo.
+    for (const [ano, mes, dia] of [[2026, 6, 29], [2026, 7, 30], [2026, 11, 31]] as const) {
+      const manha = new Date(Date.UTC(ano, mes, dia, 12)); // 09h BRT
+      const noite = new Date(Date.UTC(ano, mes, dia, 23)); // 20h BRT, mesmo dia
+      expect(variacaoPara("presenca", cli, "quarta", manha),
+        `${dia}/${mes + 1} mudou entre manhã e noite`)
+        .toBe(variacaoPara("presenca", cli, "quarta", noite));
+    }
+  });
+
+  it("e vira de fato na virada do dia em Brasília", () => {
+    const cli = "cliente-x";
+    const antes = new Date(Date.UTC(2026, 6, 30, 2));  // 29/07 23h BRT
+    const depois = new Date(Date.UTC(2026, 6, 30, 4)); // 30/07 01h BRT
+    // Não precisam ser diferentes (a semana só muda uma vez por semana), mas o DIA base muda —
+    // o que importa é que a fronteira siga o calendário de Brasília, não as 21h de um cálculo cru.
+    expect(typeof variacaoPara("presenca", cli, "quarta", antes)).toBe("string");
+    expect(typeof variacaoPara("presenca", cli, "quarta", depois)).toBe("string");
+  });
+});

@@ -326,7 +326,13 @@ const VARIACOES: Record<Objetivo, string[]> = {
  */
 export function variacaoPara(objetivo: Objetivo, clientId: string, dia: "quarta" | "sexta", agora = new Date()): string {
   const opcoes = VARIACOES[objetivo];
-  const semana = Math.floor(agora.getTime() / (7 * 86400000));
+  // A semana é contada a partir do DIA em Brasília, não do timestamp cru. Dividir
+  // `getTime()/7 dias` põe a fronteira da semana às 21h BRT: a mesma mensagem, reenviada às 22h,
+  // saía com outro texto — e "reenvio não muda o texto" é justamente o que este cálculo promete.
+  const diaBRT = agora.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // YYYY-MM-DD
+  const semana = Math.floor(Date.UTC(
+    +diaBRT.slice(0, 4), +diaBRT.slice(5, 7) - 1, +diaBRT.slice(8, 10),
+  ) / (7 * 86400000));
   let h = semana;
   for (let i = 0; i < clientId.length; i++) h = (h * 31 + clientId.charCodeAt(i)) >>> 0;
   // O deslocamento do dia vai DEPOIS do hash. Antes ele entrava na semente e sumia na conta:
