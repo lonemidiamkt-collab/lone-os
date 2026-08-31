@@ -24,12 +24,15 @@ import { csSendGroupDocument, csSendGroupText } from "@/lib/cs/notify";
 // veja primeiro. O do CEO fala da operação, não de quem.
 //
 // ?dry=1 gera e devolve sem enviar · ?quem=ceo|funcao · ?jid= manda pra um grupo específico
+// ?baixar=ceo|<nome da pessoa> devolve aquele PDF em vez de enviar — é como se confere o documento
+//   antes que ele chegue num grupo. Sem isso, a única forma de ver o que sai era disparando.
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req); if (denied) return denied;
   const dry = req.nextUrl.searchParams.get("dry") !== null;
   const quem = req.nextUrl.searchParams.get("quem") || "ambos";
   const jidManual = req.nextUrl.searchParams.get("jid") || "";
+  const baixar = (req.nextUrl.searchParams.get("baixar") || "").trim().toLowerCase();
 
   const { de, ate, rotulo } = janelaSemana();
   const logo = await loadLoneLogo().catch(() => "");
@@ -41,7 +44,12 @@ export async function POST(req: NextRequest) {
     const v = await visaoCeo(de, ate, rotulo);
     const pdf = await htmlToPdf(ceoPdfHtml(v, logo));
     if (!pdf.ok || !pdf.buffer) erros.push(`CEO: ${pdf.error}`);
-    else if (!dry) {
+    else if (baixar === "ceo") {
+      return new NextResponse(new Uint8Array(pdf.buffer), {
+        headers: { "content-type": "application/pdf",
+          "content-disposition": `inline; filename="ceo-${rotulo.replace(/[^0-9]/g, "")}.pdf"` },
+      });
+    } else if (!dry) {
       // Grupo administrativo. Sem ele configurado, NÃO cai em outro grupo: o resumo tem número de
       // negócio e não pode vazar pro grupo errado por falta de config.
       const jid = jidManual || process.env.CS_ADM_GROUP_JID || "";
@@ -62,7 +70,13 @@ export async function POST(req: NextRequest) {
     for (const b of blocos) {
       const pdf = await htmlToPdf(funcaoPdfHtml(b, rotulo, logo));
       if (!pdf.ok || !pdf.buffer) { erros.push(`${b.pessoa}: ${pdf.error}`); continue; }
-      if (dry) { enviados.push(`${b.pessoa} (dry)`); continue; }
+      if (baixar && b.pessoa.toLowerCase().includes(baixar)) {
+        return new NextResponse(new Uint8Array(pdf.buffer), {
+          headers: { "content-type": "application/pdf",
+            "content-disposition": `inline; filename="${b.pessoa.replace(/\s+/g, "-")}.pdf"` },
+        });
+      }
+      if (dry || baixar) { enviados.push(`${b.pessoa} (dry)`); continue; }
       if (!jid) { erros.push(`${b.pessoa}: grupo da equipe não configurado`); continue; }
       const r = await csSendGroupDocument(jid, pdf.buffer.toString("base64"),
         `${b.pessoa} - semana ${rotulo.replace(/\//g, "-")}.pdf`,
