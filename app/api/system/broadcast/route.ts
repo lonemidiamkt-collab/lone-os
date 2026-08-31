@@ -73,10 +73,23 @@ export async function POST(req: NextRequest) {
     : porAudiencia;
   const excluidos = porAudiencia.length - alvo.length;
 
+  // Duas fichas podem apontar pro MESMO grupo (Bazar Ribeiro Maricá e Saquarema dividem um só). O
+  // envio real já cobre isso mais abaixo, com `gruposFalados` — mas a prévia contava FICHAS, e é a
+  // prévia que alguém lê pra autorizar o disparo. Anunciar 42 e entregar 41 faz o relatório final
+  // parecer uma falha que não houve; pior, esconde que duas contas dividem um grupo.
   if (dryRun) {
+    const porJid = new Map<string, string[]>();
+    for (const c of alvo) {
+      const jid = c.whatsapp_group_jid!;
+      porJid.set(jid, [...(porJid.get(jid) ?? []), clientDisplayName(c)]);
+    }
+    const compartilhados = [...porJid.values()].filter((nomes) => nomes.length > 1);
     return NextResponse.json({
       ok: true, status: "dry_run", audiencia, chave,
-      receberiam: alvo.length, clientes: alvo.map(clientDisplayName), texto,
+      receberiam: porJid.size,          // grupos que recebem a mensagem — o número que importa
+      fichas: alvo.length,              // cadastros na audiência, pode ser maior
+      grupos_compartilhados: compartilhados.map((nomes) => nomes.join(" + ")),
+      clientes: alvo.map(clientDisplayName), texto,
     });
   }
 
