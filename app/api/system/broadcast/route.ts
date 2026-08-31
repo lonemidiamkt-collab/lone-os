@@ -5,6 +5,10 @@
 //
 //   ?dryRun=1        → mostra quem receberia e o texto, não envia
 //   ?audiencia=      → trafego (só quem tem conta de anúncio) | social | todos   [padrão: todos]
+//   ?excluir=        → nomes a tirar da lista, separados por vírgula (casa por trecho do nome).
+//                      Ex: excluir=Dumar,Bruno Tintas Iguaba — porque "tem conta de anúncio" não é
+//                      o mesmo que "faz tráfego com a gente", e conferir a lista antes de disparar
+//                      é a regra da casa.
 //   ?chave=          → identificador do disparo (idempotência). Ex: "fim-de-mes-2026-07"
 //   body { texto }   → a mensagem
 //
@@ -38,6 +42,8 @@ export async function POST(req: NextRequest) {
   const url = new URL(req.url);
   const dryRun = url.searchParams.get("dryRun") === "1";
   const audiencia = url.searchParams.get("audiencia") || "todos";
+  const excluir = (url.searchParams.get("excluir") || "")
+    .split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
   const chave = (url.searchParams.get("chave") || "").trim();
   const body = await req.json().catch(() => ({}));
   const texto = ((body?.texto as string) || "").trim();
@@ -55,9 +61,17 @@ export async function POST(req: NextRequest) {
   const clientes = await selectActiveClientsWithGroup();
   const comGrupo = clientes.filter((c) => c.whatsapp_group_jid);
 
-  const alvo = audiencia === "trafego" ? comGrupo.filter((c) => c.meta_ad_account_id)
+  const porAudiencia = audiencia === "trafego" ? comGrupo.filter((c) => c.meta_ad_account_id)
     : audiencia === "social" ? comGrupo.filter((c) => !c.meta_ad_account_id)
     : comGrupo;
+
+  // Tira quem foi excluído na mão. O filtro de audiência é grosso por natureza — "tem conta de
+  // anúncio" pega cliente de social que tem conta parada, e cliente pausado há semanas. Quem
+  // dispara confere a lista e nomeia as exceções.
+  const alvo = excluir.length
+    ? porAudiencia.filter((c) => !excluir.some((e) => clientDisplayName(c).toLowerCase().includes(e)))
+    : porAudiencia;
+  const excluidos = porAudiencia.length - alvo.length;
 
   if (dryRun) {
     return NextResponse.json({
