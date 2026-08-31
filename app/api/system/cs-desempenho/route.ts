@@ -1,0 +1,89 @@
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 600;
+
+import { NextRequest, NextResponse } from "next/server";
+import { requireCron } from "@/lib/api/cron-guard";
+import { janelaSemana, desempenhoDesigner, desempenhoSocial, desempenhoTrafego, visaoCeo } from "@/lib/reports/desempenho";
+import { ceoPdfHtml, funcaoPdfHtml } from "@/lib/reports/desempenhoPdf";
+import { loadLoneLogo } from "@/lib/cs/roteiro-pdf";
+import { htmlToPdf } from "@/lib/traffic/renderPdf";
+import { csSendGroupDocument, csSendGroupText } from "@/lib/cs/notify";
+
+// POST /api/system/cs-desempenho — o PDF de desempenho da semana.
+//
+// PRA QUE (Roberto, 31/08): "toda sexta um PDF pros funcionários e pra mim, mostrando o desempenho
+// deles, personalizado de acordo com a função". E: "muito textão nos grupos — algumas coisas podem
+// ser PDF".
+//
+// Duas peças da mesma base:
+//   CEO     → o que está bom / o que preocupa, SEM nome de pessoa. Vai pro grupo administrativo.
+//   FUNÇÃO  → o cartão de cada pessoa, com as metas da função dela. Vai pro grupo da equipe.
+//
+// A separação é deliberada: número que expõe pessoa não vai pro grupo de todo mundo sem que ela
+// veja primeiro. O do CEO fala da operação, não de quem.
+//
+// ?dry=1 gera e devolve sem enviar · ?quem=ceo|funcao · ?jid= manda pra um grupo específico
+
+export async function POST(req: NextRequest) {
+  const denied = requireCron(req); if (denied) return denied;
+  const dry = req.nextUrl.searchParams.get("dry") !== null;
+  const quem = req.nextUrl.searchParams.get("quem") || "ambos";
+  const jidManual = req.nextUrl.searchParams.get("jid") || "";
+
+  const { de, ate, rotulo } = janelaSemana();
+  const logo = await loadLoneLogo().catch(() => "");
+  const enviados: string[] = [];
+  const erros: string[] = [];
+
+  // ── CEO ──
+  if (quem === "ceo" || quem === "ambos") {
+    const v = await visaoCeo(de, ate, rotulo);
+    const pdf = await htmlToPdf(ceoPdfHtml(v, logo));
+    if (!pdf.ok || !pdf.buffer) erros.push(`CEO: ${pdf.error}`);
+    else if (!dry) {
+      // Grupo administrativo. Sem ele configurado, NÃO cai em outro grupo: o resumo tem número de
+      // negócio e não pode vazar pro grupo errado por falta de config.
+      const jid = jidManual || process.env.CS_ADM_GROUP_JID || "";
+      if (!jid) erros.push("CEO: grupo administrativo não configurado (CS_ADM_GROUP_JID)");
+      else {
+        const r = await csSendGroupDocument(jid, pdf.buffer.toString("base64"),
+          `Semana ${rotulo.replace(/\//g, "-")} - Lone Midia.pdf`,
+          `📊 *Resumo da semana* — ${rotulo}\n${v.bom.length} ponto(s) positivo(s) · ${v.preocupa.length} ponto(s) de atenção`);
+        if (r.ok) enviados.push("ceo"); else erros.push(`CEO: ${r.error}`);
+      }
+    } else enviados.push(`ceo (dry, ${pdf.buffer?.length ?? 0} bytes)`);
+  }
+
+  // ── POR FUNÇÃO ──
+  const blocos = [...await desempenhoDesigner(de, ate), ...await desempenhoSocial(de, ate)];
+  if (quem === "funcao" || quem === "ambos") {
+    const jid = jidManual || process.env.CS_TEAM_GROUP_JID || "";
+    for (const b of blocos) {
+      const pdf = await htmlToPdf(funcaoPdfHtml(b, rotulo, logo));
+      if (!pdf.ok || !pdf.buffer) { erros.push(`${b.pessoa}: ${pdf.error}`); continue; }
+      if (dry) { enviados.push(`${b.pessoa} (dry)`); continue; }
+      if (!jid) { erros.push(`${b.pessoa}: grupo da equipe não configurado`); continue; }
+      const r = await csSendGroupDocument(jid, pdf.buffer.toString("base64"),
+        `${b.pessoa} - semana ${rotulo.replace(/\//g, "-")}.pdf`,
+        `📈 *${b.pessoa}* — desempenho da semana (${rotulo})`);
+      if (r.ok) enviados.push(b.pessoa); else erros.push(`${b.pessoa}: ${r.error}`);
+      await new Promise((r) => setTimeout(r, 1500)); // não estoura a fila da Evolution
+    }
+    // O tráfego não tem "produção por pessoa" no sistema: a Meta é editada fora daqui. Vai como
+    // resumo curto, honesto sobre o que dá pra medir.
+    if (!dry && jid) {
+      const t = await desempenhoTrafego(de, ate);
+      const seta = (n: number | null) => n === null ? "" : n > 0 ? ` (+${n}%)` : ` (${n}%)`;
+      await csSendGroupText(jid, [
+        `📊 *Tráfego — semana ${rotulo}*`, "",
+        `• ${t.contasAtivas} contas com verba rodando`,
+        `• ${t.conversas} conversas geradas${seta(t.variacaoConversas)}`,
+        `• custo por conversa: R$ ${t.custoPorConversa.toFixed(2)}${seta(t.variacaoCusto)}`,
+      ].join("\n"), undefined, { origem: "desempenho-trafego", destino: "interno" });
+      enviados.push("trafego");
+    }
+  }
+
+  return NextResponse.json({ ok: erros.length === 0, dry, periodo: rotulo, enviados, erros, pessoas: blocos.length });
+}
