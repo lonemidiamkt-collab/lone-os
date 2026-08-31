@@ -497,6 +497,7 @@ export function snakeToDesignRequest(row: Record<string, unknown>): DesignReques
     deadline: (row.deadline as string) ?? undefined,
     createdAt: (row.created_at as string) ?? undefined,
     designerNote: (row.designer_note as string) ?? undefined,
+    briefingIa: (row.briefing_ia as string) ?? undefined,
   };
 }
 

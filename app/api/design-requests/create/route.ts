@@ -51,6 +51,24 @@ export async function POST(req: NextRequest) {
       if (linkErr) console.error("[design-requests/create] link reverso falhou:", linkErr.message);
     }
 
+    // BRIEFING DA ARTE, SEM BOTÃO. O pedido segue na hora; o briefing enriquecido (regras visuais
+    // do cliente + motivos das reprovações anteriores) entra segundos depois, antes de o designer
+    // abrir. Era um botão dentro do card e foi usado em 9% dos 510 cards — enquanto 27% das artes
+    // voltavam por "não seguiu o padrão do cliente".
+    // Não bloqueia e não sobrescreve nada: escreve num campo próprio, ao lado do que o social pediu.
+    if (body.contentCardId) {
+      void import("@/lib/cs/briefing-design-card")
+        .then(({ briefingDesignDoCard }) => briefingDesignDoCard(body.contentCardId as string))
+        .then(async (texto) => {
+          if (!texto) return;
+          const { error } = await supabaseAdmin.from("design_requests")
+            .update({ briefing_ia: texto }).eq("id", data.id);
+          if (error) console.error("[design-requests/create] briefing IA não salvou:", error.message);
+          else console.log(`[design-requests/create] briefing da arte gerado (${data.id})`);
+        })
+        .catch((e) => console.error("[design-requests/create] briefing IA falhou (ignorado):", e));
+    }
+
     return NextResponse.json({ id: data.id });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";

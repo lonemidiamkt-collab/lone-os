@@ -320,6 +320,9 @@ export interface DesignRequest {
   deadline?: string;
   createdAt?: string;
   designerNote?: string; // comentário/pedido do designer (ex.: "briefing incompleto") — o social vê
+  /** Briefing enriquecido por IA: regras visuais do cliente + o que já foi reprovado antes.
+   *  Gerado sozinho na criação do pedido; fica AO LADO do briefing do social, não no lugar. */
+  briefingIa?: string;
 }
 
 export interface Notice {

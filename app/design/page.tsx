@@ -16,7 +16,7 @@ import {
   Palette, Filter, Clock, CheckCircle, Loader, Paperclip, X,
   AlertTriangle, Zap, LayoutList, Columns3, Upload, Download,
   ImageIcon, Eye, ChevronDown, User, Users, FileText, FileWarning, FolderOpen,
-  ExternalLink, BarChart2, Plus, Calendar, ArrowRight, XCircle, RotateCcw, Search,
+  ExternalLink, BarChart2, Plus, Calendar, ArrowRight, XCircle, RotateCcw, Search, Sparkles,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
@@ -1651,8 +1651,22 @@ export default function DesignPage() {
                     : contentCards.find((c) => c.designRequestId === briefingReq.id);
                   const brief = rc?.briefing || briefingReq.briefing;
                   return brief ? (
-                    <div className="bg-muted border border-border rounded-lg p-4">
-                      <MarkdownView source={brief} />
+                    <div className="space-y-3">
+                      {/* PADRÃO DO CLIENTE, ANTES DO PEDIDO. 27% das artes voltavam por "não seguiu
+                          o padrão" — e o que evita isso (regras visuais + o que já foi reprovado)
+                          ficava escondido atrás de um botão usado em 9% dos cards. Agora vem junto,
+                          e vem primeiro: é o que se lê antes de abrir o editor. */}
+                      {briefingReq.briefingIa && (
+                        <div className="rounded-lg border border-primary/30 bg-primary/[0.04] p-4">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-primary mb-2">
+                            <Sparkles size={13} /> Padrão deste cliente — leia antes de começar
+                          </div>
+                          <MarkdownView source={briefingReq.briefingIa} />
+                        </div>
+                      )}
+                      <div className="bg-muted border border-border rounded-lg p-4">
+                        <MarkdownView source={brief} />
+                      </div>
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground leading-relaxed bg-muted border border-border rounded-lg p-4">Sem briefing detalhado.</p>
