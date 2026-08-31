@@ -43,8 +43,18 @@ O QUE PODE VIRAR UM PROBLEMA (só reporte se estiver VISÍVEL e você tiver CERT
 2. DADO que CONTRADIZ o briefing: só quando o briefing traz um VALOR CONCRETO (um preço, telefone,
    endereço, nome de produto, data) E a arte mostra OUTRO diferente. Ex.: briefing "R$23,00" e a arte
    "R$32,00" → aponte. Placeholder esquecido ("R$00,00", "lorem ipsum", "inserir preço") → aponte.
-3. LOGO/MARCA: só aponte "falta logo" se o briefing EXIGIR logo e ela claramente não aparecer.
-4. REGRA explícita do briefing violada (ex.: "nunca usar vermelho" e a arte é vermelha).
+3. LOGO/MARCA DE OUTRO CLIENTE — o erro mais caro que existe aqui. O nome do cliente desta peça
+   vem no contexto. Se a arte estiver ASSINADA por outra empresa (logo/nome de anunciante que não é
+   o cliente, num rodapé, cabeçalho ou selo), aponte com prioridade máxima.
+   CUIDADO PRA NÃO CONFUNDIR: marca de PRODUTO exposto é normal e não é erro — uma loja de tintas
+   mostra Suvinil e Coral, um pet shop mostra Golden e Pedigree, uma loja de pisos mostra Portobello.
+   O que não pode é a peça estar assinada como se fosse de outra agência ou de outro cliente.
+   Na dúvida entre "marca do produto" e "assinatura da peça", NÃO aponte.
+4. LOGO AUSENTE: só aponte "falta logo" se o briefing EXIGIR logo e ela claramente não aparecer.
+5. REGRA explícita do cliente violada. As regras vêm no contexto e são específicas dele
+   (ex.: "não usar vermelho", "logo sempre no rodapé", "toda arte fecha com o telefone").
+   Cor: só aponte quando a regra nomear a cor E a arte contradisser de forma evidente — "parece
+   meio alaranjado" não é violação, "a regra diz para não usar vermelho e a peça é vermelha" é.
 
 NÃO FAÇA:
 - NÃO invente divergência quando o briefing não tem o dado pra comparar (ex.: briefing só com link →
@@ -60,10 +70,40 @@ RESULTADO:
   "telefone ilegível no rodapé". Na dúvida entre apontar algo incerto ou não, NÃO aponte.
 Responda APENAS no JSON do schema.`;
 
+/**
+ * Baixa a arte e devolve como data URI, reduzida.
+ *
+ * POR QUE NÃO MANDAR A URL: a OpenAI baixa a imagem do nosso servidor, e as peças finalizadas têm
+ * 2160×2700 / 4 MB. Ela desiste com "Unable to download content before the timeout" — o que fazia a
+ * revisão falhar calada justamente nas artes de verdade (a de 480 KB passava, a de 4 MB não).
+ * Baixando aqui, o servidor faz o trabalho pesado uma vez e manda pronto.
+ *
+ * 1400px de largura é o suficiente pra ler preço, telefone e logo — que é tudo o que a revisão
+ * precisa enxergar — e derruba 4 MB pra alguns poucos KB.
+ */
+async function baixarComoDataUri(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const { default: sharp } = await import("sharp");
+    const jpg = await sharp(buf).rotate().resize({ width: 1400, withoutEnlargement: true })
+      .jpeg({ quality: 82 }).toBuffer();
+    return `data:image/jpeg;base64,${jpg.toString("base64")}`;
+  } catch (err) {
+    console.error("[CS/revisao-arte] não consegui preparar a imagem:", String(err));
+    return null;
+  }
+}
+
 export async function revisarArte(inp: RevisaoInput): Promise<RevisaoResult> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { ok: false, data: null, error: "OPENAI_API_KEY não configurada" };
   const regras = inp.regras?.length ? inp.regras.map((r) => `- ${r}`).join("\n") : "(nenhuma)";
+  // Prepara a imagem ANTES de chamar a IA. Sem isto, arte grande = revisão que nunca acontece.
+  const imagem = await baixarComoDataUri(inp.imageUrl);
+  if (!imagem) return { ok: false, data: null, error: "não consegui baixar a arte" };
+
   const contexto =
     `Cliente: ${inp.clienteNome}\n` +
     `Era pra ser: ${inp.temaEsperado}\n` +
@@ -82,7 +122,7 @@ export async function revisarArte(inp: RevisaoInput): Promise<RevisaoResult> {
           { role: "system", content: SYSTEM },
           { role: "user", content: [
             { type: "text", text: contexto },
-            { type: "image_url", image_url: { url: inp.imageUrl, detail: "high" } },
+            { type: "image_url", image_url: { url: imagem, detail: "high" } },
           ] },
         ],
       }),
