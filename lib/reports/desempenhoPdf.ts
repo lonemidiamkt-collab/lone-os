@@ -22,8 +22,13 @@ const ALERTA = "#f0b357";
 
 const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/** Bateu a meta? Depende de qual lado é o bom — retrabalho menor é melhor, entrega maior é melhor. */
-function bateu(m: Meta): boolean {
+/**
+ * Bateu a meta? Depende de qual lado é o bom — retrabalho menor é melhor, entrega maior é melhor.
+ * `null` quando não há veredito a dar: métrica sem base para medir, ou de acompanhamento (por onde
+ * ninguém é cobrado). Dizer "fora da meta" nesses casos é acusar alguém pela lacuna do sistema.
+ */
+function bateu(m: Meta): boolean | null {
+  if (m.valor === null || m.semBase || m.informativa) return null;
   return m.melhorQuando === "maior" ? m.valor >= m.alvo : m.valor <= m.alvo;
 }
 
@@ -92,16 +97,34 @@ export function funcaoPdfHtml(b: BlocoFuncao, periodo: string, logo: string): st
 
   const meta = ([nome, m]: [string, Meta]) => {
     const ok = bateu(m);
-    const cor = ok ? OK : ALERTA;
     const sufixo = m.unidade === "%" ? "%" : m.unidade === "dias" ? " dias" : "";
-    const alvo = m.melhorQuando === "maior" ? `meta: ${m.alvo}${sufixo} ou mais` : `meta: até ${m.alvo}${sufixo}`;
+
+    // Sem base: mostra o motivo no lugar do número. Um "0%" ali seria lido como desempenho zero.
+    if (m.valor === null || m.semBase) {
+      return `<div style="background:${CARTAO};border:1px solid ${LINHA};border-radius:8px;padding:15px 17px">
+        <div style="font-size:11.5px;color:${SUAVE};margin-bottom:7px">${esc(nome)}</div>
+        <div style="font-size:19px;font-weight:700;color:${SUAVE};letter-spacing:-.02em">—</div>
+        <div style="font-size:10.5px;color:${SUAVE};margin-top:5px">${esc(m.semBase || "sem dado nesta semana")}</div>
+      </div>`;
+    }
+
+    // Acompanhamento: tem número, não tem veredito. Devolver arte pra ajuste é o trabalho de quem
+    // revisa — marcar isso como "fora da meta" pune justamente quem confere antes do cliente ver.
+    const cor = ok === null ? TEXTO : ok ? OK : ALERTA;
+    const selo = ok === null
+      ? `<span style="font-size:10.5px;color:${SUAVE}">acompanhamento</span>`
+      : `<span style="font-size:10.5px;color:${ok ? OK : ALERTA}">${ok ? "✓ na meta" : "fora da meta"}</span>`;
+    const rodape = ok === null && m.informativa
+      ? "sem meta — número de acompanhamento"
+      : m.melhorQuando === "maior" ? `meta: ${m.alvo}${sufixo} ou mais` : `meta: até ${m.alvo}${sufixo}`;
+
     return `<div style="background:${CARTAO};border:1px solid ${LINHA};border-radius:8px;padding:15px 17px">
       <div style="font-size:11.5px;color:${SUAVE};margin-bottom:7px">${esc(nome)}</div>
       <div style="display:flex;align-items:baseline;gap:9px">
         <span style="font-size:27px;font-weight:800;color:${cor};letter-spacing:-.02em">${m.valor}${sufixo}</span>
-        <span style="font-size:10.5px;color:${ok ? OK : ALERTA}">${ok ? "✓ na meta" : "fora da meta"}</span>
+        ${selo}
       </div>
-      <div style="font-size:10.5px;color:${SUAVE};margin-top:5px">${esc(alvo)}</div>
+      <div style="font-size:10.5px;color:${SUAVE};margin-top:5px">${esc(rodape)}</div>
     </div>`;
   };
 

@@ -11,7 +11,17 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 
-export interface Meta { valor: number; alvo: number; unidade: "%" | "un" | "dias"; melhorQuando: "maior" | "menor" }
+export interface Meta {
+  /** null = não houve base para medir nesta semana. NUNCA vira 0: ver `pct`. */
+  valor: number | null;
+  alvo: number;
+  unidade: "%" | "un" | "dias";
+  melhorQuando: "maior" | "menor";
+  /** Métrica que se acompanha, mas por onde ninguém é cobrado (ex.: revisar arte é o trabalho). */
+  informativa?: boolean;
+  /** Por que não deu pra medir — aparece no lugar do número. */
+  semBase?: string;
+}
 export interface BlocoFuncao {
   pessoa: string;
   funcao: "designer" | "social" | "trafego";
@@ -20,7 +30,15 @@ export interface BlocoFuncao {
   atencao: string[];
 }
 
-const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0);
+/**
+ * Porcentagem, ou `null` quando não há denominador.
+ *
+ * Devolvia 0 quando d===0, e o PDF do Carlos saiu com "Pedidos do cliente decididos: 0% — fora da
+ * meta" numa semana em que TODAS as demandas ainda estavam pendentes: não havia nada decidido nem
+ * expirado, o denominador era zero. Zero por cento e "não houve o que decidir" são coisas
+ * diferentes, e a primeira acusa alguém pela segunda. Nada dividido por nada não é nota.
+ */
+const pct = (n: number, d: number): number | null => (d > 0 ? Math.round((n / d) * 100) : null);
 
 /**
  * A semana que está FECHANDO, em horário de Brasília.
@@ -88,26 +106,37 @@ export async function desempenhoDesigner(de: string, ate: string): Promise<Bloco
     porPessoa.set(nome, g);
   }
 
-  return [...porPessoa.entries()].map(([pessoa, g]) => {
+  return [...porPessoa.entries()]
+    // Quem não entregou nada como designer nesta semana não vira um cartão de designer zerado.
+    .filter(([, g]) => g.entregues > 0)
+    .map(([pessoa, g]) => {
     const retrabalho = pct(g.voltaram, g.entregues);
     const prazo = pct(g.noPrazo, g.entregues);
-    const media = g.dias.length ? g.dias.reduce((a, b) => a + b, 0) / g.dias.length : 0;
+    // Sem entrega medida, o tempo médio é `null`, não zero: zero dia leria como entrega instantânea,
+    // o melhor resultado possível, quando na verdade é ausência de dado.
+    const media = g.dias.length ? g.dias.reduce((a, b) => a + b, 0) / g.dias.length : null;
     return {
       pessoa, funcao: "designer" as const,
       metas: {
         "Artes entregues": { valor: g.entregues, alvo: 25, unidade: "un" as const, melhorQuando: "maior" as const },
         "Entregues no prazo": { valor: prazo, alvo: 90, unidade: "%" as const, melhorQuando: "maior" as const },
         "Voltaram pra refazer": { valor: retrabalho, alvo: 15, unidade: "%" as const, melhorQuando: "menor" as const },
-        "Tempo médio de entrega": { valor: Math.round(media * 10) / 10, alvo: 2, unidade: "dias" as const, melhorQuando: "menor" as const },
+        "Tempo médio de entrega": {
+          valor: media === null ? null : Math.round(media * 10) / 10,
+          alvo: 2, unidade: "dias" as const, melhorQuando: "menor" as const,
+          semBase: media === null ? "sem entrega com data nesta semana" : undefined,
+        },
       },
+      // `prazo` e `retrabalho` são null quando não houve entrega medida. Sem base, não há elogio
+      // nem cobrança a fazer — a linha simplesmente não aparece.
       destaques: [
         g.entregues > 0 ? `${g.entregues} artes entregues` : "",
-        prazo >= 90 ? `${prazo}% no prazo — acima da meta` : "",
-        retrabalho <= 15 && g.entregues > 3 ? `só ${retrabalho}% voltaram` : "",
+        prazo !== null && prazo >= 90 ? `${prazo}% no prazo — acima da meta` : "",
+        retrabalho !== null && retrabalho <= 15 && g.entregues > 3 ? `só ${retrabalho}% voltaram` : "",
       ].filter(Boolean),
       atencao: [
-        retrabalho > 15 ? `${retrabalho}% das artes voltaram pra refazer (meta: até 15%)` : "",
-        prazo < 90 && g.entregues > 3 ? `${prazo}% no prazo (meta: 90%)` : "",
+        retrabalho !== null && retrabalho > 15 ? `${retrabalho}% das artes voltaram pra refazer (meta: até 15%)` : "",
+        prazo !== null && prazo < 90 && g.entregues > 3 ? `${prazo}% no prazo (meta: 90%)` : "",
       ].filter(Boolean),
     };
   });
@@ -144,23 +173,53 @@ export async function desempenhoSocial(de: string, ate: string): Promise<BlocoFu
     const g = get(nome); g.reprovou++; porPessoa.set(nome, g);
   }
 
-  return [...porPessoa.entries()].map(([pessoa, g]) => {
+  // Quantos cards do histórico têm aprovação registrada. Se o campo quase não é usado, ele não mede
+  // a pessoa — mede o preenchimento — e não pode virar meta. Ver o bloco de "Aprovações" abaixo.
+  const { count: totalCards } = await supabaseAdmin
+    .from("content_cards").select("id", { count: "exact", head: true });
+  const { count: cardsComAprovacao } = await supabaseAdmin
+    .from("content_cards").select("id", { count: "exact", head: true }).not("client_approved_at", "is", null);
+  const registroDeAprovacaoEmUso = (totalCards ?? 0) > 0 && (cardsComAprovacao ?? 0) / (totalCards ?? 1) >= 0.5;
+
+  return [...porPessoa.entries()]
+    // Só entra no relatório de social quem PRODUZIU como social nesta semana. Sem isto, alguém com
+    // uma demanda pendente entrava como "Social Media com 0 peças criadas, fora da meta" — o
+    // Rodrigo e o Julio saíram assim na primeira rodada, e nem são dessa função.
+    .filter(([, g]) => g.criados > 0)
+    .map(([pessoa, g]) => {
     const decisao = pct(g.decididas, g.decididas + g.expiradas);
+    const pendentesSemDesfecho = g.decididas + g.expiradas === 0;
     return {
       pessoa, funcao: "social" as const,
       metas: {
         "Peças criadas": { valor: g.criados, alvo: 20, unidade: "un" as const, melhorQuando: "maior" as const },
-        "Pedidos do cliente decididos": { valor: decisao, alvo: 90, unidade: "%" as const, melhorQuando: "maior" as const },
-        "Aprovações registradas": { valor: g.aprovados, alvo: 5, unidade: "un" as const, melhorQuando: "maior" as const },
-        "Artes que você reprovou": { valor: g.reprovou, alvo: 5, unidade: "un" as const, melhorQuando: "menor" as const },
+        "Pedidos do cliente decididos": {
+          valor: decisao, alvo: 90, unidade: "%" as const, melhorQuando: "maior" as const,
+          // Pendente ainda dentro do prazo não é pedido ignorado. Sem desfecho, não há o que medir.
+          semBase: pendentesSemDesfecho ? "nenhum pedido venceu nesta semana" : undefined,
+        },
+        // `client_approved_at` está preenchido em 36 de 529 cards do histórico. Cobrar "5 aprovações
+        // por semana" é cobrar a pessoa por um campo que o fluxo real não preenche. Enquanto o
+        // registro não for hábito, o número aparece como acompanhamento, não como meta.
+        "Aprovações registradas": {
+          valor: g.aprovados, alvo: 5, unidade: "un" as const, melhorQuando: "maior" as const,
+          informativa: !registroDeAprovacaoEmUso,
+          semBase: registroDeAprovacaoEmUso ? undefined : "o time ainda não registra aprovação no sistema",
+        },
+        // Reprovar arte É o trabalho de quem revisa. Tratar 6 revisões como "fora da meta" pune
+        // justamente quem confere antes de mandar pro cliente. Acompanha-se o número; não se cobra.
+        "Artes que você devolveu pra ajuste": {
+          valor: g.reprovou, alvo: 5, unidade: "un" as const, melhorQuando: "menor" as const,
+          informativa: true,
+        },
       },
       destaques: [
         g.criados > 0 ? `${g.criados} peças criadas` : "",
-        decisao >= 90 && g.decididas > 0 ? "todos os pedidos do cliente decididos" : "",
+        decisao !== null && decisao >= 90 && g.decididas > 0 ? "todos os pedidos do cliente decididos" : "",
       ].filter(Boolean),
       atencao: [
         g.expiradas > 0 ? `${g.expiradas} pedido(s) de cliente expiraram sem decisão` : "",
-        g.reprovou > 8 ? `${g.reprovou} artes reprovadas — vale alinhar o padrão com o designer antes` : "",
+        g.reprovou > 8 ? `${g.reprovou} artes devolvidas — vale alinhar o padrão com o designer antes` : "",
       ].filter(Boolean),
     };
   });
@@ -229,12 +288,15 @@ export async function visaoCeo(de: string, ate: string, rotulo: string): Promise
   const bom: { texto: string; numero: string }[] = [];
   const preocupa: { texto: string; numero: string }[] = [];
 
-  if (total > 0) bom.push({ numero: String(total), texto: "artes entregues na semana" });
-  if (total > 0 && pct(noPrazo, total) >= 85) bom.push({ numero: `${pct(noPrazo, total)}%`, texto: "entregues no prazo" });
-  if (total > 0 && pct(voltaram, total) <= 15) bom.push({ numero: `${pct(voltaram, total)}%`, texto: "de retrabalho — dentro da meta" });
+  const pctPrazo = pct(noPrazo, total);
+  const pctVoltaram = pct(voltaram, total);
 
-  if (total > 0 && pct(voltaram, total) > 15) preocupa.push({ numero: `${pct(voltaram, total)}%`, texto: `das artes voltaram pra refazer (${voltaram} de ${total})` });
-  if (total > 0 && pct(noPrazo, total) < 85) preocupa.push({ numero: `${pct(noPrazo, total)}%`, texto: "no prazo — abaixo dos 85% habituais" });
+  if (total > 0) bom.push({ numero: String(total), texto: "artes entregues na semana" });
+  if (pctPrazo !== null && pctPrazo >= 85) bom.push({ numero: `${pctPrazo}%`, texto: "entregues no prazo" });
+  if (pctVoltaram !== null && pctVoltaram <= 15) bom.push({ numero: `${pctVoltaram}%`, texto: "de retrabalho — dentro da meta" });
+
+  if (pctVoltaram !== null && pctVoltaram > 15) preocupa.push({ numero: `${pctVoltaram}%`, texto: `das artes voltaram pra refazer (${voltaram} de ${total})` });
+  if (pctPrazo !== null && pctPrazo < 85) preocupa.push({ numero: `${pctPrazo}%`, texto: "no prazo — abaixo dos 85% habituais" });
   if ((expiradas ?? 0) > 0) preocupa.push({ numero: String(expiradas), texto: "pedidos de cliente expiraram sem ninguém decidir" });
   if ((pendentes ?? 0) > 15) preocupa.push({ numero: String(pendentes), texto: "pedidos ainda esperando decisão" });
   if (semConteudo > 0) preocupa.push({ numero: String(semConteudo), texto: "clientes sem nenhuma peça há 4 semanas" });
