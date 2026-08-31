@@ -26,6 +26,15 @@ import { fetchClientCsRules } from "@/lib/supabase/queries";
 // A mesma correção pedida três vezes na mesma peça, e nada virou regra. O próximo card do mesmo
 // cliente começava do zero.
 //
+// SUBSTITUI o antigo cs-aprender-cards, que lia as mesmas duas fontes (cards e comentários) sem
+// as correções. Manter os dois faria os jobs disputarem a cota diária de aprendizado do cliente e
+// gerarem regra duplicada — o mais completo ficou, o outro saiu.
+//
+// As três fontes de aprendizado agora são distintas, de propósito:
+//   cs-briefing-update  → o que o CLIENTE fala no grupo
+//   cs-releitura        → o ciclo de PRODUÇÃO (pedido, entrega, correção, aprovação)
+//   inbound (tempo real)→ a CORREÇÃO que o cliente pede na hora
+//
 // ?dry=1 não grava · ?dias=90 · ?clientId= roda um só · Cron: domingo.
 
 const MIN_MATERIAL = 3;   // menos que isso não dá pra ver padrão nenhum

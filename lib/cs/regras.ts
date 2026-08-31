@@ -167,11 +167,17 @@ export async function gravarRegras(
   if (!regras.length) return { gravadas: [], puladas: 0 };
 
   const desde24h = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  // O cap conta POR FONTE, não no total do cliente. Antes era global, e como três jobs de
+  // aprendizado rodam no mesmo domingo, o primeiro a rodar consumia as 5 vagas e calava os outros
+  // dois — o job mais valioso (a releitura do ciclo) seria silenciado pelo menos valioso só por
+  // rodar meia hora depois. O guarda-corpo continua de pé: cada fonte tem seu teto, e uma fonte
+  // ruim num dia ruim ainda não consegue reescrever o cliente.
   const [{ data: existentes }, { count: hoje }] = await Promise.all([
     supabaseAdmin.from("cs_client_rules").select("texto")
       .eq("client_id", clientId).eq("ativo", true),
     supabaseAdmin.from("cs_client_rules").select("id", { count: "exact", head: true })
-      .eq("client_id", clientId).eq("origem", "aprendido").gte("created_at", desde24h),
+      .eq("client_id", clientId).eq("origem", "aprendido").eq("author", meta.author)
+      .gte("created_at", desde24h),
   ]);
 
   const jaTem = (existentes ?? []).map((e) => String(e.texto).toLowerCase().trim());

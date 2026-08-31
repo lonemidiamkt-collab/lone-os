@@ -68,3 +68,15 @@ describe("filtrarRegras", () => {
     expect(out).toHaveLength(1);
   });
 });
+
+// O cap de aprendizado é POR FONTE. Três jobs rodam no mesmo domingo (conversas, releitura do
+// ciclo, correção); com cap global, o primeiro consumia as vagas e calava os outros — e o mais
+// valioso seria silenciado por rodar meia hora depois.
+describe("teto de aprendizado por fonte", () => {
+  it("o cap é contado pelo autor, não no total do cliente", async () => {
+    const src = await import("node:fs").then((fs) => fs.readFileSync("lib/cs/regras.ts", "utf8"));
+    const trecho = src.slice(src.indexOf("const desde24h"), src.indexOf("const jaTem"));
+    expect(trecho, "o cap precisa filtrar por author, senão as fontes se canibalizam")
+      .toContain('.eq("author", meta.author)');
+  });
+});
