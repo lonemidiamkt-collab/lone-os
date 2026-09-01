@@ -93,7 +93,12 @@ export async function POST(req: NextRequest) {
     const tipo = String(m.media_type ?? "").toUpperCase();
     let nivel: NivelAnalise = "texto";
     const imagens: string[] = [];
-    const urlVisual = (m.media_url as string) || (m.thumbnail_url as string) || "";
+    // Para VIDEO, `media_url` é o MP4 — mandar isso como imagem faz a OpenAI recusar o formato.
+    // O que se manda de um Reel é a MINIATURA. O arquivo do vídeo serve para outra coisa (frames e
+    // transcrição, com ffmpeg), que é etapa própria.
+    const urlVisual = tipo === "VIDEO"
+      ? ((m.thumbnail_url as string) || "")
+      : ((m.media_url as string) || (m.thumbnail_url as string) || "");
     if (urlVisual) {
       try {
         const resp = await fetch(urlVisual, { signal: AbortSignal.timeout(20_000) });
