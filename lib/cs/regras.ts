@@ -54,7 +54,84 @@ const RX_NARRATIVA = /\bclientes?\s+(est[áa]|estava|pretende|mencionou|acredita
 /** Entrada de catálogo sem preço: "Produto: Sabonete íntimo." É item de estoque, não regra. */
 const RX_ITEM_CATALOGO = /^\s*(produto|item|linha|modelo|refer[êe]ncia)\s*:/i;
 
-export type MotivoDescarte = "catalogo" | "promocao" | "efemero" | "curto" | "narrativa";
+/**
+ * ANÚNCIO DE INFORMAÇÃO, sem a informação.
+ *
+ * Auditoria de 02/09: entraram na base "Informação sobre fechamento na segunda-feira" e "Informação
+ * sobre horário de funcionamento". Nenhuma das duas diz QUAL é o horário — avisam que existe um
+ * dado em algum lugar. Para quem vai fazer a arte, isso não vale nada: ele continua sem saber o que
+ * escrever. A regra tem que CARREGAR o dado.
+ */
+const RX_ANUNCIO_VAZIO = /^\s*(informa[çc][ãa]o|informe|aviso|comunicado|dados?|detalhes?|observa[çc][ãa]o)\s+(sobre|a respeito|referente|de|do|da)\b/i;
+
+/**
+ * Processo interno da agência, não regra DO CLIENTE.
+ *
+ * "Manter comunicação próxima e atenta com o cliente" e "Sempre dar retorno sobre materiais
+ * solicitados em até uma semana" descrevem como a Lone deveria trabalhar. Podem até ser boas
+ * práticas, mas entram no lugar errado: a base de regras é lida na hora de fazer a PEÇA daquele
+ * cliente, e ali isso só ocupa espaço e dilui o que importa.
+ */
+const RX_PROCESSO_INTERNO = /\b(manter|dar|garantir|assegurar|estabelecer|criar|melhorar|reforçar|refor[çc]ar)\s+(uma?\s+)?(comunica[çc][ãa]o|retorno|contato|acompanhamento|alinhamento|proximidade|aten[çc][ãa]o|relacionamento|feedback)/i;
+
+/**
+ * Genérica: não manda ninguém fazer nada.
+ *
+ * A primeira versão exigia "âncora concreta" (número, nome próprio, termo visual) e barrava 157 das
+ * 363 regras ativas — mas amostrando as 157, metade era regra boa: "utilizar a palavra 'pet' em vez
+ * de 'animal'", "usar a paleta vermelho, amarelo e branco", "destacar a vacinação em todas as
+ * artes". Nenhuma tem número, e todas mudam a peça.
+ *
+ * O que realmente separa é o VERBO DE INSTRUÇÃO. Regra é ordem para quem produz — usar, incluir,
+ * destacar, conferir, evitar. Ruído é narrativa em terceira pessoa sobre o negócio: "o faturamento
+ * está sendo puxado manualmente", "Saquarema começou devagar o mês", "caiu a venda de bruto". Tudo
+ * verdade, nada que o designer faça a respeito.
+ */
+// RAÍZES, não infinitivos: a base está cheia de conjugação — "toda legenda FECHA com o endereço",
+// "a arte LEVA o selo", "SEMPRE INCLUI o telefone". Buscar por "fechar" não casa "fecha", e foi
+// assim que uma regra boa caiu no primeiro teste.
+const VERBOS_DE_INSTRUCAO =
+  /\b(us[ae]|usar|utiliz|inclu|adicion|coloc|inser|destac|evit|mant[êe]|manter|segu|confer|revis|post|public|escrev|cit[ae]|citar|mencion|mostr|exib|prioriz|padroniz|separ|limp|cri[ae]|criar|desativ|remov|tir[ae]|tirar|troc|substitu|fech|abr[ei]|marc|sinaliz|respeit|aplic|refor[çc]|lembr|atent|cuid|verific|valid|aprov|solicit|lev[ae]|levar)/i;
+
+/** Proibição também é instrução, mesmo sem verbo de ação explícito. */
+const PROIBICAO_CLARA = /\b(nunca|jamais|n[ãa]o\s+(pode|deve|usar|postar|citar|colocar|falar|mencionar|escrever|mostrar))\b/i;
+
+/**
+ * Narrativa sobre o negócio: descreve, não instrui.
+ *
+ * O fim usa LOOKAHEAD, não `\b` — pela segunda vez neste arquivo. Em JS o `\b` é ASCII, então
+ * "está\b" nunca casa: não existe borda depois do "á" para o motor. Escrevi assim de novo mesmo com
+ * o aviso três blocos acima, e o filtro deixou passar "o faturamento está sendo puxado manualmente"
+ * até o teste pegar. Em regex com acento no fim do token, lookahead sempre.
+ */
+const RX_RELATO = /\b(est[áa]|est[ãa]o|estava|estavam|come[çc]ou|caiu|subiu|aumentou|diminuiu|melhorou|piorou|aconteceu|houve|teve|foi|foram|ficou|ficaram|vem|v[êe]m|anda|andam)(?=\s|[,.;!?]|$)/i;
+
+/**
+ * Dado operacional durável: endereço, telefone, horário.
+ *
+ * "Mudança de horário de funcionamento para 07:30 a 13:00" não tem verbo de instrução nenhum, e é
+ * exatamente o tipo de regra que evita o erro mais caro — a arte sair com o horário velho. O dado
+ * em si é a instrução.
+ */
+const RX_DADO_DURAVEL =
+  /\b(hor[áa]rio|funcionamento|endere[çc]o|telefone|whats|contato|abre|fecha|atende)\b/i;
+
+function temInstrucao(t: string): boolean {
+  if (PROIBICAO_CLARA.test(t)) return true;
+  // Dado operacional com o VALOR junto (número ou nome) vale por si.
+  if (RX_DADO_DURAVEL.test(t) && /\d|[A-ZÁÉÍÓÚ][a-záéíóú]{2,}/.test(t.slice(1))) return true;
+  if (!VERBOS_DE_INSTRUCAO.test(t)) return false;
+
+  // Relato pode conter verbo de ordem no meio ("o faturamento ESTÁ sendo puxado pra VERIFICAR").
+  // Quando a frase começa descrevendo, é relato — a ordem teria vindo antes.
+  const iInstr = t.search(VERBOS_DE_INSTRUCAO);
+  const iRelato = t.search(RX_RELATO);
+  return iRelato === -1 || iInstr < iRelato;
+}
+
+export type MotivoDescarte =
+  | "catalogo" | "promocao" | "efemero" | "curto" | "narrativa"
+  | "anuncio_vazio" | "processo_interno" | "generica";
 
 /**
  * O texto pode virar regra permanente? Retorna o motivo quando NÃO pode.
@@ -70,6 +147,9 @@ export function motivoParaNaoVirarRegra(texto: string): MotivoDescarte | null {
   if (RX_EFEMERO.test(t)) return "efemero";
   if (RX_ITEM_CATALOGO.test(t)) return "catalogo";
   if (RX_NARRATIVA.test(t)) return "narrativa";
+  if (RX_ANUNCIO_VAZIO.test(t)) return "anuncio_vazio";
+  if (RX_PROCESSO_INTERNO.test(t)) return "processo_interno";
+  if (!temInstrucao(t)) return "generica";
   return null;
 }
 
@@ -101,6 +181,11 @@ NÃO É REGRA (jamais retorne):
 - estado passageiro ("a equipe está em treinamento", "o material sai sexta")
 - opinião solta sobre uma peça ("não gostei dessa arte") sem dizer o QUE mudar
 - saudação, combinado de horário, conversa
+- ANÚNCIO de informação sem a informação ("Informação sobre o horário de funcionamento").
+  A regra tem que CARREGAR o dado: "abre 07:30 e fecha 13:00 aos sábados"
+- processo interno da agência ("manter comunicação próxima", "dar retorno em até uma semana").
+  A base é lida na hora de fazer a PEÇA — isso não muda a peça
+- conselho genérico sem nada concreto ("ser mais atencioso", "buscar qualidade")
 
 Escreva cada regra como INSTRUÇÃO para quem vai produzir, curta e no imperativo. Não copie a fala do
 cliente — traduza. "o endereço tá errado" vira "conferir o endereço na arte: o correto é X".`.trim();

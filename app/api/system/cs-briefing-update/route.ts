@@ -9,11 +9,22 @@ import { sincronizarBriefingAprendido } from "@/lib/cs/briefing-sync";
 import { chatJson, isOpenAIConfigured } from "@/lib/ai/openai";
 import { DEFINICAO_DE_REGRA, SCHEMA_REGRAS, filtrarRegras, ESCOPO_POR_TIPO } from "@/lib/cs/regras";
 
-// POST /api/system/cs-briefing-update — a IA "percebe" as conversas dos grupos e ENRIQUECE o briefing
-// dos clientes: extrai FATOS de negócio/produto novos (lançou produto X, faz entrega em Y, promoção
-// até Z) e grava como regra APRENDIDA (escopo negócio) → briefing-sync joga na seção "🧠 Aprendido".
+// POST /api/system/cs-briefing-update — extrai REGRAS das conversas dos grupos.
+//
+// ⚠️ O NOME ENGANA e vale saber por quê antes de mexer: este job grava em `cs_client_rules`, NÃO em
+// `client_briefings`. Ele "enriquece o briefing" no sentido de que as regras aprendidas aparecem na
+// seção "🧠 Aprendido" via briefing-sync — mas o briefing estruturado (produtos, público, tom de
+// voz) ele nunca tocou.
+//
+// Isso custou caro: na auditoria de 02/09 o log dizia "16 clientes atualizados" toda semana enquanto
+// `client_briefings` estava parado desde 20/07 e 31 dos 50 clientes ativos não tinham briefing
+// nenhum. Um job que reporta sucesso enquanto a coisa mais importante não acontece é pior que um job
+// quebrado, porque ninguém vai olhar.
+//
+// Quem cria o briefing estruturado de quem não tem é `/api/system/cs-briefing-inicial`.
+//
 // Lê o corpus cs_message_corpus (mensagens do CLIENTE, is_team=false). ?dry=1 não grava.
-// Cron sugerido: 1x/dia. ?clientId=… roda só um cliente.
+// Cron: domingo 7h BRT. ?clientId=… roda só um cliente.
 
 export async function POST(req: NextRequest) {
   const denied = requireCron(req); if (denied) return denied;
@@ -71,5 +82,5 @@ export async function POST(req: NextRequest) {
     if (novos.length) resultados.push({ cliente: (c.nome_fantasia as string) || (c.name as string), novos: novos.length });
   }
 
-  return NextResponse.json({ ok: true, dry, clientes_atualizados: resultados.length, detalhe: resultados });
+  return NextResponse.json({ ok: true, dry, o_que_atualizou: "regras (cs_client_rules) — NÃO o briefing estruturado", regras_novas_por_cliente: resultados.length, detalhe: resultados });
 }
