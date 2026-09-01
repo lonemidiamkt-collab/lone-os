@@ -51,6 +51,10 @@ services:
       CS_OWNER_JID: ${CS_OWNER_JID}
       CS_TRAFFIC_GROUP_JID: ${CS_TRAFFIC_GROUP_JID}
       CS_TEAM_GROUP_JID: ${CS_TEAM_GROUP_JID}
+      # Grupo administrativo (só o Roberto). Recebe o relatório do time e o resumo do CEO —
+      # números que não vão pro grupo de todo mundo. Declarar aqui é obrigatório: este compose
+      # lista variável por variável, então pôr no .env sem declarar não chega ao container.
+      CS_ADM_GROUP_JID: ${CS_ADM_GROUP_JID}
       # Grupos SANDBOX de teste: ali o agente trata msg da equipe como pedido e classifica mesmo
       # sendo o grupo interno (pra testar o fluxo completo). Vazio em prod real.
       CS_TEST_GROUP_JIDS: ${CS_TEST_GROUP_JIDS}
