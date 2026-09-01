@@ -176,6 +176,12 @@ export async function escolherQueriesMistas(nicho: string, quantas = 4) {
 }
 
 /** Extrai @handles de um texto solto. O modelo às vezes devolve prosa junto; isso limpa. */
+const PALAVRAS_COMUNS = new Set([
+  "instagram","www","com","https","http","reel","reels","explore","perfil","perfis","loja","lojas",
+  "que","para","como","mais","voce","você","tem","seu","sua","dos","das","por","com","uma","nao",
+  "não","seguidores","conteudo","conteúdo","brasil","empresa","empresas","marca","marcas","aqui",
+]);
+
 export function extrairHandles(texto: string): string[] {
   const achados = new Set<string>();
   for (const bruto of texto.split(/[\s,;\n]+/)) {
@@ -183,7 +189,13 @@ export function extrairHandles(texto: string): string[] {
     // instagram.com/loja → loja
     const doLink = limpo.match(/instagram\.com\/([a-z0-9._]{2,30})/)?.[1];
     const cand = doLink ?? limpo;
-    if (/^[a-z0-9._]{3,30}$/.test(cand) && !/^(instagram|www|com|https?|reels?|explore|p)$/.test(cand)) {
+    // Palavra solta do texto não é @. O extrator pegou "que" de uma frase e o sistema foi validar
+    // na Meta uma conta chamada @que, com 92 mil seguidores e nada a ver com o nicho. Handle de
+    // empresa quase sempre tem número, ponto, underline ou é uma palavra composta — palavra única
+    // e comum do português é ruído do texto ao redor.
+    const ehPalavraComum = PALAVRAS_COMUNS.has(cand);
+    const parecePalavraSolta = /^[a-z]{1,6}$/.test(cand) && !/[0-9._]/.test(cand);
+    if (/^[a-z0-9._]{3,30}$/.test(cand) && !ehPalavraComum && !parecePalavraSolta) {
       achados.add(cand);
     }
   }

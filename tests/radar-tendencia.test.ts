@@ -71,3 +71,27 @@ describe("tendência tem ciclo de vida", () => {
     expect(assinatura("história de legado da empresa")).toBe(assinatura("legado história empresa da"));
   });
 });
+
+import { extrairHandles } from "@/lib/radar/discovery";
+
+// O extrator pegou a palavra "que" de uma frase e o sistema foi validar na Meta uma conta @que,
+// com 92 mil seguidores e nada a ver com construção. Palavra solta do texto não é um @.
+describe("extrair handles do texto da busca", () => {
+  it("ignora palavra comum solta", () => {
+    const r = extrairHandles("perfis que valem a pena: uma loja com mais de mil seguidores");
+    expect(r).not.toContain("que");
+    expect(r).not.toContain("uma");
+    expect(r).not.toContain("loja");
+  });
+
+  it("pega handle de empresa de verdade", () => {
+    const r = extrairHandles("@lojasconstrular, villarejorevestimentos, instagram.com/moura.revestimentos");
+    expect(r).toContain("lojasconstrular");
+    expect(r).toContain("villarejorevestimentos");
+    expect(r).toContain("moura.revestimentos");
+  });
+
+  it("não confunde o domínio com um perfil", () => {
+    expect(extrairHandles("veja em instagram.com/reel/ABC123")).not.toContain("instagram");
+  });
+});
