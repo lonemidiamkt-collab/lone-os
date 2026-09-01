@@ -25,6 +25,10 @@ export interface MidiaPublica {
   postedAt?: string;
   likes: number;
   comments: number;
+  /** Arquivo da imagem/carrossel. Vem para IMAGE e CAROUSEL; NÃO vem para VIDEO (probe 01/09). */
+  mediaUrl?: string;
+  /** Miniatura. É o que existe para VIDEO — sem ela, Reel de terceiro seria analisado às cegas. */
+  thumbnailUrl?: string;
 }
 
 export interface InstagramProvider {
@@ -56,7 +60,7 @@ export function metaProvider(token: string, igUserIdDaAgencia: string): Instagra
         `business_discovery.username(${limpo})` +
         `{username,followers_count,media_count,` +
         `media.limit(${Math.min(50, Math.max(1, limiteMidias))})` +
-        `{id,media_type,permalink,caption,timestamp,like_count,comments_count}}`;
+        `{id,media_type,permalink,caption,timestamp,like_count,comments_count,media_url,thumbnail_url}}`;
 
       const url = `${GRAPH}/${igUserIdDaAgencia}?fields=${encodeURIComponent(campos)}&access_token=${encodeURIComponent(token)}`;
 
@@ -86,6 +90,8 @@ export function metaProvider(token: string, igUserIdDaAgencia: string): Instagra
         postedAt: m.timestamp ? String(m.timestamp) : undefined,
         likes: Number(m.like_count ?? 0),
         comments: Number(m.comments_count ?? 0),
+        mediaUrl: m.media_url ? String(m.media_url) : undefined,
+        thumbnailUrl: m.thumbnail_url ? String(m.thumbnail_url) : undefined,
       }));
 
       return {

@@ -122,6 +122,10 @@ export async function POST(req: NextRequest) {
             media_type: m.mediaType, permalink: m.permalink, caption: m.caption,
             posted_at: m.postedAt, likes: m.likes, comments: m.comments,
             followers_na_coleta: perfil.followers,
+            // Guardadas na coleta porque a URL da Meta EXPIRA: buscar de novo na hora da análise
+            // costuma devolver 403, e aí o conteúdo visual viraria análise de texto sem ninguém
+            // entender por quê.
+            media_url: m.mediaUrl ?? null, thumbnail_url: m.thumbnailUrl ?? null,
             engagement_rate: score.taxaEngajamento, outlier_ratio: score.outlierRatio,
             trend_score: score.temBase ? score.valor : null,
           });
