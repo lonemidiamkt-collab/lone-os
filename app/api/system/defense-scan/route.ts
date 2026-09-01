@@ -47,6 +47,9 @@ export async function POST(req: NextRequest) {
   const denied = await requireCronOrUser(req);
   if (denied) return denied;
 
+  // Padrão 8: o suficiente pra baseline de 7 dias. Sobe pra recuperar histórico de conta nova.
+  const diasHistorico = Math.min(90, Math.max(2, Number(req.nextUrl.searchParams.get("dias")) || 8));
+
   try {
     const token = await getMetaToken();
     if (!token) {
@@ -79,8 +82,9 @@ export async function POST(req: NextRequest) {
       const accountId = c.meta_ad_account_id as string;
 
       try {
-        // 1. Fetch últimos 8 dias
-        const insights = await getAccountInsights(accountId, token, 8);
+        // 1. Fetch do histórico. `?dias=` permite puxar mais fundo — é como uma conta recém
+        // vinculada ganha passado (ver o bloco de persistência abaixo).
+        const insights = await getAccountInsights(accountId, token, diasHistorico);
         if (!insights || insights.length === 0) {
           results.push({ client: clientName, snapshot: false, anomalies: 0, error: "no insights" });
           continue;
@@ -115,7 +119,31 @@ export async function POST(req: NextRequest) {
         const current: CurrentMetric = buildMetric(currentInsight);
         const history: HistoricalMetric[] = insights.map(buildMetric);
 
-        // 3. Persiste snapshot — UMA linha por cliente/dia, sobrescrita a cada scan.
+        // 3a. Persiste TODO o histórico que já veio na mesma chamada.
+        //
+        // O scan sempre buscou 8 dias pra calcular a baseline e gravava só o dia corrente — os
+        // outros 7 eram baixados e jogados fora. Isso custava duas coisas: dia em que o scan falhou
+        // ficava sem registro PARA SEMPRE (o relatório do mês some com ele), e conta recém-vinculada
+        // nascia sem passado nenhum. O ACM Distribuidora acabou de entrar assim: conta rodando desde
+        // agosto, R$ 210 na Meta, zero no relatório.
+        //
+        // Só insere o que falta: o dia corrente continua sendo apagado-e-reinserido logo abaixo,
+        // porque ele muda a cada scan enquanto o dia não fecha.
+        const { data: jaTem } = await supabaseAdmin.from("metric_snapshots")
+          .select("metric_date").eq("client_id", clientId)
+          .gte("metric_date", insights[0].date_start);
+        const datasGravadas = new Set((jaTem ?? []).map((r) => r.metric_date as string));
+
+        const faltando = history
+          .filter((h) => h.metric_date !== currentDate && !datasGravadas.has(h.metric_date))
+          .map((h) => ({
+            client_id: clientId, meta_ad_account_id: accountId, metric_date: h.metric_date,
+            spend: h.spend, impressions: h.impressions, clicks: h.clicks,
+            conversions: h.conversions, ctr: h.ctr, cpm: h.cpm, cpc: h.cpc, cpl: h.cpl,
+          }));
+        if (faltando.length) await supabaseAdmin.from("metric_snapshots").insert(faltando);
+
+        // 3b. Persiste snapshot do dia — UMA linha por cliente/dia, sobrescrita a cada scan.
         //
         // Este scan roda a cada 15 min, e o insert cru criava uma linha NOVA toda vez: 392.819
         // linhas para 4.001 combinações reais de cliente+dia, ou seja 98 cópias do mesmo número.
