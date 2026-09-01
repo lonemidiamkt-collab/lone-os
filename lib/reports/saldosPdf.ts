@@ -29,6 +29,14 @@ const ROTULO: Record<string, string> = {
   critical: "precisa de recarga", warning: "acabando", error: "sem leitura", ok: "ok",
 };
 
+/** "acaba hoje", "1 dia", "3 dias" — nunca 0.0105709106462 dias. */
+function diasLegiveis(d: number | null): string {
+  if (d === null || !Number.isFinite(d) || d < 0) return "";
+  if (d < 1) return "acaba hoje no ritmo atual";
+  const n = Math.floor(d);
+  return `${n} dia${n === 1 ? "" : "s"} no ritmo atual`;
+}
+
 /** Ordem de leitura: quem precisa de ação primeiro. Dentro do grupo, o mais vazio na frente. */
 function ordenar(contas: DigestAccount[]): DigestAccount[] {
   const peso: Record<string, number> = { critical: 0, warning: 1, error: 2, ok: 3 };
@@ -49,10 +57,10 @@ export function saldosPdfHtml(contas: DigestAccount[], logo: string, quando: str
   const linha = (c: DigestAccount) => {
     const cor = COR[c.alert.severity] ?? SUAVE;
     const pct = c.alert.pctRemaining !== null ? `${c.alert.pctRemaining.toFixed(0)}% da verba` : "sem verba definida";
-    // Dias restantes é o número que decide se dá pra esperar até amanhã ou não.
-    const dias = c.daysRemaining !== null && c.daysRemaining >= 0
-      ? `${c.daysRemaining} dia${c.daysRemaining === 1 ? "" : "s"} no ritmo atual`
-      : "";
+    // Dias restantes é o número que decide se dá pra esperar até amanhã ou não — e por isso precisa
+    // ser lido de relance. O cálculo vem em fração (0.0105709106462…), e imprimir isso cru ocupa
+    // meia linha dizendo menos que "acaba hoje".
+    const dias = diasLegiveis(c.daysRemaining);
     return `<tr>
       <td style="padding:9px 0;border-bottom:1px solid ${LINHA}">
         <div style="font-size:13px;color:${TEXTO};font-weight:600">${esc(c.clientName)}</div>
