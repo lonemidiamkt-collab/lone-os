@@ -46,9 +46,18 @@ export async function POST(req: NextRequest) {
 
   for (const c of clientes ?? []) {
     const nome = (c.name as string) ?? "";
-    // Já normalizado e específico? Não mexe.
+    // Já tem ramo reconhecível? Mantém o RAMO, mas reescreve o rótulo na forma canônica.
+    //
+    // Sem isso o banco acumula sinônimos do mesmo ramo — "Construção", "Construção Civil",
+    // "Construção e materiais" e "Pisos e porcelanato" conviviam como quatro nichos diferentes. Pro
+    // Trend Radar isso é pior que cosmético: ele pesquisaria o mesmo mercado quatro vezes, pagando
+    // quatro coletas e diluindo as tendências entre rótulos que deveriam ser um só.
     const atual = normalizarNicho(c.nicho as string);
-    if (atual && atual !== "outro") { decidido.push({ nome, nicho: atual, via: "cadastro" }); continue; }
+    if (atual && atual !== "outro") {
+      decidido.push({ nome, nicho: atual, via: "cadastro" });
+      if ((c.nicho as string) !== ROTULO_NICHO[atual]) gravar.push({ id: c.id as string, nicho: atual });
+      continue;
+    }
 
     // industry pode conter ramo de verdade em alguns (Ótica, Construção Civil) — o normalizador
     // devolve null pros que são pacote.
