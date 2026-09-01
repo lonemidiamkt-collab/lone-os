@@ -10,6 +10,7 @@ import type { SnapshotData, PeriodKind } from "@/lib/portal/types";
 import MobileFAB from "./MobileFAB";
 import PortalContent from "./PortalContent";
 import PortalInstagram from "./PortalInstagram";
+import PortalUpload from "@/components/portal/PortalUpload";
 
 const WA_NUMBER = "5522981530700";
 
@@ -115,6 +116,8 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
 
 interface Props {
   token: string;
+  /** Aprovação de arte pelo cliente. Desligada por decisão do Roberto (31/08) — ver PortalContent. */
+  aprovacaoLigada?: boolean;
   clientId: string;
   clientName: string;
   whatsappPhone: string;
@@ -124,7 +127,7 @@ interface Props {
   hasSocial?: boolean; // pacote inclui social/design → mostra artes entregues + Instagram orgânico
 }
 
-export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, hasAds = true, hasSocial = false }: Props) {
+export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, hasAds = true, hasSocial = false, aprovacaoLigada = false }: Props) {
   const [period, setPeriod]         = useState<PeriodKind>("last_week");
   const [data, setData]             = useState<SnapshotData | null>(initialData);
   const [loading, setLoading]       = useState(false);
@@ -283,7 +286,8 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
         {/* Crescimento nas redes (Instagram orgânico + Conteúdo entregue) */}
         {hasSocial && view === "social" && (<>
           <PortalInstagram token={token} clientId={clientId} />
-          <PortalContent token={token} />
+          <PortalContent token={token} aprovacaoLigada={aprovacaoLigada} />
+          <PortalUpload token={token} clientName={clientName} />
         </>)}
 
         {/* Bloco de TRÁFEGO — só pra pacote que tem anúncios */}

@@ -95,6 +95,7 @@ export default async function PortalPage({
         initialData={initialData}
         hasAds={hasAds}
         hasSocial={hasSocial}
+        aprovacaoLigada={process.env.PORTAL_APROVACAO_CLIENTE === "on"}
       />
     </>
   );

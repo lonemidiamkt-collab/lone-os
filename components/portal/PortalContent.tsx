@@ -10,7 +10,12 @@ interface Item { id: string; title: string; format: string; status: string; imag
 
 const fmtDate = (d: string | null) => d ? new Date(d.length <= 10 ? d + "T00:00:00" : d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "";
 
-export default function PortalContent({ token }: { token: string }) {
+/**
+ * `aprovacaoLigada` chega desligado por padrão: o cliente vê a arte e pode PEDIR AJUSTE, mas o
+ * aceite final volta a ser com o time (Roberto, 31/08: "o cliente aprovar pelo painel ainda não").
+ * O botão existia desde julho, antes dessa decisão.
+ */
+export default function PortalContent({ token, aprovacaoLigada = false }: { token: string; aprovacaoLigada?: boolean }) {
   const [items, setItems] = useState<Item[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [ajusteOpen, setAjusteOpen] = useState<string | null>(null);
@@ -85,9 +90,9 @@ export default function PortalContent({ token }: { token: string }) {
                     </div>
                   ) : (
                     <div className="flex gap-2">
-                      <button disabled={busy === it.id} onClick={() => act(it.id, "approve")}
+                      {aprovacaoLigada && <button disabled={busy === it.id} onClick={() => act(it.id, "approve")}
                         className="flex-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 min-h-[44px] flex items-center justify-center gap-1.5"
-                        style={{ background: "#22c55e", color: "#04120a" }}>✅ Aprovar</button>
+                        style={{ background: "#22c55e", color: "#04120a" }}>✅ Aprovar</button>}
                       <button disabled={busy === it.id} onClick={() => setAjusteOpen(it.id)}
                         className="flex-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 min-h-[44px]"
                         style={{ background: "#0B0E1E", color: "#c7cbd8", border: "1px solid #1A1F33" }}>✏️ Pedir ajuste</button>
