@@ -37,6 +37,11 @@ export interface ChatJsonParams {
   temperature?: number;
 }
 
+/** Modelos que usam o contrato novo de parâmetros (max_completion_tokens, sem temperature livre). */
+function ehGpt5(modelo: string): boolean {
+  return /^(gpt-5|o[34])/.test(modelo);
+}
+
 export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiResult<T>> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { ok: false, error: "OPENAI_API_KEY não configurada" };
@@ -52,8 +57,13 @@ export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiRe
           { role: "system", content: p.system },
           { role: "user", content: p.user },
         ],
-        max_tokens: p.maxTokens ?? 2048,
-        temperature: p.temperature ?? 0,
+        // A família GPT-5 trocou `max_tokens` por `max_completion_tokens` e recusa o nome antigo
+        // ("Unsupported parameter"). Como o modelo vem por parâmetro, o helper precisa escolher o
+        // nome certo — senão toda chamada a um modelo novo falha, e falha só em produção, na
+        // primeira vez que alguém trocar o modelo.
+        ...(ehGpt5(p.model)
+          ? { max_completion_tokens: p.maxTokens ?? 2048 }
+          : { max_tokens: p.maxTokens ?? 2048, temperature: p.temperature ?? 0 }),
         response_format: {
           type: "json_schema",
           json_schema: { name: p.schemaName, strict: true, schema: p.schema },
