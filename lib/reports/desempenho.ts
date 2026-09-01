@@ -331,13 +331,16 @@ export async function visaoCeo(de: string, ate: string, rotulo: string): Promise
   const total = entregues?.length ?? 0;
   const noPrazo = (entregues ?? []).filter((k) => k.due_date && (k.designer_delivered_at as string)?.slice(0, 10) <= (k.due_date as string)).length;
 
-  // "X% das artes voltaram" só faz sentido se numerador e denominador falarem do MESMO conjunto.
-  // Contando todo evento de rework da semana dava 11 de 44 = 25%, mas 3 daqueles 11 eram artes
-  // entregues em semanas ANTERIORES que voltaram agora — não estão entre as 44. O relatório do time
-  // mostrava 25% no topo e 18% no cartão do designer, na mesma página, sobre as mesmas artes.
+  // "X% das artes voltaram" conta ARTES, não eventos de retrabalho. A conta antiga somava os 11
+  // eventos da semana sobre as 44 artes = 25%, mas aqueles 11 eventos eram só 8 artes distintas:
+  // uma arte que volta duas vezes contava como duas artes. Além de inflar, brigava com o cartão do
+  // designer (18%), que sempre contou cards. Dois números pra mesma coisa na mesma página.
   const idsEntregues = new Set((entregues ?? []).map((k) => k.id as string));
-  const voltaram = new Set((reworks ?? []).map((r) => r.card_id as string).filter((id) => idsEntregues.has(id))).size;
-  const voltaramDeAntes = new Set((reworks ?? []).map((r) => r.card_id as string).filter((id) => !idsEntregues.has(id))).size;
+  const cardsComRework = (reworks ?? []).map((r) => r.card_id as string).filter((id) => idsEntregues.has(id));
+  const voltaram = new Set(cardsComRework).size;
+  // Arte que volta MAIS DE UMA VEZ é outro problema: não é ajuste fino, é briefing que não fechou
+  // ou cliente que muda de ideia. Some na contagem de artes e some numa taxa.
+  const reincidentes = cardsComRework.length - voltaram;
 
   // Cliente ativo sem NENHUMA peça nas últimas 4 semanas — o sinal de churn que aparece cedo.
   const quatroSem = new Date(new Date(ate).getTime() - 28 * 864e5).toISOString();
@@ -357,8 +360,7 @@ export async function visaoCeo(de: string, ate: string, rotulo: string): Promise
   if (pctVoltaram !== null && pctVoltaram <= 15) bom.push({ numero: `${pctVoltaram}%`, texto: "de retrabalho — dentro da meta" });
 
   if (pctVoltaram !== null && pctVoltaram > 15) preocupa.push({ numero: `${pctVoltaram}%`, texto: `das artes voltaram pra refazer (${voltaram} de ${total})` });
-  // Retrabalho de arte antiga é outro problema: não entra na taxa da semana, mas custa hora do time.
-  if (voltaramDeAntes > 0) preocupa.push({ numero: String(voltaramDeAntes), texto: "arte(s) de semanas anteriores voltaram pra ajuste nesta semana" });
+  if (reincidentes > 0) preocupa.push({ numero: String(reincidentes), texto: "ida(s) e volta(s) além da primeira — arte que volta duas vezes é briefing que não fechou" });
   if (pctPrazo !== null && pctPrazo < 85) preocupa.push({ numero: `${pctPrazo}%`, texto: "no prazo — abaixo dos 85% habituais" });
   if ((expiradas ?? 0) > 0) preocupa.push({ numero: String(expiradas), texto: "pedidos de cliente expiraram sem ninguém decidir" });
   if ((pendentes ?? 0) > 15) preocupa.push({ numero: String(pendentes), texto: "pedidos ainda esperando decisão" });
@@ -427,10 +429,12 @@ export async function relatorioTime(de: string, ate: string, rotulo: string): Pr
   const noPrazo = cards.filter((k) => k.due_date && (k.designer_delivered_at as string)?.slice(0, 10) <= (k.due_date as string)).length;
   const clientes = new Set(atendidos.map((k) => k.client_name).filter(Boolean));
 
-  // Mesmo critério do cartão do designer: das artes DESTA semana, quantas voltaram.
+  // Mesmo critério do cartão do designer: das artes DESTA semana, quantas voltaram. Conta ARTES,
+  // não eventos — uma arte que volta duas vezes é uma arte.
   const idsEntregues = new Set(cards.map((k) => k.id as string));
-  const voltaram = new Set(reworks.map((r) => r.card_id as string).filter((id) => idsEntregues.has(id))).size;
-  const voltaramDeAntes = new Set(reworks.map((r) => r.card_id as string).filter((id) => !idsEntregues.has(id))).size;
+  const cardsComRework = reworks.map((r) => r.card_id as string).filter((id) => idsEntregues.has(id));
+  const voltaram = new Set(cardsComRework).size;
+  const reincidentes = cardsComRework.length - voltaram;
 
   // Riscos que só aparecem no conjunto. Um cartão individual nunca mostra "o time inteiro depende
   // de uma pessoa" — pra quem entrega, aquilo é só uma semana produtiva.
@@ -449,8 +453,10 @@ export async function relatorioTime(de: string, ate: string, rotulo: string): Pr
   const semDono = porDesigner.get("(sem designer)") ?? 0;
   if (semDono > 0) estruturais.push(`${semDono} arte(s) entregue(s) sem registro de quem fez — não dá pra creditar nem cobrar.`);
 
-  if (voltaramDeAntes > 0) {
-    estruturais.push(`${voltaramDeAntes} arte(s) entregue(s) em semanas anteriores voltaram pra ajuste agora — não entram na taxa desta semana, mas consumiram hora do time.`);
+  if (reincidentes > 0) {
+    estruturais.push(
+      `${reincidentes} arte(s) voltaram mais de uma vez. Segunda ida e volta raramente é ajuste fino: ` +
+      `costuma ser briefing que não fechou antes de começar, ou cliente decidindo durante a execução.`);
   }
 
   // Queda que atinge TODO MUNDO não é desempenho individual: ou a demanda caiu, ou algo travou a
