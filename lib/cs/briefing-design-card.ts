@@ -17,6 +17,7 @@ import { isOpenAIConfigured } from "@/lib/ai/openai";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 import { loadBriefingCombinado, loadBriefingForClient } from "@/lib/cs/load-briefing";
 import { gerarBriefingDesign, formatBriefingDesign } from "@/lib/cs/briefing-design";
+import { conferirContato } from "@/lib/cs/conferencia-contato";
 
 /**
  * Devolve o briefing pronto pro designer, ou null quando não dá pra montar.
@@ -34,7 +35,7 @@ export async function briefingDesignDoCard(cardId: string): Promise<string | nul
     if (!card?.client_id) return null;
 
     const { data: cli } = await supabaseAdmin
-      .from("clients").select("name, nome_fantasia, nicho, industry, fixed_briefing, campaign_briefing")
+      .from("clients").select("name, nome_fantasia, nicho, industry, fixed_briefing, campaign_briefing, endereco, phone")
       .eq("id", card.client_id as string).maybeSingle();
     const clienteNome = (cli?.nome_fantasia as string) || (cli?.name as string)
       || (card.client_name as string) || "Cliente";
@@ -55,9 +56,18 @@ export async function briefingDesignDoCard(cardId: string): Promise<string | nul
       ...new Set((reworkRes.data ?? []).map((r) => (r.reason as string)?.trim()).filter(Boolean)),
     ].slice(0, 8);
 
+    // Endereço e telefone vão SEMPRE, mesmo quando não há regra nem histórico: é o erro que mais
+    // volta ("colocou o endereço da loja errada") e o mais barato de evitar. Cliente com mais de uma
+    // unidade recebe aviso explícito, porque é exatamente aí que a troca acontece.
+    const contato = conferirContato(
+      { endereco: cli?.endereco as string, telefone: cli?.phone as string },
+      [card.title, card.briefing, card.observations].filter(Boolean).join(" "),
+      clienteNome,
+    );
+
     // Sem regra E sem histórico de reprovação, o briefing por IA acrescenta pouco ao que o social
-    // já escreveu — e custa uma chamada. Cliente novo entra nesse caso até ter história.
-    if (!regras.length && !reprovacoesRecentes.length) return null;
+    // já escreveu — e custa uma chamada. Mas o bloco de contato vale por si só e segue sozinho.
+    if (!regras.length && !reprovacoesRecentes.length) return contato.texto || null;
 
     const b = estruturado.briefing;
     const r = await gerarBriefingDesign({
@@ -72,10 +82,11 @@ export async function briefingDesignDoCard(cardId: string): Promise<string | nul
       palavrasProibidas: b.palavrasProibidas, publicoAlvo: b.publicoAlvo,
       regras, reprovacoesRecentes,
     });
-    if (!r.ok || !r.data) return null;
+    if (!r.ok || !r.data) return contato.texto || null;
 
-    return formatBriefingDesign(r.data, clienteNome,
+    const briefingIA = formatBriefingDesign(r.data, clienteNome,
       (card.format as string) || undefined, (card.due_date as string) || undefined);
+    return [briefingIA, contato.texto].filter(Boolean).join("\n\n");
   } catch (err) {
     console.error("[briefing-design-card] falhou (ignorado):", String(err));
     return null;
