@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
     // clientes simplesmente não rodou, e a resposta saiu com "ok: true, pautas: []" — o pipeline
     // inteiro parecendo saudável sem ter produzido nada. Se a consulta falhar, o relatório diz.
     const { data: clientes, error: erroClientes } = await supabaseAdmin.from("clients")
-      .select("id, name, nome_fantasia, nicho, cidade")
+      .select("id, name, nome_fantasia, nicho, endereco_cidade")
       .eq("nicho", t.nicho)
       .or("active.is.null,active.eq.true")
       .is("draft_status", null)
@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
         cliente: nome, nicho: t.nicho,
         briefing: typeof briefing === "string" ? briefing : undefined,
         regras: Array.isArray(regras) ? regras.slice(0, 8).map(String) : undefined,
-        cidade: (c.cidade as string) || undefined,
+        cidade: (c.endereco_cidade as string) || undefined,
         tendencia: {
           nome: `${t.formato} com abertura de ${t.hookTipo}`,
           formato: t.formato, hookTipo: t.hookTipo,
