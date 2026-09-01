@@ -222,12 +222,24 @@ export async function POST(req: NextRequest) {
       });
       if (!r.ok || !r.data) { erros.push(`pauta ${nome}: ${r.error ?? "sem retorno"}`); continue; }
 
-      pautas.push({
-        cliente: nome, nicho: t.nicho,
-        tendencia: `${t.formato} · ${t.hookTipo} (${t.perfisDistintos} perfis)`,
-        ...r.data,
-        referencias: t.itens.slice(0, 3).map((i) => i.permalink).filter(Boolean),
-      });
+      const rotulo = `${t.formato} · ${t.hookTipo} (${t.perfisDistintos} perfis)`;
+      const refs = t.itens.slice(0, 3).map((i) => i.permalink).filter(Boolean) as string[];
+      pautas.push({ cliente: nome, nicho: t.nicho, tendencia: rotulo, ...r.data, referencias: refs });
+
+      // Grava. Sem isto a pauta morre na resposta da API — o mesmo destino dos alertas de queda,
+      // detectados por meses e nunca comunicados a ninguém.
+      if (!dry) {
+        const d = r.data as Record<string, unknown>;
+        await supabaseAdmin.from("radar_pautas").insert({
+          client_id: c.id, cliente_nome: nome, nicho: t.nicho,
+          tendencia: rotulo, perfis_na_tendencia: t.perfisDistintos,
+          ideia: String(d.ideia ?? ""), hook: String(d.hook ?? ""),
+          formato: String(d.formato ?? ""),
+          roteiro: Array.isArray(d.roteiro) ? d.roteiro.map(String) : null,
+          cta: String(d.cta ?? ""), porque_funciona: String(d.porqueVaiFuncionar ?? ""),
+          referencias: refs.length ? refs : null,
+        });
+      }
     }
   }
 
