@@ -7,7 +7,7 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { metaProvider } from "@/lib/radar/provider";
 import { mediana, engajamento, faixaDePerfil, MIN_BASELINE } from "@/lib/radar/score";
-import { escolherQueries, semearQueries, buscarCandidatos } from "@/lib/radar/discovery";
+import { escolherQueriesMistas, semearQueries, buscarAchados } from "@/lib/radar/discovery";
 
 // POST /api/system/radar-descoberta — procura no mercado quem a gente ainda não conhece.
 //
@@ -63,15 +63,23 @@ export async function POST(req: NextRequest) {
     const t0 = Date.now();
     const erros: string[] = [];
     await semearQueries(nicho);
-    const queries = await escolherQueries(nicho, quantasQueries);
+    // Metade das perguntas é content-first ("que Reel está circulando"), metade é profile-first
+    // ("quem são as empresas"). Só rodízio por data faria semanas inteiras caírem na segunda
+    // família, que é a maioria das cadastradas, e o content-first nunca sairia do papel.
+    const queries = await escolherQueriesMistas(nicho, quantasQueries);
     if (!queries.length) { resumo.push({ nicho, aviso: "sem queries" }); continue; }
 
-    // 1) Descobrir endereços
-    const candidatos = new Map<string, string>();  // username -> query que o trouxe
+    // 1) Descobrir — por conteúdo e por empresa
+    const candidatos = new Map<string, { queryId: string; origem: string; permalink?: string }>();
+    let viaConteudo = 0;
     for (const q of queries) {
       try {
-        const achados = await buscarCandidatos(q.query as string, apiKey);
-        for (const u of achados) if (!candidatos.has(u)) candidatos.set(u, q.id as string);
+        const achados = await buscarAchados(q.query as string, String(q.tipo ?? "keyword"), apiKey);
+        for (const a of achados) {
+          if (candidatos.has(a.username)) continue;
+          candidatos.set(a.username, { queryId: q.id as string, origem: a.origem, permalink: a.permalink });
+          if (a.origem === "conteudo") viaConteudo++;
+        }
       } catch (e) {
         erros.push(`${q.query}: ${String(e).slice(0, 90)}`);
       }
@@ -88,9 +96,10 @@ export async function POST(req: NextRequest) {
 
     // 2) Validar e medir na fonte oficial
     let validados = 0, novos = 0, semBase = 0, inacessiveis = 0;
-    const aceitos: { username: string; followers: number; faixa: string; mediana: number; posts: number; queryId: string }[] = [];
+    const aceitos: { username: string; followers: number; faixa: string; mediana: number; posts: number; queryId: string; origem: string }[] = [];
 
-    for (const [username, queryId] of candidatos) {
+    for (const [username, meta] of candidatos) {
+      const queryId = meta.queryId;
       if (conhecidos.has(username)) continue;
       try {
         const r = await provider.lerPerfil(username, 25);
@@ -103,15 +112,15 @@ export async function POST(req: NextRequest) {
         const faixa = faixaDePerfil(r.perfil.followers);
         aceitos.push({
           username: r.perfil.username, followers: r.perfil.followers, faixa,
-          mediana: med, posts: engs.length, queryId,
+          mediana: med, posts: engs.length, queryId, origem: meta.origem,
         });
         novos++;
 
         if (!dry) {
           await supabaseAdmin.from("radar_profiles").insert({
-            username: r.perfil.username, nicho, origem: "descoberto",
+            username: r.perfil.username, nicho,
             followers: r.perfil.followers, media_count: r.perfil.mediaCount,
-            faixa, descoberto_por: queryId,
+            faixa, descoberto_por: queryId, origem: meta.origem === "conteudo" ? "descoberto_conteudo" : "descoberto",
             mediana_engajamento: med, baseline_posts: engs.length,
           });
           // Pergunta que traz perfil útil ganha prioridade; a que não traz nada vai perdendo a vez.
@@ -135,9 +144,12 @@ export async function POST(req: NextRequest) {
 
     resumo.push({
       nicho, queries: queries.length, candidatos: candidatos.size,
+      // Quantos nasceram de uma busca por CONTEÚDO — é o indicador de que o radar não voltou a
+      // ser um buscador de empresas.
+      via_conteudo: viaConteudo,
       validados, novos, sem_base: semBase, inacessiveis,
       // Amostra do que entrou, pra dar pra conferir sem abrir o banco.
-      exemplos: aceitos.slice(0, 6).map((a) => `@${a.username} (${a.followers} seg, ${a.faixa}, mediana ${Math.round(a.mediana)})`),
+      exemplos: aceitos.slice(0, 6).map((a) => `@${a.username} (${a.followers} seg, ${a.faixa}, via ${a.origem})`),
       erros: erros.slice(0, 3),
       duracao_ms: duracao,
     });

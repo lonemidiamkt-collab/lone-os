@@ -45,3 +45,33 @@ describe("chatJson escolhe o parâmetro certo por modelo", () => {
     expect(cap.body).toHaveProperty("max_completion_tokens");
   });
 });
+
+// O Radar analisava conteúdo visual lendo só a legenda — julgar um antes/depois pelo texto. A Meta
+// entrega o arquivo de post/carrossel de terceiros e a miniatura de vídeo; o helper precisa saber
+// mandar isso junto.
+describe("chatJson aceita imagem", () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+  it("monta content multimodal quando há imagens", async () => {
+    process.env.OPENAI_API_KEY ||= "teste";
+    const cap = capturarCorpo();
+    await chatJson({
+      model: "gpt-5.4-nano", schemaName: "t", schema: {}, system: "s", user: "u",
+      imagens: ["data:image/jpeg;base64,AAA"],
+    });
+    const msgs = (cap.body as Record<string, unknown>).messages as Array<Record<string, unknown>>;
+    const userMsg = msgs.find((m) => m.role === "user")!;
+    expect(Array.isArray(userMsg.content)).toBe(true);
+    const partes = userMsg.content as Array<Record<string, unknown>>;
+    expect(partes.some((p) => p.type === "text")).toBe(true);
+    expect(partes.some((p) => p.type === "image_url")).toBe(true);
+  });
+
+  it("sem imagem, o content continua string simples", async () => {
+    process.env.OPENAI_API_KEY ||= "teste";
+    const cap = capturarCorpo();
+    await chatJson({ model: "gpt-4o-mini", schemaName: "t", schema: {}, system: "s", user: "u" });
+    const msgs = (cap.body as Record<string, unknown>).messages as Array<Record<string, unknown>>;
+    expect(typeof msgs.find((m) => m.role === "user")!.content).toBe("string");
+  });
+});

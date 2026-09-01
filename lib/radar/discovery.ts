@@ -13,6 +13,61 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 
 export interface CandidatoPerfil { username: string; queryId?: string; query?: string }
 
+/**
+ * O que a descoberta devolve.
+ *
+ * `perfil` nasce de "quem são as empresas desse mercado"; `conteudo` nasce de "que post/Reel está
+ * circulando nesse mercado" — e este segundo é o que faltava. Descobrir a empresa e depois olhar o
+ * que ela publica encontra empresas novas, mas ainda parte de quem publica. Partir do CONTEÚDO é o
+ * caminho que acha a loja que ninguém conhece porque um Reel dela estourou.
+ */
+export interface AchadoDescoberta {
+  username: string;
+  permalink?: string;
+  origem: "perfil" | "conteudo";
+  queryId?: string;
+}
+
+/**
+ * Perguntas voltadas ao CONTEÚDO, não à empresa.
+ *
+ * "loja de pisos instagram" acha lojas. "antes e depois porcelanato reels" acha o post que está
+ * circulando — e o autor dele pode ser uma loja de 8 mil seguidores que nenhuma busca por empresa
+ * traria. As duas famílias convivem: uma acha quem é referência, a outra acha o que está pegando.
+ */
+export function queriesDeConteudo(nicho: string): { query: string; tipo: string }[] {
+  const porNicho: Record<string, string[]> = {
+    "Construção e materiais": [
+      "antes e depois de obra instagram reels",
+      "erros ao escolher piso instagram reels",
+      "dicas antes de comprar material de construção reels instagram",
+      "site:instagram.com/reel porcelanato obra",
+      "transformação de ambiente com porcelanato instagram",
+    ],
+    "Móveis e decoração": [
+      "antes e depois decoração de sala instagram reels",
+      "site:instagram.com/reel móveis planejados",
+      "erros ao comprar móveis instagram reels",
+    ],
+    "Beleza e estética": [
+      "transformação de cabelo antes e depois instagram reels",
+      "site:instagram.com/reel procedimento estético resultado",
+    ],
+    "Automotivo": [
+      "antes e depois estética automotiva instagram reels",
+      "dicas de manutenção do carro instagram reels",
+    ],
+    "Saúde e clínicas": ["dicas de saúde instagram reels clínica", "site:instagram.com/reel clínica orientação paciente"],
+    "Energia solar": ["instalação de energia solar antes e depois instagram reels", "quanto economiza energia solar instagram reels"],
+    "Moda e vestuário": ["provador de roupas instagram reels loja", "site:instagram.com/reel loja de roupas novidade"],
+    "Alimentação": ["bastidores de cozinha instagram reels restaurante", "site:instagram.com/reel comida preparo loja"],
+    "Ótica": ["provando óculos instagram reels ótica"],
+    "Pet": ["banho e tosa antes e depois instagram reels"],
+    "Fitness e academia": ["treino instagram reels academia dica"],
+  };
+  return (porNicho[nicho] ?? [`${nicho} instagram reels dicas`]).map((q) => ({ query: q, tipo: "conteudo" }));
+}
+
 /** As perguntas de partida de um nicho. Curtas e específicas — busca vaga traz perfil vago. */
 export function queriesIniciais(nicho: string): { query: string; tipo: string }[] {
   const base: Record<string, { query: string; tipo: string }[]> = {
@@ -89,8 +144,28 @@ export async function escolherQueries(nicho: string, quantas = 5) {
 }
 
 export async function semearQueries(nicho: string) {
-  const linhas = queriesIniciais(nicho).map((q) => ({ nicho, query: q.query, tipo: q.tipo }));
+  const linhas = [...queriesIniciais(nicho), ...queriesDeConteudo(nicho)]
+    .map((q) => ({ nicho, query: q.query, tipo: q.tipo }));
   if (linhas.length) await supabaseAdmin.from("radar_queries").upsert(linhas, { onConflict: "nicho,query" });
+}
+
+/**
+ * Escolhe as perguntas da semana MISTURANDO as duas famílias.
+ *
+ * Só rodízio por data faria semanas inteiras caírem só em busca por empresa (que é a maioria das
+ * perguntas cadastradas) e o content-first nunca sairia do papel. Metade e metade, sempre.
+ */
+export async function escolherQueriesMistas(nicho: string, quantas = 4) {
+  const metade = Math.max(1, Math.floor(quantas / 2));
+  const [{ data: conteudo }, { data: perfil }] = await Promise.all([
+    supabaseAdmin.from("radar_queries").select("id, query, tipo, usos, achados_uteis")
+      .eq("nicho", nicho).eq("ativa", true).eq("tipo", "conteudo")
+      .order("ultima_vez", { ascending: true, nullsFirst: true }).limit(metade),
+    supabaseAdmin.from("radar_queries").select("id, query, tipo, usos, achados_uteis")
+      .eq("nicho", nicho).eq("ativa", true).neq("tipo", "conteudo")
+      .order("ultima_vez", { ascending: true, nullsFirst: true }).limit(quantas - metade),
+  ]);
+  return [...(conteudo ?? []), ...(perfil ?? [])];
 }
 
 /** Extrai @handles de um texto solto. O modelo às vezes devolve prosa junto; isso limpa. */
@@ -108,6 +183,16 @@ export function extrairHandles(texto: string): string[] {
   return [...achados];
 }
 
+/** Extrai links de post/Reel do texto — o caminho content-first. */
+export function extrairPermalinks(texto: string): { permalink: string; username?: string }[] {
+  const achados: { permalink: string; username?: string }[] = [];
+  const rx = /https?:\/\/(?:www\.)?instagram\.com\/(?:([a-z0-9._]{2,30})\/)?(?:reel|reels|p)\/([A-Za-z0-9_-]{5,})/gi;
+  for (const m of texto.matchAll(rx)) {
+    achados.push({ permalink: `https://www.instagram.com/${m[1] ? `${m[1]}/` : ""}${m[0].includes("/reel") ? "reel" : "p"}/${m[2]}/`, username: m[1]?.toLowerCase() });
+  }
+  return achados;
+}
+
 /** Pergunta à IA com busca web. Só handles — a métrica quem dá é a Meta. */
 export async function buscarCandidatos(query: string, apiKey: string, modelo = "gpt-5.4-mini"): Promise<string[]> {
   const res = await fetch("https://api.openai.com/v1/responses", {
@@ -118,10 +203,11 @@ export async function buscarCandidatos(query: string, apiKey: string, modelo = "
       tools: [{ type: "web_search" }],
       input:
         `Pesquise na web: ${query}\n\n` +
-        `Liste perfis do Instagram de empresas BRASILEIRAS desse mercado. ` +
+        `Encontre CONTEÚDOS e PERFIS do Instagram de empresas BRASILEIRAS desse mercado. ` +
         `Priorize lojas REGIONAIS e de pequeno/médio porte — grandes marcas nacionais são menos úteis aqui. ` +
-        `NÃO tente estimar seguidores nem desempenho: responda APENAS os nomes de usuário, ` +
-        `separados por vírgula, sem @ e sem nenhum outro texto. No máximo 20.`,
+        `Se encontrar links de posts ou Reels, inclua os links completos. ` +
+        `NÃO tente estimar seguidores nem desempenho — isso é medido depois. ` +
+        `Responda apenas com nomes de usuário e/ou links do Instagram, separados por vírgula ou quebra de linha, sem texto explicativo.`,
     }),
     signal: AbortSignal.timeout(180_000),
   });
@@ -139,4 +225,51 @@ export async function buscarCandidatos(query: string, apiKey: string, modelo = "
     }
   }
   return extrairHandles(texto);
+}
+
+/** Busca que devolve as duas coisas: quem publica e o que foi publicado. */
+export async function buscarAchados(query: string, tipo: string, apiKey: string, modelo = "gpt-5.4-mini"): Promise<AchadoDescoberta[]> {
+  const texto = await buscarTextoBruto(query, apiKey, modelo);
+  const porConteudo = extrairPermalinks(texto);
+  const achados = new Map<string, AchadoDescoberta>();
+
+  // Quem apareceu por causa de um post entra marcado como content-first: é o caminho que encontra
+  // a loja desconhecida cujo Reel circulou.
+  for (const c of porConteudo) {
+    if (c.username) achados.set(c.username, { username: c.username, permalink: c.permalink, origem: "conteudo" });
+  }
+  for (const u of extrairHandles(texto)) {
+    if (!achados.has(u)) achados.set(u, { username: u, origem: tipo === "conteudo" ? "conteudo" : "perfil" });
+  }
+  return [...achados.values()];
+}
+
+async function buscarTextoBruto(query: string, apiKey: string, modelo: string): Promise<string> {
+  const res = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: modelo,
+      tools: [{ type: "web_search" }],
+      input:
+        `Pesquise na web: ${query}\n\n` +
+        `Encontre CONTEÚDOS e PERFIS do Instagram de empresas BRASILEIRAS desse mercado. ` +
+        `Priorize lojas REGIONAIS e de pequeno/médio porte. ` +
+        `Se encontrar links de posts ou Reels, inclua os links completos. ` +
+        `NÃO estime seguidores nem desempenho — isso é medido depois. ` +
+        `Responda apenas com nomes de usuário e/ou links do Instagram.`,
+    }),
+    signal: AbortSignal.timeout(180_000),
+  });
+  const json = await res.json().catch(() => null) as Record<string, unknown> | null;
+  if (!json) return "";
+  if (json.error) throw new Error(String((json.error as Record<string, unknown>)?.message ?? "web_search falhou"));
+  if (typeof json.output_text === "string" && json.output_text) return json.output_text;
+  let texto = "";
+  for (const o of (json.output as Array<Record<string, unknown>>) ?? []) {
+    for (const c of (o.content as Array<Record<string, unknown>>) ?? []) {
+      if (typeof c.text === "string") texto += `\n${c.text}`;
+    }
+  }
+  return texto;
 }

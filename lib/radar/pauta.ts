@@ -31,8 +31,15 @@ export interface EntradaPauta {
 
 export const SCHEMA_PAUTA: Record<string, unknown> = {
   type: "object", additionalProperties: false,
-  required: ["ideia", "hook", "formato", "roteiro", "cta", "porqueVaiFuncionar"],
+  required: ["fitScore", "ideia", "hook", "formato", "roteiro", "cta", "porqueVaiFuncionar"],
   properties: {
+    fitScore: {
+      type: "number",
+      description:
+        "0 a 100: o quanto ESTE padrão faz sentido para ESTE cliente, considerando produtos, " +
+        "posicionamento e o que ele já publica. Seja severo — abaixo de 70 a pauta é descartada, " +
+        "e é melhor descartar do que entregar ideia que não combina.",
+    },
     ideia: { type: "string", description: "título da peça, curto" },
     hook: { type: "string", description: "a primeira frase, escrita para ESTE cliente" },
     formato: { type: "string", description: "Reel, carrossel, post estático…" },

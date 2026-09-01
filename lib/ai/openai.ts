@@ -35,6 +35,14 @@ export interface ChatJsonParams {
   schemaName: string;
   maxTokens?: number;
   temperature?: number;
+  /**
+   * Imagens (data: URI ou URL) que acompanham o `user`.
+   *
+   * O Radar analisava conteúdo visual lendo só a legenda — o que é o mesmo que julgar um post de
+   * antes/depois pelo texto. A Meta entrega o arquivo de post e carrossel de terceiros, e a
+   * miniatura de vídeo; usar isso é a diferença entre adivinhar e ver.
+   */
+  imagens?: string[];
 }
 
 /** Modelos que usam o contrato novo de parâmetros (max_completion_tokens, sem temperature livre). */
@@ -55,7 +63,15 @@ export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiRe
         model: p.model,
         messages: [
           { role: "system", content: p.system },
-          { role: "user", content: p.user },
+          p.imagens?.length
+            ? {
+                role: "user",
+                content: [
+                  { type: "text", text: p.user },
+                  ...p.imagens.map((url) => ({ type: "image_url", image_url: { url, detail: "low" } })),
+                ],
+              }
+            : { role: "user", content: p.user },
         ],
         // A família GPT-5 trocou `max_tokens` por `max_completion_tokens` e recusa o nome antigo
         // ("Unsupported parameter"). Como o modelo vem por parâmetro, o helper precisa escolher o

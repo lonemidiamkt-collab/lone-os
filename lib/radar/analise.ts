@@ -24,6 +24,16 @@ export interface EntradaAnalise {
 
 export interface SaidaAnalise {
   tema: string;
+  /**
+   * O MECANISMO: por que aquilo prende, dito como ideia, não como formato.
+   *
+   * É a diferença entre "institucional" e "storytelling de legado". Formato é o recipiente —
+   * carrossel, Reel, institucional; mecanismo é o que faz funcionar, e é isso que se replica num
+   * negócio diferente. Agrupar por formato produzia tendência falsa: quatro conteúdos que só têm
+   * em comum serem institucionais não são um movimento de mercado.
+   */
+  mecanismo: string;
+  angulo: string;
   hook: string;
   hookTipo: string;
   formato: string;
@@ -32,13 +42,23 @@ export interface SaidaAnalise {
   motivoPerformance: string;
   replicavel: string;
   tags: string[];
+  /** O quanto dá pra confiar nisto, dado o material que chegou. Ver `NivelAnalise`. */
+  confianca: "alta" | "media" | "baixa";
 }
 
 export const SCHEMA_ANALISE: Record<string, unknown> = {
   type: "object", additionalProperties: false,
-  required: ["tema", "hook", "hookTipo", "formato", "estrutura", "cta", "motivoPerformance", "replicavel", "tags"],
+  required: ["tema", "mecanismo", "angulo", "hook", "hookTipo", "formato", "estrutura", "cta", "motivoPerformance", "replicavel", "tags", "confianca"],
   properties: {
-    tema: { type: "string", description: "assunto em poucas palavras" },
+    tema: { type: "string", description: "assunto do conteúdo, em poucas palavras" },
+    mecanismo: {
+      type: "string",
+      description:
+        "POR QUE prende, como IDEIA replicável — nunca o formato. Bom: 'história de legado da " +
+        "empresa', 'erros antes da compra', 'transformação antes e depois', 'funcionário " +
+        "demonstrando o produto', 'comparação barato x correto'. Ruim: 'institucional', 'carrossel', 'Reel'.",
+    },
+    angulo: { type: "string", description: "o ponto de vista: educar, provocar, emocionar, provar, vender" },
     hook: { type: "string", description: "a primeira frase ou o que prende nos primeiros segundos; '' se não der pra saber" },
     hookTipo: { type: "string", enum: ["pergunta", "erro/alerta", "curiosidade", "promessa", "numero/lista", "transformacao", "bastidor", "institucional", "oferta", "indefinido"] },
     formato: { type: "string", enum: ["antes_depois", "lista", "tutorial", "demonstracao", "depoimento", "bastidor", "oferta", "storytelling", "institucional", "outro"] },
@@ -47,7 +67,18 @@ export const SCHEMA_ANALISE: Record<string, unknown> = {
     motivoPerformance: { type: "string", description: "hipótese do porquê performou acima do normal DESTE perfil" },
     replicavel: { type: "string", description: "o que outro negócio poderia repetir — o mecanismo, nunca o texto" },
     tags: { type: "array", items: { type: "string" }, maxItems: 6 },
+    confianca: {
+      type: "string", enum: ["alta", "media", "baixa"],
+      description: "quanto dá pra confiar nesta leitura considerando o material recebido",
+    },
   },
+};
+
+/** O que cada nível permite afirmar — e o que não permite. */
+export const LIMITE_DO_NIVEL: Record<NivelAnalise, string> = {
+  texto: "Você recebeu APENAS legenda e métricas. NÃO afirme nada sobre imagem, corte, edição, ritmo ou áudio. Confiança no máximo 'media'.",
+  imagem: "Você recebeu legenda, métricas e a IMAGEM do post. Pode descrever o que se vê. NÃO afirme nada sobre ritmo, corte, movimento ou áudio.",
+  video: "Você recebeu legenda, métricas e a MINIATURA de um vídeo — não o vídeo. Pode descrever o que a miniatura mostra (produto, pessoa, texto na tela, ambiente, se parece antes/depois). NÃO afirme nada sobre os primeiros segundos, ritmo, cortes, trilha ou áudio: você não assistiu. Confiança no máximo 'media'.",
 };
 
 export function promptAnalise(e: EntradaAnalise, nivel: NivelAnalise): { system: string; user: string } {
@@ -58,11 +89,9 @@ export function promptAnalise(e: EntradaAnalise, nivel: NivelAnalise): { system:
     "",
     "REGRAS:",
     "- Não invente o que não está no material. Sem saber o hook, devolva string vazia.",
-    nivel === "texto"
-      ? "- Você recebeu APENAS legenda e métricas: não afirme nada sobre imagem, corte ou edição."
-      : nivel === "imagem"
-      ? "- Você recebeu legenda, métricas e UMA imagem estática: não afirme nada sobre ritmo, corte ou áudio."
-      : "- Você recebeu legenda, métricas e quadros do vídeo.",
+    `- ${LIMITE_DO_NIVEL[nivel]}`,
+    "- MECANISMO é a parte mais importante: diga a IDEIA que faz o conteúdo funcionar, de um jeito que",
+    "  outro negócio conseguiria repetir. 'Institucional' e 'carrossel' são formatos, não mecanismos.",
     "- 'Performou acima do normal' é relativo AO PRÓPRIO PERFIL. Não comente tamanho de seguidores.",
     "- Escreva em português do Brasil, direto, sem jargão de marketing.",
   ].join("\n");

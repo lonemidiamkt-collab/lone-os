@@ -9,6 +9,7 @@ import { chatJson } from "@/lib/ai/openai";
 import { avaliarCandidato, diversificar } from "@/lib/radar/score";
 import { SCHEMA_ANALISE, promptAnalise, type SaidaAnalise, type NivelAnalise } from "@/lib/radar/analise";
 import { SCHEMA_PAUTA, promptPauta } from "@/lib/radar/pauta";
+import { agruparPorSemelhanca, candidatas, avaliarForca, assinatura, type ItemParaAgrupar } from "@/lib/radar/tendencia";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 import { loadBriefingCombinado } from "@/lib/cs/load-briefing";
 
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   // ── 1. Seleção: matemática decide onde vale gastar IA ──────────────────────
   let q = supabaseAdmin.from("radar_media")
-    .select("id, nicho, media_type, permalink, caption, likes, comments, followers_na_coleta, outlier_ratio, trend_score, posted_at, profile_id, analisado_em")
+    .select("id, nicho, media_type, permalink, caption, likes, comments, followers_na_coleta, outlier_ratio, trend_score, posted_at, profile_id, analisado_em, media_url, thumbnail_url")
     .is("analisado_em", null)
     .not("outlier_ratio", "is", null)
     .gte("posted_at", new Date(Date.now() - 45 * 864e5).toISOString());
@@ -84,9 +85,27 @@ export async function POST(req: NextRequest) {
 
   for (const m of selecionados) {
     const p = porPerfil.get(m.profile_id as string);
-    // O probe mostrou que vídeo de terceiro não entrega o arquivo — só legenda e miniatura. O nível
-    // fica registrado pra ninguém achar que houve leitura de vídeo que não houve.
-    const nivel: NivelAnalise = "texto";
+
+    // Julgar um antes/depois pela legenda é adivinhar. A Meta entrega o arquivo de IMAGE/CAROUSEL
+    // de terceiros e a MINIATURA de vídeo — o probe confirmou os dois. Usar isso é a diferença
+    // entre ver e supor. O que continua fora é o vídeo em si, e o nível registrado diz exatamente
+    // isso, pra ninguém achar que houve leitura de vídeo que não houve.
+    const tipo = String(m.media_type ?? "").toUpperCase();
+    let nivel: NivelAnalise = "texto";
+    const imagens: string[] = [];
+    const urlVisual = (m.media_url as string) || (m.thumbnail_url as string) || "";
+    if (urlVisual) {
+      try {
+        const resp = await fetch(urlVisual, { signal: AbortSignal.timeout(20_000) });
+        if (resp.ok) {
+          const buf = Buffer.from(await resp.arrayBuffer());
+          if (buf.length > 0 && buf.length < 8 * 1024 * 1024) {
+            imagens.push(`data:image/jpeg;base64,${buf.toString("base64")}`);
+            nivel = tipo === "VIDEO" ? "video" : "imagem";
+          }
+        }
+      } catch { /* sem a imagem cai pro nível texto — que é honesto, e fica registrado */ }
+    }
     const { system, user } = promptAnalise({
       caption: m.caption as string | undefined,
       mediaType: String(m.media_type ?? "?"),
@@ -98,7 +117,8 @@ export async function POST(req: NextRequest) {
 
     const r = await chatJson<SaidaAnalise>({
       model: MODELO_ANALISE, schemaName: "radar_analise", schema: SCHEMA_ANALISE,
-      maxTokens: 500, temperature: 0.2, system, user,
+      maxTokens: 700, temperature: 0.2, system, user,
+      imagens: imagens.length ? imagens : undefined,
     });
     if (!r.ok || !r.data) { erros.push(`análise ${m.id}: ${r.error ?? "sem retorno"}`); continue; }
 
@@ -110,107 +130,130 @@ export async function POST(req: NextRequest) {
         formato: r.data.formato, estrutura: r.data.estrutura, cta: r.data.cta,
         motivo_performance: r.data.motivoPerformance, replicavel: r.data.replicavel,
         tags: r.data.tags, modelo: `${MODELO_ANALISE} (nível: ${nivel})`,
+        mecanismo: r.data.mecanismo, angulo: r.data.angulo, confianca: r.data.confianca,
       });
-      await supabaseAdmin.from("radar_media").update({ analisado_em: new Date().toISOString() }).eq("id", m.id);
+      await supabaseAdmin.from("radar_media")
+        .update({ analisado_em: new Date().toISOString(), analysis_level: nivel }).eq("id", m.id);
     }
   }
 
-  // ── 3. Tendência = padrão repetido em perfis DIFERENTES ────────────────────
+  // ── 3. Tendência: mesmo MECANISMO em perfis diferentes ─────────────────────
   //
-  // Um post sozinho é sinal, não tendência. Só vira tendência quando empresas diferentes chegam à
-  // mesma fórmula por conta própria — aí é o mercado falando, não acaso.
-  //
-  // Agrupa por FORMATO, não por formato+abertura. Na primeira rodada real, "institucional"
-  // apareceu em 5 conteúdos de 4 perfis (Casas Bahia nos 70 anos, Votorantim nos 90, Telhanorte,
-  // Canadian Solar) — uma tendência clara de storytelling de legado. A chave antiga exigia também
-  // o mesmo tipo de abertura, e como as aberturas variavam ("institucional", "erro/alerta",
-  // "indefinido"), o padrão se partiu em quatro grupos de um e NENHUMA tendência foi detectada.
-  // Formato é o que se repete de verdade; a abertura é variação em cima dele.
-  // O agrupamento olha TODAS as análises recentes, não só as desta execução.
-  //
-  // Como cada conteúdo é marcado depois de analisado, ele não volta na rodada seguinte — e a versão
-  // anterior agrupava apenas o que tinha acabado de analisar. Na prática cada semana recomeçava do
-  // zero: uma execução com 1 conteúdo novo nunca alcança "2 perfis diferentes", e o sinal nunca
-  // acumulava. Tendência é justamente o que se repete AO LONGO do tempo.
+  // Agrupa por mecanismo, não por formato: "institucional" e "carrossel" são recipientes, e quatro
+  // conteúdos que só têm isso em comum não são movimento de mercado. Olha os últimos 45 dias, não
+  // só esta execução — conteúdo analisado não volta, e sem memória o sinal nunca acumulava.
   const { data: historico } = await supabaseAdmin
     .from("radar_analysis")
-    .select("formato, hook_tipo, estrutura, motivo_performance, replicavel, media_id, created_at")
+    .select("media_id, mecanismo, tema, formato, hook_tipo, estrutura, motivo_performance, created_at")
     .gte("created_at", new Date(Date.now() - 45 * 864e5).toISOString());
 
   const idsHist = (historico ?? []).map((h) => h.media_id as string);
   const { data: midiasHist } = idsHist.length
     ? await supabaseAdmin.from("radar_media")
-        .select("id, nicho, permalink, outlier_ratio, profile_id").in("id", idsHist)
+        .select("id, nicho, permalink, outlier_ratio, profile_id, posted_at").in("id", idsHist)
     : { data: [] as Record<string, unknown>[] };
   const porMidia = new Map((midiasHist ?? []).map((m) => [m.id as string, m]));
 
-  type ItemGrupo = { perfil: string; formato: string; hookTipo: string; estrutura: string;
-                     motivo: string; permalink?: string; outlier: number; nicho: string };
-  const universo: ItemGrupo[] = [];
+  const universo: ItemParaAgrupar[] = [];
+  const detalhePorMedia = new Map<string, { estrutura: string; motivo: string }>();
   for (const h of historico ?? []) {
     const m = porMidia.get(h.media_id as string);
     if (!m) continue;
+    const mec = String(h.mecanismo ?? "").trim();
+    // Análise antiga (antes do campo existir) não entra: sem mecanismo não há o que agrupar, e
+    // cair no formato de volta seria repetir o erro que esta mudança veio corrigir.
+    if (!mec) continue;
     const p = porPerfil.get(m.profile_id as string);
     universo.push({
+      mediaId: m.id as string,
       perfil: String(p?.username ?? m.profile_id),
-      formato: String(h.formato ?? "outro"),
-      hookTipo: String(h.hook_tipo ?? "indefinido"),
-      estrutura: String(h.estrutura ?? ""),
-      motivo: String(h.motivo_performance ?? ""),
-      permalink: m.permalink as string | undefined,
-      outlier: Number(m.outlier_ratio) || 0,
       nicho: String(m.nicho ?? ""),
+      mecanismo: mec, tema: String(h.tema ?? ""),
+      formato: String(h.formato ?? "outro"), hookTipo: String(h.hook_tipo ?? "indefinido"),
+      outlier: Number(m.outlier_ratio) || 0,
+      permalink: m.permalink as string | undefined,
+      quando: String(m.posted_at ?? h.created_at ?? ""),
+    });
+    detalhePorMedia.set(m.id as string, {
+      estrutura: String(h.estrutura ?? ""), motivo: String(h.motivo_performance ?? ""),
     });
   }
 
-  const grupos = new Map<string, ItemGrupo[]>();
-  for (const x of universo) {
-    const chave = `${x.nicho}|${x.formato}`;
-    grupos.set(chave, [...(grupos.get(chave) ?? []), x]);
+  const tendencias = candidatas(agruparPorSemelhanca(universo))
+    .map((c) => ({ ...c, ...avaliarForca(c) }))
+    .filter((c) => c.perfisDistintos >= 2 && c.status !== "dead")
+    .sort((a, b) => b.forca - a.forca);
+
+  // Persiste, para acompanhar evolução e não recomeçar do zero toda semana.
+  const idsTendencia = new Map<string, string>();
+  if (!dry) {
+    for (const t of tendencias) {
+      const mec = t.itens[0].mecanismo;
+      const sig = assinatura(mec);
+      const { data: gravada } = await supabaseAdmin.from("radar_trends").upsert({
+        nicho: t.nicho, assinatura: sig, nome: mec.slice(0, 90), mecanismo: mec,
+        formatos: [...new Set(t.itens.map((i) => i.formato))],
+        aberturas: [...new Set(t.itens.map((i) => i.hookTipo).filter((h) => h !== "indefinido"))],
+        perfis_count: t.perfisDistintos, midias_count: t.itens.length,
+        outlier_mediano: t.outlierMediano, forca: t.forca, status: t.status,
+        ultima_vez: new Date().toISOString(),
+      }, { onConflict: "nicho,assinatura" }).select("id").single();
+      if (gravada?.id) {
+        idsTendencia.set(sig, gravada.id as string);
+        await supabaseAdmin.from("radar_trend_media")
+          .upsert(t.itens.map((i) => ({ trend_id: gravada.id, media_id: i.mediaId })), { onConflict: "trend_id,media_id" });
+      }
+    }
   }
 
-  const tendencias = [...grupos.entries()]
-    .map(([chave, itens]) => {
-      const [nicho, formato] = chave.split("|");
-      const perfisDistintos = new Set(itens.map((i) => i.perfil)).size;
-      // As aberturas vistas dentro do formato: é o que dá textura à recomendação.
-      const aberturas = [...new Set(itens.map((i) => i.hookTipo).filter((h) => h && h !== "indefinido"))];
-      return { nicho, formato, hookTipo: aberturas[0] ?? "variada", aberturas, itens, perfisDistintos };
-    })
-    .filter((t) => t.perfisDistintos >= 2)          // dois perfis diferentes, no mínimo
-    .sort((a, b) => b.perfisDistintos - a.perfisDistintos || b.itens.length - a.itens.length);
-
-  // ── 4. Tendência vira pauta para os clientes daquele nicho ─────────────────
+  // ── 4. Tendência vira pauta — só para quem faz sentido ─────────────────────
   const pautas: Record<string, unknown>[] = [];
   for (const t of tendencias.slice(0, 4)) {
-    // Erro aqui não pode passar em branco: na primeira execução a lista voltou vazia, o laço de
-    // clientes simplesmente não rodou, e a resposta saiu com "ok: true, pautas: []" — o pipeline
-    // inteiro parecendo saudável sem ter produzido nada. Se a consulta falhar, o relatório diz.
+    const sig = assinatura(t.itens[0].mecanismo);
+    const trendId = idsTendencia.get(sig);
+
+    // Sem limite arbitrário de clientes: o corte é por PERTINÊNCIA, não pelos três primeiros que o
+    // banco devolveu. Construção tem 20 clientes e a tendência pode servir a poucos ou a muitos.
     const { data: clientes, error: erroClientes } = await supabaseAdmin.from("clients")
       .select("id, name, nome_fantasia, nicho, endereco_cidade")
-      .eq("nicho", t.nicho)
-      .or("active.is.null,active.eq.true")
-      .is("draft_status", null)
-      .limit(3);
-
+      .eq("nicho", t.nicho).or("active.is.null,active.eq.true").is("draft_status", null);
     if (erroClientes) { erros.push(`clientes do nicho ${t.nicho}: ${erroClientes.message}`); continue; }
-    if (!clientes?.length) { erros.push(`nenhum cliente ativo no nicho "${t.nicho}" para receber a pauta`); continue; }
+    if (!clientes?.length) { erros.push(`nenhum cliente ativo no nicho "${t.nicho}"`); continue; }
 
     for (const c of clientes) {
       const nome = (c.nome_fantasia as string) || (c.name as string);
+
+      // Já recebeu pauta desta tendência e ainda não decidiu? Não manda de novo. Repetir a mesma
+      // ideia toda semana é o jeito mais rápido de o time parar de ler o radar.
+      if (trendId) {
+        const { count } = await supabaseAdmin.from("radar_pautas")
+          .select("id", { count: "exact", head: true })
+          .eq("client_id", c.id as string).eq("trend_id", trendId).eq("status", "nova");
+        if ((count ?? 0) > 0) continue;
+      }
+
       const briefing = await loadBriefingCombinado(c.id as string).catch(() => "");
       const regras = await fetchClientCsRules(c.id as string).catch(() => [] as string[]);
 
+      // O que o cliente já publicou, pra não repetir tema.
+      const { data: recentes } = await supabaseAdmin.from("content_cards")
+        .select("title").eq("client_id", c.id as string)
+        .order("created_at", { ascending: false }).limit(10);
+      const jaPublicou = (recentes ?? []).map((r) => String(r.title ?? "")).filter(Boolean);
+
+      const primeiro = detalhePorMedia.get(t.itens[0].mediaId);
       const { system, user } = promptPauta({
         cliente: nome, nicho: t.nicho,
         briefing: typeof briefing === "string" ? briefing : undefined,
         regras: Array.isArray(regras) ? regras.slice(0, 8).map(String) : undefined,
         cidade: (c.endereco_cidade as string) || undefined,
+        jaPublicou,
         tendencia: {
-          nome: `${t.formato} com abertura de ${t.hookTipo}`,
-          formato: t.formato, hookTipo: t.hookTipo,
-          estrutura: t.itens[0]?.estrutura ?? "",
-          porqueFunciona: t.itens[0]?.motivo ?? "",
+          nome: t.itens[0].mecanismo,
+          formato: [...new Set(t.itens.map((i) => i.formato))].join(" ou "),
+          hookTipo: t.itens[0].hookTipo,
+          estrutura: primeiro?.estrutura ?? "",
+          porqueFunciona: primeiro?.motivo ?? "",
           quantosPerfis: t.perfisDistintos,
           exemplos: t.itens.slice(0, 3).map((i) => ({ permalink: i.permalink, outlier: i.outlier })),
         },
@@ -218,23 +261,28 @@ export async function POST(req: NextRequest) {
 
       const r = await chatJson<Record<string, unknown>>({
         model: MODELO_PAUTA, schemaName: "radar_pauta", schema: SCHEMA_PAUTA,
-        maxTokens: 700, temperature: 0.6, system, user,
+        maxTokens: 900, temperature: 0.6, system, user,
       });
       if (!r.ok || !r.data) { erros.push(`pauta ${nome}: ${r.error ?? "sem retorno"}`); continue; }
 
-      const rotulo = `${t.formato} · ${t.hookTipo} (${t.perfisDistintos} perfis)`;
-      const refs = t.itens.slice(0, 3).map((i) => i.permalink).filter(Boolean) as string[];
-      pautas.push({ cliente: nome, nicho: t.nicho, tendencia: rotulo, ...r.data, referencias: refs });
+      const d = r.data as Record<string, unknown>;
+      const fit = Number(d.fitScore);
+      // A própria IA diz se a tendência serve àquele cliente. Abaixo do corte, não vira pauta:
+      // 5 tendências x 20 clientes daria 100 pautas, e a maioria seria ruído com nome de ideia.
+      if (Number.isFinite(fit) && fit < 70) continue;
 
-      // Grava. Sem isto a pauta morre na resposta da API — o mesmo destino dos alertas de queda,
-      // detectados por meses e nunca comunicados a ninguém.
+      const refs = t.itens.slice(0, 3).map((i) => i.permalink).filter(Boolean) as string[];
+      pautas.push({
+        cliente: nome, nicho: t.nicho, forca: t.forca, fit: Number.isFinite(fit) ? fit : null,
+        tendencia: t.itens[0].mecanismo, ...d, referencias: refs,
+      });
+
       if (!dry) {
-        const d = r.data as Record<string, unknown>;
         await supabaseAdmin.from("radar_pautas").insert({
-          client_id: c.id, cliente_nome: nome, nicho: t.nicho,
-          tendencia: rotulo, perfis_na_tendencia: t.perfisDistintos,
-          ideia: String(d.ideia ?? ""), hook: String(d.hook ?? ""),
-          formato: String(d.formato ?? ""),
+          client_id: c.id, cliente_nome: nome, nicho: t.nicho, trend_id: trendId ?? null,
+          tendencia: t.itens[0].mecanismo.slice(0, 200), perfis_na_tendencia: t.perfisDistintos,
+          fit_score: Number.isFinite(fit) ? fit : null,
+          ideia: String(d.ideia ?? ""), hook: String(d.hook ?? ""), formato: String(d.formato ?? ""),
           roteiro: Array.isArray(d.roteiro) ? d.roteiro.map(String) : null,
           cta: String(d.cta ?? ""), porque_funciona: String(d.porqueVaiFuncionar ?? ""),
           referencias: refs.length ? refs : null,
@@ -248,8 +296,9 @@ export async function POST(req: NextRequest) {
     avaliados: brutos.length, descartados_pelo_filtro: descartados,
     analisados: analisados.length,
     tendencias: tendencias.map((t) => ({
-      nicho: t.nicho, formato: t.formato, aberturas: t.aberturas,
+      nicho: t.nicho, mecanismo: t.itens[0].mecanismo, forca: t.forca, status: t.status,
       perfis: t.perfisDistintos, conteudos: t.itens.length,
+      outlier_mediano: Math.round(t.outlierMediano * 10) / 10,
       exemplos: t.itens.slice(0, 3).map((i) => `@${i.perfil} ${i.outlier.toFixed(1)}x`),
     })),
     pautas,
