@@ -320,7 +320,7 @@ export async function visaoCeo(de: string, ate: string, rotulo: string): Promise
     await Promise.all([
       supabaseAdmin.from("content_cards").select("id, due_date, designer_delivered_at")
         .gte("designer_delivered_at", de).lt("designer_delivered_at", ate),
-      supabaseAdmin.from("cs_rework_events").select("id").gte("created_at", de).lt("created_at", ate),
+      supabaseAdmin.from("cs_rework_events").select("card_id").gte("created_at", de).lt("created_at", ate),
       supabaseAdmin.from("cs_demandas").select("id", { count: "exact", head: true }).eq("status", "pendente"),
       supabaseAdmin.from("cs_demandas").select("id", { count: "exact", head: true })
         .eq("status", "expirada").gte("updated_at", de).lt("updated_at", ate),
@@ -330,7 +330,14 @@ export async function visaoCeo(de: string, ate: string, rotulo: string): Promise
 
   const total = entregues?.length ?? 0;
   const noPrazo = (entregues ?? []).filter((k) => k.due_date && (k.designer_delivered_at as string)?.slice(0, 10) <= (k.due_date as string)).length;
-  const voltaram = reworks?.length ?? 0;
+
+  // "X% das artes voltaram" só faz sentido se numerador e denominador falarem do MESMO conjunto.
+  // Contando todo evento de rework da semana dava 11 de 44 = 25%, mas 3 daqueles 11 eram artes
+  // entregues em semanas ANTERIORES que voltaram agora — não estão entre as 44. O relatório do time
+  // mostrava 25% no topo e 18% no cartão do designer, na mesma página, sobre as mesmas artes.
+  const idsEntregues = new Set((entregues ?? []).map((k) => k.id as string));
+  const voltaram = new Set((reworks ?? []).map((r) => r.card_id as string).filter((id) => idsEntregues.has(id))).size;
+  const voltaramDeAntes = new Set((reworks ?? []).map((r) => r.card_id as string).filter((id) => !idsEntregues.has(id))).size;
 
   // Cliente ativo sem NENHUMA peça nas últimas 4 semanas — o sinal de churn que aparece cedo.
   const quatroSem = new Date(new Date(ate).getTime() - 28 * 864e5).toISOString();
@@ -350,6 +357,8 @@ export async function visaoCeo(de: string, ate: string, rotulo: string): Promise
   if (pctVoltaram !== null && pctVoltaram <= 15) bom.push({ numero: `${pctVoltaram}%`, texto: "de retrabalho — dentro da meta" });
 
   if (pctVoltaram !== null && pctVoltaram > 15) preocupa.push({ numero: `${pctVoltaram}%`, texto: `das artes voltaram pra refazer (${voltaram} de ${total})` });
+  // Retrabalho de arte antiga é outro problema: não entra na taxa da semana, mas custa hora do time.
+  if (voltaramDeAntes > 0) preocupa.push({ numero: String(voltaramDeAntes), texto: "arte(s) de semanas anteriores voltaram pra ajuste nesta semana" });
   if (pctPrazo !== null && pctPrazo < 85) preocupa.push({ numero: `${pctPrazo}%`, texto: "no prazo — abaixo dos 85% habituais" });
   if ((expiradas ?? 0) > 0) preocupa.push({ numero: String(expiradas), texto: "pedidos de cliente expiraram sem ninguém decidir" });
   if ((pendentes ?? 0) > 15) preocupa.push({ numero: String(pendentes), texto: "pedidos ainda esperando decisão" });
@@ -398,7 +407,7 @@ export function janelaAnterior(de: string): { de: string; ate: string; rotulo: s
 
 export async function relatorioTime(de: string, ate: string, rotulo: string): Promise<RelatorioTime> {
   const anterior = janelaAnterior(de);
-  const [designers, socials, trafego, cards, demandas, reworks] = await Promise.all([
+  const [designers, socials, trafego, cards, demandas, reworks, atendidos] = await Promise.all([
     desempenhoDesigner(de, ate, anterior),
     desempenhoSocial(de, ate, anterior),
     desempenhoTrafego(de, ate),
@@ -406,13 +415,22 @@ export async function relatorioTime(de: string, ate: string, rotulo: string): Pr
       .select("id, due_date, designer_delivered_at, designer_delivered_by, client_name")
       .gte("designer_delivered_at", de).lt("designer_delivered_at", ate)),
     exigir("time: demandas", supabaseAdmin.from("cs_demandas").select("status").gte("created_at", de).lt("created_at", ate)),
-    exigir("time: retrabalho", supabaseAdmin.from("cs_rework_events").select("id").gte("created_at", de).lt("created_at", ate)),
+    exigir("time: retrabalho", supabaseAdmin.from("cs_rework_events").select("card_id").gte("created_at", de).lt("created_at", ate)),
+    // Clientes atendidos é a UNIÃO das funções: quem teve arte entregue OU peça criada na semana.
+    exigir("time: clientes atendidos", supabaseAdmin.from("content_cards")
+      .select("client_name, created_at, designer_delivered_at")
+      .or(`and(designer_delivered_at.gte.${de},designer_delivered_at.lt.${ate}),and(created_at.gte.${de},created_at.lt.${ate})`)),
   ]);
 
   const blocos = [...designers, ...socials];
   const entregues = cards.length;
   const noPrazo = cards.filter((k) => k.due_date && (k.designer_delivered_at as string)?.slice(0, 10) <= (k.due_date as string)).length;
-  const clientes = new Set(cards.map((k) => k.client_name).filter(Boolean));
+  const clientes = new Set(atendidos.map((k) => k.client_name).filter(Boolean));
+
+  // Mesmo critério do cartão do designer: das artes DESTA semana, quantas voltaram.
+  const idsEntregues = new Set(cards.map((k) => k.id as string));
+  const voltaram = new Set(reworks.map((r) => r.card_id as string).filter((id) => idsEntregues.has(id))).size;
+  const voltaramDeAntes = new Set(reworks.map((r) => r.card_id as string).filter((id) => !idsEntregues.has(id))).size;
 
   // Riscos que só aparecem no conjunto. Um cartão individual nunca mostra "o time inteiro depende
   // de uma pessoa" — pra quem entrega, aquilo é só uma semana produtiva.
@@ -431,6 +449,20 @@ export async function relatorioTime(de: string, ate: string, rotulo: string): Pr
   const semDono = porDesigner.get("(sem designer)") ?? 0;
   if (semDono > 0) estruturais.push(`${semDono} arte(s) entregue(s) sem registro de quem fez — não dá pra creditar nem cobrar.`);
 
+  if (voltaramDeAntes > 0) {
+    estruturais.push(`${voltaramDeAntes} arte(s) entregue(s) em semanas anteriores voltaram pra ajuste agora — não entram na taxa desta semana, mas consumiram hora do time.`);
+  }
+
+  // Queda que atinge TODO MUNDO não é desempenho individual: ou a demanda caiu, ou algo travou a
+  // entrada de trabalho. Nenhum cartão individual consegue dizer isso.
+  const comQueda = blocos.filter((b) => b.variacao && b.variacao.anterior > 0 &&
+    (b.variacao.atual - b.variacao.anterior) / b.variacao.anterior <= -0.25);
+  if (blocos.length >= 2 && comQueda.length === blocos.length) {
+    estruturais.push(
+      `Todo o time produziu menos que na semana anterior (${blocos.map((b) => b.pessoa).join(", ")}). ` +
+      `Queda geral costuma ser entrada de trabalho, não ritmo de quem executa — vale olhar quantos pedidos chegaram.`);
+  }
+
   const expiradas = demandas.filter((d) => d.status === "expirada").length;
   const abertas = demandas.filter((d) => d.status === "pendente").length;
   if (abertas > 0 && blocos.length > 0) {
@@ -444,7 +476,7 @@ export async function relatorioTime(de: string, ate: string, rotulo: string): Pr
       pecasCriadas: socials.reduce((a, b) => a + (Number(b.metas["Peças criadas"]?.valor) || 0), 0),
       clientesAtendidos: clientes.size,
       noPrazo: pct(noPrazo, entregues),
-      retrabalho: pct(reworks.length, entregues),
+      retrabalho: pct(voltaram, entregues),
       pedidosAbertos: abertas, pedidosExpirados: expiradas,
     },
     estruturais,

@@ -66,3 +66,25 @@ describe("relatório do time", () => {
     expect(html).toContain("8 clientes");
   });
 });
+
+// O relatório mostrava 25% de retrabalho no topo e 18% no cartão do designer — mesma semana,
+// mesmas 44 artes. Os 11 eventos de rework da semana incluíam 3 de artes entregues em semanas
+// ANTERIORES; o denominador eram só as 44 desta. Numerador e denominador de conjuntos diferentes.
+describe("consistência dos números na mesma página", () => {
+  it("o retrabalho do topo é o mesmo critério do cartão da pessoa", () => {
+    const r: RelatorioTime = {
+      ...base,
+      geral: { ...base.geral, artesEntregues: 44, retrabalho: 18 },
+      blocos: [{
+        pessoa: "Rodrigo", funcao: "designer", clientes: 26,
+        metas: { "Voltaram pra refazer": { valor: 18, alvo: 15, unidade: "%", melhorQuando: "menor" } },
+        destaques: [], atencao: [],
+      }],
+    };
+    const html = timePdfHtml(r, "");
+    const numeros = [...html.matchAll(/(\d+)%/g)].map((m) => m[1]);
+    // 18 aparece; 25 (a razão de conjuntos misturados) não pode aparecer em lugar nenhum.
+    expect(numeros).toContain("18");
+    expect(numeros).not.toContain("25");
+  });
+});
