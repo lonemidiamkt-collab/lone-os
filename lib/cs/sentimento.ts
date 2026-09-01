@@ -41,6 +41,22 @@ material = NEUTRO. "Muda o preço pra R$30" NÃO é reclamação. Só é negativ
 insatisfação de verdade: frustração, repetição irritada ("de novo isso?"), decepção, rispidez,
 cobrança de atraso ("cadê? já faz dias"). Elogio/obrigado = positivo, risco baixo, churn false.
 Na dúvida entre neutro e negativo, escolha NEUTRO (não gere alarme fraco).
+
+⚠️ A DISTINÇÃO QUE MAIS ERRA: criticar A PEÇA é diferente de estar insatisfeito COM A AGÊNCIA.
+Cliente dizendo o que quer diferente numa arte é o trabalho acontecendo — é assim que ele participa,
+e virar alerta toda vez ensina o time a ignorar o alerta.
+NEUTRO (é ajuste de arte, mesmo com "não gostei"):
+  "não gostei desse aqui na hora de falar o valor, acho melhor deixar igual o último"
+  "essa cor não ficou boa, troca"
+  "prefiro a primeira versão"
+  "não curti a fonte, dá pra mudar?"
+NEGATIVO (é a RELAÇÃO, não a peça):
+  "não tô gostando do trabalho de vocês"
+  "de novo a mesma coisa, já falei isso três vezes"
+  "cadê a arte que pedi semana passada?"
+  "vocês não me respondem"
+A pergunta que separa: ele está falando DA PEÇA ou DE COMO ESTÁ SENDO ATENDIDO? Se for da peça,
+é NEUTRO — por mais que use "não gostei".
 Responda APENAS no JSON do schema.`;
 
 export async function analisarSentimentoCliente(mensagem: string): Promise<OpenAiResult<SentimentoOutput>> {
