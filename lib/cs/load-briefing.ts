@@ -31,14 +31,34 @@ export async function loadContentRules(clientId: string): Promise<string[]> {
  *  de texto livre clients.fixed/campaign_briefing estão VAZIOS — o briefing vivo mora em
  *  client_briefings (onboarding/ficha). Sem este loader, A3 e pauta rodavam sem contexto. */
 export async function loadBriefingTexto(clientId: string): Promise<string | undefined> {
-  const { data: b } = await supabaseAdmin
-    .from("client_briefings").select(BRIEFING_COLS)
-    .eq("client_id", clientId).eq("is_current", true).maybeSingle();
-  if (!b) return undefined;
+  const [{ data: b }, { data: cadastro }] = await Promise.all([
+    supabaseAdmin.from("client_briefings").select(BRIEFING_COLS)
+      .eq("client_id", clientId).eq("is_current", true).maybeSingle(),
+    // Endereço e telefone vêm do CADASTRO quando o briefing não os tem.
+    //
+    // A regra nº1 do guia de legendas é "toda legenda fecha com contato", e o campo estava vazio em
+    // 22 dos 23 briefings: o agente escrevia o fecho sem ter o dado. Preenchi os briefings, mas ler
+    // do cadastro também é o que mantém isso vivo — briefing novo nasce sem contato, e endereço que
+    // muda é atualizado na ficha do cliente, não numa versão de briefing.
+    supabaseAdmin.from("clients").select("endereco, phone").eq("id", clientId).maybeSingle(),
+  ]);
+
+  const contatoDoCadastro = [
+    (cadastro?.endereco as string) || "",
+    (cadastro?.phone as string) ? `Tel: ${cadastro?.phone}` : "",
+  ].filter(Boolean).join(" · ");
+
+  // Sem briefing, o contato sozinho já vale a viagem: é o que fecha a legenda.
+  if (!b) {
+    return contatoDoCadastro
+      ? `Contato (fechar a legenda com isto — endereço/telefone): ${contatoDoCadastro}`
+      : undefined;
+  }
   const j = (a: unknown) => (Array.isArray(a) && a.length ? (a as string[]).join(", ") : null);
   const linhas = [
     b.resumo_estrategico && `Resumo: ${b.resumo_estrategico}`,
-    b.contato && `Contato (fechar a legenda com isto — endereço/telefone/horário): ${b.contato}`,
+    (b.contato || contatoDoCadastro) &&
+      `Contato (fechar a legenda com isto — endereço/telefone/horário): ${b.contato || contatoDoCadastro}`,
     b.posicionamento && `Posicionamento: ${b.posicionamento}`,
     j(b.produtos) && `Produtos: ${j(b.produtos)}`,
     j(b.produtos_destaque_atual) && `Destaques do momento: ${j(b.produtos_destaque_atual)}`,
