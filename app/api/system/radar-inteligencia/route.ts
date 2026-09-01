@@ -146,11 +146,20 @@ export async function POST(req: NextRequest) {
   // ── 4. Tendência vira pauta para os clientes daquele nicho ─────────────────
   const pautas: Record<string, unknown>[] = [];
   for (const t of tendencias.slice(0, 4)) {
-    const { data: clientes } = await supabaseAdmin.from("clients")
+    // Erro aqui não pode passar em branco: na primeira execução a lista voltou vazia, o laço de
+    // clientes simplesmente não rodou, e a resposta saiu com "ok: true, pautas: []" — o pipeline
+    // inteiro parecendo saudável sem ter produzido nada. Se a consulta falhar, o relatório diz.
+    const { data: clientes, error: erroClientes } = await supabaseAdmin.from("clients")
       .select("id, name, nome_fantasia, nicho, cidade")
-      .eq("nicho", t.nicho).or("active.is.null,active.eq.true").is("draft_status", null).limit(3);
+      .eq("nicho", t.nicho)
+      .or("active.is.null,active.eq.true")
+      .is("draft_status", null)
+      .limit(3);
 
-    for (const c of clientes ?? []) {
+    if (erroClientes) { erros.push(`clientes do nicho ${t.nicho}: ${erroClientes.message}`); continue; }
+    if (!clientes?.length) { erros.push(`nenhum cliente ativo no nicho "${t.nicho}" para receber a pauta`); continue; }
+
+    for (const c of clientes) {
       const nome = (c.nome_fantasia as string) || (c.name as string);
       const briefing = await loadBriefingCombinado(c.id as string).catch(() => "");
       const regras = await fetchClientCsRules(c.id as string).catch(() => [] as string[]);
