@@ -29,11 +29,18 @@ export interface AchadoDescoberta {
 }
 
 /**
- * Perguntas voltadas ao CONTEÚDO, não à empresa.
+ * Perguntas orientadas ao CONTEÚDO — mas perguntando por QUEM FAZ, não por links.
  *
- * "loja de pisos instagram" acha lojas. "antes e depois porcelanato reels" acha o post que está
- * circulando — e o autor dele pode ser uma loja de 8 mil seguidores que nenhuma busca por empresa
- * traria. As duas famílias convivem: uma acha quem é referência, a outra acha o que está pegando.
+ * A ideia original era content-first puro: achar o Reel que está circulando e chegar ao autor por
+ * ele. Testei e NÃO FUNCIONA por busca web: o Instagram não deixa post e Reel individuais serem
+ * indexados. Três buscas com `site:instagram.com/reel/` voltaram zero resultados e texto vazio.
+ * Não é limitação da implementação; é da web. Content-first de verdade depende da Hashtag Search
+ * da Meta, que está bloqueada aguardando App Review (ver radar_capabilities).
+ *
+ * O que funciona hoje e chega perto: perguntar quem PRODUZ aquele tipo de conteúdo. "Quais lojas
+ * fazem vídeo de antes e depois de obra?" devolveu perfis; "liste links de Reels de antes e depois"
+ * não devolveu nada. Continua sendo o perfil como porta de entrada, mas escolhido pelo conteúdo
+ * que produz — e isso encontra gente que uma busca por "loja de material de construção" não acha.
  */
 export function queriesDeConteudo(nicho: string): { query: string; tipo: string }[] {
   const porNicho: Record<string, string[]> = {
@@ -45,27 +52,27 @@ export function queriesDeConteudo(nicho: string): { query: string; tipo: string 
       "transformação de ambiente com porcelanato instagram",
     ],
     "Móveis e decoração": [
-      "antes e depois decoração de sala instagram reels",
-      "site:instagram.com/reel móveis planejados",
-      "erros ao comprar móveis instagram reels",
+      "Lojas de móveis brasileiras que publicam antes e depois de ambientes no Instagram",
+      "Perfis do Instagram de lojas de móveis que mostram montagem e bastidores",
     ],
     "Beleza e estética": [
-      "transformação de cabelo antes e depois instagram reels",
-      "site:instagram.com/reel procedimento estético resultado",
+      "Salões e clínicas de estética brasileiras que publicam transformação antes e depois no Instagram",
+      "Perfis de estética no Instagram que explicam procedimentos para o cliente leigo",
     ],
     "Automotivo": [
-      "antes e depois estética automotiva instagram reels",
-      "dicas de manutenção do carro instagram reels",
+      "Oficinas e lojas automotivas brasileiras que fazem antes e depois no Instagram",
+      "Perfis automotivos no Instagram que dão dicas de manutenção para o dono do carro",
     ],
-    "Saúde e clínicas": ["dicas de saúde instagram reels clínica", "site:instagram.com/reel clínica orientação paciente"],
-    "Energia solar": ["instalação de energia solar antes e depois instagram reels", "quanto economiza energia solar instagram reels"],
-    "Moda e vestuário": ["provador de roupas instagram reels loja", "site:instagram.com/reel loja de roupas novidade"],
-    "Alimentação": ["bastidores de cozinha instagram reels restaurante", "site:instagram.com/reel comida preparo loja"],
-    "Ótica": ["provando óculos instagram reels ótica"],
-    "Pet": ["banho e tosa antes e depois instagram reels"],
-    "Fitness e academia": ["treino instagram reels academia dica"],
+    "Saúde e clínicas": ["Clínicas brasileiras que publicam orientação ao paciente no Instagram", "Perfis de saúde no Instagram que desmentem mitos comuns"],
+    "Energia solar": ["Empresas de energia solar que mostram instalação e economia real no Instagram", "Perfis de energia solar que explicam o retorno do investimento"],
+    "Moda e vestuário": ["Lojas de roupas brasileiras que fazem provador e looks no Instagram", "Perfis de moda no Instagram que mostram novidades da loja"],
+    "Alimentação": ["Restaurantes brasileiros que mostram bastidores da cozinha no Instagram", "Perfis de alimentação que mostram o preparo do produto"],
+    "Ótica": ["Óticas brasileiras que mostram clientes provando armações no Instagram"],
+    "Pet": ["Petshops brasileiros que publicam antes e depois de banho e tosa no Instagram"],
+    "Fitness e academia": ["Academias brasileiras que publicam dicas de treino no Instagram"],
   };
-  return (porNicho[nicho] ?? [`${nicho} instagram reels dicas`]).map((q) => ({ query: q, tipo: "conteudo" }));
+  return (porNicho[nicho] ?? [`Perfis brasileiros do Instagram de ${nicho} que produzem conteúdo educativo`])
+    .map((q) => ({ query: q, tipo: "conteudo" }));
 }
 
 /** As perguntas de partida de um nicho. Curtas e específicas — busca vaga traz perfil vago. */
