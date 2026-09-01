@@ -95,7 +95,10 @@ export async function POST(req: NextRequest) {
 
     // Modo de entrega: ?mode= sobrescreve o setting (útil p/ preview/dry-run).
     const modeParam = url.searchParams.get("mode");
-    const mode = modeParam === "per_account" || modeParam === "digest" ? modeParam : settings.mode;
+    // "pdf" é o padrão desde 02/09: um documento no lugar de uma mensagem por conta.
+    const mode = modeParam === "per_account" || modeParam === "digest" || modeParam === "pdf"
+      ? modeParam
+      : "pdf";
 
     // Verdes (ok): só vão na SEXTA (ou ?greens=summary), num resumo consolidado.
     // Seg/qua → só contas que precisam de ação (crítico/atenção/erro de sync).
@@ -123,6 +126,40 @@ export async function POST(req: NextRequest) {
         message: `[${mode}] ${messages.length} mensagem(ns)`,
       });
       return NextResponse.json({ ok: true, status: "dry_run", mode, counts, messageCount: messages.length, messages });
+    }
+
+    // ── MODO PDF: um documento no lugar de N mensagens ──────────────────────
+    //
+    // Roberto (02/09): "por que você não cria um PDF e envia mostrando pro gestor de tráfego, em vez
+    // de mandar vários, que fica tudo poluído?". No per_account, uma segunda com 8 contas no
+    // vermelho vira 9 mensagens seguidas no grupo — e o time rola sem ler. A mesma informação cabe
+    // numa página, ordenada pelo que precisa de ação, com o total que ninguém somava de cabeça.
+    if (mode === "pdf" && settings.groupJid && !dryRun) {
+      const { saldosPdfHtml, legendaSaldos } = await import("@/lib/reports/saldosPdf");
+      const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
+      const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
+      const { csSendGroupDocument } = await import("@/lib/cs/notify");
+
+      const logo = await loadLoneLogo().catch(() => "");
+      const quando = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "long", year: "numeric" });
+      const pdf = await htmlToPdf(saldosPdfHtml(sync.accounts, logo, quando));
+
+      if (pdf.ok && pdf.buffer) {
+        const r = await csSendGroupDocument(
+          settings.groupJid, pdf.buffer.toString("base64"),
+          `Saldos ${new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }).replace(/\//g, "-")}.pdf`,
+          legendaSaldos(sync.accounts),
+        );
+        await supabaseAdmin.from("budget_digest_log").insert({
+          date_key: dateKey, status: r.ok ? "sent" : "failed", severity_counts: counts,
+          message: "[pdf] 1 documento", error: r.ok ? null : (r.error ?? "envio falhou"),
+        });
+        if (r.ok) return NextResponse.json({ ok: true, status: "sent", mode: "pdf", counts, sent: 1 });
+        // PDF falhou no envio: cai pro texto em vez de ficar em silêncio — saldo zerado é urgente.
+        console.error("[budget-digest] PDF falhou, caindo pro texto:", r.error);
+      } else {
+        console.error("[budget-digest] geração do PDF falhou, caindo pro texto:", pdf.error);
+      }
     }
 
     if (!settings.groupJid) {
