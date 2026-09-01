@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      if (pdf.ok && pdf.buffer) {
+      if (pdf.ok && pdf.buffer && settings.groupJid) {
         const r = await csSendGroupDocument(
           settings.groupJid, pdf.buffer.toString("base64"),
           `Saldos ${new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }).replace(/\//g, "-")}.pdf`,
