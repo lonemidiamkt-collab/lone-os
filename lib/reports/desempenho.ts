@@ -280,30 +280,92 @@ export async function desempenhoSocial(de: string, ate: string, anterior?: { de:
 }
 
 // ── TRÁFEGO ─────────────────────────────────────────────────────────────────
-// O sistema LÊ a Meta, não escreve nela. Então mede resultado e cobertura, não "otimizações feitas".
+// Responsável: Julio. O sistema LÊ a Meta, não escreve nela — então mede resultado e COBERTURA
+// (verba que devia estar rodando e não está), não "otimizações feitas".
+//
+// Roberto (01/09): "vale a pena melhorar as KPIs e verificar esses números que não batem, você pode
+// colocar quantidade de todos os clientes investido no mês, e quantidade de mensagens geradas por
+// mês". O que não batia: o bloco dizia "40 contas com verba rodando" sem denominador. São 48 contas
+// conectadas — 8 não gastaram nada na semana, e 5 delas são de clientes ATIVOS (Bruno Tintas Iguaba
+// parado desde 27/07, Max Contabilidade desde 30/07). Verba parada em cliente ativo é resultado que
+// não foi entregue e ninguém viu.
+//
+// `conversions` em metric_snapshots É conversa de WhatsApp iniciada: quem grava (defense-scan) usa
+// countMessagesFromActions, a mesma fonte do portal do cliente — messaging_conversation_started_7d,
+// que é a coluna "Resultados" do Gerenciador. Não é lead nem compra.
+
+export interface ContaParada { nome: string; ultimoGasto: string | null; diasParada: number | null }
+
 export async function desempenhoTrafego(de: string, ate: string) {
   const d0 = de.slice(0, 10), d1 = ate.slice(0, 10);
   const antes = new Date(new Date(de).getTime() - 7 * 864e5).toISOString().slice(0, 10);
+  const inicioMes = `${d1.slice(0, 7)}-01`;
 
-  const { data: m } = await supabaseAdmin.from("metric_snapshots")
-    .select("client_id, metric_date, spend, conversions").gte("metric_date", antes).lt("metric_date", d1);
+  const [linhas, doMes, contas] = await Promise.all([
+    exigir("tráfego: semana", supabaseAdmin.from("metric_snapshots")
+      .select("client_id, metric_date, spend, conversions").gte("metric_date", antes).lt("metric_date", d1)),
+    exigir("tráfego: mês", supabaseAdmin.from("metric_snapshots")
+      .select("client_id, spend, conversions").gte("metric_date", inicioMes).lt("metric_date", d1)),
+    exigir("tráfego: contas conectadas", supabaseAdmin.from("clients")
+      .select("id, name, active, draft_status, meta_ad_account_id").not("meta_ad_account_id", "is", null)),
+  ]);
 
-  const sem = (ini: string, fim: string) => (m ?? []).filter((x) => (x.metric_date as string) >= ini && (x.metric_date as string) < fim);
-  const soma = (rows: typeof m) => (rows ?? []).reduce((a, r) => ({
+  const sem = (ini: string, fim: string) => linhas.filter((x) => (x.metric_date as string) >= ini && (x.metric_date as string) < fim);
+  const soma = (rows: { spend?: unknown; conversions?: unknown }[]) => rows.reduce((a, r) => ({
     gasto: a.gasto + (Number(r.spend) || 0), conversas: a.conversas + (Number(r.conversions) || 0),
   }), { gasto: 0, conversas: 0 });
 
   const atual = soma(sem(d0, d1)), anterior = soma(sem(antes, d0));
+  const mes = soma(doMes);
   const custoAtual = atual.conversas > 0 ? atual.gasto / atual.conversas : 0;
   const custoAntes = anterior.conversas > 0 ? anterior.gasto / anterior.conversas : 0;
-  const contasAtivas = new Set(sem(d0, d1).filter((x) => Number(x.spend) > 0).map((x) => x.client_id)).size;
+
+  const gastaramNaSemana = new Set(sem(d0, d1).filter((x) => Number(x.spend) > 0).map((x) => x.client_id as string));
+  const conectadas = contas.filter((c) => String(c.meta_ad_account_id ?? "").trim() !== "");
+  const ativas = conectadas.filter((c) => c.active !== false && c.draft_status == null);
+
+  // Último dia com gasto de cada conta ativa que não gastou na semana. É o número que faltava.
+  const ultimoGasto = new Map<string, string>();
+  const paradas: ContaParada[] = [];
+  const semGasto = ativas.filter((c) => !gastaramNaSemana.has(c.id as string));
+  if (semGasto.length) {
+    const hist = await exigir("tráfego: último gasto", supabaseAdmin.from("metric_snapshots")
+      .select("client_id, metric_date").gt("spend", 0)
+      .in("client_id", semGasto.map((c) => c.id as string)));
+    for (const h of hist) {
+      const id = h.client_id as string, d = h.metric_date as string;
+      if (!ultimoGasto.has(id) || d > ultimoGasto.get(id)!) ultimoGasto.set(id, d);
+    }
+    for (const c of semGasto) {
+      const u = ultimoGasto.get(c.id as string) ?? null;
+      paradas.push({
+        nome: (c.name as string) ?? "(sem nome)", ultimoGasto: u,
+        diasParada: u ? Math.round((new Date(d1).getTime() - new Date(u).getTime()) / 864e5) : null,
+      });
+    }
+    paradas.sort((a, b) => (b.diasParada ?? 9999) - (a.diasParada ?? 9999));
+  }
 
   return {
-    contasAtivas, gasto: atual.gasto, conversas: atual.conversas,
+    responsavel: "Julio",
+    contasAtivas: gastaramNaSemana.size,
+    contasConectadas: conectadas.length,
+    contasAtivasCadastro: ativas.length,
+    gasto: atual.gasto, conversas: atual.conversas,
     custoPorConversa: Math.round(custoAtual * 100) / 100,
     variacaoCusto: custoAntes > 0 ? Math.round(((custoAtual - custoAntes) / custoAntes) * 1000) / 10 : null,
     variacaoConversas: anterior.conversas > 0
       ? Math.round(((atual.conversas - anterior.conversas) / anterior.conversas) * 1000) / 10 : null,
+    variacaoGasto: anterior.gasto > 0 ? Math.round(((atual.gasto - anterior.gasto) / anterior.gasto) * 1000) / 10 : null,
+    mes: {
+      rotulo: new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "America/Sao_Paulo" })
+        .format(new Date(`${inicioMes}T12:00:00Z`)),
+      gasto: Math.round(mes.gasto * 100) / 100,
+      conversas: mes.conversas,
+      custoPorConversa: mes.conversas > 0 ? Math.round((mes.gasto / mes.conversas) * 100) / 100 : 0,
+      contas: new Set(doMes.filter((x) => Number(x.spend) > 0).map((x) => x.client_id as string)).size,
+    },
+    paradas,
   };
 }
 

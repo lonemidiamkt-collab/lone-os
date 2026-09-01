@@ -27,7 +27,16 @@ const base: RelatorioTime = {
       destaques: [], atencao: [],
     },
   ],
-  trafego: { contasAtivas: 26, gasto: 1000, conversas: 300, custoPorConversa: 3.33, variacaoCusto: -5, variacaoConversas: 12 },
+  trafego: {
+    responsavel: "Julio", contasAtivas: 40, contasConectadas: 48, contasAtivasCadastro: 45,
+    gasto: 13008.01, conversas: 2157, custoPorConversa: 6.03,
+    variacaoCusto: 11, variacaoConversas: -10.9, variacaoGasto: -1.2,
+    mes: { rotulo: "agosto de 2026", gasto: 54997.36, conversas: 9629, custoPorConversa: 5.71, contas: 43 },
+    paradas: [
+      { nome: "Bruno Tintas Iguaba", ultimoGasto: "2026-07-27", diasParada: 35 },
+      { nome: "Dumar Comercio e serviços", ultimoGasto: null, diasParada: null },
+    ],
+  },
   geral: { artesEntregues: 44, pecasCriadas: 24, clientesAtendidos: 20, noPrazo: 84, retrabalho: 25, pedidosAbertos: 8, pedidosExpirados: 0 },
   estruturais: ["Rodrigo entregou 44 das 44 artes da semana. A produção inteira depende de uma pessoa."],
 };
@@ -64,6 +73,30 @@ describe("relatório do time", () => {
     const html = timePdfHtml(base, "");
     expect(html).toContain("12 clientes");
     expect(html).toContain("8 clientes");
+  });
+
+  // Roberto: "na parte do tráfego, sendo o responsável Julio, vale a pena melhorar as KPIs e
+  // verificar esses números que não batem". O bloco dizia "40 contas com verba rodando" sem
+  // denominador — 8 contas não gastaram nada, 5 delas de clientes ATIVOS.
+  it("o tráfego tem dono e o número de contas tem denominador", () => {
+    const html = timePdfHtml(base, "");
+    expect(html).toContain("Julio");
+    expect(html).toMatch(/40 de 45 contas/);
+  });
+
+  it("mostra investimento e conversas do MÊS, não só da semana", () => {
+    const html = timePdfHtml(base, "");
+    expect(html).toContain("agosto de 2026");
+    expect(html).toContain("54.997,36");   // investido no mês
+    expect(html).toContain("9.629");       // conversas no mês
+    expect(html).toContain("Investido no mês");
+  });
+
+  it("nomeia a conta de cliente ativo com verba parada", () => {
+    const html = timePdfHtml(base, "");
+    expect(html).toContain("Bruno Tintas Iguaba");
+    expect(html).toContain("35 dias");
+    expect(html).toContain("nunca registrou gasto"); // Dumar: conta conectada que nunca rodou
   });
 });
 

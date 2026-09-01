@@ -236,17 +236,44 @@ export function timePdfHtml(r: RelatorioTime, logo: string): string {
 
     <h2 style="margin-top:22px;color:${SUAVE};text-transform:uppercase;font-size:11px;letter-spacing:.08em">Tráfego Pago</h2>
     <div style="background:${CARTAO};border:1px solid ${LINHA};border-radius:10px;padding:16px 18px">
-      <div style="font-size:10.5px;color:${SUAVE};margin-bottom:10px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:4px">
+        <div style="font-size:16px;font-weight:700;letter-spacing:-.01em">${esc(t.responsavel)}</div>
+        <div style="font-size:10.5px;color:${SUAVE}">Gestor de tráfego · ${t.contasAtivas} de ${t.contasAtivasCadastro} contas rodando</div>
+      </div>
+      <div style="font-size:10.5px;color:${SUAVE};margin-bottom:12px">
         O sistema lê a Meta, não escreve nela — mede resultado e cobertura, não otimização feita.
       </div>
+
+      <div style="font-size:10.5px;color:${SUAVE};text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px">${esc(t.mes.rotulo)} até aqui</div>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px">
+        ${kpi("Investido no mês", `R$ ${t.mes.gasto.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, `${t.mes.contas} contas`)}
+        ${kpi("Conversas no mês", t.mes.conversas.toLocaleString("pt-BR"))}
+        ${kpi("Custo por conversa", `R$ ${t.mes.custoPorConversa.toFixed(2)}`, "no mês")}
+      </div>
+
+      <div style="font-size:10.5px;color:${SUAVE};text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Nesta semana</div>
       <table style="width:100%;border-collapse:collapse">
-        <tr><td style="padding:7px 0;font-size:12.5px">Contas com verba rodando</td>
-            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:right">${t.contasAtivas}</td></tr>
-        <tr><td style="padding:7px 0;font-size:12.5px">Conversas geradas</td>
-            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:right">${t.conversas}${esc(varTrafego(t.variacaoConversas))}</td></tr>
+        <tr><td style="padding:7px 0;font-size:12.5px">Investido</td>
+            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:right;white-space:nowrap">R$ ${t.gasto.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${esc(varTrafego(t.variacaoGasto))}</td></tr>
+        <tr><td style="padding:7px 0;font-size:12.5px">Conversas iniciadas</td>
+            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:right;white-space:nowrap">${t.conversas.toLocaleString("pt-BR")}${esc(varTrafego(t.variacaoConversas))}</td></tr>
         <tr><td style="padding:7px 0;font-size:12.5px">Custo por conversa</td>
-            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:right">R$ ${t.custoPorConversa.toFixed(2)}${esc(varTrafego(t.variacaoCusto))}</td></tr>
+            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:right;white-space:nowrap">R$ ${t.custoPorConversa.toFixed(2)}${esc(varTrafego(t.variacaoCusto))}</td></tr>
       </table>
+
+      ${t.paradas.length ? `
+        <div style="margin-top:13px;padding-top:11px;border-top:1px solid ${LINHA}">
+          <div style="font-size:12px;color:${ALERTA};font-weight:600;margin-bottom:6px">
+            ${t.paradas.length} conta(s) de cliente ativo sem gastar nada nesta semana
+          </div>
+          ${t.paradas.map((p) => `<div style="font-size:11.5px;color:${TEXTO};margin-bottom:3px">
+            • ${esc(p.nome)} — ${p.ultimoGasto
+              ? `último gasto há ${p.diasParada} dia${p.diasParada === 1 ? "" : "s"}`
+              : "nunca registrou gasto"}</div>`).join("")}
+          <div style="font-size:10.5px;color:${SUAVE};margin-top:6px">
+            Verba parada em cliente ativo é resultado que não foi entregue — e o cliente percebe antes da gente.
+          </div>
+        </div>` : ""}
     </div>
 
     <div class="foot">Lone Mídia · ${esc(r.rotulo)} · as metas saem da média da própria operação e são revisadas com o time</div>
