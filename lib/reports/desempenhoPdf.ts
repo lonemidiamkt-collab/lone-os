@@ -9,7 +9,7 @@
 //
 // A regra que separa as duas: número que expõe pessoa fica no PDF DELA. O do CEO fala da operação.
 
-import type { BlocoFuncao, Meta, VisaoCeo } from "./desempenho";
+import type { BlocoFuncao, Meta, RelatorioTime, VisaoCeo } from "./desempenho";
 
 const BRAND = "#2b3cff";
 const FUNDO = "#060814";
@@ -143,5 +143,112 @@ export function funcaoPdfHtml(b: BlocoFuncao, periodo: string, logo: string): st
     ${lista(b.destaques, OK, "Foi bem")}
     ${lista(b.atencao, ALERTA, "Merece atenção")}
     <div class="foot">Lone Mídia · ${esc(periodo)} · as metas saem da média da própria operação e são revisadas com o time</div>
+  </body></html>`;
+}
+
+/**
+ * Relatório do TIME: um documento só, com todo mundo.
+ *
+ * Roberto (01/09): "eu queria tipo um PDF como se fosse um relatório de todo o time". A primeira
+ * entrega mandava um arquivo por pessoa — para ler a operação inteira ele tinha que abrir quatro
+ * documentos e comparar de cabeça, e riscos do conjunto (o time inteiro depender de um designer)
+ * não apareciam em lugar nenhum, porque não cabem num cartão individual.
+ */
+export function timePdfHtml(r: RelatorioTime, logo: string): string {
+  const n = (v: number | null, sufixo = "") => (v === null ? "—" : `${v}${sufixo}`);
+
+  const kpi = (rotulo: string, valor: string, nota?: string) => `
+    <div style="flex:1;min-width:120px;background:${CARTAO};border:1px solid ${LINHA};border-radius:8px;padding:13px 15px">
+      <div style="font-size:23px;font-weight:800;letter-spacing:-.02em">${esc(valor)}</div>
+      <div style="font-size:10.5px;color:${SUAVE};margin-top:3px">${esc(rotulo)}</div>
+      ${nota ? `<div style="font-size:10px;color:${SUAVE};margin-top:2px">${esc(nota)}</div>` : ""}
+    </div>`;
+
+  // Variação contra a semana anterior. Sem isso um volume não diz se melhorou ou piorou.
+  const seta = (v?: BlocoFuncao["variacao"]) => {
+    if (!v || (v.anterior === 0 && v.atual === 0)) return "";
+    if (v.anterior === 0) return `<span style="color:${SUAVE};font-size:11px">· primeira semana com registro</span>`;
+    const d = Math.round(((v.atual - v.anterior) / v.anterior) * 100);
+    if (d === 0) return `<span style="color:${SUAVE};font-size:11px">· igual à semana passada</span>`;
+    const cor = d > 0 ? OK : ALERTA;
+    return `<span style="color:${cor};font-size:11px">· ${d > 0 ? "▲" : "▼"} ${Math.abs(d)}% vs semana passada (${v.anterior})</span>`;
+  };
+
+  const metaLinha = ([nome, m]: [string, Meta]) => {
+    const ok = bateu(m);
+    const sufixo = m.unidade === "%" ? "%" : m.unidade === "dias" ? " dias" : "";
+    const semNota = m.valor === null || m.semBase;
+    const valor = semNota ? "—" : `${m.valor}${sufixo}`;
+    const cor = semNota ? SUAVE : ok === null ? TEXTO : ok ? OK : ALERTA;
+    const nota = semNota ? (m.semBase || "sem dado")
+      : ok === null ? "acompanhamento"
+      : ok ? "na meta" : `meta: ${m.melhorQuando === "maior" ? `${m.alvo}${sufixo}+` : `até ${m.alvo}${sufixo}`}`;
+    return `<tr>
+      <td style="padding:7px 0;font-size:12.5px;color:${TEXTO}">${esc(nome)}</td>
+      <td style="padding:7px 0;font-size:14px;font-weight:700;color:${cor};text-align:right;white-space:nowrap">${esc(valor)}</td>
+      <td style="padding:7px 0 7px 12px;font-size:10.5px;color:${semNota || ok === null ? SUAVE : ok ? OK : ALERTA};white-space:nowrap">${esc(nota)}</td>
+    </tr>`;
+  };
+
+  const pessoa = (b: BlocoFuncao) => {
+    const rotuloFuncao = { designer: "Designer", social: "Social Media", trafego: "Tráfego Pago" }[b.funcao];
+    return `<div style="background:${CARTAO};border:1px solid ${LINHA};border-radius:10px;padding:16px 18px;margin-bottom:11px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:4px">
+        <div style="font-size:16px;font-weight:700;letter-spacing:-.01em">${esc(b.pessoa)}</div>
+        <div style="font-size:10.5px;color:${SUAVE}">${esc(rotuloFuncao)}${b.clientes ? ` · ${b.clientes} cliente${b.clientes > 1 ? "s" : ""}` : ""}</div>
+      </div>
+      <div style="margin-bottom:9px">${seta(b.variacao)}</div>
+      <table style="width:100%;border-collapse:collapse">${Object.entries(b.metas).map(metaLinha).join("")}</table>
+      ${b.atencao.length ? `<div style="margin-top:10px;padding-top:9px;border-top:1px solid ${LINHA}">
+        ${b.atencao.map((t) => `<div style="font-size:11.5px;color:${ALERTA};margin-bottom:3px">• ${esc(t)}</div>`).join("")}
+      </div>` : ""}
+    </div>`;
+  };
+
+  const grupo = (titulo: string, blocos: BlocoFuncao[]) => blocos.length ? `
+    <h2 style="margin-top:22px;color:${SUAVE};text-transform:uppercase;font-size:11px;letter-spacing:.08em">${esc(titulo)}</h2>
+    ${blocos.map(pessoa).join("")}` : "";
+
+  const t = r.trafego;
+  const varTrafego = (v: number | null) => v === null ? "" : ` (${v > 0 ? "+" : ""}${v}%)`;
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>${BASE_CSS}</style></head><body>
+    ${cabecalho(logo, "Relatório do time", r.rotulo)}
+    <h1>Como foi a semana do time</h1>
+    <p class="sub">Produção, prazo e qualidade por pessoa — comparado com ${esc(r.periodoAnterior)}.</p>
+
+    <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:6px">
+      ${kpi("Artes entregues", String(r.geral.artesEntregues))}
+      ${kpi("Peças criadas", String(r.geral.pecasCriadas))}
+      ${kpi("Entregues no prazo", n(r.geral.noPrazo, "%"))}
+      ${kpi("Voltaram pra refazer", n(r.geral.retrabalho, "%"))}
+      ${kpi("Clientes atendidos", String(r.geral.clientesAtendidos))}
+    </div>
+
+    ${r.estruturais.length ? `
+      <h2 style="margin-top:24px;color:${ALERTA}">Atenção da operação</h2>
+      ${r.estruturais.map((t2) => `<div style="padding:11px 15px;background:${CARTAO};border:1px solid ${LINHA};
+        border-left:3px solid ${ALERTA};border-radius:0 8px 8px 0;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(t2)}</div>`).join("")}
+    ` : ""}
+
+    ${grupo("Design", r.blocos.filter((b) => b.funcao === "designer"))}
+    ${grupo("Social Media", r.blocos.filter((b) => b.funcao === "social"))}
+
+    <h2 style="margin-top:22px;color:${SUAVE};text-transform:uppercase;font-size:11px;letter-spacing:.08em">Tráfego Pago</h2>
+    <div style="background:${CARTAO};border:1px solid ${LINHA};border-radius:10px;padding:16px 18px">
+      <div style="font-size:10.5px;color:${SUAVE};margin-bottom:10px">
+        O sistema lê a Meta, não escreve nela — mede resultado e cobertura, não otimização feita.
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <tr><td style="padding:7px 0;font-size:12.5px">Contas com verba rodando</td>
+            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:right">${t.contasAtivas}</td></tr>
+        <tr><td style="padding:7px 0;font-size:12.5px">Conversas geradas</td>
+            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:right">${t.conversas}${esc(varTrafego(t.variacaoConversas))}</td></tr>
+        <tr><td style="padding:7px 0;font-size:12.5px">Custo por conversa</td>
+            <td style="padding:7px 0;font-size:14px;font-weight:700;text-align:right">R$ ${t.custoPorConversa.toFixed(2)}${esc(varTrafego(t.variacaoCusto))}</td></tr>
+      </table>
+    </div>
+
+    <div class="foot">Lone Mídia · ${esc(r.rotulo)} · as metas saem da média da própria operação e são revisadas com o time</div>
   </body></html>`;
 }

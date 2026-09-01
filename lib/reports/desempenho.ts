@@ -28,6 +28,10 @@ export interface BlocoFuncao {
   metas: Record<string, Meta>;
   destaques: string[];
   atencao: string[];
+  /** Quantos clientes diferentes essa pessoa atendeu na semana — carga espalhada ou concentrada. */
+  clientes?: number;
+  /** Variação do volume principal contra a semana anterior. Número solto não diz se melhorou. */
+  variacao?: { rotulo: string; anterior: number; atual: number };
 }
 
 /**
@@ -80,22 +84,51 @@ export function janelaSemana(agora = new Date()): { de: string; ate: string; rot
 }
 
 
+/**
+ * Query que NÃO pode falhar calada.
+ *
+ * O bloco do designer saiu vazio na primeira rodada — nenhum designer no relatório — numa semana em
+ * que 44 artes foram entregues. A causa: o select pedia a coluna `designer`, que não existe em
+ * content_cards (o campo é `designer_delivered_by`). O PostgREST devolvia erro, `data` vinha null,
+ * `cards ?? []` virava lista vazia e o relatório seguia dizendo que ninguém tinha entregado nada.
+ * Um erro de digitação no nome de uma coluna apagava uma função inteira sem deixar rastro.
+ */
+async function exigir<T>(rotulo: string, p: PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
+  const { data, error } = await p;
+  if (error) throw new Error(`consulta "${rotulo}" falhou: ${error.message}`);
+  return data ?? [];
+}
+
 // ── DESIGNER ────────────────────────────────────────────────────────────────
 // O que dói hoje: 27% das artes voltam. O resto está saudável (1 dia de entrega, 85% no prazo).
-export async function desempenhoDesigner(de: string, ate: string): Promise<BlocoFuncao[]> {
-  const [{ data: cards }, { data: reworks }] = await Promise.all([
-    supabaseAdmin.from("content_cards")
-      .select("id, designer, designer_delivered_at, due_date, created_at, client_name")
-      .gte("designer_delivered_at", de).lt("designer_delivered_at", ate),
-    supabaseAdmin.from("cs_rework_events").select("card_id, client_name").gte("created_at", de).lt("created_at", ate),
+export async function desempenhoDesigner(de: string, ate: string, anterior?: { de: string; ate: string }): Promise<BlocoFuncao[]> {
+  const [cards, reworks, cardsAntes] = await Promise.all([
+    exigir("designer: cards entregues", supabaseAdmin.from("content_cards")
+      .select("id, designer_delivered_by, designer_delivered_at, due_date, created_at, client_name")
+      .gte("designer_delivered_at", de).lt("designer_delivered_at", ate)),
+    exigir("designer: retrabalho", supabaseAdmin.from("cs_rework_events")
+      .select("card_id, client_name").gte("created_at", de).lt("created_at", ate)),
+    // Semana anterior, só para dizer se subiu ou desceu. Volume sem comparação não informa nada.
+    anterior
+      ? exigir("designer: semana anterior", supabaseAdmin.from("content_cards")
+          .select("id, designer_delivered_by")
+          .gte("designer_delivered_at", anterior.de).lt("designer_delivered_at", anterior.ate))
+      : Promise.resolve([] as { designer_delivered_by: string | null }[]),
   ]);
 
-  const porPessoa = new Map<string, { entregues: number; noPrazo: number; voltaram: number; dias: number[] }>();
+  const entreguesAntes = new Map<string, number>();
+  for (const k of cardsAntes) {
+    const n = (k.designer_delivered_by as string)?.trim() || "(sem designer)";
+    entreguesAntes.set(n, (entreguesAntes.get(n) ?? 0) + 1);
+  }
+
+  const porPessoa = new Map<string, { entregues: number; noPrazo: number; voltaram: number; dias: number[]; clientes: Set<string> }>();
   const idsComRework = new Set((reworks ?? []).map((r) => r.card_id as string));
 
   for (const k of cards ?? []) {
-    const nome = (k.designer as string)?.trim() || "(sem designer)";
-    const g = porPessoa.get(nome) ?? { entregues: 0, noPrazo: 0, voltaram: 0, dias: [] };
+    const nome = (k.designer_delivered_by as string)?.trim() || "(sem designer)";
+    const g = porPessoa.get(nome) ?? { entregues: 0, noPrazo: 0, voltaram: 0, dias: [], clientes: new Set<string>() };
+    if (k.client_name) g.clientes.add(k.client_name as string);
     g.entregues++;
     if (k.due_date && (k.designer_delivered_at as string)?.slice(0, 10) <= (k.due_date as string)) g.noPrazo++;
     if (idsComRework.has(k.id as string)) g.voltaram++;
@@ -117,6 +150,10 @@ export async function desempenhoDesigner(de: string, ate: string): Promise<Bloco
     const media = g.dias.length ? g.dias.reduce((a, b) => a + b, 0) / g.dias.length : null;
     return {
       pessoa, funcao: "designer" as const,
+      clientes: g.clientes.size,
+      variacao: anterior
+        ? { rotulo: "artes entregues", anterior: entreguesAntes.get(pessoa) ?? 0, atual: g.entregues }
+        : undefined,
       metas: {
         "Artes entregues": { valor: g.entregues, alvo: 25, unidade: "un" as const, melhorQuando: "maior" as const },
         "Entregues no prazo": { valor: prazo, alvo: 90, unidade: "%" as const, melhorQuando: "maior" as const },
@@ -144,21 +181,34 @@ export async function desempenhoDesigner(de: string, ate: string): Promise<Bloco
 
 // ── SOCIAL ──────────────────────────────────────────────────────────────────
 // O que dói: sugestão do agente que expira sem decisão, e aprovação de cliente que não é registrada.
-export async function desempenhoSocial(de: string, ate: string): Promise<BlocoFuncao[]> {
-  const [{ data: cards }, { data: demandas }, { data: reworks }] = await Promise.all([
-    supabaseAdmin.from("content_cards")
-      .select("id, social_media, created_at, client_approved_at, status")
-      .gte("created_at", de).lt("created_at", ate),
-    supabaseAdmin.from("cs_demandas").select("responsavel, status, created_at").gte("created_at", de).lt("created_at", ate),
-    supabaseAdmin.from("cs_rework_events").select("reviewed_by").gte("created_at", de).lt("created_at", ate),
+export async function desempenhoSocial(de: string, ate: string, anterior?: { de: string; ate: string }): Promise<BlocoFuncao[]> {
+  const [cards, demandas, reworks, cardsAntes] = await Promise.all([
+    exigir("social: cards criados", supabaseAdmin.from("content_cards")
+      .select("id, social_media, created_at, client_approved_at, status, client_name")
+      .gte("created_at", de).lt("created_at", ate)),
+    exigir("social: demandas", supabaseAdmin.from("cs_demandas")
+      .select("responsavel, status, created_at").gte("created_at", de).lt("created_at", ate)),
+    exigir("social: revisões", supabaseAdmin.from("cs_rework_events")
+      .select("reviewed_by").gte("created_at", de).lt("created_at", ate)),
+    anterior
+      ? exigir("social: semana anterior", supabaseAdmin.from("content_cards")
+          .select("id, social_media").gte("created_at", anterior.de).lt("created_at", anterior.ate))
+      : Promise.resolve([] as { social_media: string | null }[]),
   ]);
 
-  const porPessoa = new Map<string, { criados: number; aprovados: number; decididas: number; expiradas: number; reprovou: number }>();
-  const get = (n: string) => porPessoa.get(n) ?? { criados: 0, aprovados: 0, decididas: 0, expiradas: 0, reprovou: 0 };
+  const criadosAntes = new Map<string, number>();
+  for (const k of cardsAntes) {
+    const n = (k.social_media as string)?.trim(); if (!n) continue;
+    criadosAntes.set(n, (criadosAntes.get(n) ?? 0) + 1);
+  }
+
+  const porPessoa = new Map<string, { criados: number; aprovados: number; decididas: number; expiradas: number; reprovou: number; clientes: Set<string> }>();
+  const get = (n: string) => porPessoa.get(n) ?? { criados: 0, aprovados: 0, decididas: 0, expiradas: 0, reprovou: 0, clientes: new Set<string>() };
 
   for (const k of cards ?? []) {
     const nome = (k.social_media as string)?.trim(); if (!nome) continue;
     const g = get(nome); g.criados++; if (k.client_approved_at) g.aprovados++;
+    if (k.client_name) g.clientes.add(k.client_name as string);
     porPessoa.set(nome, g);
   }
   for (const d of demandas ?? []) {
@@ -191,6 +241,10 @@ export async function desempenhoSocial(de: string, ate: string): Promise<BlocoFu
     const pendentesSemDesfecho = g.decididas + g.expiradas === 0;
     return {
       pessoa, funcao: "social" as const,
+      clientes: g.clientes.size,
+      variacao: anterior
+        ? { rotulo: "peças criadas", anterior: criadosAntes.get(pessoa) ?? 0, atual: g.criados }
+        : undefined,
       metas: {
         "Peças criadas": { valor: g.criados, alvo: 20, unidade: "un" as const, melhorQuando: "maior" as const },
         "Pedidos do cliente decididos": {
@@ -307,5 +361,92 @@ export async function visaoCeo(de: string, ate: string, rotulo: string): Promise
       ativos: (clientes ?? []).filter((c) => !/\(teste\)/i.test(c.name as string)).length,
       semConteudo, pedidosAbertos: pendentes ?? 0,
     },
+  };
+}
+
+// ── RELATÓRIO DO TIME ───────────────────────────────────────────────────────
+// Roberto (01/09): "eu queria tipo um PDF como se fosse um relatório de todo o time, com alguns
+// dados a mais". A primeira versão mandava um documento por pessoa; para ler a operação inteira ele
+// tinha que abrir quatro arquivos e comparar de cabeça. Aqui é um documento só, com todo mundo.
+
+export interface RelatorioTime {
+  rotulo: string;
+  periodoAnterior: string;
+  blocos: BlocoFuncao[];
+  trafego: Awaited<ReturnType<typeof desempenhoTrafego>>;
+  geral: {
+    artesEntregues: number; pecasCriadas: number; clientesAtendidos: number;
+    noPrazo: number | null; retrabalho: number | null;
+    pedidosAbertos: number; pedidosExpirados: number;
+  };
+  /** Riscos que só aparecem olhando o time junto — não cabem em nenhum cartão individual. */
+  estruturais: string[];
+}
+
+/** A semana anterior à janela dada, para as comparações. Calendário puro, como `janelaSemana`. */
+export function janelaAnterior(de: string): { de: string; ate: string; rotulo: string } {
+  const ini = new Date(de);
+  const antes = new Date(ini.getTime()); antes.setUTCDate(antes.getUTCDate() - 7);
+  const fim = new Date(ini.getTime());
+  const f = (d: Date) => {
+    const p = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
+    return p.format(d);
+  };
+  const ultimoDia = new Date(fim.getTime() - 864e5);
+  return { de: antes.toISOString(), ate: fim.toISOString(), rotulo: `${f(antes)} a ${f(ultimoDia)}` };
+}
+
+export async function relatorioTime(de: string, ate: string, rotulo: string): Promise<RelatorioTime> {
+  const anterior = janelaAnterior(de);
+  const [designers, socials, trafego, cards, demandas, reworks] = await Promise.all([
+    desempenhoDesigner(de, ate, anterior),
+    desempenhoSocial(de, ate, anterior),
+    desempenhoTrafego(de, ate),
+    exigir("time: entregas", supabaseAdmin.from("content_cards")
+      .select("id, due_date, designer_delivered_at, designer_delivered_by, client_name")
+      .gte("designer_delivered_at", de).lt("designer_delivered_at", ate)),
+    exigir("time: demandas", supabaseAdmin.from("cs_demandas").select("status").gte("created_at", de).lt("created_at", ate)),
+    exigir("time: retrabalho", supabaseAdmin.from("cs_rework_events").select("id").gte("created_at", de).lt("created_at", ate)),
+  ]);
+
+  const blocos = [...designers, ...socials];
+  const entregues = cards.length;
+  const noPrazo = cards.filter((k) => k.due_date && (k.designer_delivered_at as string)?.slice(0, 10) <= (k.due_date as string)).length;
+  const clientes = new Set(cards.map((k) => k.client_name).filter(Boolean));
+
+  // Riscos que só aparecem no conjunto. Um cartão individual nunca mostra "o time inteiro depende
+  // de uma pessoa" — pra quem entrega, aquilo é só uma semana produtiva.
+  const estruturais: string[] = [];
+  const porDesigner = new Map<string, number>();
+  for (const k of cards) {
+    const n = (k.designer_delivered_by as string)?.trim() || "(sem designer)";
+    porDesigner.set(n, (porDesigner.get(n) ?? 0) + 1);
+  }
+  const maior = [...porDesigner.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (maior && entregues > 0 && maior[1] / entregues >= 0.9 && entregues >= 10) {
+    estruturais.push(
+      `${maior[0]} entregou ${maior[1]} das ${entregues} artes da semana. A produção inteira depende de uma pessoa: ` +
+      `férias, atestado ou saída param a entrega de todos os clientes.`);
+  }
+  const semDono = porDesigner.get("(sem designer)") ?? 0;
+  if (semDono > 0) estruturais.push(`${semDono} arte(s) entregue(s) sem registro de quem fez — não dá pra creditar nem cobrar.`);
+
+  const expiradas = demandas.filter((d) => d.status === "expirada").length;
+  const abertas = demandas.filter((d) => d.status === "pendente").length;
+  if (abertas > 0 && blocos.length > 0) {
+    estruturais.push(`${abertas} pedido(s) de cliente da semana ainda sem decisão — é o funil da semana que vem.`);
+  }
+
+  return {
+    rotulo, periodoAnterior: anterior.rotulo, blocos, trafego,
+    geral: {
+      artesEntregues: entregues,
+      pecasCriadas: socials.reduce((a, b) => a + (Number(b.metas["Peças criadas"]?.valor) || 0), 0),
+      clientesAtendidos: clientes.size,
+      noPrazo: pct(noPrazo, entregues),
+      retrabalho: pct(reworks.length, entregues),
+      pedidosAbertos: abertas, pedidosExpirados: expiradas,
+    },
+    estruturais,
   };
 }
