@@ -67,7 +67,15 @@ describe("radar: separar sinal de ruído", () => {
   it("ratio alto em perfil minúsculo não vira candidato", () => {
     const v = avaliarCandidato({ engajamento: 3, followers: 9, outlierRatio: 3, postsNaBaseline: 12 });
     expect(v.aceito).toBe(false);
-    expect(v.motivo).toMatch(/piso/i);
+    expect(v.motivo).toMatch(/pequeno demais/i);
+  });
+
+  // O piso NÃO escala com seguidores. A primeira versão exigia 2000 interações de conta acima de 1
+  // milhão, e medindo no acervo real ZERO conteúdos passavam — inclusive os bons. Para perfil
+  // grande o ratio já é o filtro, porque a mediana dele já é alta.
+  it("conta grande com post excepcional passa", () => {
+    const v = avaliarCandidato({ engajamento: 900, followers: 2_800_000, outlierRatio: 4.2, postsNaBaseline: 25 });
+    expect(v.aceito).toBe(true);
   });
 
   it("mas a loja pequena de verdade passa", () => {

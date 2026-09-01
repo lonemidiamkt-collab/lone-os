@@ -113,18 +113,20 @@ export function faixaDePerfil(followers: number): Faixa {
 }
 
 /**
- * Piso de engajamento absoluto por faixa.
+ * Piso de engajamento ABSOLUTO — e por que ele NÃO escala com seguidores.
  *
- * Ratio alto sozinho não significa nada em perfil minúsculo. Na primeira descoberta real apareceu
- * `revestimentosprime`: 9 seguidores, mediana 1 curtida, melhor post 3 — o cálculo diz "3x", e sem
- * este piso ele competiria com uma loja de 42 mil que fez 23x. Um post de 3 curtidas não é
- * tendência de mercado, é uma terça-feira.
+ * O piso existe para um caso só: perfil minúsculo onde o ratio mente. Na primeira descoberta real
+ * apareceu `revestimentosprime` — 9 seguidores, mediana de 1 curtida, melhor post 3 — marcando
+ * "3x". Um post de 3 curtidas não é tendência de mercado, é uma terça-feira.
  *
- * O piso sobe com o tamanho porque 30 interações num perfil de 200 mil também é ruído.
+ * A primeira versão fazia o piso subir com o tamanho do perfil (2000 interações para conta acima de
+ * 1 milhão). Medi no acervo real: ZERO conteúdos passavam, inclusive os bons. O raciocínio estava
+ * errado — para perfil grande o RATIO já é o filtro exigente, porque a mediana dele já é alta;
+ * exigir 2000 absolutas por cima é pedir duas vezes a mesma coisa e barrar tudo.
+ *
+ * Então: um piso baixo e único, que só descarta o ruído do perfil sem movimento.
  */
-const PISO_ENGAJAMENTO: Record<Faixa, number> = {
-  micro: 40, small: 120, medium: 300, large: 800, enterprise: 2000,
-};
+const PISO_ABSOLUTO = 30;
 
 /** Mínimo de posts para a mediana significar alguma coisa. Abaixo disso, não há régua. */
 export const MIN_BASELINE = 8;
@@ -147,9 +149,8 @@ export function avaliarCandidato(c: Candidato, ratioMinimo = 2.5): Veredito {
   if (c.outlierRatio < ratioMinimo) {
     return { aceito: false, motivo: `${c.outlierRatio.toFixed(1)}x — abaixo do mínimo de ${ratioMinimo}x` };
   }
-  const piso = PISO_ENGAJAMENTO[faixaDePerfil(c.followers)];
-  if (c.engajamento < piso) {
-    return { aceito: false, motivo: `${c.engajamento} interações — abaixo do piso de ${piso} para o tamanho do perfil` };
+  if (c.engajamento < PISO_ABSOLUTO) {
+    return { aceito: false, motivo: `${c.engajamento} interações — movimento pequeno demais para ser sinal de mercado` };
   }
   return { aceito: true };
 }
