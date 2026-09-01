@@ -98,3 +98,95 @@ export function calcularScore(m: MidiaParaScore, historico: MidiaParaScore[], ag
     temBase: true,
   };
 }
+
+
+// ── Anti-ruído e anti-monopólio ─────────────────────────────────────────────
+
+export type Faixa = "micro" | "small" | "medium" | "large" | "enterprise";
+
+export function faixaDePerfil(followers: number): Faixa {
+  if (followers < 10_000) return "micro";
+  if (followers < 50_000) return "small";
+  if (followers < 250_000) return "medium";
+  if (followers < 1_000_000) return "large";
+  return "enterprise";
+}
+
+/**
+ * Piso de engajamento absoluto por faixa.
+ *
+ * Ratio alto sozinho não significa nada em perfil minúsculo. Na primeira descoberta real apareceu
+ * `revestimentosprime`: 9 seguidores, mediana 1 curtida, melhor post 3 — o cálculo diz "3x", e sem
+ * este piso ele competiria com uma loja de 42 mil que fez 23x. Um post de 3 curtidas não é
+ * tendência de mercado, é uma terça-feira.
+ *
+ * O piso sobe com o tamanho porque 30 interações num perfil de 200 mil também é ruído.
+ */
+const PISO_ENGAJAMENTO: Record<Faixa, number> = {
+  micro: 40, small: 120, medium: 300, large: 800, enterprise: 2000,
+};
+
+/** Mínimo de posts para a mediana significar alguma coisa. Abaixo disso, não há régua. */
+export const MIN_BASELINE = 8;
+
+export interface Candidato {
+  engajamento: number;
+  followers: number;
+  outlierRatio: number | null;
+  postsNaBaseline: number;
+}
+
+export interface Veredito { aceito: boolean; motivo?: string }
+
+/** O post merece entrar na fila de análise? */
+export function avaliarCandidato(c: Candidato, ratioMinimo = 2.5): Veredito {
+  if (c.postsNaBaseline < MIN_BASELINE) {
+    return { aceito: false, motivo: `histórico curto demais (${c.postsNaBaseline} posts, mínimo ${MIN_BASELINE})` };
+  }
+  if (c.outlierRatio === null) return { aceito: false, motivo: "sem base de comparação" };
+  if (c.outlierRatio < ratioMinimo) {
+    return { aceito: false, motivo: `${c.outlierRatio.toFixed(1)}x — abaixo do mínimo de ${ratioMinimo}x` };
+  }
+  const piso = PISO_ENGAJAMENTO[faixaDePerfil(c.followers)];
+  if (c.engajamento < piso) {
+    return { aceito: false, motivo: `${c.engajamento} interações — abaixo do piso de ${piso} para o tamanho do perfil` };
+  }
+  return { aceito: true };
+}
+
+export interface ParaDiversificar<T> {
+  item: T; perfil: string; followers: number; score: number;
+}
+
+/**
+ * Diversifica a seleção final.
+ *
+ * Dois problemas que aparecem sozinhos e estragam o relatório:
+ *   1. um perfil com dez posts bons ocupa dez lugares do Top 20 e some com todo mundo;
+ *   2. contas gigantes dominam, e o valor do radar está justamente em achar a loja de 8 mil que
+ *      acertou — quem quer saber o que a Leroy postou já sabe onde olhar.
+ * O teto para grandes é proporcional, não proibitivo: marca grande entra quando fez algo
+ * excepcional, só não pode ocupar a lista.
+ */
+export function diversificar<T>(
+  itens: ParaDiversificar<T>[],
+  { limite = 20, porPerfil = 2, tetoGrandes = 0.2 } = {},
+): T[] {
+  const ordenados = [...itens].sort((a, b) => b.score - a.score);
+  const usadosPorPerfil = new Map<string, number>();
+  const maxGrandes = Math.max(1, Math.floor(limite * tetoGrandes));
+  let grandes = 0;
+  const saida: T[] = [];
+
+  for (const it of ordenados) {
+    if (saida.length >= limite) break;
+    const jaTem = usadosPorPerfil.get(it.perfil) ?? 0;
+    if (jaTem >= porPerfil) continue;
+    const ehGrande = it.followers >= 500_000;
+    if (ehGrande && grandes >= maxGrandes) continue;
+    usadosPorPerfil.set(it.perfil, jaTem + 1);
+    if (ehGrande) grandes++;
+    saida.push(it.item);
+  }
+  return saida;
+}
