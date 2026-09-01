@@ -296,6 +296,9 @@ export async function desempenhoSocial(de: string, ate: string, anterior?: { de:
 
 export interface ContaParada { nome: string; ultimoGasto: string | null; diasParada: number | null }
 
+/** Cliente cujo pacote contratado não bate com o que ele vem recebendo. */
+export interface DivergenciaPacote { nome: string; contratado: string; falta: string }
+
 export async function desempenhoTrafego(de: string, ate: string) {
   const d0 = de.slice(0, 10), d1 = ate.slice(0, 10);
   const antes = new Date(new Date(de).getTime() - 7 * 864e5).toISOString().slice(0, 10);
@@ -450,6 +453,8 @@ export interface RelatorioTime {
   periodoAnterior: string;
   blocos: BlocoFuncao[];
   trafego: Awaited<ReturnType<typeof desempenhoTrafego>>;
+  /** Pacote contratado que não bate com a entrega — decisão comercial, fica à vista até alguém decidir. */
+  divergencias: DivergenciaPacote[];
   geral: {
     artesEntregues: number; pecasCriadas: number; clientesAtendidos: number;
     noPrazo: number | null; retrabalho: number | null;
@@ -472,9 +477,57 @@ export function janelaAnterior(de: string): { de: string; ate: string; rotulo: s
   return { de: antes.toISOString(), ate: fim.toISOString(), rotulo: `${f(antes)} a ${f(ultimoDia)}` };
 }
 
+/**
+ * Pacote contratado x entrega dos últimos 90 dias.
+ *
+ * Roberto: "verifica se todos os clientes estão certinho, a maioria é Lone Growth". Achei 4 fora, e
+ * cada um tem DUAS leituras opostas: o Bruno Tintas Iguaba está como Lone Growth (tráfego + social)
+ * e não tem UM card em 90 dias. Ou o cadastro está errado, ou ele paga por social e não recebe há
+ * três meses. Trocar o cadastro pra "só tráfego" faria a divergência sumir da tela — e o problema
+ * continuar existindo, agora invisível.
+ *
+ * Por isso isto vive no relatório toda semana em vez de virar uma correção de banco: a decisão é
+ * comercial, e enquanto ninguém decide, ela fica à vista.
+ */
+async function divergenciasDePacote(ate: string): Promise<DivergenciaPacote[]> {
+  const noventaDias = new Date(new Date(ate).getTime() - 90 * 864e5).toISOString();
+
+  const [clientes, gastos, cards] = await Promise.all([
+    exigir("pacote: clientes", supabaseAdmin.from("clients")
+      .select("id, name, service_type, meta_ad_account_id, active, draft_status")
+      .or("active.is.null,active.eq.true").is("draft_status", null)),
+    exigir("pacote: gasto recente", supabaseAdmin.from("metric_snapshots")
+      .select("client_id").gt("spend", 0).gte("metric_date", noventaDias.slice(0, 10))),
+    exigir("pacote: cards recentes", supabaseAdmin.from("content_cards")
+      .select("client_id").gte("created_at", noventaDias)),
+  ]);
+
+  const gastou = new Set(gastos.map((g) => g.client_id as string));
+  const temCard = new Set(cards.map((k) => k.client_id as string));
+
+  const fora: DivergenciaPacote[] = [];
+  for (const c of clientes) {
+    const st = (c.service_type as string) ?? "";
+    const nome = (c.name as string) ?? "(sem nome)";
+    const g = gastou.has(c.id as string);
+    const k = temCard.has(c.id as string);
+
+    if (st === "lone_growth") {
+      // Contratou os dois. Falta algum?
+      if (!k) fora.push({ nome, contratado: "Tráfego + Social", falta: "nenhuma peça de social em 90 dias" });
+      else if (!g) fora.push({ nome, contratado: "Tráfego + Social", falta: "nenhum gasto de anúncio em 90 dias" });
+    } else if ((st === "assessoria_social" || st === "assessoria_design") && g) {
+      fora.push({ nome, contratado: "Só social", falta: "está gastando em anúncio — o pacote não prevê" });
+    } else if ((st === "assessoria_trafego" || st === "trafego_pago" || st === "trafego_site") && k) {
+      fora.push({ nome, contratado: "Só tráfego", falta: "está recebendo peça de social — o pacote não prevê" });
+    }
+  }
+  return fora.sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
 export async function relatorioTime(de: string, ate: string, rotulo: string): Promise<RelatorioTime> {
   const anterior = janelaAnterior(de);
-  const [designers, socials, trafego, cards, demandas, reworks, atendidos] = await Promise.all([
+  const [designers, socials, trafego, cards, demandas, reworks, atendidos, divergencias] = await Promise.all([
     desempenhoDesigner(de, ate, anterior),
     desempenhoSocial(de, ate, anterior),
     desempenhoTrafego(de, ate),
@@ -487,6 +540,7 @@ export async function relatorioTime(de: string, ate: string, rotulo: string): Pr
     exigir("time: clientes atendidos", supabaseAdmin.from("content_cards")
       .select("client_name, created_at, designer_delivered_at")
       .or(`and(designer_delivered_at.gte.${de},designer_delivered_at.lt.${ate}),and(created_at.gte.${de},created_at.lt.${ate})`)),
+    divergenciasDePacote(ate),
   ]);
 
   const blocos = [...designers, ...socials];
@@ -541,7 +595,7 @@ export async function relatorioTime(de: string, ate: string, rotulo: string): Pr
   }
 
   return {
-    rotulo, periodoAnterior: anterior.rotulo, blocos, trafego,
+    rotulo, periodoAnterior: anterior.rotulo, blocos, trafego, divergencias,
     geral: {
       artesEntregues: entregues,
       pecasCriadas: socials.reduce((a, b) => a + (Number(b.metas["Peças criadas"]?.valor) || 0), 0),

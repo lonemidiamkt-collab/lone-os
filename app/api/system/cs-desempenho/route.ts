@@ -16,13 +16,16 @@ import { csSendGroupDocument, csSendGroupText } from "@/lib/cs/notify";
 // deles, personalizado de acordo com a função". E: "muito textão nos grupos — algumas coisas podem
 // ser PDF".
 //
-// Três peças da mesma base:
-//   TIME    → um documento com o time inteiro: produção por pessoa, comparação com a semana
-//             anterior, e os riscos que só aparecem no conjunto. É o padrão. Vai pro grupo
-//             administrativo. Roberto (01/09): "eu queria tipo um PDF como se fosse um relatório
-//             de todo o time" — antes eram quatro arquivos que ele tinha que juntar de cabeça.
-//   CEO     → o que está bom / o que preocupa, SEM nome de pessoa. Leitura de negócio.
-//   FUNÇÃO  → o cartão de UMA pessoa. Existe pra mandar individualmente a quem é da conta.
+// UM DOCUMENTO, UM DESTINO. Roberto (01/09), depois de ver os três PDFs separados chegarem no grupo
+// da equipe: "esses relatórios devem ser enviados para mim no adm, e devem ser enviados esses dados
+// em um único pdf". Antes disso ele tinha pedido pra mandar na equipe pra testar — viu funcionando
+// e decidiu o contrário. Vale a decisão nova.
+//
+// Então: o relatório do TIME (todo mundo, num arquivo) vai pro grupo administrativo, e mais nada
+// sai sozinho. Os outros dois formatos continuam existindo, mas só respondem a chamada explícita:
+//   CEO     → sem nome de pessoa, leitura de negócio (?quem=ceo).
+//   FUNÇÃO  → o cartão de UMA pessoa (?quem=funcao) — exige ?jid= pra não voltar sozinho pro grupo
+//             da equipe, que é justamente o que ele pediu pra parar.
 //
 // ?dry=1 gera e devolve sem enviar · ?quem=time|ceo|funcao|ambos · ?jid= manda pra um grupo
 // ?baixar=time|ceo|<nome> devolve aquele PDF em vez de enviar — é como se confere antes do envio.
@@ -93,7 +96,10 @@ export async function POST(req: NextRequest) {
     ? []
     : [...await desempenhoDesigner(de, ate, anterior), ...await desempenhoSocial(de, ate, anterior)];
   if (quem === "funcao" || quem === "ambos") {
-    const jid = jidManual || process.env.CS_TEAM_GROUP_JID || "";
+    // Sem ?jid= explícito, o cartão individual NÃO é enviado. Ele caía no grupo da equipe por
+    // padrão; o Roberto viu chegar e pediu pra não mandar. Deixar o padrão como estava seria
+    // repetir o envio toda sexta, sem ninguém mandar.
+    const jid = jidManual;
     for (const b of blocos) {
       const pdf = await htmlToPdf(funcaoPdfHtml(b, rotulo, logo));
       if (!pdf.ok || !pdf.buffer) { erros.push(`${b.pessoa}: ${pdf.error}`); continue; }
@@ -104,15 +110,14 @@ export async function POST(req: NextRequest) {
         });
       }
       if (dry || baixar) { enviados.push(`${b.pessoa} (dry)`); continue; }
-      if (!jid) { erros.push(`${b.pessoa}: grupo da equipe não configurado`); continue; }
+      if (!jid) { erros.push(`${b.pessoa}: cartão individual só é enviado com ?jid= explícito`); continue; }
       const r = await csSendGroupDocument(jid, pdf.buffer.toString("base64"),
         `${b.pessoa} - semana ${rotulo.replace(/\//g, "-")}.pdf`,
         `📈 *${b.pessoa}* — desempenho da semana (${rotulo})`);
       if (r.ok) enviados.push(b.pessoa); else erros.push(`${b.pessoa}: ${r.error}`);
       await new Promise((r) => setTimeout(r, 1500)); // não estoura a fila da Evolution
     }
-    // O tráfego não tem "produção por pessoa" no sistema: a Meta é editada fora daqui. Vai como
-    // resumo curto, honesto sobre o que dá pra medir.
+    // Idem: só com destino explícito. O resumo de tráfego também caía no grupo da equipe sozinho.
     if (!dry && jid) {
       const t = await desempenhoTrafego(de, ate);
       const seta = (n: number | null) => n === null ? "" : n > 0 ? ` (+${n}%)` : ` (${n}%)`;

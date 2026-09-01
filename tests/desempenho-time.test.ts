@@ -39,6 +39,9 @@ const base: RelatorioTime = {
   },
   geral: { artesEntregues: 44, pecasCriadas: 24, clientesAtendidos: 20, noPrazo: 84, retrabalho: 25, pedidosAbertos: 8, pedidosExpirados: 0 },
   estruturais: ["Rodrigo entregou 44 das 44 artes da semana. A produção inteira depende de uma pessoa."],
+  divergencias: [
+    { nome: "Bruno Tintas Iguaba", contratado: "Tráfego + Social", falta: "nenhuma peça de social em 90 dias" },
+  ],
 };
 
 describe("relatório do time", () => {
@@ -92,6 +95,17 @@ describe("relatório do time", () => {
     expect(html).toContain("Investido no mês");
   });
 
+  // Roberto: "verifica se todos os clientes estão certinho". O Bruno Tintas Iguaba está como Lone
+  // Growth (tráfego + social) e não tem UM card em 90 dias: ou o cadastro está errado, ou ele paga
+  // por social e não recebe há três meses. Corrigir o cadastro faria sumir da tela, não do mundo.
+  it("mostra pacote contratado que não bate com a entrega", () => {
+    const html = timePdfHtml(base, "");
+    expect(html).toContain("Pacote contratado x entrega");
+    expect(html).toContain("Bruno Tintas Iguaba");
+    expect(html).toContain("nenhuma peça de social em 90 dias");
+    expect(html).toMatch(/cadastro está errado|paga por algo que não recebe/);
+  });
+
   it("nomeia a conta de cliente ativo com verba parada", () => {
     const html = timePdfHtml(base, "");
     expect(html).toContain("Bruno Tintas Iguaba");
@@ -103,6 +117,25 @@ describe("relatório do time", () => {
 // O relatório mostrava 25% de retrabalho no topo e 18% no cartão do designer — mesma semana,
 // mesmas 44 artes. Os 11 eventos de rework da semana incluíam 3 de artes entregues em semanas
 // ANTERIORES; o denominador eram só as 44 desta. Numerador e denominador de conjuntos diferentes.
+// Roberto (01/09), vendo os três PDFs separados chegarem: "esses relatórios devem ser enviados
+// para mim no adm, e devem ser enviados esses dados em UM ÚNICO pdf". O documento único precisa
+// carregar tudo que os individuais carregavam — inclusive o que foi BEM, não só o que preocupa.
+describe("o PDF único traz o que os individuais traziam", () => {
+  it("mostra destaque e atenção de cada pessoa", () => {
+    const html = timePdfHtml({
+      ...base,
+      blocos: [{
+        pessoa: "Rodrigo", funcao: "designer", clientes: 26,
+        metas: { "Artes entregues": { valor: 44, alvo: 25, unidade: "un", melhorQuando: "maior" } },
+        destaques: ["44 artes entregues"],
+        atencao: ["18% das artes voltaram pra refazer (meta: até 15%)"],
+      }],
+    }, "");
+    expect(html).toContain("44 artes entregues");
+    expect(html).toContain("18% das artes voltaram pra refazer");
+  });
+});
+
 describe("consistência dos números na mesma página", () => {
   it("o retrabalho do topo é o mesmo critério do cartão da pessoa", () => {
     const r: RelatorioTime = {

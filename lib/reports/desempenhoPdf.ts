@@ -199,7 +199,8 @@ export function timePdfHtml(r: RelatorioTime, logo: string): string {
       </div>
       <div style="margin-bottom:9px">${seta(b.variacao)}</div>
       <table style="width:100%;border-collapse:collapse">${Object.entries(b.metas).map(metaLinha).join("")}</table>
-      ${b.atencao.length ? `<div style="margin-top:10px;padding-top:9px;border-top:1px solid ${LINHA}">
+      ${(b.destaques.length || b.atencao.length) ? `<div style="margin-top:10px;padding-top:9px;border-top:1px solid ${LINHA}">
+        ${b.destaques.map((t) => `<div style="font-size:11.5px;color:${OK};margin-bottom:3px">• ${esc(t)}</div>`).join("")}
         ${b.atencao.map((t) => `<div style="font-size:11.5px;color:${ALERTA};margin-bottom:3px">• ${esc(t)}</div>`).join("")}
       </div>` : ""}
     </div>`;
@@ -229,6 +230,20 @@ export function timePdfHtml(r: RelatorioTime, logo: string): string {
       <h2 style="margin-top:24px;color:${ALERTA}">Atenção da operação</h2>
       ${r.estruturais.map((t2) => `<div style="padding:11px 15px;background:${CARTAO};border:1px solid ${LINHA};
         border-left:3px solid ${ALERTA};border-radius:0 8px 8px 0;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(t2)}</div>`).join("")}
+    ` : ""}
+
+    ${r.divergencias.length ? `
+      <h2 style="margin-top:24px;color:${ALERTA}">Pacote contratado x entrega</h2>
+      <div style="font-size:11px;color:${SUAVE};margin-bottom:9px">
+        Cada linha tem duas leituras: ou o cadastro está errado, ou o cliente paga por algo que não recebe.
+        Mudar o cadastro faz sumir da tela — não faz sumir o problema.
+      </div>
+      ${r.divergencias.map((d) => `<div style="padding:10px 15px;background:${CARTAO};border:1px solid ${LINHA};
+        border-left:3px solid ${ALERTA};border-radius:0 8px 8px 0;margin-bottom:7px">
+        <span style="font-size:13px;font-weight:600">${esc(d.nome)}</span>
+        <span style="font-size:11.5px;color:${SUAVE}"> · contratou ${esc(d.contratado)}</span>
+        <div style="font-size:12px;color:${TEXTO};margin-top:3px">${esc(d.falta)}</div>
+      </div>`).join("")}
     ` : ""}
 
     ${grupo("Design", r.blocos.filter((b) => b.funcao === "designer"))}

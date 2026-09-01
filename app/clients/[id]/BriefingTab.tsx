@@ -5,6 +5,7 @@ import * as Sentry from "@sentry/nextjs";
 import { useRole } from "@/lib/context/RoleContext";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import type { BriefingWithMeta } from "@/lib/types/briefing";
+import MaterialDoCliente from "@/components/clients/MaterialDoCliente";
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -432,6 +433,10 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
           </button>
         )}
       </div>
+
+      {/* O material que o cliente mandou pelo painel. Fica ANTES do briefing porque é insumo pra
+          peça — se aparecesse no fim, ninguém rolaria até lá antes de começar a criar. */}
+      <MaterialDoCliente clientId={clientId} />
 
       {/* Empty state */}
       {!briefing && (
