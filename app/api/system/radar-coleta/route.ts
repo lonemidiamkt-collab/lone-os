@@ -103,6 +103,10 @@ export async function POST(req: NextRequest) {
                 likes: m.likes, comments: m.comments,
                 engagement_rate: score.taxaEngajamento, outlier_ratio: score.outlierRatio,
                 trend_score: score.temBase ? score.valor : null,
+                // As URLs também se renovam aqui: elas expiram na Meta, e conteúdo antigo que ainda
+                // não foi analisado precisa da versão válida — senão a análise cai pra texto
+                // silenciosamente e ninguém entende por que o Radar ficou cego.
+                media_url: m.mediaUrl ?? null, thumbnail_url: m.thumbnailUrl ?? null,
               }).eq("id", existente.id);
             }
           }
