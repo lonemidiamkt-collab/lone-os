@@ -126,9 +126,46 @@ export async function POST(req: NextRequest) {
   // o mesmo tipo de abertura, e como as aberturas variavam ("institucional", "erro/alerta",
   // "indefinido"), o padrão se partiu em quatro grupos de um e NENHUMA tendência foi detectada.
   // Formato é o que se repete de verdade; a abertura é variação em cima dele.
-  const grupos = new Map<string, typeof analisados>();
-  for (const x of analisados) {
-    const chave = `${x.midia.nicho}|${x.a.formato}`;
+  // O agrupamento olha TODAS as análises recentes, não só as desta execução.
+  //
+  // Como cada conteúdo é marcado depois de analisado, ele não volta na rodada seguinte — e a versão
+  // anterior agrupava apenas o que tinha acabado de analisar. Na prática cada semana recomeçava do
+  // zero: uma execução com 1 conteúdo novo nunca alcança "2 perfis diferentes", e o sinal nunca
+  // acumulava. Tendência é justamente o que se repete AO LONGO do tempo.
+  const { data: historico } = await supabaseAdmin
+    .from("radar_analysis")
+    .select("formato, hook_tipo, estrutura, motivo_performance, replicavel, media_id, created_at")
+    .gte("created_at", new Date(Date.now() - 45 * 864e5).toISOString());
+
+  const idsHist = (historico ?? []).map((h) => h.media_id as string);
+  const { data: midiasHist } = idsHist.length
+    ? await supabaseAdmin.from("radar_media")
+        .select("id, nicho, permalink, outlier_ratio, profile_id").in("id", idsHist)
+    : { data: [] as Record<string, unknown>[] };
+  const porMidia = new Map((midiasHist ?? []).map((m) => [m.id as string, m]));
+
+  type ItemGrupo = { perfil: string; formato: string; hookTipo: string; estrutura: string;
+                     motivo: string; permalink?: string; outlier: number; nicho: string };
+  const universo: ItemGrupo[] = [];
+  for (const h of historico ?? []) {
+    const m = porMidia.get(h.media_id as string);
+    if (!m) continue;
+    const p = porPerfil.get(m.profile_id as string);
+    universo.push({
+      perfil: String(p?.username ?? m.profile_id),
+      formato: String(h.formato ?? "outro"),
+      hookTipo: String(h.hook_tipo ?? "indefinido"),
+      estrutura: String(h.estrutura ?? ""),
+      motivo: String(h.motivo_performance ?? ""),
+      permalink: m.permalink as string | undefined,
+      outlier: Number(m.outlier_ratio) || 0,
+      nicho: String(m.nicho ?? ""),
+    });
+  }
+
+  const grupos = new Map<string, ItemGrupo[]>();
+  for (const x of universo) {
+    const chave = `${x.nicho}|${x.formato}`;
     grupos.set(chave, [...(grupos.get(chave) ?? []), x]);
   }
 
@@ -137,7 +174,7 @@ export async function POST(req: NextRequest) {
       const [nicho, formato] = chave.split("|");
       const perfisDistintos = new Set(itens.map((i) => i.perfil)).size;
       // As aberturas vistas dentro do formato: é o que dá textura à recomendação.
-      const aberturas = [...new Set(itens.map((i) => i.a.hookTipo).filter((h) => h && h !== "indefinido"))];
+      const aberturas = [...new Set(itens.map((i) => i.hookTipo).filter((h) => h && h !== "indefinido"))];
       return { nicho, formato, hookTipo: aberturas[0] ?? "variada", aberturas, itens, perfisDistintos };
     })
     .filter((t) => t.perfisDistintos >= 2)          // dois perfis diferentes, no mínimo
@@ -172,13 +209,10 @@ export async function POST(req: NextRequest) {
         tendencia: {
           nome: `${t.formato} com abertura de ${t.hookTipo}`,
           formato: t.formato, hookTipo: t.hookTipo,
-          estrutura: t.itens[0]?.a.estrutura ?? "",
-          porqueFunciona: t.itens[0]?.a.motivoPerformance ?? "",
+          estrutura: t.itens[0]?.estrutura ?? "",
+          porqueFunciona: t.itens[0]?.motivo ?? "",
           quantosPerfis: t.perfisDistintos,
-          exemplos: t.itens.slice(0, 3).map((i) => ({
-            permalink: i.midia.permalink as string | undefined,
-            outlier: Number(i.midia.outlier_ratio) || 0,
-          })),
+          exemplos: t.itens.slice(0, 3).map((i) => ({ permalink: i.permalink, outlier: i.outlier })),
         },
       });
 
@@ -192,7 +226,7 @@ export async function POST(req: NextRequest) {
         cliente: nome, nicho: t.nicho,
         tendencia: `${t.formato} · ${t.hookTipo} (${t.perfisDistintos} perfis)`,
         ...r.data,
-        referencias: t.itens.slice(0, 3).map((i) => i.midia.permalink).filter(Boolean),
+        referencias: t.itens.slice(0, 3).map((i) => i.permalink).filter(Boolean),
       });
     }
   }
@@ -204,7 +238,7 @@ export async function POST(req: NextRequest) {
     tendencias: tendencias.map((t) => ({
       nicho: t.nicho, formato: t.formato, aberturas: t.aberturas,
       perfis: t.perfisDistintos, conteudos: t.itens.length,
-      exemplos: t.itens.slice(0, 3).map((i) => `@${i.perfil} ${Number(i.midia.outlier_ratio).toFixed(1)}x`),
+      exemplos: t.itens.slice(0, 3).map((i) => `@${i.perfil} ${i.outlier.toFixed(1)}x`),
     })),
     pautas,
     erros: erros.slice(0, 5),
