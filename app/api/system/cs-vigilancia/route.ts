@@ -311,6 +311,18 @@ export async function POST(req: NextRequest) {
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   const detalhe: Array<Record<string, unknown>> = [];
   let postadas = 0;
+
+  // As cobranças de card não vão mais UMA A UMA.
+  //
+  // Roberto (02/09): "hoje você mandou mais de trinta mensagens e o time não engajou". Medi: a
+  // vigilância sozinha postou 91 mensagens em 7 dias, uma por card — "Oi Rodrigo! tem um card do X",
+  // "Oi Rodrigo! tem um card do Y", "Rodrigo, o Z tá na fila". Quatro avisos seguidos para a mesma
+  // pessoa sobre a mesma coisa treinam o time a rolar o grupo sem ler.
+  //
+  // Agora acumulam por pessoa e saem em UMA mensagem no fim. O registro em cs_cobrancas continua
+  // linha a linha — o que muda é quantas vezes alguém é interrompido, não o que o sistema sabe.
+  const paraAvisar = new Map<string, { cliente: string; motivo: string; vig: number }[]>();
+
   for (const cob of cobrancas) {
     const cli = clientById.get(cob.client_id);
     const nome = (cli?.name as string) || "Cliente";
@@ -334,11 +346,33 @@ export async function POST(req: NextRequest) {
     });
     const novo = !insErr;
     if (insErr && insErr.code !== "23505") console.error("[cs-vigilancia] insert:", insErr.message);
-    if (novo && live && internalJid) {
-      const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-vigilancia", destino: "interno" });
-      if (r.ok) postadas++; else console.error("[cs-vigilancia] post falhou:", r.error);
+    if (novo && live && internalJid && pessoa) {
+      paraAvisar.set(pessoa, [...(paraAvisar.get(pessoa) ?? []), { cliente: nome, motivo: cob.motivo, vig: cob.vigilancia }]);
     }
     detalhe.push({ vig: cob.vigilancia, cliente: nome, pessoa: pessoa || null, live, motivo: cob.motivo });
+  }
+
+  // ── UMA MENSAGEM POR PESSOA, com tudo que apareceu nesta rodada ──────────
+  for (const [pessoa, itens] of paraAvisar) {
+    if (!internalJid) break;
+    const primeiro = pessoa.split(/\s+/)[0];
+    const { mencionar } = await import("@/lib/cs/mencao");
+    const m = await mencionar(pessoa).catch(() => ({ trecho: primeiro, jids: [], notifica: false }));
+
+    // Uma pendência só continua com a frase inteira: encurtar aí não economiza atenção de ninguém.
+    const corpo = itens.length === 1
+      ? `${m.trecho}, ${itens[0].motivo} — *${itens[0].cliente}*.`
+      : [
+          `${m.trecho}, ${itens.length} coisas esperando você:`,
+          ...itens.slice(0, 8).map((i) => `• *${i.cliente}* — ${i.motivo}`),
+          itens.length > 8 ? `• e mais ${itens.length - 8}` : "",
+          "",
+          "Se algum já está resolvido, é só mover no board que eu paro de cobrar.",
+        ].filter(Boolean).join("\n");
+
+    const r = await csSendGroupText(internalJid, corpo, undefined,
+      { origem: "cs-vigilancia", destino: "interno" }, m.jids);
+    if (r.ok) postadas++; else console.error("[cs-vigilancia] digest por pessoa falhou:", r.error);
   }
 
   // ── DIGEST "SEM PAUTA" POR PESSOA (AO VIVO) — decisão do Roberto: ficar em cima pro time USAR
