@@ -401,12 +401,16 @@ async function checarSatisfacao(
     if (!alerta) return;
     satisfacaoCooldown.set(client.id, Date.now());
     const nome = client.nome_fantasia || client.name || "Cliente";
-    const social = client.assigned_social ? `@${String(client.assigned_social).split(" ")[0]} ` : "";
+    // Menção de verdade quando há número cadastrado; primeiro nome sem arroba quando não há. Um
+    // "@" que não notifica é pior que nenhum: dá a impressão de que a pessoa foi avisada.
+    const { mencionar } = await import("@/lib/cs/mencao");
+    const m = await mencionar(client.assigned_social as string).catch(() => ({ trecho: "", jids: [], notifica: false }));
+    const social = m.trecho ? `${m.trecho} ` : "";
     const nivel = s.churn ? "🚨 *Risco de o cliente sair*" : s.risco === "alto" ? "🔴 *Cliente insatisfeito*" : "🟠 *Atenção com o cliente*";
     const dest = teamGroupJid() || internalGroupJid();
     if (dest) {
       const aviso = `${nivel} — *${nome}*\n${social}O cliente falou algo que parece insatisfação:\n"${mensagem.slice(0, 180)}"\n\n_Por quê: ${s.motivo}_\nDá uma olhada no grupo dele antes que aperte. 🙏`;
-      await csSendGroupText(dest, aviso).catch(() => {});
+      await csSendGroupText(dest, aviso, undefined, undefined, m.jids).catch(() => {});
     }
     await supabaseAdmin.from("notifications").insert({
       type: "content",

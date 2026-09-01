@@ -18,6 +18,13 @@ export async function csSendGroupText(
   text: string,
   quotedMsgId?: string, // se vier: a msg é um REPLY àquela mensagem (threading por demanda)
   meta?: CsSendMeta,
+  /**
+   * JIDs a MENCIONAR de verdade (ex: "5522999999999@s.whatsapp.net").
+   *
+   * Sem isto, escrever "@Fulano" no texto é só texto: o WhatsApp não notifica ninguém, e a pessoa
+   * só vê se estiver lendo o grupo — que é justamente o que a menção existiria para evitar.
+   */
+  mencionados?: string[],
 ): Promise<{ ok: boolean; error?: string; id?: string }> {
   const baseUrl = process.env.EVOLUTION_API_URL?.replace(/\/+$/, "");
   const apiKey = process.env.EVOLUTION_API_KEY_NEW;
@@ -39,6 +46,7 @@ export async function csSendGroupText(
   try {
     const payload: Record<string, unknown> = { number: jid, text };
     if (quotedMsgId) payload.quoted = { key: { id: quotedMsgId } };
+    if (mencionados?.length) payload.mentioned = mencionados;
     const res = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(instance)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: apiKey },
