@@ -307,8 +307,9 @@ export async function desempenhoTrafego(de: string, ate: string) {
   const [linhas, doMes, contas] = await Promise.all([
     exigir("tráfego: semana", supabaseAdmin.from("metric_snapshots")
       .select("client_id, metric_date, spend, conversions").gte("metric_date", antes).lt("metric_date", d1)),
+    // `metric_date` vem junto pro rótulo poder dizer o último dia REALMENTE somado — ver abaixo.
     exigir("tráfego: mês", supabaseAdmin.from("metric_snapshots")
-      .select("client_id, spend, conversions").gte("metric_date", inicioMes).lt("metric_date", d1)),
+      .select("client_id, metric_date, spend, conversions").gte("metric_date", inicioMes).lt("metric_date", d1)),
     exigir("tráfego: contas conectadas", supabaseAdmin.from("clients")
       .select("id, name, active, draft_status, meta_ad_account_id").not("meta_ad_account_id", "is", null)),
   ]);
@@ -320,6 +321,10 @@ export async function desempenhoTrafego(de: string, ate: string) {
 
   const atual = soma(sem(d0, d1)), anterior = soma(sem(antes, d0));
   const mes = soma(doMes);
+  // O dia mais recente que entrou na soma do mês. Sem dado nenhum, cai na véspera da fronteira.
+  const ultimoDiaDoMes = doMes.reduce(
+    (a: string, r) => ((r.metric_date as string) > a ? (r.metric_date as string) : a),
+    new Date(new Date(`${d1}T12:00:00Z`).getTime() - 864e5).toISOString().slice(0, 10));
   const custoAtual = atual.conversas > 0 ? atual.gasto / atual.conversas : 0;
   const custoAntes = anterior.conversas > 0 ? anterior.gasto / anterior.conversas : 0;
 
@@ -361,11 +366,15 @@ export async function desempenhoTrafego(de: string, ate: string) {
       ? Math.round(((atual.conversas - anterior.conversas) / anterior.conversas) * 1000) / 10 : null,
     variacaoGasto: anterior.gasto > 0 ? Math.round(((atual.gasto - anterior.gasto) / anterior.gasto) * 1000) / 10 : null,
     mes: {
-      // Diz ATÉ QUANDO. O mês vai até o fim da janela do relatório, não até hoje — conferir contra
-      // o Gerenciador num dia 3 e achar R$ 2 mil de diferença é o tipo de coisa que faz alguém
-      // desconfiar do relatório inteiro.
+      // O rótulo mostra o ÚLTIMO DIA SOMADO, lido dos próprios dados — não o fim da janela.
+      //
+      // Era `d1`, que é a fronteira EXCLUSIVA do filtro: pra semana que terminou em 30/08, d1 vale
+      // "2026-08-31" e o PDF anunciava "agosto até 31/08" somando só até o dia 30. O Roberto
+      // conferiu 01–31 no Gerenciador, achou R$ 54.997 contra os R$ 52.966 do relatório e disse que
+      // o dado do tráfego estava errado. O dado estava certo; a legenda é que prometia um dia a
+      // mais. Off-by-one em rótulo custa a confiança no número inteiro.
       rotulo: `${new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "America/Sao_Paulo" })
-        .format(new Date(`${inicioMes}T12:00:00Z`))} até ${d1.slice(8, 10)}/${d1.slice(5, 7)}`,
+        .format(new Date(`${inicioMes}T12:00:00Z`))} até ${ultimoDiaDoMes.slice(8, 10)}/${ultimoDiaDoMes.slice(5, 7)}`,
       gasto: Math.round(mes.gasto * 100) / 100,
       conversas: mes.conversas,
       custoPorConversa: mes.conversas > 0 ? Math.round((mes.gasto / mes.conversas) * 100) / 100 : 0,
