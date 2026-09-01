@@ -110,6 +110,15 @@ export async function POST(req: NextRequest) {
 
         const med = mediana(engs);
         const faixa = faixaDePerfil(r.perfil.followers);
+
+        // Perfil com movimento pequeno demais não vira referência: com mediana de 8 interações,
+        // qualquer post de 40 marca "5x" — e 40 interações não é tendência de mercado, é uma
+        // terça-feira. Medido: os primeiros perfis que a busca trouxe tinham mediana 8, e o radar
+        // ficava sem candidato nenhum depois do filtro. Fica registrado como sem base, não some.
+        if (med < 15 || r.perfil.followers < 3000) {
+          semBase++;
+          continue;
+        }
         aceitos.push({
           username: r.perfil.username, followers: r.perfil.followers, faixa,
           mediana: med, posts: engs.length, queryId, origem: meta.origem,

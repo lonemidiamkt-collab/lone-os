@@ -210,11 +210,11 @@ export async function buscarCandidatos(query: string, apiKey: string, modelo = "
       tools: [{ type: "web_search" }],
       input:
         `Pesquise na web: ${query}\n\n` +
-        `Encontre CONTEÚDOS e PERFIS do Instagram de empresas BRASILEIRAS desse mercado. ` +
-        `Priorize lojas REGIONAIS e de pequeno/médio porte — grandes marcas nacionais são menos úteis aqui. ` +
-        `Se encontrar links de posts ou Reels, inclua os links completos. ` +
+        `Encontre PERFIS do Instagram de empresas BRASILEIRAS desse mercado que POSTAM COM FREQUÊNCIA ` +
+        `e têm público ativo — lojas regionais e de médio porte, tipicamente entre 10 mil e 300 mil seguidores. ` +
+        `EVITE contas com menos de 5 mil seguidores e as maiores marcas nacionais. ` +
         `NÃO tente estimar seguidores nem desempenho — isso é medido depois. ` +
-        `Responda apenas com nomes de usuário e/ou links do Instagram, separados por vírgula ou quebra de linha, sem texto explicativo.`,
+        `Responda apenas com nomes de usuário do Instagram, separados por vírgula, sem texto explicativo.`,
     }),
     signal: AbortSignal.timeout(180_000),
   });
@@ -260,8 +260,11 @@ async function buscarTextoBruto(query: string, apiKey: string, modelo: string): 
       tools: [{ type: "web_search" }],
       input:
         `Pesquise na web: ${query}\n\n` +
-        `Encontre CONTEÚDOS e PERFIS do Instagram de empresas BRASILEIRAS desse mercado. ` +
-        `Priorize lojas REGIONAIS e de pequeno/médio porte. ` +
+        `Encontre PERFIS do Instagram de empresas BRASILEIRAS desse mercado que POSTAM COM ` +
+        `FREQUÊNCIA e têm público ativo — lojas regionais e de médio porte, tipicamente entre 10 mil ` +
+        `e 300 mil seguidores. ` +
+        `EVITE: contas com menos de 5 mil seguidores (movimento pequeno demais para servir de ` +
+        `referência) e as maiores marcas nacionais (o que funciona para elas não se repete numa loja). ` +
         `Se encontrar links de posts ou Reels, inclua os links completos. ` +
         `NÃO estime seguidores nem desempenho — isso é medido depois. ` +
         `Responda apenas com nomes de usuário e/ou links do Instagram.`,
