@@ -7,6 +7,7 @@
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { addDays, ymd } from "@/lib/cs/vigilancia";
 import { NUCLEO_PLANEJAMENTO } from "@/lib/cs/estrategista";
+import { blocoNichoParaPrompt } from "@/lib/cs/nicho";
 
 export const PAUTA_MODEL = "gpt-4o";
 
@@ -70,6 +71,7 @@ Responda APENAS no JSON do schema.`;
 
 export interface PautaInput {
   clienteNome: string;
+  /** Ramo do cliente (clients.nicho). NÃO é o pacote vendido — ver lib/cs/nicho.ts. */
   clienteNicho?: string;
   briefing?: string;
   regras?: string[];
@@ -101,8 +103,16 @@ export async function gerarPautaSemanal(inp: PautaInput): Promise<OpenAiResult<P
   const historico = inp.historicoTitulos.length
     ? inp.historicoTitulos.map((t) => `  - ${t}`).join("\n")
     : "  (sem histórico)";
+  // O ramo do cliente E o que muda no ano dentro dele. O prompt sempre mandou "use o nicho", mas o
+  // nicho nunca chegava aqui: só existia se estivesse escrito dentro do briefing. Uma seguradora em
+  // mês de chuva fala de sinistro; uma construtora no mesmo mês fala de infiltração. Mesmo mês,
+  // conversa oposta — sem isso, janeiro e julho viravam o mesmo mês pra todo mundo.
+  const mesAlvo = inp.datas[0] ? Number(inp.datas[0].slice(5, 7)) : new Date().getUTCMonth() + 1;
+  const blocoNicho = blocoNichoParaPrompt(inp.clienteNicho, mesAlvo);
+
   const user = [
     `Cliente: ${inp.clienteNome}${inp.clienteNicho ? ` (${inp.clienteNicho})` : ""}`,
+    blocoNicho,
     `Briefing do cliente: ${inp.briefing?.trim().slice(0, 1500) || "(sem briefing cadastrado — proponha conteúdo de valor genérico do nicho, sem inventar oferta)"}`,
     `Do's & don'ts:\n${regras}`,
     `Posts recentes (NÃO repetir tema):\n${historico}`,
