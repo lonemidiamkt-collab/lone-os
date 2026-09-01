@@ -1,13 +1,18 @@
 "use client";
 
-// /planejamento — board do Calendário estratégico (fácil acesso pro social): escolhe o cliente,
-// gera o calendário (semana/mês) e vê os calendários recentes pra baixar de novo — sem garimpar
-// cliente a cliente.
+// /planejamento — onde a semana de conteúdo é decidida, do insumo ao calendário.
+//
+// Roberto (02/09): "radar e planejamento já são áreas do social media, por que estão separados? O
+// radar já faz parte de um planejamento". Eram duas abas para um trabalho só. Agora a página segue
+// a ordem real do trabalho: primeiro o que o mercado está mostrando (Radar), depois o calendário
+// estratégico do cliente. Quem monta pauta olha referência antes de escolher tema — a tela agora
+// respeita isso em vez de obrigar a trocar de aba no meio.
 
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useClientsStore } from "@/stores/useClientsStore";
 import CalendarioEstrategico from "@/components/client-tabs/CalendarioEstrategico";
+import RadarOportunidades from "@/components/planejamento/RadarOportunidades";
 import { Button } from "@/components/ui/button";
 
 interface Recente { jobId: string; clientId: string; cliente: string; periodo: string; modo: string; nPecas: number; createdAt: string }
@@ -50,11 +55,14 @@ export default function PlanejamentoPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-6 space-y-6">
       <div>
         <h1 className="text-xl font-semibold">Planejamento de conteúdo</h1>
-        <p className="text-sm text-muted-foreground">Gere o calendário estratégico de qualquer cliente e baixe os recentes — tudo num lugar.</p>
+        <p className="text-sm text-muted-foreground">O que o mercado está mostrando e o calendário estratégico de cada cliente — no mesmo lugar.</p>
       </div>
+
+      {/* O insumo vem antes da decisão: some sozinho quando não há oportunidade nova. */}
+      <RadarOportunidades />
 
       <div className="space-y-1">
         <label className="text-sm font-medium">Cliente</label>

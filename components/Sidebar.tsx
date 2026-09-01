@@ -7,7 +7,7 @@ import {
   MessageCircle, Calendar, LogOut, Sun, Moon,
   ClipboardCheck, BarChart2, Megaphone, Brain, FileText,
   ChevronLeft, Activity, Layers, AlertTriangle, Settings,
-  Users2, Globe, Target, Inbox, ShieldCheck, ShieldAlert, Package, Zap, PanelLeftClose, PanelLeft, Thermometer, Bot, Handshake, CalendarClock, HeartPulse,  BookOpen, Radar,
+  Users2, Globe, Target, Inbox, ShieldCheck, ShieldAlert, Package, Zap, PanelLeftClose, PanelLeft, Thermometer, Bot, Handshake, CalendarClock, HeartPulse,  BookOpen,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -39,10 +39,9 @@ export const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/traffic",       icon: TrendingUp,      label: "Tráfego",    roles: ["admin","manager","traffic"],                    hasSecondary: true },
   { href: "/social",        icon: Instagram,       label: "Social",     roles: ["admin","manager","social","designer"],          hasSecondary: true },
   { href: "/meus-clientes", icon: Users,           label: "Meus Clientes", roles: ["traffic","social","designer"] },
-  { href: "/planejamento",  icon: CalendarClock,   label: "Planejamento", roles: ["admin","manager","social"] },
-  // Ao lado do Planejamento porque é ali que a semana de conteúdo é decidida — é onde o social
-  // media procura ideia, e é esse tempo que o Radar existe para devolver.
-  { href: "/radar",         icon: Radar,           label: "Radar",      roles: ["admin","manager","social","designer"] },
+  // O Radar mora DENTRO daqui: olhar o que o mercado mostra faz parte de planejar a semana, não é
+  // outra área. Uma aba a menos pra quem já trabalha com Social, Design e Tarefas abertas.
+  { href: "/planejamento",  icon: CalendarClock,   label: "Planejamento", roles: ["admin","manager","social","designer"] },
   { href: "/design",        icon: Palette,         label: "Designer",   roles: ["admin","manager","designer","social"],          hasSecondary: true },
   { href: "/clients",       icon: Users,           label: "Clientes",   roles: ["admin","manager"],                              hasSecondary: true },
   { href: "/crm",           icon: Handshake,       label: "Comercial",  roles: ["admin","manager","comercial"], hasSecondary: true },
