@@ -116,22 +116,32 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 3. Tendência = padrão repetido em perfis DIFERENTES ────────────────────
+  //
   // Um post sozinho é sinal, não tendência. Só vira tendência quando empresas diferentes chegam à
-  // mesma fórmula por conta própria — aí é o mercado falando, não um acaso.
+  // mesma fórmula por conta própria — aí é o mercado falando, não acaso.
+  //
+  // Agrupa por FORMATO, não por formato+abertura. Na primeira rodada real, "institucional"
+  // apareceu em 5 conteúdos de 4 perfis (Casas Bahia nos 70 anos, Votorantim nos 90, Telhanorte,
+  // Canadian Solar) — uma tendência clara de storytelling de legado. A chave antiga exigia também
+  // o mesmo tipo de abertura, e como as aberturas variavam ("institucional", "erro/alerta",
+  // "indefinido"), o padrão se partiu em quatro grupos de um e NENHUMA tendência foi detectada.
+  // Formato é o que se repete de verdade; a abertura é variação em cima dele.
   const grupos = new Map<string, typeof analisados>();
   for (const x of analisados) {
-    const chave = `${x.midia.nicho}|${x.a.formato}|${x.a.hookTipo}`;
+    const chave = `${x.midia.nicho}|${x.a.formato}`;
     grupos.set(chave, [...(grupos.get(chave) ?? []), x]);
   }
 
   const tendencias = [...grupos.entries()]
     .map(([chave, itens]) => {
-      const [nicho, formato, hookTipo] = chave.split("|");
+      const [nicho, formato] = chave.split("|");
       const perfisDistintos = new Set(itens.map((i) => i.perfil)).size;
-      return { nicho, formato, hookTipo, itens, perfisDistintos };
+      // As aberturas vistas dentro do formato: é o que dá textura à recomendação.
+      const aberturas = [...new Set(itens.map((i) => i.a.hookTipo).filter((h) => h && h !== "indefinido"))];
+      return { nicho, formato, hookTipo: aberturas[0] ?? "variada", aberturas, itens, perfisDistintos };
     })
     .filter((t) => t.perfisDistintos >= 2)          // dois perfis diferentes, no mínimo
-    .sort((a, b) => b.perfisDistintos - a.perfisDistintos);
+    .sort((a, b) => b.perfisDistintos - a.perfisDistintos || b.itens.length - a.itens.length);
 
   // ── 4. Tendência vira pauta para os clientes daquele nicho ─────────────────
   const pautas: Record<string, unknown>[] = [];
@@ -183,7 +193,7 @@ export async function POST(req: NextRequest) {
     avaliados: brutos.length, descartados_pelo_filtro: descartados,
     analisados: analisados.length,
     tendencias: tendencias.map((t) => ({
-      nicho: t.nicho, formato: t.formato, abertura: t.hookTipo,
+      nicho: t.nicho, formato: t.formato, aberturas: t.aberturas,
       perfis: t.perfisDistintos, conteudos: t.itens.length,
       exemplos: t.itens.slice(0, 3).map((i) => `@${i.perfil} ${Number(i.midia.outlier_ratio).toFixed(1)}x`),
     })),
