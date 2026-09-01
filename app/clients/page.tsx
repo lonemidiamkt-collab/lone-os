@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import NewClientModal from "@/components/NewClientModal";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useRole } from "@/lib/context/RoleContext";
+import { MOTIVOS_LISTA, type MotivoSaida } from "@/lib/clients/churn";
 import type { Client } from "@/lib/types";
 import {
   getAttentionColor,
@@ -121,6 +122,9 @@ export default function ClientsPage() {
   const [archivedLoading, setArchivedLoading] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<Client | null>(null);
   const [archiveReason, setArchiveReason] = useState("");
+  // Motivo da saída passou a ser obrigatório: antes era opcional e 5 dos 6 clientes arquivados
+  // saíram sem ninguém registrar por quê.
+  const [archiveCategory, setArchiveCategory] = useState<MotivoSaida | "">("");
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
 
@@ -140,12 +144,17 @@ export default function ClientsPage() {
       const res = await authedFetch(`/api/clients/${archiveTarget.id}/lifecycle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "archive", reason: archiveReason.trim() || undefined }),
+        body: JSON.stringify({
+          action: "archive",
+          category: archiveCategory,
+          reason: archiveReason.trim() || undefined,
+        }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
       // O realtime patcha active=false → o cliente sai da lista ativa (filtro abaixo).
       setArchiveTarget(null);
       setArchiveReason("");
+      setArchiveCategory("");
       if (showArchived) loadArchived();
     } catch (e) {
       setLifecycleError(e instanceof Error ? e.message : "Erro ao arquivar");
@@ -232,12 +241,28 @@ export default function ClientsPage() {
               <span className="text-foreground font-medium">{archiveTarget.name}</span> sai da carteira ativa e de
               toda a automação (mensagens, relatórios, sync). O histórico é mantido e pode ser reativado.
             </p>
-            <label className="text-xs text-muted-foreground">Motivo do churn (opcional)</label>
+            <label className="text-xs text-muted-foreground">
+              Por que o cliente saiu? <span className="text-amber-500">obrigatório</span>
+            </label>
+            <select
+              value={archiveCategory}
+              onChange={(e) => setArchiveCategory(e.target.value as MotivoSaida | "")}
+              className="w-full mt-1 mb-3 bg-muted rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-amber-500"
+            >
+              <option value="">Selecione o motivo…</option>
+              {MOTIVOS_LISTA.map(([valor, rotulo]) => (
+                <option key={valor} value={valor}>{rotulo}</option>
+              ))}
+            </select>
+
+            <label className="text-xs text-muted-foreground">
+              O que aconteceu{archiveCategory === "outro" ? "" : " (opcional)"}
+            </label>
             <textarea
               value={archiveReason}
               onChange={(e) => setArchiveReason(e.target.value)}
               rows={3}
-              placeholder="Ex.: encerrou contrato, trocou de agência…"
+              placeholder="Ex.: achou caro depois do reajuste; resultado caiu nos últimos 2 meses…"
               className="w-full mt-1 bg-muted rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-amber-500 resize-none"
             />
             {lifecycleError && <p className="text-xs text-destructive mt-2">{lifecycleError}</p>}
@@ -247,8 +272,9 @@ export default function ClientsPage() {
               </button>
               <button
                 onClick={confirmArchive}
-                disabled={lifecycleBusy}
-                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium bg-amber-500 text-black hover:bg-amber-400 transition-colors disabled:opacity-50"
+                disabled={lifecycleBusy || !archiveCategory || (archiveCategory === "outro" && archiveReason.trim().length < 3)}
+                title={!archiveCategory ? "Escolha o motivo da saída" : undefined}
+                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium bg-amber-500 text-black hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {lifecycleBusy ? <Loader2 className="animate-spin" size={14} /> : <Archive size={14} />}
                 Arquivar

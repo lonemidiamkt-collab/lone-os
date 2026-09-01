@@ -244,7 +244,7 @@ export function timePdfHtml(r: RelatorioTime, logo: string): string {
         O sistema lê a Meta, não escreve nela — mede resultado e cobertura, não otimização feita.
       </div>
 
-      <div style="font-size:10.5px;color:${SUAVE};text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px">${esc(t.mes.rotulo)} até aqui</div>
+      <div style="font-size:10.5px;color:${SUAVE};text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px">${esc(t.mes.rotulo)}</div>
       <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px">
         ${kpi("Investido no mês", `R$ ${t.mes.gasto.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, `${t.mes.contas} contas`)}
         ${kpi("Conversas no mês", t.mes.conversas.toLocaleString("pt-BR"))}

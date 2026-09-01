@@ -31,7 +31,7 @@ const base: RelatorioTime = {
     responsavel: "Julio", contasAtivas: 40, contasConectadas: 48, contasAtivasCadastro: 45,
     gasto: 13008.01, conversas: 2157, custoPorConversa: 6.03,
     variacaoCusto: 11, variacaoConversas: -10.9, variacaoGasto: -1.2,
-    mes: { rotulo: "agosto de 2026", gasto: 54997.36, conversas: 9629, custoPorConversa: 5.71, contas: 43 },
+    mes: { rotulo: "agosto até 30/08", gasto: 54997.36, conversas: 9629, custoPorConversa: 5.71, contas: 43 },
     paradas: [
       { nome: "Bruno Tintas Iguaba", ultimoGasto: "2026-07-27", diasParada: 35 },
       { nome: "Dumar Comercio e serviços", ultimoGasto: null, diasParada: null },
@@ -86,7 +86,7 @@ describe("relatório do time", () => {
 
   it("mostra investimento e conversas do MÊS, não só da semana", () => {
     const html = timePdfHtml(base, "");
-    expect(html).toContain("agosto de 2026");
+    expect(html).toContain("agosto até 30/08"); // diz até quando, pra bater com o Gerenciador
     expect(html).toContain("54.997,36");   // investido no mês
     expect(html).toContain("9.629");       // conversas no mês
     expect(html).toContain("Investido no mês");

@@ -358,8 +358,11 @@ export async function desempenhoTrafego(de: string, ate: string) {
       ? Math.round(((atual.conversas - anterior.conversas) / anterior.conversas) * 1000) / 10 : null,
     variacaoGasto: anterior.gasto > 0 ? Math.round(((atual.gasto - anterior.gasto) / anterior.gasto) * 1000) / 10 : null,
     mes: {
-      rotulo: new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "America/Sao_Paulo" })
-        .format(new Date(`${inicioMes}T12:00:00Z`)),
+      // Diz ATÉ QUANDO. O mês vai até o fim da janela do relatório, não até hoje — conferir contra
+      // o Gerenciador num dia 3 e achar R$ 2 mil de diferença é o tipo de coisa que faz alguém
+      // desconfiar do relatório inteiro.
+      rotulo: `${new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "America/Sao_Paulo" })
+        .format(new Date(`${inicioMes}T12:00:00Z`))} até ${d1.slice(8, 10)}/${d1.slice(5, 7)}`,
       gasto: Math.round(mes.gasto * 100) / 100,
       conversas: mes.conversas,
       custoPorConversa: mes.conversas > 0 ? Math.round((mes.gasto / mes.conversas) * 100) / 100 : 0,
