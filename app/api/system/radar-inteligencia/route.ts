@@ -9,7 +9,7 @@ import { chatJson } from "@/lib/ai/openai";
 import { avaliarCandidato, diversificar } from "@/lib/radar/score";
 import { SCHEMA_ANALISE, promptAnalise, type SaidaAnalise, type NivelAnalise } from "@/lib/radar/analise";
 import { SCHEMA_PAUTA, promptPauta } from "@/lib/radar/pauta";
-import { agruparPorSemelhanca, candidatas, avaliarForca, assinatura, type ItemParaAgrupar } from "@/lib/radar/tendencia";
+import { agruparPorSemelhanca, candidatas, avaliarForca, assinatura, tendenciasCrossNiche, type ItemParaAgrupar } from "@/lib/radar/tendencia";
 import { fetchClientCsRules } from "@/lib/supabase/queries";
 import { loadBriefingCombinado } from "@/lib/cs/load-briefing";
 
@@ -187,7 +187,12 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const tendencias = candidatas(agruparPorSemelhanca(universo))
+  // Por nicho + as que atravessam mercados. O mesmo mecanismo em nichos diferentes é sinal mais
+  // forte, não mais fraco: é movimento geral de consumo de conteúdo, não modismo de um mercado.
+  const tendencias = [
+    ...candidatas(agruparPorSemelhanca(universo)),
+    ...tendenciasCrossNiche(universo),
+  ]
     .map((c) => ({ ...c, ...avaliarForca(c) }))
     .filter((c) => c.perfisDistintos >= 2 && c.status !== "dead")
     .sort((a, b) => b.forca - a.forca);
@@ -222,11 +227,15 @@ export async function POST(req: NextRequest) {
 
     // Sem limite arbitrário de clientes: o corte é por PERTINÊNCIA, não pelos três primeiros que o
     // banco devolveu. Construção tem 20 clientes e a tendência pode servir a poucos ou a muitos.
+    // Tendência cross-niche ("*") vale para os clientes de TODOS os nichos onde ela apareceu.
+    const nichosDaTendencia = t.nicho === "*"
+      ? [...new Set(t.itens.map((i) => i.nicho))]
+      : [t.nicho];
     const { data: clientes, error: erroClientes } = await supabaseAdmin.from("clients")
       .select("id, name, nome_fantasia, nicho, endereco_cidade")
-      .eq("nicho", t.nicho).or("active.is.null,active.eq.true").is("draft_status", null);
+      .in("nicho", nichosDaTendencia).or("active.is.null,active.eq.true").is("draft_status", null);
     if (erroClientes) { erros.push(`clientes do nicho ${t.nicho}: ${erroClientes.message}`); continue; }
-    if (!clientes?.length) { erros.push(`nenhum cliente ativo no nicho "${t.nicho}"`); continue; }
+    if (!clientes?.length) { erros.push(`nenhum cliente ativo em ${nichosDaTendencia.join(" / ")}`); continue; }
 
     for (const c of clientes) {
       const nome = (c.nome_fantasia as string) || (c.name as string);
@@ -251,7 +260,7 @@ export async function POST(req: NextRequest) {
 
       const primeiro = detalhePorMedia.get(t.itens[0].mediaId);
       const { system, user } = promptPauta({
-        cliente: nome, nicho: t.nicho,
+        cliente: nome, nicho: (c.nicho as string) || t.nicho,
         briefing: typeof briefing === "string" ? briefing : undefined,
         regras: Array.isArray(regras) ? regras.slice(0, 8).map(String) : undefined,
         cidade: (c.endereco_cidade as string) || undefined,
@@ -287,7 +296,7 @@ export async function POST(req: NextRequest) {
 
       if (!dry) {
         await supabaseAdmin.from("radar_pautas").insert({
-          client_id: c.id, cliente_nome: nome, nicho: t.nicho, trend_id: trendId ?? null,
+          client_id: c.id, cliente_nome: nome, nicho: (c.nicho as string) || t.nicho, trend_id: trendId ?? null,
           tendencia: t.itens[0].mecanismo.slice(0, 200), perfis_na_tendencia: t.perfisDistintos,
           fit_score: Number.isFinite(fit) ? fit : null,
           ideia: String(d.ideia ?? ""), hook: String(d.hook ?? ""), formato: String(d.formato ?? ""),

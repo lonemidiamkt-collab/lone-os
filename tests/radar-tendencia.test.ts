@@ -95,3 +95,41 @@ describe("extrair handles do texto da busca", () => {
     expect(extrairHandles("veja em instagram.com/reel/ABC123")).not.toContain("instagram");
   });
 });
+
+import { tendenciasCrossNiche } from "@/lib/radar/tendencia";
+
+// Na primeira rodada real, "mito_verdade" apareceu na Tintas Coral (construção) e na Casas Bahia
+// (móveis), 2,8x cada. Separados por nicho viravam dois sinais soltos e nenhuma tendência. Mas o
+// mesmo mecanismo atravessando mercados é sinal MAIS forte: é movimento de consumo de conteúdo, não
+// modismo de um mercado.
+describe("tendência que atravessa mercados", () => {
+  const it2 = (mec: string, perfil: string, nicho: string) =>
+    ({ mediaId: `${perfil}`, perfil, nicho, mecanismo: mec, tema: "", formato: "outro",
+       hookTipo: "indefinido", outlier: 2.8, quando: new Date().toISOString() });
+
+  it("mesmo mecanismo em nichos diferentes vira tendência geral", () => {
+    const r = tendenciasCrossNiche([
+      it2("mito_verdade", "tintascoral", "Construção e materiais"),
+      it2("mito_verdade", "casasbahia", "Móveis e decoração"),
+    ]);
+    expect(r).toHaveLength(1);
+    expect(r[0].nicho).toBe("*");
+    expect(r[0].perfisDistintos).toBe(2);
+  });
+
+  it("dois do MESMO nicho não entram aqui — já são cobertos pelo agrupamento normal", () => {
+    const r = tendenciasCrossNiche([
+      it2("mito_verdade", "a", "Construção e materiais"),
+      it2("mito_verdade", "b", "Construção e materiais"),
+    ]);
+    expect(r).toHaveLength(0);
+  });
+
+  it("descrição em texto livre não atravessa nicho — não é comparável", () => {
+    const r = tendenciasCrossNiche([
+      it2("história de legado da empresa", "a", "Construção e materiais"),
+      it2("história de legado da empresa", "b", "Móveis e decoração"),
+    ]);
+    expect(r).toHaveLength(0);
+  });
+});

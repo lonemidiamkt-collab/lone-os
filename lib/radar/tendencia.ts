@@ -120,3 +120,44 @@ export function avaliarForca(c: TendenciaCandidata, agora = new Date()): { forca
 export function assinatura(mecanismo: string): string {
   return [...palavrasChave(mecanismo)].sort().slice(0, 5).join("-") || "sem-mecanismo";
 }
+
+
+/**
+ * Tendência que atravessa mercados.
+ *
+ * O agrupamento normal é por nicho, e está certo: o que funciona em pisos não funciona em estética
+ * só porque o formato é o mesmo. Mas quando o MESMO mecanismo aparece em nichos DIFERENTES, isso é
+ * sinal mais forte, não mais fraco — é um movimento geral de consumo de conteúdo, não um modismo de
+ * um mercado.
+ *
+ * Aconteceu na primeira rodada real: "mito_verdade" apareceu na Tintas Coral (construção) e na
+ * Casas Bahia (móveis), com 2,8x cada. Separados por nicho, viravam dois sinais soltos e nenhuma
+ * tendência; juntos, são um padrão que serve a qualquer cliente do varejo.
+ *
+ * Exige nichos distintos de propósito: dois conteúdos do mesmo nicho já são cobertos pelo
+ * agrupamento normal, e contá-los aqui de novo inflaria a mesma coisa duas vezes.
+ */
+export function tendenciasCrossNiche(itens: ItemParaAgrupar[], minNichos = 2): TendenciaCandidata[] {
+  const porMecanismo = new Map<string, ItemParaAgrupar[]>();
+  for (const i of itens) {
+    // Só mecanismo canônico (sem espaço): descrição livre não é comparável entre nichos.
+    if (i.mecanismo.includes(" ")) continue;
+    porMecanismo.set(i.mecanismo, [...(porMecanismo.get(i.mecanismo) ?? []), i]);
+  }
+
+  const saida: TendenciaCandidata[] = [];
+  for (const [, grupo] of porMecanismo) {
+    const nichos = new Set(grupo.map((g) => g.nicho));
+    if (nichos.size < minNichos) continue;
+    const outliers = grupo.map((g) => g.outlier).sort((a, b) => a - b);
+    const meio = Math.floor(outliers.length / 2);
+    saida.push({
+      nicho: "*",   // vale para todos os nichos onde apareceu
+      itens: grupo,
+      perfisDistintos: new Set(grupo.map((g) => g.perfil)).size,
+      outlierMediano: outliers.length % 2 ? outliers[meio] : (outliers[meio - 1] + outliers[meio]) / 2,
+      maisRecente: grupo.map((g) => g.quando).sort().at(-1) ?? "",
+    });
+  }
+  return saida;
+}
