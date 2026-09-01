@@ -22,6 +22,36 @@ export interface EntradaAnalise {
   imagemDataUri?: string;   // quando a Meta entregou o arquivo
 }
 
+/**
+ * Os mecanismos que se repetem no varejo — lista fechada, de propósito.
+ *
+ * A primeira versão pedia o mecanismo em texto livre e recebeu descrições longas e únicas: "ensino
+ * direto de um look completo", "lista de novidades curadas por necessidade", "transforma uma dúvida
+ * comum em regra prática". Os três são tutorial, mas não compartilham uma palavra — e o agrupamento
+ * por semelhança nunca encontrava nada. Padrão que não se nomeia igual não se agrupa.
+ *
+ * A lista fechada é a chave do agrupamento; a descrição livre continua existindo ao lado, para a
+ * pauta ter o detalhe.
+ */
+export const MECANISMOS = [
+  "legado_historia",        // "90 anos construindo o Brasil"
+  "erros_antes_da_compra",  // "3 erros ao escolher porcelanato"
+  "antes_depois",           // transformação visível
+  "demonstracao_produto",   // mostra funcionando
+  "comparacao",             // barato x correto, A x B
+  "bastidores",             // como é feito, quem faz
+  "tutorial_ensino",        // ensina a fazer/escolher
+  "lista_curadoria",        // seleção comentada
+  "prova_social_cliente",   // cliente reagindo, depoimento
+  "oferta_urgencia",        // promoção, últimos dias
+  "identificacao_humor",    // "todo mundo que tem obra sabe"
+  "pergunta_escolha",       // "qual você levaria?"
+  "mito_verdade",           // desmente crença comum
+  "outro",
+] as const;
+
+export type Mecanismo = typeof MECANISMOS[number];
+
 export interface SaidaAnalise {
   tema: string;
   /**
@@ -32,7 +62,10 @@ export interface SaidaAnalise {
    * negócio diferente. Agrupar por formato produzia tendência falsa: quatro conteúdos que só têm
    * em comum serem institucionais não são um movimento de mercado.
    */
-  mecanismo: string;
+  /** Um dos MECANISMOS. É a chave do agrupamento — precisa ser comparável entre conteúdos. */
+  mecanismo: Mecanismo;
+  /** O mesmo mecanismo dito com as palavras deste conteúdo. Enriquece a pauta, não agrupa. */
+  mecanismoDetalhe: string;
   angulo: string;
   hook: string;
   hookTipo: string;
@@ -48,15 +81,16 @@ export interface SaidaAnalise {
 
 export const SCHEMA_ANALISE: Record<string, unknown> = {
   type: "object", additionalProperties: false,
-  required: ["tema", "mecanismo", "angulo", "hook", "hookTipo", "formato", "estrutura", "cta", "motivoPerformance", "replicavel", "tags", "confianca"],
+  required: ["tema", "mecanismo", "mecanismoDetalhe", "angulo", "hook", "hookTipo", "formato", "estrutura", "cta", "motivoPerformance", "replicavel", "tags", "confianca"],
   properties: {
     tema: { type: "string", description: "assunto do conteúdo, em poucas palavras" },
     mecanismo: {
+      type: "string", enum: [...MECANISMOS],
+      description: "O padrão que faz o conteúdo funcionar. Escolha o mais próximo; use 'outro' só se nenhum servir.",
+    },
+    mecanismoDetalhe: {
       type: "string",
-      description:
-        "POR QUE prende, como IDEIA replicável — nunca o formato. Bom: 'história de legado da " +
-        "empresa', 'erros antes da compra', 'transformação antes e depois', 'funcionário " +
-        "demonstrando o produto', 'comparação barato x correto'. Ruim: 'institucional', 'carrossel', 'Reel'.",
+      description: "O mesmo mecanismo dito com as palavras deste conteúdo, em uma linha. Nunca o formato.",
     },
     angulo: { type: "string", description: "o ponto de vista: educar, provocar, emocionar, provar, vender" },
     hook: { type: "string", description: "a primeira frase ou o que prende nos primeiros segundos; '' se não der pra saber" },

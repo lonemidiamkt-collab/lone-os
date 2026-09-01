@@ -132,7 +132,10 @@ export async function POST(req: NextRequest) {
     if (!dry) {
       await supabaseAdmin.from("radar_analysis").insert({
         media_id: m.id, tema: r.data.tema, hook: r.data.hook, hook_tipo: r.data.hookTipo,
-        formato: r.data.formato, estrutura: r.data.estrutura, cta: r.data.cta,
+        formato: r.data.formato, cta: r.data.cta,
+        // O detalhe do mecanismo entra junto da estrutura pra não perder a descrição rica: o
+        // agrupamento usa o mecanismo canônico, a pauta usa as palavras daquele conteúdo.
+        estrutura: [r.data.estrutura, r.data.mecanismoDetalhe].filter(Boolean).join(" · "),
         motivo_performance: r.data.motivoPerformance, replicavel: r.data.replicavel,
         tags: r.data.tags, modelo: `${MODELO_ANALISE} (nível: ${nivel})`,
         mecanismo: r.data.mecanismo, angulo: r.data.angulo, confianca: r.data.confianca,

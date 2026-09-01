@@ -51,7 +51,12 @@ export function agruparPorSemelhanca(itens: ItemParaAgrupar[], limiar = 0.34): I
   const grupos: ItemParaAgrupar[][] = [];
   for (const item of itens) {
     const alvo = grupos.find((g) =>
-      g.some((x) => x.nicho === item.nicho && semelhanca(x.mecanismo, item.mecanismo) >= limiar));
+      g.some((x) =>
+        x.nicho === item.nicho &&
+        // Mecanismo canônico igual já basta: é uma lista fechada justamente para ser comparável.
+        // A semelhança textual continua valendo para o detalhe, e para análises antigas que
+        // guardaram o mecanismo em texto livre.
+        (x.mecanismo === item.mecanismo || semelhanca(x.mecanismo, item.mecanismo) >= limiar)));
     if (alvo) alvo.push(item); else grupos.push([item]);
   }
   return grupos;
