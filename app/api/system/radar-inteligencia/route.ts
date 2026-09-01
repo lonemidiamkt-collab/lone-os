@@ -41,9 +41,9 @@ export async function POST(req: NextRequest) {
     .not("outlier_ratio", "is", null)
     .gte("posted_at", new Date(Date.now() - 45 * 864e5).toISOString());
   if (soNicho) q = q.eq("nicho", soNicho);
-  const { data: brutos, error } = await q.order("trend_score", { ascending: false }).limit(400);
+  const { data: brutosRaw, error } = await q.order("trend_score", { ascending: false }).limit(400);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!brutos?.length) return NextResponse.json({ ok: true, aviso: "nada novo para analisar" });
+  const brutos = brutosRaw ?? [];
 
   const { data: perfis } = await supabaseAdmin.from("radar_profiles")
     .select("id, username, followers, baseline_posts, faixa");
@@ -74,9 +74,9 @@ export async function POST(req: NextRequest) {
     { limite, porPerfil: 2, tetoGrandes: 0.2 },
   );
 
-  if (!selecionados.length) {
-    return NextResponse.json({ ok: true, avaliados: brutos.length, descartados, aviso: "nenhum candidato passou no filtro" });
-  }
+  // Sem conteúdo NOVO para analisar o fluxo continua: o valor está em transformar o acumulado em
+  // pauta, não em analisar coisa nova toda semana. A versão anterior retornava aqui e nunca chegava
+  // ao agrupamento — com 19 análises no banco, o relatório saía vazio dizendo que estava tudo bem.
 
   // ── 2. Entender cada conteúdo ──────────────────────────────────────────────
   const analisados: { midia: typeof selecionados[0]; a: SaidaAnalise; perfil: string; followers: number }[] = [];
