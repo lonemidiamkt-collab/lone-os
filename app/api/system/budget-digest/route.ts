@@ -134,7 +134,10 @@ export async function POST(req: NextRequest) {
     // de mandar vários, que fica tudo poluído?". No per_account, uma segunda com 8 contas no
     // vermelho vira 9 mensagens seguidas no grupo — e o time rola sem ler. A mesma informação cabe
     // numa página, ordenada pelo que precisa de ação, com o total que ninguém somava de cabeça.
-    if (mode === "pdf" && settings.groupJid && !dryRun) {
+    // ?baixar=1 devolve o PDF sem enviar — é como se confere o documento antes que ele chegue no
+    // grupo. Vale para o dryRun também: gerar e olhar não é efeito colateral.
+    const baixar = url.searchParams.get("baixar") === "1";
+    if (mode === "pdf" && (baixar || (settings.groupJid && !dryRun))) {
       const { saldosPdfHtml, legendaSaldos } = await import("@/lib/reports/saldosPdf");
       const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
       const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
@@ -143,6 +146,13 @@ export async function POST(req: NextRequest) {
       const logo = await loadLoneLogo().catch(() => "");
       const quando = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "long", year: "numeric" });
       const pdf = await htmlToPdf(saldosPdfHtml(sync.accounts, logo, quando));
+
+      if (baixar) {
+        if (!pdf.ok || !pdf.buffer) return NextResponse.json({ error: pdf.error }, { status: 500 });
+        return new NextResponse(new Uint8Array(pdf.buffer), {
+          headers: { "content-type": "application/pdf", "content-disposition": "inline; filename=\"saldos.pdf\"" },
+        });
+      }
 
       if (pdf.ok && pdf.buffer) {
         const r = await csSendGroupDocument(
