@@ -142,6 +142,7 @@ export async function POST(req: NextRequest) {
       const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
       const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
       const { csSendGroupDocument } = await import("@/lib/cs/notify");
+      const { responsavelDeTrafego } = await import("@/lib/cs/mencao");
 
       const logo = await loadLoneLogo().catch(() => "");
       const quando = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "long", year: "numeric" });
@@ -155,10 +156,17 @@ export async function POST(req: NextRequest) {
       }
 
       if (pdf.ok && pdf.buffer && settings.groupJid) {
+        // Saldo zerado é trabalho de alguém, não informação solta no grupo. A menção vai pra quem
+        // responde pelo tráfego — descoberto no cadastro, não fixado aqui.
+        const gestor = await responsavelDeTrafego().catch(() => ({ trecho: "", jids: [], notifica: false }));
+        const legenda = gestor.trecho
+          ? `${gestor.trecho}\n${legendaSaldos(sync.accounts)}`
+          : legendaSaldos(sync.accounts);
+
         const r = await csSendGroupDocument(
           settings.groupJid, pdf.buffer.toString("base64"),
           `Saldos ${new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }).replace(/\//g, "-")}.pdf`,
-          legendaSaldos(sync.accounts),
+          legenda, "application/pdf", gestor.jids,
         );
         await supabaseAdmin.from("budget_digest_log").insert({
           date_key: dateKey, status: r.ok ? "sent" : "failed", severity_counts: counts,

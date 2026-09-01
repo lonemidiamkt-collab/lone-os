@@ -135,6 +135,8 @@ export async function csSendGroupDocument(
   fileName: string,
   caption?: string,
   mimetype = "application/pdf",
+  /** JIDs a mencionar de verdade na legenda — ver `csSendGroupText`. */
+  mencionados?: string[],
 ): Promise<{ ok: boolean; error?: string }> {
   const baseUrl = process.env.EVOLUTION_API_URL?.replace(/\/+$/, "");
   const apiKey = process.env.EVOLUTION_API_KEY_NEW;
@@ -148,6 +150,7 @@ export async function csSendGroupDocument(
       body: JSON.stringify({
         number: jid, mediatype: "document", mimetype, media: base64, fileName,
         ...(caption ? { caption } : {}),
+        ...(mencionados?.length ? { mentioned: mencionados } : {}),
       }),
       signal: AbortSignal.timeout(60_000),
     });

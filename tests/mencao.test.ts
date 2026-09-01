@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { normalizarNumero } from "@/lib/cs/mencao";
+import { readFileSync } from "node:fs";
 
 // Roberto: "quando você marca arroba Thiago, não está funcionando direito". O código escrevia
 // "@Thiago" como texto puro — no WhatsApp isso não notifica ninguém.
@@ -22,5 +23,20 @@ describe("número para menção no WhatsApp", () => {
     expect(normalizarNumero("")).toBeNull();
     expect(normalizarNumero("123")).toBeNull();
     expect(normalizarNumero(null)).toBeNull();
+  });
+});
+
+// Roberto: "quero que você sempre marque o Julio nesses avisos". O Julio é o assigned_traffic de 46
+// dos 50 clientes — escrever "Julio" no código faria o aviso continuar indo pra ele no dia em que a
+// carteira mudasse de dono, e ninguém lembraria de trocar.
+describe("responsável de tráfego sai do cadastro, não do código", () => {
+  it("o módulo não fixa nome de pessoa", () => {
+    const src = readFileSync("lib/cs/mencao.ts", "utf8");
+    const linhasDeCodigo = src.split("\n").filter((l) => !l.trim().startsWith("*") && !l.trim().startsWith("//"));
+    expect(linhasDeCodigo.join("\n")).not.toMatch(/"Julio"|'Julio'/);
+  });
+
+  it("deriva de assigned_traffic", () => {
+    expect(readFileSync("lib/cs/mencao.ts", "utf8")).toContain("assigned_traffic");
   });
 });

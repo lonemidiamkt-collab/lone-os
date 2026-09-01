@@ -56,3 +56,27 @@ export async function mencionar(nomeOuPrimeiro?: string | null): Promise<Mencao>
 
   return { trecho: `@${numero}`, jids: [`${numero}@s.whatsapp.net`], notifica: true };
 }
+
+
+/**
+ * Quem responde pelo tráfego hoje — derivado do próprio cadastro, não fixado no código.
+ *
+ * Roberto (02/09): "quero que você sempre marque o Julio nesses avisos". O Julio é o
+ * `assigned_traffic` de 46 dos 50 clientes; escrever "Julio" no código faria o aviso continuar indo
+ * pra ele no dia em que a carteira mudar de dono, e ninguém lembraria de trocar. Perguntar ao
+ * cadastro acompanha a realidade sozinho.
+ */
+export async function responsavelDeTrafego(): Promise<Mencao> {
+  const { data } = await supabaseAdmin
+    .from("clients").select("assigned_traffic")
+    .or("active.is.null,active.eq.true").not("assigned_traffic", "is", null);
+
+  const contagem = new Map<string, number>();
+  for (const c of data ?? []) {
+    const n = String(c.assigned_traffic ?? "").trim();
+    if (n) contagem.set(n, (contagem.get(n) ?? 0) + 1);
+  }
+  const maisFrequente = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  if (!maisFrequente) return { trecho: "", jids: [], notifica: false };
+  return mencionar(maisFrequente);
+}
