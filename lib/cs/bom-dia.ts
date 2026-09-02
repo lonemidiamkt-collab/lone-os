@@ -27,9 +27,28 @@ export function buildBomDiaDigest(snap: SnapshotCS, now: Date, time: string[] = 
     l.push(`🎨 *${snap.emProducao}* em produção · *${snap.aguardandoAprovacao}* aguardando aprovação`);
   }
   if (snap.prontasPraPostar.length) {
-    // O designer já entregou — o gargalo é o social confirmar/postar. Cutuca com nome e dias.
-    const top = snap.prontasPraPostar.slice(0, 4).map((p) => `${p.cliente}${p.responsavel ? ` (${p.responsavel}, ${p.dias}d)` : ` (${p.dias}d)`}`).join(", ");
-    l.push(`✅ *${snap.prontasPraPostar.length}* arte(s) PRONTA(S) do designer só esperando vocês postarem — ${top}${snap.prontasPraPostar.length > 4 ? "…" : ""} — é confirmar e subir!`);
+    // O designer já entregou — o gargalo é o social confirmar/postar.
+    //
+    // AGRUPA POR CLIENTE. A versão anterior pegava os 4 primeiros itens sem deduplicar, e quando o
+    // mesmo cliente tinha 4 artes paradas a mensagem saía "Mr.distribuidora MDF (Carlos, 48d),
+    // Mr.distribuidora MDF (Carlos, 48d), Mr.distribuidora MDF (Carlos, 48d)…" — quatro vezes o
+    // mesmo nome, ocupando a linha inteira e escondendo os outros clientes na mesma situação.
+    const porCliente = new Map<string, { qtd: number; dias: number; responsavel?: string | null }>();
+    for (const p of snap.prontasPraPostar) {
+      const at = porCliente.get(p.cliente) ?? { qtd: 0, dias: 0, responsavel: p.responsavel };
+      at.qtd++;
+      at.dias = Math.max(at.dias, p.dias);   // a mais antiga é a que importa
+      porCliente.set(p.cliente, at);
+    }
+    const top = [...porCliente.entries()]
+      .sort((a, b) => b[1].dias - a[1].dias)
+      .slice(0, 4)
+      .map(([cliente, i]) => {
+        const qtd = i.qtd > 1 ? `${i.qtd} artes, ` : "";
+        return `${cliente} (${i.responsavel ? `${i.responsavel}, ` : ""}${qtd}${i.dias}d)`;
+      })
+      .join(", ");
+    l.push(`✅ *${snap.prontasPraPostar.length}* arte(s) PRONTA(S) do designer só esperando vocês postarem — ${top}${porCliente.size > 4 ? "…" : ""} — é confirmar e subir!`);
   }
   if (snap.atrasados.length) {
     // Separa por CULPA real: prazo vencido aguardando o DESIGNER (falta a arte) vs prazo vencido

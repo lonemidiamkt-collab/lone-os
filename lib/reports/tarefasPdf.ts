@@ -40,6 +40,16 @@ export function tarefasPdfHtml(blocos: BlocoPessoa[], logo: string, hoje: string
   const total = blocos.reduce((s, b) => s + b.tarefas.length, 0);
   const atrasadas = blocos.flatMap((b) => b.tarefas).filter((t) => t.diasAtraso > 0).length;
 
+  /**
+   * O nome do cliente já vem no título de quase toda tarefa de setup ("[Setup] Logo finalizada —
+   * UNAFER"), e repetir na coluna do lado produz "UNAFER · UNAFER". Só mostra quando acrescenta.
+   */
+  const clienteRedundante = (titulo: string, cliente?: string | null) => {
+    if (!cliente) return true;
+    const norm = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+    return norm(titulo).includes(norm(cliente));
+  };
+
   const linha = (t: TarefaPdf) => {
     const cor = t.diasAtraso > 30 ? CRITICO : t.diasAtraso > 0 ? ALERTA : SUAVE;
     const quando = t.diasAtraso > 0
@@ -47,7 +57,7 @@ export function tarefasPdfHtml(blocos: BlocoPessoa[], logo: string, hoje: string
       : t.diasAtraso === 0 ? "vence hoje" : "vence amanhã";
     return `<tr>
       <td style="padding:7px 0;border-bottom:1px solid ${LINHA};font-size:12.5px;color:${TEXTO}">
-        ${esc(t.titulo)}${t.cliente ? `<span style="color:${SUAVE}"> · ${esc(t.cliente)}</span>` : ""}
+        ${esc(t.titulo)}${clienteRedundante(t.titulo, t.cliente) ? "" : `<span style="color:${SUAVE}"> · ${esc(t.cliente!)}</span>`}
       </td>
       <td style="padding:7px 0;border-bottom:1px solid ${LINHA};text-align:right;white-space:nowrap;
                  font-size:11.5px;color:${cor};font-weight:600">${esc(quando)}</td>
