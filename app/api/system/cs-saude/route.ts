@@ -127,6 +127,26 @@ export async function POST(req: NextRequest) {
       return pior(b) - pior(a);
     });
 
+  // ?baixar=1[&pessoa=Nome] devolve o PDF sem enviar nada. O mesmo parâmetro já pegou "0.0105
+  // dias" no relatório de saldos antes do documento chegar ao grupo — conferir antes é barato.
+  if (req.nextUrl.searchParams.get("baixar") === "1") {
+    const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
+    const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
+    const logo = await loadLoneLogo().catch(() => "");
+    const soDe = req.nextUrl.searchParams.get("pessoa");
+    const alvo = soDe ? blocos.filter((b) => b.pessoa.toLowerCase().includes(soDe.toLowerCase())) : blocos;
+    if (!alvo.length) return NextResponse.json({ error: `ninguém com "${soDe}"` }, { status: 404 });
+    const { saudePdfHtml } = await import("@/lib/reports/saudePdf");
+    const html = soDe && alvo.length === 1
+      ? saudePessoaPdfHtml(alvo[0], logo, ymd(now))
+      : saudePdfHtml(alvo, logo, ymd(now));
+    const pdf = await htmlToPdf(html);
+    if (!pdf.ok || !pdf.buffer) return NextResponse.json({ error: pdf.error }, { status: 500 });
+    return new NextResponse(new Uint8Array(pdf.buffer), {
+      headers: { "content-type": "application/pdf", "content-disposition": 'inline; filename="saude.pdf"' },
+    });
+  }
+
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let enviado = false;
   const pdfsEnviados: string[] = [];
