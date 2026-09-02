@@ -23,8 +23,20 @@ const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, 
 
 export interface ClienteSaude {
   cliente: string;
-  /** null = nunca postou (ou não temos registro). Diferente de 0, que seria "postou hoje". */
-  diasSemPostar: number | null;
+  /**
+   * Dias sem postar MEDIDOS NO INSTAGRAM do cliente.
+   *   número → tantos dias parado;
+   *   null   → não postou nenhuma vez (o Instagram foi lido e não havia post);
+   *   undefined → NÃO MEDIDO. Este cliente entrou por outro sinal (reclamação, pausa de pauta) e
+   *     nada deve ser dito sobre a postagem dele.
+   *
+   * A distinção entre `null` e `undefined` não é preciosismo — é o que impede uma acusação falsa.
+   * O digest antigo calculava "dias sem post" a partir de `content_cards.status = published`, o
+   * mesmo campo que em agosto registrou 24 publicações contra 451 posts reais no Instagram. Com
+   * ele, o Império dos Pisos saía como "sem post registrado" no PDF do Thiago — quando o que
+   * estava vazio era o board, não o perfil do cliente.
+   */
+  diasSemPostar?: number | null;
   /** O que pesa além do silêncio: reclamação, pausa de pauta. Vazio quando não há. */
   motivos: string[];
   /** true quando o problema é de CADASTRO (sem Instagram vinculado), não de trabalho. */
@@ -36,15 +48,16 @@ export interface BlocoSaude {
   clientes: ClienteSaude[];
 }
 
-/** Ordem de gravidade: nunca postou primeiro, depois mais dias parados. */
+/** Ordem de gravidade: nunca postou primeiro, depois mais dias parados, e por fim o que não foi
+ *  medido (entrou por reclamação) e o que é pendência de cadastro. */
 export function ordenar(cs: ClienteSaude[]): ClienteSaude[] {
-  return [...cs].sort((a, b) => {
-    // Sem Instagram é problema de cadastro — vai por último, para não competir com trabalho parado.
-    if (!!a.semInstagram !== !!b.semInstagram) return a.semInstagram ? 1 : -1;
-    const va = a.diasSemPostar === null ? Infinity : a.diasSemPostar;
-    const vb = b.diasSemPostar === null ? Infinity : b.diasSemPostar;
-    return vb - va;
-  });
+  const peso = (c: ClienteSaude) => {
+    if (c.semInstagram) return -2;              // problema de cadastro: por último
+    if (c.diasSemPostar === undefined) return -1; // não medido: antes do cadastro, depois dos dias
+    if (c.diasSemPostar === null) return Infinity; // Instagram lido e vazio: o pior caso
+    return c.diasSemPostar;
+  };
+  return [...cs].sort((a, b) => peso(b) - peso(a));
 }
 
 export function saudePessoaPdfHtml(bloco: BlocoSaude, logo: string, hoje: string): string {
@@ -56,7 +69,8 @@ export function saudePdfHtml(blocos: BlocoSaude[], logo: string, hoje: string, d
     timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "long",
   });
   const todos = blocos.flatMap((b) => b.clientes);
-  const graves = todos.filter((c) => !c.semInstagram && (c.diasSemPostar === null || c.diasSemPostar >= 30)).length;
+  const graves = todos.filter((c) => !c.semInstagram && c.diasSemPostar !== undefined
+    && (c.diasSemPostar === null || c.diasSemPostar >= 30)).length;
 
   const linha = (c: ClienteSaude) => {
     // Cadastro incompleto não é falha de quem posta: cor neutra e texto que diz o que fazer.
@@ -70,6 +84,18 @@ export function saudePdfHtml(blocos: BlocoSaude[], logo: string, hoje: string, d
       </tr>`;
     }
     const d = c.diasSemPostar;
+    // Não medido: a direita mostra o MOTIVO pelo qual ele está aqui, nunca um número de dias que
+    // não foi apurado. Dizer "sem post registrado" para quem só reclamou é inventar um segundo
+    // problema — e uma cobrança falsa custa a confiança em todas as outras.
+    if (d === undefined) {
+      return `<tr>
+        <td style="padding:7px 0;border-bottom:1px solid ${LINHA};font-size:12.5px;color:${TEXTO}">
+          ${esc(c.cliente)}
+        </td>
+        <td style="padding:7px 0;border-bottom:1px solid ${LINHA};text-align:right;white-space:nowrap;
+                   font-size:11.5px;color:${ALERTA};font-weight:600">${esc(c.motivos[0] || "pede atenção")}</td>
+      </tr>`;
+    }
     const cor = d === null || d >= 30 ? CRITICO : d >= 14 ? ALERTA : SUAVE;
     const quando = d === null ? "sem post registrado" : `${d} dia${d === 1 ? "" : "s"} sem postar`;
     return `<tr>
@@ -135,8 +161,10 @@ export function legendaSaude(bloco: BlocoSaude, mencao: string): string {
     // Só pendência de cadastro: não é cobrança de postagem, e chamar assim seria injusto.
     return `📋 ${quem} — ${bloco.clientes.length} cliente${bloco.clientes.length > 1 ? "s" : ""} esperando o Instagram ser vinculado.`;
   }
-  const detalhe = pior.diasSemPostar === null
-    ? `*${pior.cliente}* segue sem nenhum post registrado`
-    : `o mais parado é *${pior.cliente}*, há ${pior.diasSemPostar} dias`;
+  const detalhe = pior.diasSemPostar === undefined
+    ? `*${pior.cliente}* ${pior.motivos[0] || "pede atenção"}`
+    : pior.diasSemPostar === null
+      ? `*${pior.cliente}* segue sem nenhum post registrado`
+      : `o mais parado é *${pior.cliente}*, há ${pior.diasSemPostar} dias`;
   return `🩺 ${quem} — *${reais.length} cliente${reais.length > 1 ? "s" : ""}* pedindo atenção; ${detalhe}.`;
 }

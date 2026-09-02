@@ -110,8 +110,12 @@ export async function POST(req: NextRequest) {
   for (const x of comDono) {
     if (x.aval.risco === "baixo" || nomesParados.has(x.nome)) continue;
     const motivos = [x.reclamou ? "reclamou nos últimos 14 dias" : "", x.retraiu ? "pausou/cancelou pauta" : ""].filter(Boolean);
-    if (!motivos.length && (x.diasSemPost === null || x.diasSemPost < 14)) continue; // sem sinal próprio
-    push(x.responsavel, { cliente: x.nome, diasSemPostar: x.diasSemPost, motivos });
+    // SÓ entra por motivo próprio. O `diasSemPost` desta fonte vem de `content_cards.published`,
+    // que em agosto marcou 24 publicações contra 451 posts reais — usá-lo aqui colocava no PDF do
+    // Thiago três clientes "sem post registrado" que estavam postando normalmente. Quem está de
+    // fato parado já veio da fonte 1, medida no Instagram.
+    if (!motivos.length) continue;
+    push(x.responsavel, { cliente: x.nome, motivos }); // diasSemPostar fica undefined: não medido
   }
   // Fonte 3: cadastro incompleto. Vai no PDF do dono, mas marcado como problema de cadastro —
   // cobrar postagem de quem o sistema não consegue ler seria acusar pelo que não é dele.

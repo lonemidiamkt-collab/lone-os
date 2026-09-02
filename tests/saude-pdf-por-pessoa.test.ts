@@ -90,3 +90,41 @@ describe("o PDF individual", () => {
     expect(h).not.toContain("<script>");
   });
 });
+
+// ── O erro que o preview pegou antes de ir pro grupo (02/09) ───────────────
+//
+// A primeira versão colocou "Imperio dos Pisos — sem post registrado" no PDF do Thiago. Falso: o
+// número vinha de `content_cards.status = published`, o campo que em agosto registrou 24
+// publicações contra 451 posts reais no Instagram. O cliente postava; o board é que estava vazio.
+//
+// `undefined` (não medido) passou a ser diferente de `null` (Instagram lido e sem post).
+describe("não medido ≠ nunca postou", () => {
+  const misto: BlocoSaude = { pessoa: "Thiago", clientes: [
+    { cliente: "Imperio dos Pisos", motivos: ["reclamou nos últimos 14 dias"] },   // sem diasSemPostar
+    { cliente: "Varejão", diasSemPostar: null, motivos: [] },                      // Instagram vazio
+    { cliente: "Hentzy", diasSemPostar: 58, motivos: [] },
+  ] };
+
+  it("quem entrou por reclamação NÃO é acusado de não postar", () => {
+    const h = saudePessoaPdfHtml(misto, "", "2026-09-02");
+    expect(h).toContain("Imperio dos Pisos");
+    // A direita mostra o motivo real, não um número que ninguém apurou.
+    expect(h).toMatch(/reclamou nos últimos 14 dias<\/td>/);
+  });
+
+  it("só conta como grave quem foi realmente medido", () => {
+    // Varejão (Instagram vazio) e Hentzy (58d) = 2. O Império não entra.
+    expect(saudePessoaPdfHtml(misto, "", "2026-09-02")).toMatch(/2 há mais de um mês sem post/);
+  });
+
+  it("ordem: Instagram vazio primeiro, dias depois, não-medido por último", () => {
+    expect(ordenar(misto.clientes).map((c) => c.cliente)).toEqual(["Varejão", "Hentzy", "Imperio dos Pisos"]);
+  });
+
+  it("a legenda não promete um número que não existe", () => {
+    const so: BlocoSaude = { pessoa: "X", clientes: [{ cliente: "Y", motivos: ["reclamou"] }] };
+    const l = legendaSaude(so, "");
+    expect(l).toContain("*Y* reclamou");
+    expect(l).not.toMatch(/dias/);
+  });
+});
