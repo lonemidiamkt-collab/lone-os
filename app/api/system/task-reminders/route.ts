@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
 
   // O dedup diário impede cobrar duas vezes — e também impede CONFERIR o formato depois que a
   // cobrança do dia já saiu. `?forcar=1` só faz sentido junto de `?preview=1`, que não envia nada.
-  const ignorarDedup = req.nextUrl.searchParams.get("forcar") === "1" && previewOnly;
+  const ignorarDedup = req.nextUrl.searchParams.get("forcar") === "1"
+    && (previewOnly || req.nextUrl.searchParams.get("baixar") === "1");
   const jaLembradaHoje = (iso: string | null) =>
     !ignorarDedup && !!iso && ymd(spNow(new Date(iso))) === hoje;
 
@@ -122,6 +123,20 @@ export async function POST(req: NextRequest) {
       ok: true, cobrar: aCobrar.length, hora,
       pessoas: blocosPdf.map((b) => ({ pessoa: b.pessoa, tarefas: b.tarefas.length, marcado: mencoes.has(b.pessoa) })),
       legenda,
+    });
+  }
+
+  // ?baixar=1 devolve o PDF sem enviar. O mesmo parâmetro já pegou "0.0105 dias" no relatório de
+  // saldos antes do documento chegar ao grupo — conferir antes é barato.
+  const baixar = req.nextUrl.searchParams.get("baixar") === "1";
+  if (baixar) {
+    const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
+    const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
+    const logo = await loadLoneLogo().catch(() => "");
+    const pdf = await htmlToPdf(tarefasPdfHtml(blocosPdf, logo, hoje));
+    if (!pdf.ok || !pdf.buffer) return NextResponse.json({ error: pdf.error }, { status: 500 });
+    return new NextResponse(new Uint8Array(pdf.buffer), {
+      headers: { "content-type": "application/pdf", "content-disposition": 'inline; filename="tarefas.pdf"' },
     });
   }
 
