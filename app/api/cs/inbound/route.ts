@@ -2418,6 +2418,66 @@ export async function POST(req: NextRequest) {
         .neq("status", "published")
         .order("designer_delivered_at", { ascending: false })
         .limit(1).maybeSingle();
+
+      // ── A CONFIRMAÇÃO DO CLIENTE TAMBÉM CONFIRMA A ENTREGA ──────────────
+      //
+      // Roberto (02/09): "ela entende que mandou e foi feito. Querendo ou não ela já pode
+      // confirmar a entrega da arte também — até no sistema, pra não ficar com não feito ou
+      // parado."
+      //
+      // A busca acima exige `designer_delivered_at` preenchido, então só acha card cuja entrega
+      // JÁ foi registrada. Quando o designer manda a arte direto no grupo e não marca no sistema
+      // — que é como 206 dos 208 cards de agosto ficaram presos — o cliente aprova e nada fecha.
+      // O card segue "parado" para sempre e a vigilância cobra trabalho que já foi feito.
+      //
+      // Se o cliente está aprovando, a arte existe: ele não aprova o que não viu. Então a
+      // aprovação vale como prova de entrega. Só que inferir a entrega no card ERRADO seria pior
+      // que não inferir — por isso o candidato precisa ser ÚNICO e recente. Havendo dúvida, não
+      // mexe (a regra da casa: pergunta > roteamento errado).
+      let cardInferido: { id: string; title: string } | null = null;
+      if (!cardAprov) {
+        const desde21d = new Date(Date.now() - 21 * 86400_000).toISOString();
+        const { data: cands } = await supabaseAdmin
+          .from("content_cards")
+          .select("id, title")
+          .eq("client_id", c.id as string)
+          .is("client_approved_at", null)
+          .is("designer_delivered_at", null)
+          .in("status", ["approval", "client_approval", "in_production"])
+          .is("archived_at", null)
+          .gte("created_at", desde21d)
+          .order("created_at", { ascending: false })
+          .limit(2);
+        // Exatamente UM candidato: com dois, não dá para saber qual arte o cliente viu.
+        if (cands && cands.length === 1) cardInferido = cands[0] as { id: string; title: string };
+      }
+
+      if (cardInferido) {
+        const ap = await detectarAprovacao(msg.text, cardInferido.title || clienteNome);
+        if (ap.ok && ap.data?.aprovou) {
+          const nowIso = new Date().toISOString();
+          const designer = (c.assigned_designer as string) || null;
+          const { data: marcado } = await supabaseAdmin.from("content_cards")
+            .update({
+              client_approved_at: nowIso, status: "scheduled", status_changed_at: nowIso,
+              designer_delivered_at: nowIso, designer_delivered_by: designer,
+            })
+            .eq("id", cardInferido.id).is("client_approved_at", null).select("id");
+          if (marcado && marcado.length > 0) {
+            aprovacaoDetectada = cardInferido.id;
+            // O comentário deixa a INFERÊNCIA explícita. Um registro que parece medido mas foi
+            // deduzido precisa dizer isso, senão vira dado falso com cara de dado bom.
+            await supabaseAdmin.from("card_comments").insert({
+              card_id: cardInferido.id, author: "🤖 CS", role: "system",
+              text: `🎉 Cliente aprovou no grupo. A entrega não estava marcada no sistema — como ele só aprova o que viu, registrei a entrega${designer ? ` (${designer})` : ""} e movi pra *Agendado*. Se não era essa arte, é só voltar o status.`,
+            }).then(() => {}, () => {});
+            const jid = internalGroupJid();
+            if (jid) await csSendGroupText(jid, `🎉 O cliente *${clienteNome}* aprovou a arte *${cardInferido.title}*! A entrega não estava marcada — registrei e movi pra *Agendado*. 🚀`);
+            console.log(`[CS/inbound] aprovação inferiu entrega do card ${cardInferido.id}`);
+          }
+        }
+      }
+
       if (cardAprov) {
         const ap = await detectarAprovacao(msg.text, (cardAprov.title as string) || clienteNome);
         if (ap.ok && ap.data?.aprovou) {

@@ -6,6 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { fatoSemPauta } from "@/lib/cs/porta-voz";
+import { avaliarPipeline, type CardRow as CardRowPipe } from "@/lib/cs/vigilancia-pipeline";
 import {
   spNow, ymd, addDays, isBusinessDay, isBusinessHour, isFirmPostingDay, isPostingDay, proximoDiaFirme, businessHoursSince, spDateKeyOf,
 } from "@/lib/cs/vigilancia";
@@ -152,48 +153,6 @@ function enteredAt(c: CardRow): string | null {
   return (c.column_entered_at && c.column_entered_at[c.status]) || c.status_changed_at;
 }
 
-/**
- * Avalia 1 card pelos SINAIS REAIS (não só o status do board, que costuma ficar atrasado —
- * card entregue continua parado em "Ideias"). Conservador: na dúvida NÃO cobra (regra do PDF —
- * falso positivo destrói a confiança). Só cobra o que é inequívoco e atual.
- */
-function avaliarPipeline(c: CardRow): { vigilancia: number; area: Area; motivo: string } | null {
-  if (c.status === "published" || c.status === "scheduled") return null; // fluxo completo
-
-  // Designer JÁ entregou (sinal de plataforma confiável) → o trabalho DELE acabou: nunca cobrar
-  // designer. Mas o CARD precisa andar no board (decisão do Roberto: o time TEM que usar o card,
-  // o board é a fonte de verdade) — entregue há >= TH_SOCIAL_VER h úteis e a coluna ainda atrás
-  // de Aprovação → cobra o social pra revisar E MOVER. (Agendar pós-aprovação do cliente = vig 5.)
-  if (c.designer_delivered_at || c.design_request_status === "done") {
-    if (c.status === "approval" || c.status === "client_approval") return null; // board em dia
-    const hEntrega = businessHoursSince(c.designer_delivered_at ?? enteredAt(c));
-    return hEntrega >= TH_SOCIAL_VER
-      ? { vigilancia: 4, area: "social", motivo: "arte entregue e o card parado no board — revisar e mover" }
-      : null;
-  }
-
-  // Horas úteis com relógio REAL — passar spNow() aqui deslocava o getTime() e subcontava ~3h.
-  const h = businessHoursSince(enteredAt(c));
-  if (c.status === "blocked")
-    return h >= TH_TRAVADO
-      ? { vigilancia: 3, area: "social", motivo: `card travado${c.blocked_reason ? `: ${c.blocked_reason}` : ""}` }
-      : null;
-
-  // Ainda NÃO entregue:
-  if (!c.design_request_id)
-    return h >= TH_MANDAR_DESIGNER
-      ? { vigilancia: 2, area: "social", motivo: 'ainda não foi pro designer (faltou marcar "A fazer")' }
-      : null; // card recém-criado ganha um fôlego — cobrar minutos após criar era punição injusta
-  if (c.design_request_status === "in_progress")
-    return h >= TH_PRODUCAO
-      ? { vigilancia: 3, area: "designer", motivo: "em produção há um bom tempo — tá rendendo? precisa de algo?" }
-      : null; // designer produzindo dentro do prazo → não cobra
-  // Demanda "queued" (designer ainda não pegou) e parada além do limite:
-  return h >= TH_DESIGNER_PEGAR
-    ? { vigilancia: 3, area: "designer", motivo: "aguardando o designer pegar em produção" }
-    : null;
-}
-
 export async function POST(req: NextRequest) {
   const denied = requireCron(req);
   if (denied) return denied;
@@ -273,7 +232,7 @@ export async function POST(req: NextRequest) {
 
   // ── B) PIPELINE TRAVADO — por card (qualquer dia, inclusive quarta). ──
   for (const k of cards) {
-    const v = avaliarPipeline(k);
+    const v = avaliarPipeline(k, hoje);
     if (!v) continue;
     cobrancas.push({ vigilancia: v.vigilancia, area: v.area, client_id: k.client_id, card_id: k.id,
       chave: `${v.vigilancia}-${k.id}-${hoje}`, motivo: v.motivo,

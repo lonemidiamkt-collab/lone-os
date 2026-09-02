@@ -25,8 +25,12 @@ import {
   itensPara, tituloTarefa, montarCobrancaSetup, graduou, escopoDe, PREFIXO,
   type StatusSetup, type PapelSetup,
 } from "@/lib/cs/setup-7dias";
+import { contaAcessivel, verificarItens, motivosDeAtraso } from "@/lib/cs/setup-autoverificar";
 
-const DIAS_SETUP = 7;
+// 15 dias, não 7. Roberto (02/09): "a gente tem quinze dias aí pra entregar". O playbook fala
+// dos 7 primeiros dias como ritmo ideal; o PRAZO cobrado é de 15 — cobrar como atraso o que está
+// no prazo é o que fez 14 dos 19 clientes em onboarding parecerem parados.
+const DIAS_SETUP = 15;
 const diasDesde = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 
 export async function POST(req: NextRequest) {
@@ -54,6 +58,24 @@ export async function POST(req: NextRequest) {
   ]);
   const rodando = new Set((gastos ?? []).map((g) => g.client_id as string));
 
+  // ── O acesso à conta é CONFERIDO na Meta, não presumido do cadastro ───────
+  //
+  // Roberto: "se o email da Lone Mídia, a conta do Facebook da Lone Mídia já tem a conta, então
+  // significa que o Julio já fez. Se eu não tiver, então faz essa cobrança."
+  //
+  // `meta_ad_account_id` preenchido só prova que alguém digitou o ID. O que interessa é se a
+  // conta responde à NOSSA credencial — é isso que separa "pediu o acesso" de "conseguiu".
+  const tokenSetup = await getMetaToken();
+  const acessoPorCliente = new Map<string, boolean | null>();
+  if (tokenSetup) {
+    const comConta = alvo.filter((c) => !!c.meta_ad_account_id);
+    // Sequencial de propósito: são poucos clientes em onboarding e a Meta recusa rajada por app —
+    // foi assim que o digest inteiro caiu uma vez por causa de uma conta só.
+    for (const c of comConta) {
+      acessoPorCliente.set(c.id as string, await contaAcessivel(c.meta_ad_account_id as string, tokenSetup));
+    }
+  }
+
   const entreguesPor = new Map<string, number>();
   for (const k of cards ?? []) {
     if (!k.designer_delivered_at) continue;
@@ -65,6 +87,8 @@ export async function POST(req: NextRequest) {
   const graduaram: string[] = [];
   const promovidos: string[] = [];
   const criadas: string[] = [];
+  const autoFechadas: string[] = [];
+  const atrasos: { cliente: string; dias: number; motivos: string[] }[] = [];
 
   for (const c of alvo) {
     const id = c.id as string;
@@ -101,9 +125,32 @@ export async function POST(req: NextRequest) {
     const feitos: string[] = [];
     const abertos: StatusSetup["abertos"] = [];
 
+    // O que o SISTEMA já consegue provar que está feito, sem depender de alguém marcar.
+    const provas = {
+      artesEntregues, metaAdAccountId: (c.meta_ad_account_id as string) || null,
+      anuncioRodando: rodando.has(id), contaAcessivel: acessoPorCliente.get(id) ?? null,
+    };
+    const verificados = new Map(verificarItens(provas).map((v) => [v.chave, v]));
+
     for (const item of itens) {
       const titulo = tituloTarefa(item, nome);
       const existente = minhas.find((t) => (t.title as string) === titulo);
+      const auto = verificados.get(item.chave);
+
+      // Prova encontrada → o item está feito, mesmo que ninguém tenha marcado. E a TAREFA é
+      // fechada junto: sem isso o task-reminders continua mandando PDF cobrando o que já existe,
+      // que é exatamente a queixa que abriu este trabalho.
+      if (auto?.feito) {
+        feitos.push(item.titulo);
+        if (existente && existente.status !== "done" && !previewOnly) {
+          const { error } = await supabaseAdmin.from("tasks")
+            .update({ status: "done", completed_at: new Date().toISOString() })
+            .eq("id", existente.id as string).neq("status", "done").select("id");
+          if (!error) autoFechadas.push(`${nome}: ${item.titulo} (${auto.prova})`);
+        }
+        continue;
+      }
+
       if (existente) {
         if (existente.status === "done") feitos.push(item.titulo);
         else abertos.push({ titulo: item.titulo, papel: item.papel, responsavel: donoDe[item.papel] });
@@ -123,6 +170,13 @@ export async function POST(req: NextRequest) {
         }).select("id");
         if (!error) criadas.push(`${nome}: ${item.titulo}`);
       }
+    }
+
+    // Passou dos 15 dias e ainda tem item aberto: a cobrança precisa dizer O QUE observou, não
+    // só "pendente". "Não tem anúncio ativo e não tem verba" é acionável; "item de setup" não é.
+    if (dias > DIAS_SETUP && abertos.length) {
+      const mots = motivosDeAtraso(provas, escopo !== "social");
+      if (mots.length) atrasos.push({ cliente: nome, dias, motivos: mots });
     }
 
     // Nenhuma tarefa do checklist existe pra este cliente = ele é anterior à lista.
@@ -150,7 +204,19 @@ export async function POST(req: NextRequest) {
   const textoAnuncio = textoCobranca(semAnuncio);
   const textoDuvida = textoIndefinidos(diagsAnuncio);
 
-  const partes = [textoSetup, textoAnuncio, textoDuvida, marcos.texto].filter(Boolean);
+  // ── ATRASO COM CAUSA NOMEADA ────────────────────────────────────────────
+  // Passou dos 15 dias: em vez de repetir a lista de itens, diz o que o sistema OBSERVOU. É a
+  // diferença entre "setup pendente" e "a conta está no cadastro mas não responde à nossa
+  // credencial — falta liberar o acesso", que a pessoa consegue resolver hoje.
+  const textoAtraso = atrasos.length
+    ? ["⏰ *Onboarding além dos 15 dias*", "",
+       ...atrasos.sort((a, b) => b.dias - a.dias).slice(0, 6).flatMap((a) => [
+         `*${a.cliente}* — ${a.dias} dias de casa`,
+         ...a.motivos.map((m) => `• ${m}`), "",
+       ])].join("\n").trim()
+    : "";
+
+  const partes = [textoSetup, textoAtraso, textoAnuncio, textoDuvida, marcos.texto].filter(Boolean);
   const texto = partes.join("\n\n———\n\n");
 
   const jid = process.env.CS_INTERNAL_GROUP_JID;
@@ -169,6 +235,10 @@ export async function POST(req: NextRequest) {
     ja_graduaram: graduaram,
     promovidos: promover ? promovidos : "(passe ?promover=1 pra aplicar)",
     tarefas_criadas: criadas,
+    // O que o sistema fechou sozinho, com a prova. Aparece na resposta para dar pra auditar sem
+    // abrir o banco — um "feito" automático que ninguém consegue conferir vira desconfiança.
+    tarefas_fechadas_por_prova: autoFechadas,
+    atrasos_com_causa: atrasos,
     marcos: marcos.lista,
     preview: texto || "(setup em dia e nenhum marco hoje)",
   });
