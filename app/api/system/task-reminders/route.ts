@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
 
   const { data: tasks, error } = await supabaseAdmin
     .from("tasks")
-    .select("id, title, assigned_to, client_name, due_date, priority, status, last_reminded_at")
+    // client_id entra pra resolver papel genérico → pessoa pelo responsável daquele cliente.
+    .select("id, title, assigned_to, client_id, client_name, due_date, priority, status, last_reminded_at")
     .neq("status", "done")
     .not("due_date", "is", null);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -47,10 +48,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, cobrar: 0, hora, hoje });
   }
 
-  // Agrupa por colaborador pra cada um receber a SUA lista.
+  // Agrupa por PESSOA — resolvendo papel genérico antes.
+  //
+  // A lista saía com "Rodrigo" e "designer" como se fossem duas pessoas, cada uma com metade das
+  // tarefas dele. Das tarefas abertas, 14 estavam em papel genérico e TODAS tinham cliente: o dono
+  // real vem do responsável daquele cliente por área.
+  const { resolverDonos } = await import("@/lib/cs/dono-tarefa");
+  const donos = await resolverDonos(aCobrar.map((it) => ({
+    id: it.id,
+    assigned_to: it.task.assigned_to as string | null,
+    client_id: it.task.client_id as string | null,
+  })));
+
   const porPessoa = new Map<string, Item[]>();
   for (const it of aCobrar) {
-    const p = (it.task.assigned_to as string) || "Alguém";
+    // "sem dono" fica explícito: é pendência de cadastro, e escolher um nome faria a cobrança ir
+    // para a pessoa errada.
+    const p = donos.get(it.id) || "sem dono";
     (porPessoa.get(p) ?? porPessoa.set(p, []).get(p)!).push(it);
   }
 
@@ -59,23 +73,78 @@ export async function POST(req: NextRequest) {
       : tipo === "hoje" ? "🟡 vence hoje"
         : "🔔 vence amanhã";
 
-  const blocos: string[] = [];
-  for (const [pessoa, itens] of porPessoa) {
-    const linhas = itens
-      .sort((a, b) => (a.task.due_date as string).localeCompare(b.task.due_date as string))
-      .map((it) => `${rotulo(it.tipo, (it.task.due_date as string).slice(0, 10))} — ${it.task.title as string}${it.task.client_name ? ` (${it.task.client_name})` : ""}`)
-      .join("\n");
-    blocos.push(`*${primeiroNome(pessoa)}*\n${linhas}`);
+  // ── O detalhe vai em PDF; no grupo fica só a manchete de cada um ────────────
+  //
+  // A mensagem antiga tinha 40+ linhas com tudo de todo mundo junto, e cada pessoa precisava caçar
+  // a própria parte no meio da lista dos outros. Roberto: "seria melhor em PDF? separar por
+  // funcionário e marcar eles".
+  const { tarefasPdfHtml, legendaTarefas } = await import("@/lib/reports/tarefasPdf");
+  const { mencionar } = await import("@/lib/cs/mencao");
+
+  const diasDe = (due: string) => Math.floor(
+    (new Date(`${hoje}T12:00:00Z`).getTime() - new Date(`${due}T12:00:00Z`).getTime()) / 864e5,
+  );
+
+  const blocosPdf = [...porPessoa.entries()]
+    .map(([pessoa, itens]) => ({
+      pessoa: pessoa === "sem dono" ? "Sem dono (falta atribuir)" : primeiroNome(pessoa),
+      pessoaOriginal: pessoa,
+      tarefas: itens
+        .map((it) => ({
+          titulo: it.task.title as string,
+          cliente: (it.task.client_name as string) || null,
+          vencimento: (it.task.due_date as string).slice(0, 10),
+          diasAtraso: diasDe((it.task.due_date as string).slice(0, 10)),
+        }))
+        .sort((a, b) => b.diasAtraso - a.diasAtraso),
+    }))
+    // Quem tem mais atraso primeiro — é onde o dia começa.
+    .sort((a, b) => (b.tarefas[0]?.diasAtraso ?? 0) - (a.tarefas[0]?.diasAtraso ?? 0));
+
+  // Menção de verdade: nome escrito não notifica ninguém.
+  const mencoes = new Map<string, string>();
+  const jidsTodos: string[] = [];
+  for (const b of blocosPdf) {
+    if (b.pessoaOriginal === "sem dono") continue;
+    const m = await mencionar(b.pessoaOriginal).catch(() => ({ trecho: "", jids: [], notifica: false }));
+    if (m.trecho) mencoes.set(b.pessoa, m.trecho);
+    jidsTodos.push(...m.jids);
   }
 
-  const msg = `⏰ *Tarefas pra fechar*\n\n${blocos.join("\n\n")}\n\n_Assim que concluir, marca como feita em *Tarefas* que eu paro de cobrar 🙂 (ou me avisa aqui que eu marco)._`;
+  const legenda = legendaTarefas(blocosPdf, mencoes);
 
   if (previewOnly) {
-    return NextResponse.json({ ok: true, preview: msg, cobrar: aCobrar.length, hora });
+    return NextResponse.json({
+      ok: true, cobrar: aCobrar.length, hora,
+      pessoas: blocosPdf.map((b) => ({ pessoa: b.pessoa, tarefas: b.tarefas.length, marcado: mencoes.has(b.pessoa) })),
+      legenda,
+    });
   }
 
   const dest = process.env.CS_TEAM_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID;
-  if (dest) await csSendGroupText(dest, msg, undefined, { origem: "task-reminders", destino: "interno" }).catch(() => {});
+  if (dest) {
+    try {
+      const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
+      const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
+      const { csSendGroupDocument } = await import("@/lib/cs/notify");
+      const logo = await loadLoneLogo().catch(() => "");
+      const pdf = await htmlToPdf(tarefasPdfHtml(blocosPdf, logo, hoje));
+
+      if (pdf.ok && pdf.buffer) {
+        await csSendGroupDocument(
+          dest, pdf.buffer.toString("base64"),
+          `Tarefas ${hoje.split("-").reverse().join("-")}.pdf`,
+          legenda, "application/pdf", jidsTodos,
+        );
+      } else {
+        // PDF falhou: manda a manchete mesmo assim. Cobrança que some porque o render caiu é pior
+        // que cobrança feia.
+        await csSendGroupText(dest, legenda, undefined, { origem: "task-reminders", destino: "interno" }, jidsTodos);
+      }
+    } catch {
+      await csSendGroupText(dest, legenda, undefined, { origem: "task-reminders", destino: "interno" }, jidsTodos).catch(() => {});
+    }
+  }
 
   // Marca last_reminded_at (dedup 1x/dia).
   const nowIso = new Date().toISOString();
