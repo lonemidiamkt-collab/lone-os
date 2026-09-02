@@ -85,6 +85,13 @@ export function diagnosticoPdfHtml(d: Diagnostico, logo: string): string {
     <p style="color:${SUAVE};font-size:12.5px;margin-bottom:18px">
       ${d.contasAtivas} contas · ${esc(brl(d.gastoOntem))} investidos ontem · ${totalItens} pontos encontrados
     </p>
+    ${d.comPolitica < d.contasAtivas ? `
+      <div style="background:${CARTAO};border:1px solid ${LINHA};border-left:3px solid ${SUAVE};
+                  border-radius:0 8px 8px 0;padding:9px 14px;margin-bottom:16px;font-size:11px;color:${SUAVE}">
+        ${d.comPolitica} de ${d.contasAtivas} contas têm meta de custo definida. Para as outras
+        ${d.contasAtivas - d.comPolitica}, este relatório compara o cliente só com ele mesmo — sabe dizer
+        o que mudou, não se o resultado é bom.
+      </div>` : ""}
 
     <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:22px">
       ${[[criticos, "Precisam de ação hoje", criticos > 0 ? CRITICO : OK],

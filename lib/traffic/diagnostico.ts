@@ -29,6 +29,8 @@ export interface Diagnostico {
   data: string;
   contasAtivas: number;
   gastoOntem: number;
+  /** Quantas contas têm meta definida. Sem meta, o diagnóstico só compara o cliente com ele mesmo. */
+  comPolitica: number;
   funcoes: { nome: string; pergunta: string; itens: ItemDiagnostico[]; semDado?: string }[];
 }
 
@@ -45,7 +47,7 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
   const ontem = ontemBRT(agora);
   const seteDias = new Date(new Date(`${ontem}T12:00:00Z`).getTime() - 7 * 864e5).toISOString().slice(0, 10);
 
-  const [{ data: clientes }, { data: entidades }, { data: anomalias }, { data: contaDia }] = await Promise.all([
+  const [{ data: clientes }, { data: entidades }, { data: anomalias }, { data: contaDia }, { data: politicas }] = await Promise.all([
     supabaseAdmin.from("clients").select("id, name, nome_fantasia, meta_ad_account_id, active, draft_status")
       .not("meta_ad_account_id", "is", null).neq("meta_ad_account_id", "")
       .or("active.is.null,active.eq.true").is("draft_status", null),
@@ -57,10 +59,15 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
       .gte("metric_date", seteDias).in("severity", ["critical", "high"]),
     supabaseAdmin.from("metric_snapshots").select("client_id, spend, conversions, metric_date")
       .gte("metric_date", seteDias).lte("metric_date", ontem),
+    // A política é o que transforma "fora do padrão dele" em "acima da meta dele". Sem ela o
+    // diagnóstico só sabe comparar o cliente consigo mesmo, e nunca se o resultado é BOM.
+    supabaseAdmin.from("client_traffic_policy")
+      .select("client_id, cpl_meta, cpl_alerta, cpl_critico, orcamento_diario, conversas_minimas, gasto_minimo_decisao, origem"),
   ]);
 
   const nome = new Map((clientes ?? []).map((c) => [c.id as string, (c.nome_fantasia as string) || (c.name as string)]));
   const ativos = new Set((clientes ?? []).map((c) => c.id as string));
+  const politica = new Map((politicas ?? []).map((p) => [p.client_id as string, p]));
 
   const gastoOntem = (contaDia ?? [])
     .filter((m) => m.metric_date === ontem)
@@ -210,7 +217,36 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
   }
   realocar.sort((a, b) => b.prioridade - a.prioridade);
 
-  // ── 6. ASSISTENTE DE OTIMIZAÇÃO: o que está indo bem e merece mais ──────────
+  // ── 6. ACIMA DA META DO CLIENTE ─────────────────────────────────────────────
+  //
+  // A única função que precisa da política para existir. As outras comparam o cliente com ele
+  // mesmo; esta compara com o que se espera dele. Na carteira o custo por conversa vai de R$1,91 a
+  // R$26,18 — R$18 é péssimo para uns e ótimo para outros, e sem a meta o sistema não sabe a
+  // diferença.
+  const acimaDaMeta: ItemDiagnostico[] = [];
+  for (const cj of porConjunto.values()) {
+    const pol = politica.get(cj.clientId);
+    if (!pol?.cpl_critico || cj.conv === 0) continue;
+
+    const cpl = cj.gasto / cj.conv;
+    const critico = Number(pol.cpl_critico);
+    const meta = Number(pol.cpl_meta);
+    // Evidência mínima do próprio cliente: sem isso, apontaria conjunto com 2 conversas.
+    if (cj.conv < Number(pol.conversas_minimas ?? 5)) continue;
+    if (cj.gasto < Number(pol.gasto_minimo_decisao ?? 50)) continue;
+    if (cpl < critico) continue;
+
+    acimaDaMeta.push({
+      cliente: cj.cliente, clientId: cj.clientId,
+      achado: `"${cj.nome}" está a ${dinheiro(cpl)} por conversa. A meta deste cliente é ${dinheiro(meta)}, e o teto ${dinheiro(critico)}.`,
+      acao: `Já são ${cj.conv} conversas e ${dinheiro(cj.gasto)} gastos — volume suficiente para decidir. Vale pausar ou reduzir.`,
+      prioridade: Math.min(96, 65 + Math.round((cpl / meta) * 8)),
+      emJogoDia: cj.gasto / 7,
+    });
+  }
+  acimaDaMeta.sort((a, b) => b.prioridade - a.prioridade);
+
+  // ── 7. ASSISTENTE DE OTIMIZAÇÃO: o que está indo bem e merece mais ──────────
   const escalar: ItemDiagnostico[] = [...porConjunto.values()]
     .filter((c) => c.conv >= 5 && c.gasto >= 50)
     .map((c) => ({ ...c, cpc: c.gasto / c.conv }))
@@ -228,11 +264,13 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
     data: ontem,
     contasAtivas: ativos.size,
     gastoOntem,
+    comPolitica: [...ativos].filter((id) => politica.has(id)).length,
     funcoes: [
       { nome: "Contas sem entrega", pergunta: "Alguma conta parou de rodar?", itens: semEntrega },
       { nome: "Desperdício", pergunta: "Que anúncio está gastando sem trazer nada?", itens: desperdicio },
       { nome: "Anomalias", pergunta: "O que fugiu do padrão da própria conta?", itens: anomaliasItens },
       { nome: "Verba mal distribuída", pergunta: "Dá pra mover verba dentro da mesma campanha?", itens: realocar },
+      { nome: "Acima da meta do cliente", pergunta: "O que passou do teto que combinamos?", itens: acimaDaMeta },
       { nome: "Criativo cansado", pergunta: "Quem já viu demais o mesmo anúncio?", itens: fadiga },
       { nome: "Merece mais verba", pergunta: "O que está barato e pode escalar?", itens: escalar },
     ],
