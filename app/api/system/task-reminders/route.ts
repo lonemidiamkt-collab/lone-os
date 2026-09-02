@@ -34,8 +34,9 @@ export async function POST(req: NextRequest) {
 
   // O dedup diário impede cobrar duas vezes — e também impede CONFERIR o formato depois que a
   // cobrança do dia já saiu. `?forcar=1` só faz sentido junto de `?preview=1`, que não envia nada.
-  const ignorarDedup = req.nextUrl.searchParams.get("forcar") === "1"
-    && (previewOnly || req.nextUrl.searchParams.get("baixar") === "1");
+  // `forcar=1` reenvia mesmo já tendo cobrado hoje. É pedido explícito de quem chamou — o cron
+  // nunca passa esse parâmetro, então a cobrança automática continua uma vez por dia.
+  const ignorarDedup = req.nextUrl.searchParams.get("forcar") === "1";
   const jaLembradaHoje = (iso: string | null) =>
     !ignorarDedup && !!iso && ymd(spNow(new Date(iso))) === hoje;
 
