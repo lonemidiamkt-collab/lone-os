@@ -174,3 +174,38 @@ describe("conta que posta e não conseguimos ler", () => {
     expect(l).not.toMatch(/pedindo atenção/);
   });
 });
+
+// ── Mesmo Instagram em dois cadastros (02/09) ──────────────────────────────
+//
+// "Bazar Ribeiro - Maricá" e "Bazar Ribeiro Saquarema" apontam para o mesmo
+// ig_business_account_id. A sincronização grava os posts em um dos dois; o outro fica com o
+// histórico velho e o agente anunciava "54 dias sem postar" de um perfil que postou anteontem
+// (conferido na Meta: 31/08).
+//
+// Sem saber qual cadastro é o certo, cobrar é acusar no escuro. Vira pendência de cadastro — com
+// o nome do outro cliente, que é o que torna isso resolvível em vez de um enigma.
+describe("conta de Instagram dividida entre dois clientes", () => {
+  const b: BlocoSaude = { pessoa: "Carlos", clientes: [
+    { cliente: "Lagos padrão", diasSemPostar: 14, motivos: [] },
+    { cliente: "Bazar Ribeiro - Maricá", motivos: [], contaDividida: ["Bazar Ribeiro Saquarema"] },
+  ] };
+  const html = saudePessoaPdfHtml(b, "", "2026-09-02");
+
+  it("não acusa de não postar — diz que o cadastro está duplicado", () => {
+    expect(html).toContain("cadastro duplicado");
+    expect(html).not.toMatch(/Bazar Ribeiro - Maricá[^]{0,160}dias sem postar/);
+  });
+
+  it("nomeia o outro cliente: sem isso a pessoa não tem o que fazer", () => {
+    expect(html).toContain("mesmo Instagram de Bazar Ribeiro Saquarema");
+  });
+
+  it("não entra na contagem de graves nem na legenda de cobrança", () => {
+    expect(html).not.toMatch(/há mais de um mês sem post/); // Lagos tem 14 dias, ninguém é grave
+    expect(legendaSaude(b, "@55")).toMatch(/\*1 cliente\*/);  // só o Lagos padrão
+  });
+
+  it("fica por último, junto das outras pendências técnicas", () => {
+    expect(ordenar(b.clientes)[0].cliente).toBe("Lagos padrão");
+  });
+});

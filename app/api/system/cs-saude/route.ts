@@ -9,7 +9,7 @@ import { spNow, ymd } from "@/lib/cs/vigilancia";
 
 const primeiroNome = (n: string) => (n || "").trim().split(/\s+/)[0] || n;
 import { avaliarSaude, formatSaudeDigest, type SinaisSaude } from "@/lib/cs/saude";
-import { clientesSemPostar, clientesSemInstagram, clientesIlegiveis, textoCobranca as cobrancaSemPostar, textoEscalada as escaladaSemPostar } from "@/lib/cs/sem-postar";
+import { clientesSemPostar, clientesSemInstagram, clientesIlegiveis, instagramDuplicado, textoCobranca as cobrancaSemPostar, textoEscalada as escaladaSemPostar } from "@/lib/cs/sem-postar";
 import { saudePessoaPdfHtml, legendaSaude, ordenar, type BlocoSaude, type ClienteSaude } from "@/lib/reports/saudePdf";
 
 // POST /api/system/cs-saude — 3ª função: scan de saúde/risco de churn. Avalia sinais por cliente
@@ -64,11 +64,13 @@ export async function POST(req: NextRequest) {
   // postou". Foi o erro no Varejão (138 posts) e no UNAFER (124) que o Roberto pegou.
   const cegos = await clientesIlegiveis();
   const idsCegos = new Set(cegos.map((c) => c.clientId));
+  // Mesmo Instagram em dois cadastros: os posts caem em um e o outro parece parado.
+  const duplicados = await instagramDuplicado();
   const comDono = clientes.map((c) => {
     const last = ultimoPost.get(c.id as string);
     // Conta que a gente não consegue LER entra como `null` de "não sei", não de "não postou" —
     // avaliarSaude trata null como sem sinal, e é isso que queremos: silêncio, não acusação.
-    const diasSemPost = idsCegos.has(c.id as string) ? null
+    const diasSemPost = (idsCegos.has(c.id as string) || duplicados.has(c.id as string)) ? null
       : last ? Math.floor((Date.now() - new Date(last).getTime()) / 86_400_000) : null;
     const sinais: SinaisSaude = {
       status: (c.status as string) || "good",
@@ -148,6 +150,14 @@ export async function POST(req: NextRequest) {
   for (const c of cegos) {
     if (nomesParados.has(c.cliente)) continue;
     push(c.responsavel, { cliente: c.cliente, motivos: [], ilegivel: { postsNaConta: c.postsNaConta } });
+  }
+  // Fonte 5: cadastro duplicado. Nomear o outro cliente é o que torna isso resolvível.
+  for (const c of clientes) {
+    const outros = duplicados.get(c.id as string);
+    if (!outros?.length) continue;
+    const nome = (c.nome_fantasia as string) || (c.name as string) || "Cliente";
+    if (nomesParados.has(nome)) continue;
+    push((c.assigned_social as string) || null, { cliente: nome, motivos: [], contaDividida: outros });
   }
 
   const blocos: BlocoSaude[] = [...porPessoa.entries()]
@@ -231,6 +241,7 @@ export async function POST(req: NextRequest) {
     pdfs_enviados: pdfsEnviados, falhas,
     por_pessoa: blocos.map((b) => ({ pessoa: b.pessoa, clientes: b.clientes.length })),
     semPostar: parados.length, semInstagram: semIg.length, semAcessoIg: cegos.length,
+    ig_duplicado: [...duplicados.entries()].length,
     detalhe_sem_acesso: cegos.map((c) => `${c.cliente} (@${c.usuario ?? "?"}, ${c.postsNaConta} posts)`), texto, textoSemPostar: txtParados, textoEscalada: txtEscalada,
   });
 }

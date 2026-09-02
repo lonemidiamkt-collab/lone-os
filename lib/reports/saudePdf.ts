@@ -44,6 +44,9 @@ export interface ClienteSaude {
   /** A conta TEM publicações que não conseguimos listar (falta acesso à Página na Meta).
    *  Quando presente, traz quantos posts a conta tem — a prova de que o cliente está postando. */
   ilegivel?: { postsNaConta: number } | null;
+  /** O mesmo Instagram está cadastrado em outro(s) cliente(s): os posts caem num só e este parece
+   *  parado. Traz os nomes dos outros, que é o que a pessoa precisa para resolver. */
+  contaDividida?: string[] | null;
 }
 
 export interface BlocoSaude {
@@ -55,7 +58,7 @@ export interface BlocoSaude {
  *  medido (entrou por reclamação) e o que é pendência de cadastro. */
 export function ordenar(cs: ClienteSaude[]): ClienteSaude[] {
   const peso = (c: ClienteSaude) => {
-    if (c.semInstagram || c.ilegivel) return -2; // pendência técnica: por último
+    if (c.semInstagram || c.ilegivel || c.contaDividida?.length) return -2; // pendência técnica: por último
     if (c.diasSemPostar === undefined) return -1; // não medido: antes do cadastro, depois dos dias
     if (c.diasSemPostar === null) return Infinity; // Instagram lido e vazio: o pior caso
     return c.diasSemPostar;
@@ -72,10 +75,21 @@ export function saudePdfHtml(blocos: BlocoSaude[], logo: string, hoje: string, d
     timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "long",
   });
   const todos = blocos.flatMap((b) => b.clientes);
-  const graves = todos.filter((c) => !c.semInstagram && !c.ilegivel && c.diasSemPostar !== undefined
+  const graves = todos.filter((c) => !c.semInstagram && !c.ilegivel && !c.contaDividida?.length && c.diasSemPostar !== undefined
     && (c.diasSemPostar === null || c.diasSemPostar >= 30)).length;
 
   const linha = (c: ClienteSaude) => {
+    // Mesmo Instagram em dois cadastros. Nomear o outro cliente é o que torna isso resolvível:
+    // sem o nome, "conta duplicada" manda a pessoa procurar agulha no palheiro.
+    if (c.contaDividida?.length) {
+      return `<tr>
+        <td style="padding:7px 0;border-bottom:1px solid ${LINHA};font-size:12.5px;color:${SUAVE}">
+          ${esc(c.cliente)}<span style="color:${SUAVE}"> · mesmo Instagram de ${esc(c.contaDividida.join(", "))}</span>
+        </td>
+        <td style="padding:7px 0;border-bottom:1px solid ${LINHA};text-align:right;white-space:nowrap;
+                   font-size:11.5px;color:${SUAVE}">cadastro duplicado</td>
+      </tr>`;
+    }
     // A conta posta e a gente não enxerga. Dizer o NÚMERO de posts é o que impede que isso seja
     // lido como cobrança: fica claro que o cliente trabalhou e o acesso é que falta.
     if (c.ilegivel) {
@@ -168,7 +182,7 @@ export function saudePdfHtml(blocos: BlocoSaude[], logo: string, hoje: string, d
 
 /** A legenda que acompanha o PDF de UMA pessoa. Curta: o documento tem o resto. */
 export function legendaSaude(bloco: BlocoSaude, mencao: string): string {
-  const reais = bloco.clientes.filter((c) => !c.semInstagram && !c.ilegivel);
+  const reais = bloco.clientes.filter((c) => !c.semInstagram && !c.ilegivel && !c.contaDividida?.length);
   const pior = ordenar(reais)[0];
   const quem = mencao || bloco.pessoa;
   if (!reais.length) {

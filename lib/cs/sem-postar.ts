@@ -106,6 +106,41 @@ export async function clientesIlegiveis(): Promise<ClienteIlegivel[]> {
   return out.sort((a, b) => b.postsNaConta - a.postsNaConta);
 }
 
+/**
+ * Contas de Instagram cadastradas em MAIS DE UM cliente.
+ *
+ * Caso real (02/09): "Bazar Ribeiro - Maricá" e "Bazar Ribeiro Saquarema" apontam para o mesmo
+ * `ig_business_account_id`. A sincronização grava os posts em um dos dois — o outro fica com o
+ * histórico velho e o agente anuncia "54 dias sem postar" de um perfil que postou anteontem.
+ *
+ * Não dá para saber qual dos dois é o certo sem alguém decidir, e escolher no chute gravaria post
+ * no cliente errado. Então a regra é a mesma dos outros casos ambíguos: sai da cobrança e vira
+ * pendência de cadastro, nomeada. Ver [[loneos-report-group-leak]] — grupo de WhatsApp duplicado
+ * já tinha causado exatamente este tipo de erro nos relatórios.
+ */
+export async function instagramDuplicado(): Promise<Map<string, string[]>> {
+  const { data } = await supabaseAdmin
+    .from("clients").select("id, name, nome_fantasia, ig_business_account_id")
+    .or("active.is.null,active.eq.true")
+    .not("ig_business_account_id", "is", null);
+
+  const porConta = new Map<string, { id: string; nome: string }[]>();
+  for (const c of data ?? []) {
+    const k = String(c.ig_business_account_id);
+    const nome = (c.nome_fantasia as string) || (c.name as string) || "Cliente";
+    if (/\(teste\)/i.test(nome)) continue;
+    (porConta.get(k) ?? porConta.set(k, []).get(k)!).push({ id: c.id as string, nome });
+  }
+
+  // clientId → nomes dos OUTROS clientes que dividem a mesma conta.
+  const out = new Map<string, string[]>();
+  for (const [, lista] of porConta) {
+    if (lista.length < 2) continue;
+    for (const c of lista) out.set(c.id, lista.filter((o) => o.id !== c.id).map((o) => o.nome));
+  }
+  return out;
+}
+
 export async function clientesSemPostar(): Promise<ClienteParado[]> {
   const { data: clientes } = await supabaseAdmin
     .from("clients")
@@ -115,9 +150,10 @@ export async function clientesSemPostar(): Promise<ClienteParado[]> {
   if (!clientes?.length) return [];
 
   const ids = clientes.map((c) => c.id as string);
-  const [{ data: posts }, ilegiveis] = await Promise.all([
+  const [{ data: posts }, ilegiveis, duplicados] = await Promise.all([
     supabaseAdmin.from("client_ig_posts").select("client_id, posted_at").in("client_id", ids),
     clientesIlegiveis(),
+    instagramDuplicado(),
   ]);
   // Quem a gente não consegue LER não entra na cobrança de postagem — sai em lista própria.
   const cegos = new Set(ilegiveis.map((i) => i.clientId));
@@ -149,6 +185,10 @@ export async function clientesSemPostar(): Promise<ClienteParado[]> {
     // A conta TEM posts que a gente não enxerga → pendência de acesso, não de postagem. Acusar
     // aqui é o erro que o Roberto pegou no Varejão e no UNAFER, que postam há meses.
     if (cegos.has(c.id as string)) continue;
+
+    // Mesmo Instagram em dois clientes: os posts caem em um só e o outro parece parado. Sem saber
+    // qual é o certo, cobrar seria acusar no escuro.
+    if (duplicados.has(c.id as string)) continue;
 
     // NUNCA POSTOU, TENDO INSTAGRAM: é grave de verdade. Foi a brecha que deixou o Bazar invisível.
     if (dias === null) {
