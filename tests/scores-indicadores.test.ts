@@ -22,7 +22,10 @@ describe("ponto 4: barra de progresso só onde faz sentido", () => {
   it("leads 365 de 500 é acumulativo: barra faz sentido", () => {
     const a = avaliar(ind({ chave: "leads", natureza: "acumulativa", valor: 365, meta: 500, fracaoDoPeriodo: 0.7 }));
     expect(a.mostrarBarra).toBe(true);
-    expect(a.score).toBe(73);
+    // A BARRA desenha o progresso da meta cheia (73%)…
+    expect(a.progresso).toBe(73);
+    // …e o SCORE mede o ritmo: 365 contra os 350 esperados a 70% do mês é 104%, acima do ritmo.
+    expect(a.score).toBe(104);
   });
 });
 
@@ -30,7 +33,8 @@ describe("ponto 3: situação atual x projeção", () => {
   it("acumulativa no ritmo certo é 'na meta' mesmo com a barra pela metade", () => {
     // Metade do mês, metade da meta: está no ritmo. Comparar com a meta cheia assustaria à toa.
     const a = avaliar(ind({ chave: "leads", natureza: "acumulativa", valor: 250, meta: 500, fracaoDoPeriodo: 0.5 }));
-    expect(a.score).toBe(50);
+    expect(a.progresso).toBe(50);   // barra pela metade
+    expect(a.score).toBe(100);      // ritmo perfeito — é o que entra na média da dimensão
     expect(a.situacao).toBe("no_alvo");
     expect(a.projecao).toBe(500);
   });
@@ -50,6 +54,23 @@ describe("ponto 3: situação atual x projeção", () => {
     expect(a.situacao).toBe("atencao");
     expect(["otimo", "no_alvo"]).not.toContain(a.situacao);
     expect(a.leitura).toMatch(/12 abaixo da meta/);
+  });
+});
+
+describe("começo de período não pode zerar uma dimensão", () => {
+  it("dia 2 do mês, meta de 3 novos clientes, zero feitos: não é crítico", () => {
+    // Foi o que aconteceu no primeiro teste real: Comercial (peso 20) zerou por causa do
+    // calendário, não do desempenho. Esperar 0,2 cliente e ter 0 não é uma falha.
+    const a = avaliar(ind({ chave: "novos", natureza: "acumulativa", valor: 0, meta: 3, fracaoDoPeriodo: 0.05 }));
+    expect(a.situacao).toBe("no_alvo");
+    expect(a.score).toBe(100);
+    expect(a.progresso).toBe(0);   // a barra continua honesta: 0 de 3
+  });
+
+  it("mas com o mês adiantado a cobrança volta", () => {
+    const a = avaliar(ind({ chave: "novos", natureza: "acumulativa", valor: 0, meta: 3, fracaoDoPeriodo: 0.8 }));
+    expect(a.situacao).toBe("critico");
+    expect(a.score).toBe(0);
   });
 });
 

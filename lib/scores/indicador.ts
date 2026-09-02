@@ -46,8 +46,12 @@ export interface Avaliacao {
   valor: number | null;
   meta: number;
   unidade: string;
-  /** 0..100. Para acumulativa é progresso real; para qualidade/inversa é ATINGIMENTO da meta. */
+  /** 0..100+. Mede ATINGIMENTO: na acumulativa é o ritmo (valor ÷ esperado até aqui), em
+   *  qualidade/inversa é o quanto da meta foi alcançado. É este que entra nas médias ponderadas. */
   score: number | null;
+  /** Só para acumulativa: o quanto da meta CHEIA já foi feito — é o que a barra desenha.
+   *  Separado do score porque 50% da meta na metade do mês é barra pela metade e ritmo perfeito. */
+  progresso?: number;
   situacao: Situacao;
   /** Distância até a meta, com sinal. Positivo = acima da meta (bom em qualidade, ruim em inversa). */
   delta: number | null;
@@ -123,15 +127,26 @@ export function avaliar(i: Indicador): Avaliacao {
     // O que importa aqui é o RITMO: metade do período com metade da meta é "no alvo", mesmo com
     // a barra em 50%. Comparar progresso com meta cheia no dia 3 do mês assustaria à toa.
     const esperado = f ? i.meta * f : null;
+    // CEDO DEMAIS PARA JULGAR. No dia 2 do mês, uma meta de 3 novos clientes espera 0,2 cliente —
+    // e ter 0 vira "0% de atingimento", crítico. Foi o que aconteceu no primeiro teste real: o
+    // Comercial zerou a dimensão de peso 20 por causa do calendário, não do desempenho.
+    // Enquanto o esperado não chega a UMA unidade inteira, não há o que cobrar.
     const situacao: Situacao = esperado === null
       ? (progresso >= 100 ? "no_alvo" : "atencao")
-      : situacaoPorAtingimento(esperado > 0 ? (v / esperado) * 100 : 100);
+      : esperado < 1
+        ? (v > 0 ? "otimo" : "no_alvo")
+        : situacaoPorAtingimento((v / esperado) * 100);
     const situacaoProjetada = projecao === null ? null
       : situacaoPorAtingimento(i.meta > 0 ? (projecao / i.meta) * 100 : 100);
     const leitura = projecao === null
       ? `${fmt(v, unidade)} de ${fmt(i.meta, unidade)}`
       : `${fmt(v, unidade)} de ${fmt(i.meta, unidade)} · projeta ${fmt(projecao, unidade)}`;
-    return { ...base, score: progresso, situacao, delta: v - i.meta, projecao, situacaoProjetada, mostrarBarra: true, leitura };
+    // O SCORE da acumulativa mede o RITMO, não a barra: no dia 2 do mês, 0 de 3 clientes não vale
+    // 0 pontos na dimensão — vale "sem sinal ainda". A barra continua mostrando o progresso real.
+    const scoreRitmo = esperado === null ? progresso
+      : esperado < 1 ? (v > 0 ? 100 : 100)               // cedo demais: neutro, não penaliza
+        : Math.round(Math.min(150, (v / esperado) * 100));
+    return { ...base, score: scoreRitmo, situacao, delta: v - i.meta, projecao, situacaoProjetada, mostrarBarra: true, leitura, progresso };
   }
 
   // ── QUALIDADE e INVERSA: nível, não acúmulo. Barra não se aplica ─────────
