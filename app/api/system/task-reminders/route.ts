@@ -32,7 +32,11 @@ export async function POST(req: NextRequest) {
     .not("due_date", "is", null);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const jaLembradaHoje = (iso: string | null) => !!iso && ymd(spNow(new Date(iso))) === hoje;
+  // O dedup diário impede cobrar duas vezes — e também impede CONFERIR o formato depois que a
+  // cobrança do dia já saiu. `?forcar=1` só faz sentido junto de `?preview=1`, que não envia nada.
+  const ignorarDedup = req.nextUrl.searchParams.get("forcar") === "1" && previewOnly;
+  const jaLembradaHoje = (iso: string | null) =>
+    !ignorarDedup && !!iso && ymd(spNow(new Date(iso))) === hoje;
 
   type Item = { id: string; tipo: "atrasada" | "hoje" | "vespera"; task: NonNullable<typeof tasks>[number] };
   const aCobrar: Item[] = [];
