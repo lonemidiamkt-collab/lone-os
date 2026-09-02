@@ -155,10 +155,19 @@ export async function csSendGroupDocument(
       signal: AbortSignal.timeout(60_000),
     });
     const body = await res.text().catch(() => "");
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${body.slice(0, 150)}` };
+    // Documento enviado também vira registro. Antes só o texto era gravado em cs_outbound, então
+    // relatório em PDF — que hoje é a maior parte do que o sistema manda — não deixava rastro
+    // nenhum: não dava pra saber se chegou, nem depurar depois.
+    const erro = res.ok ? null : `HTTP ${res.status}: ${body.slice(0, 150)}`;
+    await registrarSaida(jid, `[documento] ${fileName}${caption ? ` — ${caption.slice(0, 120)}` : ""}`, res.ok, erro, {
+      origem: "documento", destino: "interno",
+    }).catch(() => {});
+    if (!res.ok) return { ok: false, error: erro ?? "falhou" };
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "erro de conexão" };
+    const msg = err instanceof Error ? err.message : "erro de conexão";
+    await registrarSaida(jid, `[documento] ${fileName}`, false, msg, { origem: "documento", destino: "interno" }).catch(() => {});
+    return { ok: false, error: msg };
   }
 }
 

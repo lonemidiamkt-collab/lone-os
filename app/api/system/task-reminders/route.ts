@@ -151,11 +151,19 @@ export async function POST(req: NextRequest) {
       const pdf = await htmlToPdf(tarefasPdfHtml(blocosPdf, logo, hoje));
 
       if (pdf.ok && pdf.buffer) {
-        await csSendGroupDocument(
+        const envio = await csSendGroupDocument(
           dest, pdf.buffer.toString("base64"),
           `Tarefas ${hoje.split("-").reverse().join("-")}.pdf`,
           legenda, "application/pdf", jidsTodos,
         );
+        // Eu não checava este retorno: se o WhatsApp recusasse, a rota respondia "ok" e a cobrança
+        // sumia sem ninguém saber. É a mesma falha silenciosa que já apagou o designer do relatório
+        // e zerou o portal do cliente.
+        if (!envio.ok) {
+          await csSendGroupText(dest, legenda, undefined, { origem: "task-reminders", destino: "interno" }, jidsTodos)
+            .catch(() => {});
+          return NextResponse.json({ ok: false, erro_pdf: envio.error, caiu_para_texto: true, cobrado: aCobrar.length });
+        }
       } else {
         // PDF falhou: manda a manchete mesmo assim. Cobrança que some porque o render caiu é pior
         // que cobrança feia.
