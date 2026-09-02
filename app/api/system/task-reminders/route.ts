@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
   // A mensagem antiga tinha 40+ linhas com tudo de todo mundo junto, e cada pessoa precisava caçar
   // a própria parte no meio da lista dos outros. Roberto: "seria melhor em PDF? separar por
   // funcionário e marcar eles".
-  const { tarefasPdfHtml, legendaTarefas } = await import("@/lib/reports/tarefasPdf");
+  const { tarefasPdfHtml, tarefasPessoaPdfHtml, legendaPessoa } = await import("@/lib/reports/tarefasPdf");
   const { mencionar } = await import("@/lib/cs/mencao");
 
   const diasDe = (due: string) => Math.floor(
@@ -117,13 +117,11 @@ export async function POST(req: NextRequest) {
     jidsTodos.push(...m.jids);
   }
 
-  const legenda = legendaTarefas(blocosPdf, mencoes);
-
   if (previewOnly) {
     return NextResponse.json({
       ok: true, cobrar: aCobrar.length, hora,
       pessoas: blocosPdf.map((b) => ({ pessoa: b.pessoa, tarefas: b.tarefas.length, marcado: mencoes.has(b.pessoa) })),
-      legenda,
+      exemplo_legenda: blocosPdf[0] ? legendaPessoa(blocosPdf[0], mencoes.get(blocosPdf[0].pessoa) ?? "") : "",
     });
   }
 
@@ -134,7 +132,15 @@ export async function POST(req: NextRequest) {
     const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
     const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
     const logo = await loadLoneLogo().catch(() => "");
-    const pdf = await htmlToPdf(tarefasPdfHtml(blocosPdf, logo, hoje));
+    // O ?baixar= devolve o consolidado de propósito: serve pra conferir tudo de uma vez antes de
+    // mandar. Quem recebe no grupo recebe o seu, separado.
+    const soDe = req.nextUrl.searchParams.get("pessoa");
+    const alvo = soDe ? blocosPdf.filter((b) => b.pessoa.toLowerCase().includes(soDe.toLowerCase())) : blocosPdf;
+    if (!alvo.length) return NextResponse.json({ error: `ninguém com "${soDe}"` }, { status: 404 });
+    const html = soDe && alvo.length === 1
+      ? tarefasPessoaPdfHtml(alvo[0], logo, hoje)
+      : tarefasPdfHtml(alvo, logo, hoje);
+    const pdf = await htmlToPdf(html);
     if (!pdf.ok || !pdf.buffer) return NextResponse.json({ error: pdf.error }, { status: 500 });
     return new NextResponse(new Uint8Array(pdf.buffer), {
       headers: { "content-type": "application/pdf", "content-disposition": 'inline; filename="tarefas.pdf"' },
@@ -142,35 +148,47 @@ export async function POST(req: NextRequest) {
   }
 
   const dest = process.env.CS_TEAM_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID;
-  if (dest) {
-    try {
-      const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
-      const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
-      const { csSendGroupDocument } = await import("@/lib/cs/notify");
-      const logo = await loadLoneLogo().catch(() => "");
-      const pdf = await htmlToPdf(tarefasPdfHtml(blocosPdf, logo, hoje));
+  const enviados: string[] = [];
+  const falhas: string[] = [];
 
-      if (pdf.ok && pdf.buffer) {
+  if (dest) {
+    const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
+    const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
+    const { csSendGroupDocument } = await import("@/lib/cs/notify");
+    const logo = await loadLoneLogo().catch(() => "");
+
+    // UM PDF POR PESSOA. Roberto: "o pdf poderia ser separado por pessoa".
+    //
+    // O documento único já era melhor que a mensagem de 40 linhas, mas ainda obrigava cada um a
+    // rolar pela lista dos outros até achar a própria parte. São mais mensagens no grupo — e é o
+    // oposto do que ele pediu antes sobre volume — mas a diferença é que cada uma tem UM
+    // destinatário e é curta. O que cansa não é a quantidade de mensagens, é ler o que não é seu.
+    for (const b of blocosPdf) {
+      const primeiro = b.pessoaOriginal === "sem dono" ? "" : b.pessoa;
+      const m = primeiro
+        ? await mencionar(b.pessoaOriginal).catch(() => ({ trecho: "", jids: [], notifica: false }))
+        : { trecho: "", jids: [] as string[], notifica: false };
+
+      const arquivo = `${b.pessoa.replace(/[^\p{L}\p{N} -]/gu, "").trim() || "Tarefas"} — ${hoje.split("-").reverse().join("-")}.pdf`;
+      const legenda = legendaPessoa(b, m.trecho);
+
+      try {
+        const pdf = await htmlToPdf(tarefasPessoaPdfHtml(b, logo, hoje));
+        if (!pdf.ok || !pdf.buffer) throw new Error(pdf.error ?? "render falhou");
+
         const envio = await csSendGroupDocument(
-          dest, pdf.buffer.toString("base64"),
-          `Tarefas ${hoje.split("-").reverse().join("-")}.pdf`,
-          legenda, "application/pdf", jidsTodos,
+          dest, pdf.buffer.toString("base64"), arquivo, legenda, "application/pdf", m.jids,
         );
-        // Eu não checava este retorno: se o WhatsApp recusasse, a rota respondia "ok" e a cobrança
-        // sumia sem ninguém saber. É a mesma falha silenciosa que já apagou o designer do relatório
-        // e zerou o portal do cliente.
-        if (!envio.ok) {
-          await csSendGroupText(dest, legenda, undefined, { origem: "task-reminders", destino: "interno" }, jidsTodos)
-            .catch(() => {});
-          return NextResponse.json({ ok: false, erro_pdf: envio.error, caiu_para_texto: true, cobrado: aCobrar.length });
-        }
-      } else {
-        // PDF falhou: manda a manchete mesmo assim. Cobrança que some porque o render caiu é pior
-        // que cobrança feia.
-        await csSendGroupText(dest, legenda, undefined, { origem: "task-reminders", destino: "interno" }, jidsTodos);
+        if (!envio.ok) throw new Error(envio.error ?? "envio falhou");
+        enviados.push(b.pessoa);
+      } catch (e) {
+        // Cobrança que some porque o render caiu é pior que cobrança feia: manda o texto.
+        falhas.push(`${b.pessoa}: ${String(e).slice(0, 60)}`);
+        await csSendGroupText(dest, legenda, undefined, { origem: "task-reminders", destino: "interno" }, m.jids)
+          .catch(() => {});
       }
-    } catch {
-      await csSendGroupText(dest, legenda, undefined, { origem: "task-reminders", destino: "interno" }, jidsTodos).catch(() => {});
+      // Respiro entre documentos: a fila da Evolution engasga com envios colados.
+      await new Promise((r) => setTimeout(r, 1500));
     }
   }
 
@@ -178,5 +196,13 @@ export async function POST(req: NextRequest) {
   const nowIso = new Date().toISOString();
   await supabaseAdmin.from("tasks").update({ last_reminded_at: nowIso }).in("id", aCobrar.map((i) => i.id));
 
-  return NextResponse.json({ ok: true, cobrado: aCobrar.length, pessoas: porPessoa.size, hora });
+  // A resposta diz quem recebeu e quem falhou. Antes devolvia "ok" mesmo quando o envio tinha sido
+  // recusado — e a cobrança sumia sem ninguém saber.
+  return NextResponse.json({
+    ok: falhas.length === 0,
+    cobrado: aCobrar.length,
+    pdfs_enviados: enviados,
+    falhas,
+    hora,
+  });
 }

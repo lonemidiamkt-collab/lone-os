@@ -33,7 +33,18 @@ export interface BlocoPessoa {
   tarefas: TarefaPdf[];
 }
 
-export function tarefasPdfHtml(blocos: BlocoPessoa[], logo: string, hoje: string): string {
+/**
+ * O PDF de UMA pessoa.
+ *
+ * Roberto (02/09): "o pdf poderia ser separado por pessoa". A primeira versão era um documento só
+ * com todo mundo dentro — melhor que a mensagem de 40 linhas, mas ainda obrigava cada um a rolar
+ * pela lista dos outros até achar a própria parte. Um arquivo por pessoa abre já no que interessa.
+ */
+export function tarefasPessoaPdfHtml(bloco: BlocoPessoa, logo: string, hoje: string): string {
+  return tarefasPdfHtml([bloco], logo, hoje, bloco.pessoa);
+}
+
+export function tarefasPdfHtml(blocos: BlocoPessoa[], logo: string, hoje: string, dono?: string): string {
   const dia = new Date(`${hoje}T12:00:00Z`).toLocaleDateString("pt-BR", {
     timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "long",
   });
@@ -66,13 +77,16 @@ export function tarefasPdfHtml(blocos: BlocoPessoa[], logo: string, hoje: string
 
   const bloco = (b: BlocoPessoa) => {
     const velhas = b.tarefas.filter((t) => t.diasAtraso > 30).length;
-    return `<div style="margin-bottom:22px">
+    // No PDF individual o nome já está no título — repetir aqui só ocupa linha.
+    const cabecalho = dono ? "" : `
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px">
         <h2 style="font-size:16px;letter-spacing:-.01em">${esc(b.pessoa)}</h2>
         <span style="font-size:11px;color:${SUAVE}">
           ${b.tarefas.length} tarefa${b.tarefas.length > 1 ? "s" : ""}${velhas ? ` · ${velhas} parada${velhas > 1 ? "s" : ""} há mais de um mês` : ""}
         </span>
-      </div>
+      </div>`;
+    return `<div style="margin-bottom:22px">
+      ${cabecalho}
       <div style="background:${CARTAO};border:1px solid ${LINHA};border-radius:10px;padding:4px 16px">
         <table style="width:100%;border-collapse:collapse">${b.tarefas.map(linha).join("")}</table>
       </div>
@@ -95,7 +109,9 @@ export function tarefasPdfHtml(blocos: BlocoPessoa[], logo: string, hoje: string
       <div style="text-align:right;color:${SUAVE};font-size:11px;line-height:1.6">Tarefas em aberto<br>${esc(dia)}</div>
     </div>
 
-    <h1 style="font-size:24px;letter-spacing:-.02em;margin-bottom:5px">O que falta fechar</h1>
+    <h1 style="font-size:24px;letter-spacing:-.02em;margin-bottom:5px">
+      ${dono ? `${esc(dono)}, o que falta fechar` : "O que falta fechar"}
+    </h1>
     <p style="color:${SUAVE};font-size:12.5px;margin-bottom:22px">
       ${total} tarefa${total > 1 ? "s" : ""} · ${atrasadas} com prazo vencido
     </p>
@@ -106,6 +122,18 @@ export function tarefasPdfHtml(blocos: BlocoPessoa[], logo: string, hoje: string
       Lone Mídia · marque como feita em Tarefas que a cobrança para · ou avise no grupo que eu marco
     </div>
   </body></html>`;
+}
+
+/** A legenda que acompanha o PDF de UMA pessoa. Curta: o documento tem o resto. */
+export function legendaPessoa(bloco: BlocoPessoa, mencao: string): string {
+  const atrasadas = bloco.tarefas.filter((t) => t.diasAtraso > 0);
+  const maisVelha = [...atrasadas].sort((a, b) => b.diasAtraso - a.diasAtraso)[0];
+  const quem = mencao || bloco.pessoa;
+  if (!atrasadas.length) {
+    return `⏰ ${quem} — ${bloco.tarefas.length} tarefa${bloco.tarefas.length > 1 ? "s" : ""} pra hoje/amanhã.`;
+  }
+  return `⏰ ${quem} — *${atrasadas.length} atrasada${atrasadas.length > 1 ? "s" : ""}*` +
+    (maisVelha ? `, a mais antiga há ${maisVelha.diasAtraso} dias.` : ".");
 }
 
 /** A manchete de cada um no grupo. O detalhe está no PDF; aqui vai o que decide o dia. */
