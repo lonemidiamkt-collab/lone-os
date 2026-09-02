@@ -16,6 +16,10 @@ export const META_CONFIG = {
     "instagram_manage_insights",
     "pages_read_engagement",
     "pages_show_list",
+    // MCP oficial da Meta (02/09). O servidor devolve 401 e nomeia a exigência no header
+    // www-authenticate; sem estes dois o handshake nunca passa. Ver lib/meta/gateway/mcp.ts.
+    "catalog_management",
+    "ads_mcp_management",
   ],
 };
 

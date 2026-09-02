@@ -7,7 +7,42 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { isOpenAIConfigured } from "@/lib/ai/openai";
 import { parseUpsert, isTrivial, isLoneTeam, ehNomeEquipeLone, type EvolutionUpsert } from "@/lib/cs/ingest";
 import { classifyBlock, type ClassifierContext } from "@/lib/cs/classifier";
-import { csSendGroupText, csSendGroupDocument, csFetchMediaBase64, csFindGroupByName } from "@/lib/cs/notify";
+import { csSendGroupText as csSendRaw, csSendGroupDocument, csFetchMediaBase64, csFindGroupByName } from "@/lib/cs/notify";
+import type { CsSendMeta } from "@/lib/cs/notify";
+import { ehSoRecibo } from "@/lib/cs/recibo";
+
+// ── TODA saída deste arquivo passa a ser ETIQUETADA ─────────────────────────
+//
+// Medido em 02/09: das 527 mensagens da última semana, **80 estavam gravadas com origem
+// "desconhecida"** — e todas as 80 saíam daqui. Eram 110 chamadas de csSendGroupText no inbound e
+// nenhuma passava `meta`.
+//
+// Isso custava duas coisas, e a segunda é a cara:
+//   1. Rastreabilidade: o canal que mais fala com o time era o único que não dava pra medir nem
+//      cortar por tipo — justamente o que o Roberto pede quando reclama do volume.
+//   2. O PORTÃO. `csSendGroupText` só consulta o porta-voz quando recebe `meta.fatos`. Sem meta,
+//      o "já falei isso hoje" nunca rodava aqui. O freio contra repetição existia e não pegava no
+//      canal mais falante do sistema.
+//
+// Sombrear o import resolve as 110 de uma vez e mantém o override: quem quiser declarar origem
+// própria ou `fatos` continua passando meta normalmente.
+function destinoDoJid(jid: string): "interno" | "cliente" {
+  // Deriva em vez de fixar: hoje 100% da saída do inbound vai para grupo interno (medido), mas um
+  // rótulo chutado é pior que nenhum — no dia em que ele responder ao cliente, o portão precisa
+  // saber. Os JIDs internos vêm do ambiente, os mesmos que os crons usam.
+  const internos = [
+    process.env.CS_INTERNAL_GROUP_JID, process.env.CS_TEAM_GROUP_JID, process.env.CS_ADM_GROUP_JID,
+    process.env.CS_TRAFFIC_GROUP_JID, process.env.CS_CADASTRO_GROUP_JID,
+    process.env.CS_PILOT_GROUP_JID, process.env.CS_TEST_GROUP_JID,
+  ].filter(Boolean) as string[];
+  return internos.includes(jid) ? "interno" : "cliente";
+}
+
+function csSendGroupText(
+  jid: string, text: string, quotedMsgId?: string, meta?: CsSendMeta, mencionados?: string[],
+) {
+  return csSendRaw(jid, text, quotedMsgId, { origem: "inbound", destino: destinoDoJid(jid), ...(meta ?? {}) }, mencionados);
+}
 import { transcribeAudio } from "@/lib/cs/transcribe";
 import { describeImage } from "@/lib/cs/vision";
 import {
@@ -518,6 +553,13 @@ async function responderPapo(p: {
     // Se marquei a tarefa e a resposta não deixou isso claro, confirmo.
     const resp = marcada && !/marqu|marcad|feita|conclu/i.test(resp0)
       ? `${resp0}\n\n✅ Marquei "${marcada}" como feita no sistema.` : resp0;
+    // Cortesia sem conteúdo não vale uma notificação em seis celulares — a não ser que tenham
+    // chamado o Loninho pelo nome, ou que ele tenha uma marcação concreta a confirmar.
+    if (!p.chamadoDireto && !marcada && ehSoRecibo(resp)) {
+      pushHist(p.groupJid, "Você (Lone)", "(calei: era só recibo)");
+      console.log(`[CS/inbound] calei recibo vazio: "${resp.slice(0, 50)}"`);
+      return;
+    }
     await csSendGroupText(p.groupJid, resp, p.quotedMsgId || undefined);
     pushHist(p.groupJid, "Você (Lone)", resp);      // lembra o que ELA disse → não repete
     conversaAtiva.set(chaveConversa(p.groupJid, p.authorJid), Date.now());
