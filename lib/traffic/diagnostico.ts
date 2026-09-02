@@ -231,15 +231,30 @@ export async function montarDiagnostico(agora = new Date()): Promise<Diagnostico
     const cpl = cj.gasto / cj.conv;
     const critico = Number(pol.cpl_critico);
     const meta = Number(pol.cpl_meta);
-    // Evidência mínima do próprio cliente: sem isso, apontaria conjunto com 2 conversas.
-    if (cj.conv < Number(pol.conversas_minimas ?? 5)) continue;
-    if (cj.gasto < Number(pol.gasto_minimo_decisao ?? 50)) continue;
     if (cpl < critico) continue;
+    if (cj.gasto < Number(pol.gasto_minimo_decisao ?? 50)) continue;
+
+    // A evidência mínima escala com o TAMANHO do desvio.
+    //
+    // A primeira versão exigia sempre o volume cheio da política, e o resultado foi zero achados
+    // com problemas óbvios na base: Léo Carros gastou R$159 para UMA conversa numa conta cuja meta
+    // é R$12,40 — 12x o teto — e ficou de fora porque não tinha 8 conversas. Esses casos escapavam
+    // por um vão: não é zero conversa (não entra em desperdício) e não tem amostra (não entra
+    // aqui).
+    //
+    // Efeito grande precisa de amostra menor: quando o custo passa de 4x o teto, o gasto absoluto
+    // já justifica olhar sem esperar volume estatístico. Abaixo disso, o volume cheio continua
+    // valendo — é o que impede apontar um conjunto que teve um dia ruim.
+    const exagero = cpl / critico;
+    const volumeExigido = exagero >= 4 ? 1 : Number(pol.conversas_minimas ?? 5);
+    if (cj.conv < volumeExigido) continue;
 
     acimaDaMeta.push({
       cliente: cj.cliente, clientId: cj.clientId,
-      achado: `"${cj.nome}" está a ${dinheiro(cpl)} por conversa. A meta deste cliente é ${dinheiro(meta)}, e o teto ${dinheiro(critico)}.`,
-      acao: `Já são ${cj.conv} conversas e ${dinheiro(cj.gasto)} gastos — volume suficiente para decidir. Vale pausar ou reduzir.`,
+      achado: `"${cj.nome}" está a ${dinheiro(cpl)} por conversa — ${(cpl / meta).toFixed(1)}x a meta de ${dinheiro(meta)}. Gastou ${dinheiro(cj.gasto)} para ${cj.conv} conversa${cj.conv > 1 ? "s" : ""}.`,
+      acao: cj.conv <= 2
+        ? "O gasto já é alto demais para tão pouco retorno — vale pausar e realocar antes de esperar mais dados."
+        : `Volume suficiente para decidir. Vale pausar ou reduzir a verba deste conjunto.`,
       prioridade: Math.min(96, 65 + Math.round((cpl / meta) * 8)),
       emJogoDia: cj.gasto / 7,
     });
