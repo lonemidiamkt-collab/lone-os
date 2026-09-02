@@ -25,13 +25,31 @@ import { avaliar, type Avaliacao, type Indicador, type Situacao } from "./indica
 
 export type Dimensao = "financeiro" | "clientes" | "comercial" | "operacao" | "qualidade";
 
+/**
+ * FINANCEIRO ESTÁ FORA (peso 0) POR DECISÃO DO ROBERTO.
+ *
+ * Ele pediu a dimensão no documento de 02/09 e, ao ver o resultado, voltou atrás no mesmo dia:
+ * "sem financeiro ainda". Isso recoloca a decisão de julho — receita/MRR da AGÊNCIA não entram no
+ * sistema até ele pedir. (Faturamento DO CLIENTE é outra coisa e continua: é resultado do negócio
+ * dele, arma de retenção.)
+ *
+ * A dimensão continua declarada, com peso 0, em vez de ser apagada: é assim que religar vira uma
+ * linha em vez de uma reescrita. Os outros pesos foram renormalizados mantendo a PROPORÇÃO
+ * relativa que ele definiu — clientes continua valendo mais que comercial, que vale mais que
+ * operação, que vale mais que qualidade.
+ *
+ * Proporção original (sem financeiro): 25 : 20 : 15 : 10 sobre 70.
+ */
 export const PESOS: Record<Dimensao, number> = {
-  financeiro: 30,
-  clientes: 25,
-  comercial: 20,
-  operacao: 15,
-  qualidade: 10,
+  financeiro: 0,
+  clientes: 36,
+  comercial: 28,
+  operacao: 21,
+  qualidade: 15,
 };
+
+/** Dimensões que participam do cálculo. Peso 0 fica de fora sem sumir do código. */
+export const DIMENSOES_ATIVAS: Dimensao[] = (Object.keys(PESOS) as Dimensao[]).filter((d) => PESOS[d] > 0);
 
 export const NOME_DIMENSAO: Record<Dimensao, string> = {
   financeiro: "Financeiro",
@@ -99,7 +117,10 @@ export function scoreDimensao(dimensao: Dimensao, indicadores: Indicador[]): Res
 /** O teto que uma dimensão crítica impõe ao score geral. */
 const TETO_COM_CRITICA = 69;
 
-export function loneScore(dims: ResultadoDimensao[]): LoneScore {
+export function loneScore(todas: ResultadoDimensao[]): LoneScore {
+  // Peso 0 = desligada. Não entra na conta nem na cobertura — senão o Financeiro desligado
+  // apareceria como lacuna permanente e o score seria eternamente "parcial".
+  const dims = todas.filter((d) => d.peso > 0);
   const comDado = dims.filter((d) => d.score !== null);
   const pesoMedido = comDado.reduce((s, d) => s + d.peso, 0);
   const pesoTotal = dims.reduce((s, d) => s + d.peso, 0) || 1;

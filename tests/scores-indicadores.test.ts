@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { avaliar, type Indicador } from "@/lib/scores/indicador";
-import { scoreDimensao, loneScore, leituraLoneScore } from "@/lib/scores/executivo";
+import { scoreDimensao, loneScore, leituraLoneScore, PESOS, DIMENSOES_ATIVAS } from "@/lib/scores/executivo";
 import { scorePessoa, capacidade } from "@/lib/scores/performance";
 import { calcularSaude, distribuicao } from "@/lib/scores/health";
 import { classificar, resumirAtrasos, type CardParaAtraso } from "@/lib/scores/atraso";
@@ -110,8 +110,10 @@ describe("ponto 1: Lone Score ponderado, não média simples", () => {
 
   it("pondera pelos pesos definidos, não pela média", () => {
     const r = loneScore(dims);
-    // Média simples daria 74. Ponderado (30/25/20/15/10) dá 73 — o peso do financeiro segura.
-    expect(r.score).toBe(73);
+    // Com o Financeiro desligado, os pesos ativos são 36/28/21/15 sobre clientes(61),
+    // comercial(54), operação(88) e qualidade(81). Média simples daria 71; ponderado dá 68,
+    // porque Clientes — a dimensão mais pesada — é justamente a mais fraca.
+    expect(r.score).toBe(68);
     expect(r.cobertura).toBe(100);
   });
 
@@ -120,8 +122,8 @@ describe("ponto 1: Lone Score ponderado, não média simples", () => {
     const semComercial = dims.map((d) => d.dimensao === "comercial"
       ? scoreDimensao("comercial", [ind({ chave: "co", valor: null, meta: 100 })]) : d);
     const r = loneScore(semComercial);
-    expect(r.score).toBeGreaterThan(73);   // sem o 54 puxando, o score sobe
-    expect(r.cobertura).toBe(80);          // 100 - 20 do comercial
+    expect(r.score).toBeGreaterThan(68);   // sem o 54 puxando, o score sobe
+    expect(r.cobertura).toBe(72);          // 100 - 28 do comercial
     expect(leituraLoneScore(r)).toMatch(/parcial/);
   });
 
@@ -264,16 +266,17 @@ describe("ponto 17: atraso da Lone x atraso do cliente", () => {
 
 // ── Defeitos que só apareceram com dados reais (02/09) ────────────────────
 describe("cobertura baixa não pode virar nota alta", () => {
-  it("score 97 com 70% do peso medido NÃO é 'ótimo'", () => {
-    // Foi o primeiro resultado real: os 30% que faltavam eram o Financeiro inteiro.
+  it("nota alta com dimensão pesada faltando NÃO é 'ótimo'", () => {
+    // O primeiro resultado real deu 97 "ótimo" ignorando uma dimensão inteira. Aqui falta
+    // Clientes, a mais pesada das ativas: o número que sobra não retrata a empresa.
     const r = loneScore([
       scoreDimensao("financeiro", [ind({ chave: "f", valor: null, meta: 100 })]),
-      scoreDimensao("clientes", [ind({ chave: "c", valor: 100, meta: 100 })]),
+      scoreDimensao("clientes", [ind({ chave: "c", valor: null, meta: 100 })]),
       scoreDimensao("comercial", [ind({ chave: "co", valor: 100, meta: 100 })]),
-      scoreDimensao("operacao", [ind({ chave: "o", valor: 85, meta: 100 })]),
+      scoreDimensao("operacao", [ind({ chave: "o", valor: 95, meta: 100 })]),
       scoreDimensao("qualidade", [ind({ chave: "q", valor: 100, meta: 100 })]),
     ]);
-    expect(r.cobertura).toBe(70);
+    expect(r.cobertura).toBe(64);
     expect(r.parcial).toBe(true);
     expect(r.situacao).not.toBe("otimo");
     expect(leituraLoneScore(r)).toMatch(/parcial/);
@@ -314,5 +317,33 @@ describe("nota de pessoa exige base mínima", () => {
     ]});
     expect(r.score).toBeNull();
     expect(r.gargalo?.titulo).toBe("organizacao");   // sem julgar a pessoa, mostra onde olhar
+  });
+});
+
+// ── Financeiro desligado (Roberto, 02/09: "sem financeiro ainda") ─────────
+describe("dimensão com peso 0 fica fora sem sumir do código", () => {
+  it("o Financeiro não conta nem como lacuna", () => {
+    // Ele pediu a dimensão de manhã e voltou atrás no mesmo dia. Peso 0 em vez de apagar: religar
+    // vira uma linha. Mas enquanto desligada não pode deixar o score eternamente "parcial".
+    const r = loneScore([
+      scoreDimensao("financeiro", [ind({ chave: "mrr", valor: null, meta: 0 })]),
+      scoreDimensao("clientes", [ind({ chave: "c", valor: 90, meta: 100 })]),
+      scoreDimensao("comercial", [ind({ chave: "co", valor: 90, meta: 100 })]),
+      scoreDimensao("operacao", [ind({ chave: "o", valor: 90, meta: 100 })]),
+      scoreDimensao("qualidade", [ind({ chave: "q", valor: 90, meta: 100 })]),
+    ]);
+    expect(r.cobertura).toBe(100);
+    expect(r.parcial).toBe(false);
+    expect(r.score).toBe(90);
+  });
+
+  it("os pesos mantêm a proporção que ele definiu", () => {
+    // clientes > comercial > operação > qualidade, como no documento (25:20:15:10).
+    expect(PESOS.clientes).toBeGreaterThan(PESOS.comercial);
+    expect(PESOS.comercial).toBeGreaterThan(PESOS.operacao);
+    expect(PESOS.operacao).toBeGreaterThan(PESOS.qualidade);
+    expect(PESOS.financeiro).toBe(0);
+    expect(DIMENSOES_ATIVAS).not.toContain("financeiro");
+    expect(DIMENSOES_ATIVAS.reduce((s, d) => s + PESOS[d], 0)).toBe(100);
   });
 });

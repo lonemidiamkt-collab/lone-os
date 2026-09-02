@@ -315,7 +315,31 @@ export async function buildIgSnapshot(clientId: string, periodo: IgPeriod): Prom
   ]);
 
   // Posts do período (paginado — ver fetchMediaDoPeriodo).
-  const media = await fetchMediaDoPeriodo(igId, desde.toISOString(), token);
+  let media = await fetchMediaDoPeriodo(igId, desde.toISOString(), token);
+
+  // ── FALLBACK PÚBLICO QUANDO A META RECUSA A LISTAGEM ────────────────────
+  //
+  // Medido em 02/09 (o Roberto: "verifica certo porque varejao e unafer foi feito post sim!"):
+  // três contas respondem `media_count` normalmente — 138, 124 e 530 posts — mas `/media` devolve
+  // `(#10) Application does not have permission for this action`, porque a Página delas não está
+  // ligada ao nosso Business. O `fetchMediaDoPeriodo` engole o erro e devolve lista vazia, e o
+  // sistema inteiro passou a tratar isso como "o cliente não postou".
+  //
+  // A saída não exigia acesso nenhum: `business_discovery` pela conta @lonemidia lê qualquer
+  // perfil comercial público — e o `username` necessário já veio da chamada de conta que
+  // FUNCIONA, logo acima. Antes, o fallback existia mas só era alcançado por quem NÃO tinha
+  // `ig_business_account_id`; quem tinha o ID caía no caminho quebrado e ficava sem saída.
+  const contaTemPosts = Number(acct?.media_count ?? 0) > 0;
+  if (!media.length && contaTemPosts && acct?.username) {
+    const publico = await buildIgSnapshotPublico(String(acct.username), periodo);
+    if (publico.posts?.length) {
+      console.log(`[igSnapshot] ${acct.username}: /media recusado, usei business_discovery (${publico.posts.length} posts)`);
+      // A conta é nossa no cadastro, mas o dado veio pelo caminho público: métricas de alcance e
+      // seguidores ganhos NÃO existem aqui, e marcar como "owned" faria o relatório prometer o
+      // que não tem.
+      return { ...publico, mapped: true, fonte: "publico" };
+    }
+  }
 
   const posts: IgPost[] = await Promise.all(media.map(async (m) => {
     const tipo = (m.media_type as string) || "";

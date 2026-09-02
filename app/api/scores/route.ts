@@ -10,7 +10,8 @@ import { scorePessoa, capacidade, type Funcao, type ResultadoPessoa } from "@/li
 import { classificar, resumirAtrasos, type CardParaAtraso } from "@/lib/scores/atraso";
 import {
   sinaisDoLoninho, componenteRelacionamento, componenteEngajamento,
-  componenteSentimento, componentePendencias, observacoes,
+  componenteSentimento, componentePendencias, componenteAtendimento,
+  tendenciaConversa, observacoes,
 } from "@/lib/scores/sinais-loninho";
 import type { Indicador } from "@/lib/scores/indicador";
 
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
 
   const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
-  const [clientesQ, cardsQ, contratosQ, membrosQ] = await Promise.all([
+  const [clientesQ, cardsQ, membrosQ] = await Promise.all([
     supabaseAdmin.from("clients")
       .select("id, name, nome_fantasia, status, active, assigned_social, assigned_designer, assigned_traffic, churned_at, created_at")
       .or("active.is.null,active.eq.true"),
@@ -50,17 +51,16 @@ export async function GET(req: NextRequest) {
       .select("id, client_id, status, due_date, designer_delivered_at, designer_delivered_by, client_approved_at, blocked_reason, created_at, social_media")
       .is("archived_at", null)
       .gte("created_at", new Date(Date.now() - 90 * DIAS).toISOString()),
-    supabaseAdmin.from("contracts").select("client_id, monthly_value, status"),
     supabaseAdmin.from("team_members").select("name, role, active"),
   ]);
 
   const clientes = (clientesQ.data ?? []).filter((c) => !/\(teste\)/i.test((c.name as string) || ""));
   const ativos = clientes.filter((c) => c.status !== "onboarding");
   const cards = cardsQ.data ?? [];
-  // Os sinais são dos clientes ATIVOS — o mesmo universo do resto do cálculo. Usar a lista
-  // completa fazia a confiança reportar "48 de 42 clientes com conversa", porque os em
-  // onboarding entravam no numerador e não no denominador.
-  const ids = ativos.map((c) => c.id as string);
+  // TODOS os clientes recebem sinais e saúde — pedido do Roberto ("todos os clientes devem ser
+  // assim"). Cliente em onboarding é justamente quem mais precisa ser acompanhado de perto, e
+  // deixá-lo de fora escondia o começo de relacionamento que dá errado.
+  const ids = clientes.map((c) => c.id as string);
 
   // ── O QUE O LONINHO VIU ────────────────────────────────────────────────
   const sinais = await sinaisDoLoninho(ids);
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
     (cardsPorCliente.get(cid) ?? cardsPorCliente.set(cid, []).get(cid)!).push(k);
   }
 
-  const saude: SaudeCliente[] = ativos.map((c) => {
+  const saude: SaudeCliente[] = clientes.map((c) => {
     const id = c.id as string;
     const s = sinais.get(id);
     const meus = cardsPorCliente.get(id) ?? [];
@@ -88,7 +88,16 @@ export async function GET(req: NextRequest) {
         // Resultado do cliente (30%) ainda não tem fonte confiável por cliente — fica null em vez
         // de virar um número inventado com o maior peso do cálculo.
         resultado: null,
-        entrega: entregues > 0 ? Math.round((noPrazo / entregues) * 100) : null,
+        // Entrega/SLA combina o prazo dos cards com o tempo de resposta no grupo. Quando só um
+        // dos dois existe, vale ele sozinho — nunca se inventa a metade que falta.
+        entrega: (() => {
+          const prazo = entregues > 0 ? Math.round((noPrazo / entregues) * 100) : null;
+          const atend = s ? componenteAtendimento(s) : null;
+          if (prazo === null && atend === null) return null;
+          if (prazo === null) return atend;
+          if (atend === null) return prazo;
+          return Math.round(prazo * 0.6 + atend * 0.4);
+        })(),
         relacionamento: s ? componenteRelacionamento(s) : null,
         sentimento: s ? componenteSentimento(s) : null,
         pendencias: s ? componentePendencias(s) : null,
@@ -100,6 +109,53 @@ export async function GET(req: NextRequest) {
   });
 
   const dist = distribuicao(saude);
+
+  // ── GRAVA A SAÚDE, COM O BREAKDOWN ──────────────────────────────────────
+  //
+  // A tabela `client_health_scores` tem uma coluna `breakdown` desde sempre, e as 4.732 linhas
+  // gravadas até 02/09 têm todas `{}`. O número existia sem a explicação — e é a explicação que
+  // permite agir: 68 não diz se o problema é entrega, relacionamento ou o cliente sumido.
+  //
+  // Persistir aqui também serve às telas que leem a tabela direto, sem passar por esta rota, e dá
+  // histórico: dá para ver a saúde de um cliente caindo semana a semana.
+  if (req.nextUrl.searchParams.get("gravar") === "1") {
+    const hojeData = new Date().toISOString().slice(0, 10);
+    const linhas = saude.filter((x) => x.score !== null).map((x) => ({
+      client_id: x.clientId,
+      score: x.score,
+      level: x.nivel === "saudavel" ? "safe" : x.nivel === "atencao" ? "warning" : "critical",
+      breakdown: {
+        componentes: Object.fromEntries(x.componentes.map((c) => [c.chave, c.valor])),
+        motivos: x.motivos,
+        cobertura: x.cobertura,
+        sinais_loninho: (() => {
+          const sg = sinais.get(x.clientId);
+          if (!sg) return null;
+          return {
+            dias_sem_contato: sg.diasSemContato,
+            mensagens_30d: sg.mensagens30d,
+            mensagens_do_cliente_30d: sg.mensagensCliente30d,
+            reclamacoes_30d: sg.reclamacoes30d,
+            pedidos_sem_resposta: sg.pedidosSemResposta,
+            minutos_para_responder: sg.minutosParaResponder,
+            sem_resposta_no_dia: sg.semRespostaNoDia,
+            retrabalhos_30d: sg.retrabalhos30d,
+            motivos_retrabalho: sg.motivosRetrabalho,
+            tendencia: tendenciaConversa(sg),
+          };
+        })(),
+      },
+      computed_at: new Date().toISOString(),
+      computed_for_date: hojeData,
+    }));
+    // Um registro por cliente por dia: recalcular no mesmo dia atualiza em vez de empilhar.
+    // (Sem isto, rodar de hora em hora encheria a tabela e distorceria qualquer média histórica —
+    // é o mesmo erro que já inflou metric_snapshots 98 vezes.)
+    for (let i = 0; i < linhas.length; i += 100) {
+      await supabaseAdmin.from("client_health_scores")
+        .upsert(linhas.slice(i, i + 100), { onConflict: "client_id,computed_for_date" });
+    }
+  }
 
   // ── ATRASO: de quem é ──────────────────────────────────────────────────
   const hoje = new Date().toISOString().slice(0, 10);
@@ -180,21 +236,8 @@ export async function GET(req: NextRequest) {
   const churned = clientes.filter((c) => c.churned_at
     && (c.churned_at as string) >= inicioMes).length;
   const novos = clientes.filter((c) => (c.created_at as string) >= inicioMes).length;
-  // "draft" é o único status que existe hoje na tabela (4 linhas, todas rascunho). Filtrar por
-  // "active" devolvia zero e a lacuna do financeiro dizia "0 contratos" — verdadeiro por acaso,
-  // pelo motivo errado. Conta o que está assinado OU ativo; rascunho não é receita.
-  const contratosAtivos = (contratosQ.data ?? []).filter((c) => c.status === "active" || c.status === "signed");
-  const mrr = contratosAtivos.reduce((s, c) => s + Number(c.monthly_value ?? 0), 0);
 
   const dims: ResultadoDimensao[] = [
-    // Financeiro: só há 4 contratos cadastrados de ~43 clientes ativos. Publicar MRR sobre isso
-    // seria inventar o número mais pesado do score — fica sem dado até a base existir.
-    scoreDimensao("financeiro", [
-      { chave: "mrr", titulo: "MRR contratado", natureza: "acumulativa",
-        valor: contratosAtivos.length >= ativos.length * 0.8 ? mrr : null,
-        meta: 0, unidade: "R$", fracaoDoPeriodo: f,
-        fonte: `contracts (${contratosAtivos.length} de ${ativos.length} clientes)` },
-    ]),
     scoreDimensao("clientes", [
       { chave: "churn", titulo: "Churn no mês", natureza: "inversa",
         valor: ativos.length ? Number(((churned / ativos.length) * 100).toFixed(1)) : null,
@@ -245,11 +288,8 @@ export async function GET(req: NextRequest) {
       cobertura_score: score.cobertura,
       clientes_com_conversa: [...sinais.values()].filter((s) => s.ultimoContato).length,
       clientes_ativos: ativos.length,
-      contratos_cadastrados: contratosAtivos.length,
+      clientes_avaliados: clientes.length,
       lacunas: [
-        contratosAtivos.length < ativos.length * 0.8
-          ? `financeiro sem base: ${contratosAtivos.length} contratos para ${ativos.length} clientes ativos`
-          : "",
         saude.every((s) => s.componentes.find((c) => c.chave === "resultado")?.valor === null)
           ? "resultado do cliente (30% da saúde) não tem fonte por cliente"
           : "",
