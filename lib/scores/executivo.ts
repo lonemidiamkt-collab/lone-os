@@ -65,6 +65,8 @@ export interface LoneScore {
   criticas: Dimensao[];
   /** True quando o teto foi aplicado por causa de uma dimensão crítica. */
   limitadoPorCritica: boolean;
+  /** True quando menos de 90% do peso foi medido — o score não retrata a empresa inteira. */
+  parcial: boolean;
 }
 
 function situacaoDeScore(s: number | null): Situacao {
@@ -103,7 +105,7 @@ export function loneScore(dims: ResultadoDimensao[]): LoneScore {
   const pesoTotal = dims.reduce((s, d) => s + d.peso, 0) || 1;
 
   if (!comDado.length) {
-    return { score: null, situacao: "sem_dado", dimensoes: dims, cobertura: 0, criticas: [], limitadoPorCritica: false };
+    return { score: null, situacao: "sem_dado", dimensoes: dims, cobertura: 0, criticas: [], limitadoPorCritica: false, parcial: true };
   }
 
   // Redistribui: o peso das dimensões sem dado não vira zero, some da conta.
@@ -112,14 +114,23 @@ export function loneScore(dims: ResultadoDimensao[]): LoneScore {
   );
 
   const criticas = comDado.filter((d) => (d.score as number) < 50).map((d) => d.dimensao);
+  // COBERTURA BAIXA NÃO PODE VIRAR NOTA ALTA. No primeiro teste real o score deu 97 "ótimo" com
+  // 70% do peso medido — e os 30% que faltavam eram o Financeiro inteiro. Um número que ignora a
+  // dimensão mais pesada não é ótimo, é parcial, e apresentá-lo em verde é pior que não mostrar.
+  const parcial = pesoMedido / pesoTotal < 0.9;
   // Uma dimensão em colapso não pode ficar escondida atrás de uma média boa. O teto força o
   // número a admitir o problema, e a lista `criticas` diz qual é.
   const limitado = criticas.length > 0 && bruto > TETO_COM_CRITICA;
   const score = limitado ? TETO_COM_CRITICA : bruto;
 
+  // Com cobertura incompleta a situação cai um degrau: "ótimo" exige ter olhado o quadro todo.
+  const bruta = situacaoDeScore(score);
+  const situacao: Situacao = parcial && bruta === "otimo" ? "no_alvo" : bruta;
+
   return {
     score,
-    situacao: situacaoDeScore(score),
+    situacao,
+    parcial,
     dimensoes: dims,
     cobertura: Math.round((pesoMedido / pesoTotal) * 100),
     criticas,

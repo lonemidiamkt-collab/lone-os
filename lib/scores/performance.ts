@@ -104,7 +104,13 @@ export function scorePessoa(p: {
   const pesoMedido = comDado.reduce((s, a) => s + (pesos.get(a.chave) ?? 0), 0);
   const pesoTotal = [...pesos.values()].reduce((s, v) => s + v, 0) || 1;
 
-  const score = pesoMedido > 0
+  // COBERTURA MÍNIMA PARA EXISTIR NOTA. No primeiro teste real o Julio apareceu com "score 2" a
+  // partir de 5% de cobertura — um único indicador secundário, medido, virou a nota da pessoa.
+  // Isso não é avaliação, é ruído com cara de julgamento, e o custo de errar aqui recai sobre
+  // alguém. Abaixo de 40% do peso, a resposta honesta é "não dá para avaliar".
+  const COBERTURA_MINIMA = 0.4;
+  const fracao = pesoMedido / pesoTotal;
+  const score = pesoMedido > 0 && fracao >= COBERTURA_MINIMA
     ? Math.round(comDado.reduce((s, a) => s + Math.min(100, a.score as number) * (pesos.get(a.chave) ?? 0), 0) / pesoMedido)
     : null;
 

@@ -261,3 +261,58 @@ describe("ponto 17: atraso da Lone x atraso do cliente", () => {
     expect(r.diasMediosCliente).toBe(10);
   });
 });
+
+// ── Defeitos que só apareceram com dados reais (02/09) ────────────────────
+describe("cobertura baixa não pode virar nota alta", () => {
+  it("score 97 com 70% do peso medido NÃO é 'ótimo'", () => {
+    // Foi o primeiro resultado real: os 30% que faltavam eram o Financeiro inteiro.
+    const r = loneScore([
+      scoreDimensao("financeiro", [ind({ chave: "f", valor: null, meta: 100 })]),
+      scoreDimensao("clientes", [ind({ chave: "c", valor: 100, meta: 100 })]),
+      scoreDimensao("comercial", [ind({ chave: "co", valor: 100, meta: 100 })]),
+      scoreDimensao("operacao", [ind({ chave: "o", valor: 85, meta: 100 })]),
+      scoreDimensao("qualidade", [ind({ chave: "q", valor: 100, meta: 100 })]),
+    ]);
+    expect(r.cobertura).toBe(70);
+    expect(r.parcial).toBe(true);
+    expect(r.situacao).not.toBe("otimo");
+    expect(leituraLoneScore(r)).toMatch(/parcial/);
+  });
+
+  it("com o quadro completo, ótimo continua ótimo", () => {
+    const r = loneScore((["financeiro", "clientes", "comercial", "operacao", "qualidade"] as const)
+      .map((d) => scoreDimensao(d, [ind({ chave: d, valor: 95, meta: 100 })])));
+    expect(r.parcial).toBe(false);
+    expect(r.situacao).toBe("otimo");
+  });
+});
+
+describe("nota de pessoa exige base mínima", () => {
+  it("5% de cobertura não vira 'score 2' — vira sem avaliação", () => {
+    // Aconteceu com o Julio: um indicador secundário virou a nota da pessoa. O custo de errar
+    // aqui recai sobre alguém, então a resposta honesta é não avaliar.
+    const r = scorePessoa({ pessoa: "Julio", funcao: "traffic", carteira: 39, indicadores: [
+      ind({ chave: "organizacao", valor: 2, meta: 100 }),   // peso 5 de 100
+    ]});
+    expect(r.cobertura).toBe(5);
+    expect(r.score).toBeNull();
+    expect(r.situacao).toBe("sem_dado");
+  });
+
+  it("a partir de 40% do peso, a nota existe", () => {
+    const r = scorePessoa({ pessoa: "Rodrigo", funcao: "designer", indicadores: [
+      ind({ chave: "entregas_no_prazo", valor: 80, meta: 100 }),   // peso 30
+      ind({ chave: "retrabalho", valor: 90, meta: 100 }),           // peso 15 → 45%
+    ]});
+    expect(r.cobertura).toBe(45);
+    expect(r.score).not.toBeNull();
+  });
+
+  it("o gargalo continua sendo apontado mesmo sem nota", () => {
+    const r = scorePessoa({ pessoa: "X", funcao: "traffic", indicadores: [
+      ind({ chave: "organizacao", valor: 2, meta: 100 }),
+    ]});
+    expect(r.score).toBeNull();
+    expect(r.gargalo?.titulo).toBe("organizacao");   // sem julgar a pessoa, mostra onde olhar
+  });
+});

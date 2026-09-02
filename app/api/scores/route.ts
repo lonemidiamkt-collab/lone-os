@@ -57,7 +57,10 @@ export async function GET(req: NextRequest) {
   const clientes = (clientesQ.data ?? []).filter((c) => !/\(teste\)/i.test((c.name as string) || ""));
   const ativos = clientes.filter((c) => c.status !== "onboarding");
   const cards = cardsQ.data ?? [];
-  const ids = clientes.map((c) => c.id as string);
+  // Os sinais são dos clientes ATIVOS — o mesmo universo do resto do cálculo. Usar a lista
+  // completa fazia a confiança reportar "48 de 42 clientes com conversa", porque os em
+  // onboarding entravam no numerador e não no denominador.
+  const ids = ativos.map((c) => c.id as string);
 
   // ── O QUE O LONINHO VIU ────────────────────────────────────────────────
   const sinais = await sinaisDoLoninho(ids);
@@ -177,7 +180,10 @@ export async function GET(req: NextRequest) {
   const churned = clientes.filter((c) => c.churned_at
     && (c.churned_at as string) >= inicioMes).length;
   const novos = clientes.filter((c) => (c.created_at as string) >= inicioMes).length;
-  const contratosAtivos = (contratosQ.data ?? []).filter((c) => c.status === "active");
+  // "draft" é o único status que existe hoje na tabela (4 linhas, todas rascunho). Filtrar por
+  // "active" devolvia zero e a lacuna do financeiro dizia "0 contratos" — verdadeiro por acaso,
+  // pelo motivo errado. Conta o que está assinado OU ativo; rascunho não é receita.
+  const contratosAtivos = (contratosQ.data ?? []).filter((c) => c.status === "active" || c.status === "signed");
   const mrr = contratosAtivos.reduce((s, c) => s + Number(c.monthly_value ?? 0), 0);
 
   const dims: ResultadoDimensao[] = [
