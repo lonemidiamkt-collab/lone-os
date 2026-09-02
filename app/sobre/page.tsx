@@ -455,6 +455,8 @@ const MODULES: Module[] = [
       "Upload de logotipo (fica público) e contrato social (fica privado, só admin acessa).",
       "Após envio, o cadastro vai pra uma fila de 'Aguardando aprovação' — admin revisa e ativa.",
       "Depois de ativo, o cliente aparece em todas as abas do sistema (tráfego, social, design).",
+      "O setup tem prazo de 15 dias e o Loninho confere sozinho o que já está pronto: 3 artes entregues fecham as fixadas, gasto na conta fecha o anúncio no ar, e ele pergunta à Meta se a conta de anúncio responde à credencial da Lone — que é o que separa 'o ID foi digitado' de 'o acesso foi liberado'. Achando a prova, ele fecha a tarefa e para de cobrar.",
+      "Passando dos 15 dias, a cobrança diz o que ele observou ('a conta está no cadastro mas não responde à nossa credencial'), em vez de repetir a lista de itens pendentes.",
     ],
     features: [
       "Formulário externo responsivo — cliente preenche pelo celular",
@@ -462,6 +464,7 @@ const MODULES: Module[] = [
       "Validação CNPJ com dígitos verificadores",
       "Storage separado: logos públicas vs contratos privados (signed URLs)",
       "Briefing editável por todos os roles (tom de voz, fixo, campanha)",
+      "Setup de 15 dias que se autoverifica — o agente procura a prova no sistema e na Meta antes de cobrar alguém",
       "Aba 'Análise IA' com histórico navegável de pareceres automáticos",
       "10 abas por cliente: Overview, Dados, Resultados, Análise IA, Contratos, Chat, Histórico, Tarefas, Conteúdo, Onboarding",
       "Memória do cliente (as REGRAS que o agente aprende): o Loninho anota o que muda o jeito de fazer a próxima peça — identidade visual, o que a legenda deve dizer, dado operacional (endereço/horário) e proibições. Preço e promoção NÃO viram regra: mudam toda semana e poluiriam o briefing. Ele aprende de três lugares: as conversas do grupo, as CORREÇÕES do cliente ('o endereço está errado' vira regra com o dado certo) e o que a equipe escreve nos briefings e comentários dos cards. Na entrega do designer, a arte é conferida contra essas regras e o time é avisado antes da peça ir pro cliente",
@@ -611,6 +614,7 @@ const MODULES: Module[] = [
       "Quem é responsável (ou quem criou) marca como feita clicando no círculo — some da lista de abertas.",
       "Cobrança do Lone CS: lembra na véspera às 10h e no dia do prazo às 9h; se atrasar, insiste 1x/dia no grupo da equipe até concluir.",
       "A cobrança chega como PDF individual — um arquivo por pessoa, com o nome dela no título e só as tarefas dela, ordenadas do maior atraso pro menor. No grupo aparece uma linha curta com a marcação que notifica no celular.",
+      "A cobrança de card olha a DATA DO POST, não a idade do card: post daqui a 2 dias ou mais com o designer já envolvido não gera cobrança; na véspera o agente avisa; no dia ele cobra; passou do dia, escala.",
       "Se alguém avisar no grupo que já fez ('já fiz a arte da Imperio'), a própria IA marca a tarefa como feita.",
     ],
     features: [
