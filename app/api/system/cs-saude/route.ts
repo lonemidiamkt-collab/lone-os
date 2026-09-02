@@ -32,24 +32,44 @@ export async function POST(req: NextRequest) {
   const clientes = clientsData ?? [];
 
   // Sinais em batch.
+  //
+  // ── "DIAS SEM POSTAR" VEM DO INSTAGRAM, NUNCA DO BOARD ──────────────────
+  //
+  // Até 02/09 esta consulta lia `content_cards.status = 'published'` e o resultado ia direto para
+  // a mensagem que o time recebia toda manhã. O board está defasado por construção — em agosto
+  // marcou 24 publicações contra 451 posts reais —, então o digest saía dizendo coisas como
+  // "Madeirão Madeira, 56 dias sem postagem" de um cliente que tinha postado 5 dias antes.
+  //
+  // Medido no dia da correção: de 37 clientes de social, **16 eram acusados à toa** e outros 9
+  // não tinham registro nenhum no board estando ativos no Instagram. O Roberto pegou dois deles
+  // ("Varejão e UNAFER foi feito post sim!") e a conferência na Meta deu razão a ele em todos.
+  //
+  // `client_ig_posts` é lido do Instagram do cliente e bate com a Meta — conferido post a post.
   const [recl, retr, posts] = await Promise.all([
     supabaseAdmin.from("cs_demandas").select("client_id").eq("tipo", "reclamacao").gte("created_at", d14),
     supabaseAdmin.from("cs_demandas").select("client_id").eq("tipo", "retracao").gte("created_at", d14),
-    supabaseAdmin.from("content_cards").select("client_id, status_changed_at").eq("status", "published").order("status_changed_at", { ascending: false }),
+    supabaseAdmin.from("client_ig_posts").select("client_id, posted_at").order("posted_at", { ascending: false }),
   ]);
   const reclamou = new Set((recl.data ?? []).map((r) => r.client_id as string));
   const retraiu = new Set((retr.data ?? []).map((r) => r.client_id as string));
   const ultimoPost = new Map<string, string>();
   for (const p of posts.data ?? []) {
     const cid = p.client_id as string;
-    if (cid && !ultimoPost.has(cid) && p.status_changed_at) ultimoPost.set(cid, p.status_changed_at as string);
+    if (cid && !ultimoPost.has(cid) && p.posted_at) ultimoPost.set(cid, p.posted_at as string);
   }
 
   // Guarda o DONO e os dias junto da avaliação: o digest só precisava do texto, mas o PDF por
   // pessoa precisa saber de quem é cada cliente.
+  // Conta que POSTA e não conseguimos ler. Marcada como pendência de ACESSO — jamais como "não
+  // postou". Foi o erro no Varejão (138 posts) e no UNAFER (124) que o Roberto pegou.
+  const cegos = await clientesIlegiveis();
+  const idsCegos = new Set(cegos.map((c) => c.clientId));
   const comDono = clientes.map((c) => {
     const last = ultimoPost.get(c.id as string);
-    const diasSemPost = last ? Math.floor((Date.now() - new Date(last).getTime()) / 86_400_000) : null;
+    // Conta que a gente não consegue LER entra como `null` de "não sei", não de "não postou" —
+    // avaliarSaude trata null como sem sinal, e é isso que queremos: silêncio, não acusação.
+    const diasSemPost = idsCegos.has(c.id as string) ? null
+      : last ? Math.floor((Date.now() - new Date(last).getTime()) / 86_400_000) : null;
     const sinais: SinaisSaude = {
       status: (c.status as string) || "good",
       reclamacaoRecente: reclamou.has(c.id as string),
@@ -80,9 +100,6 @@ export async function POST(req: NextRequest) {
   // não de postagem — vai num aviso curto e à parte, pra não acusar o social de algo que não é
   // dele e queimar a credibilidade da cobrança de verdade.
   const semIg = await clientesSemInstagram();
-  // Conta que POSTA e não conseguimos ler. Vai marcada como pendência de acesso — jamais
-  // como "não postou". Foi o erro no Varejão e no UNAFER, que têm 138 e 124 posts.
-  const cegos = await clientesIlegiveis();
   const txtParados = [
     cobrancaSemPostar(parados),
     semIg.length ? `👁️ _Sem Instagram vinculado (não consigo conferir postagem): ${semIg.slice(0, 6).map((c) => c.cliente).join(", ")}${semIg.length > 6 ? ` e mais ${semIg.length - 6}` : ""}._` : "",
