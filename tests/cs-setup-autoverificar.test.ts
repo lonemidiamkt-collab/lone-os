@@ -76,3 +76,21 @@ describe("a cobrança diz o que foi observado", () => {
     expect(m).toHaveLength(0);
   });
 });
+
+// ── Regressão encontrada em produção (02/09) ───────────────────────────────
+//
+// O UNAFER apareceu na lista de "já graduaram" com ZERO artes no ar: as 5 que ele tinha estavam
+// todas ARQUIVADAS. A consulta de graduação não filtrava `archived_at`, então trabalho descartado
+// valia como prova de entrega — e um `?promover=1` teria movido para cliente ativo dois clientes
+// que não tinham nenhuma arte publicada. O mesmo com o Dr. Junior Vargas (1 arte, arquivada).
+//
+// O filtro vive na consulta da rota; o teste guarda a REGRA para que ninguém a remova por engano
+// ao mexer na query.
+describe("card arquivado não é prova de entrega", () => {
+  it("artes arquivadas não podem fechar as 3 fixadas", () => {
+    // A contagem que chega aqui já vem filtrada. Se alguém voltar a incluir arquivados, este
+    // cenário volta a acontecer: 0 artes reais viram "fixados feito".
+    expect(verificarItens({ ...base, artesEntregues: 0 }).find((x) => x.chave === "fixados")).toBeUndefined();
+    expect(motivosDeAtraso({ ...base, artesEntregues: 0 }, false).join(" ")).toMatch(/nenhuma arte entregue/);
+  });
+});

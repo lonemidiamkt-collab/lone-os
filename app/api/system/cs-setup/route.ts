@@ -51,7 +51,12 @@ export async function POST(req: NextRequest) {
   const ids = alvo.map((c) => c.id as string);
   const trintaDias = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   const [{ data: cards }, { data: tarefas }, { data: gastos }] = await Promise.all([
-    supabaseAdmin.from("content_cards").select("client_id, designer_delivered_at").in("client_id", ids),
+    // `archived_at IS NULL` não é detalhe: card arquivado é trabalho DESCARTADO. Sem este filtro,
+    // o UNAFER contava 5 artes entregues — as 5 arquivadas — e GRADUAVA como cliente pronto sem
+    // ter nenhuma arte no ar. O mesmo valia para o Dr. Junior Vargas. A prova de entrega tem que
+    // ser trabalho que existe hoje, não trabalho que existiu.
+    supabaseAdmin.from("content_cards").select("client_id, designer_delivered_at")
+      .in("client_id", ids).is("archived_at", null),
     supabaseAdmin.from("tasks").select("id, client_id, title, status").in("client_id", ids).ilike("title", `${PREFIXO}%`),
     // Anúncio RODANDO = houve gasto nos últimos 30 dias. Conta vinculada sem verba é conta parada.
     supabaseAdmin.from("metric_snapshots").select("client_id, spend").in("client_id", ids).gte("metric_date", trintaDias).gt("spend", 0),
