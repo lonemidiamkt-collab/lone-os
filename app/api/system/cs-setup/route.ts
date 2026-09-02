@@ -37,6 +37,11 @@ export async function POST(req: NextRequest) {
   const denied = requireCron(req); if (denied) return denied;
   const previewOnly = req.nextUrl.searchParams.get("preview") !== null;
   const promover = req.nextUrl.searchParams.get("promover") === "1";
+  // `?sem_post=1` aplica as mudanças SEM postar no grupo. Existe porque promover e falar eram a
+  // mesma coisa: para graduar clientes fora do horário do cron era preciso disparar a cobrança de
+  // setup de novo, mandando ao grupo uma mensagem que já tinha saído de manhã. Arrumar dado não
+  // devia custar uma notificação a ninguém.
+  const semPost = req.nextUrl.searchParams.get("sem_post") === "1";
 
   const agora = spNow();
 
@@ -226,7 +231,7 @@ export async function POST(req: NextRequest) {
 
   const jid = process.env.CS_INTERNAL_GROUP_JID;
   let postada = false;
-  if (texto && jid && !previewOnly) {
+  if (texto && jid && !previewOnly && !semPost) {
     const r = await csSendGroupText(jid, texto, undefined, {
       origem: "setup-7dias", destino: "interno",
       fatos: semAnuncio.map((d) => fatoSemAnuncio(d.cliente)),
