@@ -93,8 +93,16 @@ const RX_PROCESSO_INTERNO = /\b(manter|dar|garantir|assegurar|estabelecer|criar|
 const VERBOS_DE_INSTRUCAO =
   /\b(us[ae]|usar|utiliz|inclu|adicion|coloc|inser|destac|evit|mant[êe]|manter|segu|confer|revis|post|public|escrev|cit[ae]|citar|mencion|mostr|exib|prioriz|padroniz|separ|limp|cri[ae]|criar|desativ|remov|tir[ae]|tirar|troc|substitu|fech|abr[ei]|marc|sinaliz|respeit|aplic|refor[çc]|lembr|atent|cuid|verific|valid|aprov|solicit|lev[ae]|levar)/i;
 
-/** Proibição também é instrução, mesmo sem verbo de ação explícito. */
-const PROIBICAO_CLARA = /\b(nunca|jamais|n[ãa]o\s+(pode|deve|usar|postar|citar|colocar|falar|mencionar|escrever|mostrar))\b/i;
+/**
+ * Proibição e preferência do cliente também são instrução, mesmo sem verbo de ação.
+ *
+ * "O cliente não considera parafusos um tema relevante" e "não quer aparecer nas fotos" dizem o que
+ * NÃO fazer — é o tipo de regra que mais evita retrabalho. A primeira versão só reconhecia proibição
+ * com verbo de produção ("não postar", "não usar") e barrou justamente essas, que já estavam
+ * cobertas por teste desde a faxina anterior.
+ */
+const PROIBICAO_CLARA =
+  /\b(nunca|jamais|n[ãa]o\s+(pode|deve|quer|gosta|aceita|admite|curte|aprova|considera|autoriza|permite|usar|postar|citar|colocar|falar|mencionar|escrever|mostrar))\b/i;
 
 /**
  * Narrativa sobre o negócio: descreve, não instrui.
@@ -116,8 +124,18 @@ const RX_RELATO = /\b(est[áa]|est[ãa]o|estava|estavam|come[çc]ou|caiu|subiu|a
 const RX_DADO_DURAVEL =
   /\b(hor[áa]rio|funcionamento|endere[çc]o|telefone|whats|contato|abre|fecha|atende)\b/i;
 
+/**
+ * "deve/devem/precisa" é ordem, venha onde vier na frase.
+ *
+ * "A cafeteria e um compressor estão disponíveis no local e DEVEM SER MENCIONADOS na legenda"
+ * começa descrevendo e termina instruindo. A regra de posição — instrução tem que vir antes do
+ * relato — derruba essa, e ela é exatamente o tipo de coisa que o designer precisa saber.
+ */
+const OBRIGACAO = /\b(dev[ae]m?|precisa[m]?|tem que|t[êe]m que|obrigat[óo]ri[oa]|sempre que)\b/i;
+
 function temInstrucao(t: string): boolean {
   if (PROIBICAO_CLARA.test(t)) return true;
+  if (OBRIGACAO.test(t) && VERBOS_DE_INSTRUCAO.test(t)) return true;
   // Dado operacional com o VALOR junto (número ou nome) vale por si.
   if (RX_DADO_DURAVEL.test(t) && /\d|[A-ZÁÉÍÓÚ][a-záéíóú]{2,}/.test(t.slice(1))) return true;
   if (!VERBOS_DE_INSTRUCAO.test(t)) return false;
