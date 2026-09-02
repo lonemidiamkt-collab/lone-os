@@ -615,6 +615,7 @@ const MODULES: Module[] = [
       "Cobrança do Lone CS: lembra na véspera às 10h e no dia do prazo às 9h; se atrasar, insiste 1x/dia no grupo da equipe até concluir.",
       "A cobrança chega como PDF individual — um arquivo por pessoa, com o nome dela no título e só as tarefas dela, ordenadas do maior atraso pro menor. No grupo aparece uma linha curta com a marcação que notifica no celular.",
       "A cobrança de card olha a DATA DO POST, não a idade do card: post daqui a 2 dias ou mais com o designer já envolvido não gera cobrança; na véspera o agente avisa; no dia ele cobra; passou do dia, escala.",
+      "A saúde da carteira também sai em PDF por responsável: cada um recebe os SEUS clientes, do pior para o melhor — quem nunca postou primeiro, depois mais dias parados. Quem entrou por reclamação não leva número de dias junto, e cliente sem Instagram vinculado aparece marcado como pendência de cadastro, no fim.",
       "Se alguém avisar no grupo que já fez ('já fiz a arte da Imperio'), a própria IA marca a tarefa como feita.",
     ],
     features: [
