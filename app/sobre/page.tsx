@@ -610,6 +610,7 @@ const MODULES: Module[] = [
       "A tarefa aparece no board agrupada por urgência (Atrasadas, Vence hoje, Em aberto) e no 'Meu Trabalho' da pessoa.",
       "Quem é responsável (ou quem criou) marca como feita clicando no círculo — some da lista de abertas.",
       "Cobrança do Lone CS: lembra na véspera às 10h e no dia do prazo às 9h; se atrasar, insiste 1x/dia no grupo da equipe até concluir.",
+      "A cobrança chega como PDF individual — um arquivo por pessoa, com o nome dela no título e só as tarefas dela, ordenadas do maior atraso pro menor. No grupo aparece uma linha curta com a marcação que notifica no celular.",
       "Se alguém avisar no grupo que já fez ('já fiz a arte da Imperio'), a própria IA marca a tarefa como feita.",
     ],
     features: [
@@ -617,6 +618,7 @@ const MODULES: Module[] = [
       "Board por urgência: Atrasadas, Vence hoje, Em aberto, Concluídas",
       "Ligação automática pessoa ↔ painel (cada um vê as suas em Tarefas e em Meu Trabalho)",
       "Cobrança automática pelo Lone CS na véspera (10h) e no dia (9h), com escalada diária se atrasar",
+      "Um PDF por pessoa no grupo da Equipe: cada um recebe só o que é seu, sem rolar a lista dos outros",
       "IA marca a tarefa como feita quando alguém avisa no grupo que concluiu",
       "Gestão vê tudo e filtra por colaborador; cada colaborador vê as suas e as que criou",
     ],
@@ -624,6 +626,7 @@ const MODULES: Module[] = [
       "Sempre defina o prazo — é o que liga a cobrança automática do CS.",
       "Tarefa sem cliente serve pra coisas internas (ex.: 'revisar planejamento de agosto').",
       "Marque como feita assim que concluir — é o que faz o CS parar de cobrar.",
+      "Recebeu o PDF com seu nome? É a sua lista inteira daquele dia — o que não estiver ali, o CS não está cobrando de você.",
     ],
   },
   {
