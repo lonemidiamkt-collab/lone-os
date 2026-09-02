@@ -9,7 +9,7 @@ import { spNow, ymd } from "@/lib/cs/vigilancia";
 
 const primeiroNome = (n: string) => (n || "").trim().split(/\s+/)[0] || n;
 import { avaliarSaude, formatSaudeDigest, type SinaisSaude } from "@/lib/cs/saude";
-import { clientesSemPostar, clientesSemInstagram, textoCobranca as cobrancaSemPostar, textoEscalada as escaladaSemPostar } from "@/lib/cs/sem-postar";
+import { clientesSemPostar, clientesSemInstagram, clientesIlegiveis, textoCobranca as cobrancaSemPostar, textoEscalada as escaladaSemPostar } from "@/lib/cs/sem-postar";
 import { saudePessoaPdfHtml, legendaSaude, ordenar, type BlocoSaude, type ClienteSaude } from "@/lib/reports/saudePdf";
 
 // POST /api/system/cs-saude — 3ª função: scan de saúde/risco de churn. Avalia sinais por cliente
@@ -80,6 +80,9 @@ export async function POST(req: NextRequest) {
   // não de postagem — vai num aviso curto e à parte, pra não acusar o social de algo que não é
   // dele e queimar a credibilidade da cobrança de verdade.
   const semIg = await clientesSemInstagram();
+  // Conta que POSTA e não conseguimos ler. Vai marcada como pendência de acesso — jamais
+  // como "não postou". Foi o erro no Varejão e no UNAFER, que têm 138 e 124 posts.
+  const cegos = await clientesIlegiveis();
   const txtParados = [
     cobrancaSemPostar(parados),
     semIg.length ? `👁️ _Sem Instagram vinculado (não consigo conferir postagem): ${semIg.slice(0, 6).map((c) => c.cliente).join(", ")}${semIg.length > 6 ? ` e mais ${semIg.length - 6}` : ""}._` : "",
@@ -122,6 +125,12 @@ export async function POST(req: NextRequest) {
   for (const c of semIg) {
     if (nomesParados.has(c.cliente)) continue;
     push(c.responsavel, { cliente: c.cliente, diasSemPostar: null, motivos: [], semInstagram: true });
+  }
+  // Fonte 4: conta com publicações que não enxergamos. Entra com o NÚMERO de posts, que é a prova
+  // de que o cliente trabalhou — e a razão de isso não ser cobrança de ninguém.
+  for (const c of cegos) {
+    if (nomesParados.has(c.cliente)) continue;
+    push(c.responsavel, { cliente: c.cliente, motivos: [], ilegivel: { postsNaConta: c.postsNaConta } });
   }
 
   const blocos: BlocoSaude[] = [...porPessoa.entries()]
@@ -204,6 +213,7 @@ export async function POST(req: NextRequest) {
     ok: true, dry, enviado, escalado, clientes: clientes.length, emRisco,
     pdfs_enviados: pdfsEnviados, falhas,
     por_pessoa: blocos.map((b) => ({ pessoa: b.pessoa, clientes: b.clientes.length })),
-    semPostar: parados.length, semInstagram: semIg.length, texto, textoSemPostar: txtParados, textoEscalada: txtEscalada,
+    semPostar: parados.length, semInstagram: semIg.length, semAcessoIg: cegos.length,
+    detalhe_sem_acesso: cegos.map((c) => `${c.cliente} (@${c.usuario ?? "?"}, ${c.postsNaConta} posts)`), texto, textoSemPostar: txtParados, textoEscalada: txtEscalada,
   });
 }

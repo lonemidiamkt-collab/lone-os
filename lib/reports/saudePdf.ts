@@ -41,6 +41,9 @@ export interface ClienteSaude {
   motivos: string[];
   /** true quando o problema é de CADASTRO (sem Instagram vinculado), não de trabalho. */
   semInstagram?: boolean;
+  /** A conta TEM publicações que não conseguimos listar (falta acesso à Página na Meta).
+   *  Quando presente, traz quantos posts a conta tem — a prova de que o cliente está postando. */
+  ilegivel?: { postsNaConta: number } | null;
 }
 
 export interface BlocoSaude {
@@ -52,7 +55,7 @@ export interface BlocoSaude {
  *  medido (entrou por reclamação) e o que é pendência de cadastro. */
 export function ordenar(cs: ClienteSaude[]): ClienteSaude[] {
   const peso = (c: ClienteSaude) => {
-    if (c.semInstagram) return -2;              // problema de cadastro: por último
+    if (c.semInstagram || c.ilegivel) return -2; // pendência técnica: por último
     if (c.diasSemPostar === undefined) return -1; // não medido: antes do cadastro, depois dos dias
     if (c.diasSemPostar === null) return Infinity; // Instagram lido e vazio: o pior caso
     return c.diasSemPostar;
@@ -69,10 +72,21 @@ export function saudePdfHtml(blocos: BlocoSaude[], logo: string, hoje: string, d
     timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "long",
   });
   const todos = blocos.flatMap((b) => b.clientes);
-  const graves = todos.filter((c) => !c.semInstagram && c.diasSemPostar !== undefined
+  const graves = todos.filter((c) => !c.semInstagram && !c.ilegivel && c.diasSemPostar !== undefined
     && (c.diasSemPostar === null || c.diasSemPostar >= 30)).length;
 
   const linha = (c: ClienteSaude) => {
+    // A conta posta e a gente não enxerga. Dizer o NÚMERO de posts é o que impede que isso seja
+    // lido como cobrança: fica claro que o cliente trabalhou e o acesso é que falta.
+    if (c.ilegivel) {
+      return `<tr>
+        <td style="padding:7px 0;border-bottom:1px solid ${LINHA};font-size:12.5px;color:${SUAVE}">
+          ${esc(c.cliente)}<span style="color:${SUAVE}"> · ${c.ilegivel.postsNaConta} posts na conta</span>
+        </td>
+        <td style="padding:7px 0;border-bottom:1px solid ${LINHA};text-align:right;white-space:nowrap;
+                   font-size:11.5px;color:${SUAVE}">sem acesso pra ler as publicações</td>
+      </tr>`;
+    }
     // Cadastro incompleto não é falha de quem posta: cor neutra e texto que diz o que fazer.
     if (c.semInstagram) {
       return `<tr>
@@ -154,12 +168,15 @@ export function saudePdfHtml(blocos: BlocoSaude[], logo: string, hoje: string, d
 
 /** A legenda que acompanha o PDF de UMA pessoa. Curta: o documento tem o resto. */
 export function legendaSaude(bloco: BlocoSaude, mencao: string): string {
-  const reais = bloco.clientes.filter((c) => !c.semInstagram);
+  const reais = bloco.clientes.filter((c) => !c.semInstagram && !c.ilegivel);
   const pior = ordenar(reais)[0];
   const quem = mencao || bloco.pessoa;
   if (!reais.length) {
     // Só pendência de cadastro: não é cobrança de postagem, e chamar assim seria injusto.
-    return `📋 ${quem} — ${bloco.clientes.length} cliente${bloco.clientes.length > 1 ? "s" : ""} esperando o Instagram ser vinculado.`;
+    const semAcesso = bloco.clientes.filter((c) => c.ilegivel).length;
+    return semAcesso
+      ? `📋 ${quem} — ${semAcesso} cliente${semAcesso > 1 ? "s" : ""} postando, mas sem acesso pra eu ler. É liberação na Meta, não é cobrança.`
+      : `📋 ${quem} — ${bloco.clientes.length} cliente${bloco.clientes.length > 1 ? "s" : ""} esperando o Instagram ser vinculado.`;
   }
   const detalhe = pior.diasSemPostar === undefined
     ? `*${pior.cliente}* ${pior.motivos[0] || "pede atenção"}`

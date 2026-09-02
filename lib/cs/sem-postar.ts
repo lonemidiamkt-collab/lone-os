@@ -29,9 +29,20 @@ export interface ClienteParado {
   clientId: string;
   cliente: string;
   responsavel: string | null;
-  /** null = nunca postou (ou nunca sincronizou) — tratado como o caso MAIS grave. */
+  /** null = o Instagram foi lido e não há post nenhum. NUNCA significa "não consegui ler" —
+   *  esse caso sai em `clientesIlegiveis()`. Ver o comentário grande em clientesSemPostar(). */
   diasSemPostar: number | null;
   gravidade: Gravidade;
+}
+
+/** Cliente cujo Instagram TEM publicações que a gente não consegue enxergar. */
+export interface ClienteIlegivel {
+  clientId: string;
+  cliente: string;
+  responsavel: string | null;
+  /** Quantos posts a conta tem, segundo a própria Meta. */
+  postsNaConta: number;
+  usuario: string | null;
 }
 
 /**
@@ -40,6 +51,61 @@ export interface ClienteParado {
  * Só olha cliente de social (tem `assigned_social`): cobrar postagem de conta que a gente não
  * administra seria ruído — e ruído é o que faz o time parar de ler o alerta.
  */
+/**
+ * Contas cujo Instagram TEM publicações que a gente não consegue LISTAR.
+ *
+ * O caso real (02/09, apontado pelo Roberto: "Varejão e UNAFER foi feito post sim!"): as duas
+ * contas têm Instagram vinculado, e a Meta responde `media_count` normalmente — 138 e 124 posts.
+ * Mas pedir `/media` devolve `(#10) Application does not have permission for this action`, porque
+ * essas contas não estão ligadas à Página que a gente administra. Resultado: `client_ig_posts`
+ * vazio, e o agente anunciando "sem NENHUM post registrado" para dois clientes que postam há meses.
+ *
+ * O snapshot já guardava a prova e ninguém a lia: `conta.posts = 124` junto de `posts: []` é a
+ * assinatura exata de "não consegui ler" — nunca de "não postou". A diferença importa porque uma é
+ * pendência de ACESSO, que o Roberto resolve na Meta, e a outra é cobrança do social.
+ */
+export async function clientesIlegiveis(): Promise<ClienteIlegivel[]> {
+  const { data: clientes } = await supabaseAdmin
+    .from("clients")
+    .select("id, name, nome_fantasia, assigned_social")
+    .or("active.is.null,active.eq.true")
+    .not("assigned_social", "is", null)
+    .not("ig_business_account_id", "is", null);
+  if (!clientes?.length) return [];
+
+  const ids = clientes.map((c) => c.id as string);
+  const [{ data: posts }, { data: snaps }] = await Promise.all([
+    supabaseAdmin.from("client_ig_posts").select("client_id").in("client_id", ids),
+    supabaseAdmin.from("client_ig_snapshots").select("client_id, data").in("client_id", ids),
+  ]);
+  const temPost = new Set((posts ?? []).map((p) => p.client_id as string));
+
+  // Do snapshot mais completo de cada cliente, o total de posts que a Meta declara.
+  const contaPosts = new Map<string, { posts: number; usuario: string | null }>();
+  for (const s of snaps ?? []) {
+    const d = (s.data ?? {}) as { conta?: { posts?: number; username?: string } };
+    const n = Number(d.conta?.posts ?? 0);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    const cid = s.client_id as string;
+    const atual = contaPosts.get(cid);
+    if (!atual || n > atual.posts) contaPosts.set(cid, { posts: n, usuario: d.conta?.username ?? null });
+  }
+
+  const out: ClienteIlegivel[] = [];
+  for (const c of clientes) {
+    const cid = c.id as string;
+    const nome = (c.nome_fantasia as string) || (c.name as string) || "Cliente";
+    if (/\(teste\)/i.test(nome)) continue;
+    const info = contaPosts.get(cid);
+    // A conta tem post e a gente não gravou NENHUM: é cegueira nossa.
+    if (info && !temPost.has(cid)) {
+      out.push({ clientId: cid, cliente: nome, responsavel: (c.assigned_social as string) ?? null,
+                 postsNaConta: info.posts, usuario: info.usuario });
+    }
+  }
+  return out.sort((a, b) => b.postsNaConta - a.postsNaConta);
+}
+
 export async function clientesSemPostar(): Promise<ClienteParado[]> {
   const { data: clientes } = await supabaseAdmin
     .from("clients")
@@ -49,8 +115,12 @@ export async function clientesSemPostar(): Promise<ClienteParado[]> {
   if (!clientes?.length) return [];
 
   const ids = clientes.map((c) => c.id as string);
-  const { data: posts } = await supabaseAdmin
-    .from("client_ig_posts").select("client_id, posted_at").in("client_id", ids);
+  const [{ data: posts }, ilegiveis] = await Promise.all([
+    supabaseAdmin.from("client_ig_posts").select("client_id, posted_at").in("client_id", ids),
+    clientesIlegiveis(),
+  ]);
+  // Quem a gente não consegue LER não entra na cobrança de postagem — sai em lista própria.
+  const cegos = new Set(ilegiveis.map((i) => i.clientId));
 
   const ultimo = new Map<string, string>();
   for (const p of posts ?? []) {
@@ -75,6 +145,10 @@ export async function clientesSemPostar(): Promise<ClienteParado[]> {
 
     const q = ultimo.get(c.id as string);
     const dias = q ? Math.floor((Date.now() - new Date(q).getTime()) / 86_400_000) : null;
+
+    // A conta TEM posts que a gente não enxerga → pendência de acesso, não de postagem. Acusar
+    // aqui é o erro que o Roberto pegou no Varejão e no UNAFER, que postam há meses.
+    if (cegos.has(c.id as string)) continue;
 
     // NUNCA POSTOU, TENDO INSTAGRAM: é grave de verdade. Foi a brecha que deixou o Bazar invisível.
     if (dias === null) {

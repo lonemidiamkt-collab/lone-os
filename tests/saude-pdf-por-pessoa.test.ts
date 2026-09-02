@@ -128,3 +128,49 @@ describe("não medido ≠ nunca postou", () => {
     expect(l).not.toMatch(/dias/);
   });
 });
+
+// ── "Varejão e UNAFER foi feito post sim!" (Roberto, 02/09) ────────────────
+//
+// E estava certo. As duas contas têm Instagram vinculado e a Meta responde media_count normalmente
+// — 138 e 124 posts. Mas pedir /media devolve "(#10) Application does not have permission",
+// porque as contas não estão ligadas à Página que administramos. client_ig_posts ficava vazio e o
+// agente anunciava "sem NENHUM post registrado" para dois clientes que postam há meses.
+//
+// O snapshot já guardava a prova e ninguém lia: `conta.posts = 124` com `posts: []` é a assinatura
+// de "não consegui ler", nunca de "não postou".
+describe("conta que posta e não conseguimos ler", () => {
+  const b: BlocoSaude = { pessoa: "Thiago", clientes: [
+    { cliente: "Hentzy", diasSemPostar: 58, motivos: [] },
+    { cliente: "Varejão da Construção", motivos: [], ilegivel: { postsNaConta: 138 } },
+    { cliente: "UNAFER", motivos: [], ilegivel: { postsNaConta: 124 } },
+  ] };
+  const html = saudePessoaPdfHtml(b, "", "2026-09-02");
+
+  it("NÃO diz que não postou — diz que falta acesso", () => {
+    expect(html).toContain("sem acesso pra ler as publicações");
+    expect(html).not.toMatch(/Varejão da Construção[^]{0,200}sem post registrado/);
+  });
+
+  it("mostra quantos posts a conta tem — a prova de que o cliente trabalhou", () => {
+    expect(html).toContain("138 posts na conta");
+    expect(html).toContain("124 posts na conta");
+  });
+
+  it("não conta como grave: o problema é de acesso, não de entrega", () => {
+    expect(html).toMatch(/1 há mais de um mês sem post/); // só o Hentzy
+  });
+
+  it("vai por último, junto das outras pendências técnicas", () => {
+    expect(ordenar(b.clientes)[0].cliente).toBe("Hentzy");
+  });
+
+  it("a legenda deixa claro que não é cobrança de ninguém", () => {
+    const so: BlocoSaude = { pessoa: "Thiago", clientes: [
+      { cliente: "UNAFER", motivos: [], ilegivel: { postsNaConta: 124 } },
+    ] };
+    const l = legendaSaude(so, "@552299");
+    expect(l).toMatch(/postando/);
+    expect(l).toMatch(/não é cobrança/i);
+    expect(l).not.toMatch(/pedindo atenção/);
+  });
+});
