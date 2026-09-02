@@ -95,15 +95,21 @@ export async function clientesSemPostar(): Promise<ClienteParado[]> {
 
 /** Clientes de social sem Instagram vinculado — o sistema é CEGO pra eles. Problema real, mas de
  *  cadastro, não de postagem: vai num aviso próprio pra não contaminar a cobrança do social. */
-export async function clientesSemInstagram(): Promise<string[]> {
+export async function clientesSemInstagram(): Promise<{ cliente: string; responsavel: string | null }[]> {
+  // Devolve o RESPONSÁVEL junto (02/09). Antes eram só nomes, o que bastava para a linha solta no
+  // fim da mensagem; com o PDF por pessoa, um cliente sem dono não sabe em qual documento entrar —
+  // e um aviso de cadastro no PDF errado vira cobrança da pessoa errada.
   const { data } = await supabaseAdmin
-    .from("clients").select("name, nome_fantasia")
+    .from("clients").select("name, nome_fantasia, assigned_social")
     .or("active.is.null,active.eq.true")
     .not("assigned_social", "is", null)
     .is("ig_business_account_id", null).is("ig_public_username", null);
   return (data ?? [])
-    .map((c) => (c.nome_fantasia as string) || (c.name as string) || "Cliente")
-    .filter((n) => !/\(teste\)/i.test(n));
+    .map((c) => ({
+      cliente: (c.nome_fantasia as string) || (c.name as string) || "Cliente",
+      responsavel: (c.assigned_social as string) ?? null,
+    }))
+    .filter((c) => !/\(teste\)/i.test(c.cliente));
 }
 
 const rotuloDias = (d: number | null) => (d === null ? "sem NENHUM post registrado" : `${d} dias sem postar`);

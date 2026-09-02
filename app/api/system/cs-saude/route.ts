@@ -5,9 +5,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { csSendGroupText } from "@/lib/cs/notify";
-import { spNow } from "@/lib/cs/vigilancia";
+import { spNow, ymd } from "@/lib/cs/vigilancia";
+
+const primeiroNome = (n: string) => (n || "").trim().split(/\s+/)[0] || n;
 import { avaliarSaude, formatSaudeDigest, type SinaisSaude } from "@/lib/cs/saude";
 import { clientesSemPostar, clientesSemInstagram, textoCobranca as cobrancaSemPostar, textoEscalada as escaladaSemPostar } from "@/lib/cs/sem-postar";
+import { saudePessoaPdfHtml, legendaSaude, ordenar, type BlocoSaude, type ClienteSaude } from "@/lib/reports/saudePdf";
 
 // POST /api/system/cs-saude — 3ª função: scan de saúde/risco de churn. Avalia sinais por cliente
 // (reclamação 14d, status, retração, dias sem postagem) e posta o digest dos em risco no grupo.
@@ -22,7 +25,7 @@ export async function POST(req: NextRequest) {
   // Clientes ativos (em operação), sem o cliente-teste. Filtro de `active` obrigatório: cliente
   // arquivado/churnado mantém o status antigo e aparecia toda segunda como risco 🔴.
   const { data: clientsData } = await supabaseAdmin
-    .from("clients").select("id, name, nome_fantasia, status, active")
+    .from("clients").select("id, name, nome_fantasia, status, active, assigned_social")
     .in("status", ["good", "average", "at_risk"])
     .or("active.is.null,active.eq.true")
     .not("name", "ilike", "%(teste)%");
@@ -42,7 +45,9 @@ export async function POST(req: NextRequest) {
     if (cid && !ultimoPost.has(cid) && p.status_changed_at) ultimoPost.set(cid, p.status_changed_at as string);
   }
 
-  const avaliacoes = clientes.map((c) => {
+  // Guarda o DONO e os dias junto da avaliação: o digest só precisava do texto, mas o PDF por
+  // pessoa precisa saber de quem é cada cliente.
+  const comDono = clientes.map((c) => {
     const last = ultimoPost.get(c.id as string);
     const diasSemPost = last ? Math.floor((Date.now() - new Date(last).getTime()) / 86_400_000) : null;
     const sinais: SinaisSaude = {
@@ -51,8 +56,16 @@ export async function POST(req: NextRequest) {
       retracaoRecente: retraiu.has(c.id as string),
       diasSemPost,
     };
-    return avaliarSaude((c.nome_fantasia as string) || (c.name as string) || "Cliente", sinais);
+    const nome = (c.nome_fantasia as string) || (c.name as string) || "Cliente";
+    return {
+      aval: avaliarSaude(nome, sinais),
+      nome, diasSemPost,
+      responsavel: (c.assigned_social as string) || null,
+      reclamou: reclamou.has(c.id as string),
+      retraiu: retraiu.has(c.id as string),
+    };
   });
+  const avaliacoes = comDono.map((x) => x.aval);
 
   const now = spNow();
   const label = `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -69,16 +82,88 @@ export async function POST(req: NextRequest) {
   const semIg = await clientesSemInstagram();
   const txtParados = [
     cobrancaSemPostar(parados),
-    semIg.length ? `👁️ _Sem Instagram vinculado (não consigo conferir postagem): ${semIg.slice(0, 6).join(", ")}${semIg.length > 6 ? ` e mais ${semIg.length - 6}` : ""}._` : "",
+    semIg.length ? `👁️ _Sem Instagram vinculado (não consigo conferir postagem): ${semIg.slice(0, 6).map((c) => c.cliente).join(", ")}${semIg.length > 6 ? ` e mais ${semIg.length - 6}` : ""}._` : "",
   ].filter(Boolean).join("\n\n");
   const txtEscalada = escaladaSemPostar(parados);
 
+  // ── UM PDF POR RESPONSÁVEL ─────────────────────────────────────────────
+  //
+  // Roberto (02/09): "essa mensagem quero separado em pdf por pessoa que é responsável".
+  //
+  // A mensagem antiga trazia 17 clientes em risco num bloco SEM dono nenhum, e logo abaixo outra
+  // lista com dono — dois formatos para o mesmo problema, e ninguém sabendo o que era seu. Aqui
+  // as duas viram uma carteira só, por pessoa, ordenada do pior para o melhor.
+  const porPessoa = new Map<string, ClienteSaude[]>();
+  const push = (dono: string | null, c: ClienteSaude) => {
+    const k = dono?.trim() || "sem dono";
+    (porPessoa.get(k) ?? porPessoa.set(k, []).get(k)!).push(c);
+  };
+
+  // Fonte 1: os parados de verdade, medidos no Instagram do cliente.
+  const nomesParados = new Set<string>();
+  for (const p of parados) {
+    nomesParados.add(p.cliente);
+    push(p.responsavel, { cliente: p.cliente, diasSemPostar: p.diasSemPostar, motivos: [] });
+  }
+  // Fonte 2: quem o scan de saúde marcou em risco por OUTRO motivo (reclamação, retração). Sem
+  // duplicar quem já entrou acima — o mesmo cliente em duas seções foi metade do ruído.
+  for (const x of comDono) {
+    if (x.aval.risco === "baixo" || nomesParados.has(x.nome)) continue;
+    const motivos = [x.reclamou ? "reclamou nos últimos 14 dias" : "", x.retraiu ? "pausou/cancelou pauta" : ""].filter(Boolean);
+    if (!motivos.length && (x.diasSemPost === null || x.diasSemPost < 14)) continue; // sem sinal próprio
+    push(x.responsavel, { cliente: x.nome, diasSemPostar: x.diasSemPost, motivos });
+  }
+  // Fonte 3: cadastro incompleto. Vai no PDF do dono, mas marcado como problema de cadastro —
+  // cobrar postagem de quem o sistema não consegue ler seria acusar pelo que não é dele.
+  for (const c of semIg) {
+    if (nomesParados.has(c.cliente)) continue;
+    push(c.responsavel, { cliente: c.cliente, diasSemPostar: null, motivos: [], semInstagram: true });
+  }
+
+  const blocos: BlocoSaude[] = [...porPessoa.entries()]
+    .map(([pessoa, cs]) => ({ pessoa: pessoa === "sem dono" ? "Sem dono (falta atribuir)" : primeiroNome(pessoa), pessoaOriginal: pessoa, clientes: ordenar(cs) }))
+    .sort((a, b) => {
+      const pior = (b2: BlocoSaude) => { const c = b2.clientes.find((x) => !x.semInstagram); return c ? (c.diasSemPostar ?? 9999) : -1; };
+      return pior(b) - pior(a);
+    });
+
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let enviado = false;
-  if (!dry && internalJid && (emRisco > 0 || txtParados)) {
-    const corpo = [emRisco > 0 ? texto : "", txtParados].filter(Boolean).join("\n\n———\n\n");
-    const r = await csSendGroupText(internalJid, corpo, undefined, { origem: "cs-saude", destino: "interno" });
-    enviado = r.ok;
+  const pdfsEnviados: string[] = [];
+  const falhas: string[] = [];
+
+  if (!dry && internalJid && blocos.length) {
+    const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
+    const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
+    const { csSendGroupDocument } = await import("@/lib/cs/notify");
+    const { mencionar } = await import("@/lib/cs/mencao");
+    const logo = await loadLoneLogo().catch(() => "");
+    const hojeIso = ymd(now);
+    const dataArquivo = hojeIso.split("-").reverse().join("-");
+
+    for (const b of blocos as (BlocoSaude & { pessoaOriginal: string })[]) {
+      const m = b.pessoaOriginal === "sem dono"
+        ? { trecho: "", jids: [] as string[] }
+        : await mencionar(b.pessoaOriginal).catch(() => ({ trecho: "", jids: [] as string[] }));
+      const arquivo = `Saúde ${b.pessoa.replace(/[^\p{L}\p{N} -]/gu, "").trim() || "carteira"} — ${dataArquivo}.pdf`;
+      const legenda = legendaSaude(b, m.trecho);
+      try {
+        const pdf = await htmlToPdf(saudePessoaPdfHtml(b, logo, hojeIso));
+        if (!pdf.ok || !pdf.buffer) throw new Error(pdf.error ?? "render falhou");
+        const envio = await csSendGroupDocument(
+          internalJid, pdf.buffer.toString("base64"), arquivo, legenda, "application/pdf", m.jids,
+        );
+        if (!envio.ok) throw new Error(envio.error ?? "envio falhou");
+        pdfsEnviados.push(b.pessoa);
+      } catch (e) {
+        // Cobrança que some porque o render caiu é pior que cobrança feia: manda o texto.
+        falhas.push(`${b.pessoa}: ${String(e).slice(0, 60)}`);
+        await csSendGroupText(internalJid, legenda, undefined, { origem: "cs-saude", destino: "interno" }, m.jids).catch(() => {});
+      }
+      // Respiro entre documentos: a fila da Evolution engasga com envios colados.
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    enviado = pdfsEnviados.length > 0;
   }
 
   // O GRAVE VAI SEPARADO PRO DONO. Misturado no digest do time, "35 dias sem postar" tem o mesmo
@@ -93,6 +178,8 @@ export async function POST(req: NextRequest) {
   console.log(`[cs-saude] clientes=${clientes.length} emRisco=${emRisco} semPostar=${parados.length} escalado=${escalado} dry=${dry}`);
   return NextResponse.json({
     ok: true, dry, enviado, escalado, clientes: clientes.length, emRisco,
+    pdfs_enviados: pdfsEnviados, falhas,
+    por_pessoa: blocos.map((b) => ({ pessoa: b.pessoa, clientes: b.clientes.length })),
     semPostar: parados.length, semInstagram: semIg.length, texto, textoSemPostar: txtParados, textoEscalada: txtEscalada,
   });
 }
