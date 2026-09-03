@@ -11,8 +11,13 @@ import { mencionar } from "@/lib/cs/mencao";
 import { porExtenso } from "@/lib/cs/parse-horario";
 import {
   janelaDoMes, montarCobranca, textoCobranca, lembretesDevidos, textoLembrete,
-  type ClienteCiclo,
+  decidirAcao, HORA_OFERTA, type ClienteCiclo,
 } from "@/lib/cs/reuniao-mensal";
+import {
+  sugerirHorarios, textoOfertaTentativa, textoPassarProSocial, textoCobrarSocial,
+  textoLembreteCliente,
+} from "@/lib/cs/agendar-reuniao";
+import { porExtenso as extenso } from "@/lib/cs/parse-horario";
 
 // POST /api/system/cs-reuniao-mensal — o ciclo mensal de reuniões com o cliente.
 //
@@ -40,7 +45,7 @@ export async function POST(req: NextRequest) {
   // lembrete no dia 27, quando a janela já fechou.
   const { data: agendadas } = await supabaseAdmin
     .from("meetings")
-    .select("id, client_id, title, start_at, responsavel, lembrete_vespera_em, lembrete_hora_em, clients(name, nome_fantasia)")
+    .select("id, client_id, title, start_at, responsavel, lembrete_vespera_em, lembrete_hora_em, lembrete_cliente_vespera_em, lembrete_cliente_hora_em, clients(name, nome_fantasia, whatsapp_group_jid)")
     .eq("estado", "agendada")
     .gte("start_at", new Date(agora.getTime() - 2 * 3600_000).toISOString())
     .lte("start_at", new Date(agora.getTime() + 3 * 86400_000).toISOString());
@@ -60,12 +65,27 @@ export async function POST(req: NextRequest) {
     agora,
   );
 
+  // Mapa id-da-reunião → grupo do cliente, para lembrar os dois lados.
+  const grupoDaReuniao = new Map<string, string | null>(
+    (agendadas ?? []).map((m) => {
+      const c = m.clients as unknown as { whatsapp_group_jid?: string } | null;
+      return [m.id as string, c?.whatsapp_group_jid ?? null];
+    }),
+  );
+  const jaLembrouCliente = new Map<string, { vespera: boolean; hora: boolean }>(
+    (agendadas ?? []).map((m) => [m.id as string, {
+      vespera: !!m.lembrete_cliente_vespera_em, hora: !!m.lembrete_cliente_hora_em,
+    }]),
+  );
+
   const lembretesEnviados: string[] = [];
   for (const l of lembretes) {
+    const quandoTxt = porExtenso(l.quando);
     const m = l.responsavel ? await mencionar(l.responsavel).catch(() => ({ trecho: "", jids: [] as string[] })) : { trecho: "", jids: [] as string[] };
-    const texto = textoLembrete(l, porExtenso(l.quando), m.trecho);
+
+    // ── 1a. EQUIPE ────────────────────────────────────────────────────────
     if (!dry && internalJid) {
-      const r = await csSendGroupText(internalJid, texto, undefined,
+      const r = await csSendGroupText(internalJid, textoLembrete(l, quandoTxt, m.trecho), undefined,
         { origem: "cs-reuniao-lembrete", destino: "interno" }, m.jids);
       if (r.ok) {
         // Marca ANTES de qualquer outra coisa dar errado: repetir o lembrete é pior que perdê-lo.
@@ -74,10 +94,33 @@ export async function POST(req: NextRequest) {
             ? { lembrete_vespera_em: new Date().toISOString() }
             : { lembrete_hora_em: new Date().toISOString() })
           .eq("id", l.clientId);
-        lembretesEnviados.push(`${l.cliente}/${l.tipo}`);
+        lembretesEnviados.push(`equipe:${l.cliente}/${l.tipo}`);
       }
     } else {
-      lembretesEnviados.push(`(dry) ${l.cliente}/${l.tipo}`);
+      lembretesEnviados.push(`(dry) equipe:${l.cliente}/${l.tipo}`);
+    }
+
+    // ── 1b. CLIENTE ───────────────────────────────────────────────────────
+    // Roberto: "lembra o cliente 1 dia antes e 1h antes no grupo do cliente". É o lembrete que faz
+    // a reunião acontecer — sem ele, o compromisso existe só na agenda da agência.
+    const grupoCli = grupoDaReuniao.get(l.clientId);
+    const feito = jaLembrouCliente.get(l.clientId);
+    const jaMandou = l.tipo === "vespera" ? feito?.vespera : feito?.hora;
+    if (grupoCli && !jaMandou) {
+      if (!dry) {
+        const rc = await csSendGroupText(grupoCli, textoLembreteCliente(quandoTxt, l.tipo), undefined,
+          { origem: "cs-reuniao-lembrete-cliente", destino: "cliente" });
+        if (rc.ok) {
+          await supabaseAdmin.from("meetings")
+            .update(l.tipo === "vespera"
+              ? { lembrete_cliente_vespera_em: new Date().toISOString() }
+              : { lembrete_cliente_hora_em: new Date().toISOString() })
+            .eq("id", l.clientId);
+          lembretesEnviados.push(`cliente:${l.cliente}/${l.tipo}`);
+        }
+      } else {
+        lembretesEnviados.push(`(dry) cliente:${l.cliente}/${l.tipo}`);
+      }
     }
   }
 
@@ -106,7 +149,7 @@ export async function POST(req: NextRequest) {
 
   const { data: clientes } = await supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, assigned_social, service_type, status")
+    .select("id, name, nome_fantasia, assigned_social, service_type, status, whatsapp_group_jid")
     .or("active.is.null,active.eq.true")
     .eq("agente_ativo", true)
     .neq("status", "onboarding");
@@ -118,7 +161,7 @@ export async function POST(req: NextRequest) {
 
   const { data: doMes } = await supabaseAdmin
     .from("meetings")
-    .select("client_id, estado, start_at, proposto_em")
+    .select("id, client_id, estado, start_at, proposto_em, tentativas, ofertado_em, perguntado_social_em, horario_proposto")
     .eq("mes_referencia", janela.mes)
     .eq("meeting_type", "mensal");
   const porCliente = new Map((doMes ?? []).map((m) => [m.client_id as string, m]));
@@ -132,8 +175,100 @@ export async function POST(req: NextRequest) {
       estado: (m?.estado as ClienteCiclo["estado"]) ?? "pendente",
       quando: (m?.start_at as string) ?? null,
       propostoEm: (m?.proposto_em as string) ?? null,
+      tentativas: Number(m?.tentativas ?? 0),
+      ofertadoEm: (m?.ofertado_em as string) ?? null,
+      perguntadoAoSocialEm: (m?.perguntado_social_em as string) ?? null,
     };
   });
+
+  // ── 3. O AGENTE AGE: oferta, reoferta, entrega ao social, cobra ─────────
+  //
+  // Roberto: "ele pode mandar todo dia oito horas da manhã já perguntando". A oferta sai UMA vez
+  // por dia, na primeira rodada da manhã — o cron roda de hora em hora por causa dos lembretes, e
+  // sem esta trava o mesmo cliente receberia oferta nove vezes.
+  const horaAgora = agora.getHours();
+  const podeOfertar = horaAgora >= HORA_OFERTA && horaAgora < HORA_OFERTA + 1;
+  const grupoDoCliente = new Map(elegiveis.map((c) => [c.id as string, (c.whatsapp_group_jid as string) || null]));
+  const idReuniao = new Map((doMes ?? []).map((m) => [m.client_id as string, m.id as string]));
+  const acoes: string[] = [];
+
+  for (const c of ciclo) {
+    const acao = decidirAcao(c, janela, agora);
+    if (acao.tipo === "nada") continue;
+
+    const grupoCli = grupoDoCliente.get(c.clientId);
+    const agoraIso = new Date().toISOString();
+
+    // ── Ofertar / reofertar no grupo do cliente ──────────────────────────
+    if (acao.tipo === "ofertar" || acao.tipo === "reofertar") {
+      if (!podeOfertar || !grupoCli) continue;
+      // Sugere dentro da janela: a reunião deve caber no próprio ciclo sempre que der.
+      const opcoes = sugerirHorarios(agora, 2, janela.fecha);
+      const texto = textoOfertaTentativa(c.cliente, opcoes.map((o) => o.texto), acao.tentativa);
+      if (dry) { acoes.push(`(dry) ofertar#${acao.tentativa} ${c.cliente}`); continue; }
+
+      const r = await csSendGroupText(grupoCli, texto, undefined,
+        { origem: "cs-reuniao-oferta", destino: "cliente", clientId: c.clientId });
+      if (!r.ok) { acoes.push(`FALHA ofertar ${c.cliente}: ${r.error}`); continue; }
+
+      await supabaseAdmin.from("meetings").upsert({
+        client_id: c.clientId,
+        title: `Reunião mensal — ${c.cliente}`,
+        meeting_type: "mensal",
+        mes_referencia: janela.mes,
+        estado: "ofertada",
+        responsavel: c.responsavel,
+        tentativas: acao.tentativa,
+        ofertado_em: agoraIso,
+        group_jid: grupoCli,
+        // start_at é NOT NULL na tabela: sem horário fechado, marca o fim da janela como
+        // provisório. O que diz se a reunião existe é o `estado`, não esta data.
+        start_at: `${janela.fecha}T12:00:00-03:00`,
+        end_at: `${janela.fecha}T13:00:00-03:00`,
+        status: "scheduled",
+        created_by: "agente-cs",
+      }, { onConflict: "client_id,mes_referencia" });
+      acoes.push(`ofertou#${acao.tentativa} ${c.cliente}`);
+      await new Promise((r2) => setTimeout(r2, 1500));
+      continue;
+    }
+
+    // ── Entregar a conversa ao social ────────────────────────────────────
+    if (acao.tipo === "passar_pro_social") {
+      if (!internalJid) continue;
+      const m = c.responsavel ? await mencionar(c.responsavel).catch(() => ({ trecho: "", jids: [] as string[] })) : { trecho: "", jids: [] as string[] };
+      const texto = textoPassarProSocial(c.cliente, acao.motivo, m.trecho);
+      if (dry) { acoes.push(`(dry) passar ${c.cliente}`); continue; }
+      const r = await csSendGroupText(internalJid, texto, undefined,
+        { origem: "cs-reuniao-entrega", destino: "interno" }, m.jids);
+      if (r.ok) {
+        const id = idReuniao.get(c.clientId);
+        if (id) await supabaseAdmin.from("meetings")
+          .update({ estado: "pendente", entregue_ao_social_em: agoraIso }).eq("id", id);
+        acoes.push(`entregou ao social: ${c.cliente}`);
+        await new Promise((r2) => setTimeout(r2, 1200));
+      }
+      continue;
+    }
+
+    // ── Cobrar o social que não respondeu ao horário do cliente ──────────
+    if (acao.tipo === "cobrar_social") {
+      if (!internalJid) continue;
+      const id = idReuniao.get(c.clientId);
+      const prop = (doMes ?? []).find((x) => x.client_id === c.clientId)?.horario_proposto as string | undefined;
+      const m = c.responsavel ? await mencionar(c.responsavel).catch(() => ({ trecho: "", jids: [] as string[] })) : { trecho: "", jids: [] as string[] };
+      const texto = textoCobrarSocial(c.cliente, prop ? extenso(prop) : "o horário pedido", acao.diasEsperando, m.trecho);
+      if (dry) { acoes.push(`(dry) cobrar social ${c.cliente}`); continue; }
+      const r = await csSendGroupText(internalJid, texto, undefined,
+        { origem: "cs-reuniao-cobra-social", destino: "interno" }, m.jids);
+      if (r.ok) {
+        // Reinicia o relógio: senão a mesma cobrança sairia todo dia até alguém responder.
+        if (id) await supabaseAdmin.from("meetings").update({ perguntado_social_em: agoraIso }).eq("id", id);
+        acoes.push(`cobrou social: ${c.cliente}`);
+        await new Promise((r2) => setTimeout(r2, 1200));
+      }
+    }
+  }
 
   const cobrancas = montarCobranca(ciclo, janela, agora);
   const postadas: string[] = [];
@@ -161,6 +296,7 @@ export async function POST(req: NextRequest) {
       esperando_cliente: c.propostasSemResposta.length, intensidade: c.intensidade,
     })),
     postadas,
+    acoes,
     preview: cobrancas[0] ? textoCobranca(cobrancas[0], janela, "") : null,
   });
 }

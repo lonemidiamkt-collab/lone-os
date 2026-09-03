@@ -1000,6 +1000,87 @@ export async function POST(req: NextRequest) {
   // ─── Reply direto numa SUGESTÃO do agente? Então é resposta de DEMANDA (ok/não/ajustar/
   // linguagem natural) — nunca roteiro/comando. Sem esta guarda, "ajustar <instrução>" era
   // sequestrado pelo handler de ajuste de roteiro (ehAjusteRoteiro casa ajusta/muda/troca em
+  // ─── RESPOSTA DO SOCIAL À REUNIÃO PROPOSTA PELO CLIENTE ──────────────────
+  //
+  // Roberto: "se o social mídia pedir outro horário, ele manda ao cliente e negocia, e depois
+  // avisa ao social mídia o horário."
+  //
+  // Vem cedo no fluxo porque "ok" e "pode ser 16h" são frases curtas que qualquer handler abaixo
+  // engoliria — o de decisão de demanda, o de papo. Só age quando existe UMA reunião esperando
+  // resposta deste grupo; havendo mais de uma, não adivinha qual.
+  if (isInternalCmdGroup(msg.groupJid) && msg.text) {
+    const { data: esperando } = await supabaseAdmin
+      .from("meetings")
+      .select("id, client_id, horario_proposto, responsavel, group_jid, rodadas_negociacao, mes_referencia, clients(name, nome_fantasia)")
+      .eq("estado", "aguardando_social")
+      .eq("meeting_type", "mensal")
+      .order("perguntado_social_em", { ascending: false })
+      .limit(2);
+
+    // Uma só: dá para saber de qual reunião a pessoa está falando. Duas ou mais, o "ok" é ambíguo
+    // e responder no escuro marcaria a reunião errada.
+    if (esperando?.length === 1) {
+      const reu = esperando[0];
+      const cli = reu.clients as unknown as { name?: string; nome_fantasia?: string } | null;
+      const nomeCli = cli?.nome_fantasia || cli?.name || "o cliente";
+      const { lerRespostaSocial, textoFechado, textoContraproposta } = await import("@/lib/cs/agendar-reuniao");
+      const { porExtenso } = await import("@/lib/cs/parse-horario");
+      // O horário proposto entra como referência: "pode ser 16h?" só vira contraproposta
+      // quando se sabe de qual DIA se está falando.
+      const resp = lerRespostaSocial(msg.text, new Date(), (reu.horario_proposto as string) || undefined);
+
+      if (resp.tipo === "aceita" && reu.horario_proposto) {
+        const iso = reu.horario_proposto as string;
+        await supabaseAdmin.from("meetings").update({
+          estado: "agendada", start_at: iso,
+          end_at: new Date(new Date(iso).getTime() + 3600_000).toISOString(),
+          confirmado_em: new Date().toISOString(),
+          confirmado_por: msg.authorName || "social",
+        }).eq("id", reu.id as string);
+
+        const quandoTxt = porExtenso(iso);
+        await csSendGroupText(msg.groupJid, textoFechado(nomeCli, quandoTxt), msg.messageId,
+          { origem: "cs-reuniao-fechada", destino: "interno" });
+        // E o cliente precisa saber que está confirmado — ele ficou esperando desde a proposta.
+        if (reu.group_jid) {
+          await csSendGroupText(reu.group_jid as string,
+            `📅 Confirmado! Nossa reunião fica *${quandoTxt}*. Até lá! 👋`, undefined,
+            { origem: "cs-reuniao-fechada", destino: "cliente", clientId: reu.client_id as string });
+        }
+        console.log(`[CS/inbound] reunião ${nomeCli} confirmada pelo social → ${iso}`);
+        return NextResponse.json({ ok: true, reuniao_confirmada: iso, cliente: nomeCli });
+      }
+
+      if (resp.tipo === "contraproposta") {
+        const rodadas = Number(reu.rodadas_negociacao ?? 0) + 1;
+        // Duas rodadas e o agente sai do meio: ping-pong no grupo é o oposto de reduzir ruído.
+        if (rodadas > 2) {
+          await supabaseAdmin.from("meetings")
+            .update({ estado: "pendente", entregue_ao_social_em: new Date().toISOString() })
+            .eq("id", reu.id as string);
+          await csSendGroupText(msg.groupJid,
+            `🤝 Já fomos e voltamos duas vezes com a *${nomeCli}*. Fecha direto com ele e me avisa o dia e a hora que eu marco.`,
+            msg.messageId, { origem: "cs-reuniao-entrega", destino: "interno" });
+          return NextResponse.json({ ok: true, reuniao_entregue: nomeCli });
+        }
+
+        await supabaseAdmin.from("meetings").update({
+          horario_proposto: resp.iso, proposto_lado: "social",
+          rodadas_negociacao: rodadas, perguntado_social_em: new Date().toISOString(),
+        }).eq("id", reu.id as string);
+
+        if (reu.group_jid) {
+          await csSendGroupText(reu.group_jid as string, textoContraproposta(porExtenso(resp.iso)), undefined,
+            { origem: "cs-reuniao-contraproposta", destino: "cliente", clientId: reu.client_id as string });
+        }
+        await csSendGroupText(msg.groupJid, `👍 Levei *${porExtenso(resp.iso)}* pra ${nomeCli}. Te aviso a resposta.`,
+          msg.messageId, { origem: "cs-reuniao-contraproposta", destino: "interno" });
+        console.log(`[CS/inbound] contraproposta do social p/ ${nomeCli}: ${resp.iso}`);
+        return NextResponse.json({ ok: true, contraproposta: resp.iso, cliente: nomeCli });
+      }
+    }
+  }
+
   // qualquer posição) e o ajuste da demanda se perdia em silêncio. ───
   let demandaDaSugestao: Record<string, unknown> | null = null;
   if (msg.quotedMsgId && isInternalCmdGroup(msg.groupJid)) {
@@ -2646,45 +2727,60 @@ export async function POST(req: NextRequest) {
     const intencao = lerIntencaoReuniao(msg.text);
 
     if (intencao.tipo === "agendar") {
+      // ── O CLIENTE PROPÔS. NÃO AGENDA AINDA. ─────────────────────────────
+      //
+      // Roberto (03/09): "assim que o cliente responder, ele vai entender a data e o horário que o
+      // cliente quer, [e] perguntar ao social mídia que está responsável pela empresa se pode ser
+      // ou se tem outro horário."
+      //
+      // A versão anterior gravava `agendada` na hora — colocava compromisso na agenda de alguém
+      // sem essa pessoa saber. Agora o horário fica em `horario_proposto` e `start_at` só é
+      // preenchido quando os dois concordam: uma reunião com `start_at` é uma reunião que vai
+      // acontecer, e é isso que a agenda e os lembretes leem.
       const quando = new Date(intencao.iso);
       const mesRef = `${quando.getFullYear()}-${String(quando.getMonth() + 1).padStart(2, "0")}`;
+      const agoraIso = new Date().toISOString();
       const { error: errReu } = await supabaseAdmin.from("meetings").upsert({
         client_id: c.id as string,
         title: `Reunião mensal — ${clienteNome}`,
         meeting_type: "mensal",
         mes_referencia: mesRef,
-        start_at: intencao.iso,
-        // Uma hora é a duração padrão de acompanhamento; quem quiser outra ajusta na agenda.
-        end_at: new Date(quando.getTime() + 3600_000).toISOString(),
-        estado: "agendada",
+        estado: "aguardando_social",
+        horario_proposto: intencao.iso,
+        proposto_lado: "cliente",
+        proposto_em: agoraIso,
+        perguntado_social_em: agoraIso,
         responsavel: (c.assigned_social as string) || null,
-        confirmado_em: new Date().toISOString(),
-        confirmado_por: msg.authorName || "cliente",
         group_jid: msg.groupJid,
         trecho_origem: msg.text.slice(0, 300),
+        // start_at é NOT NULL: guarda o horário proposto como provisório. Quem manda é o `estado`.
+        start_at: intencao.iso,
+        end_at: new Date(quando.getTime() + 3600_000).toISOString(),
         status: "scheduled",
         created_by: "agente-cs",
-        // Marcar de novo zera os lembretes: se a data mudou, os avisos antigos não valem mais.
-        lembrete_vespera_em: null,
-        lembrete_hora_em: null,
+        // Horário novo invalida lembrete antigo, dos dois lados.
+        lembrete_vespera_em: null, lembrete_hora_em: null,
+        lembrete_cliente_vespera_em: null, lembrete_cliente_hora_em: null,
       }, { onConflict: "client_id,mes_referencia" });
 
       if (!errReu) {
-        // Confirma NO GRUPO onde foi combinado — quem falou precisa ver que foi entendido.
-        await csSendGroupText(msg.groupJid, textoConfirmacao(clienteNome, intencao.iso), msg.messageId,
-          { origem: "cs-reuniao-agendada", clientId: c.id as string });
-        // E avisa o time, com o responsável marcado.
+        const { porExtenso } = await import("@/lib/cs/parse-horario");
+        const { textoPerguntaAoSocial } = await import("@/lib/cs/agendar-reuniao");
+        // Ao cliente: recebido, não confirmado. Prometer o que ainda depende de terceiro é o
+        // caminho mais curto para desmarcar depois.
+        await csSendGroupText(msg.groupJid,
+          `📅 Anotei: *${porExtenso(intencao.iso)}*. Vou confirmar com o time e já te falo! 👍`,
+          msg.messageId, { origem: "cs-reuniao-proposta", clientId: c.id as string });
+        // Ao social: a pergunta, com o horário e as duas saídas possíveis.
         const jidInterno = internalGroupJid();
         if (jidInterno) {
           const { mencionar } = await import("@/lib/cs/mencao");
           const m = await mencionar((c.assigned_social as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
-          const { porExtenso } = await import("@/lib/cs/parse-horario");
-          await csSendGroupText(jidInterno,
-            `📅 ${m.trecho || ""} reunião mensal da *${clienteNome}* marcada para *${porExtenso(intencao.iso)}* — quem confirmou foi o cliente no grupo. Já está na agenda.`.trim(),
-            undefined, { origem: "cs-reuniao-agendada", destino: "interno" }, m.jids);
+          await csSendGroupText(jidInterno, textoPerguntaAoSocial(clienteNome, porExtenso(intencao.iso), m.trecho),
+            undefined, { origem: "cs-reuniao-pergunta-social", destino: "interno" }, m.jids);
         }
-        console.log(`[CS/inbound] reunião mensal ${clienteNome} → ${intencao.iso}`);
-        return NextResponse.json({ ok: true, reuniao_agendada: intencao.iso, cliente: clienteNome });
+        console.log(`[CS/inbound] ${clienteNome} propôs ${intencao.iso} → aguardando social`);
+        return NextResponse.json({ ok: true, reuniao_proposta: intencao.iso, cliente: clienteNome });
       }
       console.error("[CS/inbound] gravar reunião:", errReu.message);
     }

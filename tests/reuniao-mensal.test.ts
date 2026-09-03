@@ -139,3 +139,106 @@ describe("lembretes: véspera e uma hora antes", () => {
     expect(textoLembrete(l2, "sexta às 14:00", "@55")).toMatch(/em uma hora/);
   });
 });
+
+// ── Regras que o Roberto definiu em 03/09 ─────────────────────────────────
+import { primeiroDiaUtil, decidirAcao, diasUteisEntre, MAX_TENTATIVAS } from "@/lib/cs/reuniao-mensal";
+
+describe("a janela respeita dia útil", () => {
+  it("dia 15 no sábado empurra a abertura para segunda", () => {
+    // Agosto/2026: dia 15 é sábado. Roberto: "ele tem que verificar se o dia quinze é um domingo,
+    // é um sábado; se for, então ele manda no dia dezoito".
+    const j = janelaDoMes(new Date(2026, 7, 17));   // segunda, 17/08
+    expect(j.abre).toBe("2026-08-17");
+    expect(j.ajuste).toMatch(/sábado/);
+    expect(j.aberta).toBe(true);
+  });
+
+  it("dia 22 no fim de semana antecipa o fechamento para a sexta", () => {
+    // Prazo que termina no sábado termina, na prática, na sexta.
+    const j = janelaDoMes(new Date(2026, 10, 20));  // novembro/2026: dia 22 é domingo
+    expect(j.fecha).toBe("2026-11-20");
+  });
+
+  it("sábado dentro da janela: o agente fica quieto", () => {
+    const j = janelaDoMes(new Date(2026, 8, 19));   // sábado, 19/09
+    expect(j.aberta).toBe(false);
+  });
+
+  it("primeiroDiaUtil pula o fim de semana e não mexe em dia útil", () => {
+    expect(primeiroDiaUtil(new Date(2026, 7, 15)).getDate()).toBe(17); // sáb → seg
+    expect(primeiroDiaUtil(new Date(2026, 7, 16)).getDate()).toBe(17); // dom → seg
+    expect(primeiroDiaUtil(new Date(2026, 7, 18)).getDate()).toBe(18); // ter → ter
+  });
+});
+
+describe("duas tentativas e depois entrega pro social", () => {
+  const base = { clientId: "1", cliente: "Contele", responsavel: "Thiago", quando: null, propostoEm: null };
+  const dia16 = new Date(2026, 8, 16, 8);   // quarta, dentro da janela
+  const j = janelaDoMes(dia16);
+
+  it("cliente sem oferta nenhuma: oferta a primeira", () => {
+    const a = decidirAcao({ ...base, estado: "pendente" }, j, dia16);
+    expect(a).toEqual({ tipo: "ofertar", tentativa: 1 });
+  });
+
+  it("ofertado hoje: espera, não insiste", () => {
+    const a = decidirAcao({ ...base, estado: "ofertada", tentativas: 1, ofertadoEm: dia16.toISOString() }, j, dia16);
+    expect(a.tipo).toBe("nada");
+  });
+
+  it("dois dias sem resposta: segunda tentativa", () => {
+    const a = decidirAcao(
+      { ...base, estado: "ofertada", tentativas: 1, ofertadoEm: new Date(2026, 8, 14).toISOString() }, j, dia16);
+    expect(a).toMatchObject({ tipo: "reofertar", tentativa: 2 });
+  });
+
+  it("esgotadas as duas, passa pro social negociar — não tenta uma terceira", () => {
+    const a = decidirAcao(
+      { ...base, estado: "ofertada", tentativas: MAX_TENTATIVAS, ofertadoEm: new Date(2026, 8, 13).toISOString() }, j, dia16);
+    expect(a.tipo).toBe("passar_pro_social");
+    if (a.tipo === "passar_pro_social") expect(a.motivo).toMatch(/2 ofertas sem resposta/);
+  });
+});
+
+describe("o social tem 1 dia ÚTIL para confirmar", () => {
+  it("pedido ontem (dia útil): cobra", () => {
+    const quarta = new Date(2026, 8, 16, 10);
+    const a = decidirAcao(
+      { clientId: "1", cliente: "X", responsavel: "Thiago", estado: "aguardando_social", quando: null,
+        propostoEm: null, perguntadoAoSocialEm: new Date(2026, 8, 15, 10).toISOString() },
+      janelaDoMes(quarta), quarta);
+    expect(a.tipo).toBe("cobrar_social");
+  });
+
+  it("pedido na sexta, cobrado na segunda: conta 1 dia útil, não 3", () => {
+    // Contar o fim de semana contra a pessoa seria cobrar por dias que ela não trabalhou.
+    expect(diasUteisEntre(new Date(2026, 8, 18), new Date(2026, 8, 21))).toBe(1);
+  });
+
+  it("pedido hoje: não cobra ainda", () => {
+    const quarta = new Date(2026, 8, 16, 17);
+    const a = decidirAcao(
+      { clientId: "1", cliente: "X", responsavel: "Thiago", estado: "proposta", quando: null,
+        propostoEm: new Date(2026, 8, 16, 9).toISOString() },
+      janelaDoMes(quarta), quarta);
+    expect(a.tipo).toBe("nada");
+  });
+});
+
+describe("fora da janela o agente não fala com cliente", () => {
+  it("dia 2 do mês: nenhuma ação, mesmo com cliente pendente", () => {
+    const dia2 = new Date(2026, 8, 2, 8);
+    const a = decidirAcao(
+      { clientId: "1", cliente: "X", responsavel: "Thiago", estado: "pendente", quando: null, propostoEm: null },
+      janelaDoMes(dia2), dia2);
+    expect(a.tipo).toBe("nada");
+  });
+
+  it("reunião já agendada não gera ação nenhuma", () => {
+    const dia16 = new Date(2026, 8, 16, 8);
+    const a = decidirAcao(
+      { clientId: "1", cliente: "X", responsavel: "Thiago", estado: "agendada", quando: "2026-09-25T14:00:00-03:00", propostoEm: null },
+      janelaDoMes(dia16), dia16);
+    expect(a.tipo).toBe("nada");
+  });
+});
