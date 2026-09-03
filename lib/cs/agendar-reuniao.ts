@@ -80,16 +80,31 @@ export function textoConfirmacao(cliente: string, iso: string): string {
     + `Vou lembrar todo mundo na véspera. Se precisar mudar, é só falar aqui.`;
 }
 
-/** Quando entendeu que é reunião mas não o horário. Pergunta com opções, não em aberto. */
+/**
+ * Quando entendeu que é reunião mas não o horário.
+ *
+ * O `motivo` NÃO vai para o cliente. A versão anterior imprimia `_(disse "quinta" mas não a hora
+ * exata)_` na mensagem — diagnóstico interno vazando para fora, que faz o cliente ler o
+ * funcionamento do sistema em vez da pergunta. Ele fica no log, para quando o parser errar.
+ */
 export function textoPergunta(motivo: string): string {
-  return `📅 Show, vamos marcar! Só me confirma o dia e a hora certinho — ex.: “dia 18 às 14h”.\n`
-    + `_(${motivo})_`;
+  void motivo;   // fica no console; o cliente vê só a pergunta
+  return `📅 Perfeito! Me confirma só o horário — por exemplo, “dia 18 às 14h” — que eu já deixo marcado.`;
 }
 
-/** O agente OFERECENDO horário, dentro da janela. Duas opções concretas fecham mais rápido que "quando você pode?". */
+/** Duração padrão da reunião de acompanhamento, em minutos. */
+export const DURACAO_MIN = 30;
+
+/**
+ * O agente OFERECENDO horário. Duas opções concretas fecham mais rápido que "quando você pode?".
+ *
+ * Diz o FORMATO e a DURAÇÃO desde a primeira mensagem. Sem isso o cliente aceita um horário sem
+ * saber se precisa reservar meia hora ou duas, nem se vai ter que sair do escritório — e a
+ * primeira coisa que ele responde é "é presencial?", que vira mais uma ida e volta.
+ */
 export function textoOferta(cliente: string, opcoes: string[]): string {
   return `Oi! 👋 Chegou a hora da nossa reunião mensal de acompanhamento da *${cliente}* — `
-    + `a gente revisa os resultados do mês e alinha o próximo.\n\n`
+    + `a gente revisa os resultados do mês e alinha o próximo. É online, uns ${DURACAO_MIN} minutinhos.\n\n`
     + opcoes.map((o) => `• ${o}`).join("\n")
     + `\n\nAlgum desses funciona? Se preferir outro horário, é só dizer.`;
 }
@@ -137,7 +152,7 @@ export function textoOfertaTentativa(cliente: string, opcoes: string[], tentativ
   // Repetir a mesma mensagem que já foi ignorada não muda o resultado. A segunda é mais curta,
   // reconhece a primeira e abre a porta para o cliente dizer o horário dele.
   return `Oi! 👋 Passando de novo sobre a reunião mensal da *${cliente}* — sei que a correria é grande.\n\n`
-    + `Me diz só um dia e horário que funcione pra você que eu já deixo marcado`
+    + `É rapidinho, ${DURACAO_MIN} minutos online. Me diz um dia e horário que funcione pra você que eu já deixo marcado`
     + (opcoes.length ? `. Se ajudar, tenho ${opcoes[0]} livre.` : ".");
 }
 
@@ -167,9 +182,12 @@ export function textoCobrarSocial(cliente: string, quandoExtenso: string, dias: 
 
 /** Lembretes NO GRUPO DO CLIENTE — o que faz a reunião acontecer, não só existir na agenda. */
 export function textoLembreteCliente(quandoExtenso: string, tipo: "vespera" | "uma_hora"): string {
+  // A confirmação já termina com "Até lá! 👋". Repetir a mesma despedida no lembrete faz as duas
+  // mensagens parecerem a mesma coisa reenviada — e mensagem que parece repetida é ignorada.
   return tipo === "vespera"
-    ? `📅 Passando pra lembrar: amanhã temos nossa reunião de acompanhamento — *${quandoExtenso}*. Até lá! 👋`
-    : `⏰ Nossa reunião é daqui a uma hora (${quandoExtenso}). Te espero!`;
+    ? `📅 Lembrete: amanhã temos nossa reunião de acompanhamento — *${quandoExtenso}*.\n`
+      + `Se precisar remarcar, é só falar aqui que eu ajusto.`
+    : `⏰ Nossa reunião começa daqui a uma hora (${quandoExtenso}). Te espero!`;
 }
 
 // ── A RESPOSTA DO SOCIAL ─────────────────────────────────────────────────
@@ -228,6 +246,6 @@ export function lerRespostaSocial(texto: string, agora = new Date(), propostoIso
 
 /** Confirmação final, depois do aceite dos dois lados. */
 export function textoFechado(cliente: string, quandoExtenso: string): string {
-  return `📅 Fechado! Reunião de acompanhamento da *${cliente}* em *${quandoExtenso}*.\n`
-    + `Vou lembrar todo mundo na véspera e uma hora antes.`;
+  return `📅 Fechado! Reunião de acompanhamento da *${cliente}* em *${quandoExtenso}* `
+    + `(online, ${DURACAO_MIN} min).\nVou lembrar todo mundo na véspera e uma hora antes.`;
 }

@@ -1038,13 +1038,21 @@ export async function POST(req: NextRequest) {
           confirmado_por: msg.authorName || "social",
         }).eq("id", reu.id as string);
 
+        // A FICHA DO CLIENTE PRECISA SABER. `client_journey.proxima_reuniao` existia e só era
+        // preenchida pelo RESUMO — depois da reunião ter acontecido. Ou seja: a ficha sabia da
+        // última reunião e nunca da próxima, que é justamente a informação que serve para
+        // preparar. Quem lê a jornada (/jornada, raio-x, preparo) passa a ver o compromisso.
+        await supabaseAdmin.from("client_journey")
+          .upsert({ client_id: reu.client_id as string, proxima_reuniao: iso }, { onConflict: "client_id" })
+          .then(() => {}, (e) => console.error("[CS/inbound] jornada proxima_reuniao:", e));
+
         const quandoTxt = porExtenso(iso);
         await csSendGroupText(msg.groupJid, textoFechado(nomeCli, quandoTxt), msg.messageId,
           { origem: "cs-reuniao-fechada", destino: "interno" });
         // E o cliente precisa saber que está confirmado — ele ficou esperando desde a proposta.
         if (reu.group_jid) {
           await csSendGroupText(reu.group_jid as string,
-            `📅 Confirmado! Nossa reunião fica *${quandoTxt}*. Até lá! 👋`, undefined,
+            `📅 Confirmado! Nossa reunião fica *${quandoTxt}* — online, uns 30 minutinhos. Até lá! 👋`, undefined,
             { origem: "cs-reuniao-fechada", destino: "cliente", clientId: reu.client_id as string });
         }
         console.log(`[CS/inbound] reunião ${nomeCli} confirmada pelo social → ${iso}`);

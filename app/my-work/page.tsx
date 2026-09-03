@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Inbox, Check, Clock, AlertTriangle, FileText, Palette,
   TrendingUp, Instagram, ChevronRight, CheckCircle, Filter,
   Eye, Bell,
+  CalendarClock,
 } from "lucide-react";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import EmptyState from "@/components/ui/EmptyState";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
@@ -16,7 +18,7 @@ import Link from "next/link";
 import type { Task, ContentCard, DesignRequest } from "@/lib/types";
 import SignedImage from "@/components/shared/SignedImage";
 
-type FilterType = "all" | "tasks" | "content" | "design" | "approvals";
+type FilterType = "all" | "tasks" | "content" | "design" | "approvals" | "meetings";
 
 export default function MyWorkPage() {
   const tasks = useOperationalStore((s) => s.tasks);
@@ -26,6 +28,32 @@ export default function MyWorkPage() {
   const markNotificationRead = useNotificationsStore((s) => s.markRead);
   const { role, currentUser } = useRole();
   const [filter, setFilter] = useState<FilterType>("all");
+  // Reuniões marcadas com cliente. Não vêm do store (que não conhece `meetings`) e sim da rota,
+  // que já resolve "quem sou eu": cada um vê a própria carteira, gestão vê tudo.
+  const [reunioes, setReunioes] = useState<{ id: string; cliente: string; quando: string; responsavel: string | null }[]>([]);
+
+  useEffect(() => {
+    let vivo = true;
+    // Este mês e o próximo: uma reunião marcada dia 20 para o dia 2 do mês seguinte precisa
+    // aparecer, senão some justamente na virada, quando é mais fácil esquecer dela.
+    const hoje = new Date();
+    const meses = [0, 1].map((i) => {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    });
+    Promise.all(meses.map((m) => authedFetch(`/api/reunioes?mes=${m}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)))
+      .then((rs) => {
+        if (!vivo) return;
+        const todas = rs.flatMap((j) => j?.reunioes ?? [])
+          .filter((x: { estado: string; quando: string | null }) => x.estado === "agendada" && x.quando)
+          .filter((x: { quando: string }) => new Date(x.quando) >= new Date(Date.now() - 3600_000))
+          .map((x: { reuniaoId: string; cliente: string; quando: string; responsavel: string | null }) =>
+            ({ id: x.reuniaoId, cliente: x.cliente, quando: x.quando, responsavel: x.responsavel }))
+          .sort((a: { quando: string }, b: { quando: string }) => a.quando.localeCompare(b.quando));
+        setReunioes(todas);
+      });
+    return () => { vivo = false; };
+  }, []);
 
   const isAdmin = role === "admin" || role === "manager";
   const pSort = (a: { priority: string }, b: { priority: string }) => {
@@ -71,7 +99,7 @@ export default function MyWorkPage() {
     [notifications]
   );
 
-  const totalItems = myTasks.length + myCards.length + myDesignReqs.length + pendingApprovals.length;
+  const totalItems = myTasks.length + myCards.length + myDesignReqs.length + pendingApprovals.length + reunioes.length;
 
   const FILTERS: { key: FilterType; label: string; count: number; icon: typeof Check }[] = [
     { key: "all", label: "Tudo", count: totalItems, icon: Inbox },
@@ -79,6 +107,7 @@ export default function MyWorkPage() {
     { key: "content", label: "Conteúdo", count: myCards.length, icon: FileText },
     { key: "design", label: "Design", count: myDesignReqs.length, icon: Palette },
     { key: "approvals", label: "Aprovações", count: pendingApprovals.length, icon: Eye },
+    { key: "meetings", label: "Reuniões", count: reunioes.length, icon: CalendarClock },
   ];
 
   return (
@@ -123,6 +152,39 @@ export default function MyWorkPage() {
         {/* Main content */}
         <div className="space-y-4">
           {/* Tasks */}
+          {/* REUNIÕES — primeiro, porque é o único item da lista com hora marcada e outra pessoa
+              esperando do outro lado. Perder uma custa diferente de perder um prazo interno. */}
+          {(filter === "all" || filter === "meetings") && reunioes.length > 0 && (
+            <section className="mb-6">
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+                <CalendarClock size={14} className="text-lone-success" /> Reuniões marcadas
+                <span className="text-[10px] text-muted-foreground font-normal">· {reunioes.length}</span>
+              </h2>
+              <div className="space-y-2">
+                {reunioes.map((r) => {
+                  const d = new Date(r.quando);
+                  const hoje = new Date().toDateString() === d.toDateString();
+                  const dia = d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short", timeZone: "America/Sao_Paulo" });
+                  const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+                  return (
+                    <div key={r.id} className="p-3 rounded-xl bg-surface border border-border flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{r.cliente}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Reunião de acompanhamento{r.responsavel ? ` · ${r.responsavel}` : ""}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className={`text-sm font-semibold tabular-nums ${hoje ? "text-lone-success" : "text-foreground"}`}>{hora}</p>
+                        <p className="text-[10px] text-muted-foreground capitalize">{hoje ? "hoje" : dia}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {(filter === "all" || filter === "tasks") && myTasks.length > 0 && (
             <div className="card">
               <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">

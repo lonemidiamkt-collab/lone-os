@@ -167,11 +167,62 @@ describe("textos da negociação", () => {
     const segunda = textoOfertaTentativa("Contele", ["segunda às 10:00"], 2);
     expect(segunda).not.toBe(primeira);
     // Repetir a mensagem que já foi ignorada não muda o resultado: a segunda pede o horário dele.
-    expect(segunda).toMatch(/Me diz só um dia e horário/);
+    expect(segunda).toMatch(/Me diz um dia e horário/);
   });
 
   it("o lembrete do cliente fala com ele, não sobre ele", () => {
     expect(textoLembreteCliente("sexta às 14:00", "vespera")).toMatch(/nossa reunião/i);
     expect(textoLembreteCliente("sexta às 14:00", "uma_hora")).toMatch(/daqui a uma hora/i);
+  });
+});
+
+// ── Varredura das falas ao cliente (Roberto, 03/09) ───────────────────────
+import { textoPergunta as perguntaCli, textoFechado, textoContraproposta, DURACAO_MIN } from "@/lib/cs/agendar-reuniao";
+
+describe("o que o cliente lê", () => {
+  const ops = sugerirHorarios(new Date(2026, 8, 16, 8), 2, "2026-09-22").map((o) => o.texto);
+
+  it("NUNCA vaza jargão de sistema", () => {
+    // A versão anterior imprimia `_(disse "quinta" mas não a hora exata)_` na mensagem: o cliente
+    // lia o funcionamento do parser em vez da pergunta.
+    const t = perguntaCli('disse "quinta" mas não a hora exata');
+    expect(t).not.toMatch(/disse "quinta"/);
+    expect(t).not.toMatch(/parser|null|horaExplicita|_\(/);
+    expect(t).toMatch(/me confirma/i);
+  });
+
+  it("diz FORMATO e DURAÇÃO já na primeira oferta", () => {
+    // Sem isso o cliente aceita sem saber se reserva 30 minutos ou duas horas, nem se precisa sair
+    // do escritório — e a primeira resposta dele vira "é presencial?".
+    const t = textoOferta("Contele", ops);
+    expect(t).toMatch(/online/i);
+    expect(t).toContain(String(DURACAO_MIN));
+  });
+
+  it("a segunda tentativa também informa, para quem não leu a primeira", () => {
+    const t = textoOfertaTentativa("Contele", ops, 2);
+    expect(t).toMatch(/online/i);
+  });
+
+  it("confirmação e lembrete de véspera NÃO terminam igual", () => {
+    // Mensagem que parece a mesma reenviada é ignorada.
+    const conf = textoFechado("Contele", "sexta às 14:00");
+    const vesp = textoLembreteCliente("sexta às 14:00", "vespera");
+    expect(vesp).not.toContain("Até lá! 👋");
+    expect(conf).not.toBe(vesp);
+  });
+
+  it("o lembrete da véspera abre a porta para remarcar", () => {
+    expect(textoLembreteCliente("sexta às 14:00", "vespera")).toMatch(/remarcar/i);
+  });
+
+  it("nenhuma fala ao cliente cita nome de tabela, código ou id", () => {
+    const todas = [
+      textoOferta("X", ops), textoOfertaTentativa("X", ops, 2), perguntaCli("qualquer"),
+      textoContraproposta("sexta às 16:00"),
+      textoLembreteCliente("sexta às 14:00", "vespera"),
+      textoLembreteCliente("sexta às 14:00", "uma_hora"),
+    ].join(" ");
+    expect(todas).not.toMatch(/meetings|client_id|estado|undefined|null|\bISO\b/);
   });
 });

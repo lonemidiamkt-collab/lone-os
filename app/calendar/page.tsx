@@ -26,7 +26,9 @@ import {
   Clock,
   ExternalLink,
   GripVertical,
+  CalendarClock,
 } from "lucide-react";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useAppState } from "@/lib/context/AppStateContext"; // kept for reminders (localStorage-only, no DB equivalent)
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
@@ -42,7 +44,7 @@ const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","A
 const MONTHS_SHORT = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 const WEEKDAYS = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
-type EventType = "content" | "task" | "routine" | "reminder";
+type EventType = "content" | "task" | "routine" | "reminder" | "meeting";
 
 interface CalendarEvent {
   id: string;
@@ -75,6 +77,9 @@ const TYPE_COLORS: Record<EventType, string> = {
   task: "bg-primary",
   routine: "bg-muted",
   reminder: "bg-primary",
+  // A reunião com cliente é o único compromisso com HORA MARCADA e outra pessoa esperando do
+  // outro lado. Cor própria porque perder uma custa diferente de perder um prazo interno.
+  meeting: "bg-lone-success",
 };
 
 const TYPE_LABELS: Record<EventType, string> = {
@@ -82,9 +87,11 @@ const TYPE_LABELS: Record<EventType, string> = {
   task: "Tarefa",
   routine: "Rotina",
   reminder: "Lembrete",
+  meeting: "Reunião",
 };
 
 const TYPE_ICONS: Record<EventType, typeof FileText> = {
+  meeting: CalendarClock,
   content: FileText,
   task: Check,
   routine: ClipboardCheck,
@@ -146,7 +153,7 @@ export default function CalendarPage() {
       dayPanelRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }, [selectedDay]);
-  const [filterTypes, setFilterTypes] = useState<EventType[]>(["content", "task", "routine", "reminder"]);
+  const [filterTypes, setFilterTypes] = useState<EventType[]>(["content", "task", "routine", "reminder", "meeting"]);
   const [filterClient, setFilterClient] = useState<string>("all");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
@@ -158,6 +165,9 @@ export default function CalendarPage() {
   type ObservanceCategory = "national" | "estadual" | "municipal" | "comercial" | "cultural" | "awareness_month" | "profissao";
   type Observance = { date: string; name: string; category: ObservanceCategory; nichos?: string[]; monthLong?: boolean; uf?: string; cities?: string[] };
   const [observances, setObservances] = useState<Observance[]>([]);
+  // As reuniões agendadas do mês em exibição. Vêm de /api/reunioes (que já filtra por pessoa:
+  // cada um vê a própria carteira, gestão vê tudo) — não do store, que não conhece `meetings`.
+  const [reunioes, setReunioes] = useState<{ id: string; cliente: string; quando: string; responsavel: string | null }[]>([]);
   useEffect(() => {
     let cancelled = false;
     async function loadHolidays() {
@@ -384,8 +394,47 @@ export default function CalendarPage() {
       });
     });
 
+    // ── REUNIÕES COM CLIENTE ────────────────────────────────────────────
+    //
+    // Sem isto, a reunião que o Loninho marca fica invisível: era gravada em `meetings` e não
+    // aparecia no calendário, nem no Meu Trabalho — só na aba daquele cliente, se alguém fosse
+    // procurar. Compromisso que não aparece na agenda não é compromisso agendado.
+    reunioes.forEach((r) => {
+      events.push({
+        id: `reu-${r.id}`,
+        type: "meeting",
+        title: `Reunião — ${r.cliente}`,
+        clientName: r.cliente,
+        date: r.quando.slice(0, 10),
+        color: TYPE_COLORS.meeting,
+        detail: `${new Date(r.quando).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}${r.responsavel ? ` · ${r.responsavel}` : ""}`,
+        raw: r as unknown as Reminder,
+      });
+    });
+
     return events;
-  }, [contentCards, tasks, trafficRoutineChecks, reminders]);
+  }, [contentCards, tasks, trafficRoutineChecks, reminders, reunioes]);
+
+  // Busca as reuniões do mês em exibição. Refaz ao trocar de mês porque o ciclo é mensal — puxar
+  // tudo de uma vez traria meses de histórico que o calendário não mostra.
+  useEffect(() => {
+    let vivo = true;
+    const mes = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}`;
+    authedFetch(`/api/reunioes?mes=${mes}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!vivo || !j?.reunioes) return;
+        setReunioes(
+          j.reunioes
+            .filter((x: { estado: string; quando: string | null }) => x.estado === "agendada" && x.quando)
+            .map((x: { reuniaoId: string; cliente: string; quando: string; responsavel: string | null }) => ({
+              id: x.reuniaoId, cliente: x.cliente, quando: x.quando, responsavel: x.responsavel,
+            })),
+        );
+      })
+      .catch(() => { /* calendário sem reunião é melhor que calendário quebrado */ });
+    return () => { vivo = false; };
+  }, [viewYear, viewMonth]);
 
   const filteredEvents = useMemo(() => {
     return allEvents.filter((e) => {
