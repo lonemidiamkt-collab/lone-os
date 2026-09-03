@@ -49,6 +49,7 @@ import AIAuditsTab from "@/components/client-tabs/AIAuditsTab";
 import ClientNPS from "@/components/sector/ClientNPS";
 import WhatsAppTemplates from "@/components/WhatsAppTemplates";
 import MeetingScheduler from "@/components/MeetingScheduler";
+import HistoricoReunioes from "@/components/HistoricoReunioes";
 const ContractGenerator = dynamic(() => import("@/components/ContractGenerator"), { ssr: false });
 import PortalManagementCard from "@/components/PortalManagementCard";
 import FichaViva360Tab from "@/components/fichaviva/FichaViva360Tab";
@@ -1198,6 +1199,10 @@ export default function ClientDetailPage() {
             <div className="animate-fade-in max-w-2xl space-y-6">
               {/* Reuniões (o chat interno por cliente foi removido a pedido — só agendamento + templates) */}
               <MeetingScheduler client={client} currentUser={currentUser} />
+              {/* O histórico com a MEMÓRIA da reunião: transcrição guardada, o que a IA extraiu e
+                  busca no que foi dito. O MeetingScheduler acima agenda; este guarda o que
+                  aconteceu — são coisas diferentes e as duas vivem aqui. */}
+              <HistoricoReunioes clientId={client.id} clientName={client.name} />
               <WhatsAppTemplates client={client} />
             </div>
           )}
