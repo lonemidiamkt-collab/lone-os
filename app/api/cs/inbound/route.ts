@@ -2633,6 +2633,71 @@ export async function POST(req: NextRequest) {
   const DIAS_SEMANA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
   const dataHoraAtual = `${DIAS_SEMANA[spAgora.getDay()]}, ${String(spAgora.getDate()).padStart(2, "0")}/${String(spAgora.getMonth() + 1).padStart(2, "0")}/${spAgora.getFullYear()} ${String(spAgora.getHours()).padStart(2, "0")}:${String(spAgora.getMinutes()).padStart(2, "0")} (horário de Brasília)`;
 
+  // ─── REUNIÃO MENSAL: o cliente combinou horário no grupo? ────────────────
+  //
+  // Roberto (02/09): "a IA tem que ver se o cliente marcou a reunião ou não no grupo… e aí o
+  // cliente marcando ela já coloca na agenda desse social media".
+  //
+  // Vem ANTES do handler de data/evento porque "reunião dia 18 às 14h" é as duas coisas: uma data
+  // futura E um compromisso nosso. Sem esta ordem, viraria lembrete de evento do cliente e a
+  // agenda do time continuaria vazia.
+  if (c?.id && msg.text) {
+    const { lerIntencaoReuniao, textoConfirmacao, textoPergunta } = await import("@/lib/cs/agendar-reuniao");
+    const intencao = lerIntencaoReuniao(msg.text);
+
+    if (intencao.tipo === "agendar") {
+      const quando = new Date(intencao.iso);
+      const mesRef = `${quando.getFullYear()}-${String(quando.getMonth() + 1).padStart(2, "0")}`;
+      const { error: errReu } = await supabaseAdmin.from("meetings").upsert({
+        client_id: c.id as string,
+        title: `Reunião mensal — ${clienteNome}`,
+        meeting_type: "mensal",
+        mes_referencia: mesRef,
+        start_at: intencao.iso,
+        // Uma hora é a duração padrão de acompanhamento; quem quiser outra ajusta na agenda.
+        end_at: new Date(quando.getTime() + 3600_000).toISOString(),
+        estado: "agendada",
+        responsavel: (c.assigned_social as string) || null,
+        confirmado_em: new Date().toISOString(),
+        confirmado_por: msg.authorName || "cliente",
+        group_jid: msg.groupJid,
+        trecho_origem: msg.text.slice(0, 300),
+        status: "scheduled",
+        created_by: "agente-cs",
+        // Marcar de novo zera os lembretes: se a data mudou, os avisos antigos não valem mais.
+        lembrete_vespera_em: null,
+        lembrete_hora_em: null,
+      }, { onConflict: "client_id,mes_referencia" });
+
+      if (!errReu) {
+        // Confirma NO GRUPO onde foi combinado — quem falou precisa ver que foi entendido.
+        await csSendGroupText(msg.groupJid, textoConfirmacao(clienteNome, intencao.iso), msg.messageId,
+          { origem: "cs-reuniao-agendada", clientId: c.id as string });
+        // E avisa o time, com o responsável marcado.
+        const jidInterno = internalGroupJid();
+        if (jidInterno) {
+          const { mencionar } = await import("@/lib/cs/mencao");
+          const m = await mencionar((c.assigned_social as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
+          const { porExtenso } = await import("@/lib/cs/parse-horario");
+          await csSendGroupText(jidInterno,
+            `📅 ${m.trecho || ""} reunião mensal da *${clienteNome}* marcada para *${porExtenso(intencao.iso)}* — quem confirmou foi o cliente no grupo. Já está na agenda.`.trim(),
+            undefined, { origem: "cs-reuniao-agendada", destino: "interno" }, m.jids);
+        }
+        console.log(`[CS/inbound] reunião mensal ${clienteNome} → ${intencao.iso}`);
+        return NextResponse.json({ ok: true, reuniao_agendada: intencao.iso, cliente: clienteNome });
+      }
+      console.error("[CS/inbound] gravar reunião:", errReu.message);
+    }
+
+    if (intencao.tipo === "perguntar_horario") {
+      // Pergunta em vez de chutar. Reunião marcada no horário errado deixa alguém sozinho na
+      // chamada — perguntar custa uma mensagem, errar custa a confiança do cliente.
+      await csSendGroupText(msg.groupJid, textoPergunta(intencao.motivo), msg.messageId,
+        { origem: "cs-reuniao-pergunta", clientId: c.id as string });
+      return NextResponse.json({ ok: true, reuniao_perguntou: intencao.motivo, cliente: clienteNome });
+    }
+  }
+
   // ─── DATA/EVENTO FUTURO: o cliente citou uma data (promoção dia 12, evento, lançamento) → agenda um
   // lembrete no calendário do social responsável. O cron cs-eventos avisa faltando 5 e 2 dias. Não
   // atrapalha a classificação de demanda (roda em paralelo, best-effort). Pré-filtro barato antes da IA.
