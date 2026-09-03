@@ -455,6 +455,8 @@ const MODULES: Module[] = [
       "Upload de logotipo (fica público) e contrato social (fica privado, só admin acessa).",
       "Após envio, o cadastro vai pra uma fila de 'Aguardando aprovação' — admin revisa e ativa.",
       "Depois de ativo, o cliente aparece em todas as abas do sistema (tráfego, social, design).",
+      "REUNIÃO MENSAL: entre os dias 15 e 22 o time marca a reunião de acompanhamento de cada cliente. O Loninho cobra quem ainda não marcou (a cobrança aperta conforme o dia 22 se aproxima), oferece horário no grupo do cliente quando alguém pede ('Lone, marca a reunião do X'), e quando o cliente responde com dia e hora ele grava, confirma ali mesmo e avisa o time. Depois lembra o responsável na véspera e uma hora antes.",
+      "Se o cliente disser só o dia ('quinta de manhã'), o agente PERGUNTA a hora em vez de chutar — reunião no horário errado deixa alguém sozinho na chamada.",
       "O setup tem prazo de 15 dias e o Loninho confere sozinho o que já está pronto: 3 artes entregues fecham as fixadas, gasto na conta fecha o anúncio no ar, e ele pergunta à Meta se a conta de anúncio responde à credencial da Lone — que é o que separa 'o ID foi digitado' de 'o acesso foi liberado'. Achando a prova, ele fecha a tarefa e para de cobrar.",
       "Passando dos 15 dias, a cobrança diz o que ele observou ('a conta está no cadastro mas não responde à nossa credencial'), em vez de repetir a lista de itens pendentes.",
     ],
