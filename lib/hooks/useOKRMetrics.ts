@@ -231,18 +231,31 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
     // Delivery time: average from request creation to designerDeliveredAt
     const deliveredCards = contentCards.filter((c) => c.designerDeliveredAt);
     let avgDeliveryDays = 0;
+    let cardsComInicio = 0;
     let onTimeCount = 0;
     let totalDelivered = deliveredCards.length;
 
     if (totalDelivered > 0) {
-      const totalDays = deliveredCards.reduce((sum, c) => {
-        // Find linked design request for creation date
-        const req = designRequests.find((r) => r.id === c.designRequestId);
-        const startDate = c.workStartedAt ?? c.columnEnteredAt?.in_production ?? req?.deadline ?? c.statusChangedAt;
-        if (!startDate || !c.designerDeliveredAt) return sum;
-        return sum + Math.max(0, daysBetween(startDate, c.designerDeliveredAt));
+      // ── O INÍCIO TEM QUE SER UM INÍCIO ──────────────────────────────
+      //
+      // A versão anterior caía em `req?.deadline` quando não havia marcação de início — ou seja,
+      // usava o PRAZO como data de começo. Como o prazo costuma ser depois da entrega, a conta
+      // dava negativo, o Math.max(0, …) transformava em zero, e a tela exibia "tempo médio 0,0
+      // dias" como se o designer entregasse instantaneamente.
+      //
+      // Medido em 02/09: de 69 artes entregues, ZERO têm `work_started_at` e só 10 têm
+      // `column_entered_at.in_production`. As outras 59 não têm início nenhum — e a resposta certa
+      // para elas é não saber, não inventar.
+      const comInicio = deliveredCards.filter((c) => {
+        const ini = c.workStartedAt ?? c.columnEnteredAt?.in_production;
+        return !!ini && !!c.designerDeliveredAt && new Date(ini) <= new Date(c.designerDeliveredAt);
+      });
+      const totalDays = comInicio.reduce((sum, c) => {
+        const ini = (c.workStartedAt ?? c.columnEnteredAt?.in_production)!;
+        return sum + daysBetween(ini, c.designerDeliveredAt!);
       }, 0);
-      avgDeliveryDays = totalDays / totalDelivered;
+      avgDeliveryDays = comInicio.length > 0 ? totalDays / comInicio.length : 0;
+      cardsComInicio = comInicio.length;
 
       // On-time: delivered before dueDate
       onTimeCount = deliveredCards.filter((c) => {
@@ -261,11 +274,14 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
       detail: designIsReal ? `${onTimeCount}/${totalDelivered} on time` : "No delivered designs found",
     });
 
+    const tempoIsReal = cardsComInicio > 0;
     audit.push({
       metric: "Tempo medio entrega",
-      source: "ContentCards (start → designerDeliveredAt)",
-      status: designIsReal ? "ok" : "simulated",
-      detail: designIsReal ? `${avgDeliveryDays.toFixed(1)} days from ${totalDelivered} deliveries` : "No delivery timestamps",
+      source: "ContentCards (workStartedAt/in_production → designerDeliveredAt)",
+      status: tempoIsReal ? "ok" : "simulated",
+      detail: tempoIsReal
+        ? `${avgDeliveryDays.toFixed(1)} dias de ${cardsComInicio} artes COM início marcado (de ${totalDelivered} entregues)`
+        : `nenhuma das ${totalDelivered} artes tem início marcado — ninguém usa "iniciar" no board`,
     });
 
     // Satisfaction: simulated (would need survey system)
@@ -304,7 +320,10 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
       company: {
         churnRate: { current: Math.round(churnRate * 10) / 10, target: t("churn_rate", 5), unit: "%", isReal: true, source: "Clients" },
         // Saúde média na escala 0–100 (antes vinha 0–10 contra meta 80 → parecia quebrado)
-        nps: { current: Math.round(avgHealth * 10), target: t("nps", 80), unit: "pts", isReal: true, source: "Saúde média dos clientes (0-100)" },
+        // Não é NPS: ninguém foi perguntado "de 0 a 10, o quanto você recomendaria". É a saúde
+        // média em escala 0–100. O título do OKR já foi trocado para "Saúde média dos clientes";
+        // a fonte reforça, para o número não ser lido como pesquisa.
+        nps: { current: Math.round(avgHealth * 10), target: t("nps", 80), unit: "pts", isReal: true, source: "DERIVADO da saúde média (não é NPS: não há pesquisa)" },
         activeClients: { current: activeClientsCount, target: t("active_clients", 40), unit: "", isReal: true, source: "Clients" },
         newClients: { current: newClientsCount, target: t("new_clients", 3), unit: "", isReal: true, source: "Clients" },
       },
@@ -325,30 +344,54 @@ export function useOKRMetrics(dbTargets?: Record<string, number>): OKRMetrics {
         },
       },
       social: {
-        postsDelivered: { current: postsDelivered, target: t("posts_delivered", 96), unit: "posts", isReal: true, source: "ContentCards" },
-        engagementRate: { current: npsAvg > 0 ? npsAvg : 3.1, target: t("engagement_rate", 3.5), unit: "%", isReal: npsAvg > 0, source: npsAvg > 0 ? "Client NPS" : "Instagram Graph API (nao conectado)" },
+        // Conta cards marcados como publicados NO BOARD — que fica atrás do que foi ao ar. Em
+        // agosto o board registrou 34 e o Instagram teve 349. O número não é inventado, mas mede
+        // registro, não publicação, e o nome não deixava isso claro.
+        postsDelivered: { current: postsDelivered, target: t("posts_delivered", 96), unit: "posts", isReal: true, source: "ContentCards (cards marcados como publicados — o board fica atrás do Instagram; veja o Fechamento do mês)" },
+        // ENGAJAMENTO NÃO É SAÚDE DO CLIENTE. A versão anterior punha `npsAvg` — a saúde média
+        // da carteira — no lugar da taxa de engajamento e marcava como REAL, com fonte "Client
+        // NPS". São coisas sem relação: engajamento é curtida e comentário no Instagram; saúde é
+        // o quanto o relacionamento vai bem. Um cliente satisfeito com post de 0,5% de
+        // engajamento existe, e o contrário também.
+        //
+        // Os dados de engajamento EXISTEM em client_ig_posts (like_count, comments_count), mas
+        // ainda não são agregados aqui. Até isso ser feito, o honesto é dizer que não há dado.
+        engagementRate: { current: 0, target: t("engagement_rate", 3.5), unit: "%", isReal: false, source: "Sem dado: curtidas/comentários existem em client_ig_posts mas ainda não são agregados aqui" },
         deliverySLA: {
-          current: slaIsReal ? Math.round(avgSLAHours) : 42,
+          // O 42 fixo era um número escolhido para caber abaixo da meta de 48h — o painel ficava
+          // verde sem nada ter sido medido. Zero com a fonte explicando é pior de olhar e melhor
+          // de confiar.
+          current: slaIsReal ? Math.round(avgSLAHours) : 0,
           target: t("delivery_sla", 48), unit: "horas",
-          isReal: slaIsReal, source: slaIsReal ? "ContentCards" : "Simulado",
+          isReal: slaIsReal,
+          source: slaIsReal ? "ContentCards" : 'Sem dado: exige work_started_at, que nunca é preenchido (0 de 631 cards)',
         },
       },
       design: {
         onTimeDelivery: {
-          current: designIsReal ? Math.round(onTimePct) : 85,
+          // Sem entrega registrada não há pontualidade — 85 era um número plausível inventado.
+          current: designIsReal ? Math.round(onTimePct) : 0,
           target: t("on_time_pct", 90), unit: "%",
           isReal: designIsReal, source: designIsReal ? "DesignRequests" : "Simulado",
         },
         avgDeliveryTime: {
-          // current está em DIAS (avgDeliveryDays) — o target/unit também precisam ser em dias, senão
-          // comparava 2.8 dias contra "48h" e o KPI ficava sempre verde (nunca acusava atraso).
-          current: designIsReal ? Math.round(avgDeliveryDays * 10) / 10 : 2.8,
+          // current está em DIAS — o target/unit também precisam ser em dias, senão comparava 2.8
+          // dias contra "48h" e o KPI ficava sempre verde.
+          // Sem início marcado não há tempo de produção: 0 seria mentira, e o antigo 2.8 fixo
+          // também. Vale o que dá para medir, e a fonte diz de quantas artes.
+          current: tempoIsReal ? Math.round(avgDeliveryDays * 10) / 10 : 0,
           target: t("delivery_time", 3), unit: "dias",
-          isReal: designIsReal, source: designIsReal ? "ContentCards" : "Simulado",
+          isReal: tempoIsReal,
+          source: tempoIsReal
+            ? `ContentCards — ${cardsComInicio} de ${totalDelivered} artes têm início marcado`
+            : 'Sem dado: nenhuma arte tem início marcado no board ("iniciar" nunca é usado)',
         },
         // Satisfação real derivada da saúde dos clientes (0–5). Sem pesquisa dedicada, a saúde
         // média é o proxy real disponível — nunca mais o placeholder 4.2.
-        satisfaction: { current: Math.round((avgHealth / 2) * 10) / 10, target: t("satisfaction", 4.5), unit: "/5", isReal: true, source: "Saúde média dos clientes" },
+        // PROXY declarado, não pesquisa. Não existe pesquisa de satisfação no sistema; o número é
+        // a saúde média convertida para escala 0–5. Continua "real" (vem de dado medido), mas a
+        // fonte precisa dizer que é derivado — senão "4,5/5" passa por resposta de cliente.
+        satisfaction: { current: Math.round((avgHealth / 2) * 10) / 10, target: t("satisfaction", 4.5), unit: "/5", isReal: true, source: "DERIVADO da saúde média dos clientes (não há pesquisa de satisfação)" },
       },
       audit,
     };
