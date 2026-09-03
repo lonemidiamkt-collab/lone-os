@@ -104,6 +104,12 @@ export default function MeetingScheduler({ client, currentUser }: Props) {
       google_calendar_url: googleUrl,
       status: "scheduled",
       created_by: currentUser,
+      // `estado` e `responsavel` fazem a reunião marcada À MÃO participar do mesmo fluxo da que o
+      // agente marca: aparecer no calendário e no Meu Trabalho, e gerar lembrete de véspera e de
+      // uma hora antes. Sem eles, o cron não a enxerga — ela existia no banco e não avisava
+      // ninguém, que é o mesmo que não estar marcada.
+      estado: "agendada",
+      responsavel: client.assignedSocial || currentUser,
     });
 
     if (!error) {

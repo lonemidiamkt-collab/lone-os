@@ -21,11 +21,29 @@ export async function GET(req: NextRequest) {
   const par = req.nextUrl.searchParams.get("mes");
   const mes = par && /^\d{4}-\d{2}$/.test(par) ? par : janelaDoMes(agora).mes;
   const janela = janelaDoMes(agora);
+  // Primeiro dia do mês seguinte, para a janela de busca por data.
+  const [ano, m] = mes.split("-").map(Number);
+  const proximoMes = m === 12
+    ? `${ano + 1}-01-01T00:00:00-03:00`
+    : `${ano}-${String(m + 1).padStart(2, "0")}-01T00:00:00-03:00`;
 
   const [{ data: reunioes }, { data: clientes }] = await Promise.all([
+    // ── TODAS as reuniões do mês, não só as do ciclo ────────────────────────
+    //
+    // A versão anterior filtrava `meeting_type = 'mensal' AND mes_referencia = mes`. Isso deixava
+    // de fora exatamente duas coisas que precisam aparecer na agenda:
+    //   • a reunião que o social marca À MÃO pelo botão "Agendar" (tipo 'alinhamento',
+    //     'apresentacao'… e sem mes_referencia, que só o ciclo preenche);
+    //   • a avulsa criada ao registrar uma transcrição.
+    // Resultado: o calendário e o Meu Trabalho só mostravam o que o agente tinha marcado — e uma
+    // agenda que ignora o que a pessoa marcou sozinha não é a agenda dela.
+    //
+    // A janela é por DATA, que é o que a agenda entende. O ciclo continua identificável pelo
+    // `mes_referencia`, para quem precisa dele (a cobrança da janela 15–22).
     supabaseAdmin.from("meetings")
-      .select("id, client_id, title, start_at, end_at, estado, responsavel, proposto_em, confirmado_por, resumo, realizada_em")
-      .eq("meeting_type", "mensal").eq("mes_referencia", mes)
+      .select("id, client_id, title, start_at, end_at, estado, status, responsavel, proposto_em, confirmado_por, resumo, realizada_em, meeting_type, mes_referencia")
+      .gte("start_at", `${mes}-01T00:00:00-03:00`)
+      .lt("start_at", proximoMes)
       .order("start_at", { ascending: true, nullsFirst: false }),
     supabaseAdmin.from("clients")
       .select("id, name, nome_fantasia, assigned_social, status, active, agente_ativo")
@@ -39,12 +57,22 @@ export async function GET(req: NextRequest) {
     return (c?.nome_fantasia as string) || (c?.name as string) || "Cliente";
   };
 
-  const porCliente = new Map((reunioes ?? []).map((m) => [m.client_id as string, m]));
+  // Só as do CICLO entram no "quem falta" — uma reunião avulsa de terça não significa que a do
+  // ciclo foi marcada.
+  const doCiclo = new Map((reunioes ?? [])
+    .filter((m) => m.meeting_type === "mensal" && m.mes_referencia === mes)
+    .map((m) => [m.client_id as string, m]));
 
   // Cada cliente elegível vira uma linha, marcada ou não. É a lista "quem falta" que o time usa
   // na janela — sem ela, a tela só mostraria quem já resolveu.
-  const linhas = elegiveis.map((c) => {
-    const m = porCliente.get(c.id as string);
+  interface LinhaAgenda {
+    clientId: string; cliente: string; responsavel: string | null; estado: string;
+    quando: string | null; propostoEm: string | null; confirmadoPor: string | null;
+    reuniaoId: string | null; resumo: string | null; tipo: string;
+  }
+
+  const linhas: LinhaAgenda[] = elegiveis.map((c) => {
+    const m = doCiclo.get(c.id as string);
     return {
       clientId: c.id as string,
       cliente: (c.nome_fantasia as string) || (c.name as string) || "Cliente",
@@ -55,8 +83,32 @@ export async function GET(req: NextRequest) {
       confirmadoPor: (m?.confirmado_por as string) ?? null,
       reuniaoId: (m?.id as string) ?? null,
       resumo: (m?.resumo as string) ?? null,
+      tipo: "mensal",
     };
   });
+
+  // As de FORA do ciclo (marcadas à mão ou avulsas) entram como linhas próprias: são compromissos
+  // reais com hora marcada, e a agenda existe para mostrar compromisso.
+  const nomePorId = new Map(elegiveis.map((c) => [c.id as string,
+    (c.nome_fantasia as string) || (c.name as string) || "Cliente"]));
+  const foraDoCiclo = (reunioes ?? [])
+    .filter((m) => !(m.meeting_type === "mensal" && m.mes_referencia === mes))
+    .filter((m) => !!m.start_at)
+    .map((m) => ({
+      clientId: m.client_id as string,
+      cliente: nomePorId.get(m.client_id as string) ?? (m.title as string) ?? "Cliente",
+      responsavel: (m.responsavel as string) || null,
+      // Reunião marcada à mão nasce sem `estado` (o MeetingScheduler não preenche): se tem data e
+      // não foi cancelada, está agendada — é o que a pessoa quis dizer ao marcar.
+      estado: (m.estado as string) || (m.status === "cancelled" ? "cancelada" : "agendada"),
+      quando: m.start_at as string,
+      propostoEm: null as string | null,
+      confirmadoPor: (m.confirmado_por as string) ?? null,
+      reuniaoId: m.id as string,
+      resumo: (m.resumo as string) ?? null,
+      tipo: (m.meeting_type as string) || "avulsa",
+    }));
+  linhas.push(...foraDoCiclo);
 
   // Não-admin vê só a própria carteira. `ServerUser` só traz email, então o nome vem de
   // team_members — que é a mesma fonte que resolve as menções no WhatsApp.
