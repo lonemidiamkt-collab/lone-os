@@ -15,6 +15,7 @@ import { useOKRMetrics, type KPIValue } from "@/lib/hooks/useOKRMetrics";
 import { useSnapshots, type Delta } from "@/lib/hooks/useSnapshots";
 import { useOKRData } from "@/lib/hooks/useOKRData";
 import { useCollaboratorScores } from "@/lib/hooks/useCollaboratorScores";
+import FechamentoMensal from "@/components/FechamentoMensal";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useRole } from "@/lib/context/RoleContext";
 import { useCockpit, valorOu, variacaoBoa } from "@/lib/hooks/useCockpit";
@@ -746,6 +747,13 @@ export default function GoalsPage() {
             </div>
           )}
 
+          {/* ─── Fechamento do mês: os números concretos, com nome ───
+              Roberto (02/09): "tem que mostrar se teve um cliente que não recebeu artes, quantos
+              clientes teve arte, quantos não teve, quanto foi tempo de atraso". O bloco de
+              "Produção dos Colaboradores" logo abaixo mostra SCORE; este mostra CONTAGEM, que é o
+              que se usa para agir de manhã. */}
+          {timeView === "atual" && <FechamentoMensal />}
+
           {/* ─── Produção dos Colaboradores (real, por pessoa) ─── */}
           {timeView === "atual" && collaborators.length > 0 && (
             <div className="card p-4">
@@ -790,7 +798,9 @@ export default function GoalsPage() {
                 })}
               </div>
               <p className="text-[10px] text-muted-foreground mt-3">
-                Design: score = % de entregas no prazo. Social/Tráfego: score = saúde média da carteira. Tudo do mês corrente, dados reais do sistema.
+                Design: score = % de entregas no prazo. Social/Tráfego: score = saúde média da carteira —
+                é uma leitura da CARTEIRA, não da pessoa: a satisfação do cliente também depende de tráfego,
+                aprovação e do produto dele. Para desempenho por pessoa, use o Fechamento do mês acima.
               </p>
             </div>
           )}
