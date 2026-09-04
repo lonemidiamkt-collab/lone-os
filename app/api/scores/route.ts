@@ -51,7 +51,9 @@ export async function GET(req: NextRequest) {
       .select("id, client_id, status, due_date, designer_delivered_at, designer_delivered_by, client_approved_at, blocked_reason, created_at, social_media")
       .is("archived_at", null)
       .gte("created_at", new Date(Date.now() - 90 * DIAS).toISOString()),
-    supabaseAdmin.from("team_members").select("name, role, active"),
+    // A coluna é `is_active`, não `active`: com o nome errado o PostgREST devolve erro e a
+    // lista vem vazia — sem quebrar nada visível, que é o pior tipo de falha.
+    supabaseAdmin.from("team_members").select("name, role, is_active"),
   ]);
 
   const clientes = (clientesQ.data ?? []).filter((c) => !/\(teste\)/i.test((c.name as string) || ""));
@@ -178,7 +180,7 @@ export async function GET(req: NextRequest) {
   const atrasos = resumirAtrasos(paraAtraso, diasEsperandoCliente);
 
   // ── DESEMPENHO POR PESSOA ──────────────────────────────────────────────
-  const membros = (membrosQ.data ?? []).filter((m) => m.active !== false);
+  const membros = (membrosQ.data ?? []).filter((m) => m.is_active !== false);
   const pessoas: ResultadoPessoa[] = [];
 
   const porFuncao: { funcao: Funcao; campo: "assigned_designer" | "assigned_social" | "assigned_traffic" }[] = [
