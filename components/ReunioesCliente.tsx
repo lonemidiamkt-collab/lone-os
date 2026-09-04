@@ -80,6 +80,7 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
   const [pontos, setPontos] = useState<string[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
 
   const [agendando, setAgendando] = useState(false);
   const [form, setForm] = useState({
@@ -103,13 +104,28 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
 
   const carregar = useCallback(() => {
     setCarregando(true);
+    setErro(null);
+    // FALHA SILENCIOSA ERA O DEFEITO: a versão anterior fazia `if (!j?.ok) return`, então um 401
+    // ou um erro de servidor deixavam a tela vazia, idêntica a "não há reunião nenhuma". Quem
+    // olhava concluía que a funcionalidade não existia — e não havia como saber a diferença sem
+    // abrir o console. Agora o erro aparece na tela, com o status.
     authedFetch(`/api/reunioes/historico?clientId=${clientId}`)
-      .then((r) => (r.ok ? r.json() : null))
+      .then(async (r) => {
+        if (!r.ok) {
+          const corpo = await r.json().catch(() => null);
+          throw new Error(
+            r.status === 401
+              ? "sua sessão expirou — recarregue a página ou entre de novo"
+              : (corpo?.error ?? `o servidor respondeu ${r.status}`),
+          );
+        }
+        return r.json();
+      })
       .then((j) => {
-        if (!j?.ok) return;
         setLista(j.reunioes ?? []);
         setPontos(j.pontosAtencao ?? []);
       })
+      .catch((e: Error) => setErro(e.message))
       .finally(() => setCarregando(false));
   }, [clientId]);
 
@@ -229,6 +245,18 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
 
       {aviso && <p className="mb-3 text-[11px] text-foreground bg-surface border border-border rounded-lg p-2.5">{aviso}</p>}
 
+      {erro && (
+        <div className="mb-3 p-2.5 rounded-lg bg-destructive/10 border border-destructive/30">
+          <p className="text-[11.5px] text-destructive flex items-start gap-1.5">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+            <span>Não consegui carregar as reuniões: {erro}</span>
+          </p>
+          <button onClick={carregar} className="mt-1.5 text-[10px] px-2 py-1 rounded-md bg-card border border-border text-foreground hover:border-primary">
+            Tentar de novo
+          </button>
+        </div>
+      )}
+
       {/* MEMÓRIA VIVA */}
       {pontos.length > 0 && !agendando && (
         <div className="mb-4 p-3 rounded-xl bg-surface border border-border">
@@ -329,7 +357,7 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
       )}
 
       {carregando && <p className="text-[11px] text-muted-foreground">Carregando…</p>}
-      {!carregando && !lista.length && !agendando && registrando !== "nova" && (
+      {!carregando && !erro && !lista.length && !agendando && registrando !== "nova" && (
         <p className="text-[11px] text-muted-foreground">
           Nenhuma reunião ainda. Use <b>Agendar</b> para a próxima (com pauta e anexos), ou{" "}
           <b>Registrar realizada</b> para guardar a transcrição de uma que já aconteceu.

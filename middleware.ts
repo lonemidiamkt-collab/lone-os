@@ -27,8 +27,13 @@ export function middleware(request: NextRequest) {
   // route handler via getServerUser — middleware só bloqueia request claramente
   // sem credencial alguma.
   if (pathname.startsWith("/api/")) {
+    // `includes`, não `endsWith`: quando o token é grande o Supabase divide o cookie em pedaços
+    // nomeados `sb-<ref>-auth-token.0`, `.1`… e nenhum deles TERMINA em "-auth-token". Com
+    // `endsWith`, esse usuário levava 401 do middleware antes de a rota ser chamada — sessão
+    // válida, porta fechada, e sem nada no log da rota para explicar.
+    // O critério aqui tem que ser o MESMO de lib/supabase/auth-server.ts, que já usava `includes`.
     const hasCookieSession = request.cookies.getAll().some(
-      (c) => c.name.startsWith("sb-") && c.name.endsWith("-auth-token")
+      (c) => c.name.startsWith("sb-") && c.name.includes("-auth-token")
     );
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization") || "";
     const hasAuthHeader = /^bearer\s+\S/i.test(authHeader);
