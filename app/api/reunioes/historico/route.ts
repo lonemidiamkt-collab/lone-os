@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   if (id) {
     const { data, error } = await supabaseAdmin
       .from("meetings")
-      .select("id, client_id, title, start_at, responsavel, estado, resumo, transcricao, transcricao_origem, transcricao_em, transcricao_por, transcricao_palavras, analise, pontos_atencao, pdf_path")
+      .select("id, client_id, title, start_at, end_at, responsavel, estado, resumo, transcricao, transcricao_origem, transcricao_em, transcricao_por, transcricao_palavras, analise, pontos_atencao, pdf_path, pauta, pauta_origem, pauta_em, pauta_por, anexos, location, description, meeting_type")
       .eq("id", id).maybeSingle();
     if (error || !data) return NextResponse.json({ error: "reunião não encontrada" }, { status: 404 });
 
@@ -42,7 +42,16 @@ export async function GET(req: NextRequest) {
         .from("meeting-records").createSignedUrl(data.pdf_path as string, 3600);
       pdfUrl = signed?.signedUrl ?? null;
     }
-    return NextResponse.json({ ok: true, reuniao: { ...data, pdfUrl } });
+    // Cada anexo ganha um link assinado: o bucket é privado, e URL sem assinatura não abre.
+    const anexos = await Promise.all(
+      ((Array.isArray(data.anexos) ? data.anexos : []) as { path: string; nome: string; tamanho: number; tipo: string }[])
+        .map(async (a) => {
+          const { data: signed } = await supabaseAdmin.storage
+            .from("meeting-records").createSignedUrl(a.path, 3600);
+          return { ...a, url: signed?.signedUrl ?? null };
+        }),
+    );
+    return NextResponse.json({ ok: true, reuniao: { ...data, pdfUrl, anexos } });
   }
 
   if (!clientId) return NextResponse.json({ error: "clientId é obrigatório" }, { status: 400 });
@@ -71,7 +80,7 @@ export async function GET(req: NextRequest) {
   // ── A lista ─────────────────────────────────────────────────────────────
   const { data, error } = await supabaseAdmin
     .from("meetings")
-    .select("id, title, start_at, responsavel, estado, resumo, transcricao_palavras, pontos_atencao, pdf_path, analise, meeting_type")
+    .select("id, title, start_at, end_at, responsavel, estado, status, resumo, transcricao_palavras, pontos_atencao, pdf_path, analise, meeting_type, location, description, pauta, pauta_origem, anexos")
     .eq("client_id", clientId)
     .order("start_at", { ascending: false })
     .limit(50);
@@ -80,8 +89,14 @@ export async function GET(req: NextRequest) {
   const reunioes = (data ?? []).map((m) => {
     const a = (m.analise ?? {}) as { clima?: string; decisoes?: unknown[]; proximas_acoes?: unknown[]; pendencias_cliente?: unknown[]; sugestoes_briefing?: unknown[] };
     return {
-      id: m.id, quando: m.start_at, responsavel: m.responsavel, estado: m.estado,
+      id: m.id, quando: m.start_at, fim: m.end_at, responsavel: m.responsavel,
+      // Reunião marcada pelo agendador antigo nasce sem `estado`: se tem data e não foi
+      // cancelada, está agendada — é o que a pessoa quis dizer ao marcar.
+      estado: (m.estado as string) || (m.status === "cancelled" ? "cancelada" : "agendada"),
       tipo: m.meeting_type, resumo: m.resumo,
+      titulo: m.title, local: m.location, descricao: m.description,
+      pauta: m.pauta, pautaOrigem: m.pauta_origem,
+      anexos: (Array.isArray(m.anexos) ? m.anexos : []) as { path: string; nome: string; tamanho: number }[],
       palavras: m.transcricao_palavras ?? 0,
       temTranscricao: (m.transcricao_palavras ?? 0) > 0,
       temPdf: !!m.pdf_path,

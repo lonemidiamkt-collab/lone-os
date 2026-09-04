@@ -48,8 +48,7 @@ import CrescimentoTab from "@/components/fichaviva/CrescimentoTab";
 import AIAuditsTab from "@/components/client-tabs/AIAuditsTab";
 import ClientNPS from "@/components/sector/ClientNPS";
 import WhatsAppTemplates from "@/components/WhatsAppTemplates";
-import MeetingScheduler from "@/components/MeetingScheduler";
-import HistoricoReunioes from "@/components/HistoricoReunioes";
+import ReunioesCliente from "@/components/ReunioesCliente";
 const ContractGenerator = dynamic(() => import("@/components/ContractGenerator"), { ssr: false });
 import PortalManagementCard from "@/components/PortalManagementCard";
 import FichaViva360Tab from "@/components/fichaviva/FichaViva360Tab";
@@ -1198,11 +1197,11 @@ export default function ClientDetailPage() {
           {activeTab === "chat" && (
             <div className="animate-fade-in max-w-2xl space-y-6">
               {/* Reuniões (o chat interno por cliente foi removido a pedido — só agendamento + templates) */}
-              <MeetingScheduler client={client} currentUser={currentUser} />
-              {/* O histórico com a MEMÓRIA da reunião: transcrição guardada, o que a IA extraiu e
-                  busca no que foi dito. O MeetingScheduler acima agenda; este guarda o que
-                  aconteceu — são coisas diferentes e as duas vivem aqui. */}
-              <HistoricoReunioes clientId={client.id} clientName={client.name} />
+              {/* UM componente para o ciclo inteiro: agendar, escrever ou gerar a pauta, anexar
+                  material, registrar a transcrição depois e buscar no histórico.
+                  Antes eram dois blocos ("Agendar" e "Reuniões cadastradas") fazendo partes do
+                  mesmo trabalho — quem chegava não sabia em qual clicar. */}
+              <ReunioesCliente clientId={client.id} clientName={client.nomeFantasia || client.name} />
               <WhatsAppTemplates client={client} />
             </div>
           )}

@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
       clientId: m.client_id as string,
       cliente: nomePorId.get(m.client_id as string) ?? (m.title as string) ?? "Cliente",
       responsavel: (m.responsavel as string) || null,
-      // Reunião marcada à mão nasce sem `estado` (o MeetingScheduler não preenche): se tem data e
+      // Reunião antiga pode não ter `estado` (o agendador anterior não preenchia): se tem data e
       // não foi cancelada, está agendada — é o que a pessoa quis dizer ao marcar.
       estado: (m.estado as string) || (m.status === "cancelled" ? "cancelada" : "agendada"),
       quando: m.start_at as string,
