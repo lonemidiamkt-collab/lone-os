@@ -86,10 +86,51 @@ export type IntencaoReuniao =
  * dessas continua sendo conversa comum.
  */
 const RX_CONFIRMA_CURTO =
-  /^\s*(?:isso|isso a[ií]|exato|exatamente|perfeito|pode confirmar|confirma|confirmado|pode marcar|pode agendar|fechado|fechou|combinado|beleza|blz|ok|okay|show|boa|t[áa] [óo]timo|t[áa] bom|por mim (?:ok|beleza|t[áa] bom)|sim)(?=[\s,.!…]|$)/i;
+  /^\s*(?:isso|isso a[ií]|exato|exatamente|perfeito|pode(?:\s+(?:ser|sim|confirmar|marcar|agendar))?|confirma|confirmado|fechado|fechou|combinado|beleza|blz|ok|okay|show|boa|t[áa] [óo]timo|t[áa] bom|por mim (?:ok|beleza|t[áa] bom)|sim)(?=[\s,.!…]|$)/i;
 
 /** Tamanho máximo de uma mensagem que ainda pode ser lida como RESPOSTA a "que horas?". */
 const RESPOSTA_CURTA = 160;
+
+/**
+ * Por quanto tempo um horário proposto continua valendo.
+ *
+ * Roberto (08/09): *"Loninho: 'pode terça às 15h?' Cliente responde dois dias depois: 'pode'. Seu
+ * agente pode interpretar isso como confirmação. Não deveria. A proposta precisa ter validade."*
+ *
+ * Ele está certo, e o custo do erro é concreto: em dois dias alguém pode ter posto outra coisa
+ * naquele horário, e o agente confirmaria uma reunião que já não cabe.
+ */
+export const VALIDADE_PROPOSTA_H = 24;
+
+/** A proposta feita em `propostoEm` ainda vale? */
+export function propostaValida(propostoEm: string | null | undefined, agora = new Date()): boolean {
+  if (!propostoEm) return false;
+  const t = new Date(propostoEm).getTime();
+  if (Number.isNaN(t)) return false;
+  return agora.getTime() - t <= VALIDADE_PROPOSTA_H * 3600_000;
+}
+
+/**
+ * "isso", "pode", "beleza" — um aceite curto, sem data nem hora.
+ *
+ * Exportado porque a rota precisa reconhecê-lo mesmo quando a proposta JÁ EXPIROU: o cliente
+ * concordou de boa-fé e não pode levar silêncio por causa de um relógio nosso.
+ */
+export function ehConfirmacaoCurta(texto: string, agora = new Date()): boolean {
+  const t = (texto || "").trim();
+  if (!t || !RX_CONFIRMA_CURTO.test(t) || RX_RECUSA.test(t)) return false;
+  // "pode ser dia 20 às 10h" começa igual a um aceite e não é: é horário NOVO. Qualquer data ou
+  // hora legível na mensagem desqualifica — quem manda horário está corrigindo, não concordando.
+  if (lerHorario(t, agora)) return false;
+  if (lerHora(t)?.explicita) return false;
+  return true;
+}
+
+/** O que ele diz quando o cliente concorda com um horário que já passou da validade. */
+export function textoPropostaExpirada(quandoExtenso: string): string {
+  return `📅 Perfeito! Só me dá um minuto: *${quandoExtenso}* foi combinado faz mais de um dia e eu `
+    + `preciso confirmar se continua livre. Já te falo! 👍`;
+}
 
 export function lerIntencaoReuniao(
   texto: string,

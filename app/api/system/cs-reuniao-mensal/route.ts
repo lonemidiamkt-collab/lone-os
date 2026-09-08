@@ -8,6 +8,7 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow, isBusinessDay, isBusinessHour } from "@/lib/cs/vigilancia";
 import { mencionar } from "@/lib/cs/mencao";
+import { lerAbordagem, podeAbordar, descrever } from "@/lib/cs/piloto";
 import { porExtenso } from "@/lib/cs/parse-horario";
 import {
   janelaDoMes, montarCobranca, textoCobranca, lembretesDevidos, textoLembrete,
@@ -211,6 +212,9 @@ export async function POST(req: NextRequest) {
   // sem esta trava o mesmo cliente receberia oferta nove vezes.
   const horaAgora = agora.getHours();
   const podeOfertar = horaAgora >= HORA_OFERTA && horaAgora < HORA_OFERTA + 1;
+  // O PORTÃO DO LANÇAMENTO PROGRESSIVO. Vale só para a INICIATIVA do agente: cobrança do time,
+  // resposta a quem perguntou e lembrete de reunião combinada não passam por aqui.
+  const abordagem = await lerAbordagem();
   const grupoDoCliente = new Map(elegiveis.map((c) => [c.id as string, (c.whatsapp_group_jid as string) || null]));
   const idReuniao = new Map((doMes ?? []).map((m) => [m.client_id as string, m.id as string]));
   const acoes: string[] = [];
@@ -225,6 +229,13 @@ export async function POST(req: NextRequest) {
     // ── Ofertar / reofertar no grupo do cliente ──────────────────────────
     if (acao.tipo === "ofertar" || acao.tipo === "reofertar") {
       if (!podeOfertar || !grupoCli) continue;
+      // Fora do piloto o agente NÃO puxa conversa. O cliente continua no ciclo — ele aparece na
+      // cobrança do time normalmente, e alguém marca à mão. O que não acontece é o agente
+      // escrever no grupo dele sem estar liberado.
+      if (!podeAbordar(abordagem, c.clientId)) {
+        acoes.push(`(fora do piloto) ${c.cliente}`);
+        continue;
+      }
       // Sugere dentro da janela: a reunião deve caber no próprio ciclo sempre que der.
       const opcoes = sugerirHorarios(agora, 2, janela.fecha);
       const texto = textoOfertaTentativa(c.cliente, opcoes.map((o) => o.texto), acao.tentativa);
@@ -313,6 +324,9 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     janela,
+    // Sai no log de toda execução. Sem isto, "o agente não mandou nada" e "o agente está
+    // desligado" ficam indistinguíveis — e é assim que se perde uma janela inteira.
+    abordagem: descrever(abordagem),
     lembretes: lembretesEnviados,
     cobrancas: cobrancas.map((c) => ({
       pessoa: c.pessoa, pendentes: c.pendentes.length, agendadas: c.agendadas,

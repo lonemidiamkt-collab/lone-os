@@ -1079,6 +1079,27 @@ export async function POST(req: NextRequest) {
 
       if (resp.tipo === "aceita" && reu.horario_proposto) {
         const iso = reu.horario_proposto as string;
+        const fimIso = new Date(new Date(iso).getTime() + 3600_000).toISOString();
+
+        // ── CONFERE DE NOVO ANTES DE FECHAR ────────────────────────────────
+        //
+        // Entre o agente propor e o social responder passaram horas ou dias, e nesse intervalo a
+        // própria pessoa pode ter marcado outra coisa pela tela. Confirmar sem reconferir é como
+        // se cria reunião dupla — o tipo de erro que só aparece na hora da chamada.
+        const { conflitoDoResponsavel, textoConflito } = await import("@/lib/cs/conflito-reuniao");
+        const conf = await conflitoDoResponsavel(
+          (reu.responsavel as string) || null, iso, fimIso, reu.id as string);
+        if (conf) {
+          const { porExtenso: pe } = await import("@/lib/cs/parse-horario");
+          const { mencionar: men } = await import("@/lib/cs/mencao");
+          const mc = await men((reu.responsavel as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
+          await csSendGroupText(msg.groupJid,
+            textoConflito(nomeCli, pe(iso), conf, mc.trecho), msg.messageId,
+            { origem: "cs-reuniao-conflito", destino: "interno" }, mc.jids);
+          console.log(`[CS/inbound] conflito: ${nomeCli} ${iso} choca com ${conf.cliente}`);
+          return NextResponse.json({ ok: true, reuniao_conflito: conf.cliente, cliente: nomeCli });
+        }
+
         await supabaseAdmin.from("meetings").update({
           estado: "agendada", start_at: iso,
           end_at: new Date(new Date(iso).getTime() + 3600_000).toISOString(),
@@ -2789,14 +2810,17 @@ export async function POST(req: NextRequest) {
   // futura E um compromisso nosso. Sem esta ordem, viraria lembrete de evento do cliente e a
   // agenda do time continuaria vazia.
   if (c?.id && msg.text) {
-    const { lerIntencaoReuniao, textoConfirmacao, textoPergunta, textoPropoeHorario } = await import("@/lib/cs/agendar-reuniao");
+    const {
+      lerIntencaoReuniao, textoConfirmacao, textoPergunta, textoPropoeHorario,
+      propostaValida, ehConfirmacaoCurta, textoPropostaExpirada,
+    } = await import("@/lib/cs/agendar-reuniao");
 
     // Proposta PENDENTE deste cliente, feita pelo agente. É o que permite entender um "isso,
     // pode confirmar" — resposta sem data, sem hora e sem a palavra "reunião", que antes caía no
     // vazio e deixava o cliente falando sozinho depois de já ter concordado (caso Contele, 04/09).
     const { data: pendente } = await supabaseAdmin
       .from("meetings")
-      .select("id, horario_proposto, mes_referencia")
+      .select("id, horario_proposto, mes_referencia, proposto_em")
       .eq("client_id", c.id as string)
       .eq("estado", "ofertada")
       .eq("proposto_lado", "agente")
@@ -2822,8 +2846,36 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .maybeSingle();
 
+    // ── A PROPOSTA TEM VALIDADE ─────────────────────────────────────────
+    //
+    // Um "pode" dois dias depois não confirma nada: naquele intervalo alguém pode ter ocupado o
+    // horário. Passada a validade, o agente reconhece o aceite (o cliente concordou de boa-fé e
+    // não pode levar silêncio) mas diz que vai reconfirmar em vez de fechar.
+    const propValida = propostaValida((pendente?.proposto_em as string) || null);
+    if (pendente?.horario_proposto && !propValida && ehConfirmacaoCurta(msg.text, new Date())) {
+      const { porExtenso } = await import("@/lib/cs/parse-horario");
+      await csSendGroupText(msg.groupJid, textoPropostaExpirada(porExtenso(pendente.horario_proposto as string)),
+        msg.messageId, { origem: "cs-reuniao-proposta-expirada", clientId: c.id as string });
+      // Volta ao social com o horário de novo: quem confere disponibilidade é gente, não o relógio.
+      const jidEq = internalGroupJid();
+      if (jidEq) {
+        const { mencionar } = await import("@/lib/cs/mencao");
+        const mm = await mencionar((c.assigned_social as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
+        await csSendGroupText(jidEq,
+          `⏳ ${mm.trecho} a *${clienteNome}* aceitou *${porExtenso(pendente.horario_proposto as string)}*, `
+          + `mas essa proposta é de mais de um dia atrás. Esse horário ainda está de pé? Responde *ok* que eu fecho.`,
+          undefined, { origem: "cs-reuniao-revalidar", destino: "interno" }, mm.jids);
+        await supabaseAdmin.from("meetings")
+          .update({ estado: "aguardando_social", perguntado_social_em: new Date().toISOString() })
+          .eq("id", pendente.id as string);
+      }
+      return NextResponse.json({ ok: true, reuniao_proposta_expirada: true, cliente: clienteNome });
+    }
+
     const intencao = lerIntencaoReuniao(
-      msg.text, new Date(), (pendente?.horario_proposto as string) || undefined, !!perguntou,
+      msg.text, new Date(),
+      propValida ? ((pendente?.horario_proposto as string) || undefined) : undefined,
+      !!perguntou,
     );
 
     // ── O CLIENTE DEU O TURNO: o agente propõe a hora ────────────────────
