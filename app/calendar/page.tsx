@@ -27,6 +27,8 @@ import {
   ExternalLink,
   GripVertical,
   CalendarClock,
+  Video,
+  MapPin,
 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useAppState } from "@/lib/context/AppStateContext"; // kept for reminders (localStorage-only, no DB equivalent)
@@ -126,7 +128,10 @@ const PRIORITY_COLORS: Record<Priority, string> = {
   critical: "text-destructive",
 };
 
-type CreateType = "task" | "social" | "reminder";
+// "meeting" entrou em 08/09: o Criação Rápida do calendário só oferecia tarefa, card e lembrete,
+// então marcar reunião exigia abrir o cliente. Roberto: "ainda não aparece para eu selecionar de
+// forma descritiva se é uma tarefa, um lembrete ou uma reunião, e nem o link caso for uma reunião".
+type CreateType = "task" | "social" | "reminder" | "meeting";
 
 export default function CalendarPage() {
   // reminders/addReminder/toggleReminder/updateReminder stay on AppStateContext (localStorage-only)
@@ -1289,6 +1294,12 @@ function QuickCreateModal({
   const [format, setFormat] = useState("Post Feed (1:1)");
   const [time, setTime] = useState("");
   const [endDate, setEndDate] = useState(date);
+  // Reunião: o link é clicável e vai para o lembrete; a modalidade muda o que se cobra de quem vai
+  // (link vs endereço), e sem ela o convite não diz se a pessoa precisa sair do escritório.
+  const [linkReuniao, setLinkReuniao] = useState("");
+  const [modalidade, setModalidade] = useState<"online" | "presencial">("online");
+  const [duracao, setDuracao] = useState("60");
+  const [salvandoReuniao, setSalvandoReuniao] = useState(false);
 
   // Autoresize do textarea de descrição (briefing usa MarkdownEditor que cuida sozinho)
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -1312,8 +1323,44 @@ function QuickCreateModal({
     return currentUser;
   };
 
-  const handleSave = (openDetails = false) => {
-    if (!title.trim()) return;
+  const handleSave = async (openDetails = false) => {
+    if (!title.trim() && createType !== "meeting") return;
+
+    // ── REUNIÃO ────────────────────────────────────────────────────────────
+    //
+    // Vai para `meetings`, não para `tasks`: é o que faz ela entrar no histórico do cliente, nos
+    // OKRs ("quem teve reunião") e no cron de lembrete. Gravar como tarefa a deixaria fora dos
+    // três — foi por isso que o tipo precisou existir aqui em vez de virar "tarefa de reunião".
+    if (createType === "meeting") {
+      if (!clientId) { alert("Reunião precisa de um cliente."); return; }
+      setSalvandoReuniao(true);
+      try {
+        const inicio = new Date(`${date}T${time || "10:00"}:00-03:00`).toISOString();
+        const fim = new Date(new Date(inicio).getTime() + Number(duracao) * 60000).toISOString();
+        const r = await authedFetch("/api/reunioes/gerenciar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            acao: "agendar", clientId, inicio, fim,
+            tipo: "alinhamento",
+            titulo: title.trim() || undefined,
+            local: modalidade === "online" ? "Online" : "Presencial",
+            link: modalidade === "online" ? (linkReuniao.trim() || undefined) : undefined,
+            pauta: description.trim() || undefined,
+            colaboradores: assignees.filter((a) => a !== currentUser),
+          }),
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => null);
+          alert(j?.error ?? "Não consegui agendar a reunião.");
+          return;
+        }
+        onClose();
+      } finally {
+        setSalvandoReuniao(false);
+      }
+      return;
+    }
 
     if (createType === "reminder") {
       onCreateReminder({
@@ -1373,6 +1420,7 @@ function QuickCreateModal({
     { key: "task", label: "Tarefa", icon: Briefcase, desc: "Tarefa para qualquer setor" },
     { key: "social", label: "Social Media", icon: Instagram, desc: "Card de conteúdo com briefing" },
     { key: "reminder", label: "Lembrete", icon: Bell, desc: "Aviso simples sem design" },
+    { key: "meeting", label: "Reunião", icon: CalendarClock, desc: "Com cliente — entra no histórico dele" },
   ];
 
   const dateParts = date.split("-");
@@ -1580,8 +1628,86 @@ function QuickCreateModal({
             </div>
           )}
 
+          {/* ── REUNIÃO: cliente, horário, modalidade, link e duração ─────────── */}
+          {createType === "meeting" && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Cliente</label>
+                  <select
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
+                  >
+                    <option value="">Escolha o cliente</option>
+                    {visibleClients.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                      <Clock size={10} /> Horário
+                    </label>
+                    <input
+                      type="time" value={time || "10:00"} onChange={(e) => setTime(e.target.value)}
+                      className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Duração</label>
+                    <select
+                      value={duracao} onChange={(e) => setDuracao(e.target.value)}
+                      className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50 outline-none"
+                    >
+                      <option value="30">30 min</option>
+                      <option value="60">1 hora</option>
+                      <option value="90">1h30</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Online ou presencial muda o que se cobra de quem vai: link ou endereço. */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Modalidade</label>
+                <div className="flex gap-2">
+                  {([["online", "Online", Video], ["presencial", "Presencial", MapPin]] as const).map(([v2, l, Ic]) => (
+                    <button
+                      key={v2} type="button" onClick={() => setModalidade(v2)}
+                      className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs border transition-all ${
+                        modalidade === v2
+                          ? "bg-primary/15 border-primary/50 text-primary"
+                          : "bg-card border-border text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Ic size={12} /> {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {modalidade === "online" && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Link da chamada</label>
+                  <input
+                    value={linkReuniao} onChange={(e) => setLinkReuniao(e.target.value)}
+                    placeholder="Cole o convite do Meet, Zoom…  (entra no lembrete que o cliente recebe)"
+                    className="w-full bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 outline-none"
+                  />
+                </div>
+              )}
+
+              <p className="text-[10.5px] text-muted-foreground leading-relaxed">
+                Entra no histórico do cliente e nos indicadores de reunião do mês. O Lone CS lembra
+                o cliente e quem foi convidado na véspera e uma hora antes.
+              </p>
+            </div>
+          )}
+
           {/* Priority + End Date (tasks/social) */}
-          {createType !== "reminder" && (
+          {createType !== "reminder" && createType !== "meeting" && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Prioridade</label>

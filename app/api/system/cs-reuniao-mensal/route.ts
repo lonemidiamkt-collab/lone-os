@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   // lembrete no dia 27, quando a janela já fechou.
   const { data: agendadas } = await supabaseAdmin
     .from("meetings")
-    .select("id, client_id, title, start_at, responsavel, lembrete_vespera_em, lembrete_hora_em, lembrete_cliente_vespera_em, lembrete_cliente_hora_em, clients(name, nome_fantasia, whatsapp_group_jid)")
+    .select("id, client_id, title, start_at, responsavel, attendees, link_reuniao, lembrete_vespera_em, lembrete_hora_em, lembrete_cliente_vespera_em, lembrete_cliente_hora_em, clients(name, nome_fantasia, whatsapp_group_jid)")
     .eq("estado", "agendada")
     .gte("start_at", new Date(agora.getTime() - 2 * 3600_000).toISOString())
     .lte("start_at", new Date(agora.getTime() + 3 * 86400_000).toISOString());
@@ -72,6 +72,14 @@ export async function POST(req: NextRequest) {
       return [m.id as string, c?.whatsapp_group_jid ?? null];
     }),
   );
+  // Convidados e link, por reunião: o lembrete precisa marcar quem VAI, não só o responsável, e
+  // levar o link junto — um lembrete de reunião online sem o link obriga a pessoa a ir procurar.
+  const extras = new Map<string, { colaboradores: string[]; link: string | null }>(
+    (agendadas ?? []).map((m) => [m.id as string, {
+      colaboradores: (m.attendees as string[]) ?? [],
+      link: (m.link_reuniao as string) ?? null,
+    }]),
+  );
   const jaLembrouCliente = new Map<string, { vespera: boolean; hora: boolean }>(
     (agendadas ?? []).map((m) => [m.id as string, {
       vespera: !!m.lembrete_cliente_vespera_em, hora: !!m.lembrete_cliente_hora_em,
@@ -81,11 +89,23 @@ export async function POST(req: NextRequest) {
   const lembretesEnviados: string[] = [];
   for (const l of lembretes) {
     const quandoTxt = porExtenso(l.quando);
-    const m = l.responsavel ? await mencionar(l.responsavel).catch(() => ({ trecho: "", jids: [] as string[] })) : { trecho: "", jids: [] as string[] };
+    const ext = extras.get(l.clientId) ?? { colaboradores: [], link: null };
+    // Todo mundo que VAI: o responsável e quem foi convidado. Marcar só o responsável deixaria o
+    // convidado sem aviso — e ele foi chamado justamente porque precisa estar lá.
+    const envolvidos = [l.responsavel, ...ext.colaboradores].filter(Boolean) as string[];
+    const mencoes = await Promise.all(
+      [...new Set(envolvidos)].map((nome) =>
+        mencionar(nome).catch(() => ({ trecho: "", jids: [] as string[] }))),
+    );
+    const m = {
+      trecho: mencoes.map((x) => x.trecho).filter(Boolean).join(" "),
+      jids: [...new Set(mencoes.flatMap((x) => x.jids))],
+    };
+    const comLink = ext.link ? `${textoLembrete(l, quandoTxt, m.trecho)}\n🔗 ${ext.link}` : textoLembrete(l, quandoTxt, m.trecho);
 
     // ── 1a. EQUIPE ────────────────────────────────────────────────────────
     if (!dry && internalJid) {
-      const r = await csSendGroupText(internalJid, textoLembrete(l, quandoTxt, m.trecho), undefined,
+      const r = await csSendGroupText(internalJid, comLink, undefined,
         { origem: "cs-reuniao-lembrete", destino: "interno" }, m.jids);
       if (r.ok) {
         // Marca ANTES de qualquer outra coisa dar errado: repetir o lembrete é pior que perdê-lo.
@@ -108,7 +128,10 @@ export async function POST(req: NextRequest) {
     const jaMandou = l.tipo === "vespera" ? feito?.vespera : feito?.hora;
     if (grupoCli && !jaMandou) {
       if (!dry) {
-        const rc = await csSendGroupText(grupoCli, textoLembreteCliente(quandoTxt, l.tipo), undefined,
+        const textoCli = ext.link
+          ? `${textoLembreteCliente(quandoTxt, l.tipo)}\n🔗 ${ext.link}`
+          : textoLembreteCliente(quandoTxt, l.tipo);
+        const rc = await csSendGroupText(grupoCli, textoCli, undefined,
           { origem: "cs-reuniao-lembrete-cliente", destino: "cliente" });
         if (rc.ok) {
           await supabaseAdmin.from("meetings")
