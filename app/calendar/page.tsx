@@ -46,6 +46,15 @@ const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","A
 const MONTHS_SHORT = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 const WEEKDAYS = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
+/**
+ * Sábado ou domingo, pela posição na grade.
+ *
+ * A semana começa no domingo (índice 0) e termina no sábado (6) — a grade tem 7 colunas fixas, e o
+ * resto da divisão é a coluna. Serve só para apagar um pouco o fim de semana: a equipe não trabalha
+ * nele, e a grade fica mais fácil de ler quando os blocos de semana se separam sozinhos.
+ */
+const fimDeSemana = (indice: number) => indice % 7 === 0 || indice % 7 === 6;
+
 type EventType = "content" | "task" | "routine" | "reminder" | "meeting";
 
 interface CalendarEvent {
@@ -816,15 +825,22 @@ export default function CalendarPage() {
                   onDragOver={day ? (e) => handleDragOver(e, day) : undefined}
                   onDragLeave={day ? handleDragLeave : undefined}
                   onDrop={day ? (e) => handleDrop(e, day) : undefined}
+                  // O DIA PRECISA TER CORPO.
+                  //
+                  // As células com dia vinham `border-transparent` e sem fundo: num mês sem
+                  // evento sobravam só os números soltos no escuro, e a tela parecia quebrada —
+                  // não parecia um calendário vazio, parecia um calendário que não carregou.
+                  // Dia útil tem fundo e borda discretos; fim de semana fica mais apagado; célula
+                  // de outro mês continua invisível, que é o certo.
                   className={`group min-h-[48px] sm:min-h-[70px] rounded-lg p-1 sm:p-1.5 flex flex-col transition-all border relative ${
                     dragOverDay === day
                       ? "bg-primary/15 border-primary/50 ring-1 ring-primary/30"
                       : todayFlag
-                      ? "bg-primary/10 border-primary/30"
+                      ? "bg-primary/10 border-primary/40"
                       : selected
-                      ? "bg-card/5 border-border"
+                      ? "bg-card border-primary/40"
                       : day
-                      ? "border-transparent hover:bg-muted/50 cursor-pointer"
+                      ? `${fimDeSemana(i) ? "bg-card/30" : "bg-card/60"} border-border/60 hover:bg-muted/50 hover:border-border cursor-pointer`
                       : "border-transparent"
                   }`}
                 >
@@ -841,7 +857,7 @@ export default function CalendarPage() {
                           const titleAttr = obs ? obs.allInDay.map((x) => x.name).join(" • ") : undefined;
                           // Cores por escopo de feriado: nacional=âmbar, estadual=laranja, municipal=lima
                           const dayColor = hasDeadline
-                            ? "text-destructive font-bold drop-"
+                            ? "text-destructive font-bold"
                             : todayFlag
                             ? "text-primary font-bold"
                             : isNational
@@ -858,7 +874,7 @@ export default function CalendarPage() {
                             <span className={`text-xs font-medium flex items-center gap-1 ${dayColor}`} title={titleAttr}>
                               {day}
                               {hasDeadline && (
-                                <AlertTriangle size={10} className="text-destructive drop-" />
+                                <AlertTriangle size={10} className="text-destructive" />
                               )}
                               {!hasDeadline && isFeriado && (
                                 <Flag size={9} className={flagColor} aria-label={obs!.name} />
@@ -901,7 +917,7 @@ export default function CalendarPage() {
                               {rem.done ? (
                                 <Check size={8} className="text-lone-success" />
                               ) : (
-                                <Bell size={8} className="text-primary drop-" />
+                                <Bell size={8} className="text-primary" />
                               )}
                             </button>
                             );

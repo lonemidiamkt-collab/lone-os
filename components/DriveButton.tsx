@@ -37,7 +37,7 @@ export default function DriveButton({ driveLink, clientName, size = "sm", classN
           <FolderOpen size={14} className={cn(
             "transition-all",
             isValid
-              ? "text-primary drop- group-hover:drop-"
+              ? "text-primary"
               : "text-muted-foreground"
           )} />
         </div>
@@ -73,7 +73,7 @@ export default function DriveButton({ driveLink, clientName, size = "sm", classN
       <FolderOpen size={14} className={cn(
         "transition-all",
         isValid
-          ? "text-primary drop- group-hover:drop-"
+          ? "text-primary"
           : "text-muted-foreground"
       )} />
     </button>

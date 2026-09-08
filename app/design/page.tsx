@@ -232,7 +232,7 @@ function UploadArtModal({
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-primary/[0.04] border border-primary/20 hover:border-primary/40 transition-all"
             >
-              <FolderOpen size={14} className="text-primary drop-" />
+              <FolderOpen size={14} className="text-primary" />
               <div className="flex-1">
                 <p className="text-xs text-foreground font-medium">Pasta do cliente no Drive</p>
                 <p className="text-[9px] text-muted-foreground">Abrir para fazer upload da arte</p>
