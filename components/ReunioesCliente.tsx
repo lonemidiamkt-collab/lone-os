@@ -89,6 +89,10 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
   });
   // Quem mais participa. Roberto: "o Thiago poder convidar o Carlos para aquele evento".
   const [colaboradores, setColaboradores] = useState<string[]>([]);
+  // Mesma decisão que existe no Calendário: avisar o cliente é escolha de quem marca, e a escolha
+  // tem que ser a MESMA nos dois lugares — a mesma ação se comportar diferente conforme a tela é
+  // o tipo de coisa que faz a equipe deixar de confiar no sistema.
+  const [avisarCliente, setAvisarCliente] = useState(true);
   const [time, setTime] = useState<{ name: string; role: string }[]>([]);
 
   useEffect(() => {
@@ -161,7 +165,7 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
     const j = await chamar({
       acao: "agendar", clientId, inicio, fim, tipo: form.tipo,
       local: form.local, titulo: form.titulo.trim() || undefined, pauta: form.pauta.trim() || undefined,
-      colaboradores, link: form.link.trim() || undefined,
+      colaboradores, link: form.link.trim() || undefined, avisarCliente,
     });
     if (j?.ok) {
       setAviso("Reunião agendada. Vou lembrar na véspera e uma hora antes.");
@@ -337,6 +341,18 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
           <textarea value={form.pauta} onChange={(e) => setForm({ ...form, pauta: e.target.value })}
                     placeholder="Pauta / briefing da reunião (opcional agora — dá pra escrever ou gerar depois)"
                     className="w-full h-20 p-2 rounded-lg bg-card border border-border text-[12px] text-foreground placeholder:text-muted-foreground/60 resize-y" />
+          <label className="flex items-start gap-2 rounded-lg border border-border bg-card px-2.5 py-2 cursor-pointer">
+            <input type="checkbox" checked={avisarCliente}
+                   onChange={(e) => setAvisarCliente(e.target.checked)}
+                   className="mt-0.5 accent-[var(--primary)]" />
+            <span className="text-[11px] text-foreground leading-relaxed">
+              Avisar {clientName} no grupo agora
+              <span className="block text-[10px] text-muted-foreground">
+                Manda a confirmação com data e link. Desmarque se você já combinou por fora.
+              </span>
+            </span>
+          </label>
+
           <div className="flex justify-end">
             <button onClick={agendar} disabled={ocupado}
                     className="text-[11px] px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium flex items-center gap-1.5 disabled:opacity-50">
