@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
   // ── A lista ─────────────────────────────────────────────────────────────
   const { data, error } = await supabaseAdmin
     .from("meetings")
-    .select("id, title, start_at, end_at, responsavel, estado, status, resumo, transcricao_palavras, pontos_atencao, pdf_path, analise, meeting_type, location, description, pauta, pauta_origem, anexos")
+    .select("id, title, start_at, end_at, responsavel, attendees, link_reuniao, estado, status, resumo, transcricao_palavras, pontos_atencao, pdf_path, analise, meeting_type, location, description, pauta, pauta_origem, anexos")
     .eq("client_id", clientId)
     .order("start_at", { ascending: false })
     .limit(50);
@@ -90,6 +90,10 @@ export async function GET(req: NextRequest) {
     const a = (m.analise ?? {}) as { clima?: string; decisoes?: unknown[]; proximas_acoes?: unknown[]; pendencias_cliente?: unknown[]; sugestoes_briefing?: unknown[] };
     return {
       id: m.id, quando: m.start_at, fim: m.end_at, responsavel: m.responsavel,
+      // Quem MAIS vai e por onde. A aba mostrava só o responsável — e o convite que o Thiago
+      // mandou pro Carlos ficava invisível justamente na tela onde se confere a reunião.
+      colaboradores: (m.attendees as string[]) ?? [],
+      link: (m.link_reuniao as string) ?? null,
       // Reunião marcada pelo agendador antigo nasce sem `estado`: se tem data e não foi
       // cancelada, está agendada — é o que a pessoa quis dizer ao marcar.
       estado: (m.estado as string) || (m.status === "cancelled" ? "cancelada" : "agendada"),

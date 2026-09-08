@@ -1201,7 +1201,8 @@ export default function ClientDetailPage() {
                   material, registrar a transcrição depois e buscar no histórico.
                   Antes eram dois blocos ("Agendar" e "Reuniões cadastradas") fazendo partes do
                   mesmo trabalho — quem chegava não sabia em qual clicar. */}
-              <ReunioesCliente clientId={client.id} clientName={client.nomeFantasia || client.name} />
+              <ReunioesCliente clientId={client.id} clientName={client.nomeFantasia || client.name}
+                               donos={{ social: client.assignedSocial || null, trafego: client.assignedTraffic || null, designer: client.assignedDesigner || null }} />
               <WhatsAppTemplates client={client} />
             </div>
           )}

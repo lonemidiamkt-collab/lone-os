@@ -20,7 +20,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   CalendarClock, Search, Plus, X, Loader2, AlertTriangle, Download, ChevronDown,
-  ChevronRight, Sparkles, Paperclip, Check, Trash2, FileText, Clock,
+  ChevronRight, Sparkles, Paperclip, Check, Trash2, FileText, Clock, CalendarDays,
 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { generateGoogleCalendarUrl, generateICS, downloadICS } from "@/lib/calendar/icsGenerator";
@@ -29,6 +29,7 @@ interface Anexo { path: string; nome: string; tamanho: number; tipo?: string; ur
 
 interface Reuniao {
   id: string; quando: string; fim: string | null; responsavel: string | null;
+  colaboradores: string[]; link: string | null;
   estado: string; tipo: string; titulo: string | null; local: string | null;
   descricao: string | null; resumo: string | null;
   pauta: string | null; pautaOrigem: string | null;
@@ -75,7 +76,13 @@ function paraIso(data: string, hora: string): string {
   return new Date(`${data}T${hora}:00-03:00`).toISOString();
 }
 
-export default function ReunioesCliente({ clientId, clientName }: { clientId: string; clientName: string }) {
+export default function ReunioesCliente(
+  { clientId, clientName, donos }: {
+    clientId: string; clientName: string;
+    /** Quem cuida deste cliente, por função. Vem da ficha — é a mesma fonte que a agenda usa. */
+    donos?: { social: string | null; trafego: string | null; designer: string | null };
+  },
+) {
   const [lista, setLista] = useState<Reuniao[]>([]);
   const [pontos, setPontos] = useState<string[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -86,6 +93,10 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
   const [form, setForm] = useState({
     tipo: "mensal", data: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
     hora: "10:00", duracao: "60", local: "Online", titulo: "", pauta: "", link: "",
+    // Online ou presencial: muda o que se cobra de quem vai (link ou endereço) e o que o cliente
+    // lê no convite. O Calendário já perguntava; aqui não, e a reunião presencial saía como
+    // "Online" no aviso ao cliente.
+    modalidade: "online" as "online" | "presencial", endereco: "",
   });
   // Quem mais participa. Roberto: "o Thiago poder convidar o Carlos para aquele evento".
   const [colaboradores, setColaboradores] = useState<string[]>([]);
@@ -94,6 +105,15 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
   // o tipo de coisa que faz a equipe deixar de confiar no sistema.
   const [avisarCliente, setAvisarCliente] = useState(true);
   const [time, setTime] = useState<{ name: string; role: string }[]>([]);
+  /**
+   * Quem cuida DESTE cliente, por função.
+   *
+   * Roberto (08/09): a reunião tem que estar "bem vinculada à conta do social mídia e do gestor de
+   * tráfego". Numa reunião mensal se fala de conteúdo E de verba — e o gestor de tráfego ficava de
+   * fora porque ninguém lembrava de convidá-lo à mão. Aqui ele aparece destacado, com a função ao
+   * lado, para o convite ser uma decisão e não um esquecimento.
+   */
+
 
   useEffect(() => {
     // A lista vem do roster (team_members), a MESMA fonte que resolve menção no WhatsApp e o
@@ -164,8 +184,14 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
     const fim = new Date(new Date(inicio).getTime() + Number(form.duracao) * 60000).toISOString();
     const j = await chamar({
       acao: "agendar", clientId, inicio, fim, tipo: form.tipo,
-      local: form.local, titulo: form.titulo.trim() || undefined, pauta: form.pauta.trim() || undefined,
-      colaboradores, link: form.link.trim() || undefined, avisarCliente,
+      // Presencial vai com o endereço junto: é o que o convite mostra a quem vai.
+      local: form.modalidade === "presencial"
+        ? (form.endereco.trim() ? `Presencial — ${form.endereco.trim()}` : "Presencial")
+        : "Online",
+      titulo: form.titulo.trim() || undefined, pauta: form.pauta.trim() || undefined,
+      colaboradores,
+      link: form.modalidade === "online" ? (form.link.trim() || undefined) : undefined,
+      avisarCliente,
     });
     if (j?.ok) {
       setAviso("Reunião agendada. Vou lembrar na véspera e uma hora antes.");
@@ -313,30 +339,78 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
           <input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })}
                  placeholder={`Título (opcional) — padrão: "Reunião — ${clientName}"`}
                  className="w-full p-2 rounded-lg bg-card border border-border text-[12px] text-foreground placeholder:text-muted-foreground/60" />
-          <input value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })}
-                 placeholder="Link da chamada (Meet, Zoom…) — entra no lembrete e no convite"
-                 className="w-full p-2 rounded-lg bg-card border border-border text-[12px] text-foreground placeholder:text-muted-foreground/60" />
+          {/* ONLINE OU PRESENCIAL — o Calendário já perguntava e aqui não: reunião presencial saía
+              como "Online" no convite que o cliente recebe. */}
+          <div className="flex gap-2">
+            {(["online", "presencial"] as const).map((m) => (
+              <button key={m} type="button" onClick={() => setForm({ ...form, modalidade: m })}
+                className={`flex-1 text-[11px] px-3 py-1.5 rounded-lg border transition-colors ${
+                  form.modalidade === m
+                    ? "bg-primary/15 border-primary/50 text-primary"
+                    : "bg-card border-border text-muted-foreground hover:text-foreground"
+                }`}>
+                {m === "online" ? "Online" : "Presencial"}
+              </button>
+            ))}
+          </div>
 
-          {/* CONVIDAR — o responsável já está na reunião; aqui é quem MAIS participa. */}
-          {time.length > 0 && (
-            <div>
-              <p className="text-[10px] text-muted-foreground mb-1.5">Convidar do time</p>
-              <div className="flex flex-wrap gap-1.5">
-                {time.map((m) => {
-                  const dentro = colaboradores.includes(m.name);
-                  return (
-                    <button key={m.name} type="button"
-                      onClick={() => setColaboradores((c) => dentro ? c.filter((x) => x !== m.name) : [...c, m.name])}
-                      className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
-                        dentro ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:text-foreground"
-                      }`}>
-                      {dentro && "✓ "}{m.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          {form.modalidade === "online" ? (
+            <input value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })}
+                   placeholder="Link da chamada (Meet, Zoom…) — entra no lembrete e no convite"
+                   className="w-full p-2 rounded-lg bg-card border border-border text-[12px] text-foreground placeholder:text-muted-foreground/60" />
+          ) : (
+            <input value={form.endereco} onChange={(e) => setForm({ ...form, endereco: e.target.value })}
+                   placeholder="Endereço — entra no lembrete e no convite"
+                   className="w-full p-2 rounded-lg bg-card border border-border text-[12px] text-foreground placeholder:text-muted-foreground/60" />
           )}
+
+          {/* CONVIDAR — o responsável já está na reunião; aqui é quem MAIS participa.
+              Quem cuida DESTE cliente vem primeiro, com a função ao lado. Numa reunião mensal se
+              fala de conteúdo E de verba, e o gestor de tráfego ficava de fora porque ninguém
+              lembrava de convidá-lo à mão — o convite tem que ser decisão, não memória. */}
+          {time.length > 0 && (() => {
+            const papel: Record<string, string> = {};
+            if (donos?.social) papel[donos.social] = "social";
+            if (donos?.trafego) papel[donos.trafego] = "tráfego";
+            if (donos?.designer) papel[donos.designer] = "design";
+            // O responsável já está na reunião por definição: oferecê-lo como convidado faria
+            // parecer que ele pode ficar de fora.
+            const doCliente = time.filter((m) => papel[m.name] && m.name !== donos?.social);
+            const resto = time.filter((m) => !papel[m.name] || m.name === donos?.social);
+            const chip = (m: { name: string }, comPapel: boolean) => {
+              const dentro = colaboradores.includes(m.name);
+              return (
+                <button key={m.name} type="button"
+                  onClick={() => setColaboradores((c) => dentro ? c.filter((x) => x !== m.name) : [...c, m.name])}
+                  className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
+                    dentro ? "bg-primary text-primary-foreground border-primary"
+                           : comPapel ? "bg-card border-primary/40 text-foreground hover:border-primary"
+                                      : "bg-card border-border text-muted-foreground hover:text-foreground"
+                  }`}>
+                  {dentro && "✓ "}{m.name}
+                  {comPapel && <span className="opacity-60"> · {papel[m.name]}</span>}
+                </button>
+              );
+            };
+            return (
+              <div className="space-y-2">
+                {doCliente.length > 0 && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1.5">
+                      Quem mais cuida de {clientName}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">{doCliente.map((m) => chip(m, true))}</div>
+                  </div>
+                )}
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1.5">
+                    {doCliente.length > 0 ? "Outros do time" : "Convidar do time"}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">{resto.map((m) => chip(m, false))}</div>
+                </div>
+              </div>
+            );
+          })()}
 
           <textarea value={form.pauta} onChange={(e) => setForm({ ...form, pauta: e.target.value })}
                     placeholder="Pauta / briefing da reunião (opcional agora — dá pra escrever ou gerar depois)"
@@ -481,6 +555,13 @@ function Cartao(p: {
           </p>
           {r.resumo && <p className="text-[11.5px] text-muted-foreground mt-0.5 line-clamp-2">{r.resumo}</p>}
           <p className="text-[10px] text-muted-foreground/70 mt-1 flex items-center gap-2 flex-wrap">
+            {/* Quem mais vai, onde é e o link: é o que a pessoa confere antes da hora, e o que
+                estava só no banco até agora. */}
+            {(r.colaboradores ?? []).length > 0 && (
+              <span className="text-primary">+ {r.colaboradores.join(", ")}</span>
+            )}
+            {r.local && <span>{r.local}</span>}
+            {r.link && <span className="text-lone-success">com link</span>}
             {r.pauta && <span className="text-lone-success">✓ com pauta</span>}
             {r.anexos.length > 0 && <span className="flex items-center gap-0.5"><Paperclip size={9} />{r.anexos.length}</span>}
             {r.temTranscricao && <span>{r.palavras} palavras</span>}
@@ -488,8 +569,20 @@ function Cartao(p: {
             {!r.temTranscricao && !futura && <span className="text-lone-warning">sem transcrição</span>}
           </p>
         </div>
-        {p.aberta ? <ChevronDown size={14} className="text-muted-foreground shrink-0 mt-1" />
-                  : <ChevronRight size={14} className="text-muted-foreground shrink-0 mt-1" />}
+        <span className="flex items-center gap-2 shrink-0 mt-1">
+          {/* O VÍNCULO COM A AGENDA. Roberto (08/09): "essa área também deveria estar vinculada à
+              área do calendário." A reunião já ia para o calendário — mas não havia caminho de
+              uma tela para a outra, então parecia que eram dois sistemas. */}
+          {futura && (
+            <a href={`/calendar?d=${r.quando.slice(0, 10)}`} onClick={(e) => e.stopPropagation()}
+               title="Ver no calendário"
+               className="text-[10px] px-1.5 py-1 rounded-md border border-border text-muted-foreground hover:text-primary hover:border-primary transition-colors flex items-center gap-1">
+              <CalendarDays size={10} /> agenda
+            </a>
+          )}
+          {p.aberta ? <ChevronDown size={14} className="text-muted-foreground" />
+                    : <ChevronRight size={14} className="text-muted-foreground" />}
+        </span>
       </button>
 
       {p.aberta && (

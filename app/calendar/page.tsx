@@ -147,9 +147,19 @@ export default function CalendarPage() {
   const { role, currentUser } = useRole();
 
   const today = new Date();
-  const [viewYear, setViewYear] = useState(today.getFullYear());
-  const [viewMonth, setViewMonth] = useState(today.getMonth());
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  // `?d=YYYY-MM-DD` abre o calendário JÁ no dia certo. É o que liga a aba Reuniões do cliente a
+  // esta tela: sem isso, "ver no calendário" jogava a pessoa no mês corrente e ela tinha que
+  // procurar a reunião — e uma agenda que obriga a procurar não é a mesma agenda.
+  const alvo = (() => {
+    if (typeof window === "undefined") return null;
+    const d = new URLSearchParams(window.location.search).get("d");
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    const [a, m, dd] = d.split("-").map(Number);
+    return { ano: a, mes: m - 1, dia: dd };
+  })();
+  const [viewYear, setViewYear] = useState(alvo?.ano ?? today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(alvo?.mes ?? today.getMonth());
+  const [selectedDay, setSelectedDay] = useState<number | null>(alvo?.dia ?? null);
   // Painel do dia é uma sidebar que, em tela estreita, empilha EMBAIXO do calendário — parecia que
   // "não abria". Ao clicar num dia, rola o painel pra vista (só se estiver fora da tela).
   const dayPanelRef = useRef<HTMLDivElement>(null);

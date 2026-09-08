@@ -5,7 +5,7 @@ import {
   Inbox, Check, Clock, AlertTriangle, FileText, Palette,
   TrendingUp, Instagram, ChevronRight, CheckCircle, Filter,
   Eye, Bell,
-  CalendarClock,
+  CalendarClock, History, ChevronDown,
 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import EmptyState from "@/components/ui/EmptyState";
@@ -31,6 +31,15 @@ export default function MyWorkPage() {
   // Reuniões marcadas com cliente. Não vêm do store (que não conhece `meetings`) e sim da rota,
   // que já resolve "quem sou eu": cada um vê a própria carteira, gestão vê tudo.
   const [reunioes, setReunioes] = useState<{ id: string; cliente: string; quando: string; responsavel: string | null }[]>([]);
+  // O que JÁ aconteceu. Roberto (08/09): "cada um com seu histórico." Sem isto, a pessoa chega na
+  // reunião do mês sem lembrar o que foi combinado na anterior — que é o que a reunião mensal
+  // existe para evitar. Quem tem 17 clientes não vai abrir cliente por cliente para lembrar.
+  interface Passada {
+    reuniaoId: string; clientId: string; cliente: string; quando: string;
+    resumo: string | null; temTranscricao: boolean; temAta: boolean; papel?: string;
+  }
+  const [historico, setHistorico] = useState<Passada[]>([]);
+  const [verHistorico, setVerHistorico] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -51,6 +60,9 @@ export default function MyWorkPage() {
             ({ id: x.reuniaoId, cliente: x.cliente, quando: x.quando, responsavel: x.responsavel }))
           .sort((a: { quando: string }, b: { quando: string }) => a.quando.localeCompare(b.quando));
         setReunioes(todas);
+        // O histórico vem na mesma resposta; o do mês corrente já cobre os 6 meses para trás.
+        const hist = (rs[0]?.historico ?? []) as Passada[];
+        setHistorico(hist.filter((h, i, arr) => arr.findIndex((x) => x.reuniaoId === h.reuniaoId) === i));
       });
     return () => { vivo = false; };
   }, []);
@@ -182,6 +194,50 @@ export default function MyWorkPage() {
                   );
                 })}
               </div>
+            </section>
+          )}
+
+          {/* O HISTÓRICO — fechado por padrão: quem abre o Meu Trabalho quer saber o que fazer
+              hoje, não o que já foi feito. Mas antes da reunião do mês, é o primeiro lugar onde
+              se procura o que ficou combinado. */}
+          {(filter === "all" || filter === "meetings") && historico.length > 0 && (
+            <section className="mb-6">
+              <button
+                onClick={() => setVerHistorico((v) => !v)}
+                className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3 hover:text-primary transition-colors"
+              >
+                <History size={14} className="text-muted-foreground" /> Reuniões que já aconteceram
+                <span className="text-[10px] text-muted-foreground font-normal">· {historico.length}</span>
+                <ChevronDown size={13} className={`text-muted-foreground transition-transform ${verHistorico ? "rotate-180" : ""}`} />
+              </button>
+              {verHistorico && (
+                <div className="space-y-2">
+                  {historico.map((h) => {
+                    const d = new Date(h.quando);
+                    const dia = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit", timeZone: "America/Sao_Paulo" });
+                    return (
+                      <Link key={h.reuniaoId} href={`/clients/${h.clientId}?tab=reunioes`}
+                            className="block p-3 rounded-xl bg-surface border border-border hover:border-primary/40 transition-colors">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{h.cliente}</p>
+                            {/* O resumo é o que serve; sem ele, dizer o que EXISTE de registro
+                                evita a pessoa abrir para descobrir que não há nada. */}
+                            <p className="text-[11px] text-muted-foreground line-clamp-2">
+                              {h.resumo
+                                || (h.temTranscricao ? "Transcrição guardada — abra para ler" : "Sem registro do que foi tratado")}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-[11px] text-muted-foreground tabular-nums">{dia}</p>
+                            {h.temAta && <p className="text-[10px] text-lone-success">ata em PDF</p>}
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           )}
 
