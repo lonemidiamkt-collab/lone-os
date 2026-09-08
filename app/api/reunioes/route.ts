@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
      * agenda e veria reuniões que ele não marcou, sem entender se deve ir — e ou vai a todas, ou
      * não vai a nenhuma. Preenchido só na resposta, por leitor.
      */
-    papel?: "responsavel" | "convidado" | "social" | "trafego" | "designer";
+    papel?: "responsavel" | "convidado" | "social" | "trafego";
   }
 
   const linhas: LinhaAgenda[] = elegiveis.map((c) => {
@@ -138,11 +138,10 @@ export async function GET(req: NextRequest) {
   // convidado à mão. O gestor de tráfego do cliente não via nada: a reunião mensal daquele
   // cliente — a mesma em que a verba e o resultado dos anúncios são discutidos — passava sem ele
   // saber que existia. Agora quem cuida do cliente em QUALQUER função vê a agenda dele.
-  const quemCuida = new Map<string, { social: string | null; trafego: string | null; designer: string | null }>(
+  const quemCuida = new Map<string, { social: string | null; trafego: string | null }>(
     (clientes ?? []).map((c) => [c.id as string, {
       social: (c.assigned_social as string) || null,
       trafego: (c.assigned_traffic as string) || null,
-      designer: (c.assigned_designer as string) || null,
     }]),
   );
 
@@ -152,7 +151,9 @@ export async function GET(req: NextRequest) {
     const t = quemCuida.get(l.clientId);
     if (t?.social === nome) return "social";
     if (t?.trafego === nome) return "trafego";
-    if (t?.designer === nome) return "designer";
+    // O DESIGNER de propósito fica de fora: Roberto pediu social e gestor de tráfego. Incluí-lo
+    // por conta própria colocaria as reuniões de 32 clientes na tela do Rodrigo, que não vai a
+    // reunião de cliente — ele continua vendo as que for responsável ou convidado.
     return null;
   };
 
