@@ -18,13 +18,14 @@ const RX_REUNIAO = /\b(reuni[ãa]o|reuniao|call|meet|alinhamento|conversar|bate[
  * Verbos que indicam MARCAR sem ambiguidade nenhuma. "tivemos uma reunião" não agenda nada.
  */
 const RX_MARCAR_FORTE =
-  /\b(marcar?|marca|marque|agendar?|agenda|agende|remarcar?|remarca|combinar?|combina|que tal|disponibilidade|dispon[íi]vel)\b/i;
+  /\b(marcar?|marca|marque|agendar?|agenda|agende|remarcar?|remarca|combinar?|combina|que tal)\b/i;
 
 /**
  * Verbos AMBÍGUOS. Sozinhos não querem dizer nada — só contam quando estão perto da palavra
  * "reunião". "podemos utilizar o CRM" não marca reunião nenhuma.
  */
-const RX_MARCAR_FRACO = /\b(pode ser|podemos|posso|consigo|topo|fechado|confirmo|confirmado)\b/i;
+const RX_MARCAR_FRACO =
+  /\b(pode ser|podemos|posso|consigo|topo|fechado|confirmo|confirmado|dispon[íi]vel|disponibilidade)\b/i;
 
 /**
  * Fala DE uma reunião que já existe, sobre o que vai acontecer nela.
@@ -37,6 +38,40 @@ const RX_REUNIAO_EXISTENTE =
 
 /** Distância máxima, em caracteres, entre "reunião" e o verbo para contarem como um pedido. */
 const PERTO = 60;
+
+/** Referências a DIA numa mensagem: "amanhã", "sexta", "dia 8", "18/09". */
+const RX_DIAS = /\b(hoje|amanh[ãa]|depois de amanh[ãa]|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|dia\s+\d{1,2}|\d{1,2}\/\d{1,2})\b/gi;
+
+/** Referências a HORA: "14:00", "10h30", "às 9", "16h". */
+const RX_HORAS = /\b(\d{1,2}\s*[:h]\s*\d{2}|\d{1,2}\s*h\b|(?:as|às)\s+\d{1,2}\b)/gi;
+
+/**
+ * A mensagem oferece MAIS DE UMA opção de dia ou de hora?
+ *
+ * Achado na simulação (08/09), duas mensagens reais:
+ *   • "Amanha as 14:00 to enrolado. Podemos combinar na segunda?" — o agente marcava justamente
+ *     as 14h que o cliente acabou de recusar. O "to enrolado" não é recusa que regex nenhum
+ *     conheça, mas as DUAS referências de dia (amanhã, segunda) são visíveis.
+ *   • "Podemos marcar amanhã por volta das 14:00 ou sexta umas 10:30" — duas opções legítimas, e
+ *     ele silenciosamente escolhia a primeira.
+ *
+ * Roberto já tinha escrito a regra: "não chuta horário". Com duas opções na mesa, escolher uma é
+ * chutar — perguntar custa uma mensagem, marcar no dia errado custa a reunião.
+ */
+export function ofereceMaisDeUmHorario(texto: string): boolean {
+  const t = texto || "";
+  const dias = new Set([...t.matchAll(RX_DIAS)].map((m) => m[0].toLowerCase().replace(/\s+/g, " ")));
+  const horas = new Set([...t.matchAll(RX_HORAS)].map((m) => m[0].toLowerCase().replace(/\s+/g, "")));
+  return dias.size > 1 || horas.size > 1;
+}
+
+/**
+ * Alguém VAI entrar em contato — não é proposta de horário.
+ *
+ * "Matheus vai entrar em contato com vocês hoje de tarde para ver a questão da reunião": o "hoje
+ * de tarde" é de quem vai ligar, não da reunião. O agente propunha reunião para hoje às 15h.
+ */
+const RX_RECADO = /\b(vai|v[ãa]o|ir[áa]|ir[ãa]o)\s+(?:\w+\s+){0,2}(entrar em contato|falar|ligar|chamar|procurar|retornar)\b/i;
 
 /**
  * O verbo de marcar está PERTO da palavra reunião?
@@ -198,9 +233,36 @@ export function lerIntencaoReuniao(
   // Recusa SEM contraproposta: quem disse que não pode e não ofereceu alternativa.
   if (RX_RECUSA.test(t) && !horario) return falaDeReuniao || querMarcar ? { tipo: "recusa" } : { tipo: "nenhuma" };
 
-  // Sem contexto de reunião, uma data solta é outra coisa — "a promoção começa dia 18" não é
-  // convite para reunião. Exige que a conversa seja sobre reunião OU que o verbo seja de marcar.
-  if (!falaDeReuniao && !querMarcar) return { tipo: "nenhuma" };
+  // ── SEM CONTEXTO, EXIGE OS DOIS SINAIS ─────────────────────────────────
+  //
+  // Era "reunião OU verbo de marcar". A simulação sobre 4.584 mensagens reais mostrou que o OU
+  // deixa passar mensagem que não tem nada a ver:
+  //   • "Leads chegam depois das 18h… a partir de *segunda* já estou com uma pessoa
+  //     *disponível*" → o agente marcaria segunda às 18h;
+  //   • "Amanhã as 14:00 to enrolado. *Podemos* combinar na segunda?" → marcaria exatamente as
+  //     14h que o cliente acabou de recusar (o "to enrolado" não é recusa que o regex conheça);
+  //   • um relatório de atendimento com "ficou de retornar para *agendar*".
+  //
+  // Quando NÃO há pergunta nem proposta pendente, o agente só abre conversa de agendamento se a
+  // mensagem falar de reunião E pedir para marcar. Quem responde a uma pergunta dele omite a
+  // palavra "reunião" — e esse caso já é tratado lá em cima, pelo contexto.
+  //
+  // Custo de errar para cada lado: calado, o social lê a mensagem e resolve; falando, a Lone
+  // escreveu no grupo do cliente sobre algo que ninguém pediu.
+  //
+  // Com pergunta ou proposta PENDENTE o portão não se aplica: aí a mensagem é resposta a algo que
+  // o agente perguntou, e ninguém repete "reunião" ao responder "consigo dia 18 às 16h".
+  const temContexto = !!propostoIso || perguntouHorario;
+  if (!temContexto) {
+    // Um pedido CURTO e direto vale sozinho: "marca aí pra dia 18 às 10h" é a mensagem inteira,
+    // não sobra assunto para ser outra coisa. É o comprimento que separa esse caso do relatório
+    // de atendimento de 1.500 caracteres onde "agendar" aparece de passagem.
+    const pedidoDireto = RX_MARCAR_FORTE.test(t) && t.length <= RESPOSTA_CURTA;
+    // Falar de reunião basta para ENTRAR: quando há data na mensagem, a data já é a intenção
+    // ("reunião dia 18 de manhã" não precisa de verbo). A exigência do verbo continua existindo
+    // logo abaixo, no ramo em que NÃO há data — que é onde o agente inventava conversa.
+    if (!pedidoDireto && !falaDeReuniao) return { tipo: "nenhuma" };
+  }
 
   if (!horario) {
     // ── SEM DATA NENHUMA: o ramo mais perigoso ────────────────────────────
@@ -219,6 +281,19 @@ export function lerIntencaoReuniao(
     // desfaz: "sobre a reunião que a gente vai marcar" continua sendo pedido.
     if (RX_REUNIAO_EXISTENTE.test(t) && !RX_MARCAR_FORTE.test(t)) return { tipo: "nenhuma" };
     return { tipo: "perguntar_horario", motivo: "sem data ou hora na mensagem" };
+  }
+
+  // Recado de terceiro não é proposta: o horário citado é de quem vai ligar.
+  if (RX_RECADO.test(t)) return { tipo: "nenhuma" };
+
+  // Duas opções na mesa: pergunta qual, em vez de escolher a primeira.
+  //
+  // Não vale quando há recusa explícita: "não posso terça, pode ser quarta às 10h?" também cita
+  // dois dias, mas um deles está NEGADO — o cliente está estreitando, não oferecendo escolha.
+  // (O "to enrolado" do Mercadão não é recusa que o regex conheça, e é justamente por isso que
+  // ele continua caindo aqui.)
+  if (!RX_RECUSA.test(t) && ofereceMaisDeUmHorario(t)) {
+    return { tipo: "perguntar_horario", motivo: "mais de um dia ou horário na mensagem" };
   }
 
   if (!horario.horaExplicita) {
@@ -241,6 +316,20 @@ export function lerIntencaoReuniao(
 
   const plausivel = horarioPlausivel(horario.iso, agora);
   if (!plausivel.ok) {
+    // ── HORÁRIO IMPLAUSÍVEL SEM FALAR DE REUNIÃO NÃO É PERGUNTA ───────────
+    //
+    // Achado pela simulação sobre 4.584 mensagens reais (08/09). Dois disparos, nenhum sobre
+    // reunião:
+    //   • "Segunda a sexta: 7:30 às 18:00 / Domingo: *fechado*" — o horário de funcionamento da
+    //     loja. "fechado" ligou o verbo de marcação e "domingo 7:30" caiu como implausível.
+    //   • um relatório de atendimento de 1.500 caracteres com "ficou de retornar para *agendar*"
+    //     e a data "20/07" no meio — passado, logo implausível.
+    // Nos dois o agente responderia "me confirma só o horário" a quem não pediu nada.
+    //
+    // Uma data estranha numa mensagem que nunca menciona reunião é só um dado: um relatório, um
+    // horário de loja. Não há o que perguntar. Com a palavra na mensagem, a pergunta continua
+    // valendo — é o caso de quem propõe reunião num domingo.
+    if (!falaDeReuniao) return { tipo: "nenhuma" };
     return { tipo: "perguntar_horario", motivo: plausivel.motivo ?? "horário improvável" };
   }
 

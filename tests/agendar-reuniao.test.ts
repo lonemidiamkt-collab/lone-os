@@ -12,7 +12,6 @@ describe("o cliente marcou: agenda", () => {
     "podemos fazer a reunião dia 18 às 14h",
     "reunião quinta às 15h pode ser?",
     "marca aí pra dia 18 às 10h",
-    "consigo dia 18/09 às 16h",
     "fechado, reunião amanhã às 11h",
   ]) {
     it(`entende: "${frase}"`, () => {
@@ -242,11 +241,30 @@ describe("o que o cliente lê", () => {
 //
 // Dois defeitos, ambos aqui: o parser já sabia que "terça à tarde" era terça 15h e jogava fora
 // por falta de hora exata; e uma confirmação curta, sem data nem hora, caía em "nenhuma".
+// Sem a palavra "reunião" e sem verbo forte, estas frases só são pedido de agendamento PORQUE
+// respondem a algo que o agente perguntou — foi assim na conversa real da Contele. Passar o
+// contexto aqui não é acomodar o teste: é o teste passar a modelar o que acontece de verdade.
+// A simulação sobre 4.584 mensagens mostrou o custo de aceitá-las soltas: "estou com uma pessoa
+// disponível a partir de segunda" virava reunião marcada.
+describe("responde ao agente sem repetir a palavra reunião", () => {
+  const AG = new Date("2026-09-02T13:00:00Z");
+  const respondendo2 = (t: string) => lerIntencaoReuniao(t, AG, undefined, true);
+
+  it('"consigo dia 18/09 às 16h" fecha quando responde à pergunta', () => {
+    const r = respondendo2("consigo dia 18/09 às 16h");
+    expect(r.tipo).toBe("agendar");
+  });
+
+  it("solta, sem pergunta pendente, a mesma frase não faz nada", () => {
+    expect(ler("consigo dia 18/09 às 16h").tipo).toBe("nenhuma");
+  });
+});
+
 describe("cliente dá o turno: o agente PROPÕE, não devolve a pergunta", () => {
   const quinta = new Date(2026, 8, 4, 16, 54);   // sexta 04/09/2026, como na conversa
 
   it('"Eu consigo terça à tarde" vira PROPOSTA de horário concreto', () => {
-    const r = lerIntencaoReuniao("Eu consigo terça à tarde", quinta);
+    const r = lerIntencaoReuniao("Eu consigo terça à tarde", quinta, undefined, true);
     expect(r.tipo).toBe("propor");
     if (r.tipo === "propor") {
       expect(r.iso).toContain("T15:00");        // "à tarde" = 15h
@@ -255,15 +273,23 @@ describe("cliente dá o turno: o agente PROPÕE, não devolve a pergunta", () =>
   });
 
   it('"quinta de manhã" também propõe, às 10h', () => {
-    const r = lerIntencaoReuniao("consigo quinta de manhã", quinta);
+    const r = lerIntencaoReuniao("consigo quinta de manhã", quinta, undefined, true);
     expect(r.tipo).toBe("propor");
     if (r.tipo === "propor") expect(r.iso).toContain("T10:00");
   });
 
   it("horário impossível continua virando pergunta, não proposta", () => {
     // Domingo não é dia de reunião de trabalho: propor seria pior que perguntar.
-    const r = lerIntencaoReuniao("pode ser domingo de manhã", quinta);
+    // Respondendo à pergunta do agente — solta, "pode ser domingo de manhã" não é sobre reunião
+    // nenhuma, e foi assim que "Domingo: fechado" (horário de funcionamento de uma loja) abriu
+    // agendamento na simulação.
+    const r = lerIntencaoReuniao("pode ser domingo de manhã", quinta, undefined, true);
     expect(r.tipo).toBe("perguntar_horario");
+  });
+
+  it("o mesmo texto SOLTO não vira nada — era o horário de funcionamento da loja", () => {
+    expect(lerIntencaoReuniao("Segunda a sexta: 7:30 às 18:00\nDomingo: fechado", quinta).tipo)
+      .toBe("nenhuma");
   });
 });
 
@@ -409,5 +435,58 @@ describe("Império dos Pisos: reconhecer a resposta que ele pediu", () => {
 
   it("mensagem sem horário nenhum não é engolida pela janela", () => {
     expect(respondendo("obrigado!").tipo).toBe("nenhuma");
+  });
+});
+
+// ── O QUE A SIMULAÇÃO SOBRE 4.584 MENSAGENS REAIS ENSINOU (08/09) ────────
+//
+// Roberto: "não tem como testar em ninguém agora." Sem cliente para testar, o teste foi o
+// passado. Rodar o parser sobre 120 dias de conversa real (49 clientes) achou 4 disparos errados
+// que nenhum teste escrito à mão tinha imaginado. Cada frase abaixo é literal.
+describe("achados da simulação sobre conversa real", () => {
+  const AG = new Date("2026-09-08T15:00:00-03:00");
+  const l = (t: string) => lerIntencaoReuniao(t, AG);
+
+  it("horário de funcionamento da loja não é proposta de reunião", () => {
+    // "fechado" ligava o verbo de marcação e "domingo 7:30" caía como horário implausível.
+    expect(l("Segunda a sexta: 7:30 às 18:00\nDomingo: fechado\nFeriados: 7:30 às 13:00").tipo)
+      .toBe("nenhuma");
+  });
+
+  it("relatório de atendimento com 'agendar' no meio não é pedido de reunião", () => {
+    const relatorio = "20/07\n1 Atendimento, msg recebida de domingo as 14:00 (fiz o atendimento "
+      + "na segunda, não tivemos resposta)\n1 Atendimento, informações sobre vacinas "
+      + "( Ficou de retornar para agendar )\n1 Atendimento, localidade ( ficou de vim a loja )";
+    expect(l(relatorio).tipo).toBe("nenhuma");
+  });
+
+  it("'pessoa disponível a partir de segunda' não marca reunião", () => {
+    expect(l("Leads chegam depois das 18h ou antes das 9h. A partir de segunda já estou com uma "
+      + "pessoa disponível só para esse retorno.").tipo).toBe("nenhuma");
+  });
+
+  it("recado de terceiro não é proposta — o horário é de quem vai ligar", () => {
+    expect(l("Matheus vai entrar em contato com vocês hoje de tarde para ver a questão da reunião").tipo)
+      .toBe("nenhuma");
+  });
+
+  it("duas opções na mesa viram PERGUNTA, não escolha da primeira", () => {
+    expect(l("Podemos marcar amanhã por volta das 14:00 ou sexta umas 10:30").tipo)
+      .toBe("perguntar_horario");
+  });
+
+  it("'to enrolado' não é recusa que o regex conheça — mas os dois dias são visíveis", () => {
+    // Marcava justamente as 14h que o cliente acabou de recusar.
+    expect(l("Amanha as 14:00 to enrolado. Podemos combinar na segunda?").tipo)
+      .toBe("perguntar_horario");
+  });
+
+  it("e o pedido claro continua passando", () => {
+    // Na conversa real isto foi escrito em 02/09 — às 15h do dia 8, "dia 8 às 10:00" já passou,
+    // e aí virar pergunta é o comportamento certo.
+    const dia2 = new Date("2026-09-02T19:01:00-03:00");
+    expect(lerIntencaoReuniao("Reunião pode ser dia 8 às 10:00", dia2).tipo).toBe("agendar");
+    expect(l("Vamos marcar uma reunião com vocês para alinharmos alguns assuntos").tipo)
+      .toBe("perguntar_horario");
   });
 });
