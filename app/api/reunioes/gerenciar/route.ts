@@ -5,6 +5,13 @@ export const maxDuration = 120;
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { csSendGroupText } from "@/lib/cs/notify";
+import { mencionar } from "@/lib/cs/mencao";
+import { porExtenso } from "@/lib/cs/parse-horario";
+import {
+  textoConviteEquipe, textoConviteCliente, textoRemarqueEquipe, textoRemarqueCliente,
+  type Convite,
+} from "@/lib/cs/convite-reuniao";
 
 // POST /api/reunioes/gerenciar — agendar, editar, escrever a pauta, anexar e cancelar.
 //
@@ -37,6 +44,14 @@ interface Corpo {
   arquivo?: { nome: string; tipo: string; base64: string };
   /** remover_anexo */
   path?: string;
+  /**
+   * Manda o aviso no grupo do CLIENTE também.
+   *
+   * Fica DESLIGADO por padrão de propósito: escrever no grupo do cliente é irreversível, e a
+   * regra da casa é confirmar antes de qualquer envio. Quem marca decide na tela — quando ela já
+   * combinou por telefone, desmarca e só a equipe é avisada.
+   */
+  avisarCliente?: boolean;
 }
 
 /** Duração padrão quando só o início é informado. */
@@ -64,7 +79,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "clientId e inicio são obrigatórios" }, { status: 400 });
     }
     const { data: cli } = await supabaseAdmin
-      .from("clients").select("name, nome_fantasia, assigned_social").eq("id", b.clientId).maybeSingle();
+      .from("clients").select("name, nome_fantasia, assigned_social, whatsapp_group_jid").eq("id", b.clientId).maybeSingle();
     if (!cli) return NextResponse.json({ error: "cliente não encontrado" }, { status: 404 });
     const nomeCli = (cli.nome_fantasia as string) || (cli.name as string) || "Cliente";
 
@@ -101,13 +116,34 @@ export async function POST(req: NextRequest) {
       .upsert({ client_id: b.clientId, proxima_reuniao: inicio.toISOString() }, { onConflict: "client_id" })
       .then(() => {}, () => {});
 
-    return NextResponse.json({ ok: true, reuniaoId: data.id });
+    // ── O CONVITE SAI AGORA ───────────────────────────────────────────────
+    // Sem isto, marcar a reunião só escrevia no banco: o convidado não sabia de nada até a
+    // véspera, quando o cron manda o lembrete. Um convite que chega véspera não é convite — é
+    // aviso de que já era tarde para remanejar a agenda.
+    const responsavel = (cli.assigned_social as string) || quem;
+    const convite: Convite = {
+      cliente: nomeCli,
+      quando: porExtenso(inicio.toISOString()),
+      responsavel,
+      colaboradores: (b.colaboradores ?? []).filter((n) => n && n !== responsavel),
+      modalidade: (b.local || "Online").toLowerCase().startsWith("presencial") ? "presencial" : "online",
+      link: b.link?.trim() || null,
+      local: b.local ?? null,
+      pauta: b.pauta?.trim() || null,
+      marcadaPor: quem,
+    };
+    const avisos = await enviarConvite(convite, {
+      grupoCliente: (cli.whatsapp_group_jid as string) || null,
+      avisarCliente: b.avisarCliente === true,
+    });
+
+    return NextResponse.json({ ok: true, reuniaoId: data.id, avisos });
   }
 
   // As demais ações exigem a reunião.
   if (!b?.reuniaoId) return NextResponse.json({ error: "reuniaoId é obrigatório" }, { status: 400 });
   const { data: reu } = await supabaseAdmin
-    .from("meetings").select("id, client_id, anexos, start_at, responsavel, attendees, clients(name, nome_fantasia, nicho)")
+    .from("meetings").select("id, client_id, anexos, start_at, responsavel, attendees, location, link_reuniao, clients(name, nome_fantasia, nicho, whatsapp_group_jid)")
     .eq("id", b.reuniaoId).maybeSingle();
   if (!reu) return NextResponse.json({ error: "reunião não encontrada" }, { status: 404 });
 
@@ -133,7 +169,29 @@ export async function POST(req: NextRequest) {
     }
     const { error } = await supabaseAdmin.from("meetings").update(patch).eq("id", b.reuniaoId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true });
+
+    // Mudou a HORA: quem ia precisa saber hoje, não na nova véspera. Só a data dispara aviso —
+    // corrigir um título ou colar o link não é motivo para escrever no grupo de ninguém.
+    let avisos: { equipe: boolean; cliente: boolean } | undefined;
+    if (b.inicio && reu.start_at && new Date(b.inicio).toISOString() !== new Date(reu.start_at as string).toISOString()) {
+      const cli = reu.clients as unknown as { name?: string; nome_fantasia?: string; whatsapp_group_jid?: string } | null;
+      const colabs = (b.colaboradores ?? (reu.attendees as string[]) ?? []).filter(Boolean);
+      const local = b.local ?? (reu.location as string) ?? "Online";
+      avisos = await enviarConvite({
+        cliente: cli?.nome_fantasia || cli?.name || "Cliente",
+        quando: porExtenso(new Date(b.inicio).toISOString()),
+        responsavel: (reu.responsavel as string) || null,
+        colaboradores: colabs.filter((n) => n !== reu.responsavel),
+        modalidade: local.toLowerCase().startsWith("presencial") ? "presencial" : "online",
+        link: (b.link ?? (reu.link_reuniao as string) ?? null) || null,
+        local,
+      }, {
+        grupoCliente: cli?.whatsapp_group_jid ?? null,
+        avisarCliente: b.avisarCliente === true,
+        remarqueDe: porExtenso(new Date(reu.start_at as string).toISOString()),
+      });
+    }
+    return NextResponse.json({ ok: true, avisos });
   }
 
   // ── PAUTA escrita à mão ─────────────────────────────────────────────────
@@ -247,4 +305,46 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ error: `ação desconhecida: ${acao}` }, { status: 400 });
+}
+
+// ── ENVIO ─────────────────────────────────────────────────────────────────
+//
+// Um só lugar que fala com o WhatsApp, para não haver duas regras de quem é avisado. Falha de
+// envio NUNCA derruba o agendamento: a reunião marcada e sem aviso é recuperável (o cron manda o
+// lembrete); um 500 na tela faz a pessoa marcar de novo e criar reunião duplicada.
+async function enviarConvite(
+  c: Convite,
+  opts: { grupoCliente: string | null; avisarCliente: boolean; remarqueDe?: string },
+): Promise<{ equipe: boolean; cliente: boolean }> {
+  const out = { equipe: false, cliente: false };
+  const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
+
+  // EQUIPE: marca o responsável E cada convidado. Menção de verdade (com o JID), senão "@Fulano"
+  // é só texto e o WhatsApp não notifica ninguém.
+  if (internalJid) {
+    const nomes = [...new Set([c.responsavel, ...c.colaboradores].filter(Boolean) as string[])];
+    const ms = await Promise.all(nomes.map((n) =>
+      mencionar(n).catch(() => ({ trecho: "", jids: [] as string[] }))));
+    const trecho = ms.map((x) => x.trecho).filter(Boolean).join(" ");
+    const jids = [...new Set(ms.flatMap((x) => x.jids))];
+    const texto = opts.remarqueDe
+      ? textoRemarqueEquipe(c, trecho, opts.remarqueDe)
+      : textoConviteEquipe(c, trecho);
+    const r = await csSendGroupText(internalJid, texto, undefined,
+      { origem: opts.remarqueDe ? "reuniao-remarque" : "reuniao-convite", destino: "interno" }, jids)
+      .catch(() => ({ ok: false }));
+    out.equipe = !!r.ok;
+  }
+
+  // CLIENTE: só quando quem marcou pediu. Grupo de cliente não é lugar de disparo automático.
+  if (opts.avisarCliente && opts.grupoCliente) {
+    const texto = opts.remarqueDe
+      ? textoRemarqueCliente(c, opts.remarqueDe)
+      : textoConviteCliente(c);
+    const r = await csSendGroupText(opts.grupoCliente, texto, undefined,
+      { origem: opts.remarqueDe ? "reuniao-remarque-cliente" : "reuniao-convite-cliente", destino: "cliente" })
+      .catch(() => ({ ok: false }));
+    out.cliente = !!r.ok;
+  }
+  return out;
 }

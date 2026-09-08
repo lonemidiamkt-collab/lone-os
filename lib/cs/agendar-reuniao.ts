@@ -303,3 +303,31 @@ export function textoFechado(cliente: string, quandoExtenso: string): string {
   return `📅 Fechado! Reunião de acompanhamento da *${cliente}* em *${quandoExtenso}* `
     + `(online, ${DURACAO_MIN} min).\nVou lembrar todo mundo na véspera e uma hora antes.`;
 }
+
+// ── O LINK DA CHAMADA ────────────────────────────────────────────────────
+//
+// O agente fecha a reunião dizendo "online" — e ninguém nunca pediu o link a lugar nenhum. O
+// cliente ficava com "confirmado, online" e um endereço que não existe; na hora, alguém corria
+// atrás no grupo. O lembrete da véspera até carrega o link, mas só se ele tiver sido gravado.
+//
+// Então quem fecha é quem cola: o agente pede no grupo da equipe e reconhece o link na resposta.
+
+/** Reconhece um link de chamada colado no grupo. Só os serviços que a equipe usa. */
+const RX_LINK_CHAMADA =
+  /https?:\/\/(?:[\w-]+\.)*(?:meet\.google\.com|zoom\.us|teams\.(?:microsoft|live)\.com|whereby\.com|meet\.jit\.si)\/[^\s<>"']+/i;
+
+export function acharLinkChamada(texto: string): string | null {
+  const m = RX_LINK_CHAMADA.exec(texto ?? "");
+  // Tira pontuação que costuma vir grudada no fim quando a pessoa escreve uma frase.
+  return m ? m[0].replace(/[.,;:)\]]+$/, "") : null;
+}
+
+/** O pedido do link, junto do "fechado". Uma mensagem só: pedir depois vira outra notificação. */
+export function textoPedeLink(mencao: string): string {
+  return `\n🔗 ${mencao ? `${mencao} ` : ""}manda o link da chamada aqui que eu levo pro cliente e ponho nos lembretes.`;
+}
+
+/** O aviso de que o link foi recebido e repassado. */
+export function textoLinkRecebido(cliente: string): string {
+  return `🔗 Link guardado e enviado pra *${cliente}*. Vai junto nos lembretes.`;
+}

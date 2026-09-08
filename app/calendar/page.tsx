@@ -1298,6 +1298,10 @@ function QuickCreateModal({
   // (link vs endereço), e sem ela o convite não diz se a pessoa precisa sair do escritório.
   const [linkReuniao, setLinkReuniao] = useState("");
   const [modalidade, setModalidade] = useState<"online" | "presencial">("online");
+  // Avisar o cliente fica LIGADO por padrão — marcar reunião e não contar ao cliente é o caso
+  // raro. Mas é uma escolha visível: quem já combinou por telefone desmarca antes de salvar, e
+  // nada é escrito no grupo dele.
+  const [avisarCliente, setAvisarCliente] = useState(true);
   const [duracao, setDuracao] = useState("60");
   const [salvandoReuniao, setSalvandoReuniao] = useState(false);
 
@@ -1348,6 +1352,7 @@ function QuickCreateModal({
             link: modalidade === "online" ? (linkReuniao.trim() || undefined) : undefined,
             pauta: description.trim() || undefined,
             colaboradores: assignees.filter((a) => a !== currentUser),
+          avisarCliente,
           }),
         });
         if (!r.ok) {
@@ -1699,9 +1704,27 @@ function QuickCreateModal({
                 </div>
               )}
 
+              {/* O único ponto desta tela que escreve no grupo do CLIENTE. Fica explícito, com o
+                  texto do que sai, porque grupo de cliente não se desfaz. */}
+              <label className="flex items-start gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5 cursor-pointer">
+                <input
+                  type="checkbox" checked={avisarCliente}
+                  onChange={(e) => setAvisarCliente(e.target.checked)}
+                  className="mt-0.5 accent-[var(--primary)]"
+                />
+                <span className="text-[11px] text-foreground leading-relaxed">
+                  Avisar o cliente no grupo agora
+                  <span className="block text-[10.5px] text-muted-foreground">
+                    Manda “Reunião confirmada — {"{data}"}” com o link. Desmarque se você já combinou
+                    com ele por fora.
+                  </span>
+                </span>
+              </label>
+
               <p className="text-[10.5px] text-muted-foreground leading-relaxed">
-                Entra no histórico do cliente e nos indicadores de reunião do mês. O Lone CS lembra
-                o cliente e quem foi convidado na véspera e uma hora antes.
+                Entra no histórico do cliente e nos indicadores de reunião do mês. Quem você
+                convidar é avisado na hora no grupo da equipe, e o Lone lembra os dois lados na
+                véspera e uma hora antes.
               </p>
             </div>
           )}

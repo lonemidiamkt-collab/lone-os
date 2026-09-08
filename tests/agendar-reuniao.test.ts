@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { lerIntencaoReuniao, sugerirHorarios, textoOferta } from "@/lib/cs/agendar-reuniao";
+import {
+  lerIntencaoReuniao, sugerirHorarios, textoOferta, acharLinkChamada, textoPedeLink,
+} from "@/lib/cs/agendar-reuniao";
 
 // Quarta, 02/09/2026, 10h de SP.
 const AGORA = new Date("2026-09-02T13:00:00Z");
@@ -291,5 +293,38 @@ describe("confirmação curta fecha a proposta pendente", () => {
 
   it("recusa não vira confirmação", () => {
     expect(lerIntencaoReuniao("não vai dar não", agora, proposto).tipo).toBe("recusa");
+  });
+});
+
+// ── O LINK DA CHAMADA ────────────────────────────────────────────────────
+describe("link da chamada colado no grupo", () => {
+  for (const [frase, esperado] of [
+    ["https://meet.google.com/abc-defg-hij", "https://meet.google.com/abc-defg-hij"],
+    ["segue o link: https://meet.google.com/abc-defg-hij", "https://meet.google.com/abc-defg-hij"],
+    ["https://us02web.zoom.us/j/8412345678?pwd=xyz", "https://us02web.zoom.us/j/8412345678?pwd=xyz"],
+    ["ta aqui https://teams.microsoft.com/l/meetup-join/19%3ameeting", "https://teams.microsoft.com/l/meetup-join/19%3ameeting"],
+  ] as const) {
+    it(`acha em: "${frase.slice(0, 40)}"`, () => {
+      expect(acharLinkChamada(frase)).toBe(esperado);
+    });
+  }
+
+  it("tira a pontuação grudada no fim", () => {
+    expect(acharLinkChamada("o link é https://meet.google.com/abc-defg-hij."))
+      .toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("ignora link que não é de chamada — o grupo vive cheio deles", () => {
+    for (const t of [
+      "olha esse post https://instagram.com/p/xyz",
+      "https://painel.lonemidia.com/clients",
+      "https://drive.google.com/file/d/123",
+      "sem link nenhum aqui",
+    ]) expect(acharLinkChamada(t)).toBeNull();
+  });
+
+  it("o pedido do link marca a pessoa", () => {
+    expect(textoPedeLink("@Thiago")).toContain("@Thiago");
+    expect(textoPedeLink("")).toContain("link da chamada");
   });
 });

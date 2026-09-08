@@ -1008,10 +1008,58 @@ export async function POST(req: NextRequest) {
   // Vem cedo no fluxo porque "ok" e "pode ser 16h" são frases curtas que qualquer handler abaixo
   // engoliria — o de decisão de demanda, o de papo. Só age quando existe UMA reunião esperando
   // resposta deste grupo; havendo mais de uma, não adivinha qual.
+  // ─── O LINK DA CHAMADA COLADO NO GRUPO DA EQUIPE ──────────────────────────
+  //
+  // O agente pediu o link ao fechar a reunião. Quando ele aparece, guarda e leva ao cliente — que
+  // até aqui recebia "confirmado, online" e nenhum endereço.
+  if (isInternalCmdGroup(msg.groupJid) && msg.text) {
+    const { acharLinkChamada, textoLinkRecebido } = await import("@/lib/cs/agendar-reuniao");
+    const link = acharLinkChamada(msg.text);
+    if (link) {
+      // Só as que estão marcadas, ainda vão acontecer e não têm link. Duas ou mais e o link é
+      // ambíguo: colar no cliente errado é convidar gente para a chamada de outro.
+      const { data: semLink } = await supabaseAdmin
+        .from("meetings")
+        .select("id, client_id, group_jid, start_at, clients(name, nome_fantasia)")
+        .eq("estado", "agendada")
+        .is("link_reuniao", null)
+        .gte("start_at", new Date().toISOString())
+        .order("start_at", { ascending: true })
+        .limit(2);
+
+      if (semLink?.length === 1) {
+        const r = semLink[0];
+        const cli = r.clients as unknown as { name?: string; nome_fantasia?: string } | null;
+        const nome = cli?.nome_fantasia || cli?.name || "o cliente";
+        await supabaseAdmin.from("meetings").update({ link_reuniao: link }).eq("id", r.id as string);
+        if (r.group_jid) {
+          const { porExtenso } = await import("@/lib/cs/parse-horario");
+          await csSendGroupText(r.group_jid as string,
+            `🔗 Aqui o link da nossa reunião de *${porExtenso(r.start_at as string)}*:\n${link}`,
+            undefined, { origem: "cs-reuniao-link", destino: "cliente", clientId: r.client_id as string });
+        }
+        await csSendGroupText(msg.groupJid, textoLinkRecebido(nome), msg.messageId,
+          { origem: "cs-reuniao-link", destino: "interno" });
+        console.log(`[CS/inbound] link da reunião ${nome} guardado`);
+        return NextResponse.json({ ok: true, reuniao_link: nome });
+      }
+      if ((semLink?.length ?? 0) > 1) {
+        const nomes = (semLink ?? []).map((r) => {
+          const c = r.clients as unknown as { name?: string; nome_fantasia?: string } | null;
+          return c?.nome_fantasia || c?.name || "cliente";
+        });
+        await csSendGroupText(msg.groupJid,
+          `🔗 Esse link é de qual reunião? Tenho ${nomes.map((n) => `*${n}*`).join(" e ")} sem link. Me diz o nome que eu guardo.`,
+          msg.messageId, { origem: "cs-reuniao-link", destino: "interno" });
+        return NextResponse.json({ ok: true, reuniao_link: "ambiguo" });
+      }
+    }
+  }
+
   if (isInternalCmdGroup(msg.groupJid) && msg.text) {
     const { data: esperando } = await supabaseAdmin
       .from("meetings")
-      .select("id, client_id, horario_proposto, responsavel, group_jid, rodadas_negociacao, mes_referencia, clients(name, nome_fantasia)")
+      .select("id, client_id, horario_proposto, responsavel, group_jid, rodadas_negociacao, mes_referencia, link_reuniao, clients(name, nome_fantasia)")
       .eq("estado", "aguardando_social")
       .eq("meeting_type", "mensal")
       .order("perguntado_social_em", { ascending: false })
@@ -1047,12 +1095,22 @@ export async function POST(req: NextRequest) {
           .then(() => {}, (e) => console.error("[CS/inbound] jornada proxima_reuniao:", e));
 
         const quandoTxt = porExtenso(iso);
-        await csSendGroupText(msg.groupJid, textoFechado(nomeCli, quandoTxt), msg.messageId,
+        // Sem link gravado, o "fechado" já vem com o pedido: é a única mensagem que a equipe lê
+        // sobre esta reunião hoje, e pedir depois seria uma notificação a mais pelo mesmo assunto.
+        const linkJa = (reu.link_reuniao as string) || null;
+        let fechado = textoFechado(nomeCli, quandoTxt);
+        if (!linkJa) {
+          const { textoPedeLink } = await import("@/lib/cs/agendar-reuniao");
+          const { mencionar } = await import("@/lib/cs/mencao");
+          const mm = await mencionar((reu.responsavel as string) || null).catch(() => ({ trecho: "", jids: [] as string[] }));
+          fechado += textoPedeLink(mm.trecho);
+        }
+        await csSendGroupText(msg.groupJid, fechado, msg.messageId,
           { origem: "cs-reuniao-fechada", destino: "interno" });
         // E o cliente precisa saber que está confirmado — ele ficou esperando desde a proposta.
         if (reu.group_jid) {
           await csSendGroupText(reu.group_jid as string,
-            `📅 Confirmado! Nossa reunião fica *${quandoTxt}* — online, uns 30 minutinhos. Até lá! 👋`, undefined,
+            `📅 Confirmado! Nossa reunião fica *${quandoTxt}* — online, uns 30 minutinhos.${linkJa ? `\n🔗 ${linkJa}` : ""} Até lá! 👋`, undefined,
             { origem: "cs-reuniao-fechada", destino: "cliente", clientId: reu.client_id as string });
         }
         console.log(`[CS/inbound] reunião ${nomeCli} confirmada pelo social → ${iso}`);
