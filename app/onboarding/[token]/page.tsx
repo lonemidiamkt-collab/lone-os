@@ -88,19 +88,19 @@ function InputField({ label, value, onChange, placeholder, required, type = "tex
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-medium text-zinc-400">
-        {label} {required && <span className="text-red-400">*</span>}
+      <label className="text-xs font-medium text-muted-foreground">
+        {label} {required && <span className="text-lone-danger">*</span>}
       </label>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(mask ? mask(e.target.value) : e.target.value)}
         placeholder={placeholder}
-        className={`w-full bg-[#111113] border rounded-lg px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-600 outline-none transition-colors ${
-          fieldError ? "border-red-500/50 focus:border-red-500" : "border-[#1e1e2a] focus:border-[#2b3cff]/50"
+        className={`w-full bg-background border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none transition-colors ${
+          fieldError ? "border-destructive/60 focus:border-destructive" : "border-border focus:border-primary/50"
         }`}
       />
-      {fieldError && <p className="text-[10px] text-red-400">{fieldError}</p>}
+      {fieldError && <p className="text-[10px] text-lone-danger">{fieldError}</p>}
     </div>
   );
 }
@@ -149,21 +149,21 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
   };
 
   const borderClass = uploaded
-    ? "border-emerald-500/30 bg-emerald-500/[0.03]"
+    ? "border-lone-success-border bg-lone-success-bg"
     : missing
-      ? "border-red-500/40 bg-red-500/[0.03]"
-      : "border-[#1e1e2a] bg-[#0f0f13]";
+      ? "border-lone-danger-border bg-lone-danger-bg"
+      : "border-border bg-card";
 
   return (
     <div className={`rounded-xl border p-4 space-y-3 transition-all ${borderClass}`}>
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-zinc-300">
-          {label} {required && <span className="text-red-400">*</span>}
+        <p className="text-sm font-medium text-foreground">
+          {label} {required && <span className="text-lone-danger">*</span>}
         </p>
-        {uploaded && <Check size={16} className="text-emerald-500" />}
+        {uploaded && <Check size={16} className="text-lone-success" />}
       </div>
       {missing && !uploaded && (
-        <p className="text-[10px] text-red-400 -mt-1">Este arquivo e essencial para a geracao do seu contrato.</p>
+        <p className="text-[10px] text-lone-danger -mt-1">Este arquivo e essencial para a geracao do seu contrato.</p>
       )}
       {(() => {
         const enviados = listaDocs(uploaded);
@@ -172,23 +172,23 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
         return (
           <div className="flex flex-wrap justify-center gap-2">
             {itens.map((src, i) => src.startsWith("legal://") ? (
-              <div key={i} className="flex items-center gap-2 p-3 rounded-lg bg-[#0a0a0c] border border-[#1e1e2a]">
-                <Check size={14} className="text-emerald-500" />
-                <span className="text-xs text-zinc-400">Arquivo {itens.length > 1 ? i + 1 : ""} salvo com seguranca</span>
+              <div key={i} className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border">
+                <Check size={14} className="text-lone-success" />
+                <span className="text-xs text-muted-foreground">Arquivo {itens.length > 1 ? i + 1 : ""} salvo com seguranca</span>
               </div>
             ) : (
               <img key={i} src={src} alt={`${label} ${i + 1}`}
-                className={`max-h-24 object-contain ${previewRound ? "w-20 h-20 rounded-full border-2 border-[#2b3cff]/30" : "rounded-lg border border-[#1e1e2a]"}`} />
+                className={`max-h-24 object-contain ${previewRound ? "w-20 h-20 rounded-full border-2 border-primary/30" : "rounded-lg border border-border"}`} />
             ))}
           </div>
         );
       })()}
       {uploaded && !multiplo ? (
-        <p className="text-xs text-emerald-400">Enviado com sucesso</p>
+        <p className="text-xs text-lone-success">Enviado com sucesso</p>
       ) : (
         <div className="flex gap-2">
           <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#2b3cff]/30 text-zinc-400 hover:text-white transition-all text-xs">
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-border bg-background hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all text-xs">
             {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
             {uploading ? "Enviando..." : listaDocs(uploaded).length ? "Adicionar outro arquivo" : (multiplo ? "Selecionar Arquivos" : "Selecionar Arquivo")}
           </button>
@@ -198,7 +198,7 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
             input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleFile(f); };
             input.click();
           }}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-[#1e1e2a] bg-[#111113] hover:border-[#2b3cff]/30 text-zinc-400 hover:text-white transition-all text-xs">
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-border bg-background hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all text-xs">
             <Camera size={14} /> Foto
           </button>
         </div>
@@ -209,12 +209,12 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
         for (const f of fs) await handleFile(f);
         e.target.value = ""; // permite reenviar o mesmo arquivo depois de remover
       }} />
-      {error && <p className="text-xs text-red-400">{error}</p>}
-      <p className="text-[10px] text-zinc-600">
+      {error && <p className="text-xs text-lone-danger">{error}</p>}
+      <p className="text-[10px] text-muted-foreground/70">
         JPG, PNG ou PDF — maximo 10MB{multiplo ? " por arquivo. Pode enviar mais de um (frente e verso, varias paginas)." : ""}
       </p>
       {multiplo && listaDocs(uploaded).length > 0 && (
-        <p className="text-xs text-emerald-400">
+        <p className="text-xs text-lone-success">
           {listaDocs(uploaded).length} arquivo{listaDocs(uploaded).length > 1 ? "s" : ""} enviado{listaDocs(uploaded).length > 1 ? "s" : ""}
         </p>
       )}
@@ -229,11 +229,11 @@ function AccessField({ platform, icon, login, password, status, onLogin, onPassw
   const [showPw, setShowPw] = useState(false);
   return (
     <div className={`rounded-xl border p-4 space-y-3 transition-all ${
-      status === "waiting_client" ? "border-amber-500/20 bg-amber-500/[0.02]" :
-      status === "partner_invite" ? "border-[#2b3cff]/20 bg-[#2b3cff]/[0.02]" :
-      "border-[#1e1e2a] bg-[#0f0f13]"
+      status === "waiting_client" ? "border-lone-warning-border bg-lone-warning-bg" :
+      status === "partner_invite" ? "border-primary/20 bg-primary/[0.03]" :
+      "border-border bg-card"
     }`}>
-      <p className="text-sm font-medium text-zinc-300 flex items-center gap-2"><span>{icon}</span> {platform}</p>
+      <p className="text-sm font-medium text-foreground flex items-center gap-2"><span>{icon}</span> {platform}</p>
       <div className="flex gap-1.5">
         {([
           { v: "fill_now" as const, label: "Preencher", icon: "📥" },
@@ -242,28 +242,28 @@ function AccessField({ platform, icon, login, password, status, onLogin, onPassw
         ]).map((opt) => (
           <button key={opt.v} type="button" onClick={() => onStatus(opt.v)}
             className={`flex-1 text-xs py-2 rounded-lg border transition-all ${
-              status === opt.v ? "border-[#2b3cff]/50 bg-[#2b3cff]/10 text-white" : "border-[#1e1e2a] text-zinc-500 hover:text-zinc-300"
+              status === opt.v ? "border-primary/50 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
             }`}>{opt.icon} {opt.label}</button>
         ))}
       </div>
       {status === "fill_now" && (
         <div className="space-y-2">
           <input type="text" value={login} onChange={(e) => onLogin(e.target.value)} placeholder="Login / Email"
-            className="w-full bg-[#0a0a0c] border border-[#1e1e2a] rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-[#2b3cff]/50" />
+            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary/50" />
           <div className="relative">
             <input type={showPw ? "text" : "password"} value={password} onChange={(e) => onPassword(e.target.value)} placeholder="Senha"
-              className="w-full bg-[#0a0a0c] border border-[#1e1e2a] rounded-lg px-3 py-2 pr-10 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-[#2b3cff]/50" />
-            <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400">
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 pr-10 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary/50" />
+            <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-muted-foreground">
               {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           </div>
         </div>
       )}
       {status === "waiting_client" && (
-        <div className="flex items-center gap-2 text-xs text-amber-400/80"><AlertTriangle size={12} /><span>Sera marcado como pendencia</span></div>
+        <div className="flex items-center gap-2 text-xs text-lone-warning/80"><AlertTriangle size={12} /><span>Sera marcado como pendencia</span></div>
       )}
       {status === "partner_invite" && (
-        <p className="text-xs text-[#2b3cff]">Nos adicionaremos como parceiro via Business Manager.</p>
+        <p className="text-xs text-primary">Nos adicionaremos como parceiro via Business Manager.</p>
       )}
     </div>
   );
@@ -546,39 +546,39 @@ export default function ExternalOnboardingPage() {
 
   // ─── States ─────────────────────────────────────────────
   if (loading) return (
-    <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
-      <Loader2 size={24} className="text-[#2b3cff] animate-spin" />
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <Loader2 size={24} className="text-primary animate-spin" />
     </div>
   );
 
   if (submitted) return (
-    <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-6">
+    <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center space-y-6 animate-fade-in">
-        <div className="w-20 h-20 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto">
-          <Check size={40} className="text-emerald-500" />
+        <div className="w-20 h-20 rounded-full bg-lone-success-icon-bg flex items-center justify-center mx-auto">
+          <Check size={40} className="text-lone-success" />
         </div>
-        <h1 className="text-2xl font-bold text-white">Tudo certo!</h1>
-        <p className="text-zinc-400">
-          Seus dados foram recebidos com sucesso. A equipe da <span className="text-white font-medium">Lone Midia</span> vai analisar e entrar em contato pelo WhatsApp.
+        <h1 className="text-2xl font-bold text-foreground">Tudo certo!</h1>
+        <p className="text-muted-foreground">
+          Seus dados foram recebidos com sucesso. A equipe da <span className="text-foreground font-medium">Lone Midia</span> vai analisar e entrar em contato pelo WhatsApp.
         </p>
         {submittedData && (
-          <div className="bg-[#111113] border border-[#1e1e2a] rounded-xl p-4 text-left space-y-2">
-            <p className="text-xs text-zinc-500 font-medium">Dados recebidos:</p>
-            {submittedData.nomeFantasia && <p className="text-xs text-zinc-300">Empresa: <span className="text-white">{submittedData.nomeFantasia}</span></p>}
-            {submittedData.contactName && <p className="text-xs text-zinc-300">Responsavel: <span className="text-white">{submittedData.contactName}</span></p>}
-            {submittedData.cnpj && <p className="text-xs text-zinc-300">CNPJ: <span className="text-white">{submittedData.cnpj}</span></p>}
+          <div className="bg-card border border-border rounded-xl p-4 text-left space-y-2">
+            <p className="text-xs text-muted-foreground font-medium">Dados recebidos:</p>
+            {submittedData.nomeFantasia && <p className="text-xs text-foreground">Empresa: <span className="text-foreground">{submittedData.nomeFantasia}</span></p>}
+            {submittedData.contactName && <p className="text-xs text-foreground">Responsavel: <span className="text-foreground">{submittedData.contactName}</span></p>}
+            {submittedData.cnpj && <p className="text-xs text-foreground">CNPJ: <span className="text-foreground">{submittedData.cnpj}</span></p>}
           </div>
         )}
-        <div className="bg-[#111113] border border-[#1e1e2a] rounded-xl p-4 text-left">
-          <p className="text-xs text-zinc-500 mb-1">Proximos passos:</p>
-          <ul className="text-xs text-zinc-400 space-y-1">
+        <div className="bg-card border border-border rounded-xl p-4 text-left">
+          <p className="text-xs text-muted-foreground mb-1">Proximos passos:</p>
+          <ul className="text-xs text-muted-foreground space-y-1">
             <li>1. Analise dos documentos pela equipe</li>
             <li>2. Configuracao das plataformas</li>
             <li>3. Kickoff e inicio das operacoes</li>
           </ul>
         </div>
         <button onClick={() => { setSubmitted(false); setSubmission(null); setError(""); }}
-          className="text-xs text-zinc-500 hover:text-[#2b3cff] transition-colors flex items-center gap-1.5 mx-auto">
+          className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5 mx-auto">
           <RefreshCw size={12} /> Preciso corrigir algo
         </button>
       </div>
@@ -586,49 +586,49 @@ export default function ExternalOnboardingPage() {
   );
 
   if (error && !submission) return (
-    <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-6">
+    <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center space-y-4">
-        <AlertTriangle size={40} className="text-amber-500 mx-auto" />
-        <h1 className="text-xl font-bold text-white">Link invalido</h1>
-        <p className="text-zinc-400 text-sm">{error}</p>
+        <AlertTriangle size={40} className="text-lone-warning mx-auto" />
+        <h1 className="text-xl font-bold text-foreground">Link invalido</h1>
+        <p className="text-muted-foreground text-sm">{error}</p>
       </div>
     </div>
   );
 
   // ─── Main Form ──────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#09090b]">
+    <div className="min-h-screen bg-background">
       {/* Upload success toast (ephemeral) */}
       {uploadToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-medium shadow-lg animate-fade-in">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-xl bg-lone-success-icon-bg border border-lone-success-border text-lone-success text-xs font-medium shadow-lg animate-fade-in">
           <Check size={14} /> {uploadToast}
         </div>
       )}
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#09090b]/95 backdrop-blur-sm border-b border-[#1e1e2a]">
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="max-w-lg mx-auto px-6 py-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               {docLogo ? (
-                <img src={docLogo} alt="Logo do cliente" className="w-7 h-7 rounded-lg object-contain border border-[#1e1e2a]" />
+                <img src={docLogo} alt="Logo do cliente" className="w-7 h-7 rounded-lg object-contain border border-border" />
               ) : (
                 <Logo className="w-7 h-7" />
               )}
-              <span className="font-semibold text-white text-sm">{nomeFantasia || "Lone Midia"}</span>
+              <span className="font-semibold text-foreground text-sm">{nomeFantasia || "Lone Midia"}</span>
             </div>
             <div className="flex items-center gap-2">
-              {autoSaving && <span className="text-[10px] text-zinc-600 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Salvando...</span>}
-              <span className="text-[10px] text-[#2b3cff] font-medium">{fieldProgress}%</span>
+              {autoSaving && <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Salvando...</span>}
+              <span className="text-[10px] text-primary font-medium">{fieldProgress}%</span>
             </div>
           </div>
           {/* Progress bar — field-based */}
-          <div className="h-1.5 bg-[#111113] rounded-full overflow-hidden">
-            <div className="h-full bg-[#2b3cff] rounded-full transition-all duration-700 ease-out" style={{ width: `${fieldProgress}%` }} />
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-primary rounded-full transition-all duration-700 ease-out" style={{ width: `${fieldProgress}%` }} />
           </div>
           <div className="flex justify-between mt-2">
             {STEPS.map((s, i) => (
               <button key={s.key} onClick={() => setStep(s.key)}
-                className={`text-[10px] transition-colors ${i <= currentStep ? "text-[#2b3cff]" : "text-zinc-600"}`}>
+                className={`text-[10px] transition-colors ${i <= currentStep ? "text-primary" : "text-muted-foreground/70"}`}>
                 {s.label}
               </button>
             ))}
@@ -639,20 +639,20 @@ export default function ExternalOnboardingPage() {
       {/* Content */}
       <div className="max-w-lg mx-auto px-6 py-6 space-y-6">
         <div>
-          <h1 className="text-lg font-bold text-white">Onboarding — {clientName}</h1>
-          <p className="text-xs text-zinc-500 mt-1">Preencha os dados para iniciarmos seu projeto</p>
+          <h1 className="text-lg font-bold text-foreground">Onboarding — {clientName}</h1>
+          <p className="text-xs text-muted-foreground mt-1">Preencha os dados para iniciarmos seu projeto</p>
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2.5 text-xs text-red-400">{error}</div>
+          <div className="bg-lone-danger-bg border border-lone-danger-border rounded-lg px-4 py-2.5 text-xs text-lone-danger">{error}</div>
         )}
 
         {/* ═══ STEP 1: DADOS ═══ */}
         {step === "dados" && (
           <div className="space-y-4 animate-fade-in">
-            <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
-              <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
-                <Building2 size={10} className="text-[#2b3cff]" /> Dados da Empresa
+            <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
+                <Building2 size={10} className="text-primary" /> Dados da Empresa
               </p>
               <InputField label="Nome Fantasia" value={nomeFantasia} onChange={setNomeFantasia} placeholder="Ex: Loja do Joao" required
                 error={showValidation && missingRequired.nomeFantasia ? REQUIRED_ERROR : undefined} />
@@ -686,23 +686,23 @@ export default function ExternalOnboardingPage() {
                       onClick={() => setNicho(opt)}
                       className={`text-[10px] px-2.5 py-1 rounded-full border transition-all ${
                         nicho === opt
-                          ? "bg-[#2b3cff]/15 text-[#2b3cff] border-[#2b3cff]/30"
-                          : "bg-[#0a0a0c] text-zinc-500 border-[#1e1e2a] hover:border-[#2b3cff]/20 hover:text-zinc-300"
+                          ? "bg-primary/15 text-primary border-primary/30"
+                          : "bg-background text-muted-foreground border-border hover:border-primary/20 hover:text-foreground"
                       }`}
                     >
                       {opt}
                     </button>
                   ))}
                 </div>
-                <p className="text-[10px] text-zinc-600">
+                <p className="text-[10px] text-muted-foreground/70">
                   Clique numa sugestão ou digite o seu. Usado pra personalizar o objeto do contrato.
                 </p>
               </div>
             </div>
 
-            <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
-              <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
-                <User size={10} className="text-[#2b3cff]" /> Responsavel
+            <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
+                <User size={10} className="text-primary" /> Responsavel
               </p>
               <InputField label="Nome Completo" value={contactName} onChange={setContactName} placeholder="Ex: Joao da Silva" required
                 error={showValidation && missingRequired.contactName ? REQUIRED_ERROR : undefined} />
@@ -713,9 +713,9 @@ export default function ExternalOnboardingPage() {
                 error={phoneError || (showValidation && missingRequired.contactWhatsapp ? REQUIRED_ERROR : undefined)} />
             </div>
 
-            <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-4">
-              <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
-                <MapPin size={10} className="text-[#2b3cff]" /> Endereco
+            <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
+                <MapPin size={10} className="text-primary" /> Endereco
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <InputField label="CEP" value={enderecoCep} onChange={handleCepChange} placeholder="00000-000" required
@@ -737,7 +737,7 @@ export default function ExternalOnboardingPage() {
         {/* ═══ STEP 2: DOCUMENTOS ═══ */}
         {step === "documentos" && submission && (
           <div className="space-y-4 animate-fade-in">
-            <p className="text-xs text-zinc-500">Envie os documentos abaixo. Voce pode selecionar um arquivo ou tirar uma foto.</p>
+            <p className="text-xs text-muted-foreground">Envie os documentos abaixo. Voce pode selecionar um arquivo ou tirar uma foto.</p>
             <FileUpload label="Logo da Empresa" docType="logo" clientId={submission.client_id} token={token} onUploaded={setDocLogo} uploaded={docLogo} previewRound
               required missing={showValidation && missingRequired.docLogo} onToast={setUploadToast} />
             <FileUpload label="Contrato Social / Cartao CNPJ (PDF ou Foto)" docType="contrato_social" clientId={submission.client_id} token={token} onUploaded={setDocContrato} uploaded={docContrato}
@@ -750,7 +750,7 @@ export default function ExternalOnboardingPage() {
         {/* ═══ STEP 3: ACESSOS ═══ */}
         {step === "acessos" && (
           <div className="space-y-4 animate-fade-in">
-            <p className="text-xs text-zinc-500">Informe os acessos das plataformas. Se nao tiver agora, selecione &quot;Nao tenho&quot;.</p>
+            <p className="text-xs text-muted-foreground">Informe os acessos das plataformas. Se nao tiver agora, selecione &quot;Nao tenho&quot;.</p>
             <AccessField platform="Facebook / Meta Ads" icon="📘" login={metaLogin} password={metaPassword} status={metaStatus}
               onLogin={setMetaLogin} onPassword={setMetaPassword} onStatus={setMetaStatus} />
             <AccessField platform="Instagram" icon="📷" login={instaLogin} password={instaPassword} status={instaStatus}
@@ -763,65 +763,65 @@ export default function ExternalOnboardingPage() {
         {/* ═══ STEP 4: REVIEW ═══ */}
         {step === "review" && (
           <div className="space-y-4 animate-fade-in">
-            <div className="rounded-xl border border-[#1e1e2a] bg-[#0f0f13] p-4 space-y-3">
-              <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Resumo</p>
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Resumo</p>
               <div className="space-y-2 text-sm">
-                {nomeFantasia && <div className="flex justify-between"><span className="text-zinc-500">Nome Fantasia</span><span className="text-white">{nomeFantasia}</span></div>}
-                {razaoSocial && <div className="flex justify-between"><span className="text-zinc-500">Razao Social</span><span className="text-white">{razaoSocial}</span></div>}
-                {cnpj && <div className="flex justify-between"><span className="text-zinc-500">CNPJ</span><span className={`${cnpjError ? "text-red-400" : "text-white"}`}>{cnpj} {cnpjError && "(invalido)"}</span></div>}
-                {nicho && <div className="flex justify-between"><span className="text-zinc-500">Ramo / Nicho</span><span className="text-white">{nicho}</span></div>}
-                <div className="flex justify-between"><span className="text-zinc-500">Responsavel</span><span className="text-white">{contactName || "—"}</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">WhatsApp</span><span className="text-white">{contactWhatsapp || "—"}</span></div>
+                {nomeFantasia && <div className="flex justify-between"><span className="text-muted-foreground">Nome Fantasia</span><span className="text-foreground">{nomeFantasia}</span></div>}
+                {razaoSocial && <div className="flex justify-between"><span className="text-muted-foreground">Razao Social</span><span className="text-foreground">{razaoSocial}</span></div>}
+                {cnpj && <div className="flex justify-between"><span className="text-muted-foreground">CNPJ</span><span className={`${cnpjError ? "text-lone-danger" : "text-foreground"}`}>{cnpj} {cnpjError && "(invalido)"}</span></div>}
+                {nicho && <div className="flex justify-between"><span className="text-muted-foreground">Ramo / Nicho</span><span className="text-foreground">{nicho}</span></div>}
+                <div className="flex justify-between"><span className="text-muted-foreground">Responsavel</span><span className="text-foreground">{contactName || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">WhatsApp</span><span className="text-foreground">{contactWhatsapp || "—"}</span></div>
                 {(enderecoRua || enderecoCidade) && (
-                  <div className="flex justify-between"><span className="text-zinc-500">Endereco</span>
-                    <span className="text-white text-right max-w-[60%]">{[enderecoRua, enderecoBairro, enderecoCidade, enderecoEstado, enderecoCep].filter(Boolean).join(", ")}</span>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Endereco</span>
+                    <span className="text-foreground text-right max-w-[60%]">{[enderecoRua, enderecoBairro, enderecoCidade, enderecoEstado, enderecoCep].filter(Boolean).join(", ")}</span>
                   </div>
                 )}
-                <div className="border-t border-[#1e1e2a] my-2" />
+                <div className="border-t border-border my-2" />
                 {[
                   { label: "Logo", ok: !!docLogo },
                   { label: "Contrato Social", ok: !!docContrato },
                   { label: "Documento c/ Foto", ok: !!docIdentidade },
                 ].map(({ label, ok }) => (
-                  <div key={label} className="flex justify-between"><span className="text-zinc-500">{label}</span>
-                    <span className={ok ? "text-emerald-400" : "text-amber-400"}>{ok ? "Enviado" : "Pendente"}</span></div>
+                  <div key={label} className="flex justify-between"><span className="text-muted-foreground">{label}</span>
+                    <span className={ok ? "text-lone-success" : "text-lone-warning"}>{ok ? "Enviado" : "Pendente"}</span></div>
                 ))}
-                <div className="border-t border-[#1e1e2a] my-2" />
+                <div className="border-t border-border my-2" />
                 {[
                   { label: "Meta Ads", status: metaStatus, login: metaLogin },
                   { label: "Instagram", status: instaStatus, login: instaLogin },
                   { label: "Google", status: googleStatus, login: googleLogin },
                 ].map(({ label, status, login }) => (
-                  <div key={label} className="flex justify-between"><span className="text-zinc-500">{label}</span>
-                    <span className={status === "fill_now" && login ? "text-emerald-400" : "text-amber-400"}>
+                  <div key={label} className="flex justify-between"><span className="text-muted-foreground">{label}</span>
+                    <span className={status === "fill_now" && login ? "text-lone-success" : "text-lone-warning"}>
                       {status === "fill_now" ? (login ? "Preenchido" : "Vazio") : status === "waiting_client" ? "Pendente" : "Partner"}
                     </span></div>
                 ))}
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-400">Observacoes (opcional)</label>
+              <label className="text-xs font-medium text-muted-foreground">Observacoes (opcional)</label>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
                 placeholder="Alguma informacao adicional..."
-                className="w-full bg-[#111113] border border-[#1e1e2a] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-600 outline-none focus:border-[#2b3cff]/50 transition-colors resize-none" />
+                className="w-full bg-background border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary/50 transition-colors resize-none" />
             </div>
           </div>
         )}
 
         {/* Navigation */}
-        <div className="flex items-center justify-between pt-4 border-t border-[#1e1e2a]">
+        <div className="flex items-center justify-between pt-4 border-t border-border">
           {currentStep > 0 ? (
-            <button onClick={goPrev} className="text-xs text-zinc-400 hover:text-white transition-colors px-4 py-2">Voltar</button>
+            <button onClick={goPrev} className="text-xs text-muted-foreground hover:text-foreground transition-colors px-4 py-2">Voltar</button>
           ) : <div />}
           {step === "review" ? (
             <div className="flex flex-col items-end gap-2">
               {!isFormComplete && (
-                <p className="text-[10px] text-amber-400">
+                <p className="text-[10px] text-lone-warning">
                   {Object.values(missingRequired).filter(Boolean).length} campo(s) obrigatorio(s) pendente(s)
                 </p>
               )}
               <button onClick={handleSubmit} disabled={submitting || !isFormComplete}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-[#2b3cff] hover:bg-[#2b3cff]/80 text-white text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-primary hover:bg-primary/80 text-foreground text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 title={!isFormComplete ? "Preencha todos os campos obrigatorios para finalizar" : ""}>
                 {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 {submitting ? "Enviando..." : "Finalizar Onboarding"}
@@ -829,7 +829,7 @@ export default function ExternalOnboardingPage() {
             </div>
           ) : (
             <button onClick={goNext}
-              className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-[#2b3cff] hover:bg-[#2b3cff]/80 text-white text-sm font-medium transition-colors">
+              className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/80 text-foreground text-sm font-medium transition-colors">
               Proximo <ChevronRight size={14} />
             </button>
           )}
