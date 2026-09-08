@@ -2731,8 +2731,55 @@ export async function POST(req: NextRequest) {
   // futura E um compromisso nosso. Sem esta ordem, viraria lembrete de evento do cliente e a
   // agenda do time continuaria vazia.
   if (c?.id && msg.text) {
-    const { lerIntencaoReuniao, textoConfirmacao, textoPergunta } = await import("@/lib/cs/agendar-reuniao");
-    const intencao = lerIntencaoReuniao(msg.text);
+    const { lerIntencaoReuniao, textoConfirmacao, textoPergunta, textoPropoeHorario } = await import("@/lib/cs/agendar-reuniao");
+
+    // Proposta PENDENTE deste cliente, feita pelo agente. É o que permite entender um "isso,
+    // pode confirmar" — resposta sem data, sem hora e sem a palavra "reunião", que antes caía no
+    // vazio e deixava o cliente falando sozinho depois de já ter concordado (caso Contele, 04/09).
+    const { data: pendente } = await supabaseAdmin
+      .from("meetings")
+      .select("id, horario_proposto, mes_referencia")
+      .eq("client_id", c.id as string)
+      .eq("estado", "ofertada")
+      .eq("proposto_lado", "agente")
+      .not("horario_proposto", "is", null)
+      .order("proposto_em", { ascending: false })
+      .limit(1).maybeSingle();
+
+    const intencao = lerIntencaoReuniao(msg.text, new Date(), (pendente?.horario_proposto as string) || undefined);
+
+    // ── O CLIENTE DEU O TURNO: o agente propõe a hora ────────────────────
+    if (intencao.tipo === "propor") {
+      const quando = new Date(intencao.iso);
+      const mesRef = `${quando.getFullYear()}-${String(quando.getMonth() + 1).padStart(2, "0")}`;
+      const { error: errProp } = await supabaseAdmin.from("meetings").upsert({
+        client_id: c.id as string,
+        title: `Reunião mensal — ${clienteNome}`,
+        meeting_type: "mensal",
+        mes_referencia: mesRef,
+        // `ofertada` + `proposto_lado: agente` é o estado que faz a próxima resposta curta do
+        // cliente ser lida como aceite desta proposta, e não como conversa solta.
+        estado: "ofertada",
+        proposto_lado: "agente",
+        horario_proposto: intencao.iso,
+        proposto_em: new Date().toISOString(),
+        responsavel: (c.assigned_social as string) || null,
+        group_jid: msg.groupJid,
+        trecho_origem: msg.text.slice(0, 300),
+        start_at: intencao.iso,
+        end_at: new Date(quando.getTime() + 3600_000).toISOString(),
+        status: "scheduled",
+        created_by: "agente-cs",
+      }, { onConflict: "client_id,mes_referencia" });
+
+      if (!errProp) {
+        await csSendGroupText(msg.groupJid, textoPropoeHorario(intencao.iso), msg.messageId,
+          { origem: "cs-reuniao-propoe", clientId: c.id as string });
+        console.log(`[CS/inbound] propus ${intencao.iso} p/ ${clienteNome} (turno informado)`);
+        return NextResponse.json({ ok: true, reuniao_proposta_agente: intencao.iso, cliente: clienteNome });
+      }
+      console.error("[CS/inbound] propor reunião:", errProp.message);
+    }
 
     if (intencao.tipo === "agendar") {
       // ── O CLIENTE PROPÔS. NÃO AGENDA AINDA. ─────────────────────────────

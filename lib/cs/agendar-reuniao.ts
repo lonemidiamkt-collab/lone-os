@@ -25,6 +25,9 @@ const RX_RECUSA = /\b(n[ãa]o (posso|consigo|d[áa]|vai dar|rola)|imposs[íi]vel
 
 export type IntencaoReuniao =
   | { tipo: "agendar"; iso: string; trecho: string; confirmar: false }
+  /** O cliente deu o DIA e o TURNO ("terça à tarde"). Não é hora exata, mas é quase tudo: o
+   *  agente propõe um horário concreto dentro do turno em vez de devolver a pergunta. */
+  | { tipo: "propor"; iso: string; trecho: string }
   | { tipo: "perguntar_horario"; motivo: string }
   | { tipo: "recusa" }
   | { tipo: "nenhuma" };
@@ -36,9 +39,35 @@ export type IntencaoReuniao =
  * quarta?" está propondo quarta, mas quem diz "não posso essa semana" não está propondo nada), e
  * passado antes de tudo (relato não agenda).
  */
-export function lerIntencaoReuniao(texto: string, agora = new Date()): IntencaoReuniao {
+/**
+ * Confirmação curta a uma proposta que o agente fez.
+ *
+ * "Isso! Pode confirmar" não tem data, nem hora, nem a palavra "reunião" — e por isso caía em
+ * `nenhuma`, deixando o cliente falando sozinho depois de ter concordado. Só faz sentido quando
+ * EXISTE uma proposta pendente, então quem chama passa `propostoIso`; sem isso, uma resposta
+ * dessas continua sendo conversa comum.
+ */
+const RX_CONFIRMA_CURTO =
+  /^\s*(?:isso|isso a[ií]|exato|exatamente|perfeito|pode confirmar|confirma|confirmado|pode marcar|pode agendar|fechado|fechou|combinado|beleza|blz|ok|okay|show|boa|t[áa] [óo]timo|t[áa] bom|por mim (?:ok|beleza|t[áa] bom)|sim)(?=[\s,.!…]|$)/i;
+
+export function lerIntencaoReuniao(texto: string, agora = new Date(), propostoIso?: string): IntencaoReuniao {
   const t = (texto || "").trim();
   if (!t) return { tipo: "nenhuma" };
+
+  // Com proposta pendente, um "isso, pode confirmar" fecha — mas só depois de checar se a
+  // mensagem não traz um horário NOVO (o cliente pode estar corrigindo, não concordando).
+  if (propostoIso) {
+    const comHora = lerHorario(t, agora);
+    const soHora = !comHora ? lerHora(t) : null;
+    const temHorarioNovo = (comHora?.horaExplicita) || (soHora?.explicita);
+    if (!temHorarioNovo && RX_CONFIRMA_CURTO.test(t) && !RX_RECUSA.test(t)) {
+      return { tipo: "agendar", iso: propostoIso, trecho: t.slice(0, 60), confirmar: false };
+    }
+    // E a recusa curta também: "não vai dar não" não tem a palavra "reunião" nem verbo de marcar,
+    // então cairia em `nenhuma` — o agente ficaria esperando resposta a uma proposta que já foi
+    // negada, e cobraria o cliente por isso depois.
+    if (!temHorarioNovo && RX_RECUSA.test(t)) return { tipo: "recusa" };
+  }
 
   const falaDeReuniao = RX_REUNIAO.test(t);
   const querMarcar = RX_MARCAR.test(t);
@@ -63,7 +92,21 @@ export function lerIntencaoReuniao(texto: string, agora = new Date()): IntencaoR
   }
 
   if (!horario.horaExplicita) {
-    return { tipo: "perguntar_horario", motivo: `disse "${horario.trecho}" mas não a hora exata` };
+    // ── O CASO CONTELE (04/09) ──────────────────────────────────────────────
+    //
+    // O cliente escreveu "Eu consigo terça à tarde" e o agente respondeu "me confirma só o
+    // horário". O cliente devolveu "Isso! Pode confirmar" — e o agente perguntou de novo. Três
+    // vezes a mesma pergunta, nenhuma reunião marcada.
+    //
+    // O erro não era de entendimento: o parser JÁ tinha calculado terça às 15h e jogava fora
+    // porque a hora não foi dita com todas as letras. Quem sabe o dia e o turno tem quase tudo —
+    // devolver a pergunta transfere ao cliente um trabalho que é nosso.
+    //
+    // Agora o agente PROPÕE o horário concreto. O cliente responde sim ou corrige, e nos dois
+    // casos a conversa anda.
+    const plaus = horarioPlausivel(horario.iso, agora);
+    if (plaus.ok) return { tipo: "propor", iso: horario.iso, trecho: horario.trecho };
+    return { tipo: "perguntar_horario", motivo: plaus.motivo ?? `disse "${horario.trecho}" mas não a hora exata` };
   }
 
   const plausivel = horarioPlausivel(horario.iso, agora);
@@ -78,6 +121,17 @@ export function lerIntencaoReuniao(texto: string, agora = new Date()): IntencaoR
 export function textoConfirmacao(cliente: string, iso: string): string {
   return `📅 Fechado! Anotei a reunião de acompanhamento da *${cliente}* para *${porExtenso(iso)}*.\n`
     + `Vou lembrar todo mundo na véspera. Se precisar mudar, é só falar aqui.`;
+}
+
+/**
+ * O agente propondo o horário concreto a partir do turno que o cliente deu.
+ *
+ * Pergunta fechada, de sim ou não: é o que faz a conversa terminar numa resposta, em vez de virar
+ * uma negociação de horário por mensagem.
+ */
+export function textoPropoeHorario(iso: string): string {
+  return `📅 Perfeito! Fica bom *${porExtenso(iso)}*?\n`
+    + `Se preferir outro horário nesse dia, é só me dizer.`;
 }
 
 /**

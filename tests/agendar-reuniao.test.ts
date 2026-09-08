@@ -25,13 +25,18 @@ describe("falou de marcar mas não disse quando: pergunta", () => {
   for (const frase of [
     "bora marcar a reunião desse mês",
     "podemos agendar a call?",
-    "reunião quinta pode ser?",           // dia sem hora
-    "reunião dia 18 de manhã",            // período, não horário
+    "reunião quinta pode ser?",           // dia sem hora nem turno
   ]) {
     it(`pergunta em vez de chutar: "${frase}"`, () => {
       expect(ler(frase).tipo).toBe("perguntar_horario");
     });
   }
+
+  it('"dia 18 de manhã" agora PROPÕE, porque dia + turno é quase tudo', () => {
+    // Antes isto virava pergunta. Depois do caso Contele, devolver a pergunta a quem já deu o dia
+    // e o turno passou a ser considerado empurrar trabalho nosso para o cliente.
+    expect(ler("reunião dia 18 de manhã").tipo).toBe("propor");
+  });
 
   it("o motivo da pergunta é específico", () => {
     const r = ler("reunião dia 18 de manhã");
@@ -224,5 +229,67 @@ describe("o que o cliente lê", () => {
       textoLembreteCliente("sexta às 14:00", "uma_hora"),
     ].join(" ");
     expect(todas).not.toMatch(/meetings|client_id|estado|undefined|null|\bISO\b/);
+  });
+});
+
+// ── O CASO CONTELE (04/09) ────────────────────────────────────────────────
+//
+// Conversa real. A cliente escreveu "Eu consigo terça à tarde"; o agente respondeu "me confirma
+// só o horário"; ela devolveu "Isso! Pode confirmar" — e ele perguntou de novo. Três vezes a
+// mesma pergunta no grupo, nenhuma reunião marcada.
+//
+// Dois defeitos, ambos aqui: o parser já sabia que "terça à tarde" era terça 15h e jogava fora
+// por falta de hora exata; e uma confirmação curta, sem data nem hora, caía em "nenhuma".
+describe("cliente dá o turno: o agente PROPÕE, não devolve a pergunta", () => {
+  const quinta = new Date(2026, 8, 4, 16, 54);   // sexta 04/09/2026, como na conversa
+
+  it('"Eu consigo terça à tarde" vira PROPOSTA de horário concreto', () => {
+    const r = lerIntencaoReuniao("Eu consigo terça à tarde", quinta);
+    expect(r.tipo).toBe("propor");
+    if (r.tipo === "propor") {
+      expect(r.iso).toContain("T15:00");        // "à tarde" = 15h
+      expect(r.iso.slice(0, 10)).toBe("2026-09-08"); // a terça seguinte
+    }
+  });
+
+  it('"quinta de manhã" também propõe, às 10h', () => {
+    const r = lerIntencaoReuniao("consigo quinta de manhã", quinta);
+    expect(r.tipo).toBe("propor");
+    if (r.tipo === "propor") expect(r.iso).toContain("T10:00");
+  });
+
+  it("horário impossível continua virando pergunta, não proposta", () => {
+    // Domingo não é dia de reunião de trabalho: propor seria pior que perguntar.
+    const r = lerIntencaoReuniao("pode ser domingo de manhã", quinta);
+    expect(r.tipo).toBe("perguntar_horario");
+  });
+});
+
+describe("confirmação curta fecha a proposta pendente", () => {
+  const proposto = "2026-09-08T15:00:00-03:00";
+  const agora = new Date(2026, 8, 4, 17);
+
+  for (const frase of ["Isso ! Pode confirmar", "isso aí", "pode marcar", "fechado", "por mim ok", "perfeito"]) {
+    it(`fecha com: "${frase}"`, () => {
+      const r = lerIntencaoReuniao(frase, agora, proposto);
+      expect(r.tipo).toBe("agendar");
+      if (r.tipo === "agendar") expect(r.iso).toBe(proposto);
+    });
+  }
+
+  it("SEM proposta pendente, a mesma frase não agenda nada", () => {
+    // "Isso, pode confirmar" solto no grupo é conversa — sem contexto, marcar seria chutar.
+    expect(lerIntencaoReuniao("Isso ! Pode confirmar", agora).tipo).toBe("nenhuma");
+  });
+
+  it("horário NOVO na resposta corrige a proposta, não a confirma", () => {
+    // "ok, mas pode ser 16h?" está corrigindo — confirmar marcaria o horário recusado.
+    const r = lerIntencaoReuniao("ok, mas pode ser dia 9 às 16h?", agora, proposto);
+    expect(r.tipo).toBe("agendar");
+    if (r.tipo === "agendar") expect(r.iso).not.toBe(proposto);
+  });
+
+  it("recusa não vira confirmação", () => {
+    expect(lerIntencaoReuniao("não vai dar não", agora, proposto).tipo).toBe("recusa");
   });
 });
