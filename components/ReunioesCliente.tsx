@@ -85,8 +85,20 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
   const [agendando, setAgendando] = useState(false);
   const [form, setForm] = useState({
     tipo: "mensal", data: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
-    hora: "10:00", duracao: "60", local: "Online", titulo: "", pauta: "",
+    hora: "10:00", duracao: "60", local: "Online", titulo: "", pauta: "", link: "",
   });
+  // Quem mais participa. Roberto: "o Thiago poder convidar o Carlos para aquele evento".
+  const [colaboradores, setColaboradores] = useState<string[]>([]);
+  const [time, setTime] = useState<{ name: string; role: string }[]>([]);
+
+  useEffect(() => {
+    // A lista vem do roster (team_members), a MESMA fonte que resolve menção no WhatsApp e o
+    // filtro da agenda. Usar outra lista aqui criaria convite para um nome que o resto do
+    // sistema não reconhece.
+    fetch("/api/team/roster").then((r) => (r.ok ? r.json() : null))
+      .then((j) => setTime((j?.profiles ?? []).map((p: { name: string; role: string }) => ({ name: p.name, role: p.role }))))
+      .catch(() => { /* sem o time, o convite simplesmente não aparece */ });
+  }, []);
 
   const [aberta, setAberta] = useState<string | null>(null);
   const [detalhe, setDetalhe] = useState<Detalhe | null>(null);
@@ -149,11 +161,13 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
     const j = await chamar({
       acao: "agendar", clientId, inicio, fim, tipo: form.tipo,
       local: form.local, titulo: form.titulo.trim() || undefined, pauta: form.pauta.trim() || undefined,
+      colaboradores, link: form.link.trim() || undefined,
     });
     if (j?.ok) {
       setAviso("Reunião agendada. Vou lembrar na véspera e uma hora antes.");
       setAgendando(false);
-      setForm((f) => ({ ...f, titulo: "", pauta: "" }));
+      setForm((f) => ({ ...f, titulo: "", pauta: "", link: "" }));
+      setColaboradores([]);
       carregar();
     }
   };
@@ -295,6 +309,31 @@ export default function ReunioesCliente({ clientId, clientName }: { clientId: st
           <input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })}
                  placeholder={`Título (opcional) — padrão: "Reunião — ${clientName}"`}
                  className="w-full p-2 rounded-lg bg-card border border-border text-[12px] text-foreground placeholder:text-muted-foreground/60" />
+          <input value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })}
+                 placeholder="Link da chamada (Meet, Zoom…) — entra no lembrete e no convite"
+                 className="w-full p-2 rounded-lg bg-card border border-border text-[12px] text-foreground placeholder:text-muted-foreground/60" />
+
+          {/* CONVIDAR — o responsável já está na reunião; aqui é quem MAIS participa. */}
+          {time.length > 0 && (
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1.5">Convidar do time</p>
+              <div className="flex flex-wrap gap-1.5">
+                {time.map((m) => {
+                  const dentro = colaboradores.includes(m.name);
+                  return (
+                    <button key={m.name} type="button"
+                      onClick={() => setColaboradores((c) => dentro ? c.filter((x) => x !== m.name) : [...c, m.name])}
+                      className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
+                        dentro ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:text-foreground"
+                      }`}>
+                      {dentro && "✓ "}{m.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <textarea value={form.pauta} onChange={(e) => setForm({ ...form, pauta: e.target.value })}
                     placeholder="Pauta / briefing da reunião (opcional agora — dá pra escrever ou gerar depois)"
                     className="w-full h-20 p-2 rounded-lg bg-card border border-border text-[12px] text-foreground placeholder:text-muted-foreground/60 resize-y" />

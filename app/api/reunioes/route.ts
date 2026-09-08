@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     // A janela é por DATA, que é o que a agenda entende. O ciclo continua identificável pelo
     // `mes_referencia`, para quem precisa dele (a cobrança da janela 15–22).
     supabaseAdmin.from("meetings")
-      .select("id, client_id, title, start_at, end_at, estado, status, responsavel, proposto_em, confirmado_por, resumo, realizada_em, meeting_type, mes_referencia")
+      .select("id, client_id, title, start_at, end_at, estado, status, responsavel, attendees, link_reuniao, proposto_em, confirmado_por, resumo, realizada_em, meeting_type, mes_referencia")
       .gte("start_at", `${mes}-01T00:00:00-03:00`)
       .lt("start_at", proximoMes)
       .order("start_at", { ascending: true, nullsFirst: false }),
@@ -69,6 +69,7 @@ export async function GET(req: NextRequest) {
     clientId: string; cliente: string; responsavel: string | null; estado: string;
     quando: string | null; propostoEm: string | null; confirmadoPor: string | null;
     reuniaoId: string | null; resumo: string | null; tipo: string;
+    colaboradores: string[]; link: string | null;
   }
 
   const linhas: LinhaAgenda[] = elegiveis.map((c) => {
@@ -84,6 +85,8 @@ export async function GET(req: NextRequest) {
       reuniaoId: (m?.id as string) ?? null,
       resumo: (m?.resumo as string) ?? null,
       tipo: "mensal",
+      colaboradores: (m?.attendees as string[]) ?? [],
+      link: (m?.link_reuniao as string) ?? null,
     };
   });
 
@@ -107,11 +110,15 @@ export async function GET(req: NextRequest) {
       reuniaoId: m.id as string,
       resumo: (m.resumo as string) ?? null,
       tipo: (m.meeting_type as string) || "avulsa",
+      colaboradores: (m.attendees as string[]) ?? [],
+      link: (m.link_reuniao as string) ?? null,
     }));
   linhas.push(...foraDoCiclo);
 
   // Não-admin vê só a própria carteira. `ServerUser` só traz email, então o nome vem de
   // team_members — que é a mesma fonte que resolve as menções no WhatsApp.
+  // Quem foi CONVIDADO também vê. Sem isto, o Carlos convidado pelo Thiago não enxergaria a
+  // reunião em lugar nenhum — o convite existiria só no banco.
   let meu = linhas;
   if (!user.isAdmin) {
     const { data: membro } = await supabaseAdmin
@@ -119,7 +126,8 @@ export async function GET(req: NextRequest) {
     const nomeUsuario = (membro?.name as string) || "";
     // Sem nome resolvido, mostra vazio em vez da carteira inteira: ver a agenda dos outros por
     // acidente é pior que não ver a própria.
-    meu = linhas.filter((l) => !!nomeUsuario && l.responsavel === nomeUsuario);
+    meu = linhas.filter((l) => !!nomeUsuario
+      && (l.responsavel === nomeUsuario || (l.colaboradores ?? []).includes(nomeUsuario)));
   }
 
   const agendadas = meu.filter((l) => l.estado === "agendada");

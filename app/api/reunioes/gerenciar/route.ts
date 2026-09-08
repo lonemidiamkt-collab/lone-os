@@ -29,6 +29,10 @@ interface Corpo {
   local?: string;
   descricao?: string;
   pauta?: string;
+  /** Nomes (os mesmos de team_members) convidados além do responsável. */
+  colaboradores?: string[];
+  /** Link da chamada — Meet, Zoom, o que for. */
+  link?: string;
   /** anexar: arquivo já em base64 (o front lê o File e manda). */
   arquivo?: { nome: string; tipo: string; base64: string };
   /** remover_anexo */
@@ -84,6 +88,11 @@ export async function POST(req: NextRequest) {
       created_by: quem,
       pauta: b.pauta?.trim() || null,
       ...(b.pauta?.trim() ? { pauta_em: new Date().toISOString(), pauta_por: quem, pauta_origem: "manual" } : {}),
+      // Convidados por NOME, sem repetir quem já é responsável — a lista existe para dizer quem
+      // MAIS participa, e ver o próprio nome duplicado no convite confunde.
+      attendees: (b.colaboradores ?? []).filter((n) => n && n !== ((cli.assigned_social as string) || quem)),
+      link_reuniao: b.link?.trim() || null,
+      convidado_por: quem,
     }).select("id").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -98,7 +107,7 @@ export async function POST(req: NextRequest) {
   // As demais ações exigem a reunião.
   if (!b?.reuniaoId) return NextResponse.json({ error: "reuniaoId é obrigatório" }, { status: 400 });
   const { data: reu } = await supabaseAdmin
-    .from("meetings").select("id, client_id, anexos, start_at, clients(name, nome_fantasia, nicho)")
+    .from("meetings").select("id, client_id, anexos, start_at, responsavel, attendees, clients(name, nome_fantasia, nicho)")
     .eq("id", b.reuniaoId).maybeSingle();
   if (!reu) return NextResponse.json({ error: "reunião não encontrada" }, { status: 404 });
 
@@ -109,6 +118,8 @@ export async function POST(req: NextRequest) {
     if (b.descricao !== undefined) patch.description = b.descricao;
     if (b.tipo !== undefined) patch.meeting_type = b.tipo;
     if (b.local !== undefined) patch.location = b.local;
+    if (b.link !== undefined) patch.link_reuniao = b.link?.trim() || null;
+    if (b.colaboradores !== undefined) patch.attendees = b.colaboradores.filter(Boolean);
     if (b.inicio) {
       const i = new Date(b.inicio);
       if (Number.isNaN(i.getTime())) return NextResponse.json({ error: "data inválida" }, { status: 400 });

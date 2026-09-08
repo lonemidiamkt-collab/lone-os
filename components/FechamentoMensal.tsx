@@ -30,8 +30,17 @@ interface Designer {
   piorAtraso: { cliente: string; titulo: string; dias: number } | null;
   clientesAtendidos: number;
 }
+interface Reunioes {
+  no_mes: number;
+  clientes_com_reuniao_marcada: number;
+  clientes_com_reuniao_realizada: number;
+  clientes_sem_reuniao: { cliente: string; social: string | null }[];
+  com_transcricao: number;
+  por_pessoa: { pessoa: string; reunioes: number }[];
+}
+
 interface Resposta {
-  rotulo: string; mes: string;
+  rotulo: string; mes: string; reunioes?: Reunioes;
   social: Social[]; designer: Designer[];
   clientes: { cliente: string; social: string | null; publicados: number; meta: number; artesRegistradas: number; semNenhumPost: boolean; ilegivel: boolean }[];
   totais: {
@@ -121,6 +130,31 @@ export default function FechamentoMensal() {
           tom={t.diferenca_registro > 20 ? "warning" : undefined}
         />
       </div>
+
+      {/* REUNIÕES DO MÊS — quem teve e quem não teve */}
+      {dados.reunioes && (
+        <div className="mb-4 p-3 rounded-xl bg-surface border border-border">
+          <div className="flex items-baseline justify-between gap-2 mb-2 flex-wrap">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Reuniões com cliente</p>
+            <p className="text-[11px] text-muted-foreground tabular-nums">
+              <span className="text-foreground font-medium">{dados.reunioes.clientes_com_reuniao_realizada}</span> de {t.clientes} clientes tiveram
+              {dados.reunioes.com_transcricao > 0 && ` · ${dados.reunioes.com_transcricao} com transcrição guardada`}
+            </p>
+          </div>
+          {dados.reunioes.por_pessoa.length > 0 && (
+            <p className="text-[11.5px] text-muted-foreground mb-1.5">
+              {dados.reunioes.por_pessoa.map((p) => `${p.pessoa}: ${p.reunioes}`).join(" · ")}
+            </p>
+          )}
+          {dados.reunioes.clientes_sem_reuniao.length > 0 && (
+            <p className="text-[11px] text-lone-warning">
+              <b>{dados.reunioes.clientes_sem_reuniao.length} sem reunião no mês:</b>{" "}
+              {dados.reunioes.clientes_sem_reuniao.slice(0, 8).map((c) => c.cliente).join(", ")}
+              {dados.reunioes.clientes_sem_reuniao.length > 8 && ` … e mais ${dados.reunioes.clientes_sem_reuniao.length - 8}`}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* SOCIAL */}
       <div className="space-y-2 mb-4">

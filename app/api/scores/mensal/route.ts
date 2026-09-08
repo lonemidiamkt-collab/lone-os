@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const fimDate = new Date(Date.UTC(ano, mes, 1));
   const fim = fimDate.toISOString().slice(0, 10);
 
-  const [clientesQ, postsQ, cardsQ, ilegiveis] = await Promise.all([
+  const [clientesQ, postsQ, cardsQ, reunioesQ, ilegiveis] = await Promise.all([
     supabaseAdmin.from("clients")
       .select("id, name, nome_fantasia, status, active, assigned_social, assigned_designer, posts_goal, service_type")
       .or("active.is.null,active.eq.true"),
@@ -44,6 +44,13 @@ export async function GET(req: NextRequest) {
       .not("designer_delivered_at", "is", null)
       .gte("designer_delivered_at", inicio).lt("designer_delivered_at", fim)
       .is("archived_at", null),
+    // REUNIÕES DO MÊS. Roberto: "o sistema identificar que é uma reunião e adicionar no histórico
+    // do cliente e nas OKRs, para podermos ver quem teve ou não teve reunião." Conta só as que
+    // ACONTECERAM: marcada e cancelada não é reunião tida.
+    supabaseAdmin.from("meetings")
+      .select("client_id, responsavel, estado, start_at, transcricao_palavras")
+      .gte("start_at", inicio).lt("start_at", fim)
+      .in("estado", ["agendada", "realizada"]),
     clientesIlegiveis(),
   ]);
 
@@ -100,6 +107,16 @@ export async function GET(req: NextRequest) {
     prazo: (k.due_date as string) || null,
   }));
 
+  // ── QUEM TEVE E QUEM NÃO TEVE REUNIÃO ──────────────────────────────────
+  const reunioesMes = reunioesQ.data ?? [];
+  const clientesComReuniao = new Set(reunioesMes.map((r) => r.client_id as string));
+  // Realizada = já passou da data. Uma marcada para o fim do mês ainda não "teve".
+  const agoraIso = new Date().toISOString();
+  const clientesComReuniaoFeita = new Set(
+    reunioesMes.filter((r) => r.estado === "realizada" || (r.start_at as string) < agoraIso)
+      .map((r) => r.client_id as string),
+  );
+
   const social = fecharSocial(porCliente);
   const designer = fecharDesigner(artes);
 
@@ -118,6 +135,21 @@ export async function GET(req: NextRequest) {
         cliente: c.cliente, social: c.responsavelSocial, publicados: c.publicados, meta: c.meta,
         artesRegistradas: c.artesRegistradas, semNenhumPost: c.semNenhumPost, ilegivel: c.ilegivel,
       })),
+    reunioes: {
+      no_mes: reunioesMes.length,
+      clientes_com_reuniao_marcada: clientesComReuniao.size,
+      clientes_com_reuniao_realizada: clientesComReuniaoFeita.size,
+      // Nomeados: é o que permite cobrar hoje, em vez de olhar um percentual.
+      clientes_sem_reuniao: porCliente
+        .filter((c) => !clientesComReuniao.has(c.clientId))
+        .map((c) => ({ cliente: c.cliente, social: c.responsavelSocial })),
+      com_transcricao: reunioesMes.filter((r) => (r.transcricao_palavras ?? 0) > 0).length,
+      por_pessoa: [...new Set(reunioesMes.map((r) => (r.responsavel as string) || "sem responsável"))]
+        .map((p) => ({
+          pessoa: p,
+          reunioes: reunioesMes.filter((r) => ((r.responsavel as string) || "sem responsável") === p).length,
+        })),
+    },
     totais: {
       clientes: porCliente.length,
       publicados: publicadosTotal,
