@@ -148,16 +148,23 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // O PORTÃO DO LANÇAMENTO PROGRESSIVO — lido AQUI, antes de qualquer retorno.
+  //
+  // Ele estava sendo lido só na hora de ofertar, e por isso não aparecia na resposta fora da
+  // janela: justamente quando alguém abre o log para conferir se está ligado antes do dia 15.
+  // "Não mandou nada" e "está desligado" precisam ser distinguíveis em toda execução.
+  const abordagem = await lerAbordagem();
+
   // ── 2. COBRANÇA DA JANELA ───────────────────────────────────────────────
   if (!janela.aberta) {
     return NextResponse.json({
-      ok: true, janela: { ...janela }, lembretes: lembretesEnviados,
+      ok: true, janela: { ...janela }, abordagem: descrever(abordagem), lembretes: lembretesEnviados,
       cobranca: "fora da janela (dia 15 a 22)",
     });
   }
   // Cobrança é de horário comercial: ninguém marca reunião às 21h de sábado.
   if (!(await isBusinessDay(agora)) || !isBusinessHour(agora)) {
-    return NextResponse.json({ ok: true, janela, lembretes: lembretesEnviados, cobranca: "fora do expediente" });
+    return NextResponse.json({ ok: true, janela, abordagem: descrever(abordagem), lembretes: lembretesEnviados, cobranca: "fora do expediente" });
   }
 
   // Uma cobrança por dia. O cron roda de hora em hora por causa dos lembretes; sem este dedup,
@@ -167,7 +174,7 @@ export async function POST(req: NextRequest) {
     const { data: jaHoje } = await supabaseAdmin.from("cs_outbound")
       .select("id").eq("origem", "cs-reuniao-cobranca").eq("dia", hojeStr).limit(1);
     if (jaHoje?.length) {
-      return NextResponse.json({ ok: true, janela, lembretes: lembretesEnviados, cobranca: "já cobrado hoje" });
+      return NextResponse.json({ ok: true, janela, abordagem: descrever(abordagem), lembretes: lembretesEnviados, cobranca: "já cobrado hoje" });
     }
   }
 
@@ -212,9 +219,7 @@ export async function POST(req: NextRequest) {
   // sem esta trava o mesmo cliente receberia oferta nove vezes.
   const horaAgora = agora.getHours();
   const podeOfertar = horaAgora >= HORA_OFERTA && horaAgora < HORA_OFERTA + 1;
-  // O PORTÃO DO LANÇAMENTO PROGRESSIVO. Vale só para a INICIATIVA do agente: cobrança do time,
-  // resposta a quem perguntou e lembrete de reunião combinada não passam por aqui.
-  const abordagem = await lerAbordagem();
+
   const grupoDoCliente = new Map(elegiveis.map((c) => [c.id as string, (c.whatsapp_group_jid as string) || null]));
   const idReuniao = new Map((doMes ?? []).map((m) => [m.client_id as string, m.id as string]));
   const acoes: string[] = [];
