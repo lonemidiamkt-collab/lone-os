@@ -328,3 +328,86 @@ describe("link da chamada colado no grupo", () => {
     expect(textoPedeLink("")).toContain("link da chamada");
   });
 });
+
+// ── O CASO IMPÉRIO DOS PISOS (08/09) ─────────────────────────────────────
+//
+// Dois erros numa conversa só, num grupo de cliente:
+//   1. O Matheus escreveu três parágrafos sobre o CRM e o agente abriu uma conversa de
+//      agendamento que ninguém pediu.
+//   2. O agente perguntou o horário; o Matheus respondeu no formato exato que foi pedido; o
+//      agente ficou mudo.
+describe("Império dos Pisos: não inventar conversa", () => {
+  const MATHEUS = `Boa tarde!
+
+Vi que foi mencionado que o CRM não identifica de qual anúncio veio cada lead, mas ele identifica sim. Essa é, inclusive, uma das primeiras informações que recebemos quando o lead entra em contato com a empresa, mostrando a origem do contato.
+
+Na reunião, vou apresentar todos os pontos relacionados ao CRM que foram mencionados no PDF, incluindo essa informação e os demais recursos e possibilidades que podemos utilizar para melhorar o acompanhamento dos leads e das vendas.`;
+
+  it("a mensagem do CRM não vira pedido de reunião", () => {
+    expect(ler(MATHEUS).tipo).toBe("nenhuma");
+  });
+
+  it("“podemos” longe de “reunião” não é pedido de marcação", () => {
+    expect(ler("Na reunião falamos do CRM. Temos recursos que podemos utilizar no atendimento.").tipo)
+      .toBe("nenhuma");
+  });
+
+  it("mas “podemos” PERTO de “reunião” continua sendo", () => {
+    expect(ler("A reunião podemos fazer essa semana?").tipo).toBe("perguntar_horario");
+  });
+
+  for (const frase of [
+    "Na reunião vou apresentar os números",
+    "durante a reunião a gente vê isso",
+    "deixo pra reunião",
+    "sobre a reunião, levo o material impresso",
+    "nessa reunião quero falar de verba",
+  ]) {
+    it(`fala DE uma reunião existente, não pede outra: "${frase}"`, () => {
+      expect(ler(frase).tipo).toBe("nenhuma");
+    });
+  }
+
+  it("verbo forte desfaz: “a reunião que a gente vai marcar”", () => {
+    expect(ler("sobre a reunião que a gente vai marcar, me avisa").tipo).toBe("perguntar_horario");
+  });
+});
+
+describe("Império dos Pisos: reconhecer a resposta que ele pediu", () => {
+  const respondendo = (t: string) => lerIntencaoReuniao(t, AGORA, undefined, true);
+
+  it("“Amanhã 9:30 esta ótimo!” fecha o horário", () => {
+    const r = respondendo("Amanhã 9:30 esta ótimo!");
+    expect(r.tipo).toBe("agendar");
+    if (r.tipo === "agendar") expect(r.iso).toBe("2026-09-03T09:30:00-03:00");
+  });
+
+  it("sem a pergunta pendente, a mesma frase não faz nada", () => {
+    expect(ler("Amanhã 9:30 esta ótimo!").tipo).toBe("nenhuma");
+  });
+
+  for (const frase of ["dia 18 às 14h", "quinta 10h pode ser", "amanhã 9h30"]) {
+    it(`responde ao formato pedido: "${frase}"`, () => {
+      expect(respondendo(frase).tipo).toBe("agendar");
+    });
+  }
+
+  it("só o dia vira proposta de horário, não pergunta de novo", () => {
+    expect(respondendo("quinta de manhã").tipo).toBe("propor");
+  });
+
+  it("recusa é entendida como recusa", () => {
+    expect(respondendo("não vai dar essa semana").tipo).toBe("recusa");
+  });
+
+  it("TEXTÃO com data não é resposta — ninguém responde “que horas?” em três parágrafos", () => {
+    const longo = "Bom dia! Sobre o material, a promoção do dia 18 começa cedo e vamos "
+      + "precisar de arte nova para o feed e para o story, além do banner do site. "
+      + "Depois te mando as fotos dos produtos que entraram essa semana no estoque.";
+    expect(respondendo(longo).tipo).not.toBe("agendar");
+  });
+
+  it("mensagem sem horário nenhum não é engolida pela janela", () => {
+    expect(respondendo("obrigado!").tipo).toBe("nenhuma");
+  });
+});

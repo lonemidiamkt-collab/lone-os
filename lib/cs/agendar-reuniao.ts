@@ -14,8 +14,46 @@ import { lerHorario, lerHora, horarioPlausivel, porExtenso } from "./parse-horar
 /** Fala sobre a reunião de acompanhamento — não sobre uma data qualquer. */
 const RX_REUNIAO = /\b(reuni[ãa]o|reuniao|call|meet|alinhamento|conversar|bate[- ]?papo|videochamada|v[ií]deo\s*chamada)\b/i;
 
-/** Verbos que indicam MARCAR, não relatar. "tivemos uma reunião" não agenda nada. */
-const RX_MARCAR = /\b(marcar?|marca|agendar?|agenda|combinar?|combina|pode ser|podemos|consigo|dispon[íi]vel|que tal|topo|fechado|confirmo|confirmado)\b/i;
+/**
+ * Verbos que indicam MARCAR sem ambiguidade nenhuma. "tivemos uma reunião" não agenda nada.
+ */
+const RX_MARCAR_FORTE =
+  /\b(marcar?|marca|marque|agendar?|agenda|agende|remarcar?|remarca|combinar?|combina|que tal|disponibilidade|dispon[íi]vel)\b/i;
+
+/**
+ * Verbos AMBÍGUOS. Sozinhos não querem dizer nada — só contam quando estão perto da palavra
+ * "reunião". "podemos utilizar o CRM" não marca reunião nenhuma.
+ */
+const RX_MARCAR_FRACO = /\b(pode ser|podemos|posso|consigo|topo|fechado|confirmo|confirmado)\b/i;
+
+/**
+ * Fala DE uma reunião que já existe, sobre o que vai acontecer nela.
+ *
+ * "Na reunião, vou apresentar os pontos do CRM" — quem escreve isso já tem a reunião. Não está
+ * pedindo para marcar, está contando o que vai fazer nela.
+ */
+const RX_REUNIAO_EXISTENTE =
+  /\b(?:n[ao]|numa|duma|dessa|desta|daquela|nessa|nesta|naquela|durante\s+[ao]|antes\s+d[ao]|depois\s+d[ao]|pr[ao]|para\s+[ao]|sobre\s+[ao])\s+(?:nossa\s+|pr[óo]xima\s+|[úu]ltima\s+)?(?:reuni[ãa]o|call|meet)\b/i;
+
+/** Distância máxima, em caracteres, entre "reunião" e o verbo para contarem como um pedido. */
+const PERTO = 60;
+
+/**
+ * O verbo de marcar está PERTO da palavra reunião?
+ *
+ * O caso Império dos Pisos (08/09): três parágrafos sobre o CRM, terminando com "recursos e
+ * possibilidades que *podemos* utilizar" — a mais de 150 caracteres do "na *reunião* vou
+ * apresentar" do parágrafo anterior. Bastou o "podemos" para o agente abrir uma conversa de
+ * agendamento que ninguém pediu, num grupo de cliente. Coincidência de vocabulário não é intenção.
+ */
+function marcarPertoDeReuniao(t: string): boolean {
+  const achar = (rx: RegExp) =>
+    [...t.matchAll(new RegExp(rx.source, "gi"))].map((m) => m.index ?? 0);
+  const reunioes = achar(RX_REUNIAO);
+  if (!reunioes.length) return false;
+  return [...achar(RX_MARCAR_FORTE), ...achar(RX_MARCAR_FRACO)]
+    .some((v) => reunioes.some((r) => Math.abs(v - r) <= PERTO));
+}
 
 /** Passado: "a reunião foi ótima", "na reunião de ontem" — não é agendamento. */
 const RX_PASSADO = /\b(foi|teve|tivemos|aconteceu|ontem|semana passada|m[êe]s passado|na [úu]ltima)\b/i;
@@ -50,7 +88,20 @@ export type IntencaoReuniao =
 const RX_CONFIRMA_CURTO =
   /^\s*(?:isso|isso a[ií]|exato|exatamente|perfeito|pode confirmar|confirma|confirmado|pode marcar|pode agendar|fechado|fechou|combinado|beleza|blz|ok|okay|show|boa|t[áa] [óo]timo|t[áa] bom|por mim (?:ok|beleza|t[áa] bom)|sim)(?=[\s,.!…]|$)/i;
 
-export function lerIntencaoReuniao(texto: string, agora = new Date(), propostoIso?: string): IntencaoReuniao {
+/** Tamanho máximo de uma mensagem que ainda pode ser lida como RESPOSTA a "que horas?". */
+const RESPOSTA_CURTA = 160;
+
+export function lerIntencaoReuniao(
+  texto: string,
+  agora = new Date(),
+  propostoIso?: string,
+  /**
+   * O agente perguntou o horário a este cliente há pouco e está esperando a resposta.
+   *
+   * Quem chama decide o "há pouco" (a rota usa 6 horas) — aqui só se usa o fato.
+   */
+  perguntouHorario = false,
+): IntencaoReuniao {
   const t = (texto || "").trim();
   if (!t) return { tipo: "nenhuma" };
 
@@ -69,8 +120,34 @@ export function lerIntencaoReuniao(texto: string, agora = new Date(), propostoIs
     if (!temHorarioNovo && RX_RECUSA.test(t)) return { tipo: "recusa" };
   }
 
+  // ── ELE PERGUNTOU. ISTO É A RESPOSTA. ───────────────────────────────────
+  //
+  // Império dos Pisos (08/09): o agente perguntou *"me confirma só o horário — por exemplo, 'dia
+  // 18 às 14h'"*. O cliente respondeu **"Amanhã 9:30 esta ótimo!"**, exatamente no formato pedido
+  // — e o agente ficou mudo, porque a resposta não tinha a palavra "reunião" nem verbo de marcar.
+  //
+  // Perguntar e não reconhecer a resposta é pior que nunca ter perguntado: o cliente respondeu,
+  // ficou esperando, e do lado de cá não existe nem registro de que ele respondeu.
+  //
+  // Duas travas para isto não virar um funil que engole tudo por 6 horas: a mensagem precisa ser
+  // CURTA (ninguém responde "que horas?" com três parágrafos) e o horário precisa ser plausível.
+  // Sem horário legível, a mensagem segue o caminho normal e provavelmente vira `nenhuma`.
+  if (perguntouHorario && t.length <= RESPOSTA_CURTA) {
+    if (RX_RECUSA.test(t)) return { tipo: "recusa" };
+    const h = lerHorario(t, agora);
+    if (h) {
+      const plaus = horarioPlausivel(h.iso, agora);
+      if (!plaus.ok) {
+        return { tipo: "perguntar_horario", motivo: plaus.motivo ?? "horário improvável" };
+      }
+      return h.horaExplicita
+        ? { tipo: "agendar", iso: h.iso, trecho: h.trecho, confirmar: false }
+        : { tipo: "propor", iso: h.iso, trecho: h.trecho };
+    }
+  }
+
   const falaDeReuniao = RX_REUNIAO.test(t);
-  const querMarcar = RX_MARCAR.test(t);
+  const querMarcar = RX_MARCAR_FORTE.test(t) || RX_MARCAR_FRACO.test(t);
 
   // Relato do que já aconteceu não agenda nada.
   if (falaDeReuniao && RX_PASSADO.test(t) && !querMarcar) return { tipo: "nenhuma" };
@@ -85,10 +162,22 @@ export function lerIntencaoReuniao(texto: string, agora = new Date(), propostoIs
   if (!falaDeReuniao && !querMarcar) return { tipo: "nenhuma" };
 
   if (!horario) {
-    // Falou de marcar reunião mas não disse quando: é o momento de perguntar, não de adivinhar.
-    return falaDeReuniao && querMarcar
-      ? { tipo: "perguntar_horario", motivo: "sem data ou hora na mensagem" }
-      : { tipo: "nenhuma" };
+    // ── SEM DATA NENHUMA: o ramo mais perigoso ────────────────────────────
+    //
+    // É o único caminho em que o agente ABRE uma conversa a partir de vocabulário solto — não há
+    // data para ancorar nada. Foi por aqui que ele respondeu ao Matheus (Império dos Pisos, 08/09)
+    // um "me confirma só o horário" no meio de três parágrafos sobre o CRM.
+    //
+    // Quando existe data na mensagem, um verbo fraco basta ("consigo dia 18 às 16h" é pedido, e
+    // sempre foi). Sem data, a régua é outra: o verbo fraco só conta se estiver PERTO da palavra
+    // reunião, e falar DE uma reunião que já existe não conta de jeito nenhum.
+    if (!falaDeReuniao) return { tipo: "nenhuma" };
+    const pedeDeVerdade = RX_MARCAR_FORTE.test(t) || marcarPertoDeReuniao(t);
+    if (!pedeDeVerdade) return { tipo: "nenhuma" };
+    // "Na reunião vou apresentar os números" — quem escreve isso já tem a reunião. Um verbo forte
+    // desfaz: "sobre a reunião que a gente vai marcar" continua sendo pedido.
+    if (RX_REUNIAO_EXISTENTE.test(t) && !RX_MARCAR_FORTE.test(t)) return { tipo: "nenhuma" };
+    return { tipo: "perguntar_horario", motivo: "sem data ou hora na mensagem" };
   }
 
   if (!horario.horaExplicita) {

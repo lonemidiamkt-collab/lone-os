@@ -2804,7 +2804,27 @@ export async function POST(req: NextRequest) {
       .order("proposto_em", { ascending: false })
       .limit(1).maybeSingle();
 
-    const intencao = lerIntencaoReuniao(msg.text, new Date(), (pendente?.horario_proposto as string) || undefined);
+    // O agente perguntou o horário a este cliente nas últimas 6 horas?
+    //
+    // Sem esta consulta ele pergunta e esquece: o cliente responde "Amanhã 9:30 esta ótimo!" e a
+    // mensagem cai em `nenhuma`, porque não tem a palavra "reunião" nem verbo de marcar. Foi o que
+    // aconteceu com o Império dos Pisos em 08/09.
+    //
+    // 6 horas porque é uma janela de expediente: quem responde no dia seguinte volta a falar do
+    // assunto por completo, e aí o caminho normal dá conta.
+    const { data: perguntou } = await supabaseAdmin
+      .from("cs_outbound")
+      .select("id")
+      .eq("client_id", c.id as string)
+      .eq("origem", "cs-reuniao-pergunta")
+      .eq("enviado", true)
+      .gte("created_at", new Date(Date.now() - 6 * 3600_000).toISOString())
+      .limit(1)
+      .maybeSingle();
+
+    const intencao = lerIntencaoReuniao(
+      msg.text, new Date(), (pendente?.horario_proposto as string) || undefined, !!perguntou,
+    );
 
     // ── O CLIENTE DEU O TURNO: o agente propõe a hora ────────────────────
     if (intencao.tipo === "propor") {
