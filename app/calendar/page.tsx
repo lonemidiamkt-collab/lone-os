@@ -1414,7 +1414,27 @@ function QuickCreateModal({
   }, [clients, role, currentUser]);
 
   const [title, setTitle] = useState("");
-  const [clientId, setClientId] = useState(visibleClients[0]?.id || "");
+  const [clientId, setClientId] = useState("");
+
+  // ── O SELECT QUE PARECIA TER CLIENTE ESCOLHIDO E NÃO TINHA ────────────
+  //
+  // `useState(visibleClients[0]?.id)` roda UMA vez, no primeiro quadro — quando o store de
+  // clientes ainda está vazio. O estado nascia "" e nunca se corrigia.
+  //
+  // Um <select> cujo `value` não casa com nenhuma <option> mostra visualmente a PRIMEIRA opção.
+  // Então o social media abria "Social Media", via o nome de um cliente no campo, e salvava
+  // achando que tinha escolhido — com `clientId` vazio. Não era não conseguir escolher: era o
+  // campo dizer uma coisa e o formulário guardar outra.
+  //
+  // Agora, assim que a carteira chega, o estado passa a apontar para o que a tela mostra.
+  useEffect(() => {
+    if (!visibleClients.length) return;
+    const valido = visibleClients.some((c) => c.id === clientId);
+    // Em tarefa e lembrete o vazio é legítimo ("— Sem cliente —"); nos demais, não existe opção
+    // vazia, e deixar o estado em "" é justamente o que produzia o engano.
+    const permiteVazio = createType === "task" || createType === "reminder";
+    if (!valido && !(permiteVazio && clientId === "")) setClientId(visibleClients[0].id);
+  }, [visibleClients, clientId, createType]);
   const [sector, setSector] = useState<"social" | "designer" | "traffic">("social");
   // Colaborador(es) da tarefa: pode escolher MAIS DE UM (cria uma tarefa por pessoa). Social Media
   // também escolhe o responsável (single) — antes vinha só do cliente.
@@ -1628,8 +1648,10 @@ function QuickCreateModal({
             />
           </div>
 
-          {/* Client + Sector (not for reminders) */}
-          {createType !== "reminder" && (
+          {/* Cliente + setor. Reunião NÃO entra aqui: ela tem o próprio seletor, com horário e
+              duração ao lado. Eu tinha deixado os dois aparecendo — duas caixas "Cliente" na
+              mesma tela, e nenhuma pista de qual valia. */}
+          {createType !== "reminder" && createType !== "meeting" && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Cliente{createType === "task" ? " (opcional)" : ""}</label>
@@ -1643,6 +1665,11 @@ function QuickCreateModal({
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
+                {!visibleClients.length && createType !== "task" && (
+                  <p className="text-[10px] text-lone-warning">
+                    Nenhum cliente na sua carteira.
+                  </p>
+                )}
               </div>
 
               {createType === "task" && (
@@ -1783,6 +1810,15 @@ function QuickCreateModal({
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
+                  {/* Carteira vazia produz o MESMO sintoma de "não consigo escolher cliente", com
+                      outra causa: não é a tela, é o cadastro. Dizer isso evita a pessoa achar que
+                      o sistema quebrou. */}
+                  {!visibleClients.length && (
+                    <p className="text-[10px] text-lone-warning mt-1">
+                      Nenhum cliente na sua carteira. Fale com a gestão — é o cadastro do cliente
+                      que define quem cuida dele.
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1.5">
