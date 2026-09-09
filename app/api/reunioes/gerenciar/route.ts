@@ -5,6 +5,7 @@ export const maxDuration = 120;
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { registrar } from "@/lib/meetings/auditoria";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { mencionar } from "@/lib/cs/mencao";
 import { porExtenso } from "@/lib/cs/parse-horario";
@@ -23,7 +24,8 @@ import {
 // seriam cinco lugares para esquecer de gravar `responsavel` — que foi exatamente o defeito do
 // agendador antigo, que salvava direto do navegador e não gerava lembrete nenhum.
 
-type Acao = "agendar" | "editar" | "pauta" | "gerar_pauta" | "anexar" | "remover_anexo" | "cancelar" | "concluir";
+type Acao = "agendar" | "registrar_realizada" | "editar" | "pauta" | "gerar_pauta"
+  | "anexar" | "remover_anexo" | "cancelar" | "concluir" | "no_show";
 
 interface Corpo {
   acao?: Acao;
@@ -44,6 +46,12 @@ interface Corpo {
   arquivo?: { nome: string; tipo: string; base64: string };
   /** remover_anexo */
   path?: string;
+  /** registrar_realizada: quanto durou, em minutos. */
+  duracao?: number;
+  /** registrar_realizada: o que foi tratado. */
+  observacao?: string;
+  /** registrar_realizada / concluir: quem conduziu, quando não é o responsável do cliente. */
+  responsavel?: string;
   /**
    * Manda o aviso no grupo do CLIENTE também.
    *
@@ -140,10 +148,98 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, reuniaoId: data.id, avisos });
   }
 
+  // ── REGISTRAR UMA REUNIÃO QUE JÁ ACONTECEU ──────────────────────────────
+  //
+  // Roberto (09/09): "às vezes um colaborador faz uma reunião, mas esquece de registrar
+  // antecipadamente no calendário."
+  //
+  // Sem isto, a reunião que aconteceu de verdade não existia para o sistema — e o cliente
+  // aparecia como "sem reunião no mês" tendo sido atendido. O indicador ficava medindo a
+  // disciplina de agendar, não o atendimento.
+  //
+  // Nasce JÁ realizada, com a data em que aconteceu, e guarda separadamente QUANDO foi registrada
+  // e POR QUEM: é o que separa "reunião de ontem lançada hoje" de "reunião inventada".
+  if (acao === "registrar_realizada") {
+    if (!b?.clientId || !b?.inicio) {
+      return NextResponse.json({ error: "clientId e inicio são obrigatórios" }, { status: 400 });
+    }
+    const quando = new Date(b.inicio);
+    if (Number.isNaN(quando.getTime())) {
+      return NextResponse.json({ error: "data inválida" }, { status: 400 });
+    }
+    const agora = new Date();
+    // Reunião "realizada" no futuro é agendamento, não registro. Recusar aqui evita que alguém
+    // infle a cobertura do mês lançando reuniões que ainda não aconteceram.
+    if (quando.getTime() > agora.getTime() + 60_000) {
+      return NextResponse.json({
+        error: "Essa data ainda não chegou. Para o futuro, use Agendar.",
+      }, { status: 400 });
+    }
+
+    const { data: cli } = await supabaseAdmin
+      .from("clients").select("name, nome_fantasia, assigned_social").eq("id", b.clientId).maybeSingle();
+    if (!cli) return NextResponse.json({ error: "cliente não encontrado" }, { status: 404 });
+    const nomeCli = (cli.nome_fantasia as string) || (cli.name as string) || "Cliente";
+
+    const minutos = Number(b.duracao) > 0 ? Number(b.duracao) : 60;
+    const fim = new Date(quando.getTime() + minutos * 60_000);
+    const dono = b.responsavel?.trim() || (cli.assigned_social as string) || quem;
+
+    const { data, error } = await supabaseAdmin.from("meetings").insert({
+      client_id: b.clientId,
+      title: b.titulo?.trim() || `Reunião — ${nomeCli}`,
+      meeting_type: b.tipo || "alinhamento",
+      start_at: quando.toISOString(),
+      end_at: fim.toISOString(),
+      location: b.local || "Online",
+      estado: "realizada",
+      status: "completed",
+      // A data em que ACONTECEU. É por ela que a reunião entra no mês certo.
+      realizada_em: quando.toISOString(),
+      responsavel: dono,
+      resumo: b.observacao?.trim() || null,
+      meeting_source: "manual",
+      // A auditoria que o pedido descreve: "Registrada em 09/09 às 10:32, por Júlio".
+      created_by: quem,
+      confirmado_por: quem,
+      confirmado_em: agora.toISOString(),
+      link_reuniao: b.link?.trim() || null,
+      attendees: (b.colaboradores ?? []).filter((n) => n && n !== dono),
+    }).select("id").single();
+
+    if (error) {
+      // O índice único (cliente + minuto) transforma duplo clique em erro, não em reunião dupla.
+      const duplicada = /duplicate key|uniq_meeting_cliente_inicio/i.test(error.message);
+      await registrar({
+        clientId: b.clientId, acao: "MEETING_SYNC_FAILED", ator: quem, origem: "registrar_realizada",
+        detalhe: { inicio: b.inicio, duracao: minutos }, erro: error.message,
+      });
+      return NextResponse.json({
+        error: duplicada
+          ? "Já existe uma reunião desse cliente nesse horário."
+          : error.message,
+      }, { status: duplicada ? 409 : 500 });
+    }
+
+    await registrar({
+      meetingId: data.id, clientId: b.clientId, acao: "MEETING_BACKFILLED", ator: quem,
+      origem: "ficha_cliente",
+      detalhe: { aconteceu_em: quando.toISOString(), registrada_em: agora.toISOString(), responsavel: dono, duracao: minutos },
+    });
+
+    // A ficha precisa saber que houve reunião — é o que alimenta risco e jornada.
+    await supabaseAdmin.from("client_journey")
+      .upsert({ client_id: b.clientId, ultima_reuniao: quando.toISOString().slice(0, 10) },
+        { onConflict: "client_id" })
+      .then(() => {}, () => {});
+
+    return NextResponse.json({ ok: true, reuniaoId: data.id, registradaPor: quem, registradaEm: agora.toISOString() });
+  }
+
   // As demais ações exigem a reunião.
   if (!b?.reuniaoId) return NextResponse.json({ error: "reuniaoId é obrigatório" }, { status: 400 });
   const { data: reu } = await supabaseAdmin
-    .from("meetings").select("id, client_id, anexos, start_at, responsavel, attendees, location, link_reuniao, clients(name, nome_fantasia, nicho, whatsapp_group_jid)")
+    .from("meetings").select("id, client_id, anexos, start_at, responsavel, attendees, location, link_reuniao, estado, clients(name, nome_fantasia, nicho, whatsapp_group_jid)")
     .eq("id", b.reuniaoId).maybeSingle();
   if (!reu) return NextResponse.json({ error: "reunião não encontrada" }, { status: 404 });
 
@@ -289,19 +385,67 @@ export async function POST(req: NextRequest) {
 
   // ── CANCELAR e CONCLUIR ─────────────────────────────────────────────────
   if (acao === "cancelar") {
-    await supabaseAdmin.from("meetings")
+    // Cancelar uma reunião JÁ REALIZADA apagaria um número que já entrou no indicador do mês.
+    // Se foi engano, o caminho é registrar o que aconteceu de verdade, não desfazer em silêncio.
+    if (reu.estado === "realizada") {
+      return NextResponse.json({
+        error: "Essa reunião já está marcada como realizada e conta nos indicadores do mês. "
+          + "Para corrigir, fale comigo — cancelar apagaria um número já contabilizado.",
+      }, { status: 409 });
+    }
+    const { error } = await supabaseAdmin.from("meetings")
       .update({ estado: "cancelada", status: "cancelled" }).eq("id", b.reuniaoId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    await registrar({
+      meetingId: b.reuniaoId, clientId: reu.client_id as string, acao: "MEETING_CANCELLED",
+      ator: quem, origem: "acao_rapida", detalhe: { de: reu.estado, quando: reu.start_at },
+    });
     return NextResponse.json({ ok: true });
   }
-  if (acao === "concluir") {
-    await supabaseAdmin.from("meetings").update({
-      estado: "realizada", status: "completed", realizada_em: new Date().toISOString(),
+  // ── AÇÕES RÁPIDAS: aconteceu / não veio ─────────────────────────────────
+  //
+  // O momento em que o indicador se separa da agenda. Enquanto ninguém disser que a reunião
+  // aconteceu, ela é só uma promessa no calendário — e não conta para "esse cliente teve reunião".
+  if (acao === "concluir" || acao === "no_show") {
+    const jaFechada = ["realizada", "no_show", "cancelada"].includes((reu.estado as string) || "");
+    if (jaFechada) {
+      // Idempotente: dois cliques no mesmo botão não viram dois eventos nem reescrevem a data.
+      return NextResponse.json({ ok: true, jaEstava: reu.estado });
+    }
+
+    const realizada = acao === "concluir";
+    // A hora que a reunião ACONTECEU é a que estava marcada, não a do clique — quem marca como
+    // realizada na segunda uma reunião de sexta não move a reunião para segunda.
+    const quandoAconteceu = (reu.start_at as string) || new Date().toISOString();
+
+    const { error } = await supabaseAdmin.from("meetings").update({
+      estado: realizada ? "realizada" : "no_show",
+      status: realizada ? "completed" : "cancelled",
+      realizada_em: realizada ? quandoAconteceu : null,
+      confirmado_por: quem,
     }).eq("id", b.reuniaoId);
-    await supabaseAdmin.from("client_journey").upsert({
-      client_id: reu.client_id as string,
-      ultima_reuniao: (reu.start_at as string).slice(0, 10),
-    }, { onConflict: "client_id" }).then(() => {}, () => {});
-    return NextResponse.json({ ok: true });
+    if (error) {
+      await registrar({
+        meetingId: b.reuniaoId, clientId: reu.client_id as string, acao: "MEETING_SYNC_FAILED",
+        ator: quem, origem: acao, erro: error.message,
+      });
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    await registrar({
+      meetingId: b.reuniaoId, clientId: reu.client_id as string,
+      acao: realizada ? "MEETING_COMPLETED" : "MEETING_NO_SHOW",
+      ator: quem, origem: "acao_rapida",
+      detalhe: { de: reu.estado, aconteceu_em: realizada ? quandoAconteceu : null },
+    });
+
+    if (realizada) {
+      await supabaseAdmin.from("client_journey").upsert({
+        client_id: reu.client_id as string,
+        ultima_reuniao: quandoAconteceu.slice(0, 10),
+      }, { onConflict: "client_id" }).then(() => {}, () => {});
+    }
+    return NextResponse.json({ ok: true, estado: realizada ? "realizada" : "no_show" });
   }
 
   return NextResponse.json({ error: `ação desconhecida: ${acao}` }, { status: 400 });
