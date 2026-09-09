@@ -66,3 +66,40 @@ export async function registrar(e: {
     console.error("[meeting_events] não consegui registrar:", e.acao, err);
   }
 }
+
+
+// ── A TIMELINE DO CLIENTE ────────────────────────────────────────────────
+//
+// Roberto (09/09, §17): "na ficha do cliente quero uma visão temporal — 08/09 reunião realizada,
+// 01/09 relatório enviado, 28/08 reunião realizada, 15/08 alteração cadastral."
+//
+// A tela já existia e o tipo `meeting` também; o que faltava era a reunião ESCREVER nela. Uma
+// timeline que não registra o evento mais importante do relacionamento não é uma timeline.
+//
+// Separado da auditoria de propósito: `meeting_events` é trilha técnica (payload, erro, origem) e
+// esta é a linha do tempo que o time lê. Misturar faria uma virar ruído da outra.
+
+/** Data e hora no formato que a coluna `timestamp` (texto) já usa nas outras entradas. */
+function carimbo(iso?: string | null): string {
+  return new Date(iso ?? Date.now()).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
+export async function timelineReuniao(e: {
+  clientId: string;
+  ator: string;
+  descricao: string;
+  /** Quando o fato aconteceu. Reunião de sexta lançada na segunda aparece na SEXTA. */
+  quando?: string | null;
+}): Promise<void> {
+  try {
+    await supabaseAdmin.from("timeline_entries").insert({
+      client_id: e.clientId,
+      type: "meeting",
+      actor: e.ator,
+      description: e.descricao,
+      timestamp: carimbo(e.quando),
+    });
+  } catch (err) {
+    console.error("[timeline] não consegui registrar reunião:", err);
+  }
+}

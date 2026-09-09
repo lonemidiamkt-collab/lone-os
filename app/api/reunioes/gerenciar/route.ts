@@ -5,7 +5,7 @@ export const maxDuration = 120;
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
-import { registrar } from "@/lib/meetings/auditoria";
+import { registrar, timelineReuniao } from "@/lib/meetings/auditoria";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { mencionar } from "@/lib/cs/mencao";
 import { porExtenso } from "@/lib/cs/parse-horario";
@@ -145,6 +145,11 @@ export async function POST(req: NextRequest) {
       avisarCliente: b.avisarCliente === true,
     });
 
+    await timelineReuniao({
+      clientId: b.clientId, ator: quem,
+      descricao: `Reunião agendada para ${porExtenso(inicio.toISOString())} — ${responsavel}`,
+    });
+
     return NextResponse.json({ ok: true, reuniaoId: data.id, avisos });
   }
 
@@ -225,6 +230,12 @@ export async function POST(req: NextRequest) {
       meetingId: data.id, clientId: b.clientId, acao: "MEETING_BACKFILLED", ator: quem,
       origem: "ficha_cliente",
       detalhe: { aconteceu_em: quando.toISOString(), registrada_em: agora.toISOString(), responsavel: dono, duracao: minutos },
+    });
+
+    await timelineReuniao({
+      clientId: b.clientId, ator: dono, quando: quando.toISOString(),
+      descricao: `Reunião realizada${b.observacao?.trim() ? ` — ${b.observacao.trim().slice(0, 120)}` : ""}`
+        + ` (lançada por ${quem})`,
     });
 
     // A ficha precisa saber que houve reunião — é o que alimenta risco e jornada.
@@ -400,6 +411,10 @@ export async function POST(req: NextRequest) {
       meetingId: b.reuniaoId, clientId: reu.client_id as string, acao: "MEETING_CANCELLED",
       ator: quem, origem: "acao_rapida", detalhe: { de: reu.estado, quando: reu.start_at },
     });
+    await timelineReuniao({
+      clientId: reu.client_id as string, ator: quem,
+      descricao: `Reunião de ${porExtenso(reu.start_at as string)} cancelada`,
+    });
     return NextResponse.json({ ok: true });
   }
   // ── AÇÕES RÁPIDAS: aconteceu / não veio ─────────────────────────────────
@@ -437,6 +452,12 @@ export async function POST(req: NextRequest) {
       acao: realizada ? "MEETING_COMPLETED" : "MEETING_NO_SHOW",
       ator: quem, origem: "acao_rapida",
       detalhe: { de: reu.estado, aconteceu_em: realizada ? quandoAconteceu : null },
+    });
+
+    await timelineReuniao({
+      clientId: reu.client_id as string, ator: (reu.responsavel as string) || quem,
+      quando: quandoAconteceu,
+      descricao: realizada ? "Reunião realizada" : "Cliente não compareceu à reunião",
     });
 
     if (realizada) {
