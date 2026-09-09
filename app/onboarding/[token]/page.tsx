@@ -295,6 +295,11 @@ export default function ExternalOnboardingPage() {
   const [contactEmail, setContactEmail] = useState("");
   const [nomeFantasia, setNomeFantasia] = useState("");
   const [razaoSocial, setRazaoSocial] = useState("");
+  // Os três que o cliente sabe e nunca foram perguntados. Sem eles, a ficha nasce incompleta e
+  // alguém do time vai atrás por WhatsApp depois — trabalho que o formulário existe para evitar.
+  const [companyPhone, setCompanyPhone] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [instagramUser, setInstagramUser] = useState("");
   const [cnpj, setCnpj] = useState("");
   const [nicho, setNicho] = useState("");
   const [enderecoRua, setEnderecoRua] = useState("");
@@ -491,7 +496,9 @@ export default function ExternalOnboardingPage() {
     action: "submit", token, clientId: submission?.client_id,
     nomeFantasia: nomeFantasia.trim(), razaoSocial: razaoSocial.trim(), cnpj: cnpj.trim(),
     nicho: nicho.trim(),
+    companyPhone: companyPhone.trim(), instagramUser: instagramUser.trim().replace(/^@+/, ""),
     contactName: contactName.trim(), contactCpf: contactCpf.trim(), contactWhatsapp: contactWhatsapp.trim(),
+    contactPhone: contactPhone.trim(),
     contactEmail: contactEmail.trim().toLowerCase(),
     enderecoRua: enderecoRua.trim(), enderecoBairro: enderecoBairro.trim(),
     enderecoCidade: enderecoCidade.trim(), enderecoEstado: enderecoEstado.trim(), enderecoCep: enderecoCep.trim(),
@@ -657,6 +664,10 @@ export default function ExternalOnboardingPage() {
               <InputField label="Nome Fantasia" value={nomeFantasia} onChange={setNomeFantasia} placeholder="Ex: Loja do Joao" required
                 error={showValidation && missingRequired.nomeFantasia ? REQUIRED_ERROR : undefined} />
               <InputField label="Razao Social" value={razaoSocial} onChange={setRazaoSocial} placeholder="Ex: Joao da Silva LTDA" />
+              <InputField label="Telefone da Empresa" value={companyPhone} onChange={setCompanyPhone}
+                          placeholder="(22) 2222-2222" />
+              <InputField label="Instagram da Empresa" value={instagramUser} onChange={setInstagramUser}
+                          placeholder="@sualoja" />
               <InputField label="CNPJ" value={cnpj} onChange={handleCnpjChange} placeholder="00.000.000/0000-00" required
                 error={cnpjError || (showValidation && missingRequired.cnpj ? REQUIRED_ERROR : undefined)} />
               <div className="space-y-2">
@@ -709,6 +720,8 @@ export default function ExternalOnboardingPage() {
               <InputField label="E-mail" type="email" value={contactEmail} onChange={handleEmailChange} placeholder="voce@empresa.com" required
                 error={emailError || (showValidation && missingRequired.contactEmail ? REQUIRED_ERROR : undefined)} />
               <InputField label="CPF do Responsavel" value={contactCpf} onChange={setContactCpf} placeholder="000.000.000-00" mask={maskCpf} />
+              <InputField label="Telefone do Responsavel" value={contactPhone} onChange={setContactPhone}
+                          placeholder="(22) 99999-9999 — se for diferente do WhatsApp" />
               <InputField label="WhatsApp de Contato" value={contactWhatsapp} onChange={handlePhoneChange} placeholder="(11) 99999-9999" required
                 error={phoneError || (showValidation && missingRequired.contactWhatsapp ? REQUIRED_ERROR : undefined)} />
             </div>

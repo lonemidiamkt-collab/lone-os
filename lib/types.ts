@@ -98,6 +98,10 @@ export interface Client {
   nomeFantasia?: string;
   cnpj?: string;
   endereco?: string;
+  /** Telefone fixo da empresa. Diferente de `phone`, que é o WhatsApp do responsável. */
+  companyPhone?: string;
+  /** Telefone do responsável, quando não é o mesmo do WhatsApp. */
+  contactPhone?: string;
   enderecoRua?: string;
   enderecoNumero?: string;
   enderecoBairro?: string;

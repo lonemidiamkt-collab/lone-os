@@ -106,6 +106,8 @@ function snakeToClient(row: Record<string, unknown>): Client {
     cpfCnpj: (row.cpf_cnpj as string) ?? undefined,
     birthDate: (row.birth_date as string) ?? undefined,
     phone: (row.phone as string) ?? undefined,
+    companyPhone: (row.company_phone as string) ?? undefined,
+    contactPhone: (row.contact_phone as string) ?? undefined,
     email: (row.email as string) ?? undefined,
     leadSource: (row.lead_source as Client["leadSource"]) ?? undefined,
     facebookLogin: (row.facebook_login as string) ?? undefined,
@@ -171,7 +173,9 @@ function clientToSnake(c: Partial<Client>): Record<string, unknown> {
   if (c.nomeFantasia !== undefined) row.nome_fantasia = c.nomeFantasia;
   if (c.cnpj !== undefined) row.cnpj = c.cnpj;
   if (c.endereco !== undefined) row.endereco = c.endereco;
-  if (c.enderecoRua !== undefined) row.endereco_rua = c.enderecoRua;
+  if (c.companyPhone !== undefined) row.company_phone = c.companyPhone;
+  if (c.contactPhone !== undefined) row.contact_phone = c.contactPhone;
+    if (c.enderecoRua !== undefined) row.endereco_rua = c.enderecoRua;
   if (c.enderecoNumero !== undefined) row.endereco_numero = c.enderecoNumero;
   if (c.enderecoBairro !== undefined) row.endereco_bairro = c.enderecoBairro;
   if (c.enderecoCidade !== undefined) row.endereco_cidade = c.enderecoCidade;
@@ -216,6 +220,7 @@ const CLIENT_LEAN_COLS = [
   "updated_at", "payment_method", "notes", "contract_end", "tone_of_voice", "drive_link", "instagram_user",
   "posts_this_month", "posts_goal", "service_type", "perfil_conteudo", "draft_status", "contact_name",
   "contact_role", "razao_social", "nome_fantasia", "cnpj", "email", "email_corporativo", "phone",
+  "company_phone", "contact_phone",
   "last_kanban_activity", "campaign_briefing", "fixed_briefing", "agente_ativo", "meta_ad_account_id",
   "meta_ad_account_name", "lead_source", "budget_alert_pct", "nps_score", "first_value_delivered_at",
   "activated_at", "ttv_days", "public_report_enabled", "ficha_viva_enabled", "whatsapp_team_phone",

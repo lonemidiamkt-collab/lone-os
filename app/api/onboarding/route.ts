@@ -256,6 +256,9 @@ export async function POST(req: NextRequest) {
         contact_email: formData.contactEmail || null,
         nome_fantasia: formData.nomeFantasia || null,
         razao_social: formData.razaoSocial || null,
+        company_phone: formData.companyPhone || null,
+        contact_phone: formData.contactPhone || null,
+        instagram_user: formData.instagramUser || null,
         cnpj: formData.cnpj || null,
         nicho: formData.nicho || null,
         endereco_rua: formData.enderecoRua || null,
@@ -297,6 +300,11 @@ export async function POST(req: NextRequest) {
         contact_name: formData.contactName,
         cpf_cnpj: formData.contactCpf,
         phone: formData.contactWhatsapp,
+        company_phone: formData.companyPhone || null,
+        contact_phone: formData.contactPhone || null,
+        // Só grava o @ se o cliente informou: apagar o que o mapeamento da Meta já descobriu por
+        // causa de um campo em branco é a sobrescrita por vazio que o pedido proíbe.
+        ...(formData.instagramUser ? { instagram_user: formData.instagramUser } : {}),
         email: formData.contactEmail || null,
         email_corporativo: formData.contactEmail || null,
         endereco_rua: formData.enderecoRua || null,
@@ -415,6 +423,9 @@ export async function POST(req: NextRequest) {
       if (subRow.contact_name) updatePayload.contact_name = subRow.contact_name;
       if (subRow.contact_cpf) updatePayload.cpf_cnpj = subRow.contact_cpf;
       if (subRow.contact_whatsapp) updatePayload.phone = subRow.contact_whatsapp;
+      if (subRow.company_phone) updatePayload.company_phone = subRow.company_phone;
+      if (subRow.contact_phone) updatePayload.contact_phone = subRow.contact_phone;
+      if (subRow.instagram_user) updatePayload.instagram_user = subRow.instagram_user;
       if (subRow.contact_email) {
         updatePayload.email = subRow.contact_email;
         updatePayload.email_corporativo = subRow.contact_email;
