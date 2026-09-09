@@ -354,7 +354,11 @@ export async function POST(req: NextRequest) {
       };
     }
     const pontos = await pontosPraReuniao(nomeCli, cli?.nicho, "reunião mensal de acompanhamento").catch(() => []);
-    const texto = montarPrepReuniao(ficha, pontos);
+    // A memória da ÚLTIMA reunião entra na pauta da próxima. Preparar uma reunião sem lembrar o
+    // que ficou combinado na anterior é como o cliente repetir o pedido toda vez — e era assim.
+    const { loadRegistrosReuniao } = await import("@/lib/cs/load-briefing");
+    const anteriores = await loadRegistrosReuniao(reu.client_id as string, 2).catch(() => undefined);
+    const texto = [montarPrepReuniao(ficha, pontos), anteriores].filter(Boolean).join("\n\n");
 
     await supabaseAdmin.from("meetings").update({
       pauta: texto, pauta_em: new Date().toISOString(), pauta_por: quem, pauta_origem: "ia",

@@ -73,12 +73,65 @@ export async function loadBriefingTexto(clientId: string): Promise<string | unde
   return linhas.length ? linhas.join("\n").slice(0, 2000) : undefined;
 }
 
+/**
+ * O QUE FOI DITO NAS REUNIÕES — a memória mais fresca que existe do cliente.
+ *
+ * Roberto (09/09): "quero que o Loninho abra esses briefings que a gente está fazendo, e tenha
+ * mais conclusões e mais anotações de regra sobre aquele cliente."
+ *
+ * O briefing estruturado envelhece: foi escrito no onboarding e quase nunca é revisto. A reunião
+ * do mês passado sabe coisas que ele não sabe — que o cliente quer empurrar cimento, que a
+ * campanha de telha traz lead de fora da região, que ele pediu para não falar de preço. Sem isto,
+ * o agente escrevia legenda com a foto de um ano atrás.
+ *
+ * Ordem importa: as DECISÕES vêm primeiro, porque são a instrução mais próxima de uma regra —
+ * "pausar a campanha antiga" é ordem, "o cliente comentou que anda devagar" é contexto.
+ */
+export async function loadRegistrosReuniao(clientId: string, quantas = 4): Promise<string | undefined> {
+  const { data } = await supabaseAdmin
+    .from("meetings")
+    .select("start_at, realizada_em, responsavel, briefing, decisoes, proximos_passos, resumo")
+    .eq("client_id", clientId)
+    .is("deleted_at", null)
+    // Só reunião que ACONTECEU: o que se planejou discutir numa reunião futura não é memória.
+    .eq("estado", "realizada")
+    .order("realizada_em", { ascending: false, nullsFirst: false })
+    .limit(quantas);
+
+  const blocos = (data ?? [])
+    .map((m) => {
+      const quando = new Date((m.realizada_em as string) || (m.start_at as string))
+        .toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", timeZone: "America/Sao_Paulo" });
+      const partes = [
+        m.decisoes && `decidido: ${m.decisoes}`,
+        m.proximos_passos && `ficou de: ${m.proximos_passos}`,
+        m.briefing && `discutido: ${m.briefing}`,
+        // O resumo da IA entra só quando a pessoa não escreveu nada — é a segunda fonte, não a
+        // primeira: quem estava na sala sabe mais que quem leu a transcrição.
+        !m.briefing && !m.decisoes && m.resumo && `resumo: ${m.resumo}`,
+      ].filter(Boolean) as string[];
+      if (!partes.length) return null;
+      return `[${quando}${m.responsavel ? ` · ${m.responsavel}` : ""}] ${partes.join(" | ")}`;
+    })
+    .filter(Boolean) as string[];
+
+  if (!blocos.length) return undefined;
+  // Teto de caracteres: memória de reunião não pode empurrar o briefing para fora do prompt.
+  return `O QUE SAIU DAS ÚLTIMAS REUNIÕES (mais recente primeiro — vale mais que o briefing antigo quando conflitar):\n${blocos.join("\n")}`.slice(0, 1800);
+}
+
 /** Junta o texto livre (fixed/campaign) COM o estruturado (client_briefings). Antes o código usava
  *  um OU outro (fixed sobrescrevia o estruturado) — então um contato/nota no fixed apagava o
  *  briefing do onboarding. Agora SOMA os dois. `fixoInline` = o fixed/campaign já lido do cliente. */
 export async function loadBriefingCombinado(clientId: string, fixoInline?: string | null): Promise<string | undefined> {
-  const estruturado = await loadBriefingTexto(clientId);
-  return [fixoInline?.trim() || null, estruturado].filter(Boolean).join("\n\n") || undefined;
+  // As reuniões entram por AQUI, e não dentro de `loadBriefingTexto`, porque este é o ponto que
+  // TODOS os prompts usam — A1, A3, pauta, roteiro. Somar num só lugar é o que garante que o
+  // agente não saiba de uma reunião numa tela e ignore na outra.
+  const [estruturado, reunioes] = await Promise.all([
+    loadBriefingTexto(clientId),
+    loadRegistrosReuniao(clientId),
+  ]);
+  return [fixoInline?.trim() || null, estruturado, reunioes].filter(Boolean).join("\n\n") || undefined;
 }
 
 export async function loadBriefingForClient(opts: {
