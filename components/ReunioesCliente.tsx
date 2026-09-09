@@ -23,6 +23,7 @@ import {
   ChevronRight, Sparkles, Paperclip, Check, Trash2, FileText, Clock, CalendarDays,
 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { saudeDoCliente, type ReuniaoRef } from "@/lib/meetings/status";
 import { generateGoogleCalendarUrl, generateICS, downloadICS } from "@/lib/calendar/icsGenerator";
 
 interface Anexo { path: string; nome: string; tamanho: number; tipo?: string; url?: string | null }
@@ -104,6 +105,15 @@ export default function ReunioesCliente(
   // tem que ser a MESMA nos dois lugares — a mesma ação se comportar diferente conforme a tela é
   // o tipo de coisa que faz a equipe deixar de confiar no sistema.
   const [avisarCliente, setAvisarCliente] = useState(true);
+
+  // Lançar uma reunião que JÁ ACONTECEU e nunca esteve na agenda. É diferente de colar
+  // transcrição numa reunião agendada: aqui a reunião não existe ainda em lugar nenhum, e sem
+  // isso o cliente aparecia como "sem reunião no mês" tendo sido atendido.
+  const [lancando, setLancando] = useState(false);
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const [lanc, setLanc] = useState({
+    data: hojeISO, hora: "10:00", duracao: "60", responsavel: "", observacao: "",
+  });
   const [time, setTime] = useState<{ name: string; role: string }[]>([]);
   /**
    * Quem cuida DESTE cliente, por função.
@@ -177,6 +187,23 @@ export default function ReunioesCliente(
       if (!r.ok) { setAviso(j?.error ?? "não consegui"); return null; }
       return j;
     } finally { setOcupado(false); }
+  };
+
+  const registrarRealizada = async () => {
+    const inicio = paraIso(lanc.data, lanc.hora);
+    const j = await chamar({
+      acao: "registrar_realizada", clientId, inicio,
+      duracao: Number(lanc.duracao) || 60,
+      responsavel: lanc.responsavel.trim() || undefined,
+      observacao: lanc.observacao.trim() || undefined,
+    });
+    if (j?.ok) {
+      const q = new Date(j.registradaEm as string).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+      setAviso(`Reunião registrada. Consta como realizada em ${dataBR(inicio)} — lançada por ${j.registradaPor} em ${q}.`);
+      setLancando(false);
+      setLanc({ data: hojeISO, hora: "10:00", duracao: "60", responsavel: "", observacao: "" });
+      carregar();
+    }
   };
 
   const agendar = async () => {
@@ -261,6 +288,17 @@ export default function ReunioesCliente(
   };
 
   const agora = Date.now();
+  // A saúde sai da MESMA função pura que alimenta a aba Clientes e o dashboard. Recalcular aqui
+  // com regra própria é como a mesma pergunta passa a ter duas respostas em duas telas.
+  const mesAtual = new Date().toISOString().slice(0, 7);
+  const saude = saudeDoCliente(
+    lista.map((r): ReuniaoRef => ({
+      id: r.id, clientId, estado: r.estado, inicio: r.quando,
+      realizadaEm: r.estado === "realizada" ? r.quando : null, responsavel: r.responsavel,
+    })),
+    mesAtual, new Date(),
+  );
+
   const proximas = lista.filter((r) => r.estado !== "cancelada" && r.estado !== "realizada" && new Date(r.quando).getTime() > agora - 3600_000);
   const realizadas = lista.filter((r) => !proximas.includes(r));
 
@@ -271,12 +309,21 @@ export default function ReunioesCliente(
           <CalendarClock size={14} className="text-primary" /> Reuniões
           {lista.length > 0 && <span className="text-[10px] text-muted-foreground font-normal">· {proximas.length} agendada(s) · {realizadas.length} realizada(s)</span>}
         </h3>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
-            onClick={() => { setRegistrando(registrando === "nova" ? null : "nova"); setAgendando(false); setAviso(null); }}
+            onClick={() => { setLancando((v) => !v); setAgendando(false); setRegistrando(null); setAviso(null); }}
             className="text-[11px] px-2.5 py-1.5 rounded-lg bg-surface border border-border text-foreground font-medium flex items-center gap-1.5 hover:border-primary"
           >
-            <FileText size={12} /> Registrar realizada
+            <Check size={12} /> Registrar realizada
+          </button>
+          {/* Renomeado: era "Registrar realizada" e fazia outra coisa — colar transcrição numa
+              reunião que já existia. Dois botões com o mesmo nome e comportamentos diferentes é
+              como se perde a confiança na tela. */}
+          <button
+            onClick={() => { setRegistrando(registrando === "nova" ? null : "nova"); setAgendando(false); setLancando(false); setAviso(null); }}
+            className="text-[11px] px-2.5 py-1.5 rounded-lg bg-surface border border-border text-foreground font-medium flex items-center gap-1.5 hover:border-primary"
+          >
+            <FileText size={12} /> Colar transcrição
           </button>
           <button
             onClick={() => { setAgendando((v) => !v); setRegistrando(null); setAviso(null); }}
@@ -287,7 +334,92 @@ export default function ReunioesCliente(
         </div>
       </div>
 
+      {/* ── O PLACAR DO MÊS ──────────────────────────────────────────────
+          A pergunta que o pedido de 09/09 quer responder de relance: esse cliente teve reunião?
+          Verde é reunião que ACONTECEU; amarelo é promessa no calendário; vermelho é ninguém
+          marcou nada. */}
+      <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-px bg-border border border-border rounded-xl overflow-hidden">
+        {[
+          { r: "Última", v: saude.ultima ? dataBR(saude.ultima) : "nunca",
+            s: saude.diasSemReuniao !== null ? `há ${saude.diasSemReuniao} dia(s)` : "sem histórico" },
+          { r: "Próxima", v: saude.proxima ? dataBR(saude.proxima) : "—",
+            s: saude.proxima ? horaBR(saude.proxima) : "nada marcado" },
+          { r: "No mês", v: `${saude.realizadas}`, s: `meta ${saude.meta}` },
+          {
+            r: "Status",
+            v: saude.status === "realizada" ? "🟢 Realizada"
+              : saude.status === "agendada" ? "🟡 Agendada" : "🔴 Sem reunião",
+            s: saude.metaAtingida ? "meta atingida"
+              : saude.status === "realizada" ? `falta ${saude.meta - saude.realizadas}` : "",
+          },
+        ].map((c) => (
+          <div key={c.r} className="bg-card p-2.5">
+            <p className="text-[9.5px] uppercase tracking-wider text-muted-foreground">{c.r}</p>
+            <p className="text-[13px] font-medium text-foreground mt-0.5">{c.v}</p>
+            {c.s && <p className="text-[10px] text-muted-foreground">{c.s}</p>}
+          </div>
+        ))}
+      </div>
+
       {aviso && <p className="mb-3 text-[11px] text-foreground bg-surface border border-border rounded-lg p-2.5">{aviso}</p>}
+
+      {/* ── LANÇAR UMA QUE JÁ ACONTECEU ───────────────────────────────── */}
+      {lancando && (
+        <div className="mb-4 p-3 rounded-xl bg-surface border border-border space-y-2.5">
+          <p className="text-[11px] text-foreground font-medium">
+            Reunião que já aconteceu com {clientName}
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <label className="text-[10px] text-muted-foreground">Data
+              <input type="date" value={lanc.data} max={hojeISO}
+                     onChange={(e) => setLanc({ ...lanc, data: e.target.value })}
+                     className="mt-1 w-full p-1.5 rounded-lg bg-card border border-border text-[12px] text-foreground" />
+            </label>
+            <label className="text-[10px] text-muted-foreground">Horário
+              <input type="time" value={lanc.hora}
+                     onChange={(e) => setLanc({ ...lanc, hora: e.target.value })}
+                     className="mt-1 w-full p-1.5 rounded-lg bg-card border border-border text-[12px] text-foreground" />
+            </label>
+            <label className="text-[10px] text-muted-foreground">Duração
+              <select value={lanc.duracao} onChange={(e) => setLanc({ ...lanc, duracao: e.target.value })}
+                      className="mt-1 w-full p-1.5 rounded-lg bg-card border border-border text-[12px] text-foreground">
+                <option value="30">30 min</option><option value="60">1 hora</option><option value="90">1h30</option>
+              </select>
+            </label>
+          </div>
+          {time.length > 0 && (
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1.5">Quem conduziu</p>
+              <div className="flex flex-wrap gap-1.5">
+                {time.map((m) => (
+                  <button key={m.name} type="button"
+                    onClick={() => setLanc({ ...lanc, responsavel: lanc.responsavel === m.name ? "" : m.name })}
+                    className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
+                      lanc.responsavel === m.name
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-card border-border text-muted-foreground hover:text-foreground"
+                    }`}>
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <textarea value={lanc.observacao} onChange={(e) => setLanc({ ...lanc, observacao: e.target.value })}
+                    placeholder="O que foi tratado (opcional) — dá pra colar a transcrição depois"
+                    className="w-full h-16 p-2 rounded-lg bg-card border border-border text-[12px] text-foreground placeholder:text-muted-foreground/60 resize-y" />
+          <p className="text-[10px] text-muted-foreground">
+            Entra como <strong>realizada</strong> e conta nos indicadores do mês. Fica registrado
+            quem lançou e quando — é o que separa reunião esquecida de reunião inventada.
+          </p>
+          <div className="flex justify-end">
+            <button onClick={registrarRealizada} disabled={ocupado}
+                    className="text-[11px] px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium flex items-center gap-1.5 disabled:opacity-50">
+              {ocupado ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Registrar
+            </button>
+          </div>
+        </div>
+      )}
 
       {erro && (
         <div className="mb-3 p-2.5 rounded-lg bg-destructive/10 border border-destructive/30">

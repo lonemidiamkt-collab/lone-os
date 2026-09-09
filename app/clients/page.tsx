@@ -57,6 +57,31 @@ export default function ClientsPage() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  // ── REUNIÃO COMO INDICADOR DA LISTA ───────────────────────────────────
+  //
+  // Roberto (09/09): "na tabela de clientes quero incluir informações relacionadas às reuniões […]
+  // existe filtro de clientes sem reunião." Os dados vêm prontos de /api/reunioes/cobertura, que
+  // é o MESMO cálculo do dashboard e da ficha — a lista não recalcula nada por conta própria.
+  interface LinhaReuniao {
+    clientId: string; status: "realizada" | "agendada" | "sem_reuniao";
+    realizadas: number; meta: number; metaAtingida: boolean;
+    ultima: string | null; proxima: string | null; diasSemReuniao: number | null;
+  }
+  const [reunioes, setReunioes] = useState<Map<string, LinhaReuniao>>(new Map());
+  const [filtroReuniao, setFiltroReuniao] = useState("all");
+
+  useEffect(() => {
+    let vivo = true;
+    authedFetch("/api/reunioes/cobertura")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!vivo || !j?.clientes) return;
+        setReunioes(new Map((j.clientes as LinhaReuniao[]).map((c) => [c.clientId, c])));
+      })
+      // Sem os dados de reunião a lista continua funcionando: a coluna some, o resto fica.
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
   const [responsibleFilter, setResponsibleFilter] = useState("mine");
 
   // Read URL filter on mount (avoids useSearchParams Suspense requirement)
@@ -212,7 +237,17 @@ export default function ClientsPage() {
         : responsibleFilter === "mine"
           ? getAssignedField(c) === currentUser
           : getAssignedField(c) === responsibleFilter;
-    return matchSearch && matchStatus && matchResponsible;
+    const r = reunioes.get(c.id);
+    const matchReuniao = (() => {
+      if (filtroReuniao === "all") return true;
+      // Cliente que a rota de cobertura não conhece (recém-criado, em onboarding) não passa em
+      // filtro de reunião nenhum — dizer que ele "está sem reunião" seria acusá-lo à toa.
+      if (!r) return false;
+      if (filtroReuniao === "mais_de_30d") return r.diasSemReuniao === null || r.diasSemReuniao > 30;
+      if (filtroReuniao === "meta_nao_batida") return !r.metaAtingida;
+      return r.status === filtroReuniao;
+    })();
+    return matchSearch && matchStatus && matchResponsible && matchReuniao;
   });
 
   return (
@@ -396,6 +431,18 @@ export default function ClientsPage() {
                 <option value="average">Resultados Médios</option>
                 <option value="at_risk">Em Risco</option>
               </select>
+              <select
+                value={filtroReuniao}
+                onChange={(e) => setFiltroReuniao(e.target.value)}
+                className="bg-card border border-border text-sm text-foreground rounded-lg px-3 py-2 outline-none focus:border-primary"
+              >
+                <option value="all">Reunião: todos</option>
+                <option value="sem_reuniao">🔴 Sem reunião no mês</option>
+                <option value="agendada">🟡 Só agendada</option>
+                <option value="realizada">🟢 Reunião realizada</option>
+                <option value="meta_nao_batida">Meta não batida</option>
+                <option value="mais_de_30d">Última há +30 dias</option>
+              </select>
               {isOperator && (
                 <select
                   value={responsibleFilter}
@@ -504,6 +551,29 @@ export default function ClientsPage() {
                           <div className="flex items-center gap-2">
                             <h4 className="font-semibold text-foreground tracking-tight">{client.name}</h4>
                             <span className="text-xs text-muted-foreground">{getStatusLabel(client.status)}</span>
+                            {/* O SEMÁFORO DA REUNIÃO. Verde é reunião que ACONTECEU; amarelo é
+                                promessa no calendário; vermelho é ninguém marcou nada. */}
+                            {(() => {
+                              const r = reunioes.get(client.id);
+                              if (!r) return null;
+                              const cor = r.status === "realizada"
+                                ? "bg-lone-success-bg text-lone-success border-lone-success-border"
+                                : r.status === "agendada"
+                                  ? "bg-lone-warning-bg text-lone-warning border-lone-warning-border"
+                                  : "bg-lone-danger-bg text-lone-danger border-lone-danger-border";
+                              const txt = r.status === "realizada"
+                                ? `${r.realizadas}${r.meta > 1 ? `/${r.meta}` : ""} reunião${r.realizadas > 1 ? "s" : ""}`
+                                : r.status === "agendada" ? "agendada" : "sem reunião";
+                              const detalhe = r.status === "agendada" && r.proxima
+                                ? `próxima ${new Date(r.proxima).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" })}`
+                                : r.diasSemReuniao !== null ? `última há ${r.diasSemReuniao}d` : "nunca teve";
+                              return (
+                                <span title={detalhe}
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border ${cor}`}>
+                                  {txt}
+                                </span>
+                              );
+                            })()}
                             {hasMetaLinked && (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#2b3cff]/10 text-[#2b3cff] border border-[#2b3cff]/20">
                                 <Facebook size={9} />
