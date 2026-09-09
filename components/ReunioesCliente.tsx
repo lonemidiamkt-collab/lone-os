@@ -31,6 +31,7 @@ interface Anexo { path: string; nome: string; tamanho: number; tipo?: string; ur
 interface Reuniao {
   id: string; quando: string; fim: string | null; responsavel: string | null;
   colaboradores: string[]; link: string | null;
+  temRegistro: boolean; realizadaEm: string | null;
   estado: string; tipo: string; titulo: string | null; local: string | null;
   descricao: string | null; resumo: string | null;
   pauta: string | null; pautaOrigem: string | null;
@@ -44,6 +45,8 @@ interface Detalhe {
   id: string; start_at: string; responsavel: string | null; resumo: string | null;
   transcricao: string | null; transcricao_palavras: number | null;
   pauta: string | null; pauta_origem: string | null; pauta_por: string | null;
+  briefing: string | null; decisoes: string | null; proximos_passos: string | null;
+  briefing_em: string | null; briefing_por: string | null;
   anexos: Anexo[]; pdfUrl: string | null; location: string | null; description: string | null;
   analise: {
     decisoes?: string[];
@@ -694,6 +697,7 @@ function Cartao(p: {
             )}
             {r.local && <span>{r.local}</span>}
             {r.link && <span className="text-lone-success">com link</span>}
+            {r.temRegistro && <span className="text-lone-success">✓ com registro</span>}
             {r.pauta && <span className="text-lone-success">✓ com pauta</span>}
             {r.anexos.length > 0 && <span className="flex items-center gap-0.5"><Paperclip size={9} />{r.anexos.length}</span>}
             {r.temTranscricao && <span>{r.palavras} palavras</span>}
@@ -722,6 +726,30 @@ function Cartao(p: {
           {!detalhe && <p className="text-[11px] text-muted-foreground">Abrindo…</p>}
           {detalhe && (
             <>
+              {/* ── O REGISTRO DA REUNIÃO ─────────────────────────────────
+                  O que a pessoa escreveu depois. Vem ANTES da pauta porque, numa reunião que já
+                  aconteceu, o que foi discutido interessa mais que o que se planejou discutir. */}
+              {(detalhe.briefing || detalhe.decisoes || detalhe.proximos_passos) && (
+                <div className="space-y-2">
+                  {([
+                    ["briefing", "O que foi discutido"],
+                    ["decisoes", "Principais decisões"],
+                    ["proximos_passos", "Próximos passos"],
+                  ] as const).map(([campo, rotulo]) => detalhe[campo] && (
+                    <div key={campo}>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{rotulo}</p>
+                      <p className="text-[12px] text-foreground whitespace-pre-wrap mt-0.5">{detalhe[campo]}</p>
+                    </div>
+                  ))}
+                  {detalhe.briefing_em && (
+                    <p className="text-[9.5px] text-muted-foreground">
+                      escrito em {new Date(detalhe.briefing_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                      {detalhe.briefing_por ? ` por ${detalhe.briefing_por}` : ""}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* PAUTA */}
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1.5">

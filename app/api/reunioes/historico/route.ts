@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   if (id) {
     const { data, error } = await supabaseAdmin
       .from("meetings")
-      .select("id, client_id, title, start_at, end_at, responsavel, estado, resumo, transcricao, transcricao_origem, transcricao_em, transcricao_por, transcricao_palavras, analise, pontos_atencao, pdf_path, pauta, pauta_origem, pauta_em, pauta_por, anexos, location, description, meeting_type")
+      .select("id, client_id, title, start_at, end_at, responsavel, estado, resumo, transcricao, transcricao_origem, transcricao_em, transcricao_por, transcricao_palavras, analise, pontos_atencao, pdf_path, pauta, pauta_origem, pauta_em, pauta_por, anexos, location, description, meeting_type, briefing, decisoes, proximos_passos, briefing_em, briefing_por, realizada_em, duration_minutes")
       .eq("id", id).maybeSingle();
     if (error || !data) return NextResponse.json({ error: "reunião não encontrada" }, { status: 404 });
 
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
   // ── A lista ─────────────────────────────────────────────────────────────
   const { data, error } = await supabaseAdmin
     .from("meetings")
-    .select("id, title, start_at, end_at, responsavel, attendees, link_reuniao, estado, status, resumo, transcricao_palavras, pontos_atencao, pdf_path, analise, meeting_type, location, description, pauta, pauta_origem, anexos")
+    .select("id, title, start_at, end_at, responsavel, attendees, link_reuniao, estado, status, resumo, transcricao_palavras, pontos_atencao, pdf_path, analise, meeting_type, location, description, pauta, pauta_origem, anexos, briefing, decisoes, proximos_passos, realizada_em")
     .eq("client_id", clientId)
     .order("start_at", { ascending: false })
     .limit(50);
@@ -100,6 +100,10 @@ export async function GET(req: NextRequest) {
       tipo: m.meeting_type, resumo: m.resumo,
       titulo: m.title, local: m.location, descricao: m.description,
       pauta: m.pauta, pautaOrigem: m.pauta_origem,
+      // O registro que a PESSOA escreveu. Sem isso, o que alguém digita na ficha aberta pelo
+      // calendário fica invisível na aba do cliente — e passam a existir duas verdades de novo.
+      temRegistro: !!(m.briefing || m.decisoes || m.proximos_passos),
+      realizadaEm: m.realizada_em,
       anexos: (Array.isArray(m.anexos) ? m.anexos : []) as { path: string; nome: string; tamanho: number }[],
       palavras: m.transcricao_palavras ?? 0,
       temTranscricao: (m.transcricao_palavras ?? 0) > 0,
