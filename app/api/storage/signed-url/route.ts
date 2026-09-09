@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { paraUrlPublica } from "@/lib/supabase/url-publica";
 import { getServerUser } from "@/lib/supabase/auth-server";
 
 const SIGNED_URL_TTL_SECONDS = 300; // 5 min
@@ -55,13 +56,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error?.message ?? "Falha ao gerar URL" }, { status: 500 });
   }
 
-  // Reescreve o hostname interno do Docker pro público (o browser precisa resolver).
-  const internalBase = process.env.SUPABASE_INTERNAL_URL ?? "";
-  const publicBase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  let signedUrl = data.signedUrl;
-  if (internalBase && publicBase && signedUrl.startsWith(internalBase)) {
-    signedUrl = publicBase + signedUrl.slice(internalBase.length);
-  }
+  // A reescrita do hostname interno agora vive em lib/supabase/url-publica: era escrita à mão
+  // aqui e ausente nas outras quatro rotas que geram link.
+  const signedUrl = paraUrlPublica(data.signedUrl) ?? data.signedUrl;
 
   // Log de acesso (LGPD). Fire-and-forget. path: "{clientId}/{docType}-{ts}.{ext}".
   const [clientIdFromPath, fileName] = path.split("/", 2);

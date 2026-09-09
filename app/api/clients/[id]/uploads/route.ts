@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { paraUrlPublica } from "@/lib/supabase/url-publica";
 import { getServerUser } from "@/lib/supabase/auth-server";
 
 // GET /api/clients/[id]/uploads — o material que o CLIENTE mandou pelo painel.
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { data: assinada } = await supabaseAdmin.storage.from("client-uploads")
       .createSignedUrl(u.storage_path as string, 3600);
     const { storage_path: _omitido, ...resto } = u;
-    return { ...resto, url: assinada?.signedUrl ?? null };
+    return { ...resto, url: paraUrlPublica(assinada?.signedUrl) };
   }));
 
   return NextResponse.json({ itens, pendentes: itens.filter((i) => !i.visto_em).length });

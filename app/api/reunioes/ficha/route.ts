@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { paraUrlPublica } from "@/lib/supabase/url-publica";
 import { getServerUser } from "@/lib/supabase/auth-server";
 
 // GET /api/reunioes/ficha?id=…
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
       const { data } = await supabaseAdmin.storage
         .from((a.storage_bucket as string) || "meeting-records")
         .createSignedUrl(a.storage_path as string, 600);
-      url = data?.signedUrl ?? null;
+      url = paraUrlPublica(data?.signedUrl);
     } catch { /* arquivo some do bucket: a linha continua, sem link */ }
     return {
       id: a.id as string,

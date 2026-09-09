@@ -446,8 +446,15 @@ export async function POST(req: NextRequest) {
     if (b.proximos_passos !== undefined) patch.proximos_passos = b.proximos_passos.trim() || null;
     if (!Object.keys(patch).length) return NextResponse.json({ ok: true, semMudanca: true });
 
-    patch.briefing_em = new Date().toISOString();
-    patch.briefing_por = quem;
+    // Carimbar "registro escrito por Fulano" quando os três campos estão vazios é gravar uma
+    // mentira: foi o que aconteceu no primeiro uso — a tela mostrava os exemplos, o clique
+    // gravou nada, e o carimbo dizia que alguém tinha escrito.
+    const escreveuAlgo = [patch.briefing, patch.decisoes, patch.proximos_passos]
+      .some((v) => typeof v === "string" && v.trim());
+    if (escreveuAlgo) {
+      patch.briefing_em = new Date().toISOString();
+      patch.briefing_por = quem;
+    }
 
     const { error } = await supabaseAdmin.from("meetings").update(patch).eq("id", b.reuniaoId);
     if (error) {

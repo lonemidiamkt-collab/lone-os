@@ -163,18 +163,30 @@ export default function FichaReuniao({ reuniao, onFechar, onMudou }: {
               ))}
             </div>
 
+            {/* ── OS CAMPOS ────────────────────────────────────────────────
+                Os exemplos daqui eram realistas demais ("Cliente pediu para aumentar a campanha
+                de cimento…") e, no tema escuro, placeholder e texto digitado ficam parecidos: o
+                Roberto leu como se estivesse preenchido, clicou Salvar e gravou vazio. Agora o
+                exemplo é curto, começa com "Ex.:" e é claramente mais apagado. */}
             {([
-              ["briefing", "O que foi discutido", "Cliente pediu para aumentar a campanha de cimento…"],
-              ["decisoes", "Principais decisões", "• aumentar orçamento\n• pausar campanha antiga"],
-              ["proximos_passos", "Próximos passos", "• designer produzir criativo\n• nova reunião em 15 dias"],
+              ["briefing", "O que foi discutido", "Ex.: aumentar a campanha de cimento"],
+              ["decisoes", "Principais decisões", "Ex.: pausar a campanha antiga"],
+              ["proximos_passos", "Próximos passos", "Ex.: designer produzir criativo"],
             ] as const).map(([campo, rotulo, exemplo]) => (
               <div key={campo}>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{rotulo}</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{rotulo}</label>
+                  {form[campo].trim() && (
+                    <span className="text-[9.5px] text-muted-foreground">
+                      {form[campo].trim().length} caracteres
+                    </span>
+                  )}
+                </div>
                 <textarea
                   value={form[campo]}
                   onChange={(e) => setForm({ ...form, [campo]: e.target.value })}
                   placeholder={exemplo}
-                  className="mt-1 w-full h-24 p-2.5 rounded-lg bg-surface border border-border text-[12.5px] text-foreground placeholder:text-muted-foreground/50 resize-y"
+                  className="mt-1 w-full h-24 p-2.5 rounded-lg bg-surface border border-border text-[13px] text-foreground placeholder:text-muted-foreground/35 placeholder:italic focus:border-primary/50 outline-none resize-y transition-colors"
                 />
               </div>
             ))}
@@ -186,13 +198,26 @@ export default function FichaReuniao({ reuniao, onFechar, onMudou }: {
               </p>
             )}
 
-            <div className="flex items-center justify-between gap-2">
-              {aviso && <span className="text-[11px] text-muted-foreground">{aviso}</span>}
-              <button onClick={salvar} disabled={salvando}
-                      className="ml-auto text-[11px] px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium flex items-center gap-1.5 disabled:opacity-50">
-                {salvando ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Salvar
-              </button>
-            </div>
+            {(() => {
+              const escreveu = Object.values(form).some((v) => v.trim());
+              const mudou = form.briefing !== (d.briefing ?? "")
+                || form.decisoes !== (d.decisoes ?? "")
+                || form.proximos_passos !== (d.proximos_passos ?? "");
+              return (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-muted-foreground">
+                    {aviso ?? (!escreveu ? "Nada escrito ainda" : mudou ? "Alterações não salvas" : "Salvo")}
+                  </span>
+                  {/* Sem texto NENHUM não há o que salvar — e era assim que um clique gravava
+                      vazio e ainda carimbava "registro escrito por". */}
+                  <button onClick={salvar} disabled={salvando || !mudou}
+                          className="text-[12px] px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+                    {salvando ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                    {mudou ? "Salvar" : "Salvo"}
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* O que a IA extraiu, quando existe. Separado do que a pessoa escreveu. */}
             {d.resumo && (
@@ -210,9 +235,9 @@ export default function FichaReuniao({ reuniao, onFechar, onMudou }: {
                 <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   Documentos e arquivos {d.anexos.length > 0 && `· ${d.anexos.length}`}
                 </label>
-                <label className="text-[10px] px-2 py-1 rounded-md bg-surface border border-border text-foreground hover:border-primary cursor-pointer flex items-center gap-1">
-                  {enviando ? <Loader2 size={10} className="animate-spin" /> : <Paperclip size={10} />}
-                  Anexar
+                <label className="text-[12px] px-3.5 py-2 rounded-lg bg-surface border border-border text-foreground hover:border-primary hover:bg-muted/50 cursor-pointer flex items-center gap-1.5 transition-colors font-medium">
+                  {enviando ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
+                  {enviando ? "Enviando…" : "Anexar arquivo"}
                   <input type="file" className="hidden" disabled={enviando}
                          onChange={(e) => { const f = e.target.files?.[0]; if (f) anexar(f); e.target.value = ""; }} />
                 </label>

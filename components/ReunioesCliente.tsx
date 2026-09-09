@@ -113,6 +113,8 @@ export default function ReunioesCliente(
   // transcrição numa reunião agendada: aqui a reunião não existe ainda em lugar nenhum, e sem
   // isso o cliente aparecia como "sem reunião no mês" tendo sido atendido.
   const [lancando, setLancando] = useState(false);
+  // `null` = ninguém mexeu ainda (o mês mais recente abre sozinho); "" = tudo fechado.
+  const [mesAberto, setMesAberto] = useState<string | null>(null);
   const hojeISO = new Date().toISOString().slice(0, 10);
   const [lanc, setLanc] = useState({
     data: hojeISO, hora: "10:00", duracao: "60", responsavel: "", observacao: "",
@@ -302,15 +304,39 @@ export default function ReunioesCliente(
     mesAtual, new Date(),
   );
 
-  const proximas = lista.filter((r) => r.estado !== "cancelada" && r.estado !== "realizada" && new Date(r.quando).getTime() > agora - 3600_000);
-  const realizadas = lista.filter((r) => !proximas.includes(r));
+  // ── CLASSIFICAR POR ESTADO, NÃO POR RELÓGIO ───────────────────────────
+  //
+  // Era: tudo que passou de uma hora caía em "realizadas". Uma reunião marcada para as 16h
+  // aparecia como realizada às 17h sem ninguém ter dito que aconteceu — e a aba mostrava
+  // "1 realizada" enquanto a ficha da mesma reunião dizia "Agendada". Duas telas, duas verdades.
+  //
+  // A reunião que passou e ninguém fechou não é realizada nem futura: é uma pergunta em aberto,
+  // e ganha grupo próprio para alguém responder.
+  const fechada = (e: string) => e === "realizada" || e === "no_show" || e === "cancelada";
+  const proximas = lista.filter((r) => !fechada(r.estado) && new Date(r.quando).getTime() > agora - 3600_000);
+  const aguardando = lista.filter((r) => !fechada(r.estado) && new Date(r.quando).getTime() <= agora - 3600_000);
+  const realizadas = lista.filter((r) => fechada(r.estado));
+
+  // ── HISTÓRICO POR MÊS ─────────────────────────────────────────────────
+  // Roberto: "poderia ter tipo reuniões de setembro, a gente clica e aparece."
+  const porMes = realizadas.reduce((acc, r) => {
+    const chave = r.quando.slice(0, 7);
+    (acc[chave] ??= []).push(r);
+    return acc;
+  }, {} as Record<string, typeof realizadas>);
+  const meses = Object.keys(porMes).sort().reverse();
+  const nomeMes = (chave: string) => {
+    const [a, m] = chave.split("-").map(Number);
+    return new Date(a, m - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  };
 
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
           <CalendarClock size={14} className="text-primary" /> Reuniões
-          {lista.length > 0 && <span className="text-[10px] text-muted-foreground font-normal">· {proximas.length} agendada(s) · {realizadas.length} realizada(s)</span>}
+          {lista.length > 0 && <span className="text-[10px] text-muted-foreground font-normal">· {proximas.length} agendada(s) · {realizadas.filter((r) => r.estado === "realizada").length} realizada(s)
+            {aguardando.length > 0 && <span className="text-lone-warning"> · {aguardando.length} sem confirmar</span>}</span>}
         </h3>
         <div className="flex gap-2 flex-wrap">
           <button
@@ -647,12 +673,16 @@ export default function ReunioesCliente(
         </>
       )}
 
-      {/* REALIZADAS */}
-      {realizadas.length > 0 && (
+      {/* ── PASSOU E NINGUÉM DISSE O QUE FOI ──────────────────────────────
+          O grupo que faltava. Antes essas caíam em "Realizadas" pelo relógio, inflando o número
+          sem ninguém ter confirmado nada. */}
+      {aguardando.length > 0 && (
         <>
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">Realizadas</p>
-          <div className="space-y-2">
-            {realizadas.map((r) => (
+          <p className="text-[10px] uppercase tracking-wide text-lone-warning mb-2 mt-1">
+            Passou e ninguém confirmou · {aguardando.length}
+          </p>
+          <div className="space-y-2 mb-4">
+            {aguardando.map((r) => (
               <Cartao key={r.id} r={r} aberta={aberta === r.id} onAbrir={() => abrir(r.id)}
                       detalhe={detalhe} editandoPauta={editandoPauta} pautaTexto={pautaTexto}
                       setPautaTexto={setPautaTexto} setEditandoPauta={setEditandoPauta}
@@ -665,6 +695,46 @@ export default function ReunioesCliente(
           </div>
         </>
       )}
+
+      {/* ── HISTÓRICO, POR MÊS ────────────────────────────────────────────
+          O mês mais recente abre sozinho; os outros ficam fechados. Quem procura o histórico
+          quase sempre quer o último — e uma lista de doze meses aberta é uma lista que ninguém lê. */}
+      {meses.map((chave, i) => {
+        const doMes = porMes[chave];
+        const feitas = doMes.filter((r) => r.estado === "realizada").length;
+        const abertoMes = mesAberto === null ? i === 0 : mesAberto === chave;
+        return (
+          <div key={chave} className="mb-2">
+            <button
+              onClick={() => setMesAberto(abertoMes ? "" : chave)}
+              className="w-full flex items-center gap-2 py-1.5 text-left hover:text-primary transition-colors"
+            >
+              <ChevronDown size={13} className={`text-muted-foreground transition-transform ${abertoMes ? "" : "-rotate-90"}`} />
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground capitalize">
+                {nomeMes(chave)}
+              </span>
+              <span className="text-[10px] text-muted-foreground/70">
+                {feitas > 0 && `${feitas} realizada${feitas > 1 ? "s" : ""}`}
+                {doMes.length > feitas && `${feitas > 0 ? " · " : ""}${doMes.length - feitas} outra(s)`}
+              </span>
+            </button>
+            {abertoMes && (
+              <div className="space-y-2 mt-1">
+                {doMes.map((r) => (
+                  <Cartao key={r.id} r={r} aberta={aberta === r.id} onAbrir={() => abrir(r.id)}
+                      detalhe={detalhe} editandoPauta={editandoPauta} pautaTexto={pautaTexto}
+                      setPautaTexto={setPautaTexto} setEditandoPauta={setEditandoPauta}
+                      onGerarPauta={() => gerarPauta(r.id)} onSalvarPauta={() => salvarPauta(r.id)}
+                      onAnexar={(f) => anexar(r.id, f)} fileRef={fileRef} ocupado={ocupado}
+                      onRegistrar={() => setRegistrando(r.id)} registrando={registrando === r.id}
+                      transcricao={transcricao} setTranscricao={setTranscricao}
+                      onGuardar={() => registrar(r.id)} />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

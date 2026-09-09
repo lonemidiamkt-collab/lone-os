@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { paraUrlPublica } from "@/lib/supabase/url-publica";
 import { getServerUser } from "@/lib/supabase/auth-server";
 
 // GET /api/reunioes/historico?clientId=…[&q=texto][&id=reuniaoId]
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
     if (data.pdf_path) {
       const { data: signed } = await supabaseAdmin.storage
         .from("meeting-records").createSignedUrl(data.pdf_path as string, 3600);
-      pdfUrl = signed?.signedUrl ?? null;
+      pdfUrl = paraUrlPublica(signed?.signedUrl);
     }
     // Cada anexo ganha um link assinado: o bucket é privado, e URL sem assinatura não abre.
     const anexos = await Promise.all(
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
         .map(async (a) => {
           const { data: signed } = await supabaseAdmin.storage
             .from("meeting-records").createSignedUrl(a.path, 3600);
-          return { ...a, url: signed?.signedUrl ?? null };
+          return { ...a, url: paraUrlPublica(signed?.signedUrl) };
         }),
     );
     return NextResponse.json({ ok: true, reuniao: { ...data, pdfUrl, anexos } });
