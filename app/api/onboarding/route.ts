@@ -169,6 +169,43 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── Generate link for an existing client ───
+  // ── LINK PARA COMPLETAR UM CADASTRO QUE JÁ EXISTE ────────────────────────
+  //
+  // 39 dos 50 clientes ativos nunca passaram pelo formulário. Mandar a eles o formulário inteiro
+  // seria pedir a um cliente de um ano que digite de novo tudo o que já temos — e a taxa de
+  // resposta disso é previsível.
+  //
+  // Aqui a submissão nasce PRÉ-PREENCHIDA com o que já sabemos, documentos inclusive. O cliente
+  // abre o link, vê os próprios dados e completa só o buraco.
+  if (body.action === "gerar_link_completar") {
+    if (!body.clientId) return NextResponse.json({ error: "clientId é obrigatório" }, { status: 400 });
+
+    const { data: cli } = await supabase.from("clients").select("*").eq("id", body.clientId).maybeSingle();
+    if (!cli) return NextResponse.json({ error: "cliente não encontrado" }, { status: 404 });
+
+    // Já existe um link aberto? Devolve o mesmo. Gerar um segundo faria dois links vivos para o
+    // mesmo cliente, e o que ele preenchesse no primeiro se perderia.
+    const { data: aberta } = await supabase
+      .from("client_onboarding_submissions")
+      .select("token")
+      .eq("client_id", body.clientId).eq("status", "pending")
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (aberta?.token) {
+      return NextResponse.json({ token: aberta.token, url: `/onboarding/${aberta.token}`, reaproveitado: true });
+    }
+
+    const { preencherDoCliente } = await import("@/lib/clients/completude");
+    const token = newOnboardingToken();
+    const { error } = await supabase.from("client_onboarding_submissions").insert({
+      client_id: body.clientId,
+      token,
+      status: "pending",
+      ...preencherDoCliente(cli as Record<string, unknown>),
+    });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ token, url: `/onboarding/${token}` });
+  }
+
   if (body.action === "generate_link") {
     const token = newOnboardingToken();
     const { error } = await supabase.from("client_onboarding_submissions").insert({

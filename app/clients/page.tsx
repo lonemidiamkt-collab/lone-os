@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import NewClientModal from "@/components/NewClientModal";
 import { useClientsStore } from "@/stores/useClientsStore";
+import CadastroIncompleto from "@/components/CadastroIncompleto";
 import { useRole } from "@/lib/context/RoleContext";
 import { MOTIVOS_LISTA, type MotivoSaida } from "@/lib/clients/churn";
 import type { Client } from "@/lib/types";
@@ -341,6 +342,14 @@ export default function ClientsPage() {
             </div>
 
             {/* ═══ PENDING APPROVALS (Admin Only) ═══ */}
+            {/* A fila de quem está com a ficha pela metade. Fica antes dos pendentes porque é
+                trabalho de hoje, não de aprovação. */}
+            {isAdmin && (
+              <div className="mb-4">
+                <CadastroIncompleto />
+              </div>
+            )}
+
             {isAdmin && drafts.length > 0 && (
               <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4 space-y-3">
                 <div className="flex items-center justify-between">
