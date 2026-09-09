@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { OperationalKpisPanel } from "@/components/ceo/OperationalKpisPanel";
+import CoberturaReunioes from "@/components/CoberturaReunioes";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
 import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel, formatTimeSpent, getLiveTimeSpentMs, OVERTIME_THRESHOLD_MS, todaySP } from "@/lib/utils";
@@ -562,7 +563,10 @@ export default function CEOPage() {
           </div>
 
           {activeSection === "operacao" && (
-            <div className="animate-fade-in">
+            <div className="space-y-4 animate-fade-in">
+              {/* Reunião com cliente é entrega operacional, não agenda — por isso fica aqui, ao
+                  lado dos KPIs de entrega, e não numa tela própria que ninguém abriria. */}
+              <CoberturaReunioes />
               <OperationalKpisPanel cards={contentCards} />
             </div>
           )}

@@ -192,6 +192,33 @@ export default function CalendarPage() {
   // As reuniões agendadas do mês em exibição. Vêm de /api/reunioes (que já filtra por pessoa:
   // cada um vê a própria carteira, gestão vê tudo) — não do store, que não conhece `meetings`.
   const [reunioes, setReunioes] = useState<{ id: string; cliente: string; quando: string; responsavel: string | null }[]>([]);
+  // ── AÇÕES RÁPIDAS DO DIA ──────────────────────────────────────────────
+  //
+  // Roberto (09/09): "quando chegar o dia da reunião, permitir marcar como realizada, reagendar,
+  // cancelar, cliente não compareceu."
+  //
+  // É aqui que o indicador se separa da agenda: enquanto ninguém disser que aconteceu, a reunião
+  // é só uma promessa no calendário e não conta para "esse cliente teve reunião no mês".
+  const [fechando, setFechando] = useState<string | null>(null);
+  const [feito, setFeito] = useState<Record<string, string>>({});
+  const fecharReuniao = async (id: string, acao: "concluir" | "no_show" | "cancelar") => {
+    setFechando(id);
+    try {
+      const r = await authedFetch("/api/reunioes/gerenciar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acao, reuniaoId: id }),
+      });
+      const j = await r.json();
+      if (!r.ok) { setFeito((f) => ({ ...f, [id]: j?.error ?? "não consegui" })); return; }
+      setFeito((f) => ({
+        ...f,
+        [id]: acao === "concluir" ? "✓ marcada como realizada"
+          : acao === "no_show" ? "cliente não compareceu" : "cancelada",
+      }));
+      // Some da agenda: só `agendada` é desenhada, e o estado acabou de mudar.
+      setReunioes((rs) => rs.filter((x) => x.id !== id));
+    } finally { setFechando(null); }
+  };
   useEffect(() => {
     let cancelled = false;
     async function loadHolidays() {
@@ -1034,8 +1061,8 @@ export default function CalendarPage() {
                     const isReminder = e.type === "reminder";
                     const rem = isReminder ? e.raw as Reminder : null;
                     return (
+                      <div key={e.id}>
                       <button
-                        key={e.id}
                         onClick={() => handleEventClick(e)}
                         className={`w-full text-left p-3 rounded-lg border transition-all ${
                           isTaskDeadline
@@ -1079,6 +1106,35 @@ export default function CalendarPage() {
                           </div>
                         )}
                       </button>
+                      {/* Irmãs do botão, não filhas: botão dentro de botão é HTML inválido e o
+                          clique de dentro dispara o de fora. */}
+                      {e.type === "meeting" && (() => {
+                        const idReu = e.id.replace(/^reu-/, "");
+                        // Só depois da hora: oferecer "marcou como realizada" numa reunião que
+                        // ainda não começou convida a marcar o que não aconteceu.
+                        const jaPassou = new Date(`${e.date}T23:59:59-03:00`) <= new Date()
+                          || new Date(e.date).toDateString() === new Date().toDateString();
+                        if (feito[idReu]) {
+                          return <p className="ml-[18px] mt-1 text-[10px] text-lone-success">{feito[idReu]}</p>;
+                        }
+                        if (!jaPassou) return null;
+                        return (
+                          <div className="flex flex-wrap gap-1.5 mt-1.5 ml-[18px]">
+                            {([
+                              ["concluir", "Aconteceu", "border-lone-success-border text-lone-success hover:bg-lone-success-bg"],
+                              ["no_show", "Não veio", "border-lone-warning-border text-lone-warning hover:bg-lone-warning-bg"],
+                              ["cancelar", "Cancelar", "border-border text-muted-foreground hover:text-foreground"],
+                            ] as const).map(([acao, rotulo, cor]) => (
+                              <button key={acao} type="button" disabled={fechando === idReu}
+                                onClick={(ev) => { ev.stopPropagation(); fecharReuniao(idReu, acao); }}
+                                className={`text-[10px] px-2 py-1 rounded-md bg-card border transition-colors disabled:opacity-50 ${cor}`}>
+                                {fechando === idReu ? "…" : rotulo}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                      </div>
                     );
                   })}
                 </div>
