@@ -79,16 +79,31 @@ export default function FichaReuniao({ reuniao, onFechar, onMudou }: {
 
   const salvar = async () => {
     setSalvando(true);
+    setAviso(null);
     try {
       const r = await authedFetch("/api/reunioes/gerenciar", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ acao: "registro", reuniaoId: reuniao.id, ...form }),
       });
-      const j = await r.json();
-      if (!r.ok) { setAviso(j?.error ?? "não consegui salvar"); return; }
+      // O corpo pode não ser JSON (500 devolve HTML). Ler como texto primeiro deixa o erro
+      // legível em vez de virar uma exceção de parse sem mensagem.
+      const bruto = await r.text();
+      let j: { error?: string } = {};
+      try { j = JSON.parse(bruto); } catch { /* fica com o texto cru abaixo */ }
+      if (!r.ok) {
+        setAviso(`Não salvou (${r.status}): ${j.error ?? bruto.slice(0, 120) ?? "erro sem mensagem"}`);
+        console.error("[FichaReuniao] salvar falhou", r.status, bruto.slice(0, 300));
+        return;
+      }
       setAviso("Salvo.");
       carregar();
       onMudou?.();
+    } catch (e) {
+      // ESTE catch NÃO EXISTIA. Sem ele, qualquer falha (rede, sessão vencida, parse) fazia o
+      // botão parar de girar e NADA ser dito — a pessoa via a tela igual e achava que salvou.
+      // Foi assim que o registro do Roberto "sumiu" três vezes seguidas.
+      setAviso(`Não salvou: ${(e as Error).message}`);
+      console.error("[FichaReuniao] salvar estourou", e);
     } finally { setSalvando(false); }
   };
 
@@ -205,7 +220,9 @@ export default function FichaReuniao({ reuniao, onFechar, onMudou }: {
                 || form.proximos_passos !== (d.proximos_passos ?? "");
               return (
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className={`text-[11px] ${
+                    aviso?.startsWith("Não salvou") ? "text-lone-danger font-medium" : "text-muted-foreground"
+                  }`}>
                     {aviso ?? (!escreveu ? "Nada escrito ainda" : mudou ? "Alterações não salvas" : "Salvo")}
                   </span>
                   {/* Sem texto NENHUM não há o que salvar — e era assim que um clique gravava
