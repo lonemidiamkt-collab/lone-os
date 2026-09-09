@@ -31,6 +31,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import FichaReuniao, { type ReuniaoResumida } from "@/components/FichaReuniao";
 import { useAppState } from "@/lib/context/AppStateContext"; // kept for reminders (localStorage-only, no DB equivalent)
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
@@ -191,7 +192,7 @@ export default function CalendarPage() {
   const [observances, setObservances] = useState<Observance[]>([]);
   // As reuniões agendadas do mês em exibição. Vêm de /api/reunioes (que já filtra por pessoa:
   // cada um vê a própria carteira, gestão vê tudo) — não do store, que não conhece `meetings`.
-  const [reunioes, setReunioes] = useState<{ id: string; cliente: string; quando: string; responsavel: string | null }[]>([]);
+  const [reunioes, setReunioes] = useState<{ id: string; cliente: string; quando: string; responsavel: string | null; estado: string; clientId: string }[]>([]);
   // ── AÇÕES RÁPIDAS DO DIA ──────────────────────────────────────────────
   //
   // Roberto (09/09): "quando chegar o dia da reunião, permitir marcar como realizada, reagendar,
@@ -215,8 +216,18 @@ export default function CalendarPage() {
         [id]: acao === "concluir" ? "✓ marcada como realizada"
           : acao === "no_show" ? "cliente não compareceu" : "cancelada",
       }));
-      // Some da agenda: só `agendada` é desenhada, e o estado acabou de mudar.
-      setReunioes((rs) => rs.filter((x) => x.id !== id));
+      // "Aconteceu" fecha em UM clique e só então abre a ficha para complementar. Um modal
+      // obrigatório antes de marcar faria a pessoa desistir de marcar — e é o clique que faz o
+      // indicador virar. O resumo pode esperar; o registro do fato, não.
+      if (acao === "concluir") {
+        const r = reunioes.find((x) => x.id === id);
+        if (r) setReuniaoAberta({ ...r, estado: "realizada" });
+      }
+      // Muda de estado, NÃO sai da agenda. Tirar daqui era a mesma ideia errada do filtro: o
+      // registro continua sendo o histórico daquele dia.
+      setReunioes((rs) => rs.map((x) => x.id === id
+        ? { ...x, estado: acao === "concluir" ? "realizada" : acao === "no_show" ? "no_show" : "cancelada" }
+        : x));
     } finally { setFechando(null); }
   };
   useEffect(() => {
@@ -451,13 +462,19 @@ export default function CalendarPage() {
     // aparecia no calendário, nem no Meu Trabalho — só na aba daquele cliente, se alguém fosse
     // procurar. Compromisso que não aparece na agenda não é compromisso agendado.
     reunioes.forEach((r) => {
+      // Cada estado tem uma cara. O que já passou fica mais discreto que o que ainda vai
+      // acontecer — mas continua visível, que é o ponto.
+      const cara = r.estado === "realizada" ? { prefixo: "✅ ", cor: "bg-lone-success" }
+        : r.estado === "no_show" ? { prefixo: "⚠️ ", cor: "bg-lone-warning" }
+        : r.estado === "cancelada" ? { prefixo: "❌ ", cor: "bg-muted-foreground" }
+        : { prefixo: "", cor: TYPE_COLORS.meeting };
       events.push({
         id: `reu-${r.id}`,
         type: "meeting",
-        title: `Reunião — ${r.cliente}`,
+        title: `${cara.prefixo}Reunião — ${r.cliente}`,
         clientName: r.cliente,
         date: r.quando.slice(0, 10),
-        color: TYPE_COLORS.meeting,
+        color: cara.cor,
         detail: `${new Date(r.quando).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}${r.responsavel ? ` · ${r.responsavel}` : ""}`,
         raw: r as unknown as Reminder,
       });
@@ -476,10 +493,20 @@ export default function CalendarPage() {
       .then((j) => {
         if (!vivo || !j?.reunioes) return;
         setReunioes(
+          // ── AQUI ESTAVA O BUG ──────────────────────────────────────────
+          //
+          // Era `.filter(x => x.estado === "agendada")`. Ao marcar "Aconteceu", o estado virava
+          // `realizada` e a reunião SUMIA do calendário — parecia apagada, e não estava: o
+          // registro seguia intacto no banco. Reunião realizada é memória do relacionamento com
+          // o cliente; ela para de ser compromisso, não de existir.
+          //
+          // `pendente` fica de fora porque não é reunião: é a linha de "esse cliente ainda não
+          // marcou", que a agenda do ciclo usa e não tem data para desenhar.
           j.reunioes
-            .filter((x: { estado: string; quando: string | null }) => x.estado === "agendada" && x.quando)
-            .map((x: { reuniaoId: string; cliente: string; quando: string; responsavel: string | null }) => ({
-              id: x.reuniaoId, cliente: x.cliente, quando: x.quando, responsavel: x.responsavel,
+            .filter((x: { estado: string; quando: string | null }) => !!x.quando && x.estado !== "pendente")
+            .map((x: { reuniaoId: string; clientId: string; cliente: string; quando: string; responsavel: string | null; estado: string }) => ({
+              id: x.reuniaoId, clientId: x.clientId, cliente: x.cliente, quando: x.quando,
+              responsavel: x.responsavel, estado: x.estado,
             })),
         );
       })
@@ -612,11 +639,19 @@ export default function CalendarPage() {
       .slice(0, 8);
   }, [tasks]);
 
+  // Clicar numa reunião abre a ficha dela. Antes não fazia nada: o clique existia só para tarefa
+  // e lembrete, e a reunião — que é o registro mais denso do calendário — não tinha para onde
+  // levar.
+  const [reuniaoAberta, setReuniaoAberta] = useState<ReuniaoResumida | null>(null);
+
   const handleEventClick = (event: CalendarEvent) => {
     if (event.type === "task") {
       setSelectedTask(event.raw as Task);
     } else if (event.type === "reminder") {
       toggleReminder((event.raw as Reminder).id);
+    } else if (event.type === "meeting") {
+      const r = event.raw as unknown as ReuniaoResumida;
+      if (r?.id) setReuniaoAberta(r);
     }
   };
 
@@ -1117,6 +1152,14 @@ export default function CalendarPage() {
                         if (feito[idReu]) {
                           return <p className="ml-[18px] mt-1 text-[10px] text-lone-success">{feito[idReu]}</p>;
                         }
+                        // Reunião já fechada não oferece botão de fechar de novo — mostra o que
+                        // ela é. Sem isso, "Aconteceu" apareceria numa reunião já realizada.
+                        const reu = reunioes.find((x) => x.id === idReu);
+                        if (reu && reu.estado !== "agendada") {
+                          const rot = reu.estado === "realizada" ? "✅ realizada"
+                            : reu.estado === "no_show" ? "⚠️ cliente não compareceu" : "❌ cancelada";
+                          return <p className="ml-[18px] mt-1 text-[10px] text-muted-foreground">{rot}</p>;
+                        }
                         if (!jaPassou) return null;
                         return (
                           <div className="flex flex-wrap gap-1.5 mt-1.5 ml-[18px]">
@@ -1286,6 +1329,15 @@ export default function CalendarPage() {
       </div>
 
       {/* Task Detail Modal */}
+      {reuniaoAberta && (
+        <FichaReuniao
+          reuniao={reuniaoAberta}
+          onFechar={() => setReuniaoAberta(null)}
+          // Salvar na ficha pode ter mudado o estado; a agenda relê para não ficar defasada.
+          onMudou={() => setReunioes((rs) => [...rs])}
+        />
+      )}
+
       {selectedTask && (
         <TaskDetailModal
           task={selectedTask}

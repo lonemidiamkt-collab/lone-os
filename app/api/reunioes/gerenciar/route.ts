@@ -25,7 +25,7 @@ import {
 // agendador antigo, que salvava direto do navegador e não gerava lembrete nenhum.
 
 type Acao = "agendar" | "registrar_realizada" | "editar" | "pauta" | "gerar_pauta"
-  | "anexar" | "remover_anexo" | "cancelar" | "concluir" | "no_show";
+  | "anexar" | "remover_anexo" | "cancelar" | "concluir" | "no_show" | "registro";
 
 interface Corpo {
   acao?: Acao;
@@ -48,6 +48,10 @@ interface Corpo {
   path?: string;
   /** registrar_realizada: quanto durou, em minutos. */
   duracao?: number;
+  /** registro: o que a PESSOA escreve depois da reunião. */
+  briefing?: string;
+  decisoes?: string;
+  proximos_passos?: string;
   /** registrar_realizada: o que foi tratado. */
   observacao?: string;
   /** registrar_realizada / concluir: quem conduziu, quando não é o responsável do cliente. */
@@ -382,6 +386,37 @@ export async function POST(req: NextRequest) {
     const { error } = await supabaseAdmin.from("meetings")
       .update({ anexos: [...atuais, novo] }).eq("id", b.reuniaoId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // ── O METADADO VAI PARA O BANCO, NÃO SÓ PARA O jsonb ──────────────────
+    //
+    // Roberto (§16): "guardar metadados no banco. Não depender apenas do Storage." O jsonb
+    // responde "quais arquivos tem esta reunião"; não responde "quais documentos existem deste
+    // cliente" sem abrir reunião por reunião — que é o §7. O arquivo continua UM só no bucket:
+    // a tabela guarda o caminho, não uma cópia.
+    const { data: linhaAnexo, error: errAnexo } = await supabaseAdmin.from("meeting_attachments").insert({
+      meeting_id: b.reuniaoId,
+      client_id: reu.client_id as string,
+      nome_arquivo: seguro,
+      nome_original: a.nome,
+      tipo_mime: a.tipo || null,
+      tamanho_bytes: buf.length,
+      storage_path: caminho,
+      enviado_por: quem,
+    }).select("id").single();
+    if (errAnexo) {
+      // O arquivo subiu e está no jsonb; o metadado falhou. Registra e segue — perder o upload
+      // por causa da linha de índice seria trocar um problema por um pior.
+      await registrar({
+        meetingId: b.reuniaoId, clientId: reu.client_id as string, acao: "MEETING_SYNC_FAILED",
+        ator: quem, origem: "anexar", detalhe: { caminho }, erro: errAnexo.message,
+      });
+    }
+
+    await registrar({
+      meetingId: b.reuniaoId, clientId: reu.client_id as string, acao: "MEETING_UPDATED",
+      ator: quem, origem: "anexo",
+      detalhe: { anexoId: linhaAnexo?.id ?? null, nome: a.nome, bytes: buf.length },
+    });
     return NextResponse.json({ ok: true, anexo: novo });
   }
 
@@ -395,6 +430,41 @@ export async function POST(req: NextRequest) {
   }
 
   // ── CANCELAR e CONCLUIR ─────────────────────────────────────────────────
+  // ── O REGISTRO ESCRITO POR QUEM PARTICIPOU ──────────────────────────────
+  //
+  // Roberto (§11): "uma reunião realizada pode receber informações posteriormente […] isso NÃO
+  // altera a data real da reunião."
+  //
+  // Por isso `briefing_em` existe separado: a reunião aconteceu às 10h, foi marcada como
+  // realizada às 11h e resumida às 15h. São três fatos, e `updated_at` sozinho conta um só.
+  if (acao === "registro") {
+    const patch: Record<string, unknown> = {};
+    // `undefined` = não mexer; string vazia = apagar de propósito. A diferença importa: sem ela,
+    // salvar o formulário com um campo em branco apagaria o que já estava escrito.
+    if (b.briefing !== undefined) patch.briefing = b.briefing.trim() || null;
+    if (b.decisoes !== undefined) patch.decisoes = b.decisoes.trim() || null;
+    if (b.proximos_passos !== undefined) patch.proximos_passos = b.proximos_passos.trim() || null;
+    if (!Object.keys(patch).length) return NextResponse.json({ ok: true, semMudanca: true });
+
+    patch.briefing_em = new Date().toISOString();
+    patch.briefing_por = quem;
+
+    const { error } = await supabaseAdmin.from("meetings").update(patch).eq("id", b.reuniaoId);
+    if (error) {
+      await registrar({
+        meetingId: b.reuniaoId, clientId: reu.client_id as string, acao: "MEETING_SYNC_FAILED",
+        ator: quem, origem: "registro", erro: error.message,
+      });
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    await registrar({
+      meetingId: b.reuniaoId, clientId: reu.client_id as string, acao: "MEETING_UPDATED",
+      ator: quem, origem: "ficha_reuniao",
+      detalhe: { campos: Object.keys(patch).filter((k) => !k.startsWith("briefing_")) },
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   if (acao === "cancelar") {
     // Cancelar uma reunião JÁ REALIZADA apagaria um número que já entrou no indicador do mês.
     // Se foi engano, o caminho é registrar o que aconteceu de verdade, não desfazer em silêncio.
