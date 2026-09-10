@@ -183,10 +183,13 @@ export async function POST(req: NextRequest) {
   const limite = ymd(addDays(now, 4));
   const { data: cardsData, error: kErr } = await supabaseAdmin
     .from("content_cards")
-    .select("id, client_id, status, due_date, created_at, design_request_id, designer_delivered_at, social_confirmed_at, status_changed_at, column_entered_at, blocked_reason")
+    // `title` entra porque a data que o social programou vive nele ("SEX 11") — ver
+    // lib/cs/data-do-post. Sem o título aqui, o parser nunca veria a data certa.
+    .select("id, client_id, title, status, due_date, created_at, design_request_id, designer_delivered_at, social_confirmed_at, status_changed_at, column_entered_at, blocked_reason")
     .is("archived_at", null)
-    .not("due_date", "is", null)
-    .lte("due_date", limite);
+    // Card SEM due_date entra também: agora a data pode vir só do título, e o filtro por
+    // due_date os deixaria de fora justamente nos que dependem do título.
+    .or(`due_date.is.null,due_date.lte.${limite}`);
   if (kErr) return NextResponse.json({ error: kErr.message }, { status: 500 });
   const cards = (cardsData ?? []) as CardRow[];
   const cardById = new Map(cards.map((k) => [k.id, k]));

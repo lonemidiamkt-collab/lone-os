@@ -15,8 +15,12 @@ import { businessHoursSince } from "./vigilancia";
 // A vigilância cobra só social e designer — tráfego tem o próprio diagnóstico diário.
 export type Area = "social" | "designer";
 
+import { dataDoPost } from "./data-do-post";
+
 export interface CardRow {
   id: string; client_id: string; status: string; due_date: string | null; created_at: string | null;
+  /** O título carrega a data que o social programou ("SEX 11"). Ver `diasAteOPost`. */
+  title?: string | null;
   design_request_id: string | null; designer_delivered_at: string | null;
   social_confirmed_at: string | null; status_changed_at: string | null;
   column_entered_at: Record<string, string> | null; blocked_reason: string | null;
@@ -45,9 +49,17 @@ function enteredAt(c: CardRow): string | null {
  * a operação está travada quando ela está no prazo.
  */
 export function diasAteOPost(c: CardRow, hoje: string): number | null {
-  if (!c.due_date) return null;
-  const d = c.due_date.slice(0, 10);
-  return Math.round((new Date(`${d}T12:00:00Z`).getTime() - new Date(`${hoje}T12:00:00Z`).getTime()) / 86400000);
+  // ── A DATA CERTA, NÃO A QUE ESTAVA À MÃO ────────────────────────────────
+  //
+  // Isto lia `due_date` direto. Os dados desmentiram o campo: de 74 cards publicados com as duas
+  // datas, `due_date` batia com a publicação real em 8. Em 42 estava mais de um dia ANTES — é
+  // prazo de produção, adiantado de propósito para a arte ficar pronta.
+  //
+  // Resultado no grupo do designer (10/09): quatro cards com "SEX 11" no título cobrados na
+  // quinta como "o post é HOJE". Cobrar um dia antes, todo dia, é como o time para de ler.
+  const alvo = dataDoPost(c, hoje);
+  if (!alvo) return null;
+  return Math.round((new Date(`${alvo.data}T12:00:00Z`).getTime() - new Date(`${hoje}T12:00:00Z`).getTime()) / 86400000);
 }
 
 /**
