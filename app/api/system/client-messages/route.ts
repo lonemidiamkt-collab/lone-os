@@ -234,7 +234,15 @@ export async function POST(req: NextRequest) {
         // Quarta/Sexta: texto do dia. Cliente com Meta → mensagem de tráfego;
         // só-social → mensagem social (foco em arte). Dedup por grupo evita o
         // texto duplicado quando dois clientes compartilham o mesmo grupo.
-        const neutro = c.meta_ad_account_id ? supportMessageFor(kind) : socialMessageFor(kind);
+        // As últimas mensagens que ESTE grupo recebeu, para não repetir a frase. Sem isso o
+        // sorteio podia devolver a mesma duas semanas seguidas — e é a repetição, mais que o
+        // texto, que faz parecer robô.
+        const { data: ultimas } = await supabaseAdmin.from("cs_outbound")
+          .select("texto").eq("group_jid", c.whatsapp_group_jid as string)
+          .eq("destino", "cliente").eq("enviado", true)
+          .order("created_at", { ascending: false }).limit(6);
+        const recentes = (ultimas ?? []).map((u) => (u.texto as string) || "");
+        const neutro = c.meta_ad_account_id ? supportMessageFor(kind, recentes) : socialMessageFor(kind, recentes);
         // TRÊS ESTÁGIOS, nesta ordem — a mensagem só chega ao cliente depois de o Roberto ler:
         //   desligado  → texto de sempre (o sorteio de 5 frases)
         //   "revisao"  → o agente ESCREVE a contextual e manda pro GRUPO INTERNO; o cliente

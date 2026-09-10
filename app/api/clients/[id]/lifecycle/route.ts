@@ -67,5 +67,68 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // ── O TIME PRECISA SABER ────────────────────────────────────────────────
+  //
+  // Roberto (10/09): "ao ser feito um churn, deveria ser aviso no grupo com o motivo e as
+  // observações." Hoje o cliente sai em silêncio: alguém arquiva pela tela e o resto descobre
+  // quando estranha a ausência no board. Enquanto isso o tráfego segue gastando verba, o social
+  // segue programando post e o designer segue produzindo arte para quem já foi embora.
+  //
+  // O `lifecycle` também acompanha: era só `active=false`, e a coluna nova ficava dizendo "ativo".
+  try {
+    const { registrarHistorico } = await import("@/lib/clients/historico");
+    const { textoAvisoChurn } = await import("@/lib/clients/aviso-churn");
+    const { csSendGroupText } = await import("@/lib/cs/notify");
+
+    const { data: membro } = await supabaseAdmin
+      .from("team_members").select("name").eq("email", user.email).maybeSingle();
+    const quem = (membro?.name as string) || user.email;
+
+    if (d.action === "archive") {
+      await supabaseAdmin.from("clients").update({ lifecycle: "inativo" }).eq("id", id);
+      // Fecha o ciclo aberto: sem isto, "há quanto tempo é cliente" continuaria contando.
+      await supabaseAdmin.from("client_lifecycles")
+        .update({ encerrou_em: new Date().toISOString().slice(0, 10), motivo: d.category })
+        .eq("client_id", id).is("encerrou_em", null);
+
+      const { data: cli } = await supabaseAdmin.from("clients")
+        .select("nome_fantasia, name, assigned_social, join_date, service_type").eq("id", id).maybeSingle();
+      const { data: ciclo } = await supabaseAdmin.from("client_lifecycles")
+        .select("iniciou_em").eq("client_id", id).order("ciclo", { ascending: true }).limit(1).maybeSingle();
+
+      const nome = (cli?.nome_fantasia as string) || (cli?.name as string) || "Cliente";
+      const texto = textoAvisoChurn({
+        cliente: nome,
+        motivo: d.category,
+        motivoDetalhe: d.reason ?? null,
+        entrada: (ciclo?.iniciou_em as string) || (cli?.join_date as string) || null,
+        saida: new Date().toISOString().slice(0, 10),
+        responsavel: (cli?.assigned_social as string) ?? null,
+        porQuem: quem,
+        // "Pausa temporária (pretende voltar)" muda a instrução: pausar não é desmontar.
+        pretendeVoltar: d.category === "pausa",
+      });
+
+      const jid = process.env.CS_INTERNAL_GROUP_JID || null;
+      if (jid) {
+        await csSendGroupText(jid, texto, undefined, { origem: "churn-aviso", destino: "interno" })
+          .catch((e) => console.error("[lifecycle] aviso de churn:", e));
+      }
+
+      await registrarHistorico({
+        clientId: id, tipo: "status", ator: quem,
+        descricao: `Cliente arquivado — ${d.category}${d.reason ? `: ${d.reason}` : ""}`,
+      });
+    } else {
+      await supabaseAdmin.from("clients").update({ lifecycle: "ativo" }).eq("id", id);
+      await registrarHistorico({ clientId: id, tipo: "status", ator: quem, descricao: "Cliente reativado" });
+    }
+  } catch (e) {
+    // Aviso é consequência, não a operação: o arquivamento já aconteceu e não pode ser desfeito
+    // porque o WhatsApp falhou.
+    console.error("[lifecycle] pós-arquivamento:", e);
+  }
+
   return NextResponse.json({ success: true, client: data });
 }
