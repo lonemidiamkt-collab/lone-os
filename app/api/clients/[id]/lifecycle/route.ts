@@ -110,7 +110,16 @@ export async function POST(
         pretendeVoltar: d.category === "pausa",
       });
 
-      const jid = process.env.CS_INTERNAL_GROUP_JID || null;
+      // ── O GRUPO CERTO ────────────────────────────────────────────────
+      //
+      // Mandei o primeiro aviso para o CS_INTERNAL_GROUP_JID — o grupo geral de operação. Eu tinha
+      // conferido que não era grupo de CLIENTE, e parei aí: não conferi se era o grupo CERTO.
+      // Entrada e saída de cliente é assunto de cadastro, e é lá que ficam contrato e oferta.
+      //
+      // Cai no geral só se o de cadastro não estiver configurado — melhor no grupo errado que em
+      // nenhum, porque cliente que sai em silêncio é o problema que este aviso existe para
+      // resolver.
+      const jid = process.env.CS_CADASTRO_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID || null;
       if (jid) {
         await csSendGroupText(jid, texto, undefined, { origem: "churn-aviso", destino: "interno" })
           .catch((e) => console.error("[lifecycle] aviso de churn:", e));

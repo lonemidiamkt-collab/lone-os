@@ -37,7 +37,7 @@ import {
   BarChart2, PenLine, Star, Upload, Image as ImageIcon,
   Link as LinkIcon, Mic, Palette, Award, ShieldAlert, Plus, Download, Pencil,
   Facebook, Settings, Link2, Unlink, ChevronDown, Check, Loader2, Target, ExternalLink,
-  Eye, EyeOff, Shield, Building2, Trash2,
+  Eye, EyeOff, Shield, Building2, Trash2, Archive,
 } from "lucide-react";
 import EditClientModal from "@/components/EditClientModal";
 import dynamic from "next/dynamic";
@@ -595,6 +595,19 @@ export default function ClientDetailPage() {
                   <Pencil size={12} />
                   Editar
                 </button>
+                {/* ENCERRAR PARCERIA — aqui, e não no meio dos atalhos de board.
+                    Eu tinha colocado lá embaixo, entre "Board Social" e "Demandas": o botão
+                    renderizava e ninguém achava. Ação de ciclo de vida do cliente pertence à barra
+                    de ações da ficha, ao lado de Editar e Excluir. */}
+                {client.active !== false && (
+                  <button
+                    onClick={() => setEncerrando(true)}
+                    className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-lone-warning-border hover:text-lone-warning"
+                  >
+                    <Archive size={12} />
+                    Encerrar parceria
+                  </button>
+                )}
                 <button
                   onClick={() => { setShowDeleteModal(true); setDeletePassword(""); setDeleteError(""); }}
                   className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-destructive/30 hover:text-destructive"
@@ -1004,12 +1017,6 @@ export default function ClientDetailPage() {
                     </button>
                     <button onClick={() => setActiveTab("content")} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground transition-colors hover:border-primary/40">
                       <Palette size={12} /> Demandas
-                    </button>
-                    {/* ENCERRAR PARCERIA. Fica junto das outras ações, discreto: é uma ação rara e
-                        séria, não deve competir por atenção com o trabalho do dia. */}
-                    <button onClick={() => setEncerrando(true)}
-                      className="ml-auto flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-lone-danger-border hover:text-lone-danger">
-                      Encerrar parceria
                     </button>
                   </div>
                 </div>

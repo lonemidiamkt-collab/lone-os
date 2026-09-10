@@ -21,7 +21,7 @@ import {
 import {
   Search, UserPlus, ChevronRight,
   ExternalLink, MoreHorizontal, Facebook, AlertTriangle, Zap,
-  Check, X, Loader2, Clock, Send, Archive, RotateCcw,
+  Check, X, Loader2, Clock, Send, Archive, RotateCcw, Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { mockAdCampaigns } from "@/lib/mockData";
@@ -156,6 +156,27 @@ export default function ClientsPage() {
   const [archiveCategory, setArchiveCategory] = useState<MotivoSaida | "">("");
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+  // Exclusão definitiva de cliente arquivado — pede o nome digitado, porque leva junto reuniões,
+  // cards, demandas e histórico. Um "tem certeza?" não é proteção suficiente para isso.
+  const [excluirAlvo, setExcluirAlvo] = useState<Client | null>(null);
+  const [excluirTexto, setExcluirTexto] = useState("");
+  const [excluirErro, setExcluirErro] = useState<string | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
+
+  const excluirDeVez = async () => {
+    if (!excluirAlvo) return;
+    setExcluindo(true);
+    setExcluirErro(null);
+    try {
+      const r = await authedFetch(`/api/clients/${excluirAlvo.id}`, { method: "DELETE" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setExcluirErro(j?.error ?? `não consegui excluir (${r.status})`); return; }
+      setExcluirAlvo(null);
+      setArchived((a) => a.filter((c) => c.id !== excluirAlvo.id));
+    } catch (e) {
+      setExcluirErro((e as Error).message);
+    } finally { setExcluindo(false); }
+  };
 
   const loadArchived = () => {
     setArchivedLoading(true);
@@ -264,6 +285,53 @@ export default function ClientsPage() {
             router.push(`/clients/${id}`);
           }}
         />
+      )}
+
+      {/* ── EXCLUIR DE VEZ ────────────────────────────────────────────────
+          Pede o nome digitado, não um "tem certeza?". A exclusão leva junto reuniões, cards,
+          pedidos e histórico — coisas que os indicadores contam. Digitar o nome é o único atrito
+          que faz a pessoa parar e ler o que vai perder. */}
+      {excluirAlvo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm p-4"
+             onClick={() => !excluindo && setExcluirAlvo(null)}>
+          <div onClick={(e) => e.stopPropagation()}
+               className="w-full max-w-md rounded-xl bg-card border border-destructive/30 p-5 space-y-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Trash2 size={15} className="text-destructive" /> Excluir cadastro
+            </h3>
+            <p className="text-[12.5px] text-muted-foreground">
+              Isso apaga <span className="text-foreground font-medium">{excluirAlvo.name}</span> do
+              banco, junto com <strong>reuniões, cards, pedidos e todo o histórico</strong>. Não dá
+              para desfazer.
+            </p>
+            <p className="text-[12px] text-muted-foreground">
+              Se a ideia é só tirar da carteira, <strong>Reativar/Arquivar</strong> resolve e mantém
+              o histórico.
+            </p>
+            <label className="block text-[11px] text-muted-foreground">
+              Digite <span className="text-foreground font-medium">{excluirAlvo.name}</span> para confirmar:
+              <input
+                value={excluirTexto}
+                onChange={(e) => setExcluirTexto(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && excluirTexto.trim() === excluirAlvo.name) excluirDeVez(); }}
+                autoFocus
+                className="mt-1 w-full p-2 rounded-lg bg-surface border border-border text-[12.5px] text-foreground"
+              />
+            </label>
+            {excluirErro && <p className="text-[11.5px] text-destructive">{excluirErro}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setExcluirAlvo(null)} disabled={excluindo}
+                      className="btn-ghost text-xs">Cancelar</button>
+              <button
+                onClick={excluirDeVez}
+                disabled={excluindo || excluirTexto.trim() !== excluirAlvo.name}
+                className="text-xs px-3 py-2 rounded-lg bg-destructive text-destructive-foreground font-medium flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Trash2 size={13} /> {excluindo ? "Excluindo…" : "Excluir de vez"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {archiveTarget && (
@@ -540,13 +608,30 @@ export default function ClientsPage() {
                         {c.churnReason ? ` · ${c.churnReason}` : ""}
                       </p>
                     </div>
-                    <button
-                      onClick={() => handleReactivate(c.id)}
-                      disabled={lifecycleBusy}
-                      className="btn-secondary flex items-center gap-2 whitespace-nowrap text-xs disabled:opacity-50"
-                    >
-                      <RotateCcw size={13} /> Reativar
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => handleReactivate(c.id)}
+                        disabled={lifecycleBusy}
+                        className="btn-secondary flex items-center gap-2 whitespace-nowrap text-xs disabled:opacity-50"
+                      >
+                        <RotateCcw size={13} /> Reativar
+                      </button>
+                      {/* EXCLUIR DE VEZ. Roberto (10/09): "na aba onde ficam os arquivados não tem
+                          como excluir cadastro."
+                          Fica só aqui, e não na lista de ativos: apagar um cliente que ainda
+                          trabalha com a gente não é uma ação que deva estar a um clique. Aqui é
+                          faxina de cadastro duplicado ou de teste — e mesmo assim leva confirmação
+                          com o nome digitado, porque apaga junto reuniões, cards e histórico. */}
+                      {isAdmin && (
+                        <button
+                          onClick={() => { setExcluirAlvo(c); setExcluirTexto(""); setExcluirErro(null); }}
+                          title="Excluir cadastro de vez"
+                          className="btn-ghost text-xs flex items-center gap-1.5 border border-border text-muted-foreground hover:border-destructive/40 hover:text-destructive"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

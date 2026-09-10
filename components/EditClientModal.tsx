@@ -84,9 +84,31 @@ export default function EditClientModal({ client, onClose }: Props) {
 
   const set = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
-  const needsTraffic = form.serviceType === "lone_growth" || form.serviceType === "assessoria_trafego";
-  const needsSocial = form.serviceType === "lone_growth" || form.serviceType === "assessoria_social";
-  const needsDesigner = form.serviceType === "lone_growth" || form.serviceType === "assessoria_design";
+  // ── QUEM APARECE NA EQUIPE RESPONSÁVEL ─────────────────────────────────
+  //
+  // Roberto (10/09): "fui editar o responsável pela Atlas na parte de designer e não consigo —
+  // isso ocorre apenas nos contratos de social mídia."
+  //
+  // A regra era só o tipo de contrato, e ela estava errada em dois níveis:
+  //
+  // 1. NA PRÁTICA. Três dos quatro clientes "Assessoria Social" TÊM designer — arte de social é
+  //    feita por designer. A taxonomia dizia que não precisa; a operação diz que precisa.
+  //
+  // 2. NO ESTRAGO. O save fazia `assignedDesigner: needsDesigner ? form.assignedDesigner : ""`.
+  //    Ou seja: editar qualquer coisa num cliente de social APAGAVA o designer — o campo estava
+  //    escondido e o formulário gravava vazio por cima. É a sobrescrita por vazio de novo, agora
+  //    escrita por mim mesmo dentro do modal.
+  //
+  // Agora o campo aparece quando o contrato pede OU quando já existe alguém ali. E o save nunca
+  // apaga quem não estava na tela.
+  const temTraffic = !!client.assignedTraffic;
+  const temSocial = !!client.assignedSocial;
+  const temDesigner = !!client.assignedDesigner;
+  const needsTraffic = form.serviceType === "lone_growth" || form.serviceType === "assessoria_trafego" || temTraffic;
+  const needsSocial = form.serviceType === "lone_growth" || form.serviceType === "assessoria_social" || temSocial;
+  const needsDesigner = form.serviceType === "lone_growth" || form.serviceType === "assessoria_design"
+    || form.serviceType === "assessoria_social"   // social sem designer não produz arte
+    || temDesigner;
 
   const handleSave = () => {
     setSaving(true);
@@ -107,9 +129,11 @@ export default function EditClientModal({ client, onClose }: Props) {
       serviceType: form.serviceType as Client["serviceType"],
       paymentMethod: form.paymentMethod as Client["paymentMethod"],
       leadSource: form.leadSource as Client["leadSource"],
-      assignedTraffic: needsTraffic ? form.assignedTraffic : "",
-      assignedSocial: needsSocial ? form.assignedSocial : "",
-      assignedDesigner: needsDesigner ? form.assignedDesigner : "",
+      // `undefined` = não mexe. Só grava o que ESTAVA na tela — campo escondido não pode virar
+      // instrução de apagar. Para tirar alguém da carteira, existe a opção vazia no próprio select.
+      assignedTraffic: needsTraffic ? form.assignedTraffic : undefined,
+      assignedSocial: needsSocial ? form.assignedSocial : undefined,
+      assignedDesigner: needsDesigner ? form.assignedDesigner : undefined,
       metaAdAccountId: form.metaAdAccountId
         ? (form.metaAdAccountId.startsWith("act_") ? form.metaAdAccountId : `act_${form.metaAdAccountId}`)
         : undefined,
