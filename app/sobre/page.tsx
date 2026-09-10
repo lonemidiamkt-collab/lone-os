@@ -612,9 +612,11 @@ const MODULES: Module[] = [
     title: "Designer",
     shortDesc: "Carteira de clientes + quadro de tarefas com pedidos e auto-iniciadas",
     whoUses: "Admin, Manager, Designer",
-    context: "Espaço do Rodrigo. Ele tem 26 clientes atendidos como designer (os Lone Growth). Pode ver a carteira completa, ler o briefing de cada um, criar tarefas próprias (auto-iniciadas) quando quer trabalhar em algo que ele mesmo identificou, e recebe pedidos do tráfego/social no Quadro de Tarefas.",
+    context: "Espaço dos designers. Cada um abre no PRÓPRIO quadro — as demandas seguem a carteira (clients.assigned_designer): Rodrigo 27 clientes, Gabriel Sodre 13. O seletor 'Quadro de' existe pra quando um precisa ajudar o outro: o quadro do colega abre editável, só sinalizado. Admin tem a visão geral. Cada um vê a carteira, lê o briefing, cria tarefas próprias e recebe pedidos do tráfego/social no Quadro de Tarefas.",
     howItWorks: [
       "Na aba /design, o sidebar tem 4 opções: Quadro de Tarefas, Meus Clientes, Minhas Tarefas, Performance.",
+      "No topo, 'Quadro de' escolhe de quem são as demandas na tela. O designer abre no dele; a escolha fica salva entre sessões.",
+      "Pra ajudar o colega: troca o quadro, abre a demanda e clica 'Assumir esta demanda' — ela passa a contar no seu quadro sem mexer no cadastro do cliente. 'Devolver à carteira' desfaz.",
       "Em 'Meus Clientes' vê o grid dos 26 clientes — logo, status, pedidos abertos, última entrega.",
       "Clica num cliente → drawer abre com briefing completo (tom de voz, branding, campanha atual).",
       "Pode editar o briefing ali mesmo (função disponível pra qualquer role).",
@@ -622,6 +624,9 @@ const MODULES: Module[] = [
       "Tarefa auto-iniciada fica marcada com tag ⚡ pra diferenciar de pedidos externos.",
     ],
     features: [
+      "Quadro por designer, tirado da carteira do cliente — designer novo ganha quadro sozinho, sem mexer no código",
+      "Botão pra assumir demanda do colega, com o dono registrado na demanda (antes o nome ia escrito no título, tipo '[Gabriel] SEX 11')",
+      "Quadro 'sem designer' agrupa os clientes que ainda não têm responsável no cadastro",
       "Grid de carteira com visual rápido (logo, stats, pedidos abertos)",
       "Drawer com briefing completo + edição inline",
       "Botão 'Nova Tarefa' pro designer criar trabalho próprio",
@@ -633,6 +638,7 @@ const MODULES: Module[] = [
     ],
     tips: [
       "Abra o drawer do cliente ANTES de começar uma tarefa — é onde está o tom de voz e o que não fazer.",
+      "Se uma demanda aparecer no quadro errado, o que está errado é o designer do cliente no cadastro — corrija lá, não no título da demanda.",
       "Se o briefing estiver vazio, preencha ali mesmo — vale pra sempre.",
       "Use tarefa auto-iniciada pra bloquear tempo de trabalho em brainstorming, não só execução.",
     ],

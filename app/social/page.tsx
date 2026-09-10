@@ -2245,7 +2245,7 @@ export default function SocialPage() {
   const [showBatchCreate, setShowBatchCreate] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
-  const { role, currentUser } = useRole();
+  const { role, currentUser, hydrated } = useRole();
 
   // ── Zustand stores (migrado de AppStateContext) ───────────────────────────
   const clients = useClientsStore((s) => s.clients);
@@ -2269,6 +2269,9 @@ export default function SocialPage() {
   const refreshContent = useContentStore((s) => s.refresh);
   const addDesignRequest = useContentStore((s) => s.addDesignRequest);
   const sendingDesignRef = useRef<Set<string>>(new Set()); // cards com demanda em voo (anti-duplicata)
+  // Card que o ?card= já tentou abrir. O efeito depende de contentCards e roda de novo a cada poll;
+  // sem essa trava, a busca no servidor dispararia repetidamente pro mesmo id.
+  const cardBuscadoRef = useRef<string | null>(null);
   const subContent = useContentStore((s) => s.subscribeRealtime);
 
   const onboarding = useOperationalStore((s) => s.onboarding);
@@ -2325,17 +2328,26 @@ export default function SocialPage() {
     setCurrentTab(activeTab);
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Carrega workspace preferido do usuário (persiste entre sessões)
+  // Carrega workspace preferido do usuário (persiste entre sessões).
+  // Quem é social abre no PRÓPRIO quadro quando ainda não escolheu: com o padrão "Todos" ele passaria
+  // a ver os cards de todo mundo de cara, que é o oposto do que o Roberto pediu.
+  // Espera a hidratação: antes dela o contexto devolve o perfil padrão (Roberto/admin), e decidir
+  // com esse valor daria o quadro errado justamente pra quem não é admin.
+  const prefCarregadaRef = useRef(false);
   useEffect(() => {
+    if (!hydrated || prefCarregadaRef.current) return;
+    prefCarregadaRef.current = true;
     authedFetch("/api/preferences?keys=social_workspace")
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (data?.social_workspace && typeof data.social_workspace === "string") {
           setAdminWorkspaceRaw(data.social_workspace);
+        } else if (role === "social" && currentUser) {
+          setAdminWorkspaceRaw(currentUser);
         }
       })
-      .catch(() => { /* silent */ });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+      .catch(() => { if (role === "social" && currentUser) setAdminWorkspaceRaw(currentUser); });
+  }, [hydrated, role, currentUser]);
 
   // Atalho de URL: ?action=new-content abre direto o modal "Novo Conteúdo"
   // Disparado pelo dropdown do header global e pelo command palette (GlobalSearch).
@@ -2354,13 +2366,36 @@ export default function SocialPage() {
       setShowArchived(true);
       router.replace(pathname, { scroll: false });
     }
-    // Atalho ?card=<id> (vindo do bloco "Artes prontas" da Home): abre o card direto.
+    // Atalho ?card=<id> (vindo da notificação "Arte entregue" e do bloco "Artes prontas" da Home).
+    // O board carrega só cards ATIVOS. 2.632 avisos no banco apontam pra card que depois foi
+    // arquivado — e o código antigo, não achando na lista, não fazia NADA: nem abria, nem avisava,
+    // nem limpava o ?card= da URL. Era o "clico na notificação e não abre a arte".
     const cardId = searchParams.get("card");
-    if (cardId) {
+    if (cardId && cardId !== cardBuscadoRef.current) {
+      cardBuscadoRef.current = cardId;
       const card = contentCards.find((c) => c.id === cardId);
       if (card) {
         setSelectedCard(card);
         router.replace(pathname, { scroll: false });
+      } else if (contentCards.length) {
+        // Só busca no servidor depois que o board carregou — senão pergunta à toa no primeiro render.
+        (async () => {
+          try {
+            const r = await authedFetch(`/api/data/content/card?id=${encodeURIComponent(cardId)}`);
+            const txt = await r.text();
+            if (!r.ok) {
+              toast.error(r.status === 404 ? "Essa arte não existe mais — o card foi excluído." : "Não consegui abrir a arte.");
+              return;
+            }
+            const { card: achado, archived } = JSON.parse(txt) as { card: ContentCard; archived: boolean };
+            setSelectedCard(achado);
+            if (archived) toast.info("Esse card está arquivado. Ele abre aqui, mas não aparece no quadro.");
+          } catch {
+            toast.error("Não consegui abrir a arte.");
+          } finally {
+            router.replace(pathname, { scroll: false });
+          }
+        })();
       }
     }
     // Atalho ?client=<id> (vindo da ficha do cliente): filtra o board por esse cliente (seta a busca).
@@ -2376,7 +2411,10 @@ export default function SocialPage() {
 
   // Auth: use global session (no secondary login needed)
   const isDesigner = role === "designer";
-  const canSelectWorkspace = isAdmin || isDesigner;
+  // Roberto (10/09/2026): "assim como também deve ser no social midia para que quando um deles
+  // precise de ajuda o outro possa ajudar." O social ficava trancado no próprio quadro — não dava
+  // nem pra ver onde o colega estava afogado. Agora escolhe; o padrão continua sendo o dele.
+  const canSelectWorkspace = isAdmin || isDesigner || role === "social";
   const isReadOnly = isDesigner; // Designer can view but not move cards
 
   const team = useTeamMembers();
@@ -2704,7 +2742,7 @@ export default function SocialPage() {
           {canSelectWorkspace ? (
             <div className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground uppercase tracking-wider">
-                {isDesigner ? "Visualizando quadro de:" : "Monitorando Workspace de:"}
+                {isDesigner ? "Visualizando quadro de:" : role === "social" ? "Quadro de:" : "Monitorando Workspace de:"}
               </span>
               <div className="relative">
                 <select
@@ -2722,6 +2760,13 @@ export default function SocialPage() {
               {isDesigner && activeWorkspace !== "Todos" && (
                 <span className="text-[10px] text-muted-foreground border border-border px-2 py-1 rounded">
                   Modo leitura
+                </span>
+              )}
+              {role === "social" && activeWorkspace !== currentUser && (
+                <span className="text-[11px] text-lone-warning bg-lone-warning-bg border border-lone-warning-border px-2.5 py-1 rounded">
+                  {activeWorkspace === "Todos"
+                    ? "Visão geral — cards de todo mundo"
+                    : `Quadro de ${activeWorkspace} — o que mexer aqui é dele`}
                 </span>
               )}
             </div>

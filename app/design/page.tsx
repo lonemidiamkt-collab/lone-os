@@ -7,7 +7,9 @@ import CsAgentInbox from "@/components/cs/CsAgentInbox";
 import ContentCardModal from "@/components/ContentCardModal";
 import EmptyState from "@/components/ui/EmptyState";
 import CardArtAttachments from "@/components/kanban/CardArtAttachments";
+import { toast } from "sonner";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { ehDoQuadro, quadrosDisponiveis, contagemPorQuadro, donoDaDemanda, SEM_DONO } from "@/lib/design/dono";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
@@ -427,7 +429,7 @@ export default function DesignPage() {
 
   const pushNotification = useNotificationsStore((s) => s.push);
 
-  const { role, currentUser } = useRole();
+  const { role, currentUser, hydrated } = useRole();
 
   useEffect(() => {
     initClients();
@@ -447,6 +449,18 @@ export default function DesignPage() {
     window.addEventListener("focus", tick);
     return () => { clearInterval(interval); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); };
   }, [refreshContent]);
+  // ── QUADRO ATIVO (10/09/2026). Roberto: "o designer Rhodrigo está vendo as coisas do designer
+  // Gabriel". Cada designer abre no PRÓPRIO quadro; o seletor existe pra quando um precisa ajudar o
+  // outro — esconder o quadro do colega quebraria justamente o pedido dele.
+  const [quadro, setQuadroRaw] = useState<string | null>(null); // null = ainda não decidiu
+  const setQuadro = (valor: string) => {
+    setQuadroRaw(valor);
+    authedFetch("/api/preferences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "design_workspace", value: valor }),
+    }).catch(() => {});
+  };
   const [tab, setTab] = useState<TabView>("kanbans");
   const [kanbanGroupBy, setKanbanGroupBy] = useState<"person" | "client">("person"); // agrupar por pessoa ou por cliente (visão unificada)
   const { pendingTab, setPendingTab, setCurrentTab } = useNav();
@@ -628,13 +642,41 @@ export default function DesignPage() {
     return `${title ?? ""} ${clientName ?? ""} ${format ?? ""}`.toLowerCase().includes(boardQuery);
   };
 
-  // Filter content cards to only show clients assigned to this designer
+  // ── Quadros que existem hoje, tirados do dado (ver lib/design/dono.ts).
+  const quadros = useMemo(() => quadrosDisponiveis(designRequests, clients), [designRequests, clients]);
+  const contagens = useMemo(() => contagemPorQuadro(designRequests, clients), [designRequests, clients]);
+
+  // Preferência salva; na falta dela, o designer cai no próprio quadro e o admin na visão geral.
+  useEffect(() => {
+    // Só depois da hidratação: antes dela o contexto devolve o perfil padrão (admin), e o designer
+    // cairia na visão geral em vez do próprio quadro.
+    if (quadro !== null || !hydrated) return;
+    let vivo = true;
+    authedFetch("/api/preferences?keys=design_workspace")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!vivo) return;
+        const salvo = typeof data?.design_workspace === "string" ? data.design_workspace : "";
+        setQuadroRaw(salvo || (role === "designer" ? currentUser : "Todos"));
+      })
+      .catch(() => { if (vivo) setQuadroRaw(role === "designer" ? currentUser : "Todos"); });
+    return () => { vivo = false; };
+  }, [quadro, role, currentUser, hydrated]);
+
+  const quadroAtivo = quadro ?? (role === "designer" ? currentUser : "Todos");
+  // Olhando o quadro de outra pessoa: a interface avisa, mas NÃO trava — é pra ajudar.
+  const quadroDeOutro = role === "designer" && quadroAtivo !== currentUser;
+
+  // Cards do quadro ativo. O card segue a carteira do cliente (não existe atribuição por card).
   const myClientIds = useMemo(() => {
-    if (role === "designer") {
-      return new Set(clients.filter((c) => c.assignedDesigner === currentUser).map((c) => c.id));
-    }
-    return null; // null = show all (admin/manager)
-  }, [clients, role, currentUser]);
+    if (quadroAtivo === "Todos") return null; // null = tudo
+    return new Set(
+      clients.filter((c) => {
+        const dono = (c.assignedDesigner ?? "").trim();
+        return quadroAtivo === SEM_DONO ? !dono : dono === quadroAtivo;
+      }).map((c) => c.id),
+    );
+  }, [clients, quadroAtivo]);
 
   const myContentCards = useMemo(() => {
     let list = myClientIds ? contentCards.filter((c) => myClientIds.has(c.clientId)) : contentCards;
@@ -642,9 +684,13 @@ export default function DesignPage() {
     return list;
   }, [contentCards, myClientIds, boardQuery]);
 
-  // Designer vê TODAS as demandas — não filtra por clientes atribuídos,
-  // pois o designer da agência atende todos os clientes.
-  const myDesignRequests = useMemo(() => designRequests, [designRequests]);
+  // As DEMANDAS não eram filtradas — o comentário antigo dizia "o designer da agência atende todos
+  // os clientes", verdade enquanto havia um só. Era isso que punha as 184 do Gabriel na tela do
+  // Rodrigo junto com as 490 dele.
+  const myDesignRequests = useMemo(
+    () => designRequests.filter((d) => ehDoQuadro(d, clients, quadroAtivo)),
+    [designRequests, clients, quadroAtivo],
+  );
 
   // Get social media people from content cards
   const socialPeople = useMemo(() => {
@@ -694,6 +740,39 @@ export default function DesignPage() {
       <div className="p-6 space-y-6 animate-fade-in">
         {/* Banner de feriados/datas comemorativas do mês — pra planejamento criativo */}
         <MonthObservancesAlert title="Datas e feriados deste mês" />
+
+        {/* Seletor de quadro. Cada designer abre no seu; trocar serve pra ajudar o outro, e por
+            isso o quadro do colega abre EDITÁVEL — só sinalizado. */}
+        {quadros.length > 1 && (
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs text-muted-foreground uppercase tracking-wider">Quadro de:</span>
+            <div className="relative">
+              <select
+                value={quadroAtivo}
+                onChange={(e) => setQuadro(e.target.value)}
+                className="bg-card border border-border rounded-lg px-4 py-2 text-sm text-foreground outline-none focus:border-primary appearance-none cursor-pointer pr-8"
+              >
+                <option value="Todos">Visão geral (todos os designers)</option>
+                {quadros.map((nome) => (
+                  <option key={nome} value={nome}>
+                    {nome}{contagens[nome] ? ` — ${contagens[nome]} aberta${contagens[nome] > 1 ? "s" : ""}` : ""}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            </div>
+            {quadroDeOutro && (
+              <span className="text-[11px] text-lone-warning bg-lone-warning-bg border border-lone-warning-border px-2.5 py-1 rounded">
+                Você está no quadro de {quadroAtivo} — o que mexer aqui é dele
+              </span>
+            )}
+            {quadroAtivo === SEM_DONO && (
+              <span className="text-[11px] text-muted-foreground border border-border px-2.5 py-1 rounded">
+                Clientes sem designer no cadastro
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Tab selector */}
         <div className="flex items-center gap-3 flex-wrap">
@@ -1940,6 +2019,38 @@ export default function DesignPage() {
               )}
               <button onClick={() => setBriefingReq(null)} className="btn-ghost flex-1 text-sm">Fechar</button>
             </div>
+            {/* Assumir/devolver. É o que torna o "um ajuda o outro" visível: sem isso a ajuda
+                acontece e ninguém sabe de quem é a demanda no dia seguinte. */}
+            {role === "designer" && (() => {
+              const dono = donoDaDemanda(briefingReq, clients);
+              const meu = dono === currentUser;
+              const assumida = !!(briefingReq.assignedDesigner ?? "").trim();
+              return (
+                <div className="px-5 pb-5 -mt-1 flex items-center justify-between gap-3">
+                  <span className="text-[11px] text-muted-foreground">
+                    {dono ? `Demanda de ${dono}${assumida ? " (assumida)" : ""}` : "Cliente sem designer no cadastro"}
+                  </span>
+                  <button
+                    onClick={async () => {
+                      const novo = meu && assumida ? "" : currentUser;
+                      try {
+                        // updateDesignRequest RELANÇA em erro (o store faz rollback e joga pra cima).
+                        // Sem catch, a promessa morria sem ninguém saber e a tela mostrava o estado
+                        // antigo sem explicar por quê.
+                        await updateDesignRequest(briefingReq.id, { assignedDesigner: novo });
+                        setBriefingReq({ ...briefingReq, assignedDesigner: novo || undefined });
+                        toast.success(novo ? `Demanda assumida por ${currentUser}.` : "Demanda devolvida à carteira do cliente.");
+                      } catch {
+                        toast.error("Não consegui salvar. Tenta de novo?");
+                      }
+                    }}
+                    className="btn-ghost text-xs px-3 py-1.5"
+                  >
+                    {meu && assumida ? "Devolver à carteira" : "Assumir esta demanda"}
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

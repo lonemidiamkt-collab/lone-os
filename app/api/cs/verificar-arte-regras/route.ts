@@ -64,6 +64,9 @@ export async function POST(req: NextRequest) {
       title: `⚠️ Arte pode violar regra — ${(card.client_name as string) || "cliente"}`,
       body: `${quem}"${card.title as string}": ${r.data.resumo || problemas[0]}. Abra o card e clique em "Revisar arte" pra ver o detalhe.`,
       clientId: card.client_id as string,
+      // O aviso manda "abra o card" — então o clique tem que LEVAR ao card. Sem isso ele caía na
+      // ficha do cliente e a pessoa tinha que caçar a arte no board (343 avisos assim no banco).
+      cardId: card.id as string,
     });
     return NextResponse.json({ notified: true, ...r.data });
   }

@@ -21,6 +21,22 @@ function timeAgo(iso: string): string {
   return `${Math.floor(diff / 86400)}d`;
 }
 
+/**
+ * Para onde o clique leva — null quando não há para onde ir.
+ *
+ * O null importa: 90 avisos no banco não têm card nem cliente ("Link de onboarding gerado",
+ * "Cliente aprovado"). Eles renderizavam como botão, com hover, e clicar não fazia nada. Agora o
+ * item aparece como texto, sem convite ao clique.
+ */
+export function destinoDaNotificacao(n: { title?: string; cardId?: string; clientId?: string }): string | null {
+  // Card arquivado NÃO abre no quadro (ele não está lá) — abre a lista de Arquivadas, que é
+  // onde a pessoa desarquiva. Mandar pro cadastro do cliente era um beco sem saída.
+  if (/arquivad/i.test(n.title ?? "")) return "/social?arquivadas=1";
+  if (n.cardId) return `/social?card=${n.cardId}`;
+  if (n.clientId) return `/clients/${n.clientId}`;
+  return null;
+}
+
 export default function NotificationCenter() {
   const notifications = useNotificationsStore((s) => s.notifications);
   const markNotificationRead = useNotificationsStore((s) => s.markRead);
@@ -33,13 +49,7 @@ export default function NotificationCenter() {
   // ou a ficha do cliente. Sem alvo, só marca como lida.
   const abrir = (notif: { id: string; read: boolean; title?: string; cardId?: string; clientId?: string }) => {
     if (!notif.read) markNotificationRead(notif.id);
-    // Card arquivado NÃO abre no quadro (ele não está lá) — abre a lista de Arquivadas, que é
-    // onde a pessoa desarquiva. Mandar pro cadastro do cliente era um beco sem saída.
-    const arquivada = /arquivad/i.test(notif.title ?? "");
-    const destino = arquivada
-      ? "/social?arquivadas=1"
-      : notif.cardId ? `/social?card=${notif.cardId}`
-      : notif.clientId ? `/clients/${notif.clientId}` : null;
+    const destino = destinoDaNotificacao(notif);
     if (destino) { setOpen(false); router.push(destino); }
   };
 
@@ -132,13 +142,16 @@ export default function NotificationCenter() {
                   {filtered.slice(0, 50).map((notif) => {
                     const config = TYPE_CONFIG[notif.type] ?? TYPE_CONFIG.system;
                     const Icon = config.icon;
+                    const clicavel = !!destinoDaNotificacao(notif);
                     return (
                       <button
                         key={notif.id}
                         onClick={() => abrir(notif)}
-                        className={`w-full text-left px-5 py-3 transition-all hover:bg-card/[0.02] ${
-                          !notif.read ? "bg-primary/[0.015]" : ""
-                        }`}
+                        aria-disabled={!clicavel}
+                        title={clicavel ? undefined : "Este aviso não tem tela pra abrir."}
+                        className={`w-full text-left px-5 py-3 transition-all ${
+                          clicavel ? "hover:bg-card/[0.02]" : "cursor-default"
+                        } ${!notif.read ? "bg-primary/[0.015]" : ""}`}
                       >
                         <div className="flex gap-3">
                           <div className={`w-7 h-7 rounded-lg ${config.bg} flex items-center justify-center shrink-0 mt-0.5`}>

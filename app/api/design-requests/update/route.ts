@@ -21,6 +21,12 @@ export async function POST(req: NextRequest) {
   if (updates.deadline !== undefined) row.deadline = updates.deadline;
   if (updates.attachments !== undefined) row.attachments = updates.attachments;
   if (updates.designerNote !== undefined) row.designer_note = updates.designerNote;
+  // "Assumir demanda": string vazia devolve à carteira do cliente (NULL), não grava "" — vazio no
+  // banco faria a regra de dono achar que alguém assumiu e não achar quem.
+  if (updates.assignedDesigner !== undefined) {
+    const nome = String(updates.assignedDesigner ?? "").trim();
+    row.assigned_designer = nome || null;
+  }
 
   if (Object.keys(row).length === 0) return NextResponse.json({ success: true });
 
