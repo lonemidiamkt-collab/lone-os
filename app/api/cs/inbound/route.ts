@@ -58,6 +58,7 @@ import { sugerirResposta } from "@/lib/cs/resposta";
 import { sincronizarBriefingAprendido } from "@/lib/cs/briefing-sync";
 import { conversarComEquipe } from "@/lib/cs/conversa";
 import { analisarSentimentoCliente } from "@/lib/cs/sentimento";
+import { decidirAlerta } from "@/lib/cs/portao-satisfacao";
 import { detectarEventoFuturo, pareceTerData } from "@/lib/cs/evento";
 import { montarSnapshotCS } from "@/lib/cs/snapshot";
 import { ehPerguntaProLone, ehVisaoGeralDemandas } from "@/lib/cs/intent";
@@ -413,20 +414,33 @@ async function checarSatisfacao(
     // jogado fora, e o agente NUNCA mexia em attention_level — então um cliente visivelmente bravo no
     // WhatsApp seguia verde na ficha da Jornada (que deriva "percebe valor" desse campo).
     // Reusa mood_entries, o mesmo caminho que o feedback manual da plataforma já usa.
-    const mood = s.churn ? "angry" : s.sentimento === "negativo" ? "frustrated" : s.sentimento === "positivo" ? "happy" : "neutral";
+    // PORTÃO (10/09/2026): o que o modelo achou passa por lib/cs/portao-satisfacao antes de virar
+    // barulho. Auditoria dos 66 alertas de jul→set: ~50 eram falso-positivo — elogio ao funcionário
+    // dele, crítica de arte, número de campanha, gíria. O portão só DESLIGA alerta, nunca liga.
+    const porta = decidirAlerta(s, mensagem);
+    const alerta = porta.alerta;
+
+    // O mood segue o portão, não o modelo cru: mood_entries alimenta negativeMoodRecent no risco de
+    // churn (lib/health/compute.ts). Gravar "frustrated" por um "Movimento parado" é o mesmo erro
+    // aparecendo no score em vez de no grupo.
+    const mood = porta.churn ? "angry" : (alerta && s.sentimento === "negativo") ? "frustrated"
+      : s.sentimento === "positivo" ? "happy" : "neutral";
     void supabaseAdmin.from("mood_entries").insert({
       client_id: client.id, mood,
-      note: `🤖 (agente, do WhatsApp) "${mensagem.slice(0, 200)}" — ${s.motivo}`,
+      note: `🤖 (agente, do WhatsApp) "${mensagem.slice(0, 200)}" — ${s.motivo}`
+        + (porta.veto ? ` [não alertado: ${porta.veto}, sobre=${s.sobre}]` : ""),
       recorded_by: "🤖 Agente CS",
       date: ymd(spNow()),
     }).then(() => {}, () => {});
 
-    const alerta = s.churn || (s.sentimento === "negativo" && (s.risco === "medio" || s.risco === "alto"));
+    if (porta.veto) {
+      console.log(`[CS/inbound] termômetro VETADO (${porta.veto}) sobre=${s.sobre} risco=${s.risco} — "${mensagem.slice(0, 70)}"`);
+    }
 
     // Sinal grave sobe o nível de atenção do cliente (só ESCALA, nunca abaixa sozinho — quem melhora
     // o cliente é o time, e o rebaixamento fica com o humano).
     if (alerta) {
-      const novo = s.churn ? "critical" : "high";
+      const novo = porta.churn ? "critical" : "high";
       void supabaseAdmin.from("clients")
         .update({ attention_level: novo }).eq("id", client.id)
         .in("attention_level", novo === "critical" ? ["low", "medium", "high"] : ["low", "medium"])
@@ -441,7 +455,7 @@ async function checarSatisfacao(
     const { mencionar } = await import("@/lib/cs/mencao");
     const m = await mencionar(client.assigned_social as string).catch(() => ({ trecho: "", jids: [], notifica: false }));
     const social = m.trecho ? `${m.trecho} ` : "";
-    const nivel = s.churn ? "🚨 *Risco de o cliente sair*" : s.risco === "alto" ? "🔴 *Cliente insatisfeito*" : "🟠 *Atenção com o cliente*";
+    const nivel = porta.churn ? "🚨 *Risco de o cliente sair*" : s.risco === "alto" ? "🔴 *Cliente insatisfeito*" : "🟠 *Atenção com o cliente*";
     const dest = teamGroupJid() || internalGroupJid();
     if (dest) {
       const aviso = `${nivel} — *${nome}*\n${social}O cliente falou algo que parece insatisfação:\n"${mensagem.slice(0, 180)}"\n\n_Por quê: ${s.motivo}_\nDá uma olhada no grupo dele antes que aperte. 🙏`;
@@ -449,11 +463,11 @@ async function checarSatisfacao(
     }
     await supabaseAdmin.from("notifications").insert({
       type: "content",
-      title: `${s.churn ? "🚨 Risco de churn" : "⚠️ Cliente pode estar insatisfeito"} — ${nome}`,
+      title: `${porta.churn ? "🚨 Risco de churn" : "⚠️ Cliente pode estar insatisfeito"} — ${nome}`,
       body: `"${mensagem.slice(0, 140)}" — ${s.motivo}`,
       client_id: client.id,
     }).then(() => {}, () => {});
-    console.log(`[CS/inbound] termômetro: ${nome} sentimento=${s.sentimento} risco=${s.risco} churn=${s.churn}`);
+    console.log(`[CS/inbound] termômetro: ${nome} sentimento=${s.sentimento} risco=${s.risco} sobre=${s.sobre} churn=${porta.churn}`);
   } catch (e) {
     console.error("[CS/inbound] checarSatisfacao erro:", e);
   }

@@ -394,9 +394,18 @@ export async function POST(req: NextRequest) {
           // OFERECE O CONTRATO NA HORA. Os dados que ele precisa (CNPJ, endereço, representante)
           // acabaram de ser preenchidos — é o momento em que gerar custa menos. Só faltam os três
           // números comerciais, que são decisão do Roberto e não existem no cadastro.
+          // O LINK DIRETO. Roberto (10/09): "poderia ter vindo com o link já do cadastro do
+          // cliente, iria adiantar muito." Mandar o caminho por extenso ("Clientes → Cadastros
+          // Pendentes → Revisar") obriga a pessoa a navegar até achar — e o id do cliente já está
+          // aqui na mão.
+          const base = process.env.NEXT_PUBLIC_PORTAL_DOMAIN
+            || process.env.NEXT_PUBLIC_SITE_URL
+            || "https://painel.lonemidia.com";
+          const linkFicha = `${base}/clients/${formData.clientId}`;
           const msg = `🎉 *${clientName}* concluiu o cadastro do onboarding (100%)!\n`
             + `${time ? `Time: ${time} — já podem se preparar.\n` : ""}`
-            + `Falta só revisar e ativar em *Clientes → Cadastros Pendentes* (botão "Revisar").\n\n`
+            + `\n👉 ${linkFicha}\n`
+            + `Falta revisar e ativar em *Clientes → Cadastros Pendentes* (botão "Revisar").\n\n`
             + `📄 *Quer que eu gere o contrato?* Me manda *valor mensal e dia de vencimento* `
             + `— ex: _"gera o contrato: 2500, dia 10"_ — que eu monto com os dados que ele preencheu.\n`
             + `_Vigência é a padrão: ciclos de 3 meses com renovação automática. Se for teste de prazo fechado, diga "teste de 1 mês"._`;

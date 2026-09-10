@@ -608,12 +608,14 @@ export default function ClientDetailPage() {
                     Encerrar parceria
                   </button>
                 )}
-                <button
-                  onClick={() => { setShowDeleteModal(true); setDeletePassword(""); setDeleteError(""); }}
-                  className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-destructive/30 hover:text-destructive"
-                >
-                  <Trash2 size={12} />
-                </button>
+                {/* O EXCLUIR SAIU DAQUI.
+                    Roberto (10/09): "primeiro eu arquivo e depois decido se excluo." O fluxo é
+                    esse, e o botão agora vive na aba Arquivados — onde a decisão realmente
+                    acontece, sobre um cliente que já saiu.
+                    Tinha ainda um problema de segurança: este botão apagava direto do navegador,
+                    validando a senha "8822" ESCRITA no código do front. Qualquer um lê abrindo o
+                    DevTools, e quem chamasse o Supabase direto nem precisaria dela. A exclusão
+                    agora é decidida no servidor: sessão, papel de admin e cliente já arquivado. */}
                 <select
                   value={client.status}
                   onChange={(e) => updateClientStatus(clientId, e.target.value as ClientStatus, currentUser)}
