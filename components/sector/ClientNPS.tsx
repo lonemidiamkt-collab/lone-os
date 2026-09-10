@@ -14,6 +14,10 @@ export default function ClientNPS({ clientId, currentUser }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // "Salvo" só pode aparecer quando gravou mesmo. Até 10/09/2026 a tabela tinha RLS ligada e nenhuma
+  // policy: TODA avaliação era rejeitada pelo banco e a estrela ficava acesa mostrando "Salvo".
+  // A tabela estava com zero linhas. Erro não olhado vira dado que não existe.
+  const [erro, setErro] = useState("");
   const month = new Date().toISOString().slice(0, 7);
 
   useEffect(() => {
@@ -24,24 +28,32 @@ export default function ClientNPS({ clientId, currentUser }: Props) {
       .eq("month", month)
       .eq("rated_by", currentUser)
       .maybeSingle()
-      .then(({ data }) => {
-        if (mounted && data) setScore(data.score as number);
+      .then(({ data, error }) => {
+        if (!mounted) return;
+        if (error) { setErro("não consegui ler"); return; }
+        if (data) setScore(data.score as number);
       });
     return () => { mounted = false; };
   }, [clientId, month, currentUser]);
 
   const rate = async (value: number) => {
-    setSaving(true);
+    setSaving(true); setErro("");
+    const anterior = score;
     setScore(value);
-    await supabase.from("client_nps").upsert({
+    const { error } = await supabase.from("client_nps").upsert({
       client_id: clientId,
       score: value,
       month,
       rated_by: currentUser,
     }, { onConflict: "client_id,month,rated_by" });
-
-    await supabase.from("clients").update({ nps_score: value }).eq("id", clientId);
+    if (error) {
+      setScore(anterior); setSaving(false);
+      setErro("não salvou");
+      return;
+    }
+    const { error: e2 } = await supabase.from("clients").update({ nps_score: value }).eq("id", clientId);
     setSaving(false);
+    if (e2) { setErro("salvou a nota, mas não atualizou a ficha"); return; }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -60,6 +72,7 @@ export default function ClientNPS({ clientId, currentUser }: Props) {
       </div>
       {saving && <Loader2 size={10} className="text-muted-foreground animate-spin" />}
       {saved && <span className="text-[10px] text-lone-success">Salvo</span>}
+      {erro && <span className="text-[10px] text-lone-danger" title={erro}>{erro}</span>}
     </div>
   );
 }

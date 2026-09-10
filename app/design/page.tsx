@@ -731,8 +731,20 @@ export default function DesignPage() {
   ).length;
   const totalInProduction = myContentCards.filter((c) => c.status === "in_production").length;
   const totalDone = myDesignRequests.filter((r) => r.status === "done").length;
+  // URGENTE PRO DESIGNER = arte que ELE ainda deve. Medido em 10/09/2026: dos 66 que este contador
+  // mostrava, 61 já tinham `designerDeliveredAt` — estavam parados em aprovação do social ou do
+  // cliente. O quadro cobrava o designer por trabalho que ele já tinha feito, todo dia, e um número
+  // que não é dele vira número que ele aprende a ignorar. O que espera outra pessoa é `aguardando`.
   const urgentCards = myContentCards.filter((c) => {
     if (c.status === "published" || c.status === "scheduled") return false;
+    if (c.designerDeliveredAt && !alteracaoPendente(c)) return false;
+    const u = getDeadlineUrgency(c.dueDate);
+    return u === "overdue" || u === "today";
+  }).length;
+  // Entregue e vencido, esperando aprovação de outra pessoa. Não é cobrança do designer, é visão.
+  const aguardandoTerceiro = myContentCards.filter((c) => {
+    if (c.status === "published" || c.status === "scheduled") return false;
+    if (!c.designerDeliveredAt || alteracaoPendente(c)) return false;
     const u = getDeadlineUrgency(c.dueDate);
     return u === "overdue" || u === "today";
   }).length;
@@ -863,6 +875,11 @@ export default function DesignPage() {
             <div>
               <p className={`text-2xl font-bold ${urgentCards > 0 ? "text-destructive" : "text-foreground"}`}>{urgentCards}</p>
               <p className="text-xs text-muted-foreground">Urgentes</p>
+              {aguardandoTerceiro > 0 && (
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  +{aguardandoTerceiro} entregue{aguardandoTerceiro > 1 ? "s" : ""}, aguardando aprovação
+                </p>
+              )}
             </div>
           </div>
           <div className="card flex items-center gap-4">

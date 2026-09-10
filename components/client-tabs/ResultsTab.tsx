@@ -153,14 +153,18 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
       if (error) throw error;
 
       if (form.strategyNote) {
-        await supabase.from("strategy_annotations").insert({
+        // supabase-js NÃO lança: devolve { error }. Sem checar, a anotação sumia e o resultado
+        // financeiro salvava — a pessoa via "salvo" e a observação estratégica não existia.
+        // Até 10/09/2026 essa tabela tinha RLS sem policy e estava com zero linhas.
+        const { error: eAnot } = await supabase.from("strategy_annotations").insert({
           client_id: client.id, month: form.month,
           annotation: form.strategyNote, type: roi !== null && roi > 0 ? "positive" : "neutral",
           created_by: currentUser,
         });
+        if (eAnot) throw eAnot;
       }
     } catch (err) {
-      setSaveError("Erro ao salvar. Tente novamente.");
+      setSaveError(`Erro ao salvar: ${err instanceof Error ? err.message : "tente novamente"}`);
       setSaving(false);
       return;
     }

@@ -22,6 +22,7 @@ interface ChecklistItem {
 export default function TrafficChecklist({ clients, currentUser }: Props) {
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState("");
   const [today] = useState(() => new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
@@ -29,12 +30,13 @@ export default function TrafficChecklist({ clients, currentUser }: Props) {
   }, [clients.length]);
 
   const loadChecklist = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("daily_checklists")
       .select("*")
       .eq("date", today)
       .in("client_id", clients.map((c) => c.id));
 
+    if (error) setErro("Não consegui ler o checklist de hoje.");
     const map = new Map((data || []).map((d) => [d.client_id, d]));
 
     setItems(clients.map((c) => ({
@@ -55,13 +57,21 @@ export default function TrafficChecklist({ clients, currentUser }: Props) {
     if (!item) return;
 
     const newVal = !item[field as keyof ChecklistItem];
-    await supabase.from("daily_checklists").upsert({
+    // Até 10/09/2026 a tabela tinha RLS ligada e nenhuma policy: o upsert era rejeitado e o check
+    // ficava marcado na tela. A tabela estava com ZERO linhas — meses de checklist preenchido e
+    // nada gravado. Agora o erro desmarca o que não foi salvo e aparece.
+    const { error } = await supabase.from("daily_checklists").upsert({
       client_id: clientId,
       date: today,
       [field === "checkedCampaigns" ? "checked_campaigns" : field === "checkedBudget" ? "checked_budget" : field === "checkedNegatives" ? "checked_negatives" : "checked_results"]: newVal,
       completed_by: currentUser,
       completed_at: new Date().toISOString(),
     }, { onConflict: "client_id,date" });
+    if (error) {
+      setItems((prev) => prev.map((i) => i.clientId === clientId ? { ...i, [field]: !newVal } : i));
+      setErro("Não consegui salvar o checklist. Nada foi gravado.");
+      setTimeout(() => setErro(""), 4000);
+    }
   };
 
   if (loading) return <div className="flex justify-center py-4"><Loader2 size={16} className="text-primary animate-spin" /></div>;
@@ -73,6 +83,11 @@ export default function TrafficChecklist({ clients, currentUser }: Props) {
 
   return (
     <div className="card space-y-3">
+      {erro && (
+        <div className="text-[11px] text-lone-danger bg-lone-danger-bg border border-lone-danger-border rounded px-2.5 py-1.5">
+          {erro}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
           <ClipboardCheck size={14} className="text-primary" /> Checklist Diario
