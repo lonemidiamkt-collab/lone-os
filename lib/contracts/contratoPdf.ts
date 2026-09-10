@@ -14,6 +14,7 @@
 // quadro-resumo, cláusulas numeradas por extenso e blocos de assinatura.
 
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { validarContrato, bloqueios, type Achado } from "@/lib/contracts/validacao";
 import { CONTRATADA } from "@/lib/contracts/contratada";
 
 /** Padrão da casa: ciclos de 3 meses com renovação automática. Teste/projeto = prazo determinado. */
@@ -35,6 +36,8 @@ export interface ContratoMontado {
   /** O que faltou no cadastro. Contrato com lacuna é pior que contrato não gerado. */
   faltando?: string[];
   erro?: string;
+  /** Auditoria do §43: bloqueios impedem a geração, revisões só avisam. */
+  achados?: Achado[];
 }
 
 const brl = (n: number) =>
@@ -145,14 +148,19 @@ export async function montarContratoHtml(
   const hoje = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const anoAtual = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", year: "numeric" });
 
+  const numero = (c.endereco_numero as string) || "";
+  const complemento = (c.endereco_complemento as string) || "";
+  const logradouro = [(c.endereco_rua as string) || (c.endereco as string), numero].filter(Boolean).join(", ");
   const endereco = [
-    (c.endereco_rua as string) || (c.endereco as string),
+    complemento ? `${logradouro} — ${complemento}` : logradouro,
     (c.endereco_bairro as string),
     `${c.endereco_cidade as string}${c.endereco_estado ? `/${c.endereco_estado}` : ""}`,
     (c.endereco_cep as string) ? `CEP ${c.endereco_cep}` : "",
   ].filter(Boolean).join(", ");
 
-  const segmento = ((c.nicho as string) || (c.industry as string) || "").trim();
+  // Só `nicho`. `industry` guarda o PACOTE contratado em 30 dos 52 cadastros ativos ("Lone Growth"
+  // em 24 deles) — cair nele escrevia o nome do produto onde deveria estar o ramo do cliente.
+  const segmento = ((c.nicho as string) || "").trim();
   const emailCliente = ((c.email as string) || (c.email_corporativo as string) || "").trim();
   const servico = NOME_DO_SERVICO[tipo] ?? "Assessoria de Marketing";
 
@@ -170,6 +178,37 @@ export async function montarContratoHtml(
     .replace(/\{\{\s*valor_mensal_extenso\s*\}\}/g, porExtenso(com.valorMensal))
     .replace(/\{\{\s*dia_pagamento\s*\}\}/g, `${String(com.diaPagamento).padStart(2, "0")} (${numExt(com.diaPagamento)})`)
     .replace(/\{\{\s*duracao_meses\s*\}\}/g, String(com.duracaoMeses ?? 3));
+
+  // ── AUDITORIA (§43 do treinamento). Roda com as cláusulas JÁ substituídas: é assim que se pega
+  // valor chumbado de outro cliente sobrando no template. Bloqueio impede a geração — contrato
+  // errado assinado custa mais que contrato não gerado.
+  const clausulasResolvidas = [...fixas, ...condicionais].map((cl) => ({ title: cl.title, body: trocar(cl.body) }));
+  const achados = validarContrato({
+    razaoSocial: razao,
+    nomeFantasia: fantasia,
+    cnpj: c.cnpj as string,
+    segmento,
+    enderecoRua: (c.endereco_rua as string) || (c.endereco as string),
+    enderecoNumero: numero,
+    cidade: c.endereco_cidade as string,
+    representante: c.contact_name as string,
+    cargo: c.contact_role as string,
+    cpf: c.cpf_cnpj as string,
+    email: emailCliente,
+    tipoServico: tipo,
+    valorMensal: com.valorMensal,
+    diaPagamento: com.diaPagamento,
+    duracaoMeses: com.duracaoMeses,
+    modalidade,
+    clausulas: clausulasResolvidas,
+  });
+  const trava = bloqueios(achados);
+  if (trava.length) {
+    return {
+      ok: false, cliente: fantasia, achados,
+      erro: `Auditoria reprovou o contrato:\n${trava.map((a) => `• ${a.mensagem}`).join("\n")}`,
+    };
+  }
 
   const clausulasHtml = [...fixas, ...condicionais]
     .map((cl, i) => `<section class="clausula">
@@ -229,6 +268,7 @@ export async function montarContratoHtml(
       <p><strong>Serviço contratado:</strong> ${esc(servico)}.</p>
       ${segmento ? `<p><strong>Segmento da CONTRATANTE:</strong> ${esc(segmento)}.</p>` : ""}
       ${linhaVigencia}
+      ${modalidade === "ciclos" ? `<p><strong>Fidelidade ou permanência mínima:</strong> inexistente.</p>` : ""}
       <p><strong>Investimento em anúncios:</strong> não incluído no valor mensal e pago separadamente pela CONTRATANTE.</p>
       <p><strong>Atendimento:</strong> de segunda a sexta-feira, das 9h às 18h, exceto feriados.</p>
       <p><strong>Canais oficiais de comunicação:</strong> grupo de WhatsApp e e-mails informados pelas partes.</p>
@@ -262,5 +302,6 @@ export async function montarContratoHtml(
   const slug = fantasia.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
 
-  return { ok: true, html, cliente: fantasia, nomeArquivo: `contrato-${slug}.pdf` };
+  // Achados de revisão viajam junto: não impedem, mas quem for enviar precisa ver.
+  return { ok: true, html, cliente: fantasia, nomeArquivo: `contrato-${slug}.pdf`, achados };
 }

@@ -1368,7 +1368,8 @@ export async function POST(req: NextRequest) {
         + `${pedido.valorMensal!.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês · `
         + `${pedido.modalidade === "ciclos" ? "ciclos de 3 meses (renovação automática)" : `${pedido.duracaoMeses} meses, sem renovação`} · `
         + `vencimento dia ${pedido.diaPagamento}\n\n`
-        + `_Confira antes de mandar pro cliente. O .docx oficial pro D4Sign continua saindo em Contratos._`;
+        + `_Confira antes de mandar pro cliente. O .docx oficial pro D4Sign continua saindo em Contratos._`
+        + (await import("@/lib/contracts/validacao")).avisosDaAuditoria(montado.achados);
       await csSendGroupDocument(msg.groupJid, pdf.buffer.toString("base64"), montado.nomeArquivo!, legenda);
       return NextResponse.json({ ok: true, acao: "contrato", cliente: alvo.nome });
     }

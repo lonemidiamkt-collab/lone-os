@@ -18,6 +18,7 @@ export const maxDuration = 120;
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { montarContratoHtml } from "@/lib/contracts/contratoPdf";
+import { avisosDaAuditoria } from "@/lib/contracts/validacao";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
 import { csSendGroupDocument } from "@/lib/cs/notify";
 
@@ -72,7 +73,8 @@ export async function POST(req: NextRequest) {
     `${valorMensal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês · ` +
     `${modalidade === "ciclos" ? "ciclos de 3 meses (renovação automática)" : `${duracaoMeses} meses, sem renovação`} · ` +
     `vencimento dia ${diaPagamento}\n\n` +
-    `_Confira antes de mandar pro cliente. O .docx oficial pro D4Sign continua saindo em Contratos._`;
+    `_Confira antes de mandar pro cliente. O .docx oficial pro D4Sign continua saindo em Contratos._`
+    + avisosDaAuditoria(montado.achados);
 
   const env = await csSendGroupDocument(groupJid, pdf.buffer.toString("base64"), montado.nomeArquivo!, legenda);
   return NextResponse.json({
