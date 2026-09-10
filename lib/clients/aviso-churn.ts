@@ -9,7 +9,7 @@
 //
 // Texto puro, testável — quem envia é a rota.
 
-import { rotuloMotivo, INICIATIVAS, type Iniciativa } from "./offboarding";
+import { rotuloMotivo, INICIATIVA_CURTA, type Iniciativa } from "./offboarding";
 import { tempoDeParceria } from "./offboarding";
 
 export interface AvisoChurn {
@@ -42,7 +42,7 @@ export function textoAvisoChurn(a: AvisoChurn): string {
   const linhas = [
     a.entrada && `📅 Cliente desde ${dataBR(a.entrada)}${a.entrada ? ` · ${tempoDeParceria(a.entrada, a.saida)}` : ""}`,
     `🚪 Saída em ${dataBR(a.saida)}`,
-    a.iniciativa && `🤝 Pedido por ${INICIATIVAS[a.iniciativa].toLowerCase()}`,
+    a.iniciativa && `🤝 Pedido ${INICIATIVA_CURTA[a.iniciativa]}`,
     a.responsavel && `👤 Carteira: ${a.responsavel}`,
   ].filter(Boolean) as string[];
   l.push(...linhas);

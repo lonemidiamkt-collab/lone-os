@@ -16,6 +16,18 @@ export const INICIATIVAS: Record<Iniciativa, string> = {
   acordo: "Acordo entre as partes",
 };
 
+/**
+ * A mesma informação em forma de complemento, para caber depois de "Pedido por…".
+ *
+ * `INICIATIVAS` é frase completa ("O cliente pediu") e serve ao formulário e ao termo. Emendada
+ * numa linha, saía "Pedido por o cliente pediu".
+ */
+export const INICIATIVA_CURTA: Record<Iniciativa, string> = {
+  cliente: "pelo cliente",
+  lone: "pela Lone",
+  acordo: "em acordo entre as partes",
+};
+
 export type EstadoOffboarding =
   | "rascunho" | "em_revisao" | "termo_gerado" | "termo_enviado" | "confirmado" | "concluido";
 
