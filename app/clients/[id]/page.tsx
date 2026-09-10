@@ -49,6 +49,7 @@ import AIAuditsTab from "@/components/client-tabs/AIAuditsTab";
 import ClientNPS from "@/components/sector/ClientNPS";
 import WhatsAppTemplates from "@/components/WhatsAppTemplates";
 import ReunioesCliente from "@/components/ReunioesCliente";
+import EncerrarParceria from "@/components/EncerrarParceria";
 const ContractGenerator = dynamic(() => import("@/components/ContractGenerator"), { ssr: false });
 import PortalManagementCard from "@/components/PortalManagementCard";
 import FichaViva360Tab from "@/components/fichaviva/FichaViva360Tab";
@@ -145,6 +146,7 @@ export default function ClientDetailPage() {
   // nem PII (cpf/endereço/docs). Esses campos são puxados 1x, gated, por /api/clients/[id],
   // e mesclados só nas chaves sensíveis (pra não sobrescrever updates realtime dos campos comuns).
   const [clientExtra, setClientExtra] = useState<Partial<Client>>({});
+  const [encerrando, setEncerrando] = useState(false);
   useEffect(() => {
     let alive = true;
     setClientExtra({});
@@ -1003,6 +1005,12 @@ export default function ClientDetailPage() {
                     <button onClick={() => setActiveTab("content")} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground transition-colors hover:border-primary/40">
                       <Palette size={12} /> Demandas
                     </button>
+                    {/* ENCERRAR PARCERIA. Fica junto das outras ações, discreto: é uma ação rara e
+                        séria, não deve competir por atenção com o trabalho do dia. */}
+                    <button onClick={() => setEncerrando(true)}
+                      className="ml-auto flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-lone-danger-border hover:text-lone-danger">
+                      Encerrar parceria
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1806,6 +1814,17 @@ export default function ClientDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {encerrando && (
+        <EncerrarParceria
+          clientId={clientId}
+          clientName={client.nomeFantasia || client.name}
+          aoFechar={() => setEncerrando(false)}
+          // Concluído, o cliente saiu da lista de ativos: voltar para /clients evita a ficha
+          // ficar mostrando um cliente que o store já não tem.
+          aoConcluir={() => router.push("/clients")}
+        />
       )}
     </div>
   );

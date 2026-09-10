@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import NewClientModal from "@/components/NewClientModal";
 import { useClientsStore } from "@/stores/useClientsStore";
 import CadastroIncompleto from "@/components/CadastroIncompleto";
+import ClientesDesativados from "@/components/ClientesDesativados";
 import { useRole } from "@/lib/context/RoleContext";
 import { MOTIVOS_LISTA, type MotivoSaida } from "@/lib/clients/churn";
 import type { Client } from "@/lib/types";
@@ -70,6 +71,8 @@ export default function ClientsPage() {
   }
   const [reunioes, setReunioes] = useState<Map<string, LinhaReuniao>>(new Map());
   const [filtroReuniao, setFiltroReuniao] = useState("all");
+  // Ativos / Em encerramento / Desativados. Cliente que saiu não some da tela — muda de aba.
+  const [abaLista, setAbaLista] = useState<"ativos" | "encerrando" | "desativados">("ativos");
 
   useEffect(() => {
     let vivo = true;
@@ -342,9 +345,32 @@ export default function ClientsPage() {
             </div>
 
             {/* ═══ PENDING APPROVALS (Admin Only) ═══ */}
+            {/* ── AS TRÊS ABAS ─────────────────────────────────────────────
+                Roberto (§17): "dentro de Clientes criar Ativos / Em encerramento / Desativados."
+                Encerrando é aba própria porque é trabalho em aberto, não arquivo. */}
+            <div className="flex gap-1 mb-4 border-b border-border">
+              {([
+                ["ativos", "Ativos"],
+                ["encerrando", "Em encerramento"],
+                ["desativados", "Desativados"],
+              ] as const).map(([k, r]) => (
+                <button key={k} onClick={() => setAbaLista(k)}
+                  className={`px-3 py-2 text-sm transition-colors border-b-2 -mb-px ${
+                    abaLista === k
+                      ? "border-primary text-primary font-medium"
+                      : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+                  {r}
+                </button>
+              ))}
+            </div>
+
+            {abaLista !== "ativos" && (
+              <ClientesDesativados aba={abaLista} />
+            )}
+
             {/* A fila de quem está com a ficha pela metade. Fica antes dos pendentes porque é
                 trabalho de hoje, não de aprovação. */}
-            {isAdmin && (
+            {abaLista === "ativos" && isAdmin && (
               <div className="mb-4">
                 <CadastroIncompleto />
               </div>
@@ -524,7 +550,7 @@ export default function ClientsPage() {
                   </div>
                 ))}
               </div>
-            ) : (
+            ) : abaLista !== "ativos" ? null : (
             <div className="space-y-3">
               {filtered.length === 0 && (
                 <div className="card text-center py-10 text-muted-foreground">
