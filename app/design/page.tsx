@@ -664,6 +664,13 @@ export default function DesignPage() {
   }, [quadro, role, currentUser, hydrated]);
 
   const quadroAtivo = quadro ?? (role === "designer" ? currentUser : "Todos");
+  // O valor ativo TEM que existir entre as opções. Um <select> com value que não casa mostra
+  // visualmente a primeira opção — a pessoa lê "Rodrigo" e está vendo outro quadro. Já aconteceu
+  // aqui com o seletor de cliente. Designer sem nenhum cliente ainda entra na lista por isso.
+  const opcoesQuadro = useMemo(
+    () => (quadroAtivo !== "Todos" && !quadros.includes(quadroAtivo) ? [quadroAtivo, ...quadros] : quadros),
+    [quadros, quadroAtivo],
+  );
   // Olhando o quadro de outra pessoa: a interface avisa, mas NÃO trava — é pra ajudar.
   const quadroDeOutro = role === "designer" && quadroAtivo !== currentUser;
 
@@ -743,7 +750,7 @@ export default function DesignPage() {
 
         {/* Seletor de quadro. Cada designer abre no seu; trocar serve pra ajudar o outro, e por
             isso o quadro do colega abre EDITÁVEL — só sinalizado. */}
-        {quadros.length > 1 && (
+        {opcoesQuadro.length > 1 && (
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-xs text-muted-foreground uppercase tracking-wider">Quadro de:</span>
             <div className="relative">
@@ -753,7 +760,7 @@ export default function DesignPage() {
                 className="bg-card border border-border rounded-lg px-4 py-2 text-sm text-foreground outline-none focus:border-primary appearance-none cursor-pointer pr-8"
               >
                 <option value="Todos">Visão geral (todos os designers)</option>
-                {quadros.map((nome) => (
+                {opcoesQuadro.map((nome) => (
                   <option key={nome} value={nome}>
                     {nome}{contagens[nome] ? ` — ${contagens[nome]} aberta${contagens[nome] > 1 ? "s" : ""}` : ""}
                   </option>
