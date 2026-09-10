@@ -34,17 +34,26 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
   const act = useCallback(async (id: string, action: "approve" | "ajuste", comment?: string) => {
     setBusy(id);
     try {
-      const res = await fetch(`/api/portal/${token}/approve`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cardId: id, action, comment }),
-      });
-      if (res.ok) {
-        setItems((prev) => (prev ?? []).map((it) => it.id === id
-          ? { ...it, pendente: false, aprovada: action === "approve" ? true : it.aprovada } : it));
-        setFlash({ id, msg: action === "approve" ? "Aprovada! ✅ Avisamos o time." : "Ajuste enviado! ✏️ Já vamos cuidar." });
-        setAjusteOpen(null); setAjusteText("");
-        setTimeout(() => setFlash(null), 4000);
+      // Rota pública por token: `fetch` puro mesmo, mas com o mesmo cuidado — é a tela do CLIENTE,
+      // e um "cliquei em aprovar e não aconteceu nada" aqui é pior que em qualquer tela interna.
+      let ok = false;
+      try {
+        const res = await fetch(`/api/portal/${token}/approve`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cardId: id, action, comment }),
+        });
+        ok = res.ok;
+      } catch { ok = false; }
+      if (!ok) {
+        setFlash({ id, msg: "Não consegui enviar agora. Tenta de novo em instantes?" });
+        setTimeout(() => setFlash(null), 5000);
+        return;
       }
+      setItems((prev) => (prev ?? []).map((it) => it.id === id
+        ? { ...it, pendente: false, aprovada: action === "approve" ? true : it.aprovada } : it));
+      setFlash({ id, msg: action === "approve" ? "Aprovada! ✅ Avisamos o time." : "Ajuste enviado! ✏️ Já vamos cuidar." });
+      setAjusteOpen(null); setAjusteText("");
+      setTimeout(() => setFlash(null), 4000);
     } finally { setBusy(null); }
   }, [token]);
 

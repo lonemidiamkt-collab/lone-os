@@ -10,6 +10,7 @@
 
 import { useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { Button } from "@/components/ui/button";
 import { Loader2, Sparkles, X, AlertTriangle } from "lucide-react";
 
@@ -46,26 +47,18 @@ export default function NovoProcessoDialog({ onClose, onCriado }: { onClose: () 
   const redigir = async () => {
     setOcupado(true); setErro(null);
     try {
-      const r = await authedFetch("/api/processos?revisar=1", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto, area, tipo }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) { setErro(j?.error || "não consegui redigir agora"); return; }
-      setRascunho(j.rascunho as Rascunho);
-      setPendencias((j.pendencias as string[]) ?? []);
+      const r = await chamar<{ rascunho: Rascunho; pendencias?: string[] }>("/api/processos?revisar=1", { texto, area, tipo });
+      if (!r.ok || !r.data) { setErro(r.erro ?? "não consegui redigir agora"); return; }
+      setRascunho(r.data.rascunho);
+      setPendencias(r.data.pendencias ?? []);
     } finally { setOcupado(false); }
   };
 
   const salvar = async () => {
     setOcupado(true); setErro(null);
     try {
-      const r = await authedFetch("/api/processos", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rascunho, area, tipo }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) { setErro(j?.error || "não consegui salvar"); return; }
+      const r = await chamar("/api/processos", { rascunho, area, tipo });
+      if (!r.ok) { setErro(r.erro ?? "não consegui salvar"); return; }
       onCriado();
     } finally { setOcupado(false); }
   };

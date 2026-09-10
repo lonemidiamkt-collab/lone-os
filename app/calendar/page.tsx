@@ -31,6 +31,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import FichaReuniao, { type ReuniaoResumida } from "@/components/FichaReuniao";
 import { useAppState } from "@/lib/context/AppStateContext"; // kept for reminders (localStorage-only, no DB equivalent)
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -205,12 +206,8 @@ export default function CalendarPage() {
   const fecharReuniao = async (id: string, acao: "concluir" | "no_show" | "cancelar") => {
     setFechando(id);
     try {
-      const r = await authedFetch("/api/reunioes/gerenciar", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao, reuniaoId: id }),
-      });
-      const j = await r.json();
-      if (!r.ok) { setFeito((f) => ({ ...f, [id]: j?.error ?? "não consegui" })); return; }
+      const r = await chamar("/api/reunioes/gerenciar", { acao, reuniaoId: id });
+      if (!r.ok) { setFeito((f) => ({ ...f, [id]: r.erro ?? "não consegui" })); return; }
       setFeito((f) => ({
         ...f,
         [id]: acao === "concluir" ? "✓ marcada como realizada"
@@ -1495,10 +1492,7 @@ function QuickCreateModal({
       try {
         const inicio = new Date(`${date}T${time || "10:00"}:00-03:00`).toISOString();
         const fim = new Date(new Date(inicio).getTime() + Number(duracao) * 60000).toISOString();
-        const r = await authedFetch("/api/reunioes/gerenciar", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const r = await chamar("/api/reunioes/gerenciar", {
             acao: "agendar", clientId, inicio, fim,
             tipo: "alinhamento",
             titulo: title.trim() || undefined,
@@ -1507,13 +1501,8 @@ function QuickCreateModal({
             pauta: description.trim() || undefined,
             colaboradores: assignees.filter((a) => a !== currentUser),
           avisarCliente,
-          }),
         });
-        if (!r.ok) {
-          const j = await r.json().catch(() => null);
-          alert(j?.error ?? "Não consegui agendar a reunião.");
-          return;
-        }
+        if (!r.ok) { alert(r.erro ?? "Não consegui agendar a reunião."); return; }
         onClose();
       } finally {
         setSalvandoReuniao(false);

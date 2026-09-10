@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import type { TrafficMonthlyReport, TrafficRoutineCheck, ClientInvestmentData, InvestmentPaymentMethod } from "@/lib/types";
 
 export interface AdAccount {
@@ -32,6 +33,8 @@ interface TrafficState {
   trafficRoutineChecks: TrafficRoutineCheck[];
   investmentData: Record<string, ClientInvestmentData>;
   syncing: boolean;
+  /** Falha do último sync de saldos. Antes o erro sumia e o botão só parava de girar. */
+  syncError: string | null;
   initialized: boolean;
 
   init: () => Promise<void>;
@@ -77,6 +80,7 @@ export const useTrafficStore = create<TrafficState>()(
       trafficRoutineChecks: [],
       investmentData: {},
       syncing: false,
+      syncError: null,
       initialized: false,
 
       init: async () => {
@@ -98,11 +102,10 @@ export const useTrafficStore = create<TrafficState>()(
       syncBalances: async () => {
         set({ syncing: true }, false, "traffic/sync/start");
         try {
-          const res = await authedFetch("/api/traffic/sync-balances", { method: "POST" });
-          if (res.ok) {
-            set({ initialized: false }, false, "traffic/sync/reset");
-            await get().init();
-          }
+          const res = await chamar("/api/traffic/sync-balances", {});
+          if (!res.ok) { set({ syncError: res.erro }, false, "traffic/sync/error"); return; }
+          set({ initialized: false, syncError: null }, false, "traffic/sync/reset");
+          await get().init();
         } finally {
           set({ syncing: false }, false, "traffic/sync/done");
         }

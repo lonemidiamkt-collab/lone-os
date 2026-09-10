@@ -6,6 +6,7 @@ import {
   Loader2, Clock, TrendingUp, RefreshCw,
 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 
 interface Insight {
   type: "positivo" | "alerta" | "critico" | "sugestao";
@@ -55,18 +56,18 @@ interface Props {
 export default function AIAuditsTab({ clientId, isAdmin }: Props) {
   const [audits, setAudits] = useState<Audit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const loadAudits = async () => {
     setLoading(true);
     try {
-      const res = await authedFetch(`/api/ai/audits?clientId=${clientId}&limit=20`);
-      const data = await res.json();
-      if (res.ok) {
-        const list: Audit[] = data.audits ?? [];
-        setAudits(list);
-        if (list.length > 0) setExpandedId(list[0].id);
-      }
+      const res = await chamar<{ audits?: Audit[] }>(`/api/ai/audits?clientId=${clientId}&limit=20`);
+      if (!res.ok) { setErro(res.erro); return; }
+      setErro(null);
+      const list: Audit[] = res.data?.audits ?? [];
+      setAudits(list);
+      if (list.length > 0) setExpandedId(list[0].id);
     } finally {
       setLoading(false);
     }
@@ -93,6 +94,16 @@ export default function AIAuditsTab({ clientId, isAdmin }: Props) {
     return (
       <div className="card flex items-center justify-center py-12 animate-fade-in">
         <Loader2 size={20} className="text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  // ANTES do vazio: falha de carga não pode se disfarçar de "nenhuma análise gerada ainda".
+  if (erro) {
+    return (
+      <div className="card text-center py-10 animate-fade-in">
+        <p className="text-sm text-lone-danger">{erro}</p>
+        <button onClick={loadAudits} className="btn-ghost text-xs mt-3">Tentar de novo</button>
       </div>
     );
   }

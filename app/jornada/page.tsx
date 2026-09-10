@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,6 +37,8 @@ export default function JornadaPage() {
   const [editId, setEditId] = useState("");
   const [form, setForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  // Sem isso a falha ao salvar a ficha fechava o formulário e a pessoa reescrevia tudo depois.
+  const [erroSalvar, setErroSalvar] = useState("");
   const [checkins, setCheckins] = useState<Array<{ pergunta: string; resposta: string | null; status: string; origem: string; enviado_em: string }>>([]);
   const [ckResp, setCkResp] = useState("");
 
@@ -86,17 +89,16 @@ export default function JornadaPage() {
     });
   };
   const salvar = async () => {
-    setSaving(true);
+    setSaving(true); setErroSalvar("");
     try {
-      await authedFetch("/api/cs/jornada", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: editId, proximaAcao: form.proximaAcao, responsavel: form.responsavel, prazo: form.prazo || null,
-          estado: form.estado || null, notas: form.notas,
-          pendenciasCliente: form.pendencias.split("\n").map((s) => s.trim()).filter(Boolean).map((item) => ({ item })),
-          proximaReuniao: form.proximaReuniao || null, ultimaReuniao: form.ultimaReuniao || null,
-        }),
+      const r = await chamar("/api/cs/jornada", {
+        clientId: editId, proximaAcao: form.proximaAcao, responsavel: form.responsavel, prazo: form.prazo || null,
+        estado: form.estado || null, notas: form.notas,
+        pendenciasCliente: form.pendencias.split("\n").map((s) => s.trim()).filter(Boolean).map((item) => ({ item })),
+        proximaReuniao: form.proximaReuniao || null, ultimaReuniao: form.ultimaReuniao || null,
       });
+      // Fechar o formulário sem ter salvado era o pior desfecho: a pessoa reescrevia tudo depois.
+      if (!r.ok) { setErroSalvar(r.erro ?? "Não consegui salvar."); return; }
       setEditId("");
       carregar();
     } finally { setSaving(false); }
@@ -166,7 +168,10 @@ export default function JornadaPage() {
                   </div>
                   <div className="space-y-1"><Label>Pendências do cliente <span className="text-muted-foreground">(o que ELE deve — 1 por linha)</span></Label><Textarea rows={2} value={form.pendencias} onChange={(e) => setForm({ ...form, pendencias: e.target.value })} placeholder="Ex.: senha do Instagram · logo em alta · aprovar arte da promoção" /></div>
                   <div className="space-y-1"><Label>Notas do relacionamento</Label><Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} /></div>
-                  <div className="flex justify-end"><Button onClick={salvar} disabled={saving}>{saving ? "Salvando…" : "Salvar ficha"}</Button></div>
+                  <div className="flex items-center justify-end gap-3">
+                    {erroSalvar && <span className="text-[11px] text-lone-danger">{erroSalvar}</span>}
+                    <Button onClick={salvar} disabled={saving}>{saving ? "Salvando…" : "Salvar ficha"}</Button>
+                  </div>
 
                   <div className="border-t border-border pt-3 space-y-2">
                     <Label>Check-ins (o que o cliente informou)</Label>

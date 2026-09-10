@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import {
   Send, Loader2, Check, AlertCircle, Bold, Italic, List, Link as LinkIcon,
   Mail, Users, Megaphone, Plus, X, CheckCircle, XCircle,
@@ -33,14 +34,18 @@ export default function BroadcastsPage() {
 
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
+  // Falha de carga vira aviso, não lista vazia disfarçada de "nenhum comunicado".
+  const [erro, setErro] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
 
   const loadBroadcasts = async () => {
     setLoading(true);
     try {
-      const res = await authedFetch("/api/broadcasts");
-      const data = await res.json();
-      if (res.ok) setBroadcasts(data.broadcasts || []);
+      const res = await chamar<{ broadcasts?: Broadcast[] }>("/api/broadcasts");
+      // Antes a falha virava lista vazia: parecia "nenhum comunicado" em vez de "não carregou".
+      if (!res.ok) { setErro(res.erro); return; }
+      setErro(null);
+      setBroadcasts(res.data?.broadcasts ?? []);
     } finally {
       setLoading(false);
     }
@@ -67,6 +72,12 @@ export default function BroadcastsPage() {
       <Header title="Comunicados" subtitle="Envio em massa para clientes" />
 
       <div className="p-6 space-y-6 animate-fade-in">
+        {erro && (
+          <div className="text-[12px] text-lone-danger bg-lone-danger-bg border border-lone-danger-border rounded-lg px-3 py-2">
+            {erro}
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Histórico de Envios</h2>

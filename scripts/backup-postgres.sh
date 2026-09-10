@@ -61,3 +61,42 @@ gzip -f "$ARQ"
 echo "$(date): Backup OK — loneos_$DATE.dump.gz ($((TAM/1024/1024)) MB, $TABELAS tabelas)" >> "$BACKUP_DIR/backup.log"
 
 find "$BACKUP_DIR" -name '*.dump.gz' -mtime +$KEEP_DAYS -delete
+
+# ── CÓPIA OFF-SITE ─────────────────────────────────────────────────────────────────────────────
+# 10/09/2026. O aviso no topo deste arquivo dizia "se a VPS morrer, banco e backup vão juntos" e a
+# cópia externa seguia pendente por falta de credencial. O bloco abaixo já está pronto: no dia em
+# que /opt/loneos/.env ganhar as três linhas do rclone, ele passa a rodar sozinho. Enquanto não
+# ganhar, o backup local continua exatamente como está — nada quebra por ausência.
+#
+# Para ligar, basta acrescentar em /opt/loneos/.env:
+#   BACKUP_REMOTO=nome-do-remote:caminho/loneos     (ex.: b2:lone-backups/postgres)
+# e ter o rclone configurado em /root/.config/rclone/rclone.conf.
+#
+# Sem BACKUP_REMOTO o script sai daqui em silêncio — e o silêncio, neste caso, é o estado conhecido.
+REMOTO=$(grep '^BACKUP_REMOTO=' /opt/loneos/.env 2>/dev/null | cut -d= -f2-)
+
+if [ -n "$REMOTO" ]; then
+  if ! command -v rclone > /dev/null 2>&1; then
+    echo "$(date): off-site configurado ($REMOTO) mas rclone não está instalado" >> "$BACKUP_DIR/backup.log"
+    avisar "🟠 *Backup off-site não rodou*: BACKUP_REMOTO está configurado mas o rclone não está instalado na VPS."
+  else
+    # --immutable protege contra o caso em que o arquivo muda no meio do envio.
+    if rclone copy "$ARQ.gz" "$REMOTO/" --immutable --transfers 1 --timeout 10m > /tmp/rclone_err.txt 2>&1; then
+      # CONFERE DO OUTRO LADO. Cópia que "não deu erro" mas não chegou é o mesmo backup fantasma
+      # que este script existe para evitar — e a hora de descobrir não pode ser a da restauração.
+      TAM_REMOTO=$(rclone size "$REMOTO/loneos_$DATE.dump.gz" --json 2>/dev/null | grep -o '"bytes":[0-9]*' | cut -d: -f2)
+      TAM_LOCAL=$(stat -c%s "$ARQ.gz" 2>/dev/null || echo 0)
+      if [ "$TAM_REMOTO" = "$TAM_LOCAL" ] && [ -n "$TAM_REMOTO" ]; then
+        echo "$(date): off-site OK — $((TAM_LOCAL/1024/1024)) MB em $REMOTO" >> "$BACKUP_DIR/backup.log"
+        # Retenção do lado de lá: 60 dias (mais que os 14 locais — é a cópia que sobrevive à VPS).
+        rclone delete "$REMOTO/" --min-age 60d --include 'loneos_*.dump.gz' > /dev/null 2>&1
+      else
+        echo "$(date): off-site DIVERGIU — local=$TAM_LOCAL remoto=$TAM_REMOTO" >> "$BACKUP_DIR/backup.log"
+        avisar "🔴 *Backup off-site chegou diferente*: local $((TAM_LOCAL/1024/1024)) MB, remoto ${TAM_REMOTO:-0} bytes. A cópia externa de hoje não serve."
+      fi
+    else
+      echo "$(date): off-site FALHOU — $(head -c 200 /tmp/rclone_err.txt)" >> "$BACKUP_DIR/backup.log"
+      avisar "🔴 *Backup off-site falhou hoje.* O backup local está bom, mas continua só na VPS."
+    fi
+  fi
+fi

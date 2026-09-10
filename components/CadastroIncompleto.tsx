@@ -16,6 +16,7 @@
 import { useEffect, useState } from "react";
 import { ClipboardList, Copy, Check, Loader2, AlertTriangle, Link2 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 
 interface Linha {
   clientId: string; nome: string; responsavel: string | null;
@@ -42,13 +43,9 @@ export default function CadastroIncompleto() {
   const gerar = async (l: Linha) => {
     setGerando(l.clientId);
     try {
-      const r = await authedFetch("/api/onboarding", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "gerar_link_completar", clientId: l.clientId }),
-      });
-      const j = await r.json();
-      if (!r.ok) { setErro(j?.error ?? "não consegui gerar"); return; }
-      setLinks((m) => ({ ...m, [l.clientId]: `${window.location.origin}${j.url}` }));
+      const r = await chamar<{ url: string }>("/api/onboarding", { action: "gerar_link_completar", clientId: l.clientId });
+      if (!r.ok || !r.data) { setErro(r.erro ?? "não consegui gerar"); return; }
+      setLinks((m) => ({ ...m, [l.clientId]: `${window.location.origin}${r.data!.url}` }));
     } finally { setGerando(null); }
   };
 

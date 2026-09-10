@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Archive, RotateCcw, Trash2, Loader2 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import type { ContentCard } from "@/lib/types";
@@ -57,14 +58,10 @@ export default function ArchivedDemandsModal({ workspace, onClose }: { workspace
     setBusyId(id);
     setErro(null);
     try {
-      const r = await authedFetch("/api/content-cards/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, archivedAt: null }),
-      });
+      const r = await chamar("/api/content-cards/update", { id, archivedAt: null });
       if (!r.ok) {
         // Falhou e ninguém sabia: o card sumia da lista mesmo sem ter sido desarquivado.
-        setErro("Não consegui desarquivar. Tente de novo.");
+        setErro(r.erro ?? "Não consegui desarquivar. Tente de novo.");
         return;
       }
       // DEVOLVE O CARD AO QUADRO NA HORA. Antes ele só sumia daqui — o board só saberia no
@@ -87,12 +84,9 @@ export default function ArchivedDemandsModal({ workspace, onClose }: { workspace
   const remove = async (id: string) => {
     setBusyId(id);
     try {
-      const r = await authedFetch("/api/content-cards/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (r.ok) setCards((cs) => (cs ?? []).filter((c) => c.id !== id));
+      const r = await chamar("/api/content-cards/delete", { id });
+      if (!r.ok) { setErro(r.erro); return; }
+      setCards((cs) => (cs ?? []).filter((c) => c.id !== id));
     } finally {
       setBusyId(null);
     }

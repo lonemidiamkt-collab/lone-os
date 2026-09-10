@@ -16,6 +16,7 @@ import { useRole } from "@/lib/context/RoleContext";
 import { mockTasks, mockAdAccounts } from "@/lib/mockData";
 import { useMetaConnection, fetchAdAccounts } from "@/lib/meta/useMetaAds";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { toast } from "sonner";
 import {
   getAttentionColor,
@@ -280,12 +281,14 @@ export default function ClientDetailPage() {
       fd.append("file", file);
       fd.append("clientId", client.id);
       fd.append("docType", docType);
-      const res = await authedFetch("/api/onboarding/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (res.ok && data.url) {
-        const field = docType === "contrato_social" ? "docContratoSocial" : docType === "identidade" ? "docIdentidade" : "docLogo";
-        updateClientData(client.id, { [field]: data.url });
+      const res = await chamar<{ url?: string }>("/api/onboarding/upload", fd);
+      if (!res.ok || !res.data?.url) {
+        // Upload que falha calado faz a pessoa jurar que anexou o documento. Já aconteceu aqui.
+        toast.error(res.erro ?? "Não consegui subir o arquivo.");
+        return;
       }
+      const field = docType === "contrato_social" ? "docContratoSocial" : docType === "identidade" ? "docIdentidade" : "docLogo";
+      updateClientData(client.id, { [field]: res.data.url });
     } finally {
       setDadosUploading(null);
     }

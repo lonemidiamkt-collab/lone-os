@@ -41,7 +41,8 @@ export async function POST(req: NextRequest) {
       const nome = nomeCli(e);
       const quando = dias <= 0 ? "é HOJE" : dias === 1 ? "é AMANHÃ" : `faltam ${dias} dias`;
       if (jid) {
-        await csSendGroupText(jid, `⏰ *Lembrete — ${nome}* (${quando})\n*${e.titulo}* em ${brDate(e.event_date)}${e.assigned_social ? ` · ${e.assigned_social}` : ""}\n${e.descricao ? `_${e.descricao}_\n` : ""}\nBora preparar o conteúdo pra essa data! 🎯`);
+        await csSendGroupText(jid, `⏰ *Lembrete — ${nome}* (${quando})\n*${e.titulo}* em ${brDate(e.event_date)}${e.assigned_social ? ` · ${e.assigned_social}` : ""}\n${e.descricao ? `_${e.descricao}_\n` : ""}\nBora preparar o conteúdo pra essa data! 🎯`,
+          undefined, { origem: "cs-eventos-lembrete", destino: "interno" });
       }
       if (e.client_id) {
         await supabaseAdmin.from("notifications").insert({

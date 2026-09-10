@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { Loader2, Save, RefreshCw, CheckCircle, AlertTriangle } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 
 interface GroupOption { id: string; subject: string }
 interface Suggestion { groupId: string | null; groupName: string | null; score: number; confidence: "high" | "medium" | "low" | "none" }
@@ -56,9 +57,9 @@ export default function GruposPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await authedFetch("/api/clients/group-mapping");
-      const data = await res.json();
-      if (!res.ok) { toast.error(data.error ?? "Erro ao carregar"); return; }
+      const r = await chamar<Record<string, unknown>>("/api/clients/group-mapping");
+      if (!r.ok || !r.data) { toast.error(r.erro ?? "Erro ao carregar"); return; }
+      const data = r.data as Record<string, never>;
       setGroups(data.groups ?? []);
       setRows(data.clients ?? []);
       if (typeof data.warningPct === "number") setWarnPct(data.warningPct);
@@ -103,13 +104,9 @@ export default function GruposPage() {
           alerts: tog[r.clientId] ?? r.alerts,
         };
       });
-      const res = await authedFetch("/api/clients/group-mapping", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mappings }),
-      });
-      const data = await res.json();
-      if (!res.ok) { toast.error(data.error ?? "Erro ao salvar"); return; }
-      toast.success(`${data.updated} cliente(s) salvos`);
+      const res = await chamar<{ updated: number }>("/api/clients/group-mapping", { mappings });
+      if (!res.ok) { toast.error(res.erro ?? "Erro ao salvar"); return; }
+      toast.success(`${res.data?.updated ?? 0} cliente(s) salvos`);
       await load();
     } finally { setSaving(false); }
   }

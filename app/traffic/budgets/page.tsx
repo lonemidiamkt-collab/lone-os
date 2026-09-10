@@ -7,6 +7,7 @@ import {
   Wifi, WifiOff, Filter, X, Loader2, Plus, Search,
 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import {
   formatDaysRemaining,
   getBalanceSeverity,
@@ -297,10 +298,7 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
 
     setSaving(true);
     try {
-      const res = await authedFetch("/api/traffic/budget-rules", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await chamar("/api/traffic/budget-rules", {
           adAccountId: account.id,
           isPrepaid,
           spendCap: spendCap ? parseFloat(spendCap) : null,
@@ -310,13 +308,8 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
           rules,
           phone: phone || null,
           pixKey: pixKey || null,
-        }),
       });
-      if (!res.ok) {
-        const d = await res.json();
-        setValidationError(d.error ?? "Erro ao salvar");
-        return;
-      }
+      if (!res.ok) { setValidationError(res.erro ?? "Erro ao salvar"); return; }
       onSaved();
       onClose();
     } finally {
@@ -791,6 +784,8 @@ function AddAccountModal({
 
 export default function BudgetsPage() {
   const [accounts, setAccounts] = useState<EnrichedAccount[]>([]);
+  // Sem isso, uma falha de rede mostrava "nenhuma conta" em vez de "não consegui carregar".
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
@@ -803,10 +798,10 @@ export default function BudgetsPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await authedFetch("/api/traffic/sync-balances");
-      if (!res.ok) return;
-      const data = await res.json();
-      const raw: AdAccountRow[] = data.accounts ?? [];
+      const res = await chamar<{ accounts?: AdAccountRow[] }>("/api/traffic/sync-balances");
+      if (!res.ok) { setLoadError(res.erro); return; }
+      setLoadError(null);
+      const raw: AdAccountRow[] = res.data?.accounts ?? [];
       const enriched = sortAccounts(raw.map(enrichAccount));
       setAccounts(enriched);
       // Última sync = o valor mais recente entre todas as contas
@@ -943,6 +938,12 @@ export default function BudgetsPage() {
   return (
     <div className="flex flex-col flex-1 overflow-auto bg-background">
       <div className="max-w-[1400px] w-full mx-auto px-6 py-6 space-y-5">
+        {loadError && (
+          <div className="text-[12px] text-lone-danger bg-lone-danger-bg border border-lone-danger-border rounded-lg px-3 py-2">
+            {loadError}
+          </div>
+        )}
+
 
         {/* Header */}
         <div className="flex items-start justify-between gap-4">

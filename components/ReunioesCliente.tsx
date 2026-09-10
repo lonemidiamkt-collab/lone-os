@@ -23,6 +23,7 @@ import {
   ChevronRight, Sparkles, Paperclip, Check, Trash2, FileText, Clock, CalendarDays,
 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { saudeDoCliente, type ReuniaoRef } from "@/lib/meetings/status";
 import { generateGoogleCalendarUrl, generateICS, downloadICS } from "@/lib/calendar/icsGenerator";
 
@@ -182,21 +183,18 @@ export default function ReunioesCliente(
 
   useEffect(carregar, [carregar]);
 
-  const chamar = async (body: Record<string, unknown>) => {
+  const gerenciar = async (body: Record<string, unknown>) => {
     setOcupado(true);
     try {
-      const r = await authedFetch("/api/reunioes/gerenciar", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-      });
-      const j = await r.json();
-      if (!r.ok) { setAviso(j?.error ?? "não consegui"); return null; }
-      return j;
+      const r = await chamar<Record<string, unknown>>("/api/reunioes/gerenciar", body);
+      if (!r.ok) { setAviso(r.erro ?? "não consegui"); return null; }
+      return r.data;
     } finally { setOcupado(false); }
   };
 
   const registrarRealizada = async () => {
     const inicio = paraIso(lanc.data, lanc.hora);
-    const j = await chamar({
+    const j = await gerenciar({
       acao: "registrar_realizada", clientId, inicio,
       duracao: Number(lanc.duracao) || 60,
       responsavel: lanc.responsavel.trim() || undefined,
@@ -214,7 +212,7 @@ export default function ReunioesCliente(
   const agendar = async () => {
     const inicio = paraIso(form.data, form.hora);
     const fim = new Date(new Date(inicio).getTime() + Number(form.duracao) * 60000).toISOString();
-    const j = await chamar({
+    const j = await gerenciar({
       acao: "agendar", clientId, inicio, fim, tipo: form.tipo,
       // Presencial vai com o endereço junto: é o que o convite mostra a quem vai.
       local: form.modalidade === "presencial"
@@ -243,12 +241,12 @@ export default function ReunioesCliente(
   };
 
   const gerarPauta = async (id: string) => {
-    const j = await chamar({ acao: "gerar_pauta", reuniaoId: id });
-    if (j?.pauta) { setPautaTexto(j.pauta); setEditandoPauta(true); setAviso("Pauta gerada do estado do cliente — revise antes da reunião."); }
+    const j = await gerenciar({ acao: "gerar_pauta", reuniaoId: id });
+    if (typeof j?.pauta === "string") { setPautaTexto(j.pauta); setEditandoPauta(true); setAviso("Pauta gerada do estado do cliente — revise antes da reunião."); }
   };
 
   const salvarPauta = async (id: string) => {
-    const j = await chamar({ acao: "pauta", reuniaoId: id, pauta: pautaTexto });
+    const j = await gerenciar({ acao: "pauta", reuniaoId: id, pauta: pautaTexto });
     if (j?.ok) { setEditandoPauta(false); abrir(id); abrir(id); carregar(); setAviso("Pauta salva."); }
   };
 
@@ -259,7 +257,7 @@ export default function ReunioesCliente(
       fr.onerror = rej;
       fr.readAsDataURL(file);
     });
-    const j = await chamar({ acao: "anexar", reuniaoId: id, arquivo: { nome: file.name, tipo: file.type, base64 } });
+    const j = await gerenciar({ acao: "anexar", reuniaoId: id, arquivo: { nome: file.name, tipo: file.type, base64 } });
     if (j?.ok) { setAviso(`"${file.name}" anexado.`); setAberta(null); setTimeout(() => abrir(id), 50); carregar(); }
   };
 
@@ -271,12 +269,12 @@ export default function ReunioesCliente(
     }
     setOcupado(true);
     try {
-      const r = await authedFetch("/api/reunioes/transcricao", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, reuniaoId: id ?? undefined, transcricao: t, origem: "texto" }),
-      });
-      const j = await r.json();
-      if (!r.ok) { setAviso(j?.error ?? "não consegui registrar"); return; }
+      const r = await chamar<{ analisada?: boolean; pontos_atencao?: unknown[]; sugestoes_briefing?: unknown[]; aviso?: string }>(
+        "/api/reunioes/transcricao",
+        { clientId, reuniaoId: id ?? undefined, transcricao: t, origem: "texto" },
+      );
+      if (!r.ok || !r.data) { setAviso(r.erro ?? "não consegui registrar"); return; }
+      const j = r.data;
       setAviso(j.analisada
         ? `Registrado. ${j.pontos_atencao?.length ?? 0} ponto(s) de atenção${j.sugestoes_briefing?.length ? ` · ${j.sugestoes_briefing.length} sugestão(ões) pro briefing` : ""}.`
         : (j.aviso ?? "Transcrição guardada."));

@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { PillBadge } from "@/components/lone-ui";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2, AlertCircle, Camera, Clock, User, Monitor } from "lucide-react";
@@ -108,12 +109,8 @@ export default function ProcessoPage() {
   const publicar = async () => {
     setPublicando(true);
     try {
-      const r = await authedFetch(`/api/processos/${slug}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao: "publicar" }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) { setErro(j?.error || "não consegui publicar"); return; }
+      const r = await chamar(`/api/processos/${slug}`, { acao: "publicar" }, { method: "PATCH" });
+      if (!r.ok) { setErro(r.erro ?? "não consegui publicar"); return; }
       carregar();
     } finally { setPublicando(false); }
   };

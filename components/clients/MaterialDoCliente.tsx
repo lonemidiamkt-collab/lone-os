@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
+import { toast } from "sonner";
 
 // O material que o CLIENTE mandou pelo painel, na ficha dele.
 //
@@ -40,11 +42,9 @@ export default function MaterialDoCliente({ clientId }: { clientId: string }) {
   const marcarVisto = useCallback(async (id: string) => {
     setMarcando(id);
     try {
-      const res = await authedFetch(`/api/clients/${clientId}/uploads`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uploadId: id }),
-      });
-      if (res.ok) await carregar();
+      const res = await chamar(`/api/clients/${clientId}/uploads`, { uploadId: id });
+      if (!res.ok) { toast.error(res.erro ?? "Não consegui marcar como visto."); return; }
+      await carregar();
     } finally { setMarcando(null); }
   }, [clientId, carregar]);
 

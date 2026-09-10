@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { Loader2, Wand2, Save, Check } from "lucide-react";
 
 interface ClientProfile { clientId: string; name: string; estilo: string }
@@ -12,17 +13,16 @@ interface ClientProfile { clientId: string; name: string; estilo: string }
 function ProfileCard({ label, keyName, value, onSaved }: { label: string; keyName: string; value: string; onSaved: (v: string) => void }) {
   const [txt, setTxt] = useState(value);
   const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   useEffect(() => setTxt(value), [value]);
 
   const save = async () => {
-    setSaving(true);
+    setSaving(true); setErro(null);
     try {
-      const r = await authedFetch("/api/cs/estilo-perfis", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save", key: keyName, value: txt }),
-      });
-      if (r.ok) { onSaved(txt); setSaved(true); setTimeout(() => setSaved(false), 1500); }
+      const r = await chamar("/api/cs/estilo-perfis", { action: "save", key: keyName, value: txt });
+      if (!r.ok) { setErro(r.erro); return; }
+      onSaved(txt); setSaved(true); setTimeout(() => setSaved(false), 1500);
     } finally { setSaving(false); }
   };
 
@@ -30,6 +30,7 @@ function ProfileCard({ label, keyName, value, onSaved }: { label: string; keyNam
     <div className="rounded-lg border border-border bg-background p-3">
       <div className="flex items-center justify-between mb-1.5">
         <p className="text-xs font-semibold text-foreground">{label}</p>
+        {erro && <span className="text-[11px] text-lone-danger">{erro}</span>}
         <button onClick={save} disabled={saving || txt === value} className="flex items-center gap-1 text-[11px] text-primary hover:underline disabled:opacity-40 disabled:no-underline">
           {saving ? <Loader2 size={11} className="animate-spin" /> : saved ? <Check size={11} className="text-lone-success" /> : <Save size={11} />}
           {saved ? "Salvo" : "Salvar"}

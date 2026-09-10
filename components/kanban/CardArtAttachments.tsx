@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import { X, Plus, Upload, ImageIcon, ChevronLeft, ChevronRight, Download, Loader2, AlertCircle } from "lucide-react";
 import type { CardAttachment } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { useImagePaste } from "@/lib/hooks/useImagePaste";
 
 const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
@@ -273,11 +274,12 @@ export default function CardArtAttachments({
         formData.append("cardId", cardId);
         for (const f of files) formData.append("file", f);
 
-        const res = await authedFetch("/api/upload-art", { method: "POST", body: formData });
-        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        // `chamar` trata os dois modos de falha que faltavam: rede caída (authedFetch rejeitava e a
+        // exceção subia sem ninguém tratar) e corpo em HTML num 502 de deploy.
+        const res = await chamar("/api/upload-art", formData);
 
         if (!res.ok) {
-          const msg = data.error || `Erro no upload (HTTP ${res.status})`;
+          const msg = res.erro ?? "Erro no upload";
           setPending((prev) =>
             prev.map((p) => (tempIds.includes(p.tempId) ? { ...p, error: msg } : p)),
           );

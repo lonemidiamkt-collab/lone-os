@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExternalLink, Check, X, Bookmark, TrendingUp, Loader2 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { MOTIVOS_LISTA, type MotivoDescarte } from "@/lib/radar/decisao";
 import { toast } from "sonner";
 
@@ -55,15 +56,8 @@ export default function RadarOportunidades() {
   const decidir = useCallback(async (id: string, decisao: string, motivo?: MotivoDescarte) => {
     setOcupado(id);
     try {
-      const res = await authedFetch("/api/radar/pautas", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, decisao, motivo }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        toast.error(d?.error || "Não consegui registrar");
-        return;
-      }
+      const res = await chamar("/api/radar/pautas", { id, decisao, motivo });
+      if (!res.ok) { toast.error(res.erro ?? "Não consegui registrar"); return; }
       toast.success(decisao === "usada" ? "Boa! Anotado como usada." : decisao === "guardada" ? "Guardada." : "Descartada — isso ajuda o Radar a melhorar.");
       setDescartando(null);
       setPautas((p) => (p ?? []).filter((x) => x.id !== id));

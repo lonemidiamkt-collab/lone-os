@@ -21,6 +21,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { PillBadge } from "@/components/lone-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,8 +94,9 @@ export default function ProcessosPage() {
   const semearIniciais = async () => {
     setSemeando(true);
     try {
-      const r = await authedFetch("/api/processos/semear", { method: "POST" });
-      if (r.ok) carregar();
+      const r = await chamar("/api/processos/semear", {});
+      if (!r.ok) { setErro(r.erro); return; }
+      carregar();
     } finally { setSemeando(false); }
   };
 

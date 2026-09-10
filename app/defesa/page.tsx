@@ -5,6 +5,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import { useRole } from "@/lib/context/RoleContext";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import {
   ShieldAlert, AlertTriangle, CheckCircle, TrendingDown, TrendingUp,
   Loader2, Check, RefreshCcw, ChevronRight, Clock,
@@ -109,8 +110,9 @@ export default function DefesaAtivaPage() {
   const acknowledge = async (id: string) => {
     setAckingId(id);
     try {
-      const res = await authedFetch(`/api/defense/alerts/${id}/acknowledge`, { method: "POST" });
-      if (res.ok) await load();
+      const res = await chamar(`/api/defense/alerts/${id}/acknowledge`, {});
+      if (!res.ok) { setErr(res.erro ?? "Não consegui marcar o alerta."); return; }
+      await load();
     } finally {
       setAckingId(null);
     }

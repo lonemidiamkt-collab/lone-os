@@ -3023,7 +3023,8 @@ export async function POST(req: NextRequest) {
         }).then(() => {}, () => {});
         // Confirma no grupo interno (tom do time; não fala com o cliente).
         const jidEv = internalGroupJid();
-        if (jidEv) await csSendGroupText(jidEv, `📅 *Anotei uma data — ${clienteNome}*\n*${tituloEv}* em ${dataBR}${assignedSocial ? ` · ${assignedSocial}` : ""}\n_${d.descricao}_\n\nTá no calendário — lembro o time faltando 5 e 2 dias. 📌`);
+        if (jidEv) await csSendGroupText(jidEv, `📅 *Anotei uma data — ${clienteNome}*\n*${tituloEv}* em ${dataBR}${assignedSocial ? ` · ${assignedSocial}` : ""}\n_${d.descricao}_\n\nTá no calendário — lembro o time faltando 5 e 2 dias. 📌`,
+          undefined, { origem: "cs-data-anotada", destino: "interno" });
         console.log(`[CS/inbound] 📅 evento futuro → ${clienteNome}: ${tituloEv} (${d.data})`);
       }
     }
@@ -3085,7 +3086,8 @@ export async function POST(req: NextRequest) {
       expires_at: temporario ? new Date(Date.now() + 14 * 86400000).toISOString() : null,
     });
     if (!temporario) await sincronizarBriefingAprendido(c.id as string); // fato durável → enriquece o briefing
-    if (internalJid) await csSendGroupText(internalJid, `🧠 Anotei do *${clienteNome}*: _${texto}_ — vou lembrar disso.${temporario ? " (por 2 semanas — parece coisa temporária)" : ""}`);
+    if (internalJid) await csSendGroupText(internalJid, `🧠 Anotei do *${clienteNome}*: _${texto}_ — vou lembrar disso.${temporario ? " (por 2 semanas — parece coisa temporária)" : ""}`,
+      undefined, { origem: "cs-regra-anotada", destino: "interno" });
     console.log(`[CS/inbound] info_operacional → memória (${clienteNome}): ${texto}`);
   }
 
