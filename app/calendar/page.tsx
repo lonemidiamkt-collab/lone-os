@@ -1402,6 +1402,16 @@ function QuickCreateModal({
 }) {
   const { profiles } = useRole();   // equipe do banco, não lista em arquivo
   const [createType, setCreateType] = useState<CreateType>("task");
+  // Três estados que pareciam um só. "Nenhum cliente na sua carteira" aparecia ENQUANTO a lista
+  // ainda carregava (ou depois de falhar) — e a mensagem culpava o cadastro. O social lia aquilo,
+  // achava que a gestão tinha esquecido dele, e o problema era o store nunca ter sido iniciado.
+  const clientesCarregando = useClientsStore((s) => s.loading);
+  const clientesCarregados = useClientsStore((s) => s.initialized);
+  const avisoCarteira = clientesCarregando
+    ? { tom: "text-muted-foreground", texto: "Carregando sua carteira…" }
+    : !clientesCarregados
+      ? { tom: "text-lone-danger", texto: "Não consegui carregar os clientes. Recarregue a página." }
+      : { tom: "text-lone-warning", texto: "Nenhum cliente na sua carteira. Fale com a gestão — é o cadastro do cliente que define quem cuida dele." };
   // Social/designer/traffic só veem seus próprios clientes na carteira
   const visibleClients = useMemo(() => {
     if (role === "social") return clients.filter((c) => c.assignedSocial === currentUser);
@@ -1655,9 +1665,7 @@ function QuickCreateModal({
                   ))}
                 </select>
                 {!visibleClients.length && createType !== "task" && (
-                  <p className="text-[10px] text-lone-warning">
-                    Nenhum cliente na sua carteira.
-                  </p>
+                  <p className={`text-[10px] ${avisoCarteira.tom}`}>{avisoCarteira.texto}</p>
                 )}
               </div>
 
@@ -1803,10 +1811,7 @@ function QuickCreateModal({
                       outra causa: não é a tela, é o cadastro. Dizer isso evita a pessoa achar que
                       o sistema quebrou. */}
                   {!visibleClients.length && (
-                    <p className="text-[10px] text-lone-warning mt-1">
-                      Nenhum cliente na sua carteira. Fale com a gestão — é o cadastro do cliente
-                      que define quem cuida dele.
-                    </p>
+                    <p className={`text-[10px] ${avisoCarteira.tom} mt-1`}>{avisoCarteira.texto}</p>
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">

@@ -57,7 +57,10 @@ export const useClientsStore = create<ClientsState>()(
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const { clients, clientChats } = await res.json();
           set({ clients, clientChats, loading: false, initialized: true }, false, "clients/init/done");
-        } catch {
+        } catch (e) {
+          // Sem isto a lista ficava vazia em silêncio e a tela dizia "nenhum cliente na sua carteira"
+          // como se fosse verdade. Erro de carga não é lista vazia.
+          console.error("[clients/init] falhou:", e instanceof Error ? e.message : e);
           set({ loading: false }, false, "clients/init/error");
         }
       },

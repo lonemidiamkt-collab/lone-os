@@ -6,6 +6,7 @@ import { RoleProvider, useRole } from "@/lib/context/RoleContext";
 import { AppStateProvider } from "@/lib/context/AppStateContext";
 import { NavProvider, useNav } from "@/lib/context/NavContext";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
+import { useClientsStore } from "@/stores/useClientsStore";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import LoginScreen from "@/components/LoginScreen";
@@ -62,13 +63,22 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   // Em segundo plano o browser afrouxa o timer p/ ~1/min, o que é ok pra notificação.
   const initNotifs = useNotificationsStore((s) => s.init);
   const refreshNotifs = useNotificationsStore((s) => s.refresh);
+  // CLIENTES CARREGAM AQUI, NÃO EM CADA PÁGINA. Roberto (11/09/2026): "os social midia seguem com
+  // o erro de não conseguir escolher o cliente" na Criação Rápida do calendário. O /calendar lia o
+  // store e nunca chamava init() — dependia de OUTRA página ter carregado antes. Admin entra pelo
+  // dashboard (que carrega) e nunca vê; social abre /calendar direto ou dá F5 e a carteira vem
+  // vazia: "Nenhum cliente na sua carteira". Seis páginas tinham o mesmo defeito (calendar, tarefas,
+  // goals, ceo, broadcasts, sobre). Carregar uma vez, onde todo login passa, fecha as seis e a
+  // sétima que alguém criar amanhã.
+  const initClients = useClientsStore((s) => s.init);
   useEffect(() => {
     initNotifs();
+    initClients();
     const interval = setInterval(() => { refreshNotifs(); }, 45000);
     const onVisible = () => { if (document.visibilityState === "visible") refreshNotifs(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
-  }, [initNotifs, refreshNotifs]);
+  }, [initNotifs, refreshNotifs, initClients]);
 
   // Secondary sidebar is 240px; primary is 72px (200px com o menu expandido)
   const hasSecondaryRoute = SECONDARY_ROUTES.some(
