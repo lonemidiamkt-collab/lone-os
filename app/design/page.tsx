@@ -405,6 +405,12 @@ function DownloadButton({ url, title }: { url: string; title: string }) {
 export default function DesignPage() {
   const clients = useClientsStore((s) => s.clients);
   const updateClientData = useClientsStore((s) => s.updateClient);
+  // Rodrigo (11/09/2026): "todas as demandas sumiram". Não sumiram — o dono da demanda é resolvido
+  // pela lista de clientes, e enquanto ela não chega (ou se a carga falhou em silêncio) TODA
+  // demanda vira "sem dono" e some do quadro pessoal. O quadro mostrava "Sem itens" como se fosse
+  // verdade. Enquanto a carteira não carregou, o quadro não pode afirmar que está vazio.
+  const clientesCarregados = useClientsStore((s) => s.initialized);
+  const clientesCarregando = useClientsStore((s) => s.loading);
   const initClients = useClientsStore((s) => s.init);
   const subClients = useClientsStore((s) => s.subscribeRealtime);
 
@@ -1334,7 +1340,22 @@ export default function DesignPage() {
         )}
 
         {/* ═══ REQUESTS TAB ═══ */}
-        {tab === "requests" && (
+        {tab === "requests" && !clientesCarregados && quadroAtivo !== "Todos" && (
+          <div className="card text-center py-14 animate-fade-in">
+            {clientesCarregando ? (
+              <>
+                <Loader size={18} className="mx-auto text-primary animate-spin mb-3" />
+                <p className="text-sm text-muted-foreground">Carregando sua carteira para montar o quadro…</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-lone-danger">Não consegui carregar a lista de clientes — sem ela não dá pra saber quais demandas são suas.</p>
+                <button onClick={() => useClientsStore.getState().init()} className="btn-ghost text-xs mt-3">Tentar de novo</button>
+              </>
+            )}
+          </div>
+        )}
+        {tab === "requests" && (clientesCarregados || quadroAtivo === "Todos") && (
           <RequestsView
             designRequests={myDesignRequests}
             contentCards={myContentCards}

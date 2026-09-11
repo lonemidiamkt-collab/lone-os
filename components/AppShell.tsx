@@ -74,7 +74,9 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     initNotifs();
     initClients();
-    const interval = setInterval(() => { refreshNotifs(); }, 45000);
+    // init() é no-op quando já carregou; quando a primeira carga FALHOU (rede, token vencido,
+    // painel reiniciando) esta é a única coisa que tenta de novo sem a pessoa dar F5.
+    const interval = setInterval(() => { refreshNotifs(); initClients(); }, 45000);
     const onVisible = () => { if (document.visibilityState === "visible") refreshNotifs(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };

@@ -39,3 +39,19 @@ describe("o modal do calendário não culpa o cadastro enquanto carrega", () => 
     expect(CAL).toMatch(/useClientsStore\(\(s\) => s\.initialized\)/);
   });
 });
+
+describe("o quadro do designer não afirma 'sem itens' antes de saber", () => {
+  const DESIGN = readFileSync("app/design/page.tsx", "utf8");
+
+  it("espera a carteira carregar antes de filtrar por dono", () => {
+    // Rodrigo (11/09): "todas as demandas sumiram". O dono é resolvido pela lista de clientes;
+    // lista vazia = toda demanda sem dono = quadro pessoal vazio, com cara de verdade.
+    expect(DESIGN).toMatch(/tab === "requests" && !clientesCarregados && quadroAtivo !== "Todos"/);
+    expect(DESIGN).toMatch(/Carregando sua carteira para montar o quadro/);
+    expect(DESIGN).toMatch(/Não consegui carregar a lista de clientes/);
+  });
+
+  it("a carteira tenta carregar de novo sozinha quando a primeira carga falha", () => {
+    expect(SHELL).toMatch(/setInterval\(\(\) => \{ refreshNotifs\(\); initClients\(\); \}, 45000\)/);
+  });
+});
