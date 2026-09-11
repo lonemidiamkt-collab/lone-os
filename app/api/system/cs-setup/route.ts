@@ -231,16 +231,29 @@ export async function POST(req: NextRequest) {
 
   const jid = process.env.CS_INTERNAL_GROUP_JID;
   let postada = false;
+  let formatoUsado: "texto" | "pdf" = "texto";
   if (texto && jid && !previewOnly && !semPost) {
-    const r = await csSendGroupText(jid, texto, undefined, {
+    // Este aviso tinha média de 1.343 caracteres e máximo de 1.755 — 10 dos 11 últimos envios
+    // foram cortados pelo WhatsApp com "Ler mais". `enviarAviso` decide texto ou PDF pelo volume
+    // e volta pro texto se o render falhar. Ver lib/cs/enviar-aviso.ts.
+    const { enviarAviso } = await import("@/lib/cs/enviar-aviso");
+    const emSetup = status.length;
+    const r = await enviarAviso(jid, texto, {
+      titulo: "Setup de cliente novo",
+      arquivo: "Setup de cliente novo",
+      resumo: emSetup > 0
+        ? `${emSetup} ${emSetup === 1 ? "cliente" : "clientes"} com item aberto nos 7 primeiros dias.`
+        : undefined,
+    }, {
       origem: "setup-7dias", destino: "interno",
       fatos: semAnuncio.map((d) => fatoSemAnuncio(d.cliente)),
     });
     postada = r.ok;
+    formatoUsado = r.formato;
   }
 
   return NextResponse.json({
-    ok: true, postada,
+    ok: true, postada, formato: formatoUsado,
     em_setup: status.length,
     ja_graduaram: graduaram,
     promovidos: promover ? promovidos : "(passe ?promover=1 pra aplicar)",

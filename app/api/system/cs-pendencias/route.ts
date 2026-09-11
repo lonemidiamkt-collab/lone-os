@@ -102,7 +102,10 @@ export async function POST(req: NextRequest) {
 
   let postada = false;
   if (PENDENCIAS_LIVE && internalJid && !previewOnly && msg) {
-    const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-pendencias", destino: "interno" });
+    // Texto ou PDF segue o VOLUME (lib/cs/enviar-aviso.ts). Abaixo do limite nada muda; acima,
+    // vira PDF em vez de ser cortado pelo WhatsApp com "Ler mais".
+    const { enviarAviso } = await import("@/lib/cs/enviar-aviso");
+    const r = await enviarAviso(internalJid, msg, { titulo: "Pendências do agente" }, { origem: "cs-pendencias", destino: "interno" });
     postada = r.ok;
     if (!r.ok) console.error("[cs-pendencias] post falhou:", r.error);
   }

@@ -75,7 +75,9 @@ export async function POST(req: NextRequest) {
     const semPauta = videoQuarta?.length
       ? []
       : lista.filter((c) => c.esperado && !c.temPost).map((c) => fatoSemPauta(c.nome, hoje));
-    const r = await csSendGroupText(internalJid, msg, undefined, {
+    // Texto ou PDF segue o VOLUME (lib/cs/enviar-aviso.ts).
+    const { enviarAviso } = await import("@/lib/cs/enviar-aviso");
+    const r = await enviarAviso(internalJid, msg, { titulo: "Postagem de hoje" }, {
       origem: "cs-postagem", destino: "interno", fatos: semPauta,
     });
     postada = r.ok;

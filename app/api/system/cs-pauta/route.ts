@@ -130,6 +130,10 @@ export async function POST(req: NextRequest) {
 
     if (internalJid) {
       const msg = buildPautaSugestao((c.assigned_social as string) || null, nome, itens, r.data.observacao);
+      // FICA COMO TEXTO DE PROPÓSITO, mesmo passando de 600 caracteres de vez em quando.
+      // O time RESPONDE esta mensagem ("ok c6d4") e o id dela é guardado em
+      // cs_demandas.msg_id_sugestao para amarrar a resposta à demanda. PDF não tem esse fio, e
+      // trocar interação que funciona por um aviso mais bonito é um mau negócio.
       const sent = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-pauta", destino: "interno" });
       if (sent.ok && sent.id) await supabaseAdmin.from("cs_demandas").update({ msg_id_sugestao: sent.id }).eq("id", dem.id);
     }
