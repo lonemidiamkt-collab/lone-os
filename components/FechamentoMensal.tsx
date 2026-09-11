@@ -49,13 +49,21 @@ interface Resposta {
   };
 }
 
-/** Últimos 6 meses, do mais recente para o mais antigo. O padrão é o mês fechado. */
-function ultimosMeses(qtd = 6): { valor: string; rotulo: string }[] {
+/**
+ * O mês ATUAL primeiro, depois os 5 fechados.
+ *
+ * Roberto (11/09/2026): "o mês ainda está em agosto e já estamos no dia 11 de setembro". A lista
+ * começava em `getMonth() - 1` de propósito — "fechamento" era só de mês encerrado — e setembro não
+ * existia nem como opção. Mas é durante o mês que a equipe precisa saber se vai bater a meta; no
+ * fechamento já não dá pra fazer nada. O atual entra marcado como "em andamento" para ninguém ler
+ * 40% no dia 11 como se fosse o resultado final.
+ */
+function ultimosMeses(qtd = 6): { valor: string; rotulo: string; emAndamento: boolean }[] {
   const hoje = new Date();
   return Array.from({ length: qtd }, (_, i) => {
-    const d = new Date(hoje.getFullYear(), hoje.getMonth() - 1 - i, 15);
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 15);
     const valor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    return { valor, rotulo: d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }) };
+    return { valor, rotulo: d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }), emAndamento: i === 0 };
   });
 }
 
@@ -98,6 +106,11 @@ export default function FechamentoMensal() {
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
           <Users size={14} className="text-primary" /> Fechamento do mês
           <span className="text-[10px] text-muted-foreground font-normal capitalize">· {dados.rotulo}</span>
+          {meses.find((m) => m.valor === mes)?.emAndamento && (
+            <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border">
+              parcial — até hoje
+            </span>
+          )}
         </h3>
         <div className="flex gap-1">
           {meses.map((m) => (
@@ -108,7 +121,7 @@ export default function FechamentoMensal() {
                 mes === m.valor ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:text-foreground"
               }`}
             >
-              {m.rotulo}
+              {m.rotulo}{m.emAndamento ? " · em andamento" : ""}
             </button>
           ))}
         </div>

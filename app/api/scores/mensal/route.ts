@@ -24,9 +24,10 @@ export async function GET(req: NextRequest) {
 
   const par = req.nextUrl.searchParams.get("mes");
   const hoje = new Date();
+  // Sem ?mes=, o padrão é o MÊS ATUAL — era o anterior, e a tela abria em agosto no dia 11 de setembro.
   const base = par && /^\d{4}-\d{2}$/.test(par)
     ? new Date(`${par}-15T12:00:00Z`)
-    : new Date(hoje.getFullYear(), hoje.getMonth() - 1, 15);
+    : new Date(hoje.getFullYear(), hoje.getMonth(), 15);
   const ano = base.getFullYear();
   const mes = base.getMonth() + 1;
   const inicio = `${ano}-${String(mes).padStart(2, "0")}-01`;
