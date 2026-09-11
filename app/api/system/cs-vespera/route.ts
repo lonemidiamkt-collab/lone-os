@@ -102,13 +102,48 @@ export async function POST(req: NextRequest) {
 
   const internalJid = process.env.CS_INTERNAL_GROUP_JID || null;
   let postada = false;
+  let formatoUsado: "texto" | "pdf" = "texto";
   if (msg && VESPERA_LIVE && internalJid && !previewOnly) {
-    const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-vespera", destino: "interno" });
-    postada = r.ok;
-    if (!r.ok) console.error("[cs-vespera] post falhou:", r.error);
+    // TEXTO OU PDF SEGUE O VOLUME (lib/cs/formato-aviso.ts). Em 11/09 esta mensagem saiu com 11
+    // clientes e o WhatsApp cortou com "Ler mais" — o fim da lista, onde estão os casos mais
+    // antigos, não foi lido por ninguém. Véspera com três clientes continua indo como texto.
+    const { escolherFormato } = await import("@/lib/cs/formato-aviso");
+    const itens = semCard.length + semArte.length + videoClientes.length;
+    formatoUsado = escolherFormato({ itens, texto: msg });
+
+    if (formatoUsado === "pdf") {
+      try {
+        const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
+        const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
+        const { csSendGroupDocument } = await import("@/lib/cs/notify");
+        const { vesperaPdfHtml, legendaVespera } = await import("@/lib/reports/vesperaPdf");
+        const dados = {
+          diaLabel, semCard, semArte, video: videoClientes,
+          prontos, esperados: esperados.length,
+        };
+        const logo = await loadLoneLogo().catch(() => "");
+        const pdf = await htmlToPdf(vesperaPdfHtml(dados, logo, new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })));
+        if (!pdf.ok || !pdf.buffer) throw new Error(pdf.error ?? "render falhou");
+        const arquivo = `Vespera ${diaLabel.replace(/[^\p{L}\p{N} ]/gu, "").trim()}.pdf`;
+        const env = await csSendGroupDocument(internalJid, pdf.buffer.toString("base64"), arquivo,
+          legendaVespera(dados), "application/pdf");
+        if (!env.ok) throw new Error(env.error ?? "envio falhou");
+        postada = true;
+      } catch (e) {
+        // Véspera que some porque o render caiu é pior que véspera comprida: cai pro texto.
+        console.error("[cs-vespera] PDF falhou, mandando como texto:", String(e));
+        formatoUsado = "texto";
+        const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-vespera", destino: "interno" });
+        postada = r.ok;
+      }
+    } else {
+      const r = await csSendGroupText(internalJid, msg, undefined, { origem: "cs-vespera", destino: "interno" });
+      postada = r.ok;
+      if (!r.ok) console.error("[cs-vespera] post falhou:", r.error);
+    }
   }
 
-  console.log(`[cs-vespera] amanhã=${amanhaKey} wd=${wdAmanha} esperados=${esperados.length} semCard=${semCard.length} semArte=${semArte.length} prontos=${prontos} postada=${postada}`);
+  console.log(`[cs-vespera] formato=${formatoUsado} amanhã=${amanhaKey} wd=${wdAmanha} esperados=${esperados.length} semCard=${semCard.length} semArte=${semArte.length} prontos=${prontos} postada=${postada}`);
   return NextResponse.json({
     ok: true, live: VESPERA_LIVE, amanha: diaLabel, firme, video_day: videoDay,
     esperados: esperados.length, prontos, sem_card: semCard.length, sem_arte: semArte.length,

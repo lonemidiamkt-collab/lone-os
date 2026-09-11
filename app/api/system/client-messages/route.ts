@@ -29,6 +29,7 @@ import {
   type ReportClientRow,
 } from "@/lib/traffic/weekly-report";
 import { mondayReportMessage, mondaySocialMessage, RESEND_REPORT_MESSAGE, supportMessageFor, socialMessageFor, type ClientMsgKind } from "@/lib/traffic/support-message";
+import { podeFalarDeAnuncio } from "@/lib/clients/servico";
 import { conferirEAvisar } from "@/lib/cs/entregas";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { montarMensagemCliente } from "@/lib/cs/mensagem-cliente";
@@ -205,7 +206,9 @@ export async function POST(req: NextRequest) {
       const name = clientDisplayName(c);
       const jid = c.whatsapp_group_jid!;
 
-      if (withReport && c.meta_ad_account_id) {
+      // Relatório de mídia paga só para quem contratou mídia paga. A conta vinculada continua
+      // sendo necessária (é de onde o número vem), mas não é mais o que AUTORIZA.
+      if (withReport && podeFalarDeAnuncio(c) && c.meta_ad_account_id) {
         // Segunda, cliente de tráfego: PDF de 7 dias com a mensagem como legenda.
         if (force || !(await alreadySent(c.id, dateKey, "report"))) {
           if (!token) {
@@ -242,7 +245,11 @@ export async function POST(req: NextRequest) {
           .eq("destino", "cliente").eq("enviado", true)
           .order("created_at", { ascending: false }).limit(6);
         const recentes = (ultimas ?? []).map((u) => (u.texto as string) || "");
-        const neutro = c.meta_ad_account_id ? supportMessageFor(kind, recentes) : socialMessageFor(kind, recentes);
+        // O QUE FOI VENDIDO decide, não o que está vinculado. Antes era
+        // `c.meta_ad_account_id ? trafego : social` — e o Dumar, que é assessoria_social e tem
+        // conta de anúncio vinculada, recebeu "nosso lado anúncios" e "de olho nas campanhas"
+        // no grupo dele. Ver lib/clients/servico.ts.
+        const neutro = podeFalarDeAnuncio(c) ? supportMessageFor(kind, recentes) : socialMessageFor(kind, recentes);
         // TRÊS ESTÁGIOS, nesta ordem — a mensagem só chega ao cliente depois de o Roberto ler:
         //   desligado  → texto de sempre (o sorteio de 5 frases)
         //   "revisao"  → o agente ESCREVE a contextual e manda pro GRUPO INTERNO; o cliente
@@ -317,7 +324,7 @@ export async function POST(req: NextRequest) {
     if (!onlyClientId) {
       const elegiveis = withGroup.map((c) => ({ id: c.id, nome: clientDisplayName(c) }));
       // Na segunda saem os dois tipos: relatório pra quem tem tráfego, texto pro resto.
-      const comRelatorio = withReport ? withGroup.filter((c) => c.meta_ad_account_id) : [];
+      const comRelatorio = withReport ? withGroup.filter((c) => podeFalarDeAnuncio(c) && c.meta_ad_account_id) : [];
       const [confSup, confRel] = await Promise.all([
         conferirEAvisar("support", dateKey, elegiveis.filter((e) => !comRelatorio.some((c) => c.id === e.id))),
         comRelatorio.length

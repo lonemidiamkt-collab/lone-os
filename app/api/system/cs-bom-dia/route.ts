@@ -78,7 +78,35 @@ export async function POST(req: NextRequest) {
       const hojeIso = ymd(now);
       const dataArquivo = hojeIso.split("-").reverse().join("-");
 
-      for (const b of blocos) {
+      // FORMATO SEGUE O VOLUME, não o destinatário (lib/cs/formato-aviso.ts).
+      // Em 11/09 chegaram quatro PDFs com UM item cada — baixar um arquivo para ler seis palavras.
+      // Quem tem até 4 itens entra numa mensagem só, com menção de verdade; quem tem mais segue em
+      // PDF, que é onde o PDF ganha.
+      const { separarPorTamanho } = await import("@/lib/cs/formato-aviso");
+      const { emPdf, juntos } = separarPorTamanho(blocos);
+
+      // ── OS PEQUENOS, numa mensagem só ──
+      if (juntos.length) {
+        const linhas: string[] = [];
+        const jidsJuntos: string[] = [];
+        for (const b of juntos) {
+          const mm = b.dono === "sem dono"
+            ? { trecho: "", jids: [] as string[] }
+            : await mencionar(b.dono).catch(() => ({ trecho: "", jids: [] as string[] }));
+          const quem = mm.trecho || (b.dono === "sem dono" ? "Sem dono" : b.dono);
+          jidsJuntos.push(...mm.jids);
+          for (const i of b.itens) {
+            linhas.push(`• ${quem} — *${i.cliente}*: ${i.acao}${i.dias >= 2 ? ` (há ${i.dias} dias)` : ""}`);
+          }
+        }
+        const texto = `☀️ *Pendências pontuais de hoje*\n${linhas.join("\n")}`;
+        const r2 = await csSendGroupText(internalJid, texto, undefined,
+          { origem: "cs-bom-dia-curtas", destino: "interno" }, jidsJuntos).catch(() => ({ ok: false, error: "envio falhou" }));
+        if (!r2.ok) falhas.push(`pendências pontuais: ${r2.error ?? "erro"}`);
+      }
+
+      // ── OS GRANDES, em PDF ──
+      for (const b of emPdf) {
         const bloco = {
           pessoa: b.dono === "sem dono" ? "Sem dono" : b.dono,
           itens: b.itens.map((i) => ({ cliente: i.cliente, acao: i.acao, dias: i.dias })),

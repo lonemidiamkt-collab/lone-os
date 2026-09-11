@@ -14,6 +14,8 @@ export interface ReportClientRow {
   id: string;
   name: string;
   nome_fantasia: string | null;
+  /** O pacote contratado. É o ÚNICO campo que autoriza falar de anúncio — ver lib/clients/servico.ts. */
+  service_type: string | null;
   meta_ad_account_id: string | null;
   ig_business_account_id?: string | null;
   ig_public_username?: string | null;
@@ -72,12 +74,15 @@ export async function selectActiveMetaClients(
 ): Promise<ReportClientRow[]> {
   let q = supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, meta_ad_account_id, ig_business_account_id, ig_public_username, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
+    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
     .in("status", ["good", "average", "onboarding"])
     .is("draft_status", null)
     .order("nome_fantasia");
+  // `apenasTrafego` filtrava por "tem conta de anúncio" — o mesmo proxy errado que mandou mensagem
+  // de campanha pro Dumar. Agora exige o CONTRATO e a conta: o contrato autoriza, a conta viabiliza.
   q = apenasTrafego
-    ? q.not("meta_ad_account_id", "is", null)
+    ? q.in("service_type", ["lone_growth", "assessoria_trafego", "trafego_pago", "trafego_social_site"])
+        .not("meta_ad_account_id", "is", null)
     : q.or("meta_ad_account_id.not.is.null,ig_business_account_id.not.is.null,ig_public_username.not.is.null");
   if (onlyClientId) q = q.eq("id", onlyClientId);
   const { data, error } = await q;
@@ -100,7 +105,11 @@ export async function selectActiveClientsWithGroup(onlyClientId?: string | null)
   // atenção era justamente o que parava de receber relatório.
   let q = supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, meta_ad_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
+    // service_type é OBRIGATÓRIO aqui: é ele que autoriza falar de anúncio (lib/clients/servico.ts).
+    // Sem esse campo no select, `podeFalarDeAnuncio` receberia undefined e — por ser prudente por
+    // desenho — calaria a mensagem de tráfego de TODO MUNDO. O silêncio geral seria pior que o erro
+    // que ele corrige.
+    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
     .in("status", ["good", "average", "onboarding", "at_risk"])
     .is("draft_status", null)
     .neq("active", false) // ex-clientes (churned) não recebem mensagem/relatório
