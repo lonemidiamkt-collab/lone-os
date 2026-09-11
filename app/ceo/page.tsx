@@ -66,6 +66,7 @@ export default function CEOPage() {
   const quinzReports = useOperationalStore((s) => s.quinzReports);
   const trafficRoutineChecks = useTrafficStore((s) => s.trafficRoutineChecks);
 
+
   const [pin, setPin] = useState("");
   const [unlocked, setUnlocked] = useState(() => isCeoSessionValid());
   const [pinError, setPinError] = useState(false);
@@ -1865,6 +1866,14 @@ function TimesheetTab({
   contentCards: import("@/lib/types").ContentCard[];
   tasks: import("@/lib/types").Task[];
 }) {
+  // "Nenhum dado disponível" só depois de os dados terem chegado. Esta tela não carregava nada —
+  // dependia de outra página ter feito isso — e mostrava os vazios como se fossem o resultado.
+  const contentPronto = useContentStore((s) => s.initialized);
+  const opsPronto = useOperationalStore((s) => s.initialized);
+  const dadosProntos = contentPronto && opsPronto;
+  const vazio = (msg: string) => (
+    <p className="text-xs text-muted-foreground">{dadosProntos ? msg : "Carregando…"}</p>
+  );
   // Aggregate hours by client
   const hoursByClient = useMemo(() => {
     const map: Record<string, { name: string; ms: number }> = {};
@@ -1969,7 +1978,7 @@ function TimesheetTab({
           Alocação por Cliente (horas)
         </h3>
         {hoursByClient.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Nenhum tempo registrado ainda. O timesheet começa a contar quando cards entram em produção.</p>
+          vazio("Nenhum tempo registrado ainda. O timesheet começa a contar quando cards entram em produção.")
         ) : (
           <div className="space-y-3">
             {hoursByClient.map((entry) => {
@@ -2000,7 +2009,7 @@ function TimesheetTab({
           Tempo Médio por Formato de Conteúdo
         </h3>
         {avgByFormat.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Dados insuficientes. O sistema precisa de cards concluídos para calcular médias.</p>
+          vazio("Dados insuficientes. O sistema precisa de cards concluídos para calcular médias.")
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
             {avgByFormat.map(({ format, avgMs, count }) => (
@@ -2021,7 +2030,7 @@ function TimesheetTab({
           Ranking de Dedicação
         </h3>
         {teamRanking.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Nenhum dado disponível.</p>
+          vazio("Nenhum dado disponível.")
         ) : (
           <div className="space-y-2">
             {teamRanking.map((member, i) => (

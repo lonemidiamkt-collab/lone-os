@@ -21,7 +21,7 @@ describe("carteira de clientes carrega no casco do app", () => {
   });
 
   it("o efeito depende do initClients (senão o React reclama e alguém 'corrige' tirando)", () => {
-    expect(SHELL).toMatch(/\[initNotifs, refreshNotifs, initClients\]/);
+    expect(SHELL).toMatch(/\[initNotifs, refreshNotifs, initClients, initContent, initOps, initTraffic\]/);
   });
 });
 
@@ -52,6 +52,24 @@ describe("o quadro do designer não afirma 'sem itens' antes de saber", () => {
   });
 
   it("a carteira tenta carregar de novo sozinha quando a primeira carga falha", () => {
-    expect(SHELL).toMatch(/setInterval\(\(\) => \{ refreshNotifs\(\); initClients\(\); \}, 45000\)/);
+    expect(SHELL).toMatch(/initClients\(\); initContent\(\); initOps\(\); initTraffic\(\);\s*\n\s*\}, 45000\)/);
+  });
+});
+
+describe("os quatro stores de dados carregam no casco, não em cada página", () => {
+  it("content, operational e traffic entram junto com clients", () => {
+    // Varredura de 11/09 à tarde: /calendar, /my-work, /ceo e /tarefas liam esses stores sem
+    // chamar init(). Quem entra pelo dashboard nunca vê; quem cai direto vê "nenhum dado".
+    expect(SHELL).toMatch(/initClients\(\); initContent\(\); initOps\(\); initTraffic\(\);/);
+  });
+
+  it("o intervalo de 45s re-tenta os quatro", () => {
+    expect(SHELL).toMatch(/refreshNotifs\(\);\s*\n\s*initClients\(\); initContent\(\); initOps\(\); initTraffic\(\);/);
+  });
+
+  it("o timesheet do CEO diz 'carregando' em vez de 'nenhum dado' enquanto espera", () => {
+    const CEO = readFileSync("app/ceo/page.tsx", "utf8");
+    expect(CEO).toMatch(/dadosProntos \? msg : "Carregando…"/);
+    expect(CEO).not.toMatch(/<p className="text-xs text-muted-foreground">Nenhum dado disponível\.<\/p>/);
   });
 });

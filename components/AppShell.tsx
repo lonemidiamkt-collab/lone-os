@@ -7,6 +7,9 @@ import { AppStateProvider } from "@/lib/context/AppStateContext";
 import { NavProvider, useNav } from "@/lib/context/NavContext";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useClientsStore } from "@/stores/useClientsStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useOperationalStore } from "@/stores/useOperationalStore";
+import { useTrafficStore } from "@/stores/useTrafficStore";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import LoginScreen from "@/components/LoginScreen";
@@ -71,16 +74,27 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   // goals, ceo, broadcasts, sobre). Carregar uma vez, onde todo login passa, fecha as seis e a
   // sétima que alguém criar amanhã.
   const initClients = useClientsStore((s) => s.init);
+  // MESMA LIÇÃO, TRÊS STORES A MAIS (11/09, à tarde). Depois de carregar clientes aqui, a varredura
+  // achou o defeito repetido: /calendar, /my-work (a home do social), /ceo e /tarefas leem content,
+  // operational e traffic e nenhuma delas chama init(). Quem entra pelo dashboard nunca vê, porque
+  // o dashboard carrega os quatro; quem cai direto — F5, link de notificação, aba nova — vê "Nenhum
+  // dado disponível" com cara de verdade. Todos os init() são idempotentes (saem se já carregou).
+  const initContent = useContentStore((s) => s.init);
+  const initOps = useOperationalStore((s) => s.init);
+  const initTraffic = useTrafficStore((s) => s.init);
   useEffect(() => {
     initNotifs();
-    initClients();
+    initClients(); initContent(); initOps(); initTraffic();
     // init() é no-op quando já carregou; quando a primeira carga FALHOU (rede, token vencido,
     // painel reiniciando) esta é a única coisa que tenta de novo sem a pessoa dar F5.
-    const interval = setInterval(() => { refreshNotifs(); initClients(); }, 45000);
+    const interval = setInterval(() => {
+      refreshNotifs();
+      initClients(); initContent(); initOps(); initTraffic();
+    }, 45000);
     const onVisible = () => { if (document.visibilityState === "visible") refreshNotifs(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
-  }, [initNotifs, refreshNotifs, initClients]);
+  }, [initNotifs, refreshNotifs, initClients, initContent, initOps, initTraffic]);
 
   // Secondary sidebar is 240px; primary is 72px (200px com o menu expandido)
   const hasSecondaryRoute = SECONDARY_ROUTES.some(
