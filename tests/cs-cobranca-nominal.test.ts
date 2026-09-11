@@ -11,7 +11,7 @@ import {
 import type { SnapshotCS } from "@/lib/cs/snapshot";
 
 const vazio: SnapshotCS = {
-  pendentes: [], emProducao: 0, aguardandoAprovacao: 0, aguardandoDesigner: 0,
+  pendentes: [], porDesigner: [], emProducao: 0, aguardandoAprovacao: 0, aguardandoDesigner: 0,
   entreguesAguardandoSocial: 0, prontasPraPostar: [], atrasados: [], encalhados: 0,
   esfriando: [], semPostsSemana: [], semPostsLabel: "essa semana", novosHoje: 0,
   eventosClientes: [], texto: "",

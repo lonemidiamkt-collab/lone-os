@@ -59,3 +59,17 @@ describe("a janela de continuação", () => {
     expect(abreJanela({ chamadoPeloNome: false, continuacao: false, perguntaOperacional: true })).toBe(false);
   });
 });
+
+describe("o snapshot que o modelo lê sabe o que cada designer tem", () => {
+  it("a linha DESIGNERS existe no texto e reusa a regra de dono do quadro", async () => {
+    // 10:07 de 11/09: "Não tem nada pendente pra você no momento" — a um designer com 3 alterações.
+    // O snapshot só via content_cards e avisava ao modelo que "resp NÃO é o designer". Dado ausente
+    // virou resposta errada com convicção.
+    const { readFileSync } = await import("node:fs");
+    const SNAP = readFileSync("lib/cs/snapshot.ts", "utf8");
+    expect(SNAP).toMatch(/DESIGNERS — o que cada um tem na mão AGORA/);
+    expect(SNAP).toMatch(/import \{ donoDaDemanda \} from "@\/lib\/design\/dono"/);
+    expect(SNAP).toMatch(/from\("design_requests"\)/);
+    expect(SNAP).toMatch(/ALTERAÇÃO pedida pelo social/);
+  });
+});

@@ -4,6 +4,7 @@
 // Determinístico (sem IA): junta cs_demandas + content_cards + clients num resumo compacto.
 
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { donoDaDemanda } from "@/lib/design/dono";
 import { spNow, ymd } from "@/lib/cs/vigilancia";
 import { clientesSemPostNaSemana, semanaAlvo } from "@/lib/cs/lacunas";
 import { proximasDatas, formatDataCurta } from "@/lib/cs/datas";
@@ -14,6 +15,8 @@ const ATRASO_MAX = 30; // acima disso o card é "encalhado" (higiene), não atra
 
 export interface SnapshotCS {
   pendentes: { codigo: string; cliente: string; tipo: string; resumo: string; dias: number; responsavel: string | null }[];
+  /** O que cada DESIGNER tem na mão agora: fila, em produção e alterações pedidas pelo social. */
+  porDesigner: { designer: string; fila: number; emProducao: number; alteracoes: number; itens: string[] }[];
   emProducao: number;
   aguardandoAprovacao: number;
   aguardandoDesigner: number;          // cards comprometidos onde o DESIGNER ainda não entregou a arte
@@ -45,9 +48,9 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
   const meiaNoiteSP = new Date(`${hojeData}T00:00:00-03:00`).toISOString();
   const limiteFrio = new Date(Date.now() - DIAS_QUIETO * 86400000).toISOString();
 
-  const [clientsRes, demRes, cardsRes] = await Promise.all([
+  const [clientsRes, demRes, cardsRes, drRes, rejRes] = await Promise.all([
     supabaseAdmin.from("clients")
-      .select("id, name, nome_fantasia, last_client_msg_at, agente_ativo, assigned_social")
+      .select("id, name, nome_fantasia, last_client_msg_at, agente_ativo, assigned_social, assigned_designer")
       .or("active.is.null,active.eq.true"),
     supabaseAdmin.from("cs_demandas")
       // `responsavel` entrou pro digest conseguir agrupar por QUEM decide — sem ele, as 58
@@ -55,8 +58,19 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       .select("codigo, cliente_nome, client_id, tipo, resumo, created_at, responsavel")
       .eq("status", "pendente").order("created_at", { ascending: true }),
     supabaseAdmin.from("content_cards")
-      .select("client_id, status, title, due_date, created_at, social_media, designer_delivered_at, social_confirmed_at")
+      .select("id, client_id, status, title, due_date, created_at, social_media, designer_delivered_at, social_confirmed_at")
       .is("archived_at", null),
+    // O QUE CADA DESIGNER TEM NA MÃO. Sem isto o modelo respondia "não tem nada pendente pra você"
+    // a um designer com 3 alterações — o snapshot só via content_cards, e o texto dizia ao modelo
+    // que "resp NÃO é o designer". Dado ausente virou resposta errada com convicção (11/09/2026).
+    supabaseAdmin.from("design_requests")
+      .select("id, title, client_id, status, assigned_designer, content_card_id")
+      .neq("status", "done"),
+    supabaseAdmin.from("content_approvals")
+      .select("card_id, status, reviewed_at")
+      .eq("status", "rejected")
+      .order("reviewed_at", { ascending: false })
+      .limit(300),
   ]);
   const primeiroNome = (n?: string | null) => (n || "").trim().split(/\s+/)[0] || null;
 
@@ -153,12 +167,48 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       data: new Date(`${e.event_date}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
     }));
 
+  // ── POR DESIGNER: fila, em produção e alterações — a mesma regra de dono do quadro (lib/design/dono).
+  const clientesDesigner = (clientsRes.data ?? []).map((c) => ({ id: c.id as string, assignedDesigner: (c.assigned_designer as string) || null }));
+  const nomeCliente = new Map((clientsRes.data ?? []).map((c) => [c.id as string, (c.nome_fantasia as string) || (c.name as string) || "Cliente"]));
+  const porDesignerMap = new Map<string, { fila: number; emProducao: number; alteracoes: number; itens: string[] }>();
+  const bucket = (d: string) => {
+    if (!porDesignerMap.has(d)) porDesignerMap.set(d, { fila: 0, emProducao: 0, alteracoes: 0, itens: [] });
+    return porDesignerMap.get(d)!;
+  };
+  for (const d of drRes.data ?? []) {
+    const dono = donoDaDemanda({ clientId: d.client_id as string, assignedDesigner: d.assigned_designer as string | null }, clientesDesigner) ?? "sem designer";
+    const b = bucket(dono);
+    if (d.status === "in_progress") b.emProducao++; else b.fila++;
+    if (b.itens.length < 6) b.itens.push(`${nomeCliente.get(d.client_id as string) ?? "Cliente"}: ${String(d.title ?? "").slice(0, 40)} (${d.status === "in_progress" ? "em produção" : "na fila"})`);
+  }
+  // Alteração pendente = rejeição mais recente que a última entrega do card.
+  const ultimaRejeicao = new Map<string, string>();
+  for (const r of rejRes.data ?? []) {
+    const k = r.card_id as string;
+    if (!ultimaRejeicao.has(k)) ultimaRejeicao.set(k, (r.reviewed_at as string) || "");
+  }
+  for (const k of cards) {
+    const rej = ultimaRejeicao.get(k.id as string);
+    if (!rej) continue;
+    if (k.designer_delivered_at && rej <= (k.designer_delivered_at as string)) continue; // já refez
+    const dono = donoDaDemanda({ clientId: k.client_id as string, assignedDesigner: null }, clientesDesigner) ?? "sem designer";
+    const b = bucket(dono);
+    b.alteracoes++;
+    if (b.itens.length < 6) b.itens.push(`${nomeCliente.get(k.client_id as string) ?? "Cliente"}: ${String(k.title ?? "").slice(0, 40)} (ALTERAÇÃO pedida pelo social)`);
+  }
+  const porDesigner = [...porDesignerMap.entries()]
+    .map(([designer, v]) => ({ designer, ...v }))
+    .sort((a, b) => (b.fila + b.emProducao + b.alteracoes) - (a.fila + a.emProducao + a.alteracoes));
+
   // Resumo factual compacto — a IA lê ISTO pra responder com números reais (não inventa).
   const linhas = [
     `Demandas pendentes esperando ok/não: ${pendentes.length} no total` +
       (pendentes.length ? ` (algumas: ${pendentes.slice(0, 8).map((p) => `${p.cliente} (${p.tipo}, há ${p.dias}d)`).join("; ")})` : ""),
     `Em produção: ${emProducao} · Aguardando aprovação: ${aguardandoAprovacao} · Novos cards hoje: ${novosHoje}`,
     `Pipeline de produção: ${aguardandoDesigner} aguardando o DESIGNER entregar a arte; ${entreguesAguardandoSocial} já entregues pelo designer, aguardando o SOCIAL confirmar/postar. (resp = social/gestor da conta, NÃO é o designer)`,
+    porDesigner.length
+      ? `DESIGNERS — o que cada um tem na mão AGORA (use isto quando um designer perguntar o que tem pra ele): ${porDesigner.map((d) => `${d.designer}: ${d.fila} na fila, ${d.emProducao} em produção, ${d.alteracoes} alteração(ões)${d.itens.length ? ` [${d.itens.join("; ")}]` : ""}`).join(" · ")}`
+      : "DESIGNERS: nenhuma demanda aberta para nenhum designer.",
     prontasPraPostar.length
       ? `Artes PRONTAS (designer entregou, falta o social postar): ${prontasPraPostar.map((p) => `${p.cliente} - ${p.titulo} (${p.dias}d parada${p.responsavel ? `, resp: ${p.responsavel}` : ""})`).slice(0, 10).join("; ")}`
       : "",
@@ -180,5 +230,5 @@ export async function montarSnapshotCS(): Promise<SnapshotCS> {
       : "",
   ].filter(Boolean);
 
-  return { pendentes, emProducao, aguardandoAprovacao, aguardandoDesigner, entreguesAguardandoSocial, prontasPraPostar, atrasados, encalhados, esfriando, semPostsSemana, semPostsLabel: semana.label, novosHoje, eventosClientes, texto: linhas.join("\n") };
+  return { pendentes, porDesigner, emProducao, aguardandoAprovacao, aguardandoDesigner, entreguesAguardandoSocial, prontasPraPostar, atrasados, encalhados, esfriando, semPostsSemana, semPostsLabel: semana.label, novosHoje, eventosClientes, texto: linhas.join("\n") };
 }
