@@ -10,6 +10,8 @@ import { classifyBlock, type ClassifierContext } from "@/lib/cs/classifier";
 import { csSendGroupText as csSendRaw, csSendGroupDocument, csFetchMediaBase64, csFindGroupByName } from "@/lib/cs/notify";
 import type { CsSendMeta } from "@/lib/cs/notify";
 import { ehSoRecibo } from "@/lib/cs/recibo";
+import { deveOuvir, deveFalar, abreJanela, type SinaisDoPapo } from "@/lib/cs/porta-do-papo";
+import { ehPalpiteSobreSistema, ehFillerComNome, RESPOSTA_SEM_VISAO_DO_PAINEL } from "@/lib/cs/palpite";
 
 // ── TODA saída deste arquivo passa a ser ETIQUETADA ─────────────────────────
 //
@@ -546,7 +548,7 @@ async function autoAvancarPorArteNoGrupo(groupJid: string, autorNome?: string | 
 // ciclo do webhook (o reply sai pela Evolution), então nunca segura a resposta HTTP.
 async function responderPapo(p: {
   groupJid: string; authorJid?: string | null; authorName?: string | null;
-  quotedMsgId?: string | null; texto: string; chamadoDireto: boolean; descontraido: boolean;
+  quotedMsgId?: string | null; texto: string; sinais: SinaisDoPapo; descontraido: boolean;
 }) {
   try {
     const historico = histTexto(p.groupJid);       // memória = mensagens ANTERIORES
@@ -559,24 +561,38 @@ async function responderPapo(p: {
     // Avisaram que uma tarefa foi feita? Marca no sistema (fecha o loop da cobrança).
     let marcada: string | null = null;
     if (conv.ok && conv.data?.tarefa_feita) marcada = await marcarTarefaFeita(p.authorName, conv.data.tarefa_feita);
-    if (conv.ok && conv.data?.ignorar === true && !p.chamadoDireto && !marcada) {
-      console.log(`[CS/inbound] conversa ignorada (não era pra Lone): "${p.texto.slice(0, 40)}"`);
-      return;
+    let resp0 = (conv.ok && conv.data?.resposta) ? conv.data.resposta : "Opa! Tô por aqui 👋 me chama que eu ajudo.";
+    // PALPITE SOBRE O SISTEMA NUNCA SAI. "pode ser um bug", "verifica se tá atualizado", "pode ser
+    // que tá filtrando" — o agente não vê o painel e não tem como saber. Chamado pelo nome recebe
+    // a frase honesta; sem nome, vira recibo e cala. Regra em código porque o prompt já proibia e
+    // hoje (11/09) saiu quatro vezes seguidas.
+    const palpite = ehPalpiteSobreSistema(resp0);
+    if (palpite) {
+      console.log(`[CS/inbound] palpite barrado: "${resp0.slice(0, 60)}"`);
+      resp0 = RESPOSTA_SEM_VISAO_DO_PAINEL;
     }
-    const resp0 = (conv.ok && conv.data?.resposta) ? conv.data.resposta : "Opa! Tô por aqui 👋 me chama que eu ajudo.";
     // Se marquei a tarefa e a resposta não deixou isso claro, confirmo.
     const resp = marcada && !/marqu|marcad|feita|conclu/i.test(resp0)
       ? `${resp0}\n\n✅ Marquei "${marcada}" como feita no sistema.` : resp0;
-    // Cortesia sem conteúdo não vale uma notificação em seis celulares — a não ser que tenham
-    // chamado o Loninho pelo nome, ou que ele tenha uma marcação concreta a confirmar.
-    if (!p.chamadoDireto && !marcada && ehSoRecibo(resp)) {
-      pushHist(p.groupJid, "Você (Lone)", "(calei: era só recibo)");
-      console.log(`[CS/inbound] calei recibo vazio: "${resp.slice(0, 50)}"`);
+    // Manda ou cala? Só o chamado pelo nome passa por cima do "ignorar" e do recibo vazio.
+    const veredicto = {
+      ignorar: !!(conv.ok && conv.data?.ignorar === true),
+      // Recibo: o detector antigo (curto, sem nome) OU o novo (abertura + nome + fecho de cortesia)
+      // OU um palpite que foi trocado pela frase honesta sem ninguém ter chamado pelo nome.
+      soRecibo: ehSoRecibo(resp) || ehFillerComNome(resp) || (palpite && !p.sinais.chamadoPeloNome),
+      marcouTarefa: !!marcada,
+    };
+    if (!deveFalar(p.sinais, veredicto)) {
+      const motivo = veredicto.ignorar ? "não era pra Lone" : "era só recibo";
+      pushHist(p.groupJid, "Você (Lone)", `(calei: ${motivo})`);
+      console.log(`[CS/inbound] calei (${motivo}): "${p.texto.slice(0, 40)}"`);
       return;
     }
     await csSendGroupText(p.groupJid, resp, p.quotedMsgId || undefined);
     pushHist(p.groupJid, "Você (Lone)", resp);      // lembra o que ELA disse → não repete
-    conversaAtiva.set(chaveConversa(p.groupJid, p.authorJid), Date.now());
+    // A janela de continuação abre com o NOME e não desliza com a resposta do agente. Era o
+    // deslizar que fazia a conversa não acabar nunca.
+    if (abreJanela(p.sinais)) conversaAtiva.set(chaveConversa(p.groupJid, p.authorJid), Date.now());
     const ensino = conv.ok ? conv.data?.ensino : null;
     if (ensino?.cliente && ensino?.regra) {
       const alvo = await resolveClientePorNome(ensino.cliente);
@@ -2436,15 +2452,19 @@ export async function POST(req: NextRequest) {
   // ─── A Lone CONVERSA com a equipe (fallback, DEPOIS de todos os comandos). Gatilho ABERTO: além de
   // "Lone…" e das perguntas operacionais, dispara em QUALQUER pergunta no grupo interno — e o próprio
   // MODELO decide se era pra ele (campo "ignorar") pra não virar tagarela. Chamado direto → sempre responde. ───
-  const chamadoDireto = ehFalaComAgente(msg.text) || emConversa(msg.groupJid, msg.authorJid);
+  // DOIS SINAIS, NÃO UM (11/09/2026). Antes `chamadoDireto` era "nome OU janela de conversa", e era
+  // ele que desligava o `ignorar` do modelo e o filtro de recibo dentro do responderPapo. Resultado:
+  // uma vez chamado pelo nome, por 5 minutos deslizantes o agente era OBRIGADO a responder tudo —
+  // "Está assim...ainda" virou "pode ser que a atualização não rolou direito". Agora só o NOME abre
+  // os freios; a continuação passa pelo modelo com os freios ligados. Regra em lib/cs/porta-do-papo.
+  const sinais = {
+    chamadoPeloNome: ehFalaComAgente(msg.text),
+    continuacao: emConversa(msg.groupJid, msg.authorJid),
+    perguntaOperacional: ehPerguntaProLone(msg.text),
+  };
   const noGrupoEquipe = isTeamGroup(msg.groupJid);
   const querPapo = (isInternalCmdGroup(msg.groupJid) || noGrupoEquipe) && !isTrivial(msg.text) && isOpenAIConfigured();
-  // MENOS TAGARELA (pedido do Roberto): o CS NÃO responde qualquer mensagem do grupo. Só dispara quando
-  // (a) foi CHAMADO — "Lone…" ou conversa ativa recente — ou (b) fizeram uma PERGUNTA OPERACIONAL dele
-  // (pendências/atrasos/entrega/demanda…). Recado solto, tag pra outra pessoa, "somente o panfleto",
-  // "a arte foi entregue" → fica QUIETO. Antes qualquer msg no grupo Equipe (noGrupoEquipe) ou com "?"
-  // disparava → virava conversa à toa.
-  const dispara = querPapo && (chamadoDireto || ehPerguntaProLone(msg.text));
+  const dispara = querPapo && deveOuvir(sinais);
   if (dispara) {
     // ANTI-FRAGMENTAÇÃO: acumula os balões picados do mesmo autor e só responde quando ele para de
     // digitar (evita responder 2x a "raio x da me" + "Mr"). A resposta usa a MEMÓRIA curta do grupo.
@@ -2454,7 +2474,7 @@ export async function POST(req: NextRequest) {
     const partes = prev ? prev.partes : [msg.text];
     const alvoPapo = {
       groupJid: msg.groupJid, authorJid: msg.authorJid, authorName: msg.authorName,
-      quotedMsgId: msg.quotedMsgId, chamadoDireto, descontraido: noGrupoEquipe,
+      quotedMsgId: msg.quotedMsgId, sinais, descontraido: noGrupoEquipe,
     };
     const timer = setTimeout(() => {
       pendPapo.delete(chave);
