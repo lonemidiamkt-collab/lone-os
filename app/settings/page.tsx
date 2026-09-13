@@ -11,6 +11,7 @@ import { useTheme } from "@/lib/context/ThemeContext";
 import { RestartTourButton } from "@/components/OnboardingTour";
 import { supabase } from "@/lib/supabase/client";
 import { useEffect } from "react";
+import DuasEtapas from "@/components/settings/DuasEtapas";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "CEO / Administrador",
@@ -317,19 +318,11 @@ export default function SettingsPage() {
                       Logado como <span className="text-foreground font-medium">{currentProfile.name}</span> ({currentProfile.email})
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-1">
-                      Autenticação: client-side (demo mode)
+                      Autenticação: Supabase Auth (senha + verificação em duas etapas quando ativa)
                     </p>
                   </div>
 
-                  <div className="p-4 rounded-xl border border-lone-warning-border bg-lone-warning-bg">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Shield size={14} className="text-lone-warning" />
-                      <p className="text-xs font-medium text-lone-warning">Ambiente de Demonstração</p>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Este sistema está em modo demo com autenticação client-side. Em produção, será usado Supabase Auth com row-level security.
-                    </p>
-                  </div>
+                  <DuasEtapas obrigatorio={isAdmin} />
 
                   <button
                     onClick={logout}

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { payloadDoJwt } from "@/lib/obs/ator";
 
 // Emails com flag isAdmin=true. Usado pelo caminho Bearer JWT para derivar
 // permissões de admin sem consulta extra ao banco.
@@ -13,6 +14,10 @@ export interface ServerUser {
   id: string;
   email: string;
   isAdmin: boolean;
+  /** Nível da sessão: aal1 (só senha) ou aal2 (senha + código do autenticador). */
+  aal: "aal1" | "aal2";
+  /** A conta tem verificação em duas etapas ativa. */
+  duasEtapas: boolean;
 }
 
 /**
@@ -60,9 +65,18 @@ export async function getServerUser(req: NextRequest): Promise<ServerUser | null
   if (error || !data.user?.email) return null;
 
   const email = data.user.email.toLowerCase();
+  const duasEtapas = (data.user.factors ?? []).some((f) => f.factor_type === "totp" && f.status === "verified");
+  const aal = payloadDoJwt(accessToken)?.aal === "aal2" ? "aal2" : "aal1";
+  // Quem ligou a verificação em duas etapas só é "logado" em aal2. Sessão aal1 de uma conta com
+  // autenticador é uma senha sozinha — exatamente o que a segunda etapa existe para não bastar.
+  // O front detecta e pede o código (RoleContext → LoginScreen); aqui é a porta que não abre.
+  if (duasEtapas && aal !== "aal2") return null;
+
   return {
     id: data.user.id,
     email,
     isAdmin: ADMIN_EMAILS.has(email),
+    aal,
+    duasEtapas,
   };
 }

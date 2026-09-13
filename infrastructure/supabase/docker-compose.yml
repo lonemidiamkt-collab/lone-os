@@ -56,6 +56,12 @@ services:
       GOTRUE_JWT_SECRET: ${JWT_SECRET}
       GOTRUE_EXTERNAL_EMAIL_ENABLED: ${GOTRUE_EXTERNAL_EMAIL_ENABLED}
       GOTRUE_MAILER_AUTOCONFIRM: ${GOTRUE_MAILER_AUTOCONFIRM}
+      # Verificação em duas etapas (TOTP) — Fase 0A do Lone Agent V2 (13/09/2026). O GoTrue vem com
+      # MFA desligado por padrão; sem isto, /auth/v1/factors responde "MFA is disabled".
+      GOTRUE_MFA_ENABLED: "true"
+      GOTRUE_MFA_TOTP_ENROLL_ENABLED: "true"
+      GOTRUE_MFA_TOTP_VERIFY_ENABLED: "true"
+      GOTRUE_MFA_MAX_ENROLLED_FACTORS: "3"
 
   # ─── PostgREST (API) ───────────────────────────────────
   rest:

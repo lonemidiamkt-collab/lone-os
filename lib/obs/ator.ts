@@ -71,5 +71,7 @@ export function asciiSeguro(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]+/g, "?").slice(0, 120);
 }
 
+/** Payload do JWT (e-mail, papel, aal) sem verificar assinatura — só para atribuição e para ler o nível da sessão. */
+export const payloadDoJwt = decodificar;
 /** Só para testes. */
 export const _decodificarJwtParaTeste = decodificar;

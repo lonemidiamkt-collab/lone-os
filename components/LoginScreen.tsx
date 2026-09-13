@@ -26,7 +26,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export default function LoginScreen() {
-  const { login, profiles } = useRole();
+  const { login, profiles, duasEtapasPendente, confirmarDuasEtapas, logout } = useRole();
   const [selectedUser, setSelectedUser] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -36,6 +36,24 @@ export default function LoginScreen() {
   const [welcomeState, setWelcomeState] = useState<{ show: boolean; name: string; role: string } | null>(null);
   const [mounted, setMounted] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
+  // Segunda etapa: senha passou, a conta tem autenticador, falta o código de 6 dígitos.
+  const [codigo, setCodigo] = useState("");
+  const [erroCodigo, setErroCodigo] = useState("");
+  const [verificando, setVerificando] = useState(false);
+  const codigoRef = useRef<HTMLInputElement>(null);
+  const duasEtapasPendenteRef = useRef(false);
+  useEffect(() => { duasEtapasPendenteRef.current = duasEtapasPendente; if (duasEtapasPendente) setTimeout(() => codigoRef.current?.focus(), 60); }, [duasEtapasPendente]);
+
+  const handleCodigo = async () => {
+    if (codigo.replace(/\D/g, "").length !== 6 || verificando) return;
+    setVerificando(true);
+    setErroCodigo("");
+    const r = await confirmarDuasEtapas(codigo);
+    setVerificando(false);
+    if (!r.ok) { setErroCodigo(r.erro ?? "Código inválido."); setCodigo(""); return; }
+    const profile = profiles.find((p) => p.id === selectedUser);
+    if (profile) setWelcomeState({ show: true, name: profile.name.split(" ")[0], role: profile.role });
+  };
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setMounted(true), []);
@@ -67,7 +85,7 @@ export default function LoginScreen() {
       if (!success) {
         setError("Senha incorreta. Verifique e tente novamente.");
         setPassword("");
-      } else {
+      } else if (!duasEtapasPendenteRef.current) {
         const profile = profiles.find((p) => p.id === selectedUser);
         if (profile) setWelcomeState({ show: true, name: profile.name.split(" ")[0], role: profile.role });
       }
@@ -164,7 +182,45 @@ export default function LoginScreen() {
           <p className="font-brand text-xl font-bold tracking-tight text-foreground">Lone OS</p>
         </div>
 
-        {/* Form — usuário + senha na MESMA tela */}
+        {duasEtapasPendente ? (
+        /* Segunda etapa — código do autenticador. A senha já passou; a sessão está em aal1 e o
+           servidor não aceita nada de quem tem autenticador até subir para aal2. */
+        <div className="animate-fade-in space-y-6">
+          <div>
+            <h1 className="font-brand text-3xl font-bold leading-tight tracking-tight text-foreground">Confirme que é você</h1>
+            <p className="mt-2 text-[15px] text-muted-foreground">Digite o código de 6 dígitos do seu aplicativo autenticador.</p>
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-muted-foreground">Código</label>
+            <input
+              ref={codigoRef}
+              id="codigo-duas-etapas"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={codigo}
+              onChange={(e) => { setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6)); setErroCodigo(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter") void handleCodigo(); }}
+              placeholder="000000"
+              className={`h-[54px] w-full rounded-xl border bg-secondary px-4 text-center font-mono text-2xl tracking-[0.5em] text-foreground outline-none transition-all placeholder:text-muted-foreground ${
+                erroCodigo ? "border-destructive/60 animate-shake" : "border-input focus:border-primary focus:ring-2 focus:ring-primary/20"
+              }`}
+            />
+            {erroCodigo && <p className="animate-fade-in text-sm text-destructive">{erroCodigo}</p>}
+          </div>
+          <button
+            onClick={handleCodigo}
+            disabled={codigo.length !== 6 || verificando}
+            className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-semibold uppercase tracking-[0.08em] text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {verificando ? (<><Loader2 size={16} className="animate-spin" /> Conferindo...</>) : (<>Confirmar <ArrowRight size={16} /></>)}
+          </button>
+          <button type="button" onClick={() => void logout()} className="w-full text-center text-xs text-muted-foreground transition-colors hover:text-foreground">
+            Voltar e entrar com outra conta
+          </button>
+        </div>
+        ) : (
+        /* Form — usuário + senha na MESMA tela */
         <div className="animate-fade-in space-y-6">
           <div>
             <h1 className="font-brand text-3xl font-bold leading-tight tracking-tight text-foreground">Bem-vindo de volta</h1>
@@ -260,6 +316,7 @@ export default function LoginScreen() {
 
           <p className="text-center text-xs text-muted-foreground">Esqueceu a senha? Fale com o administrador.</p>
         </div>
+        )}
 
         {/* Rodapé */}
         <p className="text-center text-[10px] uppercase tracking-[0.25em] text-muted-foreground">

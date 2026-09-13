@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { estadoDuasEtapas, verificarCodigo } from "@/lib/auth/duas-etapas";
 import type { Role } from "@/lib/types";
 
 export interface UserProfile {
@@ -62,6 +63,12 @@ interface RoleContextValue {
   hydrated: boolean;
   login: (userId: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  /**
+   * Senha certa, mas a conta tem autenticador e a sessão ainda está em aal1: falta o código.
+   * Enquanto isto for true, isAuthenticated fica false — a tela de login mostra o campo do código.
+   */
+  duasEtapasPendente: boolean;
+  confirmarDuasEtapas: (codigo: string) => Promise<{ ok: boolean; erro?: string }>;
 }
 
 const DEFAULT_PROFILE = USER_PROFILES[0];
@@ -79,6 +86,8 @@ const RoleContext = createContext<RoleContextValue>({
   hydrated: false,
   login: async () => false,
   logout: async () => {},
+  duasEtapasPendente: false,
+  confirmarDuasEtapas: async () => ({ ok: false }),
 });
 
 async function fetchTeamMemberId(authId: string): Promise<string | undefined> {
@@ -95,6 +104,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [currentProfile, setCurrentProfileState] = useState<UserProfile>(DEFAULT_PROFILE);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [duasEtapasPendente, setDuasEtapasPendente] = useState(false);
+  // Perfil que passou pela senha e espera o código — vira currentProfile só depois de confirmar.
+  const perfilEmEsperaRef = useRef<UserProfile | null>(null);
   // A equipe de verdade, do banco. Começa na reserva pra tela ter o que mostrar no primeiro quadro.
   const [profiles, setProfiles] = useState<UserProfile[]>(USER_PROFILES);
 
@@ -138,8 +150,16 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           const profile = acharPorEmail(session.user.email);
           if (profile) {
             const teamMemberId = await fetchTeamMemberId(session.user.id);
-            setCurrentProfileState({ ...profile, teamMemberId });
-            setIsAuthenticated(true);
+            // Sessão de quem tem autenticador precisa estar em aal2 — senão o servidor recusa
+            // tudo (auth-server.ts). Pede o código antes de deixar entrar.
+            const de = await estadoDuasEtapas();
+            if (de.precisaCodigo) {
+              perfilEmEsperaRef.current = { ...profile, teamMemberId };
+              setDuasEtapasPendente(true);
+            } else {
+              setCurrentProfileState({ ...profile, teamMemberId });
+              setIsAuthenticated(true);
+            }
           }
         }
 
@@ -157,8 +177,14 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
                 const profile = acharPorEmail(session.user.email);
                 if (profile) {
                   const teamMemberId = await fetchTeamMemberId(session.user.id);
-                  setCurrentProfileState({ ...profile, teamMemberId });
-                  setIsAuthenticated(true);
+                  const de = await estadoDuasEtapas();
+                  if (de.precisaCodigo) {
+                    perfilEmEsperaRef.current = { ...profile, teamMemberId };
+                    setDuasEtapasPendente(true);
+                  } else {
+                    setCurrentProfileState({ ...profile, teamMemberId });
+                    setIsAuthenticated(true);
+                  }
                 }
               }
             }
@@ -219,6 +245,13 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
       if (!error && data.session) {
         const teamMemberId = await fetchTeamMemberId(data.user.id);
+        const de = await estadoDuasEtapas();
+        if (de.precisaCodigo) {
+          // Senha certa, falta o código: a tela troca para o campo do autenticador.
+          perfilEmEsperaRef.current = { ...profile, teamMemberId };
+          setDuasEtapasPendente(true);
+          return true;
+        }
         setCurrentProfileState({ ...profile, teamMemberId });
         setIsAuthenticated(true);
         return true;
@@ -232,7 +265,20 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     try { await supabase.auth.signOut(); } catch { /* ignore */ }
     setIsAuthenticated(false);
+    setDuasEtapasPendente(false);
+    perfilEmEsperaRef.current = null;
     setCurrentProfileState(DEFAULT_PROFILE);
+  }, []);
+
+  const confirmarDuasEtapas = useCallback(async (codigo: string) => {
+    const r = await verificarCodigo(codigo);
+    if (!r.ok) return r;
+    const perfil = perfilEmEsperaRef.current;
+    perfilEmEsperaRef.current = null;
+    setDuasEtapasPendente(false);
+    if (perfil) setCurrentProfileState(perfil);
+    setIsAuthenticated(true);
+    return { ok: true };
   }, []);
 
   return (
@@ -250,6 +296,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         hydrated,
         login,
         logout,
+        duasEtapasPendente,
+        confirmarDuasEtapas,
       }}
     >
       {children}
