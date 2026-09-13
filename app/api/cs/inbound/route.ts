@@ -13,6 +13,7 @@ import { ehSoRecibo } from "@/lib/cs/recibo";
 import { deveOuvir, deveFalar, abreJanela, type SinaisDoPapo } from "@/lib/cs/porta-do-papo";
 import { ehPalpiteSobreSistema, ehFillerComNome, RESPOSTA_SEM_VISAO_DO_PAINEL } from "@/lib/cs/palpite";
 import { proporRegra, decidirRegra } from "@/lib/cs/regras-propostas";
+import { podeAgir } from "@/lib/cs/autoridade";
 
 // ── TODA saída deste arquivo passa a ser ETIQUETADA ─────────────────────────
 //
@@ -550,6 +551,8 @@ async function autoAvancarPorArteNoGrupo(groupJid: string, autorNome?: string | 
 async function responderPapo(p: {
   groupJid: string; authorJid?: string | null; authorName?: string | null;
   quotedMsgId?: string | null; texto: string; sinais: SinaisDoPapo; descontraido: boolean;
+  /** Remetente com papel operacional. Sem isso, "fiz a tarefa" não marca nada — é nível C. */
+  podeAgir: boolean;
 }) {
   try {
     const historico = histTexto(p.groupJid);       // memória = mensagens ANTERIORES
@@ -561,7 +564,7 @@ async function responderPapo(p: {
     });
     // Avisaram que uma tarefa foi feita? Marca no sistema (fecha o loop da cobrança).
     let marcada: string | null = null;
-    if (conv.ok && conv.data?.tarefa_feita) marcada = await marcarTarefaFeita(p.authorName, conv.data.tarefa_feita);
+    if (conv.ok && conv.data?.tarefa_feita && p.podeAgir) marcada = await marcarTarefaFeita(p.authorName, conv.data.tarefa_feita);
     let resp0 = (conv.ok && conv.data?.resposta) ? conv.data.resposta : "Opa! Tô por aqui 👋 me chama que eu ajudo.";
     // PALPITE SOBRE O SISTEMA NUNCA SAI. "pode ser um bug", "verifica se tá atualizado", "pode ser
     // que tá filtrando" — o agente não vê o painel e não tem como saber. Chamado pelo nome recebe
@@ -994,6 +997,14 @@ export async function POST(req: NextRequest) {
   if (!grupoNosso && allow.length > 0 && !allow.includes(msg.groupJid)) {
     return NextResponse.json({ ok: true, skip: "fora da allowlist do piloto" });
   }
+  // AUTORIDADE PELO REMETENTE (Fase 0A). Até aqui, estar no grupo interno bastava para executar
+  // comando. Agora o número precisa estar em team_members com papel operacional. Chamar "Lone" é
+  // intenção, não credencial. Leitura (A/B) continua livre; ação (C+) exige `podeAgirC`.
+  const autoridade = await podeAgir(msg.authorJid, "C");
+  const podeAgirC = grupoNosso && autoridade.ok;
+  if (grupoNosso && !autoridade.ok && msg.text) {
+    console.log(`[CS/inbound] remetente sem autoridade para ação (${msg.authorName || msg.authorJid}) — só leitura`);
+  }
 
   // ─── Nota de voz: baixa o áudio (Evolution) e TRANSCREVE (Whisper) → segue o fluxo com o texto.
   // Sem isso o agente é cego pra demanda mandada por áudio (muito comum no WhatsApp do cliente). ───
@@ -1384,7 +1395,7 @@ export async function POST(req: NextRequest) {
 
   // ─── "cria" depois de um plano: transforma o planejamento em cards ───
   // Vem ANTES do handler de calendário pra "cria" não ser lido como pedido de novo calendário.
-  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && pediuParaCriar(msg.text)) {
+  if (!demandaDaSugestao && podeAgirC && pediuParaCriar(msg.text)) {
     // Aprovação de PLANEJAMENTO/CALENDÁRIO busca numa janela de uma semana: o mensal sai dia 1º e
     // o social só aprova depois do cliente responder.
     const falaDePeriodo = /\b(planejamento|calend[áa]rio|linha editorial|quinzenal?|mensal|do m[êe]s)\b/i.test(msg.text || "");
@@ -1404,7 +1415,7 @@ export async function POST(req: NextRequest) {
 
   // ─── Agente "Lone": pedido de CALENDÁRIO ("Lone, monta o calendário mensal do X") ───
   // Gera o calendário estratégico e manda o PDF no grupo. Geração é longa → ack + background.
-  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehPedidoCalendario(msg.text)) {
+  if (!demandaDaSugestao && podeAgirC && ehPedidoCalendario(msg.text)) {
     const quemCal = msg.authorName || "";
     if (!isOpenAIConfigured()) {
       await csSendGroupText(msg.groupJid, "Tô sem acesso à IA agora pra montar o calendário 😕 já já volto.");
@@ -1475,7 +1486,7 @@ export async function POST(req: NextRequest) {
 
   // ─── Agente "Lone": CHECK-IN do cliente ("Lone, faz o check-in do X" | "…pro cliente") ───
   // Pergunta 1 coisa de negócio (progressiva). Pro TIME (grupo interno) ou pro CLIENTE (grupo dele).
-  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehPedidoCheckin(msg.text)) {
+  if (!demandaDaSugestao && podeAgirC && ehPedidoCheckin(msg.text)) {
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) { await csSendGroupText(msg.groupJid, "Bora! 📋 Check-in de qual cliente? Me diz o nome."); return NextResponse.json({ ok: true, checkin: "sem_cliente" }); }
     const p = await proximaPergunta(alvo.id);
@@ -1497,7 +1508,7 @@ export async function POST(req: NextRequest) {
   // Nada nunca REMOVIA de pendencias_cliente: a lista só crescia (merge aditivo no resumo de
   // reunião), então o raio-x mostrava "o cliente deve: fotos" eternamente e a cobrança pedia de novo
   // algo já entregue — na cara do cliente.
-  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehBaixaPendencia(msg.text)) {
+  if (!demandaDaSugestao && podeAgirC && ehBaixaPendencia(msg.text)) {
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) { await csSendGroupText(msg.groupJid, "Dar baixa na pendência de qual cliente? Me diz o nome."); return NextResponse.json({ ok: true, baixa: "sem_cliente" }); }
     const { data: jr } = await supabaseAdmin.from("client_journey").select("pendencias_cliente").eq("client_id", alvo.id).maybeSingle();
@@ -1530,7 +1541,7 @@ export async function POST(req: NextRequest) {
   // ─── Agente "Lone": COBRANÇA de pendências do cliente ("Lone, cobra as pendências do X") ───
   // Lê as pendências do cliente (ficha Jornada) e gera cobrança COM IMPACTO. Draft no interno, ou
   // "…pro cliente" manda direto no grupo dele. Não cobra pagamento (SEM financeiro).
-  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehPedidoCobranca(msg.text)) {
+  if (!demandaDaSugestao && podeAgirC && ehPedidoCobranca(msg.text)) {
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) { await csSendGroupText(msg.groupJid, "Cobrar as pendências de qual cliente? Me diz o nome."); return NextResponse.json({ ok: true, cobranca: "sem_cliente" }); }
     const { data: jr } = await supabaseAdmin.from("client_journey").select("pendencias_cliente").eq("client_id", alvo.id).maybeSingle();
@@ -1560,7 +1571,7 @@ export async function POST(req: NextRequest) {
 
   // ─── Agente "Lone": PREPARO de reunião ("Lone, prepara a reunião do X") ───
   // Briefing do estado do cliente (risco consolidado + atrasos + pendências + valor) + pontos pra puxar.
-  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehPedidoPrepReuniao(msg.text)) {
+  if (!demandaDaSugestao && podeAgirC && ehPedidoPrepReuniao(msg.text)) {
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) { await csSendGroupText(msg.groupJid, "📅 Preparar a reunião de qual cliente? Me diz o nome."); return NextResponse.json({ ok: true, prep_reuniao: "sem_cliente" }); }
     const ficha = (await montarJornada()).find((f) => f.clientId === alvo.id);
@@ -1581,7 +1592,7 @@ export async function POST(req: NextRequest) {
   // ─── Agente "Lone": RESUMO de reunião ("Lone, resumo da reunião do X: <notas>") ───
   // A IA extrai decisões/ações/pendências das notas e ALIMENTA a ficha (ultima_reuniao, proxima_acao,
   // pendencias_cliente, proxima_reuniao, notas). Fecha o loop da reunião.
-  if (!demandaDaSugestao && (isInternalCmdGroup(msg.groupJid) || isTeamGroup(msg.groupJid)) && ehPedidoResumoReuniao(msg.text)) {
+  if (!demandaDaSugestao && podeAgirC && ehPedidoResumoReuniao(msg.text)) {
     const alvo = await resolveClientePorNome(msg.text);
     if (!alvo) { await csSendGroupText(msg.groupJid, "📝 Resumo da reunião de qual cliente? Fala _\"Lone, resumo da reunião do X: <suas notas>\"_."); return NextResponse.json({ ok: true, resumo_reuniao: "sem_cliente" }); }
     const notas = extrairNotasReuniao(msg.text);
@@ -2126,7 +2137,8 @@ export async function POST(req: NextRequest) {
 
   // ─── Decisão humana (grupo interno): RESPONDA a sugestão com "ok" (cria) ou "não" (descarta) ───
   const decision = parseDecision(msg.text);
-  if (decision && isInternalCmdGroup(msg.groupJid)) {
+  // Confirmar demanda ou regra é ação (nível C): precisa de remetente do time, não só do grupo.
+  if (decision && isInternalCmdGroup(msg.groupJid) && podeAgirC) {
     // Primeiro: é resposta a uma REGRA proposta? (código próprio ou reply na pergunta)
     const regra = await decidirRegra({
       acao: decision.acao, codigo: decision.codigo, quotedMsgId: msg.quotedMsgId, quem: msg.authorName || msg.authorJid || null,
@@ -2478,7 +2490,7 @@ export async function POST(req: NextRequest) {
     const partes = prev ? prev.partes : [msg.text];
     const alvoPapo = {
       groupJid: msg.groupJid, authorJid: msg.authorJid, authorName: msg.authorName,
-      quotedMsgId: msg.quotedMsgId, sinais, descontraido: noGrupoEquipe,
+      quotedMsgId: msg.quotedMsgId, sinais, descontraido: noGrupoEquipe, podeAgir: podeAgirC,
     };
     const timer = setTimeout(() => {
       pendPapo.delete(chave);
