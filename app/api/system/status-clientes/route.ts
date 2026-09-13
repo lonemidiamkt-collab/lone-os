@@ -75,11 +75,23 @@ export async function POST(req: NextRequest) {
 
   for (const c of cliRes.data ?? []) {
     const nome = (c.nome_fantasia as string) || (c.name as string) || "Cliente";
-    // Só quem contratou anúncio. O Dumar recebeu 9 mensagens de campanha sem ter campanha por
-    // um código que decidia pela conta Meta em vez do contrato — aqui não se repete.
-    if (!temTrafego({ service_type: c.service_type as string })) continue;
-
     const id = c.id as string;
+    const atual = (c.status as string) || "good";
+    const diasDeCasa = Math.floor((Date.now() - new Date(c.created_at as string).getTime()) / 86400000);
+
+    // Só quem contratou anúncio recebe status por resultado. O Dumar recebeu 9 mensagens de
+    // campanha sem ter campanha por um código que decidia pela conta Meta em vez do contrato —
+    // aqui não se repete. Mas a SAÍDA DO ONBOARDING vale para todos: o Atlas (só social) estava
+    // há 146 dias lá porque nenhuma regra o tirava.
+    if (!temTrafego({ service_type: c.service_type as string })) {
+      if (atual === "onboarding" && diasDeCasa > 30) {
+        const motivo = `${diasDeCasa}d de casa; só social — sem resultado de anúncio para julgar`;
+        mudancas.push({ cliente: nome, de: atual, para: "good", motivo });
+        escritas.push({ id, status: "good", motivo });
+      }
+      continue;
+    }
+
     const g = gasto.get(id) ?? { gasto: 0, conv: 0 };
     const p = politica.get(id);
     const v: Veredito = statusPorResultado({
@@ -89,9 +101,6 @@ export async function POST(req: NextRequest) {
       convMin: p?.conversas_minimas != null ? Number(p.conversas_minimas) : null,
       temConta: temConta.has(id),
     });
-
-    const atual = (c.status as string) || "good";
-    const diasDeCasa = Math.floor((Date.now() - new Date(c.created_at as string).getTime()) / 86400000);
 
     // Onboarding: sai pela regra; enquanto não sai, não recebe status por resultado.
     if (atual === "onboarding" && !saiDeOnboarding(diasDeCasa, v)) { mantidos.push(nome); continue; }
