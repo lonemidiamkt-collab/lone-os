@@ -36,6 +36,15 @@ describe("regra permanente pede ok", () => {
   it("ativar a regra sincroniza o briefing, como o insert antigo fazia", () => {
     expect(INBOUND).toMatch(/if \(regra\.tipo === "ativada"\) await sincronizarBriefingAprendido\(regra\.clientId\)/);
   });
+
+  it("revisão 13/09: ativar é nível D, o papel de quem decide chega ao módulo, e a pergunta só sai no grupo interno", () => {
+    expect(MODULO).toMatch(/NIVEL_PARA_ATIVAR_REGRA = "D"/);
+    expect(INBOUND).toMatch(/decidirRegra\(\{[\s\S]{0,200}papel: autoridade\.autor\?\.papel \?\? null/);
+    expect(INBOUND).toMatch(/regra\.tipo === "sem_autoridade"/);
+    // O destino não é parâmetro: o módulo lê CS_INTERNAL_GROUP_JID e ignora groupJid de quem chama.
+    expect(MODULO).toMatch(/function grupoDaPergunta\(\)[\s\S]{0,80}CS_INTERNAL_GROUP_JID/);
+    expect(MODULO).not.toMatch(/csSendGroupText\(p\.groupJid/);
+  });
 });
 
 describe("fato temporário continua automático — não é regra permanente", () => {

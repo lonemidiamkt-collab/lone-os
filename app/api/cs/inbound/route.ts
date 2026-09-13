@@ -2141,8 +2141,17 @@ export async function POST(req: NextRequest) {
   if (decision && isInternalCmdGroup(msg.groupJid) && podeAgirC) {
     // Primeiro: é resposta a uma REGRA proposta? (código próprio ou reply na pergunta)
     const regra = await decidirRegra({
-      acao: decision.acao, codigo: decision.codigo, quotedMsgId: msg.quotedMsgId, quem: msg.authorName || msg.authorJid || null,
+      acao: decision.acao, codigo: decision.codigo, quotedMsgId: msg.quotedMsgId,
+      quem: msg.authorName || msg.authorJid || null, papel: autoridade.autor?.papel ?? null,
     });
+    if (regra.tipo === "sem_autoridade") {
+      // Designer/social/tráfego podem descartar, não ativar: ativar muda o agente para aquele cliente
+      // daqui em diante — é decisão de gestor. Diz quem pode, em vez de calar.
+      await csSendGroupText(msg.groupJid,
+        `Essa regra para *${regra.cliente}* só quem é gestor ou admin pode salvar. Chama o Julio ou o Roberto pra dar o ok. 😉`,
+        msg.quotedMsgId || undefined);
+      return NextResponse.json({ ok: true, regra: "sem_autoridade", nivelExigido: regra.nivelExigido });
+    }
     if (regra.tipo === "ativada" || regra.tipo === "descartada") {
       if (regra.tipo === "ativada") await sincronizarBriefingAprendido(regra.clientId);
       await csSendGroupText(msg.groupJid,

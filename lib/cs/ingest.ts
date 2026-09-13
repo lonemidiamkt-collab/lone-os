@@ -140,7 +140,7 @@ export function isTrivial(text: string): boolean {
 // Forma canônica de número BR: 55 + DDD + últimos 8 dígitos. O 9º dígito móvel aparece OU não
 // dependendo de quem gerou o jid (env com 9, WhatsApp sem, ou vice-versa) — e a diferença fica no
 // MEIO da string, então endsWith não salva. Não-BR/curto: devolve os dígitos como vieram.
-function brCanonical(digits: string): string {
+export function brCanonical(digits: string): string {
   if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
     return "55" + digits.slice(2, 4) + digits.slice(-8);
   }

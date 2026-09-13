@@ -17,6 +17,19 @@
 import { randomBytes } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { podeNoNivel, type Papel } from "@/lib/cs/autoridade";
+
+/** Ativar regra permanente é COMUNICAÇÃO/MODIFICAÇÃO do comportamento do agente: nível D. */
+export const NIVEL_PARA_ATIVAR_REGRA = "D" as const;
+
+/**
+ * A pergunta "salvar como regra?" vai SEMPRE ao grupo interno — nunca ao grupo do cliente, mesmo
+ * que o chamador passe outro JID. Garantia no módulo, não na disciplina de quem chama: um
+ * "salvar isso como regra permanente?" no grupo do cliente exporia como o agente funciona.
+ */
+function grupoDaPergunta(): string | null {
+  return process.env.CS_INTERNAL_GROUP_JID || null;
+}
 
 // Fato com prazo embutido ("semana que vem", "até dia 15") não pode virar regra ETERNA da memória
 // do cliente — ganha TTL de 14 dias. "a partir de hoje/amanhã" é mudança permanente, não casa.
@@ -32,7 +45,10 @@ export interface PedidoDeRegra {
   escopo: "sempre" | "roteiro" | "social" | "promocao";
   sourceMessage: string;
   author: string | null;
-  /** Grupo onde perguntar. Sem grupo (ex.: rotina), a proposta fica só no banco. */
+  /**
+   * @deprecated Ignorado de propósito: a pergunta vai sempre ao grupo interno. Mantido na assinatura
+   * só para os chamadores existentes não quebrarem; será removido.
+   */
   groupJid?: string | null;
 }
 
@@ -70,11 +86,12 @@ export async function proporRegra(p: PedidoDeRegra): Promise<ResultadoProposta> 
   }).select("id").single();
   if (error || !data) return { tipo: "ja_existe" };
 
-  if (p.groupJid) {
+  const destino = grupoDaPergunta();
+  if (destino) {
     const pergunta =
       `📌 Parece uma regra nova para *${p.clienteNome}*:\n_${texto}_\n\n` +
       `Salvar como regra permanente? Responde *ok ${codigo}* ou *não ${codigo}* — ou responde nesta mensagem.`;
-    const r = await csSendGroupText(p.groupJid, pergunta, undefined, { origem: "regra-proposta", destino: "interno" })
+    const r = await csSendGroupText(destino, pergunta, undefined, { origem: "regra-proposta", destino: "interno" })
       .catch(() => ({ ok: false as const, id: undefined as string | undefined }));
     const msgId = (r as { id?: string }).id;
     if (msgId) await supabaseAdmin.from("cs_client_rules").update({ msg_id_proposta: msgId }).eq("id", data.id as string);
@@ -87,10 +104,13 @@ export interface DecisaoDeRegra {
   codigo?: string | null;
   quotedMsgId?: string | null;
   quem: string | null;
+  /** Papel de quem decide. Ativar exige nível D (manager/admin); descartar, C. */
+  papel: Papel | null;
 }
 
 export type ResultadoDecisao =
   | { tipo: "nao_achei" }
+  | { tipo: "sem_autoridade"; texto: string; cliente: string; nivelExigido: "C" | "D" }
   | { tipo: "ja_decidida"; estado: string; texto: string; cliente: string }
   | { tipo: "ativada" | "descartada"; texto: string; cliente: string; clientId: string };
 
@@ -110,6 +130,11 @@ export async function decidirRegra(d: DecisaoDeRegra): Promise<ResultadoDecisao>
   if (data.estado !== "proposta") return { tipo: "ja_decidida", estado: data.estado as string, texto: data.texto as string, cliente };
 
   const ativar = d.acao === "confirmar";
+  // Ativar muda o que o agente faz para aquele cliente daqui em diante — nível D. Descartar é C.
+  const nivelExigido = ativar ? NIVEL_PARA_ATIVAR_REGRA : "C";
+  if (!podeNoNivel(d.papel, nivelExigido)) {
+    return { tipo: "sem_autoridade", texto: data.texto as string, cliente, nivelExigido };
+  }
   await supabaseAdmin.from("cs_client_rules").update({
     estado: ativar ? "ativa" : "descartada", ativo: ativar,
     confirmada_por: d.quem, confirmada_em: new Date().toISOString(),

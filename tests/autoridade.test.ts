@@ -50,4 +50,10 @@ describe("o inbound decide por remetente, não por grupo", () => {
   it("a autoridade é resolvida uma vez, pelo número, com nível C", () => {
     expect(INBOUND).toMatch(/const autoridade = await podeAgir\(msg\.authorJid, "C"\)/);
   });
+
+  it("identidade é exata (E.164 canônico), não os últimos 8 dígitos", () => {
+    const MODULO = readFileSync("lib/cs/autoridade.ts", "utf8");
+    expect(MODULO).toMatch(/const chave = \(n: string\) => brCanonical\(so\(n\)\)/);
+    expect(MODULO).not.toMatch(/slice\(-8\)/);
+  });
 });

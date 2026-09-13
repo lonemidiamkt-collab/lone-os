@@ -17,7 +17,7 @@
 //   E financeiro/destrutivo → admin (e MFA, quando existir)
 
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isLoneTeam } from "@/lib/cs/ingest";
+import { isLoneTeam, brCanonical } from "@/lib/cs/ingest";
 
 export type Nivel = "A" | "B" | "C" | "D" | "E";
 export type Papel = "admin" | "manager" | "traffic" | "social" | "designer" | "comercial";
@@ -45,8 +45,13 @@ export function podeNoNivel(papel: Papel | null | undefined, nivel: Nivel): bool
 }
 
 const so = (s: string) => (s ?? "").replace(/\D/g, "");
-/** Últimos 8 dígitos: tolera 55/DDD/nono dígito, como o resto do sistema já faz. */
-const chave = (n: string) => so(n).slice(-8);
+/**
+ * IDENTIDADE EXATA. A primeira versão usava os últimos 8 dígitos — serve para achar contato, não
+ * para autorizar: dois números de DDDs diferentes com o mesmo final colidiam. Agora: JID →
+ * dígitos → E.164 canônico (55 + DDD + 8, o nono dígito resolvido de forma determinística por
+ * brCanonical) → correspondência exata. Sem fuzzy.
+ */
+const chave = (n: string) => brCanonical(so(n));
 
 let cache: { at: number; porChave: Map<string, Autor> } | null = null;
 const TTL = 10 * 60 * 1000;
@@ -58,7 +63,7 @@ async function tabela(): Promise<Map<string, Autor>> {
   const m = new Map<string, Autor>();
   for (const t of data ?? []) {
     const k = chave(t.whatsapp_phone as string);
-    if (k.length >= 8) m.set(k, { nome: t.name as string, papel: t.role as Papel, fonte: "banco" });
+    if (k.length >= 12) m.set(k, { nome: t.name as string, papel: t.role as Papel, fonte: "banco" });
   }
   cache = { at: Date.now(), porChave: m };
   return m;
@@ -72,12 +77,18 @@ async function tabela(): Promise<Map<string, Autor>> {
 export async function quemEh(authorJid?: string | null): Promise<Autor | null> {
   if (!authorJid) return null;
   const k = chave(authorJid);
-  if (k.length < 8) return null;
+  if (k.length < 12) return null;
   const t = await tabela().catch(() => new Map<string, Autor>());
   const doBanco = t.get(k);
   if (doBanco) return doBanco;
+  // RESERVA TRANSITÓRIA — some no dia em que os três sem número forem cadastrados. Enquanto
+  // existir, cada uso é registrado em voz alta: duas fontes de autoridade é o que se quer eliminar.
+  // Risco real: um número de ex-funcionário ainda na lista do .env ganha nível C por aqui.
   const reserva = (process.env.CS_LONE_TEAM_JIDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  if (reserva.length && isLoneTeam(authorJid, reserva)) return { nome: "equipe", papel: "social", fonte: "reserva" };
+  if (reserva.length && isLoneTeam(authorJid, reserva)) {
+    console.warn(`[autoridade] RESERVA do .env usada para ${k} — cadastre em team_members e remova CS_LONE_TEAM_JIDS`);
+    return { nome: "equipe (reserva)", papel: "social", fonte: "reserva" };
+  }
   return null;
 }
 
