@@ -536,6 +536,9 @@ const MODULES: Module[] = [
     ],
     features: [
       "Integração Meta API (26 contas conectadas)",
+      "Status Clientes sai do resultado do anúncio: toda sexta o sistema compara o CPL dos últimos 7 dias com a meta de cada cliente (client_traffic_policy) e move entre Bons / Médios / Em risco. Conta parada 7 dias = Em risco. Cada card mostra o porquê",
+      "Arrastar no kanban vale por 7 dias: o sistema não sobrescreve uma decisão manual recente. Depois disso, reavalia",
+      "Onboarding termina sozinho: 30 dias de casa ou o primeiro resultado de anúncio, o que vier antes",
       "Análise IA com score 0-100 + insights acionáveis",
       "Alertas rule-based em tempo real",
       "Controle de investimento mensal com alerta de pacing >90%",
