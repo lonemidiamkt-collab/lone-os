@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { aiCache } from "@/lib/ai/cache";
 import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { registrarChamadaLlm } from "@/lib/obs/llm";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
@@ -97,6 +98,7 @@ ${JSON.stringify(compactClients, null, 0)}`;
       ttlMinutes: 60, // 1h
       bucketGranularity: "hour",
       fetcher: async () => {
+        const t0 = Date.now();
         const response = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -122,6 +124,7 @@ ${JSON.stringify(compactClients, null, 0)}`;
 
         const data = await response.json();
         const content = data.choices?.[0]?.message?.content;
+        registrarChamadaLlm({ modelo: "gpt-4o-mini", usage: data.usage, ms: Date.now() - t0, ok: true, origem: "ai:morning-briefing" });
 
         let parsed: Record<string, unknown>;
         try {

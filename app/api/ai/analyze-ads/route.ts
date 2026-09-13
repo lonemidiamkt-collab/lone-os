@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { aiCache } from "@/lib/ai/cache";
 import { requireCronOrUser } from "@/lib/api/cron-guard";
+import { registrarChamadaLlm } from "@/lib/obs/llm";
 
 // Server-side only — API key never exposed to frontend
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -100,6 +101,7 @@ Campanhas com erro: ${compactData.filter((c: Record<string, unknown>) => c.statu
       ttlMinutes: 60 * 24, // 24h
       bucketGranularity: "day",
       fetcher: async () => {
+        const t0 = Date.now();
         const response = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -125,6 +127,7 @@ Campanhas com erro: ${compactData.filter((c: Record<string, unknown>) => c.statu
 
         const data = await response.json();
         const content = data.choices?.[0]?.message?.content;
+        registrarChamadaLlm({ modelo: "gpt-4o-mini", usage: data.usage, ms: Date.now() - t0, ok: true, origem: "ai:analyze-ads" });
 
         if (!content) throw new Error("Resposta vazia da IA");
 

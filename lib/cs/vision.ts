@@ -3,6 +3,8 @@
 // preços) → aqui a imagem vira TEXTO, que segue pro A1/A3 como qualquer demanda. Provider: OpenAI
 // gpt-4o-mini com detail "high" (lê preço/texto fino; a leitura da arte é valor central). Nunca lança.
 
+import { registrarChamadaLlm } from "@/lib/obs/llm";
+
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
 const VISION_SYSTEM =
@@ -35,6 +37,7 @@ export async function describeImage(base64: string, mimetype?: string): Promise<
   if (!key) return { ok: false, descricao: null, error: "OPENAI_API_KEY não configurada" };
   const mime = mimetype || "image/jpeg";
   const dataUri = base64.startsWith("data:") ? base64 : `data:${mime};base64,${base64}`;
+  const t0 = Date.now();
   try {
     const res = await fetch(OPENAI_API_URL, {
       method: "POST",
@@ -63,13 +66,16 @@ export async function describeImage(base64: string, mimetype?: string): Promise<
       let msg = `HTTP ${res.status}`;
       try { msg = JSON.parse(body)?.error?.message ?? msg; } catch { /* corpo não-JSON */ }
       console.error("[CS/vision]", res.status, msg);
+      registrarChamadaLlm({ modelo: "gpt-4o-mini", ms: Date.now() - t0, ok: false, erro: String(msg), origem: "cs:vision", tipo: "vision" });
       return { ok: false, descricao: null, error: String(msg) };
     }
-    const j = JSON.parse(body) as { choices?: Array<{ message?: { content?: string } }> };
+    const j = JSON.parse(body) as { choices?: Array<{ message?: { content?: string } }>; usage?: import("@/lib/obs/preco-llm").UsageOpenAi };
+    registrarChamadaLlm({ modelo: "gpt-4o-mini", usage: j.usage, ms: Date.now() - t0, ok: true, origem: "cs:vision", tipo: "vision" });
     const desc = (j.choices?.[0]?.message?.content ?? "").trim();
     if (!desc || /^irrelevante\b/i.test(desc)) return { ok: true, descricao: null };
     return { ok: true, descricao: desc.slice(0, 2000) }; // cabe uma tabela de preços inteira
   } catch (err) {
+    registrarChamadaLlm({ modelo: "gpt-4o-mini", ms: Date.now() - t0, ok: false, erro: err instanceof Error ? err.message : "erro de conexão", origem: "cs:vision", tipo: "vision" });
     return { ok: false, descricao: null, error: err instanceof Error ? err.message : "erro de conexão" };
   }
 }

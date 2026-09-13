@@ -10,6 +10,7 @@
 // Ele acha o endereço; a Meta diz o que há lá dentro.
 
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { registrarChamadaLlm } from "@/lib/obs/llm";
 
 export interface CandidatoPerfil { username: string; queryId?: string; query?: string }
 
@@ -213,7 +214,19 @@ export function extrairPermalinks(texto: string): { permalink: string; username?
 }
 
 /** Pergunta à IA com busca web. Só handles — a métrica quem dá é a Meta. */
+
+/** Recibo de uma chamada à Responses API (usage vem como input_/output_tokens, não prompt_/completion_). */
+function reciboResponses(modelo: string, json: Record<string, unknown> | null, t0: number, ok: boolean, origem: string): void {
+  const u = (json?.usage ?? null) as { input_tokens?: number; output_tokens?: number; input_tokens_details?: { cached_tokens?: number } } | null;
+  registrarChamadaLlm({
+    modelo, ms: Date.now() - t0, ok, origem, tipo: "responses",
+    usage: u ? { prompt_tokens: u.input_tokens, completion_tokens: u.output_tokens, prompt_tokens_details: { cached_tokens: u.input_tokens_details?.cached_tokens } } : null,
+    erro: ok ? null : "sem resposta",
+  });
+}
+
 export async function buscarCandidatos(query: string, apiKey: string, modelo = "gpt-5.4-mini"): Promise<string[]> {
+  const t0 = Date.now();
   const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -232,6 +245,7 @@ export async function buscarCandidatos(query: string, apiKey: string, modelo = "
   });
 
   const json = await res.json().catch(() => null) as Record<string, unknown> | null;
+  reciboResponses(modelo, json, t0, !!json && res.ok, "radar:candidatos");
   if (!json) return [];
   if (json.error) throw new Error(String((json.error as Record<string, unknown>)?.message ?? "web_search falhou"));
 
@@ -264,6 +278,7 @@ export async function buscarAchados(query: string, tipo: string, apiKey: string,
 }
 
 async function buscarTextoBruto(query: string, apiKey: string, modelo: string): Promise<string> {
+  const t0 = Date.now();
   const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -284,6 +299,7 @@ async function buscarTextoBruto(query: string, apiKey: string, modelo: string): 
     signal: AbortSignal.timeout(180_000),
   });
   const json = await res.json().catch(() => null) as Record<string, unknown> | null;
+  reciboResponses(modelo, json, t0, !!json && res.ok, "radar:texto");
   if (!json) return "";
   if (json.error) throw new Error(String((json.error as Record<string, unknown>)?.message ?? "web_search falhou"));
   if (typeof json.output_text === "string" && json.output_text) return json.output_text;

@@ -6,6 +6,8 @@
 
 import { fichaDoCliente } from "@/lib/cs/guia-legendas";
 
+import { registrarChamadaLlm } from "@/lib/obs/llm";
+
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
 export interface RevisaoPostInput {
@@ -117,6 +119,7 @@ export async function revisarPost(inp: RevisaoPostInput): Promise<RevisaoPostRes
         `Preço/condição na legenda que não esteja no briefing: NÃO afirme que é inventado (pode estar na arte, que não veio) — aponte como gravidade "media", área "dados", detalhe "confirmar preço/condição (não deu pra checar contra a arte)".`);
   const userContent: unknown[] = [{ type: "text", text: contexto }];
   if (inp.imageUrl) userContent.push({ type: "image_url", image_url: { url: inp.imageUrl, detail: "high" } });
+  const t0 = Date.now();
   try {
     const res = await fetch(OPENAI_API_URL, {
       method: "POST",
@@ -138,12 +141,15 @@ export async function revisarPost(inp: RevisaoPostInput): Promise<RevisaoPostRes
       let msg = `HTTP ${res.status}`;
       try { msg = JSON.parse(body)?.error?.message ?? msg; } catch { /* corpo não-JSON */ }
       console.error("[CS/revisao-post]", res.status, msg);
+      registrarChamadaLlm({ modelo: "gpt-4o", ms: Date.now() - t0, ok: false, erro: String(msg), origem: "cs:revisao-post", tipo: "vision" });
       return { ok: false, data: null, error: String(msg) };
     }
-    const j = JSON.parse(body) as { choices?: Array<{ message?: { content?: string } }> };
+    const j = JSON.parse(body) as { choices?: Array<{ message?: { content?: string } }>; usage?: import("@/lib/obs/preco-llm").UsageOpenAi };
+    registrarChamadaLlm({ modelo: "gpt-4o", usage: j.usage, ms: Date.now() - t0, ok: true, origem: "cs:revisao-post", tipo: "vision" });
     const content = j.choices?.[0]?.message?.content ?? "";
     return { ok: true, data: JSON.parse(content) as RevisaoPostOutput };
   } catch (err) {
+    registrarChamadaLlm({ modelo: "gpt-4o", ms: Date.now() - t0, ok: false, erro: err instanceof Error ? err.message : "erro de conexão", origem: "cs:revisao-post", tipo: "vision" });
     return { ok: false, data: null, error: err instanceof Error ? err.message : "erro de conexão" };
   }
 }

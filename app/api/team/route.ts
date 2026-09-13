@@ -92,10 +92,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `não salvei na equipe: ${dbErr.message}` }, { status: 500 });
   }
 
-  await supabaseAdmin.from("audit_log").insert({
-    type: "team", actor: gate.user.email ?? "sistema",
-    description: `${name} (${role}) entrou na equipe, com login criado.`,
-  }).then(undefined, () => {});
+  // Auditoria: o trigger audit_team_members grava a linha com o autor vindo do JWT da request
+  // (lib/obs/ator.ts). O insert manual que ficava aqui usava colunas que audit_log nunca teve
+  // (type/actor/description) — falhava em silêncio desde que nasceu.
 
   return NextResponse.json({ ok: true, member: { ...membro, temLogin: true } });
 }
@@ -127,11 +126,6 @@ export async function PATCH(req: NextRequest) {
     .select("id, name, email, role, initials, is_active, unavailable_until").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  await supabaseAdmin.from("audit_log").insert({
-    type: "team", actor: gate.user.email ?? "sistema",
-    description: `${data.name}: ${Object.keys(patch).join(", ")} alterado(s).`,
-  }).then(undefined, () => {});
 
   return NextResponse.json({ ok: true, member: data });
 }

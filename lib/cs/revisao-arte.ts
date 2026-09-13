@@ -2,6 +2,8 @@
 // cliente. Confere a arte contra o briefing/regras: erro de texto, preço/telefone legível, logo,
 // palavra proibida, aderência ao tema. Provider: OpenAI gpt-4o (visão + julgamento). Nunca lança.
 
+import { registrarChamadaLlm } from "@/lib/obs/llm";
+
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
 export interface RevisaoInput {
@@ -109,6 +111,7 @@ export async function revisarArte(inp: RevisaoInput): Promise<RevisaoResult> {
     `Era pra ser: ${inp.temaEsperado}\n` +
     `Briefing: ${inp.briefing?.slice(0, 1400) || "(sem briefing)"}\n` +
     `Do's & don'ts:\n${regras}\n\nRevise a arte anexada.`;
+  const t0 = Date.now();
   try {
     const res = await fetch(OPENAI_API_URL, {
       method: "POST",
@@ -133,12 +136,15 @@ export async function revisarArte(inp: RevisaoInput): Promise<RevisaoResult> {
       let msg = `HTTP ${res.status}`;
       try { msg = JSON.parse(body)?.error?.message ?? msg; } catch { /* corpo não-JSON */ }
       console.error("[CS/revisao-arte]", res.status, msg);
+      registrarChamadaLlm({ modelo: "gpt-4o", ms: Date.now() - t0, ok: false, erro: String(msg), origem: "cs:revisao-arte", tipo: "vision" });
       return { ok: false, data: null, error: String(msg) };
     }
-    const j = JSON.parse(body) as { choices?: Array<{ message?: { content?: string } }> };
+    const j = JSON.parse(body) as { choices?: Array<{ message?: { content?: string } }>; usage?: import("@/lib/obs/preco-llm").UsageOpenAi };
+    registrarChamadaLlm({ modelo: "gpt-4o", usage: j.usage, ms: Date.now() - t0, ok: true, origem: "cs:revisao-arte", tipo: "vision" });
     const content = j.choices?.[0]?.message?.content ?? "";
     return { ok: true, data: JSON.parse(content) as RevisaoOutput };
   } catch (err) {
+    registrarChamadaLlm({ modelo: "gpt-4o", ms: Date.now() - t0, ok: false, erro: err instanceof Error ? err.message : "erro de conexão", origem: "cs:revisao-arte", tipo: "vision" });
     return { ok: false, data: null, error: err instanceof Error ? err.message : "erro de conexão" };
   }
 }

@@ -14,6 +14,7 @@ import { deveOuvir, deveFalar, abreJanela, type SinaisDoPapo } from "@/lib/cs/po
 import { ehPalpiteSobreSistema, ehFillerComNome, RESPOSTA_SEM_VISAO_DO_PAINEL } from "@/lib/cs/palpite";
 import { proporRegra, decidirRegra } from "@/lib/cs/regras-propostas";
 import { podeAgir } from "@/lib/cs/autoridade";
+import { comExecucao, definirAtor } from "@/lib/obs/correlacao";
 
 // ── TODA saída deste arquivo passa a ser ETIQUETADA ─────────────────────────
 //
@@ -897,7 +898,12 @@ async function acharCardRelacionado(
 
 export async function POST(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  // Uma execução por mensagem recebida: tudo que ela toca (OpenAI, banco, WhatsApp) responde pelo
+  // mesmo id, e no fim vira uma linha em agent_runs com custo e desfecho (lib/obs/correlacao.ts).
+  return comExecucao({ origem: "inbound", ator: "agente" }, () => processarInbound(req));
+}
 
+async function processarInbound(req: NextRequest) {
   const payload = (await req.json().catch(() => null)) as EvolutionUpsert | null;
   if (!payload) return NextResponse.json({ ok: true, skip: "corpo inválido" });
 
@@ -1001,6 +1007,7 @@ export async function POST(req: NextRequest) {
   // comando. Agora o número precisa estar em team_members com papel operacional. Chamar "Lone" é
   // intenção, não credencial. Leitura (A/B) continua livre; ação (C+) exige `podeAgirC`.
   const autoridade = await podeAgir(msg.authorJid, "C");
+  if (autoridade.autor) definirAtor(autoridade.autor.nome, autoridade.autor.papel);
   const podeAgirC = grupoNosso && autoridade.ok;
   if (grupoNosso && !autoridade.ok && msg.text) {
     console.log(`[CS/inbound] remetente sem autoridade para ação (${msg.authorName || msg.authorJid}) — só leitura`);

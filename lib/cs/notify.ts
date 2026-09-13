@@ -63,6 +63,7 @@ export async function csSendGroupText(
     let id: string | undefined;
     try { id = (JSON.parse(body) as { key?: { id?: string } })?.key?.id; } catch { /* resposta sem JSON */ }
     await registrarSaida(jid, text, true, null, meta);
+    try { (await import("@/lib/obs/correlacao")).contarEnvio(); } catch { /* fora de execução */ }
     return { ok: true, id };
   } catch (err) {
     const erro = err instanceof Error ? err.message : "erro de conexão";
@@ -89,7 +90,9 @@ async function registrarSaida(
   try {
     // import dinâmico: notify.ts é usado em caminhos que não querem carregar o client do Supabase.
     const { supabaseAdmin } = await import("@/lib/supabase/server");
+    const { idCorrelacao } = await import("@/lib/obs/correlacao");
     await supabaseAdmin.from("cs_outbound").insert({
+      correlation_id: idCorrelacao(),
       origem: meta?.origem ?? "desconhecida",
       group_jid: jid,
       destino: meta?.destino ?? "interno",

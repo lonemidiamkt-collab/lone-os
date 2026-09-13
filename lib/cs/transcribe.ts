@@ -1,6 +1,8 @@
 // lib/cs/transcribe.ts — transcreve nota de voz do WhatsApp (ogg/opus) via OpenAI Whisper.
 // Reusa a OPENAI_API_KEY. NUNCA lança — falha vira "" e o webhook segue.
 
+import { registrarChamadaLlm } from "@/lib/obs/llm";
+
 const OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions";
 
 function extFromMime(mime?: string): string {
@@ -32,6 +34,7 @@ export async function transcribeAudio(base64: string, mimetype?: string, context
     form.append("model", "whisper-1");
     form.append("language", "pt");
     form.append("prompt", promptDominio(contexto));
+    const t0 = Date.now();
     const res = await fetch(OPENAI_TRANSCRIBE_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}` },
@@ -40,9 +43,12 @@ export async function transcribeAudio(base64: string, mimetype?: string, context
     });
     if (!res.ok) {
       console.error("[transcribe] HTTP", res.status, (await res.text().catch(() => "")).slice(0, 160));
+      registrarChamadaLlm({ modelo: "whisper-1", ms: Date.now() - t0, ok: false, erro: `HTTP ${res.status}`, origem: "cs:transcribe", tipo: "transcription" });
       return "";
     }
     const data = (await res.json()) as { text?: string };
+    // whisper cobra por minuto de áudio, não por token — fica a contagem e a duração; custo null.
+    registrarChamadaLlm({ modelo: "whisper-1", ms: Date.now() - t0, ok: true, origem: "cs:transcribe", tipo: "transcription" });
     return (data.text || "").trim();
   } catch (err) {
     console.error("[transcribe]", err instanceof Error ? err.message : err);

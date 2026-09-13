@@ -4,6 +4,8 @@
 // Prompt caching é AUTOMÁTICO na OpenAI (prefixo estável primeiro → cacheia sozinho;
 // não há cache_control). Usado pelo Agente CS (A1 = gpt-4o-mini).
 
+import { registrarChamadaLlm } from "@/lib/obs/llm";
+
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
 export interface OpenAiUsage {
@@ -43,6 +45,8 @@ export interface ChatJsonParams {
    * miniatura de vídeo; usar isso é a diferença entre adivinhar e ver.
    */
   imagens?: string[];
+  /** Quem está chamando ("cs:classificar"). Vai para llm_calls; sem isso, a origem da execução. */
+  origem?: string;
 }
 
 /** Modelos que usam o contrato novo de parâmetros (max_completion_tokens, sem temperature livre). */
@@ -53,6 +57,12 @@ function ehGpt5(modelo: string): boolean {
 export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiResult<T>> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { ok: false, error: "OPENAI_API_KEY não configurada" };
+
+  const t0 = Date.now();
+  const recibo = (r: OpenAiResult<T>): OpenAiResult<T> => {
+    registrarChamadaLlm({ modelo: p.model, usage: r.usage, ms: Date.now() - t0, ok: r.ok, erro: r.ok ? null : r.error, origem: p.origem, tipo: p.imagens?.length ? "vision" : "chat" });
+    return r;
+  };
 
   let res: Response;
   try {
@@ -88,7 +98,7 @@ export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiRe
       signal: AbortSignal.timeout(45_000), // não pendura o webhook/handler se a OpenAI travar
     });
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "erro de conexão" };
+    return recibo({ ok: false, error: err instanceof Error ? err.message : "erro de conexão" });
   }
 
   const text = await res.text();
@@ -96,19 +106,19 @@ export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiRe
     let msg = `HTTP ${res.status}`;
     try { msg = JSON.parse(text)?.error?.message ?? msg; } catch { /* corpo não-JSON */ }
     console.error("[OpenAI]", res.status, msg);
-    return { ok: false, error: String(msg), status: res.status };
+    return recibo({ ok: false, error: String(msg), status: res.status });
   }
 
   let json: { choices?: Array<{ message?: { content?: string; refusal?: string } }>; usage?: OpenAiUsage };
-  try { json = JSON.parse(text); } catch { return { ok: false, error: "resposta não-JSON", raw: text, status: res.status }; }
+  try { json = JSON.parse(text); } catch { return recibo({ ok: false, error: "resposta não-JSON", raw: text, status: res.status }); }
 
   const choice = json.choices?.[0]?.message;
-  if (choice?.refusal) return { ok: false, error: `refusal: ${choice.refusal}`, status: res.status, usage: json.usage };
+  if (choice?.refusal) return recibo({ ok: false, error: `refusal: ${choice.refusal}`, status: res.status, usage: json.usage });
 
   const content = choice?.content ?? "";
   try {
-    return { ok: true, data: JSON.parse(content) as T, raw: content, usage: json.usage, status: res.status };
+    return recibo({ ok: true, data: JSON.parse(content) as T, raw: content, usage: json.usage, status: res.status });
   } catch {
-    return { ok: false, error: "JSON inválido na resposta estruturada", raw: content, status: res.status };
+    return recibo({ ok: false, error: "JSON inválido na resposta estruturada", raw: content, status: res.status, usage: json.usage });
   }
 }
