@@ -12,6 +12,7 @@ import type { CsSendMeta } from "@/lib/cs/notify";
 import { ehSoRecibo } from "@/lib/cs/recibo";
 import { deveOuvir, deveFalar, abreJanela, type SinaisDoPapo } from "@/lib/cs/porta-do-papo";
 import { ehPalpiteSobreSistema, ehFillerComNome, RESPOSTA_SEM_VISAO_DO_PAINEL } from "@/lib/cs/palpite";
+import { proporRegra, decidirRegra } from "@/lib/cs/regras-propostas";
 
 // ── TODA saída deste arquivo passa a ser ETIQUETADA ─────────────────────────
 //
@@ -597,18 +598,13 @@ async function responderPapo(p: {
     if (ensino?.cliente && ensino?.regra) {
       const alvo = await resolveClientePorNome(ensino.cliente);
       if (alvo) {
-        const textoRegra = ensino.regra.trim().slice(0, 200);
-        const { data: ex } = await supabaseAdmin.from("cs_client_rules")
-          .select("id").eq("client_id", alvo.id).eq("texto", textoRegra).eq("ativo", true).limit(1);
-        if (!ex || ex.length === 0) {
-          await supabaseAdmin.from("cs_client_rules").insert({
-            client_id: alvo.id, texto: textoRegra, escopo: "sempre", origem: "aprendido",
-            source_message: p.texto, author: p.authorName || p.authorJid,
-            expires_at: ehFatoTemporario(textoRegra) ? new Date(Date.now() + 14 * 86400000).toISOString() : null,
-          });
-          await sincronizarBriefingAprendido(alvo.id);
-          console.log(`[CS/inbound] aprendi conversando (${alvo.nome}): ${textoRegra}`);
-        }
+        // FASE 0A: regra permanente pede ok. Temporária continua automática com expiração.
+        const r = await proporRegra({
+          clientId: alvo.id, clienteNome: alvo.nome, texto: ensino.regra, escopo: "sempre",
+          sourceMessage: p.texto, author: p.authorName || p.authorJid || null, groupJid: p.groupJid,
+        });
+        if (r.tipo === "temporaria_ativa") await sincronizarBriefingAprendido(alvo.id);
+        console.log(`[CS/inbound] regra (${alvo.nome}) → ${r.tipo}: ${ensino.regra.slice(0, 60)}`);
       }
     }
     console.log(`[CS/inbound] conversa (debounced) com ${p.authorName || "equipe"}: "${p.texto.slice(0, 50)}"`);
@@ -864,12 +860,7 @@ async function salvarBriefingOnboarding(clientId: string, est: BriefingEstrutura
   return true;
 }
 
-// Fato com prazo embutido ("semana que vem", "até dia 15") não pode virar regra ETERNA da memória
-// do cliente — ganha TTL de 14 dias. "a partir de hoje/amanhã" é mudança permanente, não casa.
-function ehFatoTemporario(texto: string): boolean {
-  if (/a partir de/i.test(texto)) return false;
-  return /semana que vem|essa semana|esta semana|este m[êe]s|esse m[êe]s|pr[óo]xim[ao]s? (semana|m[êe]s)|at[ée] (o )?dia \d|s[óo] (essa|esta) semana|f[ée]rias|recesso|balan[çc]o/i.test(texto);
-}
+// ehFatoTemporario mudou para lib/cs/regras-propostas.ts (Fase 0A).
 
 // Pra cobrança/status: acha entre os cards recentes do cliente o mais relacionado ao tema
 // (>=2 palavras distintivas em comum com o título). Evita cobrar algo já entregue.
@@ -1750,12 +1741,12 @@ export async function POST(req: NextRequest) {
     // Loop de aprendizado: mina uma preferência DURÁVEL de estilo da mensagem e guarda (dedup p/ texto).
     const pref = await extrairPreferenciaRoteiro(msg.text);
     if (pref) {
-      const { data: ex } = await supabaseAdmin.from("cs_client_rules")
-        .select("id").eq("client_id", alvo.id).eq("texto", pref).eq("ativo", true).limit(1);
-      if (!ex || ex.length === 0) {
-        await supabaseAdmin.from("cs_client_rules").insert({ client_id: alvo.id, texto: pref, escopo: "roteiro", origem: "aprendido", source_message: msg.text, author: quem || msg.authorJid });
-        console.log(`[CS/inbound] aprendi preferência de roteiro (${alvo.nome}): ${pref}`);
-      }
+      // FASE 0A: preferência de roteiro é regra permanente → proposta, pede ok.
+      const r = await proporRegra({
+        clientId: alvo.id, clienteNome: alvo.nome, texto: pref, escopo: "roteiro",
+        sourceMessage: msg.text, author: quem || msg.authorJid || null, groupJid: msg.groupJid,
+      });
+      console.log(`[CS/inbound] preferência de roteiro (${alvo.nome}) → ${r.tipo}: ${pref}`);
     }
     console.log(`[CS/inbound] roteiro on-demand → ${alvo.nome} (${r.data.roteiros.length} versões) p/ ${quem}`);
     return NextResponse.json({ ok: true, roteiro: "ok", cliente: alvo.nome, n: r.data.roteiros.length });
@@ -2136,6 +2127,23 @@ export async function POST(req: NextRequest) {
   // ─── Decisão humana (grupo interno): RESPONDA a sugestão com "ok" (cria) ou "não" (descarta) ───
   const decision = parseDecision(msg.text);
   if (decision && isInternalCmdGroup(msg.groupJid)) {
+    // Primeiro: é resposta a uma REGRA proposta? (código próprio ou reply na pergunta)
+    const regra = await decidirRegra({
+      acao: decision.acao, codigo: decision.codigo, quotedMsgId: msg.quotedMsgId, quem: msg.authorName || msg.authorJid || null,
+    });
+    if (regra.tipo === "ativada" || regra.tipo === "descartada") {
+      if (regra.tipo === "ativada") await sincronizarBriefingAprendido(regra.clientId);
+      await csSendGroupText(msg.groupJid,
+        regra.tipo === "ativada"
+          ? `✅ Regra salva para *${regra.cliente}*: _${regra.texto}_`
+          : `👍 Descartei — não vira regra para *${regra.cliente}*.`,
+        msg.quotedMsgId || undefined);
+      return NextResponse.json({ ok: true, regra: regra.tipo });
+    }
+    if (regra.tipo === "ja_decidida") {
+      await csSendGroupText(msg.groupJid, `Essa regra eu já tinha ${regra.estado === "ativa" ? "salvado" : "descartado"} 😉`, msg.quotedMsgId || undefined);
+      return NextResponse.json({ ok: true, regra: "ja_decidida" });
+    }
     const alvoDec: AlvoDemanda = demandaDaSugestao
       ? (demandaDaSugestao.status === "pendente"
           ? { demanda: demandaDaSugestao }
@@ -2290,17 +2298,13 @@ export async function POST(req: NextRequest) {
         // Memória do cliente: fato durável → vira REGRA estruturada (do's & don'ts), não texto
         // solto no fixed_briefing (que o A3 ignora quando há campaign_briefing). Dedup pelo texto.
         if (i.aprendizado && alvo.client_id) {
-          const textoRegra = i.aprendizado.trim().slice(0, 200);
-          const { data: existentes } = await supabaseAdmin
-            .from("cs_client_rules").select("id")
-            .eq("client_id", alvo.client_id as string).eq("texto", textoRegra).eq("ativo", true).limit(1);
-          if (!existentes || existentes.length === 0) {
-            await supabaseAdmin.from("cs_client_rules").insert({
-              client_id: alvo.client_id as string, texto: textoRegra, escopo: "sempre", origem: "aprendido",
-              source_message: msg.text, author: quem,
-              expires_at: ehFatoTemporario(textoRegra) ? new Date(Date.now() + 14 * 86400000).toISOString() : null,
-            });
-            console.log(`[CS/inbound] aprendi (regra) sobre ${alvo.cliente_nome}: ${textoRegra}`);
+          // FASE 0A: regra permanente pede ok; a pergunta vai pro grupo INTERNO, não pro do cliente.
+          const r = await proporRegra({
+            clientId: alvo.client_id as string, clienteNome: alvo.cliente_nome as string, texto: i.aprendizado,
+            escopo: "sempre", sourceMessage: msg.text, author: quem, groupJid: internalGroupJid(),
+          });
+          if (r.tipo !== "ja_existe") {
+            console.log(`[CS/inbound] regra sobre ${alvo.cliente_nome} → ${r.tipo}: ${i.aprendizado.slice(0, 60)}`);
             await sincronizarBriefingAprendido(alvo.client_id as string); // enriquece o briefing visível
           }
         }
@@ -3099,16 +3103,18 @@ export async function POST(req: NextRequest) {
       console.warn(`[CS/inbound] cap de aprendizado/dia atingido (${clienteNome}) — pulando: ${texto}`);
       continue;
     }
-    const temporario = ehFatoTemporario(texto);
-    await supabaseAdmin.from("cs_client_rules").insert({
-      client_id: c.id as string, texto, escopo: "sempre", origem: "aprendido",
-      source_message: msg.text, author: msg.authorName || msg.authorJid,
-      expires_at: temporario ? new Date(Date.now() + 14 * 86400000).toISOString() : null,
+    // FASE 0A: fato temporário vira memória com prazo e avisa; fato permanente vira PROPOSTA e
+    // pergunta. Antes tudo entrava ativo e o grupo recebia "🧠 Anotei… vou lembrar disso" como
+    // fato consumado — 354 das 356 regras ativas nasceram assim.
+    const r = await proporRegra({
+      clientId: c.id as string, clienteNome, texto, escopo: "sempre",
+      sourceMessage: msg.text, author: msg.authorName || msg.authorJid || null, groupJid: internalJid,
     });
-    if (!temporario) await sincronizarBriefingAprendido(c.id as string); // fato durável → enriquece o briefing
-    if (internalJid) await csSendGroupText(internalJid, `🧠 Anotei do *${clienteNome}*: _${texto}_ — vou lembrar disso.${temporario ? " (por 2 semanas — parece coisa temporária)" : ""}`,
-      undefined, { origem: "cs-regra-anotada", destino: "interno" });
-    console.log(`[CS/inbound] info_operacional → memória (${clienteNome}): ${texto}`);
+    if (r.tipo === "temporaria_ativa" && internalJid) {
+      await csSendGroupText(internalJid, `🧠 Anotei do *${clienteNome}*: _${texto}_ — vou lembrar disso por 2 semanas (parece coisa temporária).`,
+        undefined, { origem: "cs-regra-anotada", destino: "interno" });
+    }
+    console.log(`[CS/inbound] info_operacional (${clienteNome}) → ${r.tipo}: ${texto}`);
   }
 
   // ─── A PERGUNTA DO CLIENTE VIRA PENDÊNCIA COM PRAZO ─────────────────────────
