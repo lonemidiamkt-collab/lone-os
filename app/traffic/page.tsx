@@ -384,6 +384,14 @@ export default function TrafficPage() {
                       <span className="font-medium text-foreground text-sm">{client.name}</span>
                     </div>
                     <p className="text-xs text-muted-foreground mb-2">{client.assignedTraffic}</p>
+                    {/* O PORQUÊ do status. Sem isso o kanban era só uma coluna — ninguém sabia se
+                        "em risco" era CPL, conta parada ou alguém que arrastou. */}
+                    {client.statusMotivo && (
+                      <p className={`text-[11px] mb-2 leading-snug ${client.status === "at_risk" ? "text-lone-danger" : client.status === "average" ? "text-lone-warning" : "text-muted-foreground"}`}>
+                        {client.statusMotivo}
+                        {client.statusOrigem === "manual" && <span className="opacity-70"> · manual</span>}
+                      </p>
+                    )}
                     <div className="flex items-center justify-between">
                       <span className={`badge border text-xs ${getAttentionColor(client.attentionLevel)}`}>
                         {getAttentionLabel(client.attentionLevel)}

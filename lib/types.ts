@@ -86,6 +86,9 @@ export interface Client {
   /** Motivo do churn (opcional). */
   churnReason?: string;
   attentionLevel: AttentionLevel;
+  /** Por que o status é o que é ("CPL R$ 25,60 acima do crítico"). Vem da rotina de sexta ou do arraste. */
+  statusMotivo?: string | null;
+  statusOrigem?: "auto" | "manual" | null;
   tags: string[];
   serviceType?: ServiceType;
   perfilConteudo?: ContentProfile; // só arte / vídeo / completo (Playbook §4)

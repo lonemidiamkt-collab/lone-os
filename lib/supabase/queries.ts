@@ -61,6 +61,8 @@ function snakeToClient(row: Record<string, unknown>): Client {
     churnedAt: (row.churned_at as string) ?? undefined,
     churnReason: (row.churn_reason as string) ?? undefined,
     attentionLevel: (row.attention_level as Client["attentionLevel"]) ?? "medium",
+    statusMotivo: (row.status_motivo as string) ?? null,
+    statusOrigem: (row.status_origem as Client["statusOrigem"]) ?? null,
     tags: (row.tags as string[]) ?? [],
     assignedTraffic: (row.assigned_traffic as string) ?? "",
     assignedSocial: (row.assigned_social as string) ?? "",
@@ -215,7 +217,7 @@ function clientToSnake(c: Partial<Client>): Record<string, unknown> {
 // lista se for adicionada aqui de propósito.
 const CLIENT_LEAN_COLS = [
   "id", "name", "logo", "logo_url", "doc_logo", "industry", "nicho", "monthly_budget", "daily_budget",
-  "status", "active", "churned_at", "churn_reason", "attention_level", "tags",
+  "status", "status_motivo", "status_origem", "active", "churned_at", "churn_reason", "attention_level", "tags",
   "assigned_traffic", "assigned_social", "assigned_designer", "last_post_date", "join_date", "created_at",
   "updated_at", "payment_method", "notes", "contract_end", "tone_of_voice", "drive_link", "instagram_user",
   "posts_this_month", "posts_goal", "service_type", "perfil_conteudo", "draft_status", "contact_name",

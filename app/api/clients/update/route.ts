@@ -106,6 +106,15 @@ export async function POST(req: NextRequest) {
     const col = FIELD_MAP[key] ?? key;
     row[col] = val;
   }
+  // Status vindo por aqui é gente arrastando no kanban: marca como MANUAL. A rotina de sexta
+  // (status-clientes) grava "auto" por outro caminho e respeita o manual por 7 dias — o Julio
+  // olhou e decidiu; a régua automática espera a próxima semana. Decidido no servidor, não no
+  // cliente, para ninguém conseguir se passar por rotina.
+  if (updates.status !== undefined) {
+    row.status_origem = "manual";
+    row.status_atualizado_em = new Date().toISOString();
+    row.status_motivo = `definido à mão por ${user.email ?? "alguém"}`;
+  }
 
   if (Object.keys(row).length === 0) {
     // Nothing to update — return current row
