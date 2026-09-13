@@ -502,6 +502,8 @@ const MODULES: Module[] = [
       "Aba 'Análise IA' com histórico navegável de pareceres automáticos",
       "10 abas por cliente: Overview, Dados, Resultados, Análise IA, Contratos, Chat, Histórico, Tarefas, Conteúdo, Onboarding",
       "Memória do cliente (as REGRAS que o agente aprende): o Loninho anota o que muda o jeito de fazer a próxima peça — identidade visual, o que a legenda deve dizer, dado operacional (endereço/horário) e proibições. Preço e promoção NÃO viram regra: mudam toda semana e poluiriam o briefing. Ele aprende de três lugares: as conversas do grupo, as CORREÇÕES do cliente ('o endereço está errado' vira regra com o dado certo) e o que a equipe escreve nos briefings e comentários dos cards. Na entrega do designer, a arte é conferida contra essas regras e o time é avisado antes da peça ir pro cliente",
+      "REGRA PERMANENTE PEDE OK (13/09): o Loninho não grava mais regra permanente a partir de uma mensagem. Ele PROPÕE no grupo interno ('📌 Parece uma regra nova para X: … Salvar? ok a1b2 / não a1b2') e só gestor ou admin ativa — designer e social podem descartar, não ativar. Fato passageiro ('fechado até dia 20') continua automático, com validade de 14 dias. Motivo: 354 das 356 regras ativas tinham nascido de uma mensagem só, sem ninguém olhar.",
+      "QUEM MANDA É O NÚMERO, NÃO O GRUPO (13/09): 'Lone, cria uma demanda' só executa se o remetente for do time cadastrado em Equipe com o WhatsApp preenchido — o número é conferido exato (DDD + 8 dígitos, o nono resolvido). Cliente no grupo dele, número desconhecido ou ex-funcionário: o agente lê e responde, mas não age. Níveis: ler/analisar é de todos; criar card, cobrar, baixar pendência e marcar reunião é do time; ativar regra, status, contrato e falar com o cliente é de gestor/admin; financeiro e apagar é só admin.",
     ],
     tips: [
       "Antes de gerar link, verifique se o cliente já não existe — o sistema tem dedup por CNPJ/email.",
@@ -777,6 +779,9 @@ const MODULES: Module[] = [
     ],
     features: [
       "Proteção por PIN 4 dígitos",
+      "VERIFICAÇÃO EM DUAS ETAPAS (13/09): em Configurações › Segurança, o admin ativa um autenticador (Google Authenticator, 1Password, Authy…). Depois disso a senha sozinha não entra: toda sessão pede o código de 6 dígitos, e o servidor recusa qualquer sessão que não tenha passado por ele. Perdeu o celular: outro admin remove o fator pelo banco.",
+      "RASTREABILIDADE (13/09): cada execução do agente (mensagem recebida, cron) tem um id. Tudo que ela tocou responde por ele — a chamada à OpenAI (llm_calls: modelo, tokens, custo em dólar), a linha gravada (audit_log.correlation_id) e a mensagem enviada (cs_outbound). agent_runs guarda a execução inteira: origem, quem disparou, duração, custo, o que saiu e o desfecho. 'Por que o Loninho fez isso?' e 'quanto ele custa por dia?' passam a ter resposta no banco.",
+      "AUDITORIA COM AUTOR (13/09): o audit_log passa a dizer QUEM mudou (era 'service_role' sem nome em 96% das linhas) e O QUE mudou (antes/depois só das colunas alteradas; update sem mudança não gera linha). Cobre clientes, tarefas, equipe e as regras do agente.",
       "Relatórios quinzenais (Quinz Reports)",
       "Análise de churn e saúde do portfolio",
       "Visão executiva (sem dados operacionais)",
