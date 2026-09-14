@@ -20,7 +20,13 @@ interface Item {
     roteiros: { variacao: string; roteiro: { angulo: string; etapas: { tempo: string; nome: string; texto: string }[]; scorecard: number } | null }[] | null;
   } | null;
 }
-interface Resposta { dia: string | null; itens: Item[]; precisao: { concordo: number; total: number; taxa: number } | null; error?: string }
+interface Teste { id: string; cliente: string; pai: string; variavel: string; muda: string | null; hipotese: string | null; criadoPor: string | null; designer: string | null; prazo: string | null; etapa: string; resultado: { veredito?: string; motivo?: string; cplPai?: number | null; cplFilho?: number | null } | null; createdAt: string }
+interface Resposta { dia: string | null; itens: Item[]; testes?: Teste[]; precisao: { concordo: number; total: number; taxa: number } | null; error?: string }
+const ETAPA: Record<string, { rotulo: string; cls: string }> = {
+  na_fila: { rotulo: "na fila do designer", cls: "bg-muted text-muted-foreground" }, em_producao: { rotulo: "em produção", cls: "bg-lone-warning-bg text-lone-warning" },
+  entregue: { rotulo: "arte entregue — falta subir", cls: "bg-primary/10 text-primary" }, no_ar: { rotulo: "no ar — medindo", cls: "bg-primary/10 text-primary" },
+  medindo: { rotulo: "medindo (ainda sem amostra)", cls: "bg-primary/10 text-primary" }, validada: { rotulo: "✓ validada", cls: "bg-emerald-500/10 text-emerald-600" }, refutada: { rotulo: "✗ refutada", cls: "bg-destructive/10 text-destructive" },
+};
 
 const ESTADO: Record<string, { rotulo: string; cls: string }> = {
   CRITICAL: { rotulo: "Crítico", cls: "bg-destructive/10 text-destructive" },
@@ -108,6 +114,28 @@ export default function CriativosPage() {
         </div>
         {erro && <p className="mt-2 text-xs text-destructive">{erro}</p>}
       </header>
+
+      {dados?.testes && dados.testes.length > 0 && (
+        <section className="rounded-xl border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold text-foreground">🧬 Testes de variação ({dados.testes.length})</h2>
+          <p className="mb-2 text-[11px] text-muted-foreground">Cada linha é um filho de um vencedor, com UMA variável. O veredito só sai com gasto de decisão; até lá, "medindo".</p>
+          <ul className="divide-y divide-border text-[11px]">
+            {dados.testes.map((t) => {
+              const e = ETAPA[t.etapa] ?? { rotulo: t.etapa, cls: "bg-muted text-muted-foreground" };
+              return (
+                <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] ${e.cls}`}>{e.rotulo}</span>
+                  <span className="font-medium text-foreground">{t.cliente}</span>
+                  <span className="text-muted-foreground">pai: {t.pai}</span>
+                  <span className="text-foreground/80">variável: {t.variavel}{t.muda ? ` — ${t.muda}` : ""}</span>
+                  {t.designer && <span className="text-muted-foreground">{t.designer}{t.prazo ? ` · prazo ${t.prazo.split("-").reverse().join("/")}` : ""}</span>}
+                  {t.resultado?.motivo && <span className="text-muted-foreground">· {t.resultado.motivo}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {dados && itens.length === 0 && (
         <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Nenhuma avaliação ainda. A primeira roda no próximo sync (07:20).</p>

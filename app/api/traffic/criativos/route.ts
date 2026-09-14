@@ -44,11 +44,32 @@ export async function GET(req: NextRequest) {
       analise: h ? { resumo: h.resumo, elementos: h.elementos, hipoteses: h.hipoteses, variacoes: h.variacoes, roteiros: h.roteiros } : null };
   });
 
+  // Testes em andamento: cada variação replicada, com o estado (na fila do designer / entregue / no ar / veredito).
+  const { data: lins } = await supabaseAdmin.from("creative_lineage")
+    .select("id, client_id, parent_ad_id, child_ad_id, child_design_request_id, variavel, muda, hipotese, criado_por, resultado, created_at")
+    .order("created_at", { ascending: false }).limit(60);
+  const drIds = [...new Set((lins ?? []).map((l) => l.child_design_request_id as string).filter(Boolean))];
+  const { data: drs } = drIds.length ? await supabaseAdmin.from("design_requests").select("id, status, assigned_designer, deadline").in("id", drIds) : { data: [] as Record<string, unknown>[] };
+  const dr = new Map((drs ?? []).map((d) => [d.id as string, d]));
+  const paiIds = [...new Set((lins ?? []).map((l) => l.parent_ad_id as string))];
+  const { data: pais } = paiIds.length ? await supabaseAdmin.from("creative_health").select("ad_id, ad_name, client_id").in("ad_id", paiIds).order("data", { ascending: false }) : { data: [] as Record<string, unknown>[] };
+  const pai = new Map<string, Record<string, unknown>>();
+  for (const p of pais ?? []) if (!pai.has(p.ad_id as string)) pai.set(p.ad_id as string, p);
+  const clientIds2 = [...new Set((lins ?? []).map((l) => l.client_id as string).filter(Boolean))];
+  const { data: cli2 } = clientIds2.length ? await supabaseAdmin.from("clients").select("id, name, nome_fantasia").in("id", clientIds2) : { data: [] as Record<string, unknown>[] };
+  const nome2 = new Map((cli2 ?? []).map((c) => [c.id as string, ((c.nome_fantasia as string) || (c.name as string)) ?? ""]));
+  const testes = (lins ?? []).map((l) => {
+    const d = dr.get(l.child_design_request_id as string);
+    const r = (l.resultado ?? null) as { veredito?: string; motivo?: string; cplPai?: number | null; cplFilho?: number | null } | null;
+    const etapa = r?.veredito && r.veredito !== "inconclusiva" ? r.veredito : l.child_ad_id ? (r ? "medindo" : "no_ar") : d?.status === "done" ? "entregue" : d?.status === "in_progress" ? "em_producao" : "na_fila";
+    return { id: l.id, cliente: nome2.get(l.client_id as string) ?? "", pai: (pai.get(l.parent_ad_id as string)?.ad_name as string) ?? l.parent_ad_id, variavel: l.variavel, muda: l.muda, hipotese: l.hipotese, criadoPor: l.criado_por, designer: d?.assigned_designer ?? null, prazo: d?.deadline ?? null, etapa, resultado: r, createdAt: l.created_at };
+  });
+
   // Precisão acumulada do shadow: concordo ÷ (concordo + discordo), todos os dias.
   const { data: rot } = await supabaseAdmin.from("creative_health").select("rotulo").not("rotulo", "is", null).neq("rotulo", "sem_opiniao");
   const concordo = (rot ?? []).filter((r) => r.rotulo === "concordo").length;
   const total = (rot ?? []).length;
-  return NextResponse.json({ dia, itens, precisao: total ? { concordo, total, taxa: Math.round((concordo / total) * 100) } : null });
+  return NextResponse.json({ dia, itens, testes, precisao: total ? { concordo, total, taxa: Math.round((concordo / total) * 100) } : null });
 }
 
 export async function POST(req: NextRequest) {
