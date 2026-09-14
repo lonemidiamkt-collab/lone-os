@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import EstiloVisual from "@/components/clients/EstiloVisual";
 import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
 import CatalogoProdutos from "@/components/clients/CatalogoProdutos";
@@ -23,9 +23,21 @@ const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : "�
 export default function InteligenciaCriativa({ clientId, role }: { clientId: string; role: string }) {
   const [d, setD] = useState<Dados | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [demorando, setDemorando] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
+  // Página aberta durante o restart do deploy ficava em "Carregando…" para sempre (14/09). Agora: erro
+  // vira texto com botão, e 12 s sem resposta também.
   useEffect(() => {
-    authedFetch(`/api/clients/${clientId}/inteligencia`).then(async (r) => { const j = (await r.json()) as Dados; if (!r.ok) setErro(j.error ?? `HTTP ${r.status}`); else setD(j); }).catch(() => setErro("Não consegui carregar."));
-  }, [clientId]);
+    let vivo = true;
+    setD(null); setErro(null); setDemorando(false);
+    const vigia = setTimeout(() => { if (vivo) setDemorando(true); }, 12_000);
+    chamar<Dados>(`/api/clients/${clientId}/inteligencia`).then((r) => {
+      if (!vivo) return;
+      clearTimeout(vigia);
+      if (!r.ok || !r.data) setErro(r.erro ?? "Não consegui carregar."); else setD(r.data);
+    });
+    return () => { vivo = false; clearTimeout(vigia); };
+  }, [clientId, tentativa]);
 
   const vencedores = d?.criativos.filter((c) => c.vencedor) ?? [];
   const problemas = d?.criativos.filter((c) => !c.vencedor && ["CRITICAL", "FATIGUE_PROBABLE", "FATIGUE_POSSIBLE"].includes(c.estado)) ?? [];
@@ -37,7 +49,12 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
         <h3 className="font-semibold text-foreground">Inteligência Criativa</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">O que define esta marca, o que está funcionando nos anúncios, o que está sendo testado e o que já aprendemos. {d?.dia && <>Avaliação de {d.dia.split("-").reverse().join("/")}.</>}</p>
       </div>
-      {erro && <p className="text-xs text-destructive">{erro}</p>}
+      {(erro || (demorando && !d)) && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs">
+          <span className="text-destructive">{erro ?? "Está demorando mais que o normal — o painel pode estar reiniciando."}</span>
+          <button onClick={() => setTentativa((t) => t + 1)} className="rounded-md border border-border px-2 py-0.5 text-foreground hover:bg-muted">Tentar de novo</button>
+        </div>
+      )}
 
       <section className="rounded-xl border border-border bg-card p-4">
         <MarcaDoCliente clientId={clientId} podeEditar={podeEditarMarca} />

@@ -31,8 +31,15 @@ function Bloco({ titulo, n }: { titulo: string; n: Nivel | undefined }) {
 
 export default function PadroesCriativos({ clientId }: { clientId?: string }) {
   const [d, setD] = useState<Dados | null>(null);
-  useEffect(() => { authedFetch(`/api/traffic/criativos/padroes${clientId ? `?clientId=${clientId}` : ""}`).then(async (r) => { const j = (await r.json()) as Dados; if (r.ok) setD(j); }).catch(() => {}); }, [clientId]);
-  if (!d) return null;
+  const [falhou, setFalhou] = useState<string | null>(null);
+  useEffect(() => {
+    setD(null); setFalhou(null);
+    authedFetch(`/api/traffic/criativos/padroes${clientId ? `?clientId=${clientId}` : ""}`)
+      .then(async (r) => { const j = (await r.json().catch(() => null)) as Dados | null; if (r.ok && j) setD(j); else setFalhou(j?.error ?? `HTTP ${r.status}`); })
+      .catch(() => setFalhou("Não consegui carregar os padrões."));
+  }, [clientId]);
+  // Antes voltava null e a caixa ficava vazia sem explicação (print do Roberto, 14/09).
+  if (!d) return <div><h4 className="text-sm font-semibold text-foreground">🔍 Padrão dos vencedores — três níveis</h4><p className="mt-1 text-xs text-muted-foreground">{falhou ?? "Carregando…"}</p></div>;
   return (
     <section className="space-y-2">
       <div>

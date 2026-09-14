@@ -98,7 +98,7 @@ export default function CatalogoProdutos({ clientId, podeEditar }: { clientId: s
             </button>
             <div className="min-w-0 flex-1 text-[11px]">
               <p className="truncate font-medium text-foreground" title={p.nome}>{p.nome}</p>
-              <p className="truncate text-muted-foreground">{[p.marca, p.categoria, p.codigo].filter(Boolean).join(" · ") || (p.origem === "briefing" ? "do briefing — completar" : "")}</p>
+              <p className="truncate text-muted-foreground">{[p.marca, p.categoria, p.codigo].filter(Boolean).join(" · ") || (p.origem === "briefing" ? "do briefing — completar" : p.origem === "briefing_ia" ? "lido do briefing pela IA — conferir" : "")}</p>
               <p className="text-muted-foreground">{p.preco != null ? <span className="text-foreground">{brl(p.preco)}</span> : "sem preço"}{p.anuncios.length ? <> · <span className="text-primary">{p.anuncios.length} anúncio{p.anuncios.length === 1 ? "" : "s"}</span></> : null}</p>
             </div>
             {podeEditar && (

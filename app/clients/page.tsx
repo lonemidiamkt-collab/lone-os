@@ -666,7 +666,7 @@ export default function ClientsPage() {
                     <div className="flex items-center gap-4">
                       <div className={`${getStatusLed(client.status)}`} />
                       {/* A capa: logo do cliente (doc_logo). 47 de 52 têm desde 14/09; sem logo, a inicial. */}
-                      {client.docLogo ? (
+                      {client.docLogo && !/\.pdf(\?|$)/i.test(client.docLogo) ? (
                         <img src={client.docLogo} alt="" className="h-11 w-11 shrink-0 rounded-xl border border-border bg-card object-contain p-0.5" loading="lazy" />
                       ) : (
                         <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-border bg-muted text-sm font-bold text-muted-foreground">{client.name.trim().charAt(0).toUpperCase()}</div>
