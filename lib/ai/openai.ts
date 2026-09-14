@@ -54,6 +54,25 @@ function ehGpt5(modelo: string): boolean {
   return /^(gpt-5|o[34])/.test(modelo);
 }
 
+// IMAGEM INLINE: o buscador da OpenAI leva 403 no CDN da Meta (fbcdn) — a URL assinada é servida
+// só a quem ela "conhece". Baixamos aqui (o servidor consegue) e mandamos como data URL. Falha
+// de download não derruba a chamada: a URL original segue, e o modelo diz que não conseguiu.
+const INLINE_MAX = 6 * 1024 * 1024;
+export async function imagemInline(url: string): Promise<string> {
+  if (!/^https?:\/\//.test(url)) return url;
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: { "User-Agent": "Mozilla/5.0 (compatible; LoneOS/1.0)" } });
+    if (!r.ok) return url;
+    const tipo = (r.headers.get("content-type") ?? "image/jpeg").split(";")[0].trim();
+    if (!tipo.startsWith("image/")) return url;
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (!buf.length || buf.length > INLINE_MAX) return url;
+    return `data:${tipo};base64,${buf.toString("base64")}`;
+  } catch {
+    return url;
+  }
+}
+
 export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiResult<T>> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { ok: false, error: "OPENAI_API_KEY não configurada" };
@@ -64,6 +83,7 @@ export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiRe
     return r;
   };
 
+  const imagens = p.imagens?.length ? await Promise.all(p.imagens.map(imagemInline)) : [];
   let res: Response;
   try {
     res = await fetch(OPENAI_API_URL, {
@@ -73,12 +93,12 @@ export async function chatJson<T = unknown>(p: ChatJsonParams): Promise<OpenAiRe
         model: p.model,
         messages: [
           { role: "system", content: p.system },
-          p.imagens?.length
+          imagens.length
             ? {
                 role: "user",
                 content: [
                   { type: "text", text: p.user },
-                  ...p.imagens.map((url) => ({ type: "image_url", image_url: { url, detail: "low" } })),
+                  ...imagens.map((url) => ({ type: "image_url", image_url: { url, detail: "low" } })),
                 ],
               }
             : { role: "user", content: p.user },
