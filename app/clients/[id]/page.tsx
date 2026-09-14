@@ -57,6 +57,7 @@ import FichaViva360Tab from "@/components/fichaviva/FichaViva360Tab";
 import Link from "next/link";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { exportReportAsPdf } from "@/lib/exportPdf";
+import InteligenciaCriativa from "@/components/client-tabs/InteligenciaCriativa";
 
 // ── Timeline helpers ─────────────────────────────────────────────────────────
 const TIMELINE_ICONS: Record<TimelineEntryType, { icon: React.ElementType; color: string; bg: string }> = {
@@ -85,12 +86,13 @@ const ASSET_TYPE_CONFIG: Record<CreativeAsset["type"], { label: string; color: s
   logo:       { label: "Logo",       color: "text-primary",  icon: Star },
 };
 
-const TABS = ["overview", "dados", "resultados", "analise-ia", "briefing", "contratos", "chat", "historico", "tasks", "content", "onboarding", "wallet", "reports", "portal", "ficha-viva"] as const;
+const TABS = ["overview", "dados", "inteligencia", "resultados", "analise-ia", "briefing", "contratos", "chat", "historico", "tasks", "content", "onboarding", "wallet", "reports", "portal", "ficha-viva"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
   overview: "Visão Geral",
   dados: "Dados",
+  inteligencia: "Inteligência Criativa",
   resultados: "Crescimento",
   "analise-ia": "Análise IA",
   briefing: "Briefing",
@@ -733,6 +735,10 @@ export default function ClientDetailPage() {
 
 
           {/* ── RESULTADOS ──────────────────────────────────────────────────── */}
+          {activeTab === "inteligencia" && (
+            <InteligenciaCriativa clientId={clientId} role={role} />
+          )}
+
           {activeTab === "resultados" && role !== "designer" && (
             <div className="space-y-4">
               <FeedbackCliente clientId={clientId} />
