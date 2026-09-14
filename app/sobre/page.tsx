@@ -605,6 +605,7 @@ const MODULES: Module[] = [
       "Detecção de cards parados >48h (SLA violado)",
       "Banco de hashtags reutilizável",
       "Criação em lote de conteúdo mensal (20 cards de uma vez)",
+      "PAUTA QUE VEM DO TRÁFEGO (14/09): quando um anúncio de um produto vence na conta do cliente, o Radar de Oportunidades (/planejamento) recebe 3 pautas ORGÂNICAS sobre aquele produto — educativo, curiosidade, erros — marcadas '🏆 Tráfego: produto — anúncio vencedor'. Nunca é o anúncio repostado: o orgânico educa e deixa o produto na cabeça. Uma leva por produto a cada 14 dias; o social decide usar, guardar ou descartar como já faz com as outras.",
       "Agente CS (monitor[IA]) lê os grupos e abre card automático — fotos enviadas em sequência (ex: vários produtos) viram UM card só, sem fragmentar nem perder nenhuma",
       "Relatório de Instagram orgânico (seguidores, seguidores ganhos, alcance, engajamento, público — gênero/idade/cidades — e posts mais engajados) em 7/14/30 dias — no portal e no PDF semanal/mensal, com anúncios e Instagram em páginas separadas",
       "Botão 'Enviar pro cliente aprovar': com a arte entregue, o social/gestor clica e o CS manda as artes no grupo do WhatsApp do cliente com uma mensagem de aprovação padronizada (varia entre 5 versões pra não soar robótico)",
