@@ -506,6 +506,9 @@ export function snakeToDesignRequest(row: Record<string, unknown>): DesignReques
     designerNote: (row.designer_note as string) ?? undefined,
     assignedDesigner: (row.assigned_designer as string) ?? undefined,
     briefingIa: (row.briefing_ia as string) ?? undefined,
+    origem: (row.origem as string) ?? undefined,
+    parentAdId: (row.parent_ad_id as string) ?? null,
+    variavel: (row.variavel as string) ?? null,
   };
 }
 

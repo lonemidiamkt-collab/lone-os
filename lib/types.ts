@@ -333,6 +333,11 @@ export interface DesignRequest {
   /** Briefing enriquecido por IA: regras visuais do cliente + o que já foi reprovado antes.
    *  Gerado sozinho na criação do pedido; fica AO LADO do briefing do social, não no lugar. */
   briefingIa?: string;
+  /** "humano" | "ia_replicacao" — de onde a demanda veio (Creative Intelligence). */
+  origem?: string;
+  /** Anúncio pai (Meta ad id) quando é variação replicada de um vencedor. */
+  parentAdId?: string | null;
+  variavel?: string | null;
 }
 
 export interface Notice {

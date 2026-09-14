@@ -2076,6 +2076,23 @@ export default function DesignPage() {
                 <div className="px-5 pb-5 -mt-1 flex items-center justify-between gap-3">
                   <span className="text-[11px] text-muted-foreground">
                     {dono ? `Demanda de ${dono}${assumida ? " (assumida)" : ""}` : "Cliente sem designer no cadastro"}
+                    {briefingReq.parentAdId && (
+                      // Fase 4 (brief 14/09): variações com elementos travados. Propostas entram como
+                      // referência anexada; o designer revisa e finaliza. Desligado até a sombra aprovar.
+                      <button
+                        onClick={async () => {
+                          const r = await authedFetch(`/api/design-requests/${briefingReq.id}/variacoes-ia`, { method: "POST" });
+                          const d = await r.json().catch(() => ({}));
+                          if (!r.ok) { toast.error(d?.error ?? "Não consegui gerar."); return; }
+                          setBriefingReq({ ...briefingReq, attachments: [...(briefingReq.attachments ?? []), ...(d.urls as string[])] });
+                          toast.success(`${(d.urls as string[]).length} variação(ões) anexada(s) como referência.`);
+                        }}
+                        className="ml-2 rounded-md border border-primary/30 px-2 py-0.5 text-[10px] text-primary hover:bg-primary/10"
+                        title="Gera propostas mantendo os elementos travados do briefing (preço, texto, logo). Vira referência, não entrega."
+                      >
+                        ✨ Gerar variações (IA)
+                      </button>
+                    )}
                   </span>
                   <button
                     onClick={async () => {

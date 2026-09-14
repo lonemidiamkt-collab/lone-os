@@ -640,6 +640,7 @@ const MODULES: Module[] = [
       "Tarefa auto-iniciada fica marcada com tag ⚡ pra diferenciar de pedidos externos.",
     ],
     features: [
+      "GERAR VARIAÇÕES (IA) — 14/09, desligado até a sombra aprovar: numa demanda de replicação (que tem anúncio pai), o botão gera 2 propostas de imagem mantendo os elementos travados do briefing (preço, texto, logo, produto) e alterando só a variável do teste. Entram como REFERÊNCIA anexada; o designer revisa e finaliza — a IA não entrega nada sozinha. Liga em agency_settings ia_imagem = on.",
       "Quadro por designer, tirado da carteira do cliente — designer novo ganha quadro sozinho, sem mexer no código",
       "Botão pra assumir demanda do colega, com o dono registrado na demanda (antes o nome ia escrito no título, tipo '[Gabriel] SEX 11')",
       "Quadro 'sem designer' agrupa os clientes que ainda não têm responsável no cadastro",
