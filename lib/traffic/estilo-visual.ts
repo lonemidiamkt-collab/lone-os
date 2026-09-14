@@ -52,7 +52,10 @@ export function linhaEstilo(e: EstiloVisual | null | undefined): string | null {
   if (!e) return null;
   const cores = e.paleta.slice(0, 4).map((c) => `${c.hex} (${c.papel})`).join(", ");
   const partes = [e.resumo, cores ? `Cores: ${cores}.` : "", e.tipografia ? `Tipografia: ${e.tipografia}.` : "", e.elementos_recorrentes.length ? `Recorrente: ${e.elementos_recorrentes.slice(0, 4).join("; ")}.` : ""];
-  return partes.filter(Boolean).join(" ").slice(0, 900);
+  const txt = partes.filter(Boolean).join(" ");
+  if (txt.length <= 900) return txt;
+  const corte = txt.lastIndexOf(" ", 900); // corta em palavra, não no meio de "sans ser…"
+  return txt.slice(0, corte > 600 ? corte : 900).replace(/[,;:]$/, "") + "…";
 }
 
 /** Último estilo lido do cliente (ou null). Usado pela replicação e pelas variações de imagem. */

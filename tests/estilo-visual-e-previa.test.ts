@@ -26,7 +26,7 @@ describe("estilo visual lido dos prints entra no DNA", () => {
     const sem = montarDemanda(base).briefing;
     const com = montarDemanda({ ...base, estiloVisual: linhaEstilo(estilo) }).briefing;
     expect(sem).not.toContain("Estilo visual da marca");
-    expect(com).toContain("**Estilo visual da marca (lido dos prints do Instagram):** Peças promocionais");
+    expect(com).toContain("**Estilo visual da marca (lido das artes entregues/prints):** Peças promocionais");
     // o estilo vem ANTES dos elementos do pai e DEPOIS do que manter — o designer lê na ordem de decisão
     expect(com.indexOf("Manter (NÃO mexer)")).toBeLessThan(com.indexOf("Estilo visual da marca"));
   });

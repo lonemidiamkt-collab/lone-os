@@ -26,7 +26,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const thumb = new Map<string, Record<string, unknown>>();
   for (const c of cri ?? []) if (!thumb.has(c.ad_id as string)) thumb.set(c.ad_id as string, c);
 
-  const criativos = (saude ?? []).map((s) => ({ ...s, thumb: (thumb.get(s.ad_id as string)?.thumb_url as string) ?? (thumb.get(s.ad_id as string)?.image_url as string) ?? null, tipo: thumb.get(s.ad_id as string)?.tipo ?? null }));
+  // Hipóteses/variações do vencedor: é daqui que a ficha cria a arte (botão "Criar arte") sem ir ao Tráfego.
+  const vencIds = (saude ?? []).filter((s) => s.vencedor).map((s) => s.ad_id as string);
+  const { data: hips } = vencIds.length ? await supabaseAdmin.from("creative_hypotheses").select("ad_id, variacoes, resumo, previas, created_at").in("ad_id", vencIds).order("created_at", { ascending: false }) : { data: [] as Record<string, unknown>[] };
+  const hip = new Map<string, Record<string, unknown>>();
+  for (const h of hips ?? []) if (!hip.has(h.ad_id as string)) hip.set(h.ad_id as string, h);
+  const { data: abertas } = vencIds.length ? await supabaseAdmin.from("design_requests").select("id, parent_ad_id, variavel, status").in("parent_ad_id", vencIds).neq("status", "done") : { data: [] as Record<string, unknown>[] };
+
+  const criativos = (saude ?? []).map((s) => ({ ...s, thumb: (thumb.get(s.ad_id as string)?.thumb_url as string) ?? (thumb.get(s.ad_id as string)?.image_url as string) ?? null, tipo: thumb.get(s.ad_id as string)?.tipo ?? null,
+    analise: hip.has(s.ad_id as string) ? { resumo: hip.get(s.ad_id as string)?.resumo ?? null, variacoes: hip.get(s.ad_id as string)?.variacoes ?? [], previas: hip.get(s.ad_id as string)?.previas ?? [] } : null,
+    demandasAbertas: (abertas ?? []).filter((d) => d.parent_ad_id === s.ad_id).map((d) => ({ id: d.id, variavel: d.variavel, status: d.status })) }));
 
   // Padrão dos vencedores: tags mais frequentes entre vencedores vs. entre os demais (do mesmo cliente).
   const vencedores = new Set((saude ?? []).filter((s) => s.vencedor).map((s) => s.ad_id as string));
@@ -37,5 +46,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     precoVisivel: { vencedores: attrV.filter((a) => a.preco_visivel).length, outros: attrO.filter((a) => a.preco_visivel).length },
     pessoa: { vencedores: attrV.filter((a) => a.pessoa).length, outros: attrO.filter((a) => a.pessoa).length } };
 
-  return NextResponse.json({ dia: dia?.data ?? null, criativos, testes: lins ?? [], aprendizados: apr ?? [], padrao });
+  const { data: flag } = await supabaseAdmin.from("agency_settings").select("value").eq("key", "ia_imagem").maybeSingle();
+  return NextResponse.json({ dia: dia?.data ?? null, criativos, testes: lins ?? [], aprendizados: apr ?? [], padrao, iaImagem: flag?.value === "on" });
 }

@@ -47,10 +47,12 @@ export async function executarReplicacao(p: { adId: string; variacao: VariacaoPe
     variacao, formato, prazo, roteiro, elementos: (hip?.elementos as { tipo: string; descricao: string }[]) ?? [], estiloVisual: linhaEstilo(estilo), pedidoPor: p.pedidoPor,
   });
 
+  // O quadro roteia pela carteira do cliente; gravar o designer na demanda deixa explícito e rastreável.
+  const designer = (cli?.assigned_designer as string) || null;
   const { data: dr, error } = await supabaseAdmin.from("design_requests").insert({
     title: d.titulo, client_id: clientId, client_name: cliente, requested_by: p.pedidoPor,
     priority: "high", status: "queued", format: formato, briefing: d.briefing, attachments: d.attachments, deadline: prazo,
-    origem: "ia_replicacao", parent_ad_id: adId, variavel,
+    origem: "ia_replicacao", parent_ad_id: adId, variavel, assigned_designer: designer,
   }).select("id").single();
   if (error) return { ok: false, status: 500, erro: error.message };
 
@@ -59,7 +61,6 @@ export async function executarReplicacao(p: { adId: string; variacao: VariacaoPe
     variavel, hipotese: variacao.testa, mantem: variacao.mantem, muda: variacao.muda, criado_por: p.pedidoPor,
   }).then(({ error: e }) => { if (e) console.error("[replicar] lineage:", e.message); });
 
-  const designer = (cli?.assigned_designer as string) || null;
   if (designer) {
     await supabaseAdmin.from("notifications").insert({
       type: "design", title: "🧬 Variação de vencedor pra você", body: `${cliente}: ${variacao.nome} — briefing travado e referência anexada. Prazo ${prazo.split("-").reverse().join("/")}.`,

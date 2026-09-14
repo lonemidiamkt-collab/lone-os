@@ -53,7 +53,7 @@ export function montarDemanda(p: PedidoReplicacao): { titulo: string; briefing: 
     `**O que este teste responde:** ${p.variacao.testa}`,
     ``,
     `**Formato:** ${p.formato}`,
-    p.estiloVisual ? `\n**Estilo visual da marca (lido dos prints do Instagram):** ${p.estiloVisual}` : "",
+    p.estiloVisual ? `\n**Estilo visual da marca (lido das artes entregues/prints):** ${p.estiloVisual}` : "",
     p.elementos?.length ? `\n**O que o pai tem (fato):**\n${p.elementos.map((e) => `- ${e.tipo}: ${e.descricao}`).join("\n")}` : "",
     p.roteiro ? `\n**Roteiro sugerido (Método Lone · ${p.roteiro.angulo}):**\n${p.roteiro.etapas.map((e) => `- ${e.tempo} ${e.nome}: ${e.texto}`).join("\n")}` : "",
     ``,

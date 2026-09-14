@@ -8,7 +8,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { comExecucao, anotar } from "@/lib/obs/correlacao";
 import { extrairProdutos, montarTexto } from "@/lib/clients/produtos-do-briefing";
 
-// POST /api/system/produtos-do-briefing?max=20[&clientId=] — completa o catálogo de cada cliente
+// POST /api/system/produtos-do-briefing?max=20[&offset=][&clientId=] — completa o catálogo de cada cliente
 // ativo com o que o briefing/regras NOMEIAM e ainda não está lá. Marca origem 'briefing_ia' para a
 // equipe saber que veio da leitura (e corrigir). Roda uma vez agora; depois só quando o briefing muda.
 export async function POST(req: NextRequest) {
@@ -16,6 +16,8 @@ export async function POST(req: NextRequest) {
   if (gate) return gate;
   const max = Math.min(60, Math.max(1, Number(req.nextUrl.searchParams.get("max") ?? 20) || 20));
   const so = req.nextUrl.searchParams.get("clientId");
+  // ?offset= para varrer a carteira em rodadas (a lista é alfabética e estável)
+  const offset = Math.max(0, Number(req.nextUrl.searchParams.get("offset") ?? 0) || 0);
   return comExecucao({ origem: "cron:produtos-do-briefing", ator: "cron" }, async () => {
     let q = supabaseAdmin.from("clients").select("id, name, nome_fantasia, nicho, fixed_briefing, campaign_briefing").eq("active", true).is("churned_at", null).order("name");
     if (so) q = q.eq("id", so);
@@ -23,7 +25,7 @@ export async function POST(req: NextRequest) {
     const inicio = Date.now();
     const resultados: { cliente: string; novos: number; erro?: string }[] = [];
     let feitos = 0;
-    for (const c of clientes ?? []) {
+    for (const c of (clientes ?? []).slice(offset)) {
       if (feitos >= max || Date.now() - inicio > 240_000) break;
       const [{ data: b }, { data: ex }, { data: rg }] = await Promise.all([
         supabaseAdmin.from("client_briefings").select("resumo_estrategico, produtos, produtos_destaque_atual").eq("client_id", c.id).eq("is_current", true).maybeSingle(),
