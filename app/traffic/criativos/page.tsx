@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useRole } from "@/lib/context/RoleContext";
+import OperacaoCriativa from "@/components/traffic/OperacaoCriativa";
 
 // /traffic/criativos — SAÚDE DOS CRIATIVOS, em sombra. O motor avalia todo dia; o gestor diz se
 // concorda. Enquanto a precisão não passar de 80%, nada disto vira recomendação nem aviso.
@@ -114,6 +115,8 @@ export default function CriativosPage() {
         </div>
         {erro && <p className="mt-2 text-xs text-destructive">{erro}</p>}
       </header>
+
+      {(role === "admin" || role === "manager") && <OperacaoCriativa />}
 
       {dados?.testes && dados.testes.length > 0 && (
         <section className="rounded-xl border border-border bg-card p-4">
