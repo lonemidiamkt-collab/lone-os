@@ -42,10 +42,10 @@ services:
       # Número dedicado do agente (monitor[IA]) — o Agente CS posta as sugestões por aqui.
       EVOLUTION_API_KEY_NEW: ${EVOLUTION_API_KEY_NEW}
       EVOLUTION_INSTANCE_NEW: ${EVOLUTION_INSTANCE_NEW}
-      # Agente CS (inbound). Webhook valida CS_INBOUND_SECRET. CS_LONE_TEAM_JIDS = números da
-      # equipe (nunca viram demanda). CS_PILOT_GROUP_JIDS = allowlist do piloto (LGPD): vazio = todos.
+      # Agente CS (inbound). Webhook valida CS_INBOUND_SECRET. Quem é da equipe vem de
+      # team_members.whatsapp_phone (Gestão da Equipe) — o CS_LONE_TEAM_JIDS do .env foi aposentado
+      # em 14/09/2026. CS_PILOT_GROUP_JIDS = allowlist do piloto (LGPD): vazio = todos.
       CS_INBOUND_SECRET: ${CS_INBOUND_SECRET}
-      CS_LONE_TEAM_JIDS: ${CS_LONE_TEAM_JIDS}
       CS_PILOT_GROUP_JIDS: ${CS_PILOT_GROUP_JIDS}
       # Cliente alvo dos cards de TESTE quando o grupo do piloto não mapeia cliente real.
       CS_TEST_CLIENT_ID: ${CS_TEST_CLIENT_ID}

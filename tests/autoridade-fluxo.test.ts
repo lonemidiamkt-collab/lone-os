@@ -95,22 +95,11 @@ describe("quem pode agir — pelo número, não pelo grupo", () => {
     expect((await quemEh("552281712589@s.whatsapp.net"))?.nome).toBe("Julio");
   });
 
-  it("a lista da equipe (quem nunca vira demanda) sai do banco; o .env só soma enquanto existir", async () => {
+  it("a lista da equipe (quem nunca vira demanda) sai do banco — e só dele", async () => {
+    process.env.CS_LONE_TEAM_JIDS = "5522977770000"; // aposentado: não pode mais contar
     expect((await numerosDaEquipe()).sort()).toEqual(["552281701631", "552281712589", "552288193773"]);
-    process.env.CS_LONE_TEAM_JIDS = "5522977770000";
-    expect(await numerosDaEquipe()).toContain("5522977770000");
+    expect(await quemEh("5522977770000@s.whatsapp.net")).toBeNull();
     delete process.env.CS_LONE_TEAM_JIDS;
-    expect(await numerosDaEquipe()).not.toContain("5522977770000"); // env fora do compose = lista só do banco
-  });
-
-  it("reserva do .env é transitória: entra como 'social', com fonte marcada e aviso no log", async () => {
-    process.env.CS_LONE_TEAM_JIDS = "5522977770000";
-    _limparCacheAutoridade();
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const a = await quemEh("5522977770000@s.whatsapp.net");
-    expect(a).toMatchObject({ papel: "social", fonte: "reserva" });
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/RESERVA do \.env/));
-    warn.mockRestore();
   });
 });
 
