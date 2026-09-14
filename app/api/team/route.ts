@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { validarWhatsapp } from "@/lib/team/whatsapp";
+import { validarWhatsapp, mesmoWhatsapp } from "@/lib/team/whatsapp";
 
 const PAPEIS = ["admin", "manager", "traffic", "social", "designer", "comercial"] as const;
 type Papel = (typeof PAPEIS)[number];
@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
   const wa = validarWhatsapp(body?.whatsapp_phone);
   if (!wa.ok) return NextResponse.json({ error: wa.erro }, { status: 400 });
   if (wa.numero) {
-    const { data: dono } = await supabaseAdmin.from("team_members").select("name").eq("whatsapp_phone", wa.numero).maybeSingle();
+    const { data: todos } = await supabaseAdmin.from("team_members").select("name, whatsapp_phone").not("whatsapp_phone", "is", null);
+    const dono = (todos ?? []).find((t) => mesmoWhatsapp(t.whatsapp_phone as string, wa.numero));
     if (dono) return NextResponse.json({ error: `esse WhatsApp já é de ${dono.name}` }, { status: 409 });
   }
 
@@ -131,8 +132,8 @@ export async function PATCH(req: NextRequest) {
     const v = validarWhatsapp(body.whatsapp_phone);
     if (!v.ok) return NextResponse.json({ error: v.erro }, { status: 400 });
     if (v.numero) {
-      const { data: dono } = await supabaseAdmin.from("team_members").select("id, name")
-        .eq("whatsapp_phone", v.numero).neq("id", id).maybeSingle();
+      const { data: todos } = await supabaseAdmin.from("team_members").select("id, name, whatsapp_phone").not("whatsapp_phone", "is", null).neq("id", id);
+      const dono = (todos ?? []).find((t) => mesmoWhatsapp(t.whatsapp_phone as string, v.numero));
       if (dono) return NextResponse.json({ error: `esse WhatsApp já é de ${dono.name}` }, { status: 409 });
     }
     patch.whatsapp_phone = v.numero;
