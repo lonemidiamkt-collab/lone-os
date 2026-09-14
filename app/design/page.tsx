@@ -29,6 +29,7 @@ import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import { MarkdownView, MarkdownEditor, markdownPlainText } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
+import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
 
 // ── Designer-focused columns (simplified from 7 → 4) ─────────────────────────
 // Maps: ideas/script → "queue", in_production → "doing", blocked → "blocked", rest → "delivered"
@@ -2604,6 +2605,10 @@ function ClientDrawer({
               {client.docLogo ? (logoBusy ? "Baixando..." : "Baixar Logo") : "Sem logo cadastrada"}
             </button>
             {logoErr && <p className="text-[10px] text-destructive mt-1">{logoErr}</p>}
+            {/* Todas as versões da logo + Figma/Drive, para baixar direto daqui. */}
+            <div className="mt-3">
+              <MarcaDoCliente clientId={client.id} compacto />
+            </div>
           </div>
 
           {/* Briefing (editavel por qualquer role) */}

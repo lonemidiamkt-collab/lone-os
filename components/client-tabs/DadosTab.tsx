@@ -10,6 +10,7 @@ import {
   Link as LinkIcon, Clock, CheckCircle, Mail, Settings,
 } from "lucide-react";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
+import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
 
 interface Props {
   client: Client;
@@ -350,6 +351,13 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             </button>
           ) : null}
         </div>
+      </div>
+
+      {/* Materiais da marca: todas as versões da logo, links de Figma/Drive, upload e capa.
+          Antes só existia UMA logo (doc_logo, do onboarding) e 32 de 52 clientes não tinham. */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <MarcaDoCliente clientId={client.id} podeEditar={["admin", "manager", "social", "designer", "traffic"].includes(role)}
+          onCapaChange={(url) => updateClientData(client.id, { docLogo: url })} />
       </div>
 
       {/* Link de Correção gerado */}
