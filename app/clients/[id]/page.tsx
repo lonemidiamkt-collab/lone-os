@@ -180,7 +180,7 @@ export default function ClientDetailPage() {
   const initialTab = (() => {
     if (typeof window !== "undefined") {
       const urlTab = new URLSearchParams(window.location.search).get("tab");
-      if (urlTab === "onboarding") return "onboarding" as Tab;
+      if (urlTab && (TABS as readonly string[]).includes(urlTab)) return urlTab as Tab;
     }
     return "overview" as Tab;
   })();

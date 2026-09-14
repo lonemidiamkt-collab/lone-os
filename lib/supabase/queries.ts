@@ -237,7 +237,21 @@ const CLIENT_LEAN_COLS = [
 export async function fetchClients(): Promise<Client[]> {
   const { data, error } = await db.from("clients").select(CLIENT_LEAN_COLS).is("draft_status", null).neq("active", false).order("name");
   if (error) { console.error("[DB] fetchClients:", error); return []; }
-  return (data ?? []).map((r) => snakeToClient(r as unknown as Record<string, unknown>));
+  const clientes = (data ?? []).map((r) => snakeToClient(r as unknown as Record<string, unknown>));
+  return completarDriveLink(clientes);
+}
+
+// clients.drive_link estava vazio em 52 de 52 clientes (14/09) — todo pedido de arte abria com o aviso
+// "sem pasta Drive" mesmo com Drive/Figma cadastrados em client_brand_assets. O link de marca vale
+// como Drive do cliente (Drive primeiro, Figma depois). Falha aqui não derruba a lista.
+async function completarDriveLink(clientes: Client[]): Promise<Client[]> {
+  const semLink = clientes.filter((c) => !c.driveLink).map((c) => c.id);
+  if (!semLink.length) return clientes;
+  const { data, error } = await db.from("client_brand_assets").select("client_id, tipo, url").in("client_id", semLink).in("tipo", ["link_drive", "link_figma"]).order("created_at", { ascending: false });
+  if (error || !data?.length) return clientes;
+  const link = new Map<string, string>();
+  for (const tipo of ["link_drive", "link_figma"]) for (const r of data) if (r.tipo === tipo && !link.has(r.client_id as string)) link.set(r.client_id as string, r.url as string);
+  return clientes.map((c) => (!c.driveLink && link.has(c.id) ? { ...c, driveLink: link.get(c.id) } : c));
 }
 
 // Ex-clientes (churned). Para a aba "Arquivados" e métricas de carteira.

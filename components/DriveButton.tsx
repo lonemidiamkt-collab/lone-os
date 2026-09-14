@@ -12,14 +12,16 @@ interface DriveButtonProps {
 
 export default function DriveButton({ driveLink, clientName, size = "sm", className }: DriveButtonProps) {
   const hasLink = !!driveLink;
-  const isValid = hasLink && driveLink.includes("drive.google.com");
+  // Antes só drive.google.com contava — link do Figma cadastrado aparecia como "não configurado".
+  const isValid = hasLink && /^https?:\/\//.test(driveLink);
+  const rotulo = !isValid ? "Pasta Drive" : driveLink.includes("figma.com") ? "Figma" : driveLink.includes("drive.google.com") ? "Pasta Drive" : "Materiais";
 
   if (size === "md") {
     return (
       <button
         onClick={() => isValid && window.open(driveLink, "_blank", "noopener,noreferrer")}
         disabled={!isValid}
-        title={isValid ? `Abrir pasta Drive — ${clientName || "Cliente"}` : "Link do Drive n\u00e3o configurado"}
+        title={isValid ? `Abrir ${rotulo} — ${clientName || "Cliente"}` : "Link do Drive n\u00e3o configurado"}
         className={cn(
           "group flex items-center gap-2 px-3 py-2 rounded-xl border transition-all duration-200",
           isValid
@@ -46,7 +48,7 @@ export default function DriveButton({ driveLink, clientName, size = "sm", classN
             "text-[11px] font-medium leading-tight",
             isValid ? "text-foreground" : "text-muted-foreground"
           )}>
-            Pasta Drive
+            {rotulo}
           </p>
           <p className="text-[9px] text-muted-foreground">
             {isValid ? "Abrir em nova aba" : "N\u00e3o configurado"}
@@ -61,7 +63,7 @@ export default function DriveButton({ driveLink, clientName, size = "sm", classN
     <button
       onClick={() => isValid && window.open(driveLink, "_blank", "noopener,noreferrer")}
       disabled={!isValid}
-      title={isValid ? `Abrir pasta Drive — ${clientName || "Cliente"}` : "Link do Drive n\u00e3o configurado"}
+      title={isValid ? `Abrir ${rotulo} — ${clientName || "Cliente"}` : "Link do Drive n\u00e3o configurado"}
       className={cn(
         "group relative w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200",
         isValid

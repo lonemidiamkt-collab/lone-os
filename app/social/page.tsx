@@ -13,6 +13,7 @@ import ContentIdeasModal from "@/components/ContentIdeasModal";
 import Client360Modal from "@/components/Client360Modal";
 import CampaignModal from "@/components/CampaignModal";
 import DriveButton from "@/components/DriveButton";
+import MateriaisResumo from "@/components/clients/MateriaisResumo";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import { MarkdownEditor } from "@/components/Markdown";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
@@ -983,25 +984,9 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
             ocupado={subindoRef}
           />
 
-          {/* Drive link auto-recovered */}
-          {selectedClient && (
-            <div className={`rounded-lg p-3 ${selectedClient.driveLink ? "bg-primary/[0.04] border border-primary/[0.1]" : "bg-lone-warning-bg/[0.04] border border-lone-warning-border/[0.1]"}`}>
-              {selectedClient.driveLink ? (
-                <div className="flex items-center gap-2">
-                  <CheckCircle size={12} className="text-primary shrink-0" />
-                  <p className="text-[10px] text-primary font-medium">Link do Drive recuperado do cadastro</p>
-                  <a href={selectedClient.driveLink} target="_blank" rel="noopener noreferrer"
-                    className="text-[10px] text-muted-foreground hover:text-primary ml-auto flex items-center gap-1">
-                    Abrir <ExternalLink size={9} />
-                  </a>
-                </div>
-              ) : (
-                <p className="text-[10px] text-lone-warning font-medium">
-                  Cliente sem pasta Drive cadastrada (opcional — não impede o pedido). Cadastre em Clientes → Editar.
-                </p>
-              )}
-            </div>
-          )}
+          {/* Materiais do cliente (logo, versões, Drive/Figma) — no lugar do aviso "sem pasta Drive" que
+              aparecia para todo cliente (drive_link vazio em 52/52) e mandava a pessoa para Clientes → Editar. */}
+          {selectedClient && <MateriaisResumo clientId={selectedClient.id} clientName={selectedClient.name} />}
 
           {/* Client fixed briefing preview */}
           {selectedClient?.fixedBriefing && (
@@ -1146,18 +1131,8 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
             </div>
           </div>
 
-          {/* Drive link indicator */}
-          {selectedClient && (
-            <div className={`rounded-lg px-3 py-2 text-[10px] ${selectedClient.driveLink ? "bg-primary/[0.04] border border-primary/[0.1] text-primary" : "bg-lone-warning-bg/[0.04] border border-lone-warning-border/[0.1] text-lone-warning"}`}>
-              {selectedClient.driveLink ? (
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle size={10} /> Drive do cliente vinculado automaticamente
-                </span>
-              ) : (
-                <span>Cliente sem pasta Drive cadastrada</span>
-              )}
-            </div>
-          )}
+          {/* Materiais do cliente — mesmo bloco do pedido único */}
+          {selectedClient && <MateriaisResumo clientId={selectedClient.id} clientName={selectedClient.name} />}
 
           {/* Rows */}
           <div className="space-y-2">

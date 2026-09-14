@@ -51,6 +51,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const nome = String(body?.nome ?? (tipo === "link_figma" ? "Figma" : "Drive / Photoshop")).slice(0, 80);
     const { data, error } = await supabaseAdmin.from("client_brand_assets").insert({ client_id: id, tipo, nome, url, origem: "painel", created_by: user.email }).select("id, tipo, nome, url").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    // O campo legado clients.drive_link é o que os quadros leem — mantém os dois em sincronia.
+    if (tipo === "link_drive") await supabaseAdmin.from("clients").update({ drive_link: url }).eq("id", id).is("drive_link", null);
     return NextResponse.json({ ok: true, item: data });
   }
 
