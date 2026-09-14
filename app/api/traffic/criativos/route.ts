@@ -26,17 +26,22 @@ export async function GET(req: NextRequest) {
 
   const adIds = [...new Set((linhas ?? []).map((l) => l.ad_id as string))];
   const clientIds = [...new Set((linhas ?? []).map((l) => l.client_id as string).filter(Boolean))];
-  const [{ data: cri }, { data: cli }] = await Promise.all([
+  const [{ data: cri }, { data: cli }, { data: hip }] = await Promise.all([
     adIds.length ? supabaseAdmin.from("creative_snapshots").select("ad_id, tipo, thumb_url, image_url, body, title, cta, capturado_em").in("ad_id", adIds).order("capturado_em", { ascending: false }) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     clientIds.length ? supabaseAdmin.from("clients").select("id, name, nome_fantasia").in("id", clientIds) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    adIds.length ? supabaseAdmin.from("creative_hypotheses").select("ad_id, hash, elementos, hipoteses, variacoes, resumo, roteiros, created_at").in("ad_id", adIds).order("created_at", { ascending: false }) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
   ]);
+  const hipotese = new Map<string, Record<string, unknown>>();
+  for (const h of hip ?? []) if (!hipotese.has(h.ad_id as string)) hipotese.set(h.ad_id as string, h);
   const criativo = new Map<string, Record<string, unknown>>();
   for (const c of cri ?? []) if (!criativo.has(c.ad_id as string)) criativo.set(c.ad_id as string, c);
   const nome = new Map((cli ?? []).map((c) => [c.id as string, ((c.nome_fantasia as string) || (c.name as string)) ?? ""]));
 
   const itens = (linhas ?? []).map((l) => {
     const c = criativo.get(l.ad_id as string);
-    return { ...l, cliente: nome.get(l.client_id as string) ?? "", tipo: c?.tipo ?? null, thumb: (c?.thumb_url as string) ?? (c?.image_url as string) ?? null, texto: (c?.body as string) ?? null, titulo: (c?.title as string) ?? null };
+    const h = hipotese.get(l.ad_id as string);
+    return { ...l, cliente: nome.get(l.client_id as string) ?? "", tipo: c?.tipo ?? null, thumb: (c?.thumb_url as string) ?? (c?.image_url as string) ?? null, texto: (c?.body as string) ?? null, titulo: (c?.title as string) ?? null,
+      analise: h ? { resumo: h.resumo, elementos: h.elementos, hipoteses: h.hipoteses, variacoes: h.variacoes, roteiros: h.roteiros } : null };
   });
 
   // Precisão acumulada do shadow: concordo ÷ (concordo + discordo), todos os dias.

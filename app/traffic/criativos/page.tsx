@@ -12,6 +12,13 @@ interface Item {
   evidencias: string[] | null; vencedor: boolean; vencedor_evidencias: string[] | null; rotulo: string | null;
   tipo: string | null; thumb: string | null; texto: string | null; titulo: string | null;
   amostra: { gasto7d?: number; conversas7d?: number; diasRodando?: number } | null;
+  analise: {
+    resumo: string | null;
+    elementos: { tipo: string; descricao: string }[];
+    hipoteses: { hipotese: string; elemento: string; confianca: string }[];
+    variacoes: { nome: string; muda: string; mantem: string; testa: string }[];
+    roteiros: { variacao: string; roteiro: { angulo: string; etapas: { tempo: string; nome: string; texto: string }[]; scorecard: number } | null }[] | null;
+  } | null;
 }
 interface Resposta { dia: string | null; itens: Item[]; precisao: { concordo: number; total: number; taxa: number } | null; error?: string }
 
@@ -31,6 +38,7 @@ export default function CriativosPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<string>("todos");
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const [aberto, setAberto] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -111,6 +119,44 @@ export default function CriativosPage() {
                   {(i.vencedor ? i.vencedor_evidencias : i.evidencias)?.slice(0, 3).map((e, k) => <li key={k}>• {e}</li>)}
                 </ul>
                 {i.amostra && <p className="mt-1 text-[10px] text-muted-foreground">7 dias: {brl(i.amostra.gasto7d)} · {i.amostra.conversas7d ?? 0} conversas · rodando há {i.amostra.diasRodando ?? "?"} dias</p>}
+                {i.vencedor && i.analise && (
+                  <div className="mt-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-2">
+                    <button className="w-full text-left text-[11px] font-medium text-primary" onClick={() => setAberto(aberto === i.ad_id ? null : i.ad_id)}>
+                      {aberto === i.ad_id ? "▾" : "▸"} Por que pode ter funcionado + 2 variações com roteiro
+                    </button>
+                    {aberto === i.ad_id && (
+                      <div className="mt-2 space-y-2 text-[11px]">
+                        {i.analise.resumo && <p className="text-foreground/90">{i.analise.resumo}</p>}
+                        <div>
+                          <p className="font-medium text-foreground">O que a peça tem (fato)</p>
+                          <ul className="mt-0.5 space-y-0.5 text-muted-foreground">{i.analise.elementos.map((e, k) => <li key={k}>• <span className="text-foreground/80">{e.tipo}:</span> {e.descricao}</li>)}</ul>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">Hipóteses (não é causa)</p>
+                          <ul className="mt-0.5 space-y-0.5 text-muted-foreground">{i.analise.hipoteses.map((h, k) => <li key={k}>• {h.hipotese} <span className="text-[10px]">— {h.elemento} · confiança {h.confianca}</span></li>)}</ul>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {i.analise.variacoes.map((v, k) => {
+                            const r = i.analise?.roteiros?.find((x) => x.variacao === v.nome)?.roteiro ?? null;
+                            return (
+                              <div key={k} className="rounded-md border border-border bg-card p-2">
+                                <p className="font-medium text-foreground">Variação {k + 1}: {v.nome}</p>
+                                <p className="text-muted-foreground"><span className="text-foreground/80">Muda:</span> {v.muda}</p>
+                                <p className="text-muted-foreground"><span className="text-foreground/80">Testa:</span> {v.testa}</p>
+                                {r ? (
+                                  <details className="mt-1">
+                                    <summary className="cursor-pointer text-primary">Roteiro pronto (Método Lone · {r.scorecard}/100) — {r.angulo}</summary>
+                                    <ol className="mt-1 space-y-0.5 text-muted-foreground">{r.etapas.map((et, j) => <li key={j}><span className="font-mono text-[10px] text-foreground/70">{et.tempo}</span> <span className="text-foreground/80">{et.nome}:</span> {et.texto}</li>)}</ol>
+                                  </details>
+                                ) : <p className="mt-1 text-[10px] text-muted-foreground">Roteiro não gerado (briefing insuficiente ou pendente).</p>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="mt-2 flex gap-1.5">
                   {(["concordo", "discordo"] as const).map((r) => (
                     <button key={r} onClick={() => rotular(i.ad_id, r)} disabled={ocupado === i.ad_id}
