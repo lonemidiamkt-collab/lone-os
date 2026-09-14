@@ -15,6 +15,8 @@ import { ehPalpiteSobreSistema, ehFillerComNome, RESPOSTA_SEM_VISAO_DO_PAINEL } 
 import { proporRegra, decidirRegra } from "@/lib/cs/regras-propostas";
 import { podeAgir, numerosDaEquipe } from "@/lib/cs/autoridade";
 import { comExecucao, definirAtor } from "@/lib/obs/correlacao";
+import { ehPedidoPrioridades, formatarTop } from "@/lib/priority/comando";
+import type { Recomendacao } from "@/lib/priority/tipos";
 
 // ── TODA saída deste arquivo passa a ser ETIQUETADA ─────────────────────────
 //
@@ -1490,6 +1492,21 @@ async function processarInbound(req: NextRequest) {
       }
     })();
     return NextResponse.json({ ok: true, calendario: "montando", cliente: alvo.nome });
+  }
+
+  // ─── Agente "Lone": "o que preciso fazer hoje?" (Fase 1) — top 5 da PESSOA, do feed de
+  // recomendações. Nível A (só leitura), mas exige saber quem pergunta: cliente no grupo dele
+  // não tem "suas prioridades". Gestor/admin pode pedir "da equipe". ───
+  // Só em grupo NOSSO: a lista tem nome de outros clientes — jamais no grupo de um cliente.
+  if (!demandaDaSugestao && grupoNosso && autoridade.autor && ehPedidoPrioridades(msg.text)) {
+    const { feed } = await import("@/lib/priority/repo");
+    const daEquipe = /\b(da|de|do) (equipe|time|todo mundo|geral)\b/i.test(msg.text) && (autoridade.autor.papel === "admin" || autoridade.autor.papel === "manager");
+    const itens = await feed({ papel: autoridade.autor.papel, nome: autoridade.autor.nome, admin: autoridade.autor.papel === "admin", escopo: daEquipe ? "todos" : "meu", limite: 5 })
+      .catch((e: unknown) => { console.error("[CS/inbound] feed de prioridades:", e instanceof Error ? e.message : e); return null; });
+    if (!itens) { await csSendGroupText(msg.groupJid, "Não consegui puxar o feed agora 😕 tenta de novo em um minuto."); return NextResponse.json({ ok: true, prioridades: "erro" }); }
+    const recs = itens.map((r) => ({ cliente: r.cliente as string, fato: (r.fato as string[]) ?? [], recomendacao: r.recomendacao as string, exposicaoRs: (r.exposicao_rs as number | null) ?? null, fonte: r.fonte as Recomendacao["fonte"] }));
+    await csSendGroupText(msg.groupJid, formatarTop(recs, autoridade.autor.nome, daEquipe ? "da equipe" : "suas"), msg.messageId, { origem: "prioridades", destino: "interno" });
+    return NextResponse.json({ ok: true, prioridades: recs.length, escopo: daEquipe ? "todos" : "meu" });
   }
 
   // ─── Agente "Lone": CHECK-IN do cliente ("Lone, faz o check-in do X" | "…pro cliente") ───

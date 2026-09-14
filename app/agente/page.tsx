@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import EstiloPerfis from "@/components/agente/EstiloPerfis";
+import FeedPrioridades from "@/components/agente/FeedPrioridades";
 
 interface DashData {
   ok: boolean;
@@ -125,6 +126,9 @@ export default function AgentePage() {
           <span className="rounded-full bg-muted px-2.5 py-1 text-muted-foreground">{config.gruposMonitorados} grupos monitorados</span>
         </div>
       </header>
+
+      {/* Feed de prioridades (Fase 1): uma lista só, de todas as fontes, com evidência e decisão. */}
+      <FeedPrioridades />
 
       {/* Pendentes — precisam do ok/não da equipe. Decidir aqui espelha o "ok" do WhatsApp. */}
       {pendentes.length > 0 && (
