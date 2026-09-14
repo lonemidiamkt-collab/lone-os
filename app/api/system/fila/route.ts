@@ -30,6 +30,13 @@ export async function GET(req: NextRequest) {
     const { rows: existe } = await pool.query(`select 1 from pg_namespace where nspname = 'pgboss'`);
     if (!existe.length) return NextResponse.json({ worker, banco: true, outbox, filas: [], motivo: "schema pgboss ainda não criado (worker nunca subiu)" });
 
+    // O worker vive no bundle do instrumentation.ts; esta rota é outro bundle, com outra cópia do
+    // módulo — estadoWorker() daqui não vê o de lá. A prova de vida vem do banco: o pg-boss carimba
+    // monitored_on a cada monitorStateIntervalSeconds (60s) enquanto está de pé.
+    const { rows: [vida] } = await pool.query<{ monitored_on: string | null; maintained_on: string | null; vivo: boolean }>(
+      `select monitored_on::text, maintained_on::text, coalesce(greatest(monitored_on, maintained_on) > now() - interval '3 minutes', false) as vivo from pgboss.version limit 1`);
+    const workerVivo = { ligado: worker.ligado || !!vida?.vivo, ultimoSinal: vida?.monitored_on ?? vida?.maintained_on ?? null, desde: worker.desde };
+
     const { rows } = await pool.query<LinhaFila>(`select name, state, count(*)::text as n from pgboss.job group by 1, 2`);
     const porFila: Record<string, Record<string, number>> = {};
     for (const nome of Object.keys(FILAS)) { porFila[nome] = {}; porFila[dlqDe(nome)] = {}; }
@@ -48,7 +55,7 @@ export async function GET(req: NextRequest) {
         order by coalesce(completed_on, created_on) desc
         limit 20`);
 
-    return NextResponse.json({ worker, banco: true, outbox, filas, ultimasFalhas: falhas });
+    return NextResponse.json({ worker: workerVivo, banco: true, outbox, filas, ultimasFalhas: falhas });
   } catch (err) {
     return NextResponse.json({ worker, banco: true, erro: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
