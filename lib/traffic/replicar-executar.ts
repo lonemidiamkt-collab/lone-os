@@ -3,6 +3,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { anotar } from "@/lib/obs/correlacao";
+import { estiloVisualDoCliente, linhaEstilo } from "@/lib/traffic/estilo-visual";
 import { montarDemanda, prazoPadrao, variavelDe } from "./replicar";
 
 export interface VariacaoPedida { nome: string; muda: string; mantem: string; testa: string }
@@ -29,9 +30,10 @@ export async function executarReplicacao(p: { adId: string; variacao: VariacaoPe
   const { data: aberta } = await supabaseAdmin.from("design_requests").select("id, status").eq("parent_ad_id", adId).eq("variavel", variavel).neq("status", "done").limit(1).maybeSingle();
   if (aberta) return { ok: false, status: 409, erro: "já existe uma demanda aberta testando essa variável deste anúncio", demandaId: aberta.id as string };
 
-  const [{ data: cli }, { data: pol }] = await Promise.all([
+  const [{ data: cli }, { data: pol }, estilo] = await Promise.all([
     supabaseAdmin.from("clients").select("name, nome_fantasia, assigned_designer").eq("id", clientId).maybeSingle(),
     supabaseAdmin.from("client_traffic_policy").select("cpl_alerta").eq("client_id", clientId).maybeSingle(),
+    estiloVisualDoCliente(clientId),
   ]);
   const cliente = ((cli?.nome_fantasia as string) || (cli?.name as string) || "Cliente");
   const am = (saude.amostra ?? {}) as { gasto7d?: number; conversas7d?: number; diasRodando?: number };
@@ -42,7 +44,7 @@ export async function executarReplicacao(p: { adId: string; variacao: VariacaoPe
   const d = montarDemanda({
     cliente, adId, adName: saude.ad_name as string, thumbUrl: thumb,
     resultado: { cpl: conv > 0 ? gasto / conv : null, cplMeta: (pol?.cpl_alerta as number) ?? null, conversas: conv, gasto, dias: Number(am.diasRodando ?? 0) },
-    variacao, formato, prazo, roteiro, elementos: (hip?.elementos as { tipo: string; descricao: string }[]) ?? [], pedidoPor: p.pedidoPor,
+    variacao, formato, prazo, roteiro, elementos: (hip?.elementos as { tipo: string; descricao: string }[]) ?? [], estiloVisual: linhaEstilo(estilo), pedidoPor: p.pedidoPor,
   });
 
   const { data: dr, error } = await supabaseAdmin.from("design_requests").insert({

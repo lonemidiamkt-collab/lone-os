@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import EstiloVisual from "@/components/clients/EstiloVisual";
 import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
 import CatalogoProdutos from "@/components/clients/CatalogoProdutos";
 import PadroesCriativos from "@/components/traffic/PadroesCriativos";
@@ -40,6 +41,10 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
 
       <section className="rounded-xl border border-border bg-card p-4">
         <MarcaDoCliente clientId={clientId} podeEditar={podeEditarMarca} />
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-4">
+        <EstiloVisual clientId={clientId} podeEditar={podeEditarMarca} />
       </section>
 
       <section className="rounded-xl border border-border bg-card p-4">

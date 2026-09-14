@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   const [{ data: cri }, { data: cli }, { data: hip }] = await Promise.all([
     adIds.length ? supabaseAdmin.from("creative_snapshots").select("ad_id, tipo, thumb_url, image_url, body, title, cta, capturado_em").in("ad_id", adIds).order("capturado_em", { ascending: false }) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     clientIds.length ? supabaseAdmin.from("clients").select("id, name, nome_fantasia").in("id", clientIds) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
-    adIds.length ? supabaseAdmin.from("creative_hypotheses").select("ad_id, hash, elementos, hipoteses, variacoes, resumo, roteiros, created_at").in("ad_id", adIds).order("created_at", { ascending: false }) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    adIds.length ? supabaseAdmin.from("creative_hypotheses").select("ad_id, hash, elementos, hipoteses, variacoes, resumo, roteiros, previas, created_at").in("ad_id", adIds).order("created_at", { ascending: false }) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
   ]);
   const hipotese = new Map<string, Record<string, unknown>>();
   for (const h of hip ?? []) if (!hipotese.has(h.ad_id as string)) hipotese.set(h.ad_id as string, h);
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     const c = criativo.get(l.ad_id as string);
     const h = hipotese.get(l.ad_id as string);
     return { ...l, cliente: nome.get(l.client_id as string) ?? "", tipo: c?.tipo ?? null, thumb: (c?.thumb_url as string) ?? (c?.image_url as string) ?? null, texto: (c?.body as string) ?? null, titulo: (c?.title as string) ?? null,
-      analise: h ? { resumo: h.resumo, elementos: h.elementos, hipoteses: h.hipoteses, variacoes: h.variacoes, roteiros: h.roteiros } : null };
+      analise: h ? { resumo: h.resumo, elementos: h.elementos, hipoteses: h.hipoteses, variacoes: h.variacoes, roteiros: h.roteiros, previas: h.previas ?? [] } : null };
   });
 
   // Testes em andamento: cada variação replicada, com o estado (na fila do designer / entregue / no ar / veredito).
@@ -70,7 +70,8 @@ export async function GET(req: NextRequest) {
   const concordo = (rot ?? []).filter((r) => r.rotulo === "concordo").length;
   const total = (rot ?? []).length;
   const { data: brief } = await supabaseAdmin.from("traffic_briefs").select("id, semana, texto, proposta, enviado_whatsapp, estado").order("created_at", { ascending: false }).limit(1).maybeSingle();
-  return NextResponse.json({ dia, itens, testes, brief: brief ?? null, precisao: total ? { concordo, total, taxa: Math.round((concordo / total) * 100) } : null });
+  const { data: flag } = await supabaseAdmin.from("agency_settings").select("value").eq("key", "ia_imagem").maybeSingle();
+  return NextResponse.json({ dia, itens, testes, brief: brief ?? null, iaImagem: flag?.value === "on", precisao: total ? { concordo, total, taxa: Math.round((concordo / total) * 100) } : null });
 }
 
 export async function POST(req: NextRequest) {

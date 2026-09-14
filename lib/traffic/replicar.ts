@@ -16,6 +16,8 @@ export interface PedidoReplicacao {
   prazo: string; // YYYY-MM-DD
   roteiro?: { angulo: string; etapas: { tempo: string; nome: string; texto: string }[] } | null;
   elementos?: { tipo: string; descricao: string }[];
+  /** linha do estilo visual lido dos prints (lib/traffic/estilo-visual) — entra no briefing quando existe */
+  estiloVisual?: string | null;
   pedidoPor: string;
 }
 
@@ -51,6 +53,7 @@ export function montarDemanda(p: PedidoReplicacao): { titulo: string; briefing: 
     `**O que este teste responde:** ${p.variacao.testa}`,
     ``,
     `**Formato:** ${p.formato}`,
+    p.estiloVisual ? `\n**Estilo visual da marca (lido dos prints do Instagram):** ${p.estiloVisual}` : "",
     p.elementos?.length ? `\n**O que o pai tem (fato):**\n${p.elementos.map((e) => `- ${e.tipo}: ${e.descricao}`).join("\n")}` : "",
     p.roteiro ? `\n**Roteiro sugerido (Método Lone · ${p.roteiro.angulo}):**\n${p.roteiro.etapas.map((e) => `- ${e.tempo} ${e.nome}: ${e.texto}`).join("\n")}` : "",
     ``,

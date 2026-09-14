@@ -34,6 +34,7 @@ import { fetchClientGroupMessageLog, type ClientGroupMessageLogRow } from "@/lib
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useMetaConnection, fetchAdAccounts, fetchCampaignInsights, fetchAccountDemographics, TokenExpiredError } from "@/lib/meta/useMetaAds";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import AtalhoCriativos from "@/components/traffic/AtalhoCriativos";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { exportReportAsPdf } from "@/lib/exportPdf";
@@ -300,6 +301,9 @@ export default function TrafficPage() {
           <MetricCard icon={AlertTriangle} label="Em Risco" value={atRiskCount} sub="clientes" iconColor="text-destructive" iconBg="bg-destructive/10" />
           <MetricCard icon={TrendingUp} label="Tarefas Abertas" value={trafficTasks.filter(t => t.status !== "done").length} sub="pendentes" iconColor="text-primary" iconBg="bg-primary/15" />
         </div>
+
+        {/* Inteligência Criativa — resumo do dia + atalho (a ação fica em /traffic/criativos) */}
+        <AtalhoCriativos />
 
         {/* Tabs */}
         <div>

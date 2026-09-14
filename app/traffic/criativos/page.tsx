@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { chamar } from "@/lib/api/chamar";
 import { useRole } from "@/lib/context/RoleContext";
 import OperacaoCriativa from "@/components/traffic/OperacaoCriativa";
 import PadroesCriativos from "@/components/traffic/PadroesCriativos";
@@ -20,11 +21,12 @@ interface Item {
     hipoteses: { hipotese: string; elemento: string; confianca: string }[];
     variacoes: { nome: string; muda: string; mantem: string; testa: string }[];
     roteiros: { variacao: string; roteiro: { angulo: string; etapas: { tempo: string; nome: string; texto: string }[]; scorecard: number } | null }[] | null;
+    previas?: { variacao: string; url: string; por: string; em: string }[];
   } | null;
 }
 interface Teste { id: string; cliente: string; pai: string; variavel: string; muda: string | null; hipotese: string | null; criadoPor: string | null; designer: string | null; prazo: string | null; etapa: string; resultado: { veredito?: string; motivo?: string; cplPai?: number | null; cplFilho?: number | null } | null; createdAt: string }
 interface Brief { id: string; semana: string; texto: string; proposta: { cliente: string; adName: string; variacao: { nome: string; muda: string } } | null; enviado_whatsapp: boolean; estado: string }
-interface Resposta { dia: string | null; itens: Item[]; testes?: Teste[]; brief?: Brief | null; precisao: { concordo: number; total: number; taxa: number } | null; error?: string }
+interface Resposta { dia: string | null; itens: Item[]; testes?: Teste[]; brief?: Brief | null; iaImagem?: boolean; precisao: { concordo: number; total: number; taxa: number } | null; error?: string }
 const ETAPA: Record<string, { rotulo: string; cls: string }> = {
   na_fila: { rotulo: "na fila do designer", cls: "bg-muted text-muted-foreground" }, em_producao: { rotulo: "em produção", cls: "bg-lone-warning-bg text-lone-warning" },
   entregue: { rotulo: "arte entregue — falta subir", cls: "bg-primary/10 text-primary" }, no_ar: { rotulo: "no ar — medindo", cls: "bg-primary/10 text-primary" },
@@ -51,6 +53,15 @@ export default function CriativosPage() {
   const [replicando, setReplicando] = useState<string | null>(null);
   const [criadas, setCriadas] = useState<Record<string, { demandaId: string; designer: string | null; prazo: string }>>({});
   const [livre, setLivre] = useState<Record<string, string>>({});
+  const [previa, setPrevia] = useState<Record<string, { url?: string; erro?: string; ocupado?: boolean }>>({});
+
+  // Prévia por IA (1 imagem com os elementos travados) — rascunho pro gestor decidir antes de mandar.
+  async function verPrevia(adId: string, v: { nome: string; muda: string; mantem: string }) {
+    const chave = `${adId}|${v.nome}`;
+    setPrevia((p) => ({ ...p, [chave]: { ocupado: true } }));
+    const r = await chamar<{ ok?: boolean; url?: string; error?: string }>("/api/traffic/criativos/previa", { adId, variacao: v });
+    setPrevia((p) => ({ ...p, [chave]: r.ok && r.data?.url ? { url: r.data.url } : { erro: r.ok ? (r.data?.error ?? "não gerou") : (r.erro ?? "não gerou") } }));
+  }
 
   const replicar = async (adId: string, variacao: { nome: string; muda: string; mantem: string; testa: string }) => {
     const chave = `${adId}|${variacao.nome}`;
@@ -216,6 +227,24 @@ export default function CriativosPage() {
                                       className="mt-1 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
                                       {replicando === chave ? "Criando…" : "🧬 Replicar: mandar pro designer"}
                                     </button>
+                                  );
+                                })()}
+                                {(() => {
+                                  const chave = `${i.ad_id}|${v.nome}`;
+                                  const salva = i.analise?.previas?.find((p) => p.variacao === v.nome)?.url;
+                                  const st = previa[chave];
+                                  const url = st?.url ?? salva;
+                                  return (
+                                    <div className="mt-1.5 text-[10px]">
+                                      {url && <a href={url} target="_blank" rel="noreferrer" className="block w-24 overflow-hidden rounded border border-border bg-muted" title="Prévia gerada por IA — rascunho, não é a arte"><img src={url} alt="" className="w-full" /></a>}
+                                      {dados?.iaImagem && (
+                                        <button onClick={() => verPrevia(i.ad_id, v)} disabled={st?.ocupado} className="mt-1 rounded-lg border border-border px-2 py-0.5 text-muted-foreground hover:text-foreground disabled:opacity-50">
+                                          {st?.ocupado ? "Gerando prévia…" : url ? "👁 Gerar outra prévia (IA)" : "👁 Ver prévia (IA) antes de mandar"}
+                                        </button>
+                                      )}
+                                      {st?.erro && <p className="mt-0.5 text-destructive">{st.erro}</p>}
+                                      {url && <p className="mt-0.5 text-muted-foreground">Rascunho da IA para você decidir — a arte final é do designer.</p>}
+                                    </div>
                                   );
                                 })()}
                                 {r ? (
