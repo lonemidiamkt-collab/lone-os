@@ -19,34 +19,40 @@ let _client: SupabaseClient | null = null;
  *      (LONE-023, lib/obs/erro-postgrest.ts).
  */
 async function fetchInstrumentado(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const headers = new Headers(init?.headers);
-  const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-  const metodo = (init?.method ?? "GET").toUpperCase();
-  const e = execucaoAtual();
-  try {
-    if (e) {
-      headers.set("x-correlation-id", e.id);
-      if (e.ator) headers.set("x-actor", asciiSeguro(e.ator));
-      if (e.papel) headers.set("x-actor-role", asciiSeguro(e.papel));
-      if (metodo !== "GET" && metodo !== "HEAD") contarEscrita();
-    } else if (/\/rest\/v1\//.test(url)) {
-      const { atorDaRequest } = await import("@/lib/obs/ator");
-      const a = await atorDaRequest();
-      if (a) {
-        headers.set("x-actor", asciiSeguro(a.email));
-        if (a.papel) headers.set("x-actor-role", asciiSeguro(a.papel));
-      }
-    }
-  } catch { /* instrumentação nunca impede a chamada */ }
-
-  const res = await fetch(input, { ...init, headers });
-  if (res.status >= 400) {
+  // No navegador este client nunca é usado (queries.ts escolhe o anon), mas o módulo é empacotado
+  // (LONE-004). `typeof window` é constante de build (SWC): o bloco inteiro — inclusive os imports
+  // dinâmicos de lib/obs — some do bundle do cliente, em vez de ser empacotado "por via das dúvidas".
+  if (typeof window === "undefined") {
+    const headers = new Headers(init?.headers);
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const metodo = (init?.method ?? "GET").toUpperCase();
+    const e = execucaoAtual();
     try {
-      const { deveReportar, reportarErroPostgrest } = await import("@/lib/obs/erro-postgrest");
-      if (deveReportar(url, res.status)) void reportarErroPostgrest(url, metodo, res.clone());
-    } catch { /* idem */ }
+      if (e) {
+        headers.set("x-correlation-id", e.id);
+        if (e.ator) headers.set("x-actor", asciiSeguro(e.ator));
+        if (e.papel) headers.set("x-actor-role", asciiSeguro(e.papel));
+        if (metodo !== "GET" && metodo !== "HEAD") contarEscrita();
+      } else if (/\/rest\/v1\//.test(url)) {
+        const { atorDaRequest } = await import("@/lib/obs/ator");
+        const a = await atorDaRequest();
+        if (a) {
+          headers.set("x-actor", asciiSeguro(a.email));
+          if (a.papel) headers.set("x-actor-role", asciiSeguro(a.papel));
+        }
+      }
+    } catch { /* instrumentação nunca impede a chamada */ }
+
+    const res = await fetch(input, { ...init, headers });
+    if (res.status >= 400) {
+      try {
+        const { deveReportar, reportarErroPostgrest } = await import("@/lib/obs/erro-postgrest");
+        if (deveReportar(url, res.status)) void reportarErroPostgrest(url, metodo, res.clone());
+      } catch { /* idem */ }
+    }
+    return res;
   }
-  return res;
+  return fetch(input, init);
 }
 
 

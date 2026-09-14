@@ -48,22 +48,28 @@ function tokenDoCookie(pares: { name: string; value: string }[]): string | null 
 }
 
 export async function atorDaRequest(): Promise<AtorDaRequest | null> {
-  let h: Headers;
-  try {
-    const mod = await import("next/headers");
-    h = await mod.headers();
-  } catch { return null; }
-  let token = /^bearer\s+(\S+)/i.exec(h.get("authorization") ?? "")?.[1] ?? null;
-  // CRON_SECRET também vem como Bearer — não é JWT (sem 3 partes), cai fora na decodificação.
-  if (!token) {
+  // `typeof window` é constante de build (SWC): no bundle do navegador este bloco é código morto e
+  // o webpack NÃO empacota next/headers — que arrasta metade do servidor do Next e estoura a memória
+  // do build. Este módulo chega ao navegador por tabela (queries.ts → server.ts → ator.ts).
+  if (typeof window === "undefined") {
+    let h: Headers;
     try {
       const mod = await import("next/headers");
-      const c = await mod.cookies();
-      token = tokenDoCookie(c.getAll());
-    } catch { token = null; }
+      h = await mod.headers();
+    } catch { return null; }
+    let token = /^bearer\s+(\S+)/i.exec(h.get("authorization") ?? "")?.[1] ?? null;
+    // CRON_SECRET também vem como Bearer — não é JWT (sem 3 partes), cai fora na decodificação.
+    if (!token) {
+      try {
+        const mod = await import("next/headers");
+        const c = await mod.cookies();
+        token = tokenDoCookie(c.getAll());
+      } catch { token = null; }
+    }
+    if (!token || token.split(".").length !== 3) return null;
+    return decodificar(token);
   }
-  if (!token || token.split(".").length !== 3) return null;
-  return decodificar(token);
+  return null;
 }
 
 /** Header HTTP só aceita Latin-1; nomes com acento derrubariam o fetch. "Júlio" → "Julio". */

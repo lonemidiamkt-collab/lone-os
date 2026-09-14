@@ -1,3 +1,5 @@
+// @vitest-environment node
+// (o fetch instrumentado é código morto quando `window` existe — em jsdom o teste não veria nada)
 import { describe, it, expect, vi } from "vitest";
 
 // O client admin real, com o fetch global trocado: o que sai no header quando se está numa execução.

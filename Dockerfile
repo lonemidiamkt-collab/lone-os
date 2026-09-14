@@ -34,7 +34,9 @@ ENV SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN
 ENV SENTRY_ORG=$SENTRY_ORG
 ENV SENTRY_PROJECT=$SENTRY_PROJECT
 
-RUN --mount=type=cache,target=/app/.next/cache npm run build
+# Heap do build: o padrão do Node 20 (~2-4 GB conforme a RAM vista) estourou em 14/09 com o bundle
+# crescendo; a VPS tem 8 GB + swap. Sem isto o build morre com "heap out of memory" sem dizer o módulo.
+RUN --mount=type=cache,target=/app/.next/cache NODE_OPTIONS=--max-old-space-size=5120 npm run build
 
 # Production runner
 FROM base AS runner
