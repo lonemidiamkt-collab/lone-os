@@ -39,6 +39,20 @@ export default function CriativosPage() {
   const [filtro, setFiltro] = useState<string>("todos");
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [aberto, setAberto] = useState<string | null>(null);
+  const [replicando, setReplicando] = useState<string | null>(null);
+  const [criadas, setCriadas] = useState<Record<string, { demandaId: string; designer: string | null; prazo: string }>>({});
+  const [livre, setLivre] = useState<Record<string, string>>({});
+
+  const replicar = async (adId: string, variacao: { nome: string; muda: string; mantem: string; testa: string }) => {
+    const chave = `${adId}|${variacao.nome}`;
+    setReplicando(chave); setErro(null);
+    try {
+      const r = await authedFetch("/api/traffic/criativos/replicar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adId, variacao }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setErro(d?.error ?? `HTTP ${r.status}`); return; }
+      setCriadas((prev) => ({ ...prev, [chave]: { demandaId: d.demandaId, designer: d.designer, prazo: d.prazo } }));
+    } finally { setReplicando(null); }
+  };
 
   const carregar = useCallback(async () => {
     try {
@@ -135,6 +149,13 @@ export default function CriativosPage() {
                           <p className="font-medium text-foreground">Hipóteses (não é causa)</p>
                           <ul className="mt-0.5 space-y-0.5 text-muted-foreground">{i.analise.hipoteses.map((h, k) => <li key={k}>• {h.hipotese} <span className="text-[10px]">— {h.elemento} · confiança {h.confianca}</span></li>)}</ul>
                         </div>
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                          <span className="text-muted-foreground">Outra variável:</span>
+                          <input id={`livre-${i.ad_id}`} value={livre[i.ad_id] ?? ""} onChange={(e) => setLivre({ ...livre, [i.ad_id]: e.target.value })} placeholder="ex.: trocar o cenário por loja" className="h-7 min-w-[220px] rounded-lg border border-input bg-background px-2 text-[11px] text-foreground outline-none focus:border-primary" />
+                          <button disabled={!livre[i.ad_id]?.trim() || replicando === `${i.ad_id}|${livre[i.ad_id]}`}
+                            onClick={() => replicar(i.ad_id, { nome: livre[i.ad_id].trim().slice(0, 60), muda: livre[i.ad_id].trim(), mantem: "todo o resto do vencedor (oferta, texto, hierarquia, CTA)", testa: `se "${livre[i.ad_id].trim()}" melhora o resultado mantendo o resto` })}
+                            className="rounded-lg border border-border px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-50">🧬 Replicar com essa</button>
+                        </div>
                         <div className="grid gap-2 sm:grid-cols-2">
                           {i.analise.variacoes.map((v, k) => {
                             const r = i.analise?.roteiros?.find((x) => x.variacao === v.nome)?.roteiro ?? null;
@@ -143,6 +164,18 @@ export default function CriativosPage() {
                                 <p className="font-medium text-foreground">Variação {k + 1}: {v.nome}</p>
                                 <p className="text-muted-foreground"><span className="text-foreground/80">Muda:</span> {v.muda}</p>
                                 <p className="text-muted-foreground"><span className="text-foreground/80">Testa:</span> {v.testa}</p>
+                                {(() => {
+                                  const chave = `${i.ad_id}|${v.nome}`;
+                                  const feita = criadas[chave];
+                                  return feita ? (
+                                    <p className="mt-1 text-[10px] text-emerald-600">✓ Demanda criada{feita.designer ? ` para ${feita.designer}` : " (cliente sem designer — cai em \"sem designer\")"} · prazo {feita.prazo.split("-").reverse().join("/")} · <a href="/design" className="underline">abrir quadro</a></p>
+                                  ) : (
+                                    <button onClick={() => replicar(i.ad_id, v)} disabled={replicando === chave}
+                                      className="mt-1 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+                                      {replicando === chave ? "Criando…" : "🧬 Replicar: mandar pro designer"}
+                                    </button>
+                                  );
+                                })()}
                                 {r ? (
                                   <details className="mt-1">
                                     <summary className="cursor-pointer text-primary">Roteiro pronto (Método Lone · {r.scorecard}/100) — {r.angulo}</summary>
