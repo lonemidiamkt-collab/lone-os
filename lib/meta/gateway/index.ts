@@ -39,6 +39,8 @@ export interface InsightEntidade {
   ctr?: number;
   cpm?: number;
   frequency?: number;
+  /** Só na leitura agregada (sem time_increment): pessoas únicas alcançadas no período. */
+  reach?: number;
   conversions: number;
 }
 
@@ -81,6 +83,11 @@ export interface ProviderMeta {
   insightsPorEntidade(p: {
     token: string; accountId: string; nivel: NivelEntidade;
     desde: string; ate: string;
+    /**
+     * true = UMA linha por entidade para o período inteiro (traz reach e frequência REAIS do
+     * período — a frequência diária é ~1,2 sempre e não mede saturação). Padrão: uma linha por dia.
+     */
+    agregado?: boolean;
   }): Promise<InsightEntidade[]>;
   /** Criativos de uma lista de anúncios (até 50 por chamada na Graph API; o provider divide). */
   criativos(p: { token: string; adIds: string[] }): Promise<CriativoAnuncio[]>;

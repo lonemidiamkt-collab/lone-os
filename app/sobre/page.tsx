@@ -542,6 +542,7 @@ const MODULES: Module[] = [
       "Status Clientes sai do resultado do anúncio: toda sexta o sistema compara o CPL dos últimos 7 dias com a meta de cada cliente (client_traffic_policy) e move entre Bons / Médios / Em risco. Conta parada 7 dias = Em risco. Cada card mostra o porquê",
       "Arrastar no kanban vale por 7 dias: o sistema não sobrescreve uma decisão manual recente. Depois disso, reavalia",
       "Onboarding termina sozinho: 30 dias de casa ou o primeiro resultado de anúncio, o que vier antes",
+      "SAÚDE DOS CRIATIVOS (14/09, em sombra): todo dia às 07:20 o sistema avalia cada anúncio que gastou na semana com vários sinais ao mesmo tempo (CTR caindo, CPM subindo, poucas conversas para o gasto contra a meta do cliente, custo por conversa subindo, frequência, idade) — nunca por uma métrica só — e marca Crítico / Cansaço provável / possível / Observar / Saudável, além de apontar o VENCEDOR pela régua do cliente. Em Tráfego › Saúde dos Criativos o gestor vê a miniatura, as evidências e diz Concordo/Discordo. Enquanto a precisão não passar de 80%, nada disso vira aviso nem recomendação.",
       "Análise IA com score 0-100 + insights acionáveis",
       "Alertas rule-based em tempo real",
       "Controle de investimento mensal com alerta de pacing >90%",

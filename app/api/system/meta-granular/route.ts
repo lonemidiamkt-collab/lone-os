@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
   // devolve 401 para esta conta, e no dia em que liberar esta rota não muda uma linha.
   const { provider, capacidade } = await escolherProvider(token);
 
-  let linhas = 0, contasLidas = 0, criativos = 0;
+  let linhas = 0, contasLidas = 0, criativos = 0, periodos = 0;
   const erros: string[] = [];
 
   for (const c of clientes ?? []) {
@@ -86,6 +86,25 @@ export async function POST(req: NextRequest) {
         }
         linhas += registros.length;
 
+        // Fase 2: FREQUÊNCIA real dos últimos 7 dias por anúncio (leitura agregada: reach vem só
+        // assim). É o sinal de saturação que a série diária não tem.
+        if (nivel === "ad") {
+          try {
+            const sete = new Date(ate.getTime() - 6 * 864e5);
+            const agg = await provider.insightsPorEntidade({ token, accountId: acc, nivel: "ad", desde: iso(sete), ate: iso(ate), agregado: true });
+            const regs = agg.filter((r) => r.spend > 0).map((r) => ({
+              ad_id: r.entityId, ate: iso(ate), dias: 7, client_id: c.id, reach: r.reach ?? null, impressions: r.impressions,
+              frequency: r.frequency ?? (r.reach ? r.impressions / r.reach : null), spend: r.spend,
+            }));
+            if (regs.length && !dry) {
+              const { error: e } = await supabaseAdmin.from("meta_ad_period").upsert(regs, { onConflict: "ad_id,ate,dias" });
+              if (e) erros.push(`${c.name} [período]: ${e.message.slice(0, 60)}`); else periodos += regs.length;
+            }
+          } catch (e) {
+            erros.push(`${c.name} [período]: ${String(e).slice(0, 70)}`);
+          }
+        }
+
         // Fase 2: o CRIATIVO dos anúncios que gastaram na janela (miniatura, texto, tipo, vídeo).
         // Falha aqui não derruba a métrica — é a base do "olhar o criativo", não o sync.
         if (nivel === "ad" && comCriativos) {
@@ -109,7 +128,7 @@ export async function POST(req: NextRequest) {
     ok: erros.length === 0, dry,
     fonte: capacidade.fonte, fonte_detalhe: capacidade.detalhe,
     contas: clientes?.length ?? 0, contas_lidas: contasLidas,
-    linhas, criativos, janela_dias: dias,
+    linhas, criativos, periodos, janela_dias: dias,
     erros: erros.slice(0, 8),
   });
 }

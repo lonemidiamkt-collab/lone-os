@@ -11,7 +11,7 @@ interface LinhaGraph {
   adset_id?: string; adset_name?: string;
   ad_id?: string; ad_name?: string;
   spend?: string; impressions?: string; clicks?: string;
-  ctr?: string; cpm?: string; frequency?: string;
+  ctr?: string; cpm?: string; frequency?: string; reach?: string;
   actions?: { action_type: string; value: string }[];
   date_start?: string;
 }
@@ -41,16 +41,18 @@ export const marketingApiProvider: ProviderMeta = {
     }
   },
 
-  async insightsPorEntidade({ token, accountId, nivel, desde, ate }): Promise<InsightEntidade[]> {
+  async insightsPorEntidade({ token, accountId, nivel, desde, ate, agregado }): Promise<InsightEntidade[]> {
     const campos = [
       "campaign_id", "campaign_name", "adset_id", "adset_name", "ad_id", "ad_name",
       "spend", "impressions", "clicks", "ctr", "cpm", "frequency", "actions",
+      ...(agregado ? ["reach"] : []),
     ].join(",");
     const timeRange = encodeURIComponent(JSON.stringify({ since: desde, until: ate }));
     // time_increment=1 → uma linha por DIA. Sem isso a Meta agrega o período e some com o "quando
-    // o problema começou", que é metade do diagnóstico.
+    // o problema começou", que é metade do diagnóstico. A leitura AGREGADA existe para o que só o
+    // período diz: reach e frequência de verdade (a diária é sempre ~1,2).
     const url = `${GRAPH}/${accountId}/insights?access_token=${encodeURIComponent(token)}` +
-      `&level=${nivel}&time_range=${timeRange}&time_increment=1&fields=${campos}&limit=500`;
+      `&level=${nivel}&time_range=${timeRange}${agregado ? "" : "&time_increment=1"}&fields=${campos}&limit=500`;
 
     const res = await fetch(url, { signal: AbortSignal.timeout(60_000) });
     const json = await res.json().catch(() => null) as { data?: LinhaGraph[]; error?: { message?: string } } | null;
@@ -64,13 +66,14 @@ export const marketingApiProvider: ProviderMeta = {
         entityName: nome ?? undefined,
         campaignName: r.campaign_name ?? undefined,
         adsetName: r.adset_name ?? undefined,
-        date: String(r.date_start ?? ""),
+        date: String(agregado ? ate : (r.date_start ?? "")),
         spend: Number(r.spend ?? 0),
         impressions: Number(r.impressions ?? 0),
         clicks: Number(r.clicks ?? 0),
         ctr: r.ctr ? Number(r.ctr) : undefined,
         cpm: r.cpm ? Number(r.cpm) : undefined,
         frequency: r.frequency ? Number(r.frequency) : undefined,
+        reach: r.reach != null ? Number(r.reach) : undefined,
         conversions: countMessagesFromActions(r.actions),
       };
     }).filter((r) => r.entityId && r.date);

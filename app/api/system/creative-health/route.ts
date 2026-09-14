@@ -52,10 +52,16 @@ export async function POST(req: NextRequest) {
         porAd.set(adId, g);
       }
       const baseline = baselineDaConta([...porAd.values()], hoje);
+      // Frequência real dos últimos 7 dias (meta_ad_period), quando o sync já trouxe.
+      const { data: per } = await supabaseAdmin.from("meta_ad_period").select("ad_id, frequency, ate")
+        .eq("client_id", c.id).eq("dias", 7).lte("ate", hoje).gte("ate", new Date(Date.parse(`${hoje}T12:00:00Z`) - 3 * 864e5).toISOString().slice(0, 10))
+        .order("ate", { ascending: false });
+      const freq = new Map<string, number>();
+      for (const p of per ?? []) if (!freq.has(p.ad_id as string) && p.frequency != null) freq.set(p.ad_id as string, Number(p.frequency));
       const registros = [];
       for (const [adId, g] of porAd) {
         if (!g.serie.some((d) => d.spend > 0 && d.data >= new Date(Date.parse(`${hoje}T12:00:00Z`) - 7 * 864e5).toISOString().slice(0, 10))) continue; // sem gasto na semana: fora
-        const r = avaliarCriativo({ adId, nome: g.nome, serie: g.serie, hoje, baseline, politica: politica.get(c.id as string) ?? null });
+        const r = avaliarCriativo({ adId, nome: g.nome, serie: g.serie, hoje, baseline, politica: politica.get(c.id as string) ?? null, freq7d: freq.get(adId) ?? null });
         registros.push({
           ad_id: adId, data: hoje, client_id: c.id, meta_ad_account_id: c.meta_ad_account_id, ad_name: g.nome,
           estado: r.estado, severidade: r.severidade, confianca: r.confianca, sinais: r.sinais, evidencias: r.evidencias,

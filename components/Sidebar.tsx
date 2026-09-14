@@ -89,6 +89,7 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
         items: [
           { label: "Anúncios Meta",            icon: Megaphone,   tab: "anuncios",   badgeKey: "activeCampaigns" },
           { label: "Saldos, Verba & Alertas",  icon: Activity,    href: "/traffic/budgets" },
+          { label: "Saúde dos Criativos",      icon: HeartPulse,  href: "/traffic/criativos" },
         ],
       },
       {
