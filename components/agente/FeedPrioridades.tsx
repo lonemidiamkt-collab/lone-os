@@ -15,6 +15,7 @@ interface Item {
 }
 interface Resposta {
   itens: Item[];
+  total: number;
   taxa: { dias: number; total: number; decididas: number; taxa: number | null; porEstado: Record<string, number> };
   eu: { nome: string | null; papel: string | null; admin: boolean };
   escopo: "meu" | "todos";
@@ -43,16 +44,17 @@ export default function FeedPrioridades() {
   const [recalculando, setRecalculando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [aberto, setAberto] = useState<string | null>(null);
+  const [limite, setLimite] = useState(12);
 
-  const carregar = useCallback(async (e: "meu" | "todos") => {
+  const carregar = useCallback(async (e: "meu" | "todos", lim = 12) => {
     try {
-      const r = await authedFetch(`/api/priority/feed?escopo=${e}`);
+      const r = await authedFetch(`/api/priority/feed?escopo=${e}&limite=${lim}`);
       const d = (await r.json()) as Resposta;
       if (!r.ok) { setErro(d.error ?? `HTTP ${r.status}`); return; }
       setDados(d); setErro(null);
     } catch { setErro("Não consegui carregar o feed."); }
   }, []);
-  useEffect(() => { void carregar(escopo); }, [carregar, escopo]);
+  useEffect(() => { void carregar(escopo, limite); }, [carregar, escopo, limite]);
 
   const decidir = async (id: string, decisao: "aceita" | "ignorada" | "incorreta" | "executada") => {
     setOcupado(id);
@@ -69,7 +71,7 @@ export default function FeedPrioridades() {
       const r = await authedFetch("/api/system/priority-recalcular", { method: "POST" });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) setErro(d?.erro ?? d?.error ?? `HTTP ${r.status}`);
-      await carregar(escopo);
+      await carregar(escopo, limite);
     } finally { setRecalculando(false); }
   };
 
@@ -80,7 +82,7 @@ export default function FeedPrioridades() {
   return (
     <section className="rounded-xl border border-primary/30 bg-primary/[0.03] p-5">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-foreground">🎯 O que precisa de você hoje{itens.length ? ` (${itens.length})` : ""}</h2>
+        <h2 className="text-sm font-semibold text-foreground">🎯 O que precisa de você hoje{dados?.total ? ` (${dados.total})` : ""}</h2>
         <div className="flex items-center gap-2 text-xs">
           {podeVerTudo && (
             <div className="flex rounded-lg border border-border p-0.5">
@@ -151,6 +153,11 @@ export default function FeedPrioridades() {
           );
         })}
       </ol>
+      {dados && dados.total > itens.length && (
+        <button onClick={() => setLimite(200)} className="mt-3 w-full rounded-lg border border-dashed border-border py-2 text-xs text-muted-foreground transition hover:text-foreground">
+          Mostrar os outros {dados.total - itens.length} (menor prioridade)
+        </button>
+      )}
     </section>
   );
 }

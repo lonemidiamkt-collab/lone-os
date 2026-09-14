@@ -15,12 +15,13 @@ export async function GET(req: NextRequest) {
   const papel = await papelDoUsuario(user);
   const { data: tm } = await supabaseAdmin.from("team_members").select("name").eq("email", user.email).maybeSingle();
   const escopo = req.nextUrl.searchParams.get("escopo") === "todos" ? "todos" : "meu";
+  const limite = Math.min(200, Math.max(1, Number(req.nextUrl.searchParams.get("limite") ?? 12) || 12));
   try {
     const [itens, taxa] = await Promise.all([
-      feed({ papel, nome: (tm?.name as string) ?? null, admin: user.isAdmin, escopo }),
+      feed({ papel, nome: (tm?.name as string) ?? null, admin: user.isAdmin, escopo, limite }),
       taxaDeDecisao(14),
     ]);
-    return NextResponse.json({ itens, taxa, eu: { nome: tm?.name ?? null, papel, admin: user.isAdmin }, escopo });
+    return NextResponse.json({ itens: [...itens], total: itens.total, taxa, eu: { nome: tm?.name ?? null, papel, admin: user.isAdmin }, escopo });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }

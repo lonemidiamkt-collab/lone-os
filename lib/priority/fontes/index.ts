@@ -8,6 +8,8 @@ import { itensDoTrafego } from "./trafego";
 import { itensDaProducao } from "./producao";
 import { itensDaSaude } from "./saude";
 import { itensDeTarefas } from "./tarefas";
+import { normalizarDono, type MembroRef } from "../dono";
+import { agregar } from "../agregar";
 
 export interface ClienteRef {
   id: string;
@@ -49,8 +51,13 @@ export async function carregarClientes(): Promise<{ porId: Map<string, ClienteRe
   return { porId, porNome };
 }
 
+async function carregarEquipe(): Promise<MembroRef[]> {
+  const { data } = await supabaseAdmin.from("team_members").select("name, role").eq("is_active", true).is("deleted_at", null);
+  return (data ?? []).map((m) => ({ nome: m.name as string, papel: m.role as MembroRef["papel"] }));
+}
+
 export async function coletarTudo(): Promise<{ itens: ItemBruto[]; ctx: ContextoRanking; porFonte: Record<string, number>; erros: string[] }> {
-  const clientes = await carregarClientes();
+  const [clientes, equipe] = await Promise.all([carregarClientes(), carregarEquipe()]);
   const ctx: ContextoRanking = { importanciaCliente: Object.fromEntries([...clientes.porId.values()].map((c) => [c.id, c.importancia])) };
   const fontes: { nome: string; fn: () => Promise<ItemBruto[]> }[] = [
     { nome: "trafego", fn: () => itensDoTrafego(clientes) },
@@ -68,5 +75,7 @@ export async function coletarTudo(): Promise<{ itens: ItemBruto[]; ctx: Contexto
     if (r.status === "fulfilled") { itens.push(...r.value); porFonte[nome] = r.value.length; }
     else { porFonte[nome] = 0; erros.push(`${nome}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`); }
   });
-  return { itens, ctx, porFonte, erros };
+  // Dono com o nome do cadastro (ou papel), depois uma recomendação por problema.
+  const normalizados = itens.map((i) => ({ ...i, ...normalizarDono(i.owner, i.ownerRole, equipe) }));
+  return { itens: agregar(normalizados), ctx, porFonte, erros };
 }

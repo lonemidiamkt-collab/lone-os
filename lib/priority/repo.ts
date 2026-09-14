@@ -53,18 +53,22 @@ export async function recalcular(): Promise<ResultadoRecalculo> {
 export interface FiltroFeed { papel: string | null; nome: string | null; admin: boolean; escopo: "meu" | "todos"; limite?: number }
 
 /** O feed de uma pessoa: o que é dela pelo nome, ou do papel dela sem dono nomeado. Admin/gestão com escopo=todos vê tudo. */
-export async function feed(f: FiltroFeed) {
-  let q = supabaseAdmin.from("recommendations").select("*").in("estado", ABERTAS).order("score", { ascending: false }).limit(f.limite ?? 60);
+export type LinhaRecomendacao = Record<string, unknown> & { id: string; fonte: string; cliente: string; titulo: string; fato: string[]; recomendacao: string; score: number; owner: string | null; owner_role: string; exposicao_rs: number | null };
+
+export async function feed(f: FiltroFeed): Promise<LinhaRecomendacao[] & { total: number }> {
+  // Limite por pessoa: o plano é "no máximo N por pessoa"; o resto existe e aparece em "mostrar
+  // mais", mas a primeira tela é o que cabe na atenção de alguém.
+  let q = supabaseAdmin.from("recommendations").select("*", { count: "exact" }).in("estado", ABERTAS).order("score", { ascending: false }).limit(f.limite ?? 12);
   if (!(f.escopo === "todos" && (f.admin || f.papel === "manager"))) {
     const partes: string[] = [];
     if (f.nome) partes.push(`owner.ilike.${f.nome.replace(/[,.()]/g, " ").trim()}`);
     if (f.papel) partes.push(`and(owner.is.null,owner_role.eq.${f.papel})`);
-    if (!partes.length) return [];
+    if (!partes.length) return Object.assign([] as LinhaRecomendacao[], { total: 0 });
     q = q.or(partes.join(","));
   }
-  const { data, error } = await q;
+  const { data, error, count } = await q;
   if (error) throw new Error(`recommendations: ${error.message}`);
-  return data ?? [];
+  return Object.assign((data ?? []) as LinhaRecomendacao[], { total: count ?? (data?.length ?? 0) });
 }
 
 export type Decisao = "vista" | "aceita" | "ignorada" | "incorreta" | "executada";

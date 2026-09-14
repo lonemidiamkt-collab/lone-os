@@ -14,6 +14,10 @@ export async function itensDaProducao(clientes: { porNome: Map<string, ClienteRe
 
   for (const a of s.atrasados) {
     const c = ref(a.cliente);
+    // Até 7 dias é urgência (ainda dá para salvar a semana); passou de 14, o post morreu — a
+    // recomendação vira limpeza (arquivar ou repactuar), com urgência menor. Post de 26 dias no
+    // topo do feed acima de verba sendo gasta em vão foi o erro do primeiro recálculo.
+    const morto = a.dias > 14;
     out.push({
       fonte: "producao", clientId: c?.id ?? null, cliente: c?.nome ?? a.cliente,
       entityRef: a.titulo, motivo: "card_atrasado",
@@ -22,10 +26,12 @@ export async function itensDaProducao(clientes: { porNome: Map<string, ClienteRe
         `Post "${a.titulo}" está ${a.dias} dia${a.dias === 1 ? "" : "s"} depois da data de postagem`,
         a.designerEntregou ? "A arte já foi entregue pelo designer — falta postar" : "O designer ainda não entregou a arte",
       ],
-      recomendacao: a.designerEntregou ? "Postar hoje ou combinar nova data com o cliente" : "Cobrar a arte do designer e avisar o cliente da nova data",
+      recomendacao: morto
+        ? "Post morto no quadro: arquivar, ou repactuar data com o cliente se ainda fizer sentido"
+        : a.designerEntregou ? "Postar hoje ou combinar nova data com o cliente" : "Cobrar a arte do designer e avisar o cliente da nova data",
       acaoProposta: { tipo: "abrir_card", titulo: a.titulo, cliente: a.cliente },
-      severidade: clamp(50 + a.dias * 8), urgencia: 90, confianca: 0.95, exposicaoRs: null,
-      reversivel: false, // a data passou; o que dá para salvar é a relação
+      severidade: morto ? 55 : clamp(50 + a.dias * 8), urgencia: morto ? 40 : 90, confianca: 0.95, exposicaoRs: null,
+      reversivel: morto, // recente: a data passou e o que dá para salvar é a relação; morto: limpeza
       ownerRole: "social", owner: a.responsavel ?? c?.assignedSocial ?? null, nivelPolicy: "C",
     });
   }
