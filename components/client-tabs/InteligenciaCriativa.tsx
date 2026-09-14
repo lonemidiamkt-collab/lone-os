@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
+import CatalogoProdutos from "@/components/clients/CatalogoProdutos";
 
 // Aba "Inteligência Criativa" da ficha — o DNA criativo do cliente num lugar só:
 // identidade, o que está rodando e como vai, vencedores, testes de variação, aprendizados e padrão.
@@ -38,6 +39,10 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
 
       <section className="rounded-xl border border-border bg-card p-4">
         <MarcaDoCliente clientId={clientId} podeEditar={podeEditarMarca} />
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-4">
+        <CatalogoProdutos clientId={clientId} podeEditar={podeEditarMarca} />
       </section>
 
       <section className="rounded-xl border border-border bg-card p-4">

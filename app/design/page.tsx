@@ -30,6 +30,7 @@ import { MarkdownView, MarkdownEditor, markdownPlainText } from "@/components/Ma
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
 import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
+import CatalogoProdutos from "@/components/clients/CatalogoProdutos";
 
 // ── Designer-focused columns (simplified from 7 → 4) ─────────────────────────
 // Maps: ideas/script → "queue", in_production → "doing", blocked → "blocked", rest → "delivered"
@@ -2606,8 +2607,9 @@ function ClientDrawer({
             </button>
             {logoErr && <p className="text-[10px] text-destructive mt-1">{logoErr}</p>}
             {/* Todas as versões da logo + Figma/Drive, para baixar direto daqui. */}
-            <div className="mt-3">
+            <div className="mt-3 space-y-3">
               <MarcaDoCliente clientId={client.id} compacto />
+              <CatalogoProdutos clientId={client.id} podeEditar />
             </div>
           </div>
 
