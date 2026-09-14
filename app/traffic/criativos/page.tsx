@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { useRole } from "@/lib/context/RoleContext";
 import OperacaoCriativa from "@/components/traffic/OperacaoCriativa";
+import PadroesCriativos from "@/components/traffic/PadroesCriativos";
 
 // /traffic/criativos — SAÚDE DOS CRIATIVOS, em sombra. O motor avalia todo dia; o gestor diz se
 // concorda. Enquanto a precisão não passar de 80%, nada disto vira recomendação nem aviso.
@@ -143,6 +144,8 @@ export default function CriativosPage() {
       {dados && itens.length === 0 && (
         <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Nenhuma avaliação ainda. A primeira roda no próximo sync (07:20).</p>
       )}
+
+      <PadroesCriativos />
 
       <ul className="grid gap-3 md:grid-cols-2">
         {lista.map((i) => {

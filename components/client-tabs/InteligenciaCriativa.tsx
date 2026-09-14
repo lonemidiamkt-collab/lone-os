@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
 import CatalogoProdutos from "@/components/clients/CatalogoProdutos";
+import PadroesCriativos from "@/components/traffic/PadroesCriativos";
 
 // Aba "Inteligência Criativa" da ficha — o DNA criativo do cliente num lugar só:
 // identidade, o que está rodando e como vai, vencedores, testes de variação, aprendizados e padrão.
@@ -102,15 +103,7 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
           </ul>
         </section>
         <section className="rounded-xl border border-border bg-card p-4">
-          <h4 className="text-sm font-semibold text-foreground">🔍 Padrão dos vencedores</h4>
-          <p className="mb-2 text-[11px] text-muted-foreground">O que os vencedores deste cliente têm em comum, contra os demais anúncios dele. É correlação — vira hipótese de teste, não verdade.</p>
-          {d && d.padrao.vencedores === 0 && <p className="text-xs text-muted-foreground">Sem vencedores com atributos lidos ainda (os atributos são extraídos todo dia às 07:30).</p>}
-          {d && d.padrao.vencedores > 0 && (
-            <div className="space-y-2 text-[11px]">
-              <p className="text-muted-foreground">Preço visível: <span className="text-foreground">{pct(d.padrao.precoVisivel.vencedores, d.padrao.vencedores)}</span> dos vencedores × {pct(d.padrao.precoVisivel.outros, d.padrao.outros)} dos outros · Pessoa na imagem: <span className="text-foreground">{pct(d.padrao.pessoa.vencedores, d.padrao.vencedores)}</span> × {pct(d.padrao.pessoa.outros, d.padrao.outros)}</p>
-              <div className="flex flex-wrap gap-1">{d.padrao.tagsVencedores.map((t) => <span key={t.tag} className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">{t.tag} · {t.n}</span>)}</div>
-            </div>
-          )}
+          <PadroesCriativos clientId={clientId} />
         </section>
       </div>
     </div>
