@@ -4,6 +4,7 @@
 
 import { chatJson, type OpenAiResult } from "@/lib/ai/openai";
 import { getEstiloTime } from "./estilo";
+import { treinamentoBase } from "./treinamento";
 
 export const CONVERSA_MODEL = "gpt-4o";
 
@@ -209,7 +210,9 @@ exageros tipo "chapou", "irmão" toda hora, "moleque" — mantenha classe (o Rob
 - Uma piada por vez. Se já brincou, a próxima é no assunto.`;
 
 export async function conversarComEquipe(inp: ConversaInput): Promise<OpenAiResult<ConversaOutput>> {
-  const estiloTime = await getEstiloTime(); // passo 3: escreve no tom real do time (aprendido + revisado)
+  // Tom real do time (aprendido do corpus + revisado) e o treinamento base (quem é, processos da
+  // casa, como o painel funciona) — é o que responde "quando pede o briefing?" sem chutar.
+  const [estiloTime, base] = await Promise.all([getEstiloTime(), treinamentoBase()]);
   const user = [
     inp.contexto ? `Contexto agora: ${inp.contexto}` : "",
     inp.historico ? `# Últimas mensagens do grupo (memória curta — pra você não repetir, não perder o fio e entender fragmentos):\n${inp.historico}\n` : "",
@@ -221,6 +224,6 @@ export async function conversarComEquipe(inp: ConversaInput): Promise<OpenAiResu
   return chatJson<ConversaOutput>({
     model: CONVERSA_MODEL, schemaName: "cs_conversa", schema: SCHEMA,
     maxTokens: 300, temperature: inp.descontraido ? 0.75 : 0.6,
-    system: inp.descontraido ? SYSTEM + DESCONTRAIDO : SYSTEM, user,
+    system: `${base}\n\n${inp.descontraido ? SYSTEM + DESCONTRAIDO : SYSTEM}`, user,
   });
 }
