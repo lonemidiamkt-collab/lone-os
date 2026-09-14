@@ -2,7 +2,7 @@
 // define — e hoje a única disponível, já que o MCP recusa o token da Lone com 401.
 
 import { countMessagesFromActions } from "@/lib/meta/messages";
-import type { CapacidadeMeta, InsightEntidade, NivelEntidade, ProviderMeta } from "./index";
+import type { CapacidadeMeta, CriativoAnuncio, InsightEntidade, NivelEntidade, ProviderMeta } from "./index";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -75,4 +75,39 @@ export const marketingApiProvider: ProviderMeta = {
       };
     }).filter((r) => r.entityId && r.date);
   },
+
+  async criativos({ token, adIds }): Promise<CriativoAnuncio[]> {
+    const ids = [...new Set(adIds.filter(Boolean))];
+    const out: CriativoAnuncio[] = [];
+    // thumbnail_width/height: sem isso a Meta manda 64×64, que não serve para a visão descrever.
+    const campos = "name,effective_status,creative.thumbnail_width(1080).thumbnail_height(1080){id,object_type,thumbnail_url,image_url,video_id,body,title,call_to_action_type,asset_feed_spec}";
+    for (let i = 0; i < ids.length; i += 50) {
+      const lote = ids.slice(i, i + 50);
+      const url = `${GRAPH}/?ids=${lote.join(",")}&fields=${encodeURIComponent(campos)}&access_token=${encodeURIComponent(token)}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+      const json = await res.json().catch(() => null) as (Record<string, AnuncioGraph> & { error?: { message?: string } }) | null;
+      if (!json) throw new Error("graph api: resposta vazia");
+      if (json.error) throw new Error(String(json.error.message ?? "graph api falhou").slice(0, 120));
+      for (const [adId, a] of Object.entries(json)) {
+        if (adId === "error" || !a || typeof a !== "object") continue;
+        const an = a as AnuncioGraph;
+        const c = an.creative ?? {};
+        const afs = c.asset_feed_spec && Object.keys(c.asset_feed_spec).length ? c.asset_feed_spec : null;
+        out.push({
+          adId, adName: an.name, effectiveStatus: an.effective_status, creativeId: c.id,
+          tipo: c.object_type, thumbUrl: c.thumbnail_url, imageUrl: c.image_url, videoId: c.video_id,
+          body: c.body, title: c.title, cta: c.call_to_action_type, assetFeedSpec: afs,
+        });
+      }
+    }
+    return out;
+  },
 };
+
+interface AnuncioGraph {
+  name?: string; effective_status?: string;
+  creative?: {
+    id?: string; object_type?: string; thumbnail_url?: string; image_url?: string; video_id?: string;
+    body?: string; title?: string; call_to_action_type?: string; asset_feed_spec?: Record<string, unknown>;
+  };
+}

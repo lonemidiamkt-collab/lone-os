@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { escolherProvider, type NivelEntidade } from "@/lib/meta/gateway";
+import { guardarCriativos } from "@/lib/meta/criativos";
 
 // POST /api/system/meta-granular — coleta desempenho por CAMPANHA, CONJUNTO e ANÚNCIO.
 //
@@ -16,6 +17,7 @@ import { escolherProvider, type NivelEntidade } from "@/lib/meta/gateway";
 //
 // ?dias=N janela (padrão 3 — a Meta reatribui conversão por alguns dias, então reler o passado
 // recente corrige número que já foi gravado) · ?clientId= um só · ?dry=1 não grava
+// · ?criativos=0 não busca criativo (Fase 2: por padrão guarda miniatura/texto/tipo dos anúncios que gastaram)
 
 const NIVEIS: NivelEntidade[] = ["campaign", "adset", "ad"];
 
@@ -24,6 +26,7 @@ export async function POST(req: NextRequest) {
   const dry = req.nextUrl.searchParams.get("dry") !== null;
   const soCliente = req.nextUrl.searchParams.get("clientId") || "";
   const dias = Math.min(30, Math.max(1, Number(req.nextUrl.searchParams.get("dias")) || 3));
+  const comCriativos = req.nextUrl.searchParams.get("criativos") !== "0";
 
   const { data: cfg } = await supabaseAdmin.from("agency_settings").select("value").eq("key", "meta_token").single();
   const token = cfg?.value as string | undefined;
@@ -45,7 +48,7 @@ export async function POST(req: NextRequest) {
   // devolve 401 para esta conta, e no dia em que liberar esta rota não muda uma linha.
   const { provider, capacidade } = await escolherProvider(token);
 
-  let linhas = 0, contasLidas = 0;
+  let linhas = 0, contasLidas = 0, criativos = 0;
   const erros: string[] = [];
 
   for (const c of clientes ?? []) {
@@ -82,6 +85,18 @@ export async function POST(req: NextRequest) {
           if (e) erros.push(`${c.name} [${nivel}] gravar: ${e.message.slice(0, 60)}`);
         }
         linhas += registros.length;
+
+        // Fase 2: o CRIATIVO dos anúncios que gastaram na janela (miniatura, texto, tipo, vídeo).
+        // Falha aqui não derruba a métrica — é a base do "olhar o criativo", não o sync.
+        if (nivel === "ad" && comCriativos) {
+          const adIds = [...new Set(insights.filter((r) => r.spend > 0).map((r) => r.entityId))];
+          try {
+            const r = await guardarCriativos({ provider, token, clientId: c.id as string, accountId: acc, adIds, dry });
+            criativos += r.gravados;
+          } catch (e) {
+            erros.push(`${c.name} [criativos]: ${String(e).slice(0, 70)}`);
+          }
+        }
       } catch (e) {
         // Conta sem acesso não derruba as outras — foi o que já derrubou o digest inteiro antes.
         erros.push(`${c.name} [${nivel}]: ${String(e).slice(0, 70)}`);
@@ -94,7 +109,7 @@ export async function POST(req: NextRequest) {
     ok: erros.length === 0, dry,
     fonte: capacidade.fonte, fonte_detalhe: capacidade.detalhe,
     contas: clientes?.length ?? 0, contas_lidas: contasLidas,
-    linhas, janela_dias: dias,
+    linhas, criativos, janela_dias: dias,
     erros: erros.slice(0, 8),
   });
 }

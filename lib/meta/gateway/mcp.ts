@@ -23,7 +23,7 @@
 // educada da plataforma ("restrito a certos usuários") custou dias de espera por um rollout que
 // não existia.
 
-import type { CapacidadeMeta, InsightEntidade, NivelEntidade, ProviderMeta } from "./index";
+import type { CapacidadeMeta, CriativoAnuncio, InsightEntidade, NivelEntidade, ProviderMeta } from "./index";
 
 const MCP_URL = process.env.META_MCP_URL || "https://mcp.facebook.com/ads";
 const PROTOCOLO = "2025-06-18";
@@ -119,6 +119,10 @@ export const mcpProvider: ProviderMeta = {
     const nomes = ((json as { result?: { tools?: { name?: string }[] } })?.result?.tools ?? [])
       .map((t) => t.name).filter(Boolean);
     throw new Error(`MCP conectado; ferramentas disponíveis: ${nomes.join(", ") || "(nenhuma)"} — mapear antes de usar`);
+  },
+
+  async criativos(): Promise<CriativoAnuncio[]> {
+    throw new Error("MCP: leitura de criativo ainda não mapeada — usar a Marketing API");
   },
 };
 

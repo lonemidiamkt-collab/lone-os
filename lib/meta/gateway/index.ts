@@ -45,6 +45,28 @@ export interface InsightEntidade {
 export type NivelEntidade = "campaign" | "adset" | "ad";
 
 /**
+ * O CRIATIVO de um anúncio, como a Meta entrega. É o dado que nenhuma tabela guardava (Fase 2 do
+ * Lone Agent V2): sem ele não existe "olhar o criativo" — só métrica. thumbUrl é assinada e vence
+ * em dias: guardar e renovar a cada sync.
+ */
+export interface CriativoAnuncio {
+  adId: string;
+  adName?: string;
+  effectiveStatus?: string;
+  creativeId?: string;
+  /** VIDEO · PHOTO · SHARE (post/link) · CAROUSEL … como vem em object_type. */
+  tipo?: string;
+  thumbUrl?: string;
+  imageUrl?: string;
+  videoId?: string;
+  body?: string;
+  title?: string;
+  cta?: string;
+  /** Criativo dinâmico: várias imagens/textos. Guardado cru para a Fase 2 decompor. */
+  assetFeedSpec?: Record<string, unknown> | null;
+}
+
+/**
  * O contrato. Quem consome o gateway programa contra isto, nunca contra a Graph API.
  *
  * As operações de LEITURA estão aqui. As de ESCRITA (pausar, alterar orçamento) ficam
@@ -60,6 +82,8 @@ export interface ProviderMeta {
     token: string; accountId: string; nivel: NivelEntidade;
     desde: string; ate: string;
   }): Promise<InsightEntidade[]>;
+  /** Criativos de uma lista de anúncios (até 50 por chamada na Graph API; o provider divide). */
+  criativos(p: { token: string; adIds: string[] }): Promise<CriativoAnuncio[]>;
 }
 
 // ── Seleção do provider ─────────────────────────────────────────────────────
