@@ -13,7 +13,9 @@ const nextConfig: NextConfig = {
   // empacotar, os elementos JSX ficam com shape incompatível e o render quebra com
   // "Minified React error #31" (mesmo em PDFs triviais). Externalizando, ele é
   // carregado como módulo node em runtime, com uma instância de React consistente.
-  serverExternalPackages: ["@react-pdf/renderer"],
+  serverExternalPackages: ["@react-pdf/renderer",
+    // pg-boss/pg: módulos node puros, carregados em runtime pelo worker (instrumentation.ts).
+    "pg-boss", "pg"],
   // Permite bodies até 51MB em route handlers (5 artes × 10MB + 1MB overhead multipart).
   // Sem isso, Next.js 15 trunca bodies >10MB e req.formData() falha com erro opaco.
   // A validação real por arquivo (10MB card / 25MB misc) é feita em upload-art/route.ts.
@@ -26,6 +28,16 @@ const nextConfig: NextConfig = {
   // from the Docker production image, causing 500 "Template não encontrado" errors.
   outputFileTracingIncludes: {
     "/api/contracts/download-docx": ["./contract-templates/*.docx"],
+  },
+  // lib/supabase/queries.ts importa lib/supabase/server.ts também no NAVEGADOR (LONE-004), e
+  // server.ts agora carrega lib/obs/correlacao.ts, que usa AsyncLocalStorage (async_hooks). No
+  // bundle do cliente o módulo resolve para vazio e o contexto vira no-op — sem isto o webpack
+  // derruba o build inteiro ("Module not found: async_hooks").
+  webpack(config, { isServer }) {
+    if (!isServer) {
+      config.resolve.fallback = { ...(config.resolve.fallback ?? {}), async_hooks: false };
+    }
+    return config;
   },
   async rewrites() {
     return [

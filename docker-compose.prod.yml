@@ -31,6 +31,10 @@ services:
       # Gere uma e guarde BACKUP — perder essa chave = perder acesso às senhas armazenadas.
       VAULT_KEY: ${VAULT_KEY}
       CRON_SECRET: ${CRON_SECRET}
+      # Fila (Fase 0B): pg-boss + relay do outbox rodam dentro do servidor quando WORKER_ENABLED=true.
+      # DATABASE_URL = conexão direta ao supabase-db-1 (rede supabase_default). Vazio = fila desligada.
+      DATABASE_URL: ${DATABASE_URL:-}
+      WORKER_ENABLED: ${WORKER_ENABLED:-}
       # Evolution API (WhatsApp) — alertas de saldo p/ grupo do gestor de tráfego
       EVOLUTION_API_URL: ${EVOLUTION_API_URL}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}

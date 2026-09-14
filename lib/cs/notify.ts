@@ -11,6 +11,11 @@ export interface CsSendMeta {
    *  hoje": o bom-dia cita os esfriando e o cron de esfriando repetia os mesmos clientes 1h30
    *  depois. Sem fato declarado a mensagem sai normal — o portão nunca cala no escuro. */
   fatos?: string[];
+  /**
+   * Chave de idempotência: quem manda a mesma coisa duas vezes (retry de job) consulta
+   * cs_outbound.idem_key antes. Só o consumidor da fila usa por enquanto.
+   */
+  idem?: string;
 }
 
 export async function csSendGroupText(
@@ -93,6 +98,7 @@ async function registrarSaida(
     const { idCorrelacao } = await import("@/lib/obs/correlacao");
     await supabaseAdmin.from("cs_outbound").insert({
       correlation_id: idCorrelacao(),
+      idem_key: meta?.idem ?? null,
       origem: meta?.origem ?? "desconhecida",
       group_jid: jid,
       destino: meta?.destino ?? "interno",

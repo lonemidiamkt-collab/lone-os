@@ -15,8 +15,15 @@
 //
 // Fora de um comExecucao() nada disso quebra: os helpers checam `execucaoAtual()` e seguem.
 
-import { AsyncLocalStorage } from "node:async_hooks";
-import { randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "async_hooks";
+
+// Este módulo chega ao bundle do NAVEGADOR por tabela: lib/supabase/queries.ts importa
+// lib/supabase/server.ts (LONE-004), que importa este. Lá, "async_hooks" resolve para vazio
+// (next.config: fallback) e AsyncLocalStorage é undefined — o contexto vira no-op e nada quebra.
+// No servidor, é o AsyncLocalStorage de verdade.
+const als: AsyncLocalStorage<Execucao> | null =
+  typeof AsyncLocalStorage === "function" ? new AsyncLocalStorage<Execucao>() : null;
+const novoId = () => globalThis.crypto.randomUUID();
 
 export interface UsoLlm {
   modelo: string;
@@ -44,28 +51,26 @@ export interface Execucao {
   extra: Record<string, unknown>;
 }
 
-const als = new AsyncLocalStorage<Execucao>();
-
-export function execucaoAtual(): Execucao | null { return als.getStore() ?? null; }
-export function idCorrelacao(): string | null { return als.getStore()?.id ?? null; }
+export function execucaoAtual(): Execucao | null { return als?.getStore() ?? null; }
+export function idCorrelacao(): string | null { return als?.getStore()?.id ?? null; }
 
 /** Anota o que aconteceu, em uma linha ("demanda criada p/ Quero Tintas"). Sem execução, ignora. */
 export function anotar(nota: string): void {
-  const e = als.getStore();
+  const e = als?.getStore();
   if (e && e.notas.length < 40) e.notas.push(nota.slice(0, 200));
 }
 
 /** Define quem está por trás da execução, quando só se descobre no meio (inbound: depois de resolver o remetente). */
 export function definirAtor(ator: string | null, papel?: string | null): void {
-  const e = als.getStore();
+  const e = als?.getStore();
   if (!e) return;
   e.ator = ator;
   if (papel !== undefined) e.papel = papel;
 }
 
-export function registrarUsoLlm(u: UsoLlm): void { als.getStore()?.llm.push(u); }
-export function contarEnvio(): void { const e = als.getStore(); if (e) e.envios++; }
-export function contarEscrita(): void { const e = als.getStore(); if (e) e.escritas++; }
+export function registrarUsoLlm(u: UsoLlm): void { als?.getStore()?.llm.push(u); }
+export function contarEnvio(): void { const e = als?.getStore(); if (e) e.envios++; }
+export function contarEscrita(): void { const e = als?.getStore(); if (e) e.escritas++; }
 
 export interface AberturaDeExecucao {
   origem: string;
@@ -83,14 +88,14 @@ export interface AberturaDeExecucao {
  */
 export async function comExecucao<T>(p: AberturaDeExecucao, fn: (e: Execucao) => Promise<T>): Promise<T> {
   const e: Execucao = {
-    id: p.id && /^[0-9a-f-]{36}$/i.test(p.id) ? p.id : randomUUID(),
+    id: p.id && /^[0-9a-f-]{36}$/i.test(p.id) ? p.id : novoId(),
     origem: p.origem, ator: p.ator ?? null, papel: p.papel ?? null,
     iniciadoEm: Date.now(), llm: [], envios: 0, escritas: 0, notas: [], extra: p.extra ?? {},
   };
   let erro: string | null = null;
   let resultado: unknown = null;
   try {
-    const r = await als.run(e, () => fn(e));
+    const r = als ? await als.run(e, () => fn(e)) : await fn(e);
     resultado = await resumoDoRetorno(r);
     return r;
   } catch (err) {
