@@ -16,6 +16,7 @@ import { proporRegra, decidirRegra } from "@/lib/cs/regras-propostas";
 import { podeAgir, numerosDaEquipe } from "@/lib/cs/autoridade";
 import { comExecucao, definirAtor } from "@/lib/obs/correlacao";
 import { ehPedidoPrioridades, formatarTop } from "@/lib/priority/comando";
+import { ehAprovacaoDeProposta, ehRecusaDeProposta } from "@/lib/traffic/brief-segunda";
 import type { Recomendacao } from "@/lib/priority/tipos";
 
 // ── TODA saída deste arquivo passa a ser ETIQUETADA ─────────────────────────
@@ -1492,6 +1493,35 @@ async function processarInbound(req: NextRequest) {
       }
     })();
     return NextResponse.json({ ok: true, calendario: "montando", cliente: alvo.nome });
+  }
+
+  // ─── Brief de segunda: "pode" em resposta à proposta → cria a demanda de variação (nível C:
+  // exige membro do time com papel operacional; a proposta fica em traffic_briefs). ───
+  if (msg.quotedMsgId && grupoNosso && podeAgirC && (ehAprovacaoDeProposta(msg.text) || ehRecusaDeProposta(msg.text))) {
+    const { data: brief } = await supabaseAdmin.from("traffic_briefs").select("id, proposta, estado").eq("msg_id", msg.quotedMsgId).maybeSingle();
+    if (brief) {
+      if (brief.estado !== "aberto") {
+        await csSendGroupText(msg.groupJid, `Essa proposta já foi ${brief.estado === "aprovado" ? "aprovada" : "encerrada"}. 👍`, msg.messageId);
+        return NextResponse.json({ ok: true, brief: "ja_decidido" });
+      }
+      const quem = autoridade.autor?.nome ?? msg.authorName ?? "gestor";
+      if (ehRecusaDeProposta(msg.text)) {
+        await supabaseAdmin.from("traffic_briefs").update({ estado: "recusado", decidido_por: quem, decidido_em: new Date().toISOString() }).eq("id", brief.id);
+        await csSendGroupText(msg.groupJid, "Fechado, deixo quieta. Se mudar de ideia, o botão está em Tráfego › Saúde dos Criativos. 👍", msg.messageId);
+        return NextResponse.json({ ok: true, brief: "recusado" });
+      }
+      const prop = brief.proposta as { adId: string; cliente: string; adName: string; variacao: { nome: string; muda: string; mantem: string; testa: string } } | null;
+      if (!prop) { await csSendGroupText(msg.groupJid, "Essa semana não tinha proposta pronta — nada a criar.", msg.messageId); return NextResponse.json({ ok: true, brief: "sem_proposta" }); }
+      const { executarReplicacao } = await import("@/lib/traffic/replicar-executar");
+      const r = await executarReplicacao({ adId: prop.adId, variacao: prop.variacao, pedidoPor: quem });
+      if (!r.ok) {
+        await csSendGroupText(msg.groupJid, r.status === 409 ? `Já existe uma demanda aberta testando essa variável do ${prop.cliente} — não criei outra.` : `Não consegui criar: ${r.erro}`, msg.messageId);
+        return NextResponse.json({ ok: true, brief: "falhou", erro: r.erro });
+      }
+      await supabaseAdmin.from("traffic_briefs").update({ estado: "aprovado", decidido_por: quem, decidido_em: new Date().toISOString() }).eq("id", brief.id);
+      await csSendGroupText(msg.groupJid, `✅ Demanda criada${r.designer ? ` para *${r.designer}*` : " (cliente sem designer — cai em \"sem designer\")"}: *${r.titulo}* — ${prop.cliente}, prazo ${r.prazo.split("-").reverse().join("/")}. Referência e briefing travado já anexados.`, msg.messageId);
+      return NextResponse.json({ ok: true, brief: "aprovado", demandaId: r.demandaId });
+    }
   }
 
   // ─── Agente "Lone": "o que preciso fazer hoje?" (Fase 1) — top 5 da PESSOA, do feed de

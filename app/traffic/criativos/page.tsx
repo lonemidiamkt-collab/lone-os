@@ -23,7 +23,8 @@ interface Item {
   } | null;
 }
 interface Teste { id: string; cliente: string; pai: string; variavel: string; muda: string | null; hipotese: string | null; criadoPor: string | null; designer: string | null; prazo: string | null; etapa: string; resultado: { veredito?: string; motivo?: string; cplPai?: number | null; cplFilho?: number | null } | null; createdAt: string }
-interface Resposta { dia: string | null; itens: Item[]; testes?: Teste[]; precisao: { concordo: number; total: number; taxa: number } | null; error?: string }
+interface Brief { id: string; semana: string; texto: string; proposta: { cliente: string; adName: string; variacao: { nome: string; muda: string } } | null; enviado_whatsapp: boolean; estado: string }
+interface Resposta { dia: string | null; itens: Item[]; testes?: Teste[]; brief?: Brief | null; precisao: { concordo: number; total: number; taxa: number } | null; error?: string }
 const ETAPA: Record<string, { rotulo: string; cls: string }> = {
   na_fila: { rotulo: "na fila do designer", cls: "bg-muted text-muted-foreground" }, em_producao: { rotulo: "em produção", cls: "bg-lone-warning-bg text-lone-warning" },
   entregue: { rotulo: "arte entregue — falta subir", cls: "bg-primary/10 text-primary" }, no_ar: { rotulo: "no ar — medindo", cls: "bg-primary/10 text-primary" },
@@ -118,6 +119,13 @@ export default function CriativosPage() {
       </header>
 
       {(role === "admin" || role === "manager") && <OperacaoCriativa />}
+
+      {dados?.brief && (
+        <details className="rounded-xl border border-border bg-card p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-foreground">📋 Brief de segunda ({dados.brief.semana.split("-").reverse().join("/")}) {dados.brief.enviado_whatsapp ? "· enviado no grupo" : "· só no painel (sombra)"}{dados.brief.proposta ? ` · proposta ${dados.brief.estado}` : ""}</summary>
+          <pre className="mt-2 whitespace-pre-wrap font-sans text-[11px] text-foreground/90">{dados.brief.texto}</pre>
+        </details>
+      )}
 
       {dados?.testes && dados.testes.length > 0 && (
         <section className="rounded-xl border border-border bg-card p-4">

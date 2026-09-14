@@ -69,7 +69,8 @@ export async function GET(req: NextRequest) {
   const { data: rot } = await supabaseAdmin.from("creative_health").select("rotulo").not("rotulo", "is", null).neq("rotulo", "sem_opiniao");
   const concordo = (rot ?? []).filter((r) => r.rotulo === "concordo").length;
   const total = (rot ?? []).length;
-  return NextResponse.json({ dia, itens, testes, precisao: total ? { concordo, total, taxa: Math.round((concordo / total) * 100) } : null });
+  const { data: brief } = await supabaseAdmin.from("traffic_briefs").select("id, semana, texto, proposta, enviado_whatsapp, estado").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  return NextResponse.json({ dia, itens, testes, brief: brief ?? null, precisao: total ? { concordo, total, taxa: Math.round((concordo / total) * 100) } : null });
 }
 
 export async function POST(req: NextRequest) {
