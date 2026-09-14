@@ -22,7 +22,8 @@ export interface ClienteRef {
 export async function carregarClientes(): Promise<{ porId: Map<string, ClienteRef>; porNome: Map<string, ClienteRef> }> {
   const { data, error } = await supabaseAdmin.from("clients")
     .select("id, name, nome_fantasia, assigned_social, assigned_traffic, monthly_budget, status, attention_level, service_type")
-    .is("archived_at", null);
+    // Cliente vivo: active ≠ false, sem churn e sem rascunho de cadastro (é o critério do diagnóstico).
+    .or("active.is.null,active.eq.true").is("churned_at", null).is("draft_status", null);
   if (error) throw new Error(`clients: ${error.message}`);
   const porId = new Map<string, ClienteRef>();
   const porNome = new Map<string, ClienteRef>();
