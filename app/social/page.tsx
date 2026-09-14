@@ -750,6 +750,15 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
   // Exige o cliente RESOLVIDO, não só o id preenchido: clientName é desnormalizado (aparece no
   // card e na busca do board), e id sem cliente na lista gravaria a demanda com o nome em branco.
   const canSubmit = title.trim() && clientId && selectedClient && dueDate && dueTime && priority;
+  // O QUE FALTA, ONDE A PESSOA ESTÁ OLHANDO. O modal é longo: quem rola até o fim vê o botão
+  // apagado e, logo acima, o aviso amarelo do Drive — e lê o aviso como se fosse o erro
+  // ("erro para pedir arte", 14/09). O motivo real (sem horário) ficava lá em cima, fora da tela.
+  const faltando = [
+    !title.trim() && "título",
+    !(clientId && selectedClient) && "cliente",
+    !dueDate && "data de postagem",
+    !dueTime && "horário",
+  ].filter(Boolean) as string[];
 
   // REFERÊNCIA JÁ NA CRIAÇÃO (pedido do social, 03/08). Antes só dava pra anexar DEPOIS: criava a
   // demanda, reabria, e só então subia a imagem — três passos pra uma coisa só, e no meio disso o
@@ -810,7 +819,13 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
       dueDate,
       dueTime,
       briefing: briefing.trim() || undefined,
-    } as Omit<ContentCard, "id">).catch(() => null);
+    } as Omit<ContentCard, "id">).catch((err: unknown) => {
+      // Antes: .catch(() => null) e o modal fechava como se tivesse criado — a pessoa só descobria
+      // quando o card não aparecia no quadro.
+      toast.error(`Não consegui criar o card${err instanceof Error && err.message ? ` (${err.message})` : ""}. Nada foi salvo — tenta de novo.`);
+      return null;
+    });
+    if (criado === null) return; // modal fica aberto com tudo preenchido
     if (criado?.id && refs.length) {
       await anexarReferencias(criado.id);
       // Falhou algum anexo: mantém o modal aberto com o aviso — a demanda já existe, mas a pessoa
@@ -982,7 +997,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
                 </div>
               ) : (
                 <p className="text-[10px] text-lone-warning font-medium">
-                  Cliente sem pasta Drive cadastrada. Cadastre em Clientes → Editar.
+                  Cliente sem pasta Drive cadastrada (opcional — não impede o pedido). Cadastre em Clientes → Editar.
                 </p>
               )}
             </div>
@@ -997,11 +1012,17 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
           )}
         </div>
 
-        <DialogFooter className="px-6 py-4 shrink-0 border-t border-border">
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit || subindoRef}>
-            Criar Conteúdo
-          </Button>
+        <DialogFooter className="px-6 py-4 shrink-0 border-t border-border sm:justify-between">
+          <p className="text-[11px] self-center text-muted-foreground" aria-live="polite">
+            {faltando.length > 0 && <span className="text-destructive">Falta preencher: {faltando.join(", ")}.</span>}
+            {faltando.length === 0 && subindoRef && "Subindo a referência…"}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+            <Button onClick={handleSubmit} disabled={!canSubmit || subindoRef}>
+              Criar Conteúdo
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
