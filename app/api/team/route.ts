@@ -148,3 +148,52 @@ export async function PATCH(req: NextRequest) {
 
   return NextResponse.json({ ok: true, member: data });
 }
+
+/**
+ * DELETE /api/team  body: { id }
+ * DESLIGA DE VERDADE. Antes o botão "Remover" só tirava da lista da sessão e o login do
+ * ex-funcionário continuava entrando. Agora: apaga o usuário no Auth (sessões morrem), marca
+ * deleted_at + is_active=false na equipe (o histórico de quem fez o quê fica) e zera o WhatsApp —
+ * número de quem saiu não pode continuar valendo como credencial perante o agente.
+ * Só admin. Não apaga a si mesmo nem o último admin.
+ */
+export async function DELETE(req: NextRequest) {
+  const gate = await requireRole(req, ["admin"]);
+  if (gate instanceof NextResponse) return gate;
+
+  const body = await req.json().catch(() => ({}));
+  const id = body?.id as string;
+  if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
+
+  const { data: membro, error: e1 } = await supabaseAdmin.from("team_members")
+    .select("id, name, email, role, is_active").eq("id", id).maybeSingle();
+  if (e1) return NextResponse.json({ error: e1.message }, { status: 500 });
+  if (!membro) return NextResponse.json({ error: "essa pessoa não está na equipe" }, { status: 404 });
+  if ((membro.email as string).toLowerCase() === gate.user.email) {
+    return NextResponse.json({ error: "você não pode remover a si mesmo" }, { status: 400 });
+  }
+  if (membro.role === "admin") {
+    const { count } = await supabaseAdmin.from("team_members").select("id", { count: "exact", head: true })
+      .eq("role", "admin").eq("is_active", true);
+    if ((count ?? 0) <= 1) return NextResponse.json({ error: "é o último admin ativo — promova outra pessoa antes" }, { status: 400 });
+  }
+
+  // 1. Login: apaga no Auth. Se não achar (nunca teve login), segue.
+  let loginApagado = false;
+  const { data: lista, error: eList } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+  if (eList) return NextResponse.json({ error: `não consegui consultar os logins: ${eList.message}` }, { status: 500 });
+  const alvo = lista.users.find((u) => (u.email ?? "").toLowerCase() === (membro.email as string).toLowerCase());
+  if (alvo) {
+    const { error: eDel } = await supabaseAdmin.auth.admin.deleteUser(alvo.id);
+    if (eDel) return NextResponse.json({ error: `não consegui apagar o login: ${eDel.message}` }, { status: 500 });
+    loginApagado = true;
+  }
+
+  // 2. Equipe: baixa lógica + WhatsApp zerado (trigger de auditoria grava quem fez).
+  const { error: e2 } = await supabaseAdmin.from("team_members")
+    .update({ is_active: false, deleted_at: new Date().toISOString(), whatsapp_phone: null, unavailable_until: null })
+    .eq("id", id);
+  if (e2) return NextResponse.json({ error: `login apagado, mas não marquei na equipe: ${e2.message}` }, { status: 500 });
+
+  return NextResponse.json({ ok: true, nome: membro.name, loginApagado });
+}

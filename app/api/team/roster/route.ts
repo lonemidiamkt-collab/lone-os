@@ -36,6 +36,7 @@ export async function GET() {
     .from("team_members")
     .select("id, name, email, role, initials, whatsapp_phone")
     .eq("is_active", true)
+    .is("deleted_at", null)
     .order("role")
     .order("name");
 

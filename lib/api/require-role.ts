@@ -23,8 +23,12 @@ export async function papelDoUsuario(user: ServerUser): Promise<Papel | null> {
   if (user.isAdmin) return "admin";
   const email = (user.email || "").toLowerCase();
   if (!email) return null;
-  const { data } = await supabaseAdmin.from("team_members").select("role").eq("email", email).maybeSingle();
-  return ((data?.role as Papel) || null);
+  // Só quem está ATIVO tem papel. Desativado/removido continua com o login até a sessão vencer
+  // (ou até o Auth apagar), mas aqui vira "sem papel" → 403 em toda rota com requireRole.
+  const { data } = await supabaseAdmin.from("team_members").select("role, is_active, deleted_at")
+    .eq("email", email).maybeSingle();
+  if (!data || data.is_active === false || data.deleted_at) return null;
+  return ((data.role as Papel) || null);
 }
 
 /**

@@ -418,9 +418,25 @@ export default function CEOPage() {
     }
   }, [teamMembers]);
 
-  const handleDeleteMember = useCallback((id: string) => {
-    setTeamMembers((prev) => prev.filter((m) => m.id !== id));
-    setConfirmDeleteId(null);
+  // REMOVER DESLIGA DE VERDADE (14/09). Antes só tirava da lista desta sessão — o login do
+  // ex-funcionário continuava entrando e o número dele continuava valendo para o agente.
+  const handleDeleteMember = useCallback(async (id: string) => {
+    setSalvandoEquipe(true); setErroEquipe(null);
+    try {
+      const { authedFetch } = await import("@/lib/supabase/authed-fetch");
+      const r = await authedFetch("/api/team", {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setErroEquipe(`Não removi: ${d?.error ?? `falha no servidor (HTTP ${r.status})`}`); return; }
+      setTeamMembers((prev) => prev.filter((m) => m.id !== id));
+      setConfirmDeleteId(null);
+    } catch {
+      setErroEquipe("Não consegui falar com o servidor. Tenta de novo.");
+    } finally {
+      setSalvandoEquipe(false);
+    }
   }, []);
 
   // OTP-style PIN input refs
@@ -1531,7 +1547,7 @@ export default function CEOPage() {
                 <AlertTriangle size={16} className="text-lone-warning mt-0.5 shrink-0" />
                 <div className="text-xs text-muted-foreground space-y-1">
                   <p><strong className="text-foreground">Adicionar cria o login junto.</strong> Ao cadastrar alguém aqui, o sistema grava na equipe <em>e</em> cria o acesso com a senha informada — as duas coisas, ou nenhuma. Nome, função e ativo/inativo também são salvos no banco.</p>
-                  <p><strong className="text-foreground">Remover</strong> só tira da lista desta sessão. Para desligar alguém de verdade, use <strong>desativar</strong>: preserva o histórico de quem fez o quê e bloqueia o acesso.</p>
+                  <p><strong className="text-foreground">Remover</strong> desliga de verdade: apaga o login, tira da equipe e zera o WhatsApp (o número deixa de valer para o agente). O histórico de quem fez o quê fica. <strong>Desativar</strong> é para afastamento temporário: bloqueia o acesso e mantém o cadastro.</p>
                 </div>
               </div>
             </div>

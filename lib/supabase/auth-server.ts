@@ -10,6 +10,24 @@ const ADMIN_EMAILS = new Set([
   "julio@lonemidia.com",    // Julio  (manager)
 ]);
 
+const situacao = new Map<string, { bloqueia: boolean; ate: number }>();
+async function equipeBloqueia(email: string): Promise<boolean> {
+  const c = situacao.get(email);
+  if (c && c.ate > Date.now()) return c.bloqueia;
+  let bloqueia = false;
+  try {
+    const { data, error } = await supabaseAdmin.from("team_members").select("is_active, deleted_at").eq("email", email).maybeSingle();
+    // Sem linha na equipe: não bloqueia (login que não é da equipe é caso à parte — não trancar
+    // ninguém por engano). Erro de consulta: idem, e fica no log.
+    if (error) console.warn("[auth-server] não consegui consultar a equipe:", error.message);
+    else if (data && (data.is_active === false || data.deleted_at)) bloqueia = true;
+  } catch { /* fail-open consciente: DB fora derruba tudo de qualquer jeito */ }
+  situacao.set(email, { bloqueia, ate: Date.now() + 60_000 });
+  return bloqueia;
+}
+/** Só para testes. */
+export function _limparCacheEquipe() { situacao.clear(); }
+
 export interface ServerUser {
   id: string;
   email: string;
@@ -65,6 +83,10 @@ export async function getServerUser(req: NextRequest): Promise<ServerUser | null
   if (error || !data.user?.email) return null;
 
   const email = data.user.email.toLowerCase();
+  // DESATIVADO NÃO ENTRA. "Desativar" na Gestão da Equipe prometia bloquear o acesso, mas só o
+  // login pela tela era barrado (roster não lista inativo) — uma sessão já aberta seguia usando
+  // todas as rotas. Agora a equipe é consultada aqui (cache de 60s) e inativo/removido vira 401.
+  if (await equipeBloqueia(email)) return null;
   const duasEtapas = (data.user.factors ?? []).some((f) => f.factor_type === "totp" && f.status === "verified");
   const aal = payloadDoJwt(accessToken)?.aal === "aal2" ? "aal2" : "aal1";
   // Quem ligou a verificação em duas etapas só é "logado" em aal2. Sessão aal1 de uma conta com

@@ -4,8 +4,12 @@ import { NextRequest } from "next/server";
 // Fase 0A — verificação em duas etapas: conta com autenticador só é "logada" em aal2.
 
 let usuario: { id: string; email: string; factors?: { factor_type: string; status: string }[] } | null = null;
+const equipe: Record<string, { is_active: boolean; deleted_at: string | null }> = {};
 vi.mock("@/lib/supabase/server", () => ({
-  supabaseAdmin: { auth: { getUser: async () => (usuario ? { data: { user: usuario }, error: null } : { data: { user: null }, error: { message: "invalid" } }) } },
+  supabaseAdmin: {
+    auth: { getUser: async () => (usuario ? { data: { user: usuario }, error: null } : { data: { user: null }, error: { message: "invalid" } }) },
+    from: () => ({ select: () => ({ eq: (_c: string, email: string) => ({ maybeSingle: async () => ({ data: equipe[email] ?? null, error: null }) }) }) }),
+  },
 }));
 
 // client do navegador, para estadoDuasEtapas
@@ -17,7 +21,7 @@ vi.mock("@/lib/supabase/client", () => ({
   } } },
 }));
 
-const { getServerUser } = await import("@/lib/supabase/auth-server");
+const { getServerUser, _limparCacheEquipe } = await import("@/lib/supabase/auth-server");
 const { estadoDuasEtapas, traduz } = await import("@/lib/auth/duas-etapas");
 
 const jwt = (payload: Record<string, unknown>) => `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.x`;
@@ -25,6 +29,8 @@ const req = (token: string) => new NextRequest("http://x/api/qualquer", { header
 
 beforeEach(() => {
   usuario = { id: "u1", email: "lonemidiamkt@gmail.com", factors: [] };
+  for (const k of Object.keys(equipe)) delete equipe[k];
+  _limparCacheEquipe();
   mfa.fatores = []; mfa.atual = "aal1"; mfa.proximo = "aal1";
 });
 
@@ -43,6 +49,17 @@ describe("servidor: quem tem autenticador só entra em aal2", () => {
     usuario!.factors = [{ factor_type: "totp", status: "verified" }];
     const u = await getServerUser(req(jwt({ email: "lonemidiamkt@gmail.com", aal: "aal2" })));
     expect(u).toMatchObject({ aal: "aal2", duasEtapas: true });
+  });
+
+  it("desativado ou removido da equipe: sessão válida no Auth, mas porta fechada", async () => {
+    equipe["lonemidiamkt@gmail.com"] = { is_active: false, deleted_at: null };
+    expect(await getServerUser(req(jwt({ email: "lonemidiamkt@gmail.com", aal: "aal1" })))).toBeNull();
+    _limparCacheEquipe();
+    equipe["lonemidiamkt@gmail.com"] = { is_active: true, deleted_at: "2026-09-14T00:00:00Z" };
+    expect(await getServerUser(req(jwt({ email: "lonemidiamkt@gmail.com", aal: "aal1" })))).toBeNull();
+    _limparCacheEquipe();
+    equipe["lonemidiamkt@gmail.com"] = { is_active: true, deleted_at: null };
+    expect(await getServerUser(req(jwt({ email: "lonemidiamkt@gmail.com", aal: "aal1" })))).not.toBeNull();
   });
 
   it("fator abandonado no meio da inscrição (unverified) não conta", async () => {
