@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Loader2, Trash2 } from "lucide-react";
+import { Camera, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 
 // ESTILO VISUAL por prints (item 12 do brief 14/09). A equipe sobe 1–4 prints do Instagram do
@@ -9,7 +9,7 @@ import { chamar } from "@/lib/api/chamar";
 // O resultado entra no briefing de toda replicação e na prévia de imagem.
 interface Analise { paleta: { hex: string; papel: string }[]; tipografia: string; composicao: string; elementos_recorrentes: string[]; tom_visual: string; o_que_evitar: string[]; resumo: string }
 interface Leitura { id: string; fonte: string; imagens: string[]; analise: Analise; resumo: string | null; created_by: string | null; created_at: string }
-interface Dados { atual: Leitura | null; historico: Leitura[]; error?: string }
+interface Dados { atual: Leitura | null; historico: Leitura[]; artesElegiveis?: number; artesNovas?: number; error?: string }
 
 const hexOk = (h: string) => /^#[0-9a-f]{3,8}$/i.test(h.trim());
 
@@ -37,6 +37,14 @@ export default function EstiloVisual({ clientId, podeEditar = true }: { clientId
     await carregar();
   }
 
+  async function relerDasArtes() {
+    setOcupado(true); setErro(null);
+    const r = await chamar<{ ok?: boolean; error?: string }>(`/api/clients/${clientId}/estilo-visual`, { fonte: "artes" });
+    setOcupado(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    await carregar();
+  }
+
   async function apagar(id: string) {
     if (!confirm("Apagar esta leitura de estilo?")) return;
     const r = await chamar(`/api/clients/${clientId}/estilo-visual?id=${id}`, undefined, { method: "DELETE" });
@@ -49,20 +57,25 @@ export default function EstiloVisual({ clientId, podeEditar = true }: { clientId
     <div>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h4 className="text-sm font-semibold text-foreground">📸 Estilo visual (lido dos prints)</h4>
-          <p className="text-[11px] text-muted-foreground">Sobe 1–4 prints do Instagram do cliente e a IA descreve paleta, tipografia e composição. Vai direto pro briefing de toda variação e pra prévia de imagem.</p>
+          <h4 className="text-sm font-semibold text-foreground">🎨 Estilo visual da marca</h4>
+          <p className="text-[11px] text-muted-foreground">Lido sozinho das artes que a Lone entregou (as publicadas e aprovadas primeiro) — e relido quando chegam artes novas. Vai pro briefing de toda variação e pra prévia de imagem. Prints do Instagram são complemento.</p>
         </div>
         {podeEditar && (
-          <>
+          <div className="flex flex-wrap gap-1.5">
+            {(d?.artesElegiveis ?? 0) >= 2 && (
+              <button onClick={() => void relerDasArtes()} disabled={ocupado} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:text-foreground disabled:opacity-50">
+                {ocupado ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} {a ? "Reler das artes" : "Ler das artes entregues"}
+              </button>
+            )}
             <input id={`prints-${clientId}`} ref={input} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => { void enviar(e.target.files); e.target.value = ""; }} />
             <button onClick={() => input.current?.click()} disabled={ocupado} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
-              {ocupado ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />} {ocupado ? "Lendo os prints…" : a ? "Ler prints novos" : "Subir prints do Instagram"}
+              {ocupado ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />} {ocupado ? "Lendo…" : "Subir prints"}
             </button>
-          </>
+          </div>
         )}
       </div>
       {erro && <p className="mt-2 text-xs text-destructive">{erro}</p>}
-      {!a && d && <p className="mt-3 text-xs text-muted-foreground">Nenhum print lido ainda. Sem isso, a IA só conhece o estilo pelos anúncios da Meta e pelas artes entregues.</p>}
+      {!a && d && <p className="mt-3 text-xs text-muted-foreground">{(d.artesElegiveis ?? 0) >= 2 ? `Ainda não lido — o sistema lê sozinho no próximo dia útil às 07:55 (${d.artesElegiveis} artes elegíveis), ou clique em "Ler das artes entregues".` : "Este cliente ainda não tem 2 artes entregues no sistema; até lá, suba prints do Instagram."}</p>}
       {a && (
         <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_auto]">
           <div className="space-y-2 text-xs">
@@ -79,7 +92,7 @@ export default function EstiloVisual({ clientId, podeEditar = true }: { clientId
             {a.analise.elementos_recorrentes.length > 0 && <p className="text-muted-foreground"><span className="text-foreground/80">Se repete:</span> {a.analise.elementos_recorrentes.join(" · ")}</p>}
             <p className="text-muted-foreground"><span className="text-foreground/80">Tom:</span> {a.analise.tom_visual}</p>
             {a.analise.o_que_evitar.length > 0 && <p className="text-muted-foreground"><span className="text-foreground/80">Evitar:</span> {a.analise.o_que_evitar.join(" · ")}</p>}
-            <p className="text-[10px] text-muted-foreground">Lido em {new Date(a.created_at).toLocaleDateString("pt-BR")}{a.created_by ? ` por ${a.created_by.split("@")[0]}` : ""}{d?.historico.length ? ` · ${d.historico.length} leitura(s) anterior(es)` : ""}.
+            <p className="text-[10px] text-muted-foreground">{a.fonte === "artes" ? `Lido de ${a.imagens.length} artes entregues` : `Lido de ${a.imagens.length} print(s)`} em {new Date(a.created_at).toLocaleDateString("pt-BR")}{a.created_by && a.created_by !== "cron" ? ` por ${a.created_by.split("@")[0]}` : ""}{(d?.artesNovas ?? 0) > 0 ? ` · ${d?.artesNovas} arte(s) nova(s) desde então` : ""}{d?.historico.length ? ` · ${d.historico.length} leitura(s) anterior(es)` : ""}.
               {podeEditar && <button onClick={() => void apagar(a.id)} className="ml-2 inline-flex items-center gap-0.5 text-destructive hover:underline"><Trash2 size={10} /> apagar</button>}
             </p>
           </div>

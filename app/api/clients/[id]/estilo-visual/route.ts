@@ -7,6 +7,8 @@ import { getServerUser } from "@/lib/supabase/auth-server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { comExecucao, anotar } from "@/lib/obs/correlacao";
 import { analisarEstiloVisual } from "@/lib/traffic/estilo-visual";
+import { lerEstiloDasArtes, candidatasDoCliente } from "@/lib/traffic/estilo-ler";
+import { escolherArtes } from "@/lib/traffic/estilo-automatico";
 
 // ESTILO VISUAL por prints (item 12 do brief): GET último + histórico; POST multipart (files[] 1–4)
 // sobe para brand-assets/<id>/estilo/… e a visão descreve; DELETE ?id= apaga uma leitura.
@@ -17,15 +19,30 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
   const { id } = await params;
-  const { data, error } = await supabaseAdmin.from("client_visual_style").select("id, fonte, imagens, analise, resumo, created_by, created_at").eq("client_id", id).order("created_at", { ascending: false }).limit(6);
+  const [{ data, error }, { cands, novasDesde }] = await Promise.all([
+    supabaseAdmin.from("client_visual_style").select("id, fonte, imagens, analise, resumo, created_by, created_at").eq("client_id", id).order("created_at", { ascending: false }).limit(6),
+    candidatasDoCliente(id),
+  ]);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ atual: data?.[0] ?? null, historico: (data ?? []).slice(1) });
+  const atual = data?.[0] ?? null;
+  return NextResponse.json({ atual, historico: (data ?? []).slice(1), artesElegiveis: escolherArtes(cands).length, artesNovas: novasDesde((atual?.created_at as string) ?? null) });
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
   const { id } = await params;
+  if ((req.headers.get("content-type") ?? "").includes("application/json")) {
+    const body = await req.json().catch(() => null) as { fonte?: string } | null;
+    if (body?.fonte !== "artes") return NextResponse.json({ error: "fonte inválida" }, { status: 400 });
+    return comExecucao({ origem: "api:estilo-visual-artes", ator: user.email }, async () => {
+      const r = await lerEstiloDasArtes({ clientId: id, por: user.email, forcar: true });
+      if (!r.lido) return NextResponse.json({ error: r.motivo === "erro" ? `Não consegui ler: ${r.erro}` : r.artes < 2 ? "Este cliente ainda não tem 2 artes entregues no sistema — sobe prints por enquanto." : `não releu (${r.motivo})` }, { status: r.motivo === "erro" ? 502 : 400 });
+      const { data } = await supabaseAdmin.from("client_visual_style").select("id, fonte, imagens, analise, resumo, created_by, created_at").eq("client_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      anotar(`estilo visual relido das artes: ${r.cliente} (${r.artes})`);
+      return NextResponse.json({ ok: true, atual: data });
+    });
+  }
   const fd = await req.formData().catch(() => null);
   const arquivos = (fd?.getAll("files") ?? []).filter((f): f is File => f instanceof File).slice(0, 4);
   if (!arquivos.length) return NextResponse.json({ error: "Manda de 1 a 4 prints (PNG, JPG ou WebP)." }, { status: 400 });
