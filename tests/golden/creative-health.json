@@ -1,0 +1,477 @@
+{
+ "capturadoEm": "2026-09-14",
+ "fonte": "meta_entity_snapshots nivel=ad (produção)",
+ "anuncios": [
+  {
+   "ad": "120239571825490162",
+   "nome": "ADS - SE VOCÊ ESTÁ PRECISANDO",
+   "politica": {
+    "cplAlerta": 8.75,
+    "cplCritico": 12.5,
+    "convMin": 8
+   },
+   "serie": [
+    {
+     "data": "2026-08-26",
+     "spend": 1.1,
+     "impressions": 95,
+     "clicks": 0,
+     "conversions": 0
+    },
+    {
+     "data": "2026-08-27",
+     "spend": 0.17,
+     "impressions": 7,
+     "clicks": 0,
+     "conversions": 0
+    },
+    {
+     "data": "2026-08-28",
+     "spend": 4.03,
+     "impressions": 352,
+     "clicks": 7,
+     "conversions": 1
+    },
+    {
+     "data": "2026-09-04",
+     "spend": 18.46,
+     "impressions": 1832,
+     "clicks": 20,
+     "conversions": 2
+    },
+    {
+     "data": "2026-09-05",
+     "spend": 23.51,
+     "impressions": 1921,
+     "clicks": 24,
+     "conversions": 4
+    },
+    {
+     "data": "2026-09-06",
+     "spend": 14.04,
+     "impressions": 1397,
+     "clicks": 24,
+     "conversions": 5
+    },
+    {
+     "data": "2026-09-07",
+     "spend": 13.7,
+     "impressions": 1451,
+     "clicks": 19,
+     "conversions": 3
+    },
+    {
+     "data": "2026-09-08",
+     "spend": 15.03,
+     "impressions": 1673,
+     "clicks": 26,
+     "conversions": 2
+    },
+    {
+     "data": "2026-09-09",
+     "spend": 15.36,
+     "impressions": 1588,
+     "clicks": 21,
+     "conversions": 4
+    },
+    {
+     "data": "2026-09-10",
+     "spend": 18.62,
+     "impressions": 2019,
+     "clicks": 23,
+     "conversions": 6
+    },
+    {
+     "data": "2026-09-11",
+     "spend": 14.96,
+     "impressions": 1286,
+     "clicks": 10,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-12",
+     "spend": 15.65,
+     "impressions": 1120,
+     "clicks": 10,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-13",
+     "spend": 18.8,
+     "impressions": 1342,
+     "clicks": 17,
+     "conversions": 2
+    },
+    {
+     "data": "2026-09-14",
+     "spend": 2.67,
+     "impressions": 185,
+     "clicks": 4,
+     "conversions": 1
+    }
+   ]
+  },
+  {
+   "ad": "120243498746060039",
+   "nome": "ADS - VIDEO - SEU LAR MERECE O MELHOR",
+   "politica": {
+    "cplAlerta": 3.39,
+    "cplCritico": 4.84,
+    "convMin": 8
+   },
+   "serie": [
+    {
+     "data": "2026-08-26",
+     "spend": 0.02,
+     "impressions": 8,
+     "clicks": 0,
+     "conversions": 0
+    },
+    {
+     "data": "2026-08-28",
+     "spend": 0.05,
+     "impressions": 12,
+     "clicks": 1,
+     "conversions": 0
+    },
+    {
+     "data": "2026-08-29",
+     "spend": 0.01,
+     "impressions": 2,
+     "clicks": 0,
+     "conversions": 0
+    },
+    {
+     "data": "2026-08-30",
+     "spend": 0.02,
+     "impressions": 5,
+     "clicks": 0,
+     "conversions": 0
+    },
+    {
+     "data": "2026-08-31",
+     "spend": 0.05,
+     "impressions": 9,
+     "clicks": 0,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-02",
+     "spend": 0.13,
+     "impressions": 12,
+     "clicks": 2,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-03",
+     "spend": 0.13,
+     "impressions": 17,
+     "clicks": 0,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-04",
+     "spend": 0.04,
+     "impressions": 8,
+     "clicks": 0,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-05",
+     "spend": 0.69,
+     "impressions": 95,
+     "clicks": 7,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-07",
+     "spend": 0.34,
+     "impressions": 55,
+     "clicks": 2,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-11",
+     "spend": 15.73,
+     "impressions": 929,
+     "clicks": 35,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-12",
+     "spend": 14.68,
+     "impressions": 1441,
+     "clicks": 61,
+     "conversions": 1
+    },
+    {
+     "data": "2026-09-13",
+     "spend": 11.64,
+     "impressions": 1342,
+     "clicks": 57,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-14",
+     "spend": 1.19,
+     "impressions": 157,
+     "clicks": 6,
+     "conversions": 0
+    }
+   ]
+  },
+  {
+   "ad": "120247743164000532",
+   "nome": "ADS - VIDEO - CONSTRUINDO OU REFORMANDO",
+   "politica": {
+    "cplAlerta": 10.45,
+    "cplCritico": 14.93,
+    "convMin": 8
+   },
+   "serie": [
+    {
+     "data": "2026-08-26",
+     "spend": 12.86,
+     "impressions": 921,
+     "clicks": 16,
+     "conversions": 3
+    },
+    {
+     "data": "2026-08-27",
+     "spend": 11.87,
+     "impressions": 1010,
+     "clicks": 14,
+     "conversions": 1
+    },
+    {
+     "data": "2026-08-28",
+     "spend": 12.36,
+     "impressions": 916,
+     "clicks": 11,
+     "conversions": 4
+    },
+    {
+     "data": "2026-08-29",
+     "spend": 10.07,
+     "impressions": 808,
+     "clicks": 15,
+     "conversions": 4
+    },
+    {
+     "data": "2026-08-30",
+     "spend": 10.2,
+     "impressions": 800,
+     "clicks": 8,
+     "conversions": 0
+    },
+    {
+     "data": "2026-08-31",
+     "spend": 12.67,
+     "impressions": 989,
+     "clicks": 20,
+     "conversions": 2
+    },
+    {
+     "data": "2026-09-01",
+     "spend": 13.04,
+     "impressions": 783,
+     "clicks": 14,
+     "conversions": 1
+    },
+    {
+     "data": "2026-09-02",
+     "spend": 11.97,
+     "impressions": 551,
+     "clicks": 12,
+     "conversions": 3
+    },
+    {
+     "data": "2026-09-03",
+     "spend": 12.66,
+     "impressions": 741,
+     "clicks": 16,
+     "conversions": 3
+    },
+    {
+     "data": "2026-09-04",
+     "spend": 10.0,
+     "impressions": 862,
+     "clicks": 11,
+     "conversions": 1
+    },
+    {
+     "data": "2026-09-05",
+     "spend": 9.64,
+     "impressions": 812,
+     "clicks": 13,
+     "conversions": 1
+    },
+    {
+     "data": "2026-09-06",
+     "spend": 11.94,
+     "impressions": 911,
+     "clicks": 19,
+     "conversions": 2
+    },
+    {
+     "data": "2026-09-07",
+     "spend": 12.42,
+     "impressions": 1229,
+     "clicks": 16,
+     "conversions": 2
+    },
+    {
+     "data": "2026-09-08",
+     "spend": 12.67,
+     "impressions": 889,
+     "clicks": 17,
+     "conversions": 1
+    },
+    {
+     "data": "2026-09-09",
+     "spend": 11.82,
+     "impressions": 673,
+     "clicks": 15,
+     "conversions": 1
+    },
+    {
+     "data": "2026-09-10",
+     "spend": 13.52,
+     "impressions": 1048,
+     "clicks": 17,
+     "conversions": 5
+    },
+    {
+     "data": "2026-09-11",
+     "spend": 13.51,
+     "impressions": 1021,
+     "clicks": 15,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-12",
+     "spend": 13.23,
+     "impressions": 871,
+     "clicks": 10,
+     "conversions": 2
+    },
+    {
+     "data": "2026-09-13",
+     "spend": 15.65,
+     "impressions": 808,
+     "clicks": 12,
+     "conversions": 3
+    },
+    {
+     "data": "2026-09-14",
+     "spend": 2.98,
+     "impressions": 116,
+     "clicks": 3,
+     "conversions": 1
+    }
+   ]
+  },
+  {
+   "ad": "120247813470620434",
+   "nome": "ADS - VIDEO - TERMOGENICO — Cópia",
+   "politica": {
+    "cplAlerta": 8.89,
+    "cplCritico": 12.7,
+    "convMin": 8
+   },
+   "serie": [
+    {
+     "data": "2026-08-26",
+     "spend": 8.54,
+     "impressions": 761,
+     "clicks": 15,
+     "conversions": 1
+    },
+    {
+     "data": "2026-08-27",
+     "spend": 6.11,
+     "impressions": 308,
+     "clicks": 9,
+     "conversions": 3
+    },
+    {
+     "data": "2026-08-28",
+     "spend": 0.01,
+     "impressions": 1,
+     "clicks": 0,
+     "conversions": 0
+    },
+    {
+     "data": "2026-08-29",
+     "spend": 5.04,
+     "impressions": 290,
+     "clicks": 7,
+     "conversions": 1
+    },
+    {
+     "data": "2026-09-01",
+     "spend": 2.21,
+     "impressions": 106,
+     "clicks": 2,
+     "conversions": 2
+    },
+    {
+     "data": "2026-09-03",
+     "spend": 10.43,
+     "impressions": 363,
+     "clicks": 14,
+     "conversions": 3
+    },
+    {
+     "data": "2026-09-04",
+     "spend": 0.12,
+     "impressions": 10,
+     "clicks": 0,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-05",
+     "spend": 2.04,
+     "impressions": 116,
+     "clicks": 1,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-08",
+     "spend": 23.62,
+     "impressions": 1298,
+     "clicks": 24,
+     "conversions": 3
+    },
+    {
+     "data": "2026-09-09",
+     "spend": 18.91,
+     "impressions": 1171,
+     "clicks": 23,
+     "conversions": 0
+    },
+    {
+     "data": "2026-09-10",
+     "spend": 25.69,
+     "impressions": 1668,
+     "clicks": 41,
+     "conversions": 8
+    },
+    {
+     "data": "2026-09-11",
+     "spend": 13.57,
+     "impressions": 977,
+     "clicks": 16,
+     "conversions": 4
+    },
+    {
+     "data": "2026-09-12",
+     "spend": 9.04,
+     "impressions": 621,
+     "clicks": 7,
+     "conversions": 1
+    }
+   ]
+  }
+ ]
+}
