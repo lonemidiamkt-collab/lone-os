@@ -34,7 +34,7 @@ const idDoEmail = (email: string) => email.split("@")[0].toLowerCase().replace(/
 export async function GET() {
   const { data, error } = await supabaseAdmin
     .from("team_members")
-    .select("id, name, email, role, initials")
+    .select("id, name, email, role, initials, whatsapp_phone")
     .eq("is_active", true)
     .order("role")
     .order("name");
@@ -55,6 +55,9 @@ export async function GET() {
       color: COR[m.role as string] ?? "text-[#3b6ff5]",
       email: m.email as string,
       teamMemberId: m.id as string,
+      // O roster é público (tela de login). O número inteiro não sai daqui: só se existe, e o
+      // final, para a Gestão da Equipe mostrar quem está mudo para o agente.
+      whatsappFinal: m.whatsapp_phone ? String(m.whatsapp_phone).slice(-4) : null,
     })),
   });
 }

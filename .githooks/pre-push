@@ -1,0 +1,13 @@
+#!/bin/sh
+# Portão de saída local — a CI que não depende do escopo do token do GitHub.
+# .github/workflows/ci.yml está pronto na branch ci/github-actions, mas o PAT fine-grained não tem
+# permissão de "Workflows" e o push do arquivo é recusado. Enquanto isso, o mesmo gate roda AQUI,
+# antes de cada push: tipos + testes. Falhou, não sobe.
+#   ligar:   git config core.hooksPath .githooks
+#   pular:   git push --no-verify   (só quando souber exatamente por quê)
+set -e
+echo "── pre-push: tsc ──"
+npx tsc --noEmit
+echo "── pre-push: vitest ──"
+npx vitest run --reporter=dot
+echo "── pre-push: ok ──"

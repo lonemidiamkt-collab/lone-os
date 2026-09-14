@@ -26,6 +26,11 @@
 
 ## Regras obrigatórias de Git
 
+### Portão de push (tipos + testes)
+`.githooks/pre-push` roda `tsc --noEmit` e `vitest run` antes de todo push (é a CI enquanto o
+token do GitHub não tem escopo de Workflows). Clone novo: `git config core.hooksPath .githooks`.
+`git push --no-verify` só sabendo exatamente por quê.
+
 ### Arquivos não rastreados (CRÍTICO)
 Antes de qualquer deploy ou ao final de qualquer tarefa que crie arquivos novos,
 rodar OBRIGATORIAMENTE:

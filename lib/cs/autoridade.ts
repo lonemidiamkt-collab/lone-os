@@ -92,6 +92,17 @@ export async function quemEh(authorJid?: string | null): Promise<Autor | null> {
   return null;
 }
 
+/**
+ * Números da equipe para o inbound decidir "mensagem da Lone nunca vira demanda". A fonte é
+ * team_members; o .env (CS_LONE_TEAM_JIDS) entra como transição enquanto existir no container —
+ * quando ele sair do compose, esta lista passa a ser só o banco, sem mudar código.
+ */
+export async function numerosDaEquipe(): Promise<string[]> {
+  const t = await tabela().catch(() => new Map<string, Autor>());
+  const doEnv = (process.env.CS_LONE_TEAM_JIDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  return [...new Set([...t.keys(), ...doEnv])];
+}
+
 /** Atalho para o inbound: o remetente pode executar uma ação de nível C (ou acima)? */
 export async function podeAgir(authorJid: string | null | undefined, nivel: Nivel = "C"): Promise<{ ok: boolean; autor: Autor | null }> {
   const autor = await quemEh(authorJid);

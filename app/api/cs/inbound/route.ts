@@ -13,7 +13,7 @@ import { ehSoRecibo } from "@/lib/cs/recibo";
 import { deveOuvir, deveFalar, abreJanela, type SinaisDoPapo } from "@/lib/cs/porta-do-papo";
 import { ehPalpiteSobreSistema, ehFillerComNome, RESPOSTA_SEM_VISAO_DO_PAINEL } from "@/lib/cs/palpite";
 import { proporRegra, decidirRegra } from "@/lib/cs/regras-propostas";
-import { podeAgir } from "@/lib/cs/autoridade";
+import { podeAgir, numerosDaEquipe } from "@/lib/cs/autoridade";
 import { comExecucao, definirAtor } from "@/lib/obs/correlacao";
 
 // ── TODA saída deste arquivo passa a ser ETIQUETADA ─────────────────────────
@@ -111,10 +111,9 @@ function authorized(req: NextRequest): boolean {
 }
 
 const splitEnv = (v?: string) => (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-const teamJids = () => splitEnv(process.env.CS_LONE_TEAM_JIDS);
 
 // NOMES da equipe Lone (Julio, Roberto, Carlos…) pro A1 saber quem NÃO é cliente — o classifier
-// recebia teamJids() (JIDs de WhatsApp, ilegíveis pro LLM). Puxa de team_members (fonte de verdade),
+// recebia equipeJids (JIDs de WhatsApp, ilegíveis pro LLM). Puxa de team_members (fonte de verdade),
 // cacheado 10 min (raramente muda; não vale um SELECT por mensagem). Fallback: CS_TEAM_NAMES do env.
 let _nomesEquipeCache: { nomes: string[]; at: number } | null = null;
 async function nomesEquipeLone(): Promise<string[]> {
@@ -910,6 +909,8 @@ async function processarInbound(req: NextRequest) {
   const msg = parseUpsert(payload);
   if (!msg) return NextResponse.json({ ok: true, skip: "não é mensagem de grupo com texto" });
   if (msg.fromMe) return NextResponse.json({ ok: true, skip: "própria mensagem" });
+  // Quem é da equipe vem de team_members (a mesma fonte da autoridade), não mais só do .env.
+  const equipeJids = await numerosDaEquipe();
 
   // Cap defensivo: texto gigante (colado/encaminhado) viraria milhares de tokens em cada estágio.
   if (msg.text.length > 4000) msg.text = msg.text.slice(0, 4000);
@@ -941,7 +942,7 @@ async function processarInbound(req: NextRequest) {
     corpusGravado = true;
     void supabaseAdmin.from("cs_message_corpus").insert({
       group_jid: msg.groupJid,
-      is_team: isLoneTeam(msg.authorJid, teamJids()),
+      is_team: isLoneTeam(msg.authorJid, equipeJids),
       author_jid: msg.authorJid ?? null,
       author_name: msg.authorName ?? null,
       text: texto.slice(0, 2000),
@@ -964,13 +965,13 @@ async function processarInbound(req: NextRequest) {
     // Resposta de onboarding por NOTA DE VOZ (comum em briefing longo): transcreve AQUI — o bloco
     // geral de transcrição roda depois da allowlist, e grupo em onboarding pode nem estar nela;
     // sem isso o áudio sumia em silêncio e a sessão travava no mesmo passo.
-    if (sess && msg.isAudio && !msg.text && !isLoneTeam(msg.authorJid, teamJids()) && isOpenAIConfigured()) {
+    if (sess && msg.isAudio && !msg.text && !isLoneTeam(msg.authorJid, equipeJids) && isOpenAIConfigured()) {
       const media = await csFetchMediaBase64(payload.data ?? {});
       if (media.base64 && media.base64.length <= 8_000_000) {
         msg.text = await transcribeAudio(media.base64, media.mimetype);
       }
     }
-    if (sess && !isLoneTeam(msg.authorJid, teamJids()) && !isTrivial(msg.text)) {
+    if (sess && !isLoneTeam(msg.authorJid, equipeJids) && !isTrivial(msg.text)) {
       const cliente = (sess.cliente_nome as string) || "cliente";
       const answers = ((sess.answers as Array<{ pergunta: string; resposta: string }>) ?? []);
       const step = (sess.step as number) ?? 0;
@@ -2519,7 +2520,7 @@ async function processarInbound(req: NextRequest) {
   // ─── Mensagem de cliente: A0 → A1 → A3 → sugere ───
   // SANDBOX de teste: no grupo de teste, a msg da equipe É tratada como pedido (pra testar o fluxo).
   const sandbox = ehSandbox(msg.groupJid);
-  if (!sandbox && (isLoneTeam(msg.authorJid, teamJids()) || ehNomeEquipeLone(msg.authorName))) {
+  if (!sandbox && (isLoneTeam(msg.authorJid, equipeJids) || ehNomeEquipeLone(msg.authorName))) {
     // O time postou algo no grupo do cliente. Se for IMAGEM, PODE ser a arte sendo enviada. Antes de
     // avançar o card, DESCREVE a imagem (visão) — só avança se for conteúdo real (não meme/print/
     // comprovante) e houver UM card entregue RECENTEMENTE (guarda contra avanço cego — VIS-3).

@@ -13,6 +13,8 @@ export interface UserProfile {
   color: string;
   email: string;
   teamMemberId?: string; // UUID from team_members table
+  /** Últimos 4 dígitos do WhatsApp cadastrado (null = a pessoa é MUDA para o agente). */
+  whatsappFinal?: string | null;
 }
 
 // LISTA DE RESERVA — a de verdade vem de /api/team/roster (tabela team_members).

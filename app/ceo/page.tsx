@@ -14,7 +14,7 @@ import {
   Eye, EyeOff, Shield, Download, Users, CheckCircle, Target,
   Instagram, Palette, Zap, UserPlus, Trash2, Edit3, Save, X,
   KeyRound, Mail, UserCog, AlertCircle, ChevronRight,
-  Calendar as CalendarIcon, ShieldCheck,
+  Calendar as CalendarIcon, ShieldCheck, Smartphone,
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -225,7 +225,10 @@ export default function CEOPage() {
   ];
 
   interface TeamMember {
+    /** UUID de team_members — é o que /api/team (PATCH) espera. */
     id: string;
+    /** id legível derivado do e-mail ("julio"): chave do avatar e do perfil de login. */
+    slug: string;
     name: string;
     email: string;
     role: Role;
@@ -233,20 +236,37 @@ export default function CEOPage() {
     password: string;
     active: boolean;
     createdAt: string;
+    /** Últimos 4 do WhatsApp cadastrado; null = mudo para o agente (nenhum comando dele executa). */
+    whatsappFinal?: string | null;
   }
 
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() =>
-    profiles.map((p) => ({
-      id: p.id,
-      name: p.name,
-      email: p.email,
-      role: p.role,
-      initials: p.initials,
-      password: "1234",
-      active: true,
-      createdAt: "2026-01-01",
-    }))
-  );
+  // ID CERTO PARA O SERVIDOR. A lista usava p.id (o slug do e-mail, "julio") e mandava isso ao
+  // PATCH /api/team, que filtra por UUID — editar nome/função ou desativar alguém carregado do
+  // banco dava "invalid input syntax for type uuid" e "NÃO salvos". Só membro recém-criado na
+  // mesma sessão (que vinha com UUID) salvava.
+  const perfilParaMembro = useCallback((p: (typeof profiles)[number]): TeamMember => ({
+    id: p.teamMemberId ?? p.id,
+    slug: p.id,
+    name: p.name,
+    email: p.email,
+    role: p.role,
+    initials: p.initials,
+    password: "1234",
+    active: true,
+    createdAt: "2026-01-01",
+    whatsappFinal: p.whatsappFinal ?? null,
+  }), []);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => profiles.map(perfilParaMembro));
+  // A equipe de verdade chega depois do primeiro render (roster). Quando chega, substitui a lista
+  // de reserva — mantendo quem foi adicionado/desativado nesta sessão e não está no roster.
+  useEffect(() => {
+    if (!profiles.some((p) => p.teamMemberId)) return;
+    setTeamMembers((prev) => {
+      const doRoster = profiles.map(perfilParaMembro);
+      const emails = new Set(doRoster.map((m) => m.email));
+      return [...doRoster.map((m) => ({ ...m, active: prev.find((x) => x.email === m.email)?.active ?? true })), ...prev.filter((m) => !emails.has(m.email))];
+    });
+  }, [profiles, perfilParaMembro]);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -257,9 +277,12 @@ export default function CEOPage() {
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState<Role>("social");
   const [newPassword, setNewPassword] = useState("1234");
+  const [newWhatsapp, setNewWhatsapp] = useState("");
 
   // Edit form
   const [editName, setEditName] = useState("");
+  // WhatsApp da pessoa = credencial dela perante o agente. Vazio = mantém o que está.
+  const [editWhatsapp, setEditWhatsapp] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editRole, setEditRole] = useState<Role>("social");
   const [editAvatar, setEditAvatar] = useState<AvatarType>("shield");
@@ -288,23 +311,26 @@ export default function CEOPage() {
         body: JSON.stringify({
           name: newName.trim(), email: newEmail.trim().toLowerCase(),
           role: newRole, password: newPassword,
+          whatsapp_phone: newWhatsapp.trim() || null,
         }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { setErroEquipe(d?.error ?? `Falha (HTTP ${r.status})`); return; }
       setTeamMembers((prev) => [...prev, {
-        id: d.member.id, name: d.member.name, email: d.member.email, role: d.member.role,
+        id: d.member.id, slug: String(d.member.email).split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, ""),
+        name: d.member.name, email: d.member.email, role: d.member.role,
         initials: d.member.initials, password: "", active: true,
         createdAt: new Date().toISOString().slice(0, 10),
+        whatsappFinal: d.member.whatsapp_phone ? String(d.member.whatsapp_phone).slice(-4) : null,
       } as TeamMember]);
-      setNewName(""); setNewEmail(""); setNewRole("social"); setNewPassword("");
+      setNewName(""); setNewEmail(""); setNewRole("social"); setNewPassword(""); setNewWhatsapp("");
       setShowAddForm(false);
     } catch {
       setErroEquipe("Não consegui falar com o servidor. Tenta de novo.");
     } finally {
       setSalvandoEquipe(false);
     }
-  }, [newName, newEmail, newRole, newPassword]);
+  }, [newName, newEmail, newRole, newPassword, newWhatsapp]);
 
   const handleStartEdit = useCallback((member: TeamMember) => {
     setEditingId(member.id);
@@ -312,6 +338,7 @@ export default function CEOPage() {
     setEditEmail(member.email);
     setEditRole(member.role);
     setEditPassword(""); // começa VAZIO — "deixe vazio para manter". Pré-preencher confundia e quebrava a troca.
+    setEditWhatsapp("");
   }, []);
 
   const handleSaveEdit = useCallback(async () => {
@@ -331,19 +358,25 @@ export default function CEOPage() {
           : m
       )
     );
-    // Save avatar
-    setUserAvatar(editingId, editAvatar);
+    // Save avatar (chave = slug do perfil, o mesmo que o Header usa para mostrar)
+    setUserAvatar(teamMembers.find((m) => m.id === editingId)?.slug ?? editingId, editAvatar);
 
     // NOME E PAPEL AGORA PERSISTEM. Antes só a senha ia pro servidor: trocar o papel de alguém
     // parecia funcionar, e voltava ao recarregar — com a pessoa seguindo com o acesso antigo.
     {
       const r = await authedFetch("/api/team", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editingId, name: editName.trim(), role: editRole }),
+        body: JSON.stringify({
+          id: editingId, name: editName.trim(), role: editRole,
+          ...(editWhatsapp.trim() ? { whatsapp_phone: editWhatsapp.trim() } : {}),
+        }),
       }).catch(() => null);
+      const d = r ? await r.json().catch(() => ({})) : {};
       if (!r?.ok) {
-        const d = r ? await r.json().catch(() => ({})) : {};
         setErroEquipe(`Nome/função NÃO salvos: ${d?.error ?? "falha no servidor"}`);
+      } else if (d?.member) {
+        const wa = d.member.whatsapp_phone ? String(d.member.whatsapp_phone).slice(-4) : null;
+        setTeamMembers((prev) => prev.map((m) => (m.id === editingId ? { ...m, whatsappFinal: wa } : m)));
       }
     }
     // Senha nova → atualiza DE VERDADE no Supabase Auth (o campo antes só mexia no estado local
@@ -365,7 +398,7 @@ export default function CEOPage() {
       }
     }
     setEditingId(null);
-  }, [editingId, editName, editEmail, editRole, editPassword, editAvatar]);
+  }, [editingId, editName, editEmail, editRole, editPassword, editAvatar, editWhatsapp, teamMembers]);
 
   const handleToggleActive = useCallback(async (id: string) => {
     const atual = teamMembers.find((m) => m.id === id);
@@ -1252,6 +1285,18 @@ export default function CEOPage() {
                       />
                     </div>
                     <div>
+                      <label className="text-xs text-muted-foreground font-medium block mb-1.5">WhatsApp</label>
+                      <input
+                        id="novo-membro-whatsapp"
+                        value={newWhatsapp}
+                        onChange={(e) => setNewWhatsapp(e.target.value)}
+                        placeholder="(22) 99999-9999"
+                        inputMode="tel"
+                        className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-1">É por ele que o agente reconhece a pessoa. Sem WhatsApp, os comandos dela não executam.</p>
+                    </div>
+                    <div>
                       <label className="text-xs text-muted-foreground font-medium block mb-1.5">Função *</label>
                       <select
                         value={newRole}
@@ -1324,6 +1369,19 @@ export default function CEOPage() {
                               value={editEmail}
                               onChange={(e) => setEditEmail(e.target.value)}
                               type="email"
+                              className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground font-medium block mb-1.5">
+                              WhatsApp {member.whatsappFinal ? <span className="text-muted-foreground/70">(cadastrado: …{member.whatsappFinal})</span> : <span className="text-lone-warning">(sem número — mudo para o agente)</span>}
+                            </label>
+                            <input
+                              id={`editar-whatsapp-${member.id}`}
+                              value={editWhatsapp}
+                              onChange={(e) => setEditWhatsapp(e.target.value)}
+                              placeholder={member.whatsappFinal ? "deixe vazio para manter" : "(22) 99999-9999"}
+                              inputMode="tel"
                               className="w-full bg-muted border border-border rounded-lg px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
                             />
                           </div>
@@ -1408,6 +1466,9 @@ export default function CEOPage() {
                         </div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
                           <span className="flex items-center gap-1"><Mail size={10} /> {member.email}</span>
+                          {member.whatsappFinal
+                            ? <span className="flex items-center gap-1"><Smartphone size={10} /> …{member.whatsappFinal}</span>
+                            : <span className="flex items-center gap-1 text-lone-warning" title="Sem WhatsApp cadastrado: o agente não reconhece esta pessoa — nenhum comando dela executa."><Smartphone size={10} /> sem WhatsApp — mudo para o agente</span>}
                           <span className="flex items-center gap-1"><RoleIcon size={10} /> {roleLabel}</span>
                           <span className="flex items-center gap-1"><KeyRound size={10} /> ••••</span>
                         </div>

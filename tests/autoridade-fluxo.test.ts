@@ -55,7 +55,7 @@ function consulta(tabela: string) {
 vi.mock("@/lib/supabase/server", () => ({ supabaseAdmin: { from: (t: string) => consulta(t) } }));
 vi.mock("@/lib/cs/notify", () => ({ csSendGroupText: async () => ({ ok: true, id: "msg-1" }) }));
 
-const { quemEh, podeAgir, _limparCacheAutoridade } = await import("@/lib/cs/autoridade");
+const { quemEh, podeAgir, numerosDaEquipe, _limparCacheAutoridade } = await import("@/lib/cs/autoridade");
 const { proporRegra, decidirRegra } = await import("@/lib/cs/regras-propostas");
 
 const JULIO = "5522981712589@s.whatsapp.net";
@@ -93,6 +93,14 @@ describe("quem pode agir — pelo número, não pelo grupo", () => {
     expect(await quemEh("5521981712589@s.whatsapp.net")).toBeNull();
     // E o nono dígito não separa a pessoa dela mesma: 55 22 81712589 (sem o 9) é o Julio.
     expect((await quemEh("552281712589@s.whatsapp.net"))?.nome).toBe("Julio");
+  });
+
+  it("a lista da equipe (quem nunca vira demanda) sai do banco; o .env só soma enquanto existir", async () => {
+    expect((await numerosDaEquipe()).sort()).toEqual(["552281701631", "552281712589", "552288193773"]);
+    process.env.CS_LONE_TEAM_JIDS = "5522977770000";
+    expect(await numerosDaEquipe()).toContain("5522977770000");
+    delete process.env.CS_LONE_TEAM_JIDS;
+    expect(await numerosDaEquipe()).not.toContain("5522977770000"); // env fora do compose = lista só do banco
   });
 
   it("reserva do .env é transitória: entra como 'social', com fonte marcada e aviso no log", async () => {

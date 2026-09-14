@@ -21,6 +21,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { validarWhatsapp } from "@/lib/team/whatsapp";
 
 const PAPEIS = ["admin", "manager", "traffic", "social", "designer", "comercial"] as const;
 type Papel = (typeof PAPEIS)[number];
@@ -60,6 +61,12 @@ export async function POST(req: NextRequest) {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return NextResponse.json({ error: "e-mail inválido" }, { status: 400 });
   if (!PAPEIS.includes(role)) return NextResponse.json({ error: `papel deve ser um de: ${PAPEIS.join(", ")}` }, { status: 400 });
   if (password.length < 6) return NextResponse.json({ error: "senha inicial precisa de ao menos 6 caracteres" }, { status: 400 });
+  const wa = validarWhatsapp(body?.whatsapp_phone);
+  if (!wa.ok) return NextResponse.json({ error: wa.erro }, { status: 400 });
+  if (wa.numero) {
+    const { data: dono } = await supabaseAdmin.from("team_members").select("name").eq("whatsapp_phone", wa.numero).maybeSingle();
+    if (dono) return NextResponse.json({ error: `esse WhatsApp já é de ${dono.name}` }, { status: 409 });
+  }
 
   const { data: jaTem } = await supabaseAdmin
     .from("team_members").select("id, is_active").eq("email", email).maybeSingle();
@@ -81,8 +88,8 @@ export async function POST(req: NextRequest) {
 
   const { data: membro, error: dbErr } = await supabaseAdmin
     .from("team_members")
-    .insert({ name, email, role, initials: iniciais(name), is_active: true })
-    .select("id, name, email, role, initials, is_active")
+    .insert({ name, email, role, initials: iniciais(name), is_active: true, whatsapp_phone: wa.numero })
+    .select("id, name, email, role, initials, is_active, whatsapp_phone")
     .single();
 
   if (dbErr) {
@@ -118,12 +125,24 @@ export async function PATCH(req: NextRequest) {
   }
   if (typeof body?.is_active === "boolean") patch.is_active = body.is_active;
   if (body?.unavailable_until !== undefined) patch.unavailable_until = body.unavailable_until;
+  // WhatsApp da pessoa = a credencial dela perante o agente (lib/cs/autoridade.ts): quem manda
+  // "Lone, cria a demanda" só executa se o número estiver aqui. Vazio apaga; inválido recusa.
+  if (body?.whatsapp_phone !== undefined) {
+    const v = validarWhatsapp(body.whatsapp_phone);
+    if (!v.ok) return NextResponse.json({ error: v.erro }, { status: 400 });
+    if (v.numero) {
+      const { data: dono } = await supabaseAdmin.from("team_members").select("id, name")
+        .eq("whatsapp_phone", v.numero).neq("id", id).maybeSingle();
+      if (dono) return NextResponse.json({ error: `esse WhatsApp já é de ${dono.name}` }, { status: 409 });
+    }
+    patch.whatsapp_phone = v.numero;
+  }
 
   if (!Object.keys(patch).length) return NextResponse.json({ error: "nada pra alterar" }, { status: 400 });
 
   const { data, error } = await supabaseAdmin
     .from("team_members").update(patch).eq("id", id)
-    .select("id, name, email, role, initials, is_active, unavailable_until").single();
+    .select("id, name, email, role, initials, is_active, unavailable_until, whatsapp_phone").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
