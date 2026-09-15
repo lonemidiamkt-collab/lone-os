@@ -23,6 +23,7 @@ interface PortalStats {
   total_accesses: number;
   last_accessed_at: string | null;
 }
+interface Prontidao { pronto: boolean; status: string; itens: { chave: string; ok: boolean; texto: string }[] }
 
 export default function PortalManagementCard({ client, onUpdate }: Props) {
   const [uiState, setUiState]           = useState<UIState>("idle");
@@ -35,6 +36,7 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
   const [welcomeMsg, setWelcomeMsg]     = useState(client.portalWelcomeMessage ?? "");
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSaved, setSettingsSaved]   = useState(false);
+  const [prontidao, setProntidao]           = useState<Prontidao | null>(null);
 
   const token   = client.publicReportToken;
   const revoked = !!client.publicReportTokenRevokedAt;
@@ -54,6 +56,14 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
         hour: "2-digit", minute: "2-digit",
       })
     : null;
+
+  // O que o cliente vai ver — antes de mandar o link (JP Barbearia abriu vazio em 15/09).
+  useEffect(() => {
+    if (!active) { setProntidao(null); return; }
+    let vivo = true;
+    authedFetch(`/api/clients/${client.id}/portal-prontidao`).then(async (r) => { const j = await r.json().catch(() => null); if (vivo && r.ok && j) setProntidao(j as Prontidao); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [active, client.id]);
 
   // QR code — gerado client-side via qrcode lib
   useEffect(() => {
@@ -144,6 +154,7 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
   }
 
   async function copyWhatsAppMessage() {
+    if (prontidao && !prontidao.pronto && !window.confirm("O portal deste cliente vai abrir VAZIO (sem anúncios, sem Instagram, sem artes). Copiar a mensagem mesmo assim?")) return;
     if (!portalUrl) return;
     const phone = whatsapp || client.whatsappTeamPhone || "5522981530700";
     const teamLine = `\n\nDúvidas? Fale com a equipe: wa.me/${phone}`;
@@ -195,6 +206,19 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
       {/* ── Token ativo ───────────────────────────────────────────────────── */}
       {active && (
         <div className="space-y-4">
+
+          {/* O que o cliente vai ver */}
+          {prontidao && (
+            <div className={`rounded-lg border px-3 py-2 text-[11px] ${prontidao.pronto ? "border-border bg-surface" : "border-lone-warning-border/40 bg-lone-warning-bg/[0.06]"}`}>
+              <p className={`font-medium ${prontidao.pronto ? "text-foreground" : "text-lone-warning"}`}>
+                {prontidao.pronto ? "O que o cliente vê ao abrir" : "⚠️ O portal vai abrir vazio — não envie ainda"}
+              </p>
+              <ul className="mt-1 space-y-0.5 text-muted-foreground">
+                {prontidao.itens.map((i) => <li key={i.chave}>{i.ok ? "✓" : "✗"} {i.texto}</li>)}
+              </ul>
+              {!prontidao.pronto && prontidao.status === "onboarding" && <p className="mt-1 text-muted-foreground">Cliente em onboarding: o portal mostra a mensagem "estamos começando" e o envio de material — mas resultado, só depois de vincular.</p>}
+            </div>
+          )}
 
           {/* URL + QR code */}
           <div className="flex gap-4 items-start">

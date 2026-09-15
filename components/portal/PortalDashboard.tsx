@@ -125,9 +125,12 @@ interface Props {
   initialData: SnapshotData | null;
   hasAds?: boolean;    // pacote inclui anúncios → mostra tráfego
   hasSocial?: boolean; // pacote inclui social/design → mostra artes entregues + Instagram orgânico
+  hasIg?: boolean;     // Instagram vinculado de verdade (informativo; a seção continua avisando "não conectado" quando há anúncios)
+  comecando?: boolean; // nada vinculado ainda (sem conta de anúncio e sem Instagram) → "estamos começando"
+  desde?: string | null;
 }
 
-export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, hasAds = true, hasSocial = false, aprovacaoLigada = false }: Props) {
+export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, hasAds = true, hasSocial = false, hasIg = false, comecando = false, desde = null, aprovacaoLigada = false }: Props) {
   const [period, setPeriod]         = useState<PeriodKind>("last_week");
   const [data, setData]             = useState<SnapshotData | null>(initialData);
   const [loading, setLoading]       = useState(false);
@@ -285,7 +288,24 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
 
         {/* Crescimento nas redes (Instagram orgânico + Conteúdo entregue) */}
         {hasSocial && view === "social" && (<>
-          <PortalInstagram token={token} clientId={clientId} />
+          {/* Nada vinculado ainda (JP Barbearia, 15/09: link enviado 1 semana após o cadastro e o cliente
+              abriu "Instagram ainda não conectado" + upload). Aqui o cliente lê o que vem, não o que falta. */}
+          {comecando ? (
+            <div className="rounded-2xl px-5 py-5 mb-4 lg:mb-6" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
+              <p className="text-base font-semibold" style={{ color: "#fff" }}>Estamos começando 🚀</p>
+              <p className="text-sm mt-1" style={{ color: "#8b91a1" }}>
+                {desde ? `Sua conta com a Lone foi aberta em ${desde.split("-").reverse().join("/")}. ` : ""}Esta página vai ser o seu painel de resultados — assim que a operação estiver rodando, você acompanha aqui:
+              </p>
+              <ul className="mt-3 space-y-1.5 text-sm" style={{ color: "#c9cdd8" }}>
+                <li>📊 <b>Anúncios</b> — investimento, conversas e custo por conversa, semana a semana</li>
+                <li>📈 <b>Instagram</b> — seguidores, alcance e os posts que mais renderam</li>
+                <li>🎨 <b>Conteúdo</b> — as artes que a equipe entregou para você</li>
+              </ul>
+              <p className="text-sm mt-3" style={{ color: "#8b91a1" }}>Enquanto isso, o que mais ajuda é mandar o material da loja aqui embaixo — logo, fotos, tabela de preço, vídeo.</p>
+            </div>
+          ) : (
+            <PortalInstagram token={token} clientId={clientId} />
+          )}
           <PortalContent token={token} aprovacaoLigada={aprovacaoLigada} />
           <PortalUpload token={token} clientName={clientName} />
         </>)}

@@ -16,7 +16,7 @@ export default async function PortalPage({
   // Valida token
   const { data: client } = await supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, public_report_enabled, public_report_token_revoked_at, service_type, meta_ad_account_id, ig_business_account_id")
+    .select("id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, public_report_enabled, public_report_token_revoked_at, service_type, meta_ad_account_id, ig_business_account_id, status, join_date")
     .eq("public_report_token", token)
     .single();
 
@@ -95,6 +95,9 @@ export default async function PortalPage({
         initialData={initialData}
         hasAds={hasAds}
         hasSocial={hasSocial}
+        hasIg={!!client.ig_business_account_id}
+        comecando={!hasAds && !client.ig_business_account_id}
+        desde={(client.join_date as string) ?? null}
         aprovacaoLigada={process.env.PORTAL_APROVACAO_CLIENTE === "on"}
       />
     </>
