@@ -9,7 +9,7 @@ import { chamar } from "@/lib/api/chamar";
 // O resultado entra no briefing de toda replicação e na prévia de imagem.
 interface Analise { paleta: { hex: string; papel: string }[]; tipografia: string; composicao: string; elementos_recorrentes: string[]; tom_visual: string; o_que_evitar: string[]; resumo: string }
 interface Leitura { id: string; fonte: string; imagens: string[]; analise: Analise; resumo: string | null; created_by: string | null; created_at: string }
-interface Dados { atual: Leitura | null; historico: Leitura[]; artesElegiveis?: number; artesNovas?: number; error?: string }
+interface Dados { atual: Leitura | null; historico: Leitura[]; artesElegiveis?: number; artesNovas?: number; instrucoes?: string; logoOk?: boolean; geracoes?: { total: number; serviu: number; naoServiu: number }; error?: string }
 
 const hexOk = (h: string) => /^#[0-9a-f]{3,8}$/i.test(h.trim());
 
@@ -17,13 +17,25 @@ export default function EstiloVisual({ clientId, podeEditar = true }: { clientId
   const [d, setD] = useState<Dados | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [instrucoes, setInstrucoes] = useState<string>("");
+  const [instrucoesSalvas, setInstrucoesSalvas] = useState<string>("");
+  const [salvandoInstr, setSalvandoInstr] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
     const r = await chamar<Dados>(`/api/clients/${clientId}/estilo-visual`);
     if (!r.ok) { setErro(r.erro); return; }
     setD(r.data ?? null);
+    setInstrucoes(r.data?.instrucoes ?? ""); setInstrucoesSalvas(r.data?.instrucoes ?? "");
   }, [clientId]);
+
+  async function salvarInstrucoes() {
+    setSalvandoInstr(true); setErro(null);
+    const r = await chamar<{ ok?: boolean }>(`/api/clients/${clientId}/estilo-visual`, { instrucoes }, { method: "PATCH" });
+    setSalvandoInstr(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    setInstrucoesSalvas(instrucoes);
+  }
   useEffect(() => { void carregar(); }, [carregar]);
 
   async function enviar(files: FileList | null) {
@@ -75,6 +87,29 @@ export default function EstiloVisual({ clientId, podeEditar = true }: { clientId
         )}
       </div>
       {erro && <p className="mt-2 text-xs text-destructive">{erro}</p>}
+      {d && (
+        <div className="mt-3 rounded-lg border border-border bg-muted/30 p-2.5 text-[11px]">
+          <p className="font-medium text-foreground">O que a IA recebe ao gerar arte deste cliente</p>
+          <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
+            <li>{d.logoOk ? "✓ logo oficial (imagem)" : "✗ logo em PNG/JPG — sem ela a IA inventa símbolo"}</li>
+            <li>{(d.artesElegiveis ?? 0) > 0 ? `✓ ${Math.min(3, d.artesElegiveis ?? 0)} artes recentes como exemplo de estilo` : "✗ nenhuma arte entregue como exemplo"}</li>
+            <li>{a ? "✓ paleta, tipografia e composição lidas" : "✗ estilo ainda não lido"}</li>
+            <li>{instrucoesSalvas ? "✓ instruções fixas da equipe" : "– sem instruções fixas"}</li>
+            <li>✓ textos exatos da referência (transcritos)</li>
+            {d.geracoes && d.geracoes.total > 0 && <li>{d.geracoes.total} geração(ões) · {d.geracoes.serviu} serviu · {d.geracoes.naoServiu} não serviu</li>}
+          </ul>
+          {podeEditar && (
+            <div className="mt-2">
+              <label htmlFor={`instr-${clientId}`} className="text-muted-foreground">Instruções fixas para a IA deste cliente (o que ela erra e a equipe sabe): ex. "logo sempre no canto superior direito", "preço em selo amarelo", "nunca usar foto de pessoa".</label>
+              <textarea id={`instr-${clientId}`} value={instrucoes} onChange={(e) => setInstrucoes(e.target.value)} rows={2} maxLength={1200}
+                className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-[11px] text-foreground outline-none focus:border-primary" />
+              {instrucoes !== instrucoesSalvas && (
+                <button onClick={() => void salvarInstrucoes()} disabled={salvandoInstr} className="mt-1 rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground disabled:opacity-50">{salvandoInstr ? "Salvando…" : "Salvar instruções"}</button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       {!a && d && <p className="mt-3 text-xs text-muted-foreground">{(d.artesElegiveis ?? 0) >= 2 ? `Ainda não lido — o sistema lê sozinho no próximo dia útil às 07:55 (${d.artesElegiveis} artes elegíveis), ou clique em "Ler das artes entregues".` : "Este cliente ainda não tem 2 artes entregues no sistema; até lá, suba prints do Instagram."}</p>}
       {a && (
         <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_auto]">

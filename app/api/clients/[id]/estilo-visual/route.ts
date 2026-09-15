@@ -19,13 +19,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const user = await getServerUser(req);
   if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
   const { id } = await params;
-  const [{ data, error }, { cands, novasDesde }] = await Promise.all([
+  const [{ data, error }, { cands, novasDesde }, { data: cli }, { data: ger }] = await Promise.all([
     supabaseAdmin.from("client_visual_style").select("id, fonte, imagens, analise, resumo, created_by, created_at").eq("client_id", id).order("created_at", { ascending: false }).limit(6),
     candidatasDoCliente(id),
+    supabaseAdmin.from("clients").select("ia_instrucoes, doc_logo").eq("id", id).maybeSingle(),
+    supabaseAdmin.from("ia_geracoes").select("feedback").eq("client_id", id),
   ]);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const atual = data?.[0] ?? null;
-  return NextResponse.json({ atual, historico: (data ?? []).slice(1), artesElegiveis: escolherArtes(cands).length, artesNovas: novasDesde((atual?.created_at as string) ?? null) });
+  const geracoes = { total: (ger ?? []).length, serviu: (ger ?? []).filter((g) => g.feedback === "serviu").length, naoServiu: (ger ?? []).filter((g) => g.feedback === "nao_serviu").length };
+  return NextResponse.json({ atual, historico: (data ?? []).slice(1), artesElegiveis: escolherArtes(cands).length, artesNovas: novasDesde((atual?.created_at as string) ?? null), instrucoes: (cli?.ia_instrucoes as string) ?? "", logoOk: /\.(png|jpe?g|webp)(\?|$)/i.test((cli?.doc_logo as string) ?? ""), geracoes });
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -81,4 +84,16 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { error } = await supabaseAdmin.from("client_visual_style").delete().eq("client_id", id).eq("id", rid);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
+}
+
+// Instruções fixas da equipe para a IA deste cliente (somam ao estilo lido das artes).
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
+  const { id } = await params;
+  const body = await req.json().catch(() => null) as { instrucoes?: string } | null;
+  const instrucoes = String(body?.instrucoes ?? "").trim().slice(0, 1200) || null;
+  const { error } = await supabaseAdmin.from("clients").update({ ia_instrucoes: instrucoes }).eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, instrucoes: instrucoes ?? "" });
 }

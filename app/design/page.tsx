@@ -490,6 +490,13 @@ export default function DesignPage() {
   const [cardToDelete, setCardToDelete] = useState<ContentCard | null>(null);
   const [reqToDelete, setReqToDelete] = useState<DesignRequest | null>(null);
   const [briefingReq, setBriefingReq] = useState<DesignRequest | null>(null);
+  const [gerandoIa, setGerandoIa] = useState(false);
+  const [geracaoIa, setGeracaoIa] = useState<{ id: string; urls: string[] } | null>(null);
+  async function feedbackIa(feedback: "serviu" | "nao_serviu", motivo = "") {
+    if (!geracaoIa?.id) return;
+    const r = await authedFetch(`/api/ia/geracoes/${geracaoIa.id}/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ feedback, motivo }) });
+    if (r.ok) { toast.success(feedback === "serviu" ? "Anotado: serviu." : "Anotado: não serviu — vai calibrar as instruções."); setGeracaoIa(null); } else toast.error("Não consegui anotar.");
+  }
   // Upload de arte direto do modal de briefing
   const briefingUploadInputRef = useRef<HTMLInputElement>(null);
   const [briefingUploading, setBriefingUploading] = useState(false);
@@ -2076,22 +2083,35 @@ export default function DesignPage() {
                 <div className="px-5 pb-5 -mt-1 flex items-center justify-between gap-3">
                   <span className="text-[11px] text-muted-foreground">
                     {dono ? `Demanda de ${dono}${assumida ? " (assumida)" : ""}` : "Cliente sem designer no cadastro"}
-                    {briefingReq.parentAdId && (
-                      // Fase 4 (brief 14/09): variações com elementos travados. Propostas entram como
-                      // referência anexada; o designer revisa e finaliza. Desligado até a sombra aprovar.
+                    {(
+                      // Proposta de arte por IA em QUALQUER demanda, com a identidade do cliente (logo, artes
+                      // recentes, estilo lido, textos exatos). Vira referência anexada; o designer finaliza.
                       <button
+                        disabled={gerandoIa}
                         onClick={async () => {
-                          const r = await authedFetch(`/api/design-requests/${briefingReq.id}/variacoes-ia`, { method: "POST" });
-                          const d = await r.json().catch(() => ({}));
-                          if (!r.ok) { toast.error(d?.error ?? "Não consegui gerar."); return; }
-                          setBriefingReq({ ...briefingReq, attachments: [...(briefingReq.attachments ?? []), ...(d.urls as string[])] });
-                          toast.success(`${(d.urls as string[]).length} variação(ões) anexada(s) como referência.`);
+                          setGerandoIa(true);
+                          try {
+                            const r = await authedFetch(`/api/design-requests/${briefingReq.id}/variacoes-ia`, { method: "POST" });
+                            const d = await r.json().catch(() => ({}));
+                            if (!r.ok) { toast.error(d?.error ?? "Não consegui gerar."); return; }
+                            setBriefingReq({ ...briefingReq, attachments: [...(briefingReq.attachments ?? []), ...(d.urls as string[])] });
+                            setGeracaoIa({ id: d.geracaoId as string, urls: d.urls as string[] });
+                            const e = d.entradas as { logo?: boolean; estilos?: number; textos?: string[] } | undefined;
+                            toast.success(`${(d.urls as string[]).length} proposta(s) anexada(s) — com ${e?.logo ? "logo" : "SEM logo"}, ${e?.estilos ?? 0} artes de estilo, ${e?.textos?.length ?? 0} textos exatos.`);
+                          } finally { setGerandoIa(false); }
                         }}
-                        className="ml-2 rounded-md border border-primary/30 px-2 py-0.5 text-[10px] text-primary hover:bg-primary/10"
-                        title="Gera propostas mantendo os elementos travados do briefing (preço, texto, logo). Vira referência, não entrega."
+                        className="ml-2 rounded-md border border-primary/30 px-2 py-0.5 text-[10px] text-primary hover:bg-primary/10 disabled:opacity-50"
+                        title="Gera propostas com a logo, as artes recentes, o estilo lido e os textos exatos do cliente. Vira referência, não entrega."
                       >
-                        ✨ Gerar variações (IA)
+                        {gerandoIa ? "Gerando (≈30 s)…" : briefingReq.parentAdId ? "✨ Gerar variações (IA)" : "✨ Proposta de arte (IA)"}
                       </button>
+                    )}
+                    {geracaoIa && (
+                      <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                        Serviu?
+                        <button onClick={() => void feedbackIa("serviu")} className="rounded border border-border px-1.5 hover:bg-emerald-500/10" title="A proposta ajudou">👍</button>
+                        <button onClick={() => { const m = window.prompt("O que saiu errado? (ex.: logo errada, cores, texto inventado)") ?? ""; void feedbackIa("nao_serviu", m); }} className="rounded border border-border px-1.5 hover:bg-destructive/10" title="Não ajudou — diga o porquê">👎</button>
+                      </span>
                     )}
                   </span>
                   <button
