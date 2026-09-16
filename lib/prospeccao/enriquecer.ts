@@ -121,6 +121,7 @@ async function gerarDiagnostico(p: ProspectRow, fatos: string[]): Promise<Diagno
     user: `EMPRESA: ${p.nome}\nSEGMENTO: ${p.segmento ?? "—"}\nCIDADE: ${p.cidade ?? "—"}/${p.uf ?? "—"}\n\nFATOS PESQUISADOS:\n${fatos.map((f) => `- ${f}`).join("\n") || "- (poucos fatos)"}`,
     maxTokens: 600, temperature: 0.3, origem: "prospeccao:diagnostico",
   });
+  if (!r.ok && /credit|quota|rate limit|429|5\d\d/i.test(r.error ?? "")) throw new Error(`OpenAI: ${r.error}`);
   if (!r.ok || !r.data) return null;
   const d = r.data;
   if (/fatura/i.test(`${d.por_que_prospectar} ${d.gancho ?? ""} ${d.oportunidades.join(" ")}`)) {
@@ -134,7 +135,7 @@ async function gerarDiagnostico(p: ProspectRow, fatos: string[]): Promise<Diagno
 
 export interface ResumoEnriquecimento { ok: boolean; etapas: string[]; erros: string[]; prospect: ProspectRow }
 
-export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, o: { comWeb?: boolean; comInstagram?: boolean; comWhatsapp?: boolean } = {}): Promise<ResumoEnriquecimento> {
+export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, o: { comWeb?: boolean; comInstagram?: boolean; comWhatsapp?: boolean; comDiagnostico?: boolean } = {}): Promise<ResumoEnriquecimento> {
   const etapas: string[] = [], erros: string[] = [];
   const patch: Record<string, unknown> = {};
   const fontes: Record<string, string> = { ...(pIn.fontes ?? {}) };
@@ -149,7 +150,24 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
   let qsa: { nome: string; qualificacao?: string | null }[] = [];
   let webNome: string | null = null, webCargo: string | null = null, webFonte: string | null = null;
 
-  // 1) Busca web complementar (pode revelar o CNPJ antes da BrasilAPI).
+  // 0) CNPJ já conhecido? Consulta grátis primeiro: MEI e cadastro inativo não são ICP e não
+  //    merecem pesquisa web (era 47% do custo, quase todo em empresa descartada).
+  if (p.cnpj) {
+    const r0 = await consultarCnpj(p.cnpj);
+    if (r0.ok && r0.data) {
+      const porte = (r0.data.porte ?? "").toUpperCase();
+      const situacao = (r0.data.descricao_situacao_cadastral ?? "").toUpperCase();
+      const motivo = /MEI/.test(porte) ? "porte MEI (fatura no máximo R$ 81 mil/ano — fora do ICP)" : situacao && !/ATIVA/.test(situacao) ? `CNPJ ${situacao.toLowerCase()}` : null;
+      if (motivo) {
+        p = await atualizarProspect(p.id, { dados_cnpj: r0.data, porte: r0.data.porte ?? null, razao_social: r0.data.razao_social ?? null, fontes: { ...fontes, porte: "BrasilAPI" } });
+        if (p.estagio !== "fora_icp") p = await transicionar(p, { para: "fora_icp", motivo, patch: { motivo_perda: motivo } });
+        return { ok: true, etapas: ["cnpj", "fora_icp_antes_da_web"], erros: [], prospect: p };
+      }
+    }
+  }
+
+  // 1) Busca web complementar (pode revelar o CNPJ antes da BrasilAPI). Erro da API sobe: o
+  //    prospect fica em `descoberto` e a próxima rodada tenta de novo.
   if (o.comWeb !== false && isOpenAIConfigured()) {
     const w = await pesquisarEmpresa({ nome: p.nome, cidade: p.cidade, uf: p.uf, instagram: p.instagram, site: p.site }, process.env.OPENAI_API_KEY as string);
     if (w) {
@@ -256,17 +274,21 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
   }
   if (dec.alternativas.length) patch.dados_cnpj = { ...((patch.dados_cnpj as object | undefined) ?? p.dados_cnpj ?? {}), decisor_alternativas: dec.alternativas };
 
-  // 7) Diagnóstico
+  // 7) Score ANTES do diagnóstico: o diagnóstico (gpt-4o) só vale para quem pode ser abordado.
   const pParcial = { ...p, ...patch } as ProspectRow;
   if (pParcial.google_avaliacoes) fatos.push(`Google: ${pParcial.google_nota ?? "?"} estrelas, ${pParcial.google_avaliacoes} avaliações`);
   if ((pParcial.unidades ?? 0) >= 2) fatos.push(`${pParcial.unidades} unidades`);
   if (pParcial.distancia_km !== null && pParcial.distancia_km !== undefined) fatos.push(`${pParcial.distancia_km} km de Araruama`);
   if (pParcial.site) fatos.push(`site: ${pParcial.site}`);
   if (pParcial.presenca?.anuncia === true) fatos.push(`anuncia (${pParcial.presenca.anuncia_fonte ?? "fonte web"})`);
-  const diag = await gerarDiagnostico(pParcial, Array.from(new Set(fatos)));
-  if (diag) { patch.diagnostico = diag; etapas.push("diagnostico"); } else if (isOpenAIConfigured()) erros.push("diagnóstico: IA não respondeu");
+  const scPrevio = calcularScore(pParcial, cfg);
 
-  // 8) Score
+  // 8) Diagnóstico só para A/B (ou quando pedido explicitamente — ex.: Roberto promoveu um C).
+  if (scPrevio.score >= cfg.score.minimo || o.comDiagnostico) {
+    const diag = await gerarDiagnostico(pParcial, Array.from(new Set(fatos)));
+    if (diag) { patch.diagnostico = diag; etapas.push("diagnostico"); } else if (isOpenAIConfigured()) erros.push("diagnóstico: IA não respondeu");
+  }
+
   const pComTudo = { ...p, ...patch } as ProspectRow;
   const sc = calcularScore(pComTudo, cfg);
   patch.score = sc.score; patch.classe = sc.classe; patch.score_detalhe = sc.detalhe; patch.faturamento_sinal = sc.faturamento;

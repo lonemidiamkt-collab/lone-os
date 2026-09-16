@@ -117,7 +117,8 @@ async function buscarEmpresasComTermo(q: ConsultaDescoberta, termo: string, apiK
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: MODELO,
-      tools: [{ type: "web_search" }],
+      // "low": menos texto de busca injetado no prompt — era o que inflava 7 mil tokens por chamada.
+      tools: [{ type: "web_search", search_context_size: "low" }],
       input:
         `Pesquise na web: ${query}\n\n` +
         `Liste até ${limite} EMPRESAS REAIS desse tipo ("${q.segmento.nome}") sediadas em ${lugar}/${q.uf} ou muito próximas. ` +
@@ -161,7 +162,7 @@ export async function pesquisarEmpresa(p: { nome: string; cidade?: string | null
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: MODELO,
-      tools: [{ type: "web_search" }],
+      tools: [{ type: "web_search", search_context_size: "low" }],
       input:
         `Pesquise na web sobre a empresa: ${ident}\n\n` +
         `Quero SÓ FATOS VERIFICÁVEIS que a busca mostrar (nunca deduza, nunca invente; use null quando não encontrar):\n` +
@@ -170,17 +171,20 @@ export async function pesquisarEmpresa(p: { nome: string; cidade?: string | null
         `- anuncia: true se houver evidência de anúncios pagos (Biblioteca de Anúncios da Meta, "patrocinado", Google Ads); false só se você encontrou a empresa na Biblioteca de Anúncios sem anúncios ativos; senão null. anuncia_fonte: onde viu.\n` +
         `- proprietario: nome do dono/sócio/diretor citado em site, Instagram, LinkedIn, matéria ou cadastro público; proprietario_cargo; proprietario_fonte (URL ou nome da fonte)\n` +
         `- whatsapp: o CELULAR/WhatsApp da loja (DDD + 9 dígitos) se aparecer no site, Instagram, Google ou anúncio — procure especificamente; instagram (@), site, telefone fixo (com DDD), cnpj (se visível), endereco\n` +
-        `- fatos: até 5 frases curtas com fatos observados e úteis para uma conversa comercial (ex.: "inaugurou 2ª loja em 2025", "faz lives de ofertas toda sexta")\n` +
-        `- fontes: lista das URLs consultadas\n` +
+        `- fatos: até 3 frases curtas com fatos observados e úteis para uma conversa comercial (ex.: "inaugurou 2ª loja em 2025", "faz lives de ofertas toda sexta")\n` +
+        `- fontes: até 3 URLs consultadas\n` +
         `Responda APENAS com um objeto JSON com essas chaves.`,
     }),
     signal: AbortSignal.timeout(180_000),
   });
   const json = await res.json().catch(() => null) as Record<string, unknown> | null;
   const usage = (json?.usage ?? null) as { input_tokens?: number; output_tokens?: number } | null;
-  registrarChamadaLlm({ modelo: MODELO, ms: Date.now() - t0, ok: !!json && res.ok, origem: "prospeccao:pesquisa-empresa", tipo: "responses",
-    usage: usage ? { prompt_tokens: usage.input_tokens, completion_tokens: usage.output_tokens } : null, erro: json && res.ok ? null : "sem resposta" });
-  if (!json || json.error) return null;
+  const erroApi = (json?.error as { message?: string } | undefined)?.message ?? (!json ? "sem resposta" : null);
+  registrarChamadaLlm({ modelo: MODELO, ms: Date.now() - t0, ok: !!json && res.ok && !json.error, origem: "prospeccao:pesquisa-empresa", tipo: "responses",
+    usage: usage ? { prompt_tokens: usage.input_tokens, completion_tokens: usage.output_tokens } : null, erro: erroApi });
+  // Erro da API (sem crédito, limite, 5xx) NÃO é "não achei nada": quem chama deixa o prospect
+  // para a próxima rodada em vez de carimbar como pesquisado.
+  if (erroApi || !json) throw new Error(`OpenAI: ${erroApi ?? "sem resposta"}`);
   const texto = textoDaResposta(json).replace(/```(?:json)?/gi, "").trim();
   const ini = texto.indexOf("{"), fim = texto.lastIndexOf("}");
   if (ini < 0 || fim <= ini) return null;

@@ -18,7 +18,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!p) return NextResponse.json({ error: "prospect não encontrado" }, { status: 404 });
   return comExecucao({ origem: "prospeccao:reenriquecer", ator: gate.user.email }, async () => {
     const cfg = await carregarConfig();
-    const r = await enriquecerProspect(p, cfg);
+    const r = await enriquecerProspect(p, cfg, { comDiagnostico: true });
     return NextResponse.json({ ok: true, etapas: r.etapas, erros: r.erros, prospect: r.prospect });
   });
 }

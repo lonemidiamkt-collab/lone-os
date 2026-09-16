@@ -106,7 +106,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       case "aprovar_fila": {
         // Promove à mão: lead C (enriquecido) → icp_aprovado; icp_aprovado → fila do dia.
         let r = p;
-        if (p.estagio === "enriquecido" || p.estagio === "fora_icp") r = await transicionar(r, { para: "icp_aprovado", motivo: String(body.motivo ?? "aprovado à mão pelo Roberto"), responsavel: quem });
+        // Lead C promovido à mão: gera o diagnóstico (gancho) que o gate exige antes da abordagem.
+        if (!r.diagnostico) {
+          const { enriquecerProspect } = await import("@/lib/prospeccao/enriquecer");
+          try { r = (await enriquecerProspect(r, cfg, { comWeb: false, comInstagram: false, comWhatsapp: false, comDiagnostico: true })).prospect; } catch { /* segue sem diagnóstico; o gate avisa */ }
+        }
+        if (r.estagio === "enriquecido" || r.estagio === "fora_icp") r = await transicionar(r, { para: "icp_aprovado", motivo: String(body.motivo ?? "aprovado à mão pelo Roberto"), responsavel: quem });
         if (r.estagio === "icp_aprovado") {
           const campanha = await campanhaAtual();
           const { ymdSP } = await import("@/lib/prospeccao/tempo");
