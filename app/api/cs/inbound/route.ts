@@ -15,6 +15,7 @@ import { ehPalpiteSobreSistema, ehFillerComNome, RESPOSTA_SEM_VISAO_DO_PAINEL } 
 import { proporRegra, decidirRegra } from "@/lib/cs/regras-propostas";
 import { podeAgir, numerosDaEquipe } from "@/lib/cs/autoridade";
 import { comExecucao, definirAtor } from "@/lib/obs/correlacao";
+import { ehDm, tratarDmProspeccao } from "@/lib/prospeccao/inbound";
 import { ehPedidoPrioridades, formatarTop } from "@/lib/priority/comando";
 import { ehAprovacaoDeProposta, ehRecusaDeProposta } from "@/lib/traffic/brief-segunda";
 import type { Recomendacao } from "@/lib/priority/tipos";
@@ -908,6 +909,20 @@ export async function POST(req: NextRequest) {
 async function processarInbound(req: NextRequest) {
   const payload = (await req.json().catch(() => null)) as EvolutionUpsert | null;
   if (!payload) return NextResponse.json({ ok: true, skip: "corpo inválido" });
+
+  // ─── DM (não é grupo): é o Piloto SDR. O prospect responde no privado do mesmo número; o
+  // parseUpsert abaixo descartaria. Só entra quem já é prospect — DM de desconhecido é ignorada lá.
+  if (ehDm(payload)) {
+    definirAtor("sdr");
+    try {
+      return NextResponse.json(await tratarDmProspeccao(payload));
+    } catch (err) {
+      // 200 mesmo assim: a Evolution reenviaria o webhook e a mensagem já foi reclamada.
+      const erro = err instanceof Error ? err.message : String(err);
+      console.error("[prospeccao/inbound] falhou:", erro);
+      return NextResponse.json({ ok: true, erro });
+    }
+  }
 
   const msg = parseUpsert(payload);
   if (!msg) return NextResponse.json({ ok: true, skip: "não é mensagem de grupo com texto" });

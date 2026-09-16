@@ -8,6 +8,7 @@ import {
   ClipboardCheck, BarChart2, Megaphone, Brain, FileText,
   ChevronLeft, Activity, Layers, AlertTriangle, Settings,
   Users2, Globe, Target, Inbox, ShieldCheck, ShieldAlert, Package, Zap, PanelLeftClose, PanelLeft, Thermometer, Bot, Handshake, CalendarClock, HeartPulse,  BookOpen,
+  Radar, ListOrdered, Building2, MessageSquare, Settings2, BarChart3,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,7 @@ export const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/design",        icon: Palette,         label: "Designer",   roles: ["admin","manager","designer","social"],          hasSecondary: true },
   { href: "/clients",       icon: Users,           label: "Clientes",   roles: ["admin","manager"],                              hasSecondary: true },
   { href: "/crm",           icon: Handshake,       label: "Comercial",  roles: ["admin","manager","comercial"], hasSecondary: true },
+  { href: "/prospeccao",    icon: Radar,           label: "Prospecção", roles: ["admin","manager"], hasSecondary: true },
   { href: "/contratos",     icon: FileText,        label: "Contratos",  roles: ["admin","manager"] },
   { href: "/churn",         icon: Thermometer,     label: "Termômetro",  roles: ["admin","manager"] },
   { href: "/jornada",       icon: HeartPulse,      label: "Jornada CS",  roles: ["admin","manager","social"] },
@@ -152,6 +154,33 @@ const SECONDARY_NAV: Record<string, { title: string; sections: SecondarySection[
           { label: "Todos os Clientes", icon: Users,         href: "/clients" },
           { label: "Em Risco",          icon: AlertTriangle, href: "/clients?filter=at_risk", badgeKey: "atRisk" },
           { label: "Objetivos",         icon: Target,        href: "/clients?filter=goals" },
+        ],
+      },
+    ],
+  },
+  "/prospeccao": {
+    title: "Prospecção",
+    sections: [
+      {
+        title: "Piloto",
+        items: [
+          { label: "Visão geral", icon: LayoutDashboard, tab: "visao" },
+          { label: "Fila do dia",  icon: ListOrdered,     tab: "fila" },
+        ],
+      },
+      {
+        title: "Operação",
+        items: [
+          { label: "Prospects", icon: Building2,     tab: "prospects" },
+          { label: "Conversas", icon: MessageSquare, tab: "conversas" },
+          { label: "Agenda",    icon: Calendar,      tab: "agenda" },
+        ],
+      },
+      {
+        title: "Gestão",
+        items: [
+          { label: "Configuração", icon: Settings2, tab: "configuracao" },
+          { label: "Relatórios",   icon: BarChart3, tab: "relatorios" },
         ],
       },
     ],

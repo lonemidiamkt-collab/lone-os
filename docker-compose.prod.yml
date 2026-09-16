@@ -59,6 +59,14 @@ services:
       # números que não vão pro grupo de todo mundo. Declarar aqui é obrigatório: este compose
       # lista variável por variável, então pôr no .env sem declarar não chega ao container.
       CS_ADM_GROUP_JID: ${CS_ADM_GROUP_JID}
+      # Piloto SDR Lone (prospecção). Instância de saída separável do CS (hoje é a mesma, NEW).
+      # Google = OAuth do Roberto (Calendar + Meet + Sheets); sem as chaves, reunião online sai sem link.
+      PROSPECT_OUTBOUND_INSTANCE: ${PROSPECT_OUTBOUND_INSTANCE:-}
+      PROSPECT_OUTBOUND_KEY: ${PROSPECT_OUTBOUND_KEY:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      DRIVA_API_KEY: ${DRIVA_API_KEY:-}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://painel.lonemidia.com}
       # Aprovação de arte pelo CLIENTE no portal. Desligada por decisão do Roberto (31/08): o
       # cliente manda material pelo painel, mas o aceite final volta a ser conversa com o time.
       # "on" religa o botão. Pedir ajuste segue funcionando sem isto.

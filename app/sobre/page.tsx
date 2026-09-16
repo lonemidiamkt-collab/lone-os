@@ -10,7 +10,7 @@ import NewPlatformUpdateModal from "@/components/NewPlatformUpdateModal";
 import {
   Brain, Users, TrendingUp, Instagram, Palette, FileText, Megaphone, Zap, Lock,
   Settings, Printer, Sparkles, ChevronDown, ChevronUp, Rocket, Package,
-  GitBranch, Lightbulb, HelpCircle, PlayCircle, Plus, RefreshCw, ClipboardCheck,
+  GitBranch, Lightbulb, HelpCircle, PlayCircle, Plus, RefreshCw, ClipboardCheck, Radar,
 } from "lucide-react";
 
 interface PlatformUpdate {
@@ -748,6 +748,44 @@ const MODULES: Module[] = [
         q: "Se o cliente não assinar em 7 dias, o que acontece?",
         a: "Alerta urgente chega pro admin. Você pode reenviar o link da D4Sign ou entrar em contato direto.",
       },
+    ],
+  },
+  {
+    id: "prospeccao",
+    icon: Radar,
+    title: "Prospecção (Piloto SDR Lone)",
+    shortDesc: "Agente de IA que encontra empresas da construção civil no RJ, pesquisa, pontua e aborda pelo WhatsApp do Loninho até marcar reunião ou visita para o Roberto",
+    whoUses: "Admin e gestão",
+    context: "É o SDR da Lone. Roda como PILOTO: 30 dias corridos, no máximo 10 novas empresas por dia, abordagem só entre 09h e 11h em dia útil, respostas até 18h. No fim do prazo ele para sozinho e só o administrador reativa. O banco do Lone OS é o CRM de verdade; o Google Sheets é só um espelho.",
+    howItWorks: [
+      "06:30 — descobre empresas (busca web por segmento × cidade, em rodízio) e grava como candidatas. Quem já é cliente da Lone nunca entra.",
+      "07:00–08:30 — pesquisa cada uma: CNPJ (sócios, porte, capital), endereço e distância de Araruama, Instagram, WhatsApp (verifica sem mandar nada), Google e anúncios pela web, decisor provável e um diagnóstico ('por que prospectar'). Cada dado guarda a fonte; o que não confirmou fica em branco.",
+      "08:35 — score 0–100 (A 80+, B 60–79, C 40–59). Só A/B que passam no quality gate (14 checagens) entram na fila do dia, os 10 melhores por score.",
+      "09:00–11:00 — manda a primeira mensagem ('Aqui é da equipe do Roberto Lino, da Lone Mídia… Consigo falar com o Fulano?'), uma por vez, com intervalo. Follow-ups no dia 2, 5 e 12; depois nutrição com o contexto da última conversa.",
+      "Quando respondem, ele lê a intenção (recepção, decisor, interesse, preço, 'me chama mês que vem', opt-out, 'é robô?') e segue a máquina de estados. Nunca fala de preço, desconto ou garantia — isso chama você.",
+      "Com interesse, oferece 2 horários reais (agenda do Roberto no Google + reuniões do Lone OS). Até 80 km sugere visita; acima, Google Meet. Só marca com aceite explícito; o link do Meet só vai depois que o Google criou o evento.",
+      "Reunião marcada → handoff para +55 22 98153-0700 e para o grupo administrativo, lead criado no funil Comercial, e o prospect passa a ser do Roberto: o agente só lembra 24h e 1h antes.",
+      "18:30 — relatório do dia no grupo administrativo (abordados, respostas, decisores, reuniões, custo de IA). No fim do piloto, relatório final com o que converteu mais (segmento, cidade, score, distância, horário).",
+    ],
+    features: [
+      "Visão geral: estado do agente, teto do dia, quem precisa de você, funil 01–17, custo",
+      "Fila do dia com o resultado do quality gate de cada empresa",
+      "Ficha do prospect: dados com fonte e confiança, diagnóstico, score detalhado, conversa e histórico de toda mudança",
+      "Assumir a conversa (pausa o agente naquele prospect), responder como você, devolver ao agente",
+      "Configuração: ICP, cidades, pesos, templates, presente, número de handoff, Google, importação de CSV (Driva), simulador",
+      "Kill-switch: 'Desligar agente' para tudo na hora",
+    ],
+    tips: [
+      "Se você responder um prospect pelo celular do Loninho, o agente percebe e pausa por 24h naquele prospect.",
+      "'Não perturbe' é definitivo: a empresa nunca mais é abordada. 'Perdido' pode voltar para nutrição.",
+      "O presente só entra na mensagem se estiver ligado em Configuração E reservado naquele prospect.",
+      "Use o simulador antes de mudar um template — ele mostra o que o agente responderia sem mandar nada.",
+    ],
+    faq: [
+      { q: "Ele fala como se fosse o Roberto?", a: "Não. Ele se apresenta como equipe do Roberto Lino; se perguntarem se é robô, diz que é o assistente comercial da Lone e que a reunião é com o Roberto." },
+      { q: "Por que um lead A não foi abordado?", a: "Abra a ficha → Score e diagnóstico → Quality gate. Cada item reprovado aparece com o motivo (sem WhatsApp, fora do RJ, teto do dia, já abordado…)." },
+      { q: "O que acontece no dia 31?", a: "O piloto encerra sozinho: sem descoberta, sem abordagem, sem follow-up, sem resposta. Os dados ficam. Em Configuração → Piloto, 'Reativar' (só admin) abre mais 30 dias." },
+      { q: "Reunião online saiu sem link?", a: "O Google não estava conectado. Conecte em Configuração; enquanto isso a ficha marca 'precisa de você' para você mandar o link." },
     ],
   },
   {
