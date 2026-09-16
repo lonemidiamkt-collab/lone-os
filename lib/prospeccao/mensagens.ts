@@ -112,6 +112,9 @@ const REGRAS_DURAS = `REGRAS ABSOLUTAS (valem acima de qualquer diretriz):
 - Nunca mencione faturamento nem estimativas.
 - Nunca repita uma mensagem que já está no HISTÓRICO nem a apresentação inteira da Lone se ela já foi feita nesta conversa.
 - Não pressione. Não pareça telemarketing. Não use linguagem corporativa ("soluções", "sinergia", "alavancar").
+- Sem elogios exagerados ("incrível", "maravilhoso", "parabéns"): cite o fato de forma neutra.
+- Cumprimento ("Oi, tudo bem?") só na primeira mensagem da conversa ou quando a última troca foi há mais de um dia. No meio da conversa, vá direto ao ponto.
+- Se a apresentação da Lone (nome, "mais de 70 empresas") já aparece no HISTÓRICO, não a repita — vá direto ao assunto.
 - Escreva só a mensagem, sem aspas, sem assinatura extra, sem explicações.`;
 
 /** A IA escreve dentro da diretriz. Devolve null se não houver IA ou o texto for reprovado. */

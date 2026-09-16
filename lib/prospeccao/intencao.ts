@@ -20,7 +20,7 @@ const RX_DEPOIS = /\b(mes que vem|proxim[oa] (mes|semana|ano)|semana que vem|daq
 const RX_SOU_DECISOR = /\b(sou (eu|o dono|a dona|o propriet\w*|a propriet\w*|o socio|a socia|o respons\w*|a respons\w*|o gerente|a gerente)|eu (mesmo|mesma)|pode falar|fala comigo|e comigo|aqui e (o|a) (dono|dona|propriet\w*|respons\w*))\b/;
 const RX_NAO_E_DECISOR = /\b(nao (e|eh) comigo|nao sou (eu|o dono|a dona|respons)|(o|a) (dono|dona|propriet\w*|respons\w*|gerente|socio|chefe) (nao (esta|ta)|esta (ocupad|fora|viajando)|so (volta|chega))|vou passar (pra|para) (ele|ela)|deixa (eu )?(ver|perguntar|passar)|aqui (e|eh) (a|o) (recep|atend|loja|balc))/;
 const RX_SOBRE_O_QUE = /\b(sobre o que|do que se trata|qual (o |seria o )?assunto|em relacao a que|(e|seria) (sobre|a respeito)|o que (voces|vcs) (fazem|oferecem|querem)|como (funciona|assim)|que empresa)\b/;
-const RX_INTERESSE = /\b(tenho interesse|interessa\w*|gostei|quero (saber|entender|conhecer|ver)|me (explica|conta|fala) (mais|melhor)|pode (me )?(explicar|mandar|passar) (mais|como)|vamos (conversar|marcar)|pode marcar|bora|topo|fechado|manda (ai|mais)|show|legal,? (pode|vamos))\b/;
+const RX_INTERESSE = /\b(tenho interesse|interessa\w*|gostei|pode ver( sim)?|pode olhar|ve (ai|sim|os horarios)|quero (saber|entender|conhecer|ver)|me (explica|conta|fala) (mais|melhor)|pode (me )?(explicar|mandar|passar) (mais|como)|vamos (conversar|marcar)|pode marcar|bora|topo|fechado|manda (ai|mais)|show|legal,? (pode|vamos))\b/;
 const RX_QUER_VISITA = /\b(pode (vir|passar|aparecer)|vem (aqui|ai)|passa (aqui|ai)|presencial(mente)?|visita|aqui na loja|conhecer a loja)\b/;
 const RX_QUER_MEET = /\b(online|meet|video ?chamada|chamada de video|call|zoom|pelo (google|computador|celular))\b/;
 const RX_SAUDACAO = /^\s*(oi|ola|bom dia|boa tarde|boa noite|e ai|eai|opa|tudo bem\??|fala)[\s!.,]*$/;
@@ -112,7 +112,7 @@ Intenções:
 - CLIENTE_NAO_E_ICP: a empresa não é do ramo (número errado, pessoa física, outro segmento).
 - OPT_OUT: pede para não receber mais mensagens.
 - E_ROBO: pergunta se é robô/automação.
-- PROPOE_HORARIO: sugere um dia/horário.
+- PROPOE_HORARIO: sugere um dia/horário CONCRETO (dia da semana, data ou hora). "pode ver os horários" NÃO é isso — é INTERESSADO.
 - CONFIRMA_HORARIO: aceita um horário oferecido.
 - RECUSA_HORARIO: recusa o horário oferecido.
 - SAUDACAO: só cumprimento.

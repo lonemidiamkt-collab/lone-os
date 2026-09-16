@@ -159,3 +159,11 @@ describe("conversa da Rafaela (simulador, sem banco, sem IA)", () => {
     expect(r.motivo).toMatch(/humano/);
   });
 });
+
+describe("'pode ver os horários sim' é interesse, não proposta de horário", () => {
+  it("no passo convite, oferece os horários", async () => {
+    const r = await fala("interesse", "pode ver os horários sim", { contexto_comercial: { passo: "convite", tipo_reuniao: "visita" } as never });
+    expect(r.estagio_depois).toBe("horario_proposto");
+    expect(r.resposta).toMatch(/Tenho .* ou/);
+  });
+});

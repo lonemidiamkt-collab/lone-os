@@ -293,7 +293,9 @@ export async function decidirEResponder(pIn: ProspectRow, texto: string, o: Opco
   };
 
   // ── Passos que dependem do sub-estado (antes da tabela geral) ──────────────
-  const horarioNaFala = intent.intent === "CONFIRMA_HORARIO" || intent.intent === "PROPOE_HORARIO";
+  // "Horário na fala" só conta com horário de verdade: a IA às vezes chama "pode ver os horários" de proposta.
+  const horarioNaFala = (intent.intent === "CONFIRMA_HORARIO" || intent.intent === "PROPOE_HORARIO") && (!!intent.quando || !!propostoIso || !!casarOpcao(texto, oferecidos));
+  if ((intent.intent === "PROPOE_HORARIO" || intent.intent === "CONFIRMA_HORARIO") && !horarioNaFala) intent.intent = ehAfirmativo(texto) ? "INTERESSADO" : "OUTRO";
   const desvia = ["NAO_INTERESSADO", "RETORNAR_DEPOIS", "PEDIU_PRECO", "E_ROBO", "JA_TEM_AGENCIA", "SEM_ORCAMENTO", "CLIENTE_NAO_E_ICP", "OPT_OUT"].includes(intent.intent);
   if (p.estagio === "interesse" && !horarioNaFala && !desvia) {
     if (cc.passo === "confirmar_cidade") {
