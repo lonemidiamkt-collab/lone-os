@@ -136,8 +136,11 @@ export async function redigirComDiretriz(chave: ChaveTemplate, t: Template, ctx:
   if (p.google_avaliacoes) fatos.push(`Google: ${p.google_nota ?? "?"} estrelas, ${p.google_avaliacoes} avaliações`);
   if (p.presenca?.instagram_followers) fatos.push(`Instagram @${p.instagram}: ${p.presenca.instagram_followers} seguidores`);
   if ((p.unidades ?? 0) >= 2) fatos.push(`${p.unidades} unidades`);
-  if (v.gancho) fatos.push(`gancho validado ({gancho}): ${v.gancho}`);
-  if (v.oportunidade) fatos.push(`oportunidade identificada ({oportunidade}): ${v.oportunidade}`);
+  // Gancho e oportunidade só entram quando a diretriz os pede: soltos, a IA usa a "oportunidade"
+  // (que é uma falha da empresa) como comentário na primeira troca — "mas com baixa frequência de posts".
+  const pede = (k: string) => t.diretriz.includes(`{${k}}`);
+  if (v.gancho && pede("gancho")) fatos.push(`gancho validado ({gancho}): ${v.gancho}`);
+  if (v.oportunidade && pede("oportunidade")) fatos.push(`oportunidade identificada ({oportunidade}): ${v.oportunidade}`);
   if (p.contexto_comercial?.resumo) fatos.push(`última conversa: ${p.contexto_comercial.resumo}`);
   if (p.contexto_comercial?.objecao) fatos.push(`objeção anterior: ${p.contexto_comercial.objecao}`);
   if (v.contexto) fatos.push(`o prospect comentou ({contexto}): ${v.contexto}`);
