@@ -28,6 +28,21 @@ const fala = (estagio: Extra["estagio"], texto: string, extra: Extra = {}, histo
   decidirEResponder(prospectBase({ estagio, ...extra }), texto, { dry: true, cfg, agora: AGORA, historico, forcarModo: "fixo" });
 
 describe("conversa da Rafaela (simulador, sem banco, sem IA)", () => {
+  it("bot do WhatsApp Business respondeu → deixa o motivo uma vez, sem mudar de estágio; depois ignora", async () => {
+    const auto = "🌺 Bem-vindo ao Mix Garden! Agradecemos a sua mensagem e em breve um Consultor vai te responder. Enquanto isso, você pode escrever aqui o que está precisando";
+    const r = await fala("abordado", auto);
+    expect(r.respondeu).toBe(true);
+    expect(r.estagio_depois).toBe("abordado");
+    expect(r.resposta).toMatch(/parceria/);
+    expect(r.resposta).toMatch(/Marcelo/);
+    expect(r.resposta).not.toMatch(/Lone Mídia|70 empresas|reuni[ãa]o/);
+    const semDecisor = await fala("abordado", auto, { decisor_nome: null, decisor_confianca: null });
+    expect(semDecisor.resposta).toMatch(/respons[áa]vel/);
+    const jaSaiu = await fala("abordado", auto, { contexto_comercial: { pos_automacao_em: "2026-09-15T12:00:00Z" } });
+    expect(jaSaiu.respondeu).toBe(false);
+    const comGente = await fala("atendente", auto, {}, [{ autor: "agente", texto: "Olá…" }, { autor: "prospect", texto: "sobre o que seria?" }, { autor: "agente", texto: "É sobre…" }]);
+    expect(comGente.respondeu).toBe(false);
+  });
   it("recepção pergunta 'sobre o que seria?' → explica curto e pergunta quem é a melhor pessoa, vai para atendente", async () => {
     const r = await fala("abordado", "sobre o que seria?");
     expect(r.intent?.intent).toBe("QUER_SABER_MAIS");

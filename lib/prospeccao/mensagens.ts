@@ -182,6 +182,8 @@ export async function redigir(chave: ChaveTemplate, ctx: ContextoRedacao): Promi
 
 // ─── Atalhos por momento da conversa ─────────────────────────────────────────
 
+/** Depois da mensagem automática do WhatsApp Business: deixa o motivo para quem ler depois. */
+export const respostaPosAutomacao = (ctx: ContextoRedacao) => redigir("pos_automacao", ctx);
 export const abordagemInicial = (ctx: ContextoRedacao) => redigir(decisorConfiavel(ctx.p) ? "abordagem_com_decisor" : "abordagem_sem_decisor", ctx);
 export const mensagemRecepcao = (ctx: ContextoRedacao) => redigir("recepcao_sobre_o_que", ctx);
 export const mensagemDecisor = (ctx: ContextoRedacao) => redigir("decisor_contexto", ctx);

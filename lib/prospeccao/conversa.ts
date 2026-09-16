@@ -61,6 +61,8 @@ export interface Passos {
   proposto_em?: string;
   oferecido_em?: string;
   lembrete_em?: string;
+  /** Quando a resposta à mensagem automática do WhatsApp Business saiu (uma vez por prospect). */
+  pos_automacao_em?: string;
   resumo?: string;
   objecao?: string;
   motivo_retorno?: string;
@@ -131,10 +133,27 @@ export async function decidirEResponder(pIn: ProspectRow, texto: string, o: Opco
 
   // ── Freios ─────────────────────────────────────────────────────────────────
   if (p.estagio === "nao_perturbe") return fim({ respondeu: false, motivo: "opt-out: silêncio" });
-  // Mensagem automática do WhatsApp Business não é gente: registra e espera alguém de verdade.
+  // Mensagem automática do WhatsApp Business não é gente: não muda estágio nem conta como resposta.
+  // Mas o bot costuma pedir "escreva aqui o que está precisando" e alguém lê a conversa depois —
+  // então, UMA vez por prospect e só antes de gente aparecer, a Rafaela deixa o motivo registrado.
   if (ehMensagemAutomatica(texto)) {
-    if (!dry) await registrarEvento(p.id, { tipo: "mensagem_automatica", mensagem: texto.slice(0, 200), responsavel: "SDR_AI", motivo: "resposta automática ignorada" });
-    return fim({ respondeu: false, motivo: "mensagem automática do WhatsApp Business — ignorada" });
+    if (!dry) await registrarEvento(p.id, { tipo: "mensagem_automatica", mensagem: texto.slice(0, 200), responsavel: "SDR_AI", motivo: "resposta automática" });
+    const cc0 = (p.contexto_comercial ?? {}) as Passos;
+    const antesDeGente = ["abordado", "aguardando_resposta"].includes(p.estagio) && !historico.some((h) => h.autor === "prospect" && !ehMensagemAutomatica(h.texto));
+    if (!antesDeGente || cc0.pos_automacao_em) return fim({ respondeu: false, motivo: "mensagem automática do WhatsApp Business — ignorada" });
+    if (!dry) {
+      const campanha0 = await campanhaAtual();
+      if (!podeResponderAgora({ cfg, campanha: campanha0, agora }).ok) return fim({ respondeu: false, motivo: "mensagem automática fora do horário — ignorada" });
+      // Claim atômico: a rajada de 2–3 automáticas chega em segundos e cada uma vira um webhook.
+      const { supabaseAdmin } = await import("@/lib/supabase/server");
+      const { data } = await supabaseAdmin.from("prospects").update({ contexto_comercial: { ...cc0, pos_automacao_em: agora.toISOString() } })
+        .eq("id", p.id).is("contexto_comercial->>pos_automacao_em", null).select("id");
+      if (!data?.length) return fim({ respondeu: false, motivo: "resposta à mensagem automática já saiu" });
+      p = { ...p, contexto_comercial: { ...cc0, pos_automacao_em: agora.toISOString() } } as ProspectRow;
+    }
+    const r = await msg.respostaPosAutomacao(ctxRed());
+    if (!dry) await enviarAoProspect(p, r, { autor: "agente", delayMs: DELAY_DIGITANDO(), estagio_antes: p.estagio, estagio_depois: null });
+    return fim({ respondeu: true, resposta: r, motivo: "mensagem automática do WhatsApp Business — motivo deixado para quem ler depois", prospect: p });
   }
 
   const cc = (p.contexto_comercial ?? {}) as Passos;

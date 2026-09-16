@@ -143,7 +143,7 @@ export interface ProspectRow {
   ultima_msg_de: string | null;
   followups: number;
   cadencia_cancelada: boolean;
-  contexto_comercial: { resumo?: string; objecao?: string; motivo_retorno?: string; proxima_abordagem?: string; retornar_em?: string };
+  contexto_comercial: { resumo?: string; objecao?: string; motivo_retorno?: string; proxima_abordagem?: string; retornar_em?: string; pos_automacao_em?: string };
   objecoes: string[];
   gift_reserved: boolean;
   gift_type: string | null;

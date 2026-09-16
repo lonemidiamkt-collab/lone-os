@@ -18,7 +18,7 @@ interface Config {
 interface Google { configurado: boolean; conectado: boolean; email?: string | null; planilha_id: string | null; planilha_url: string | null; calendario_id: string; redirect_uri: string }
 
 const TEMPLATE_ROTULOS: Record<string, string> = {
-  abordagem_com_decisor: "1. Primeira abordagem — decisor conhecido", abordagem_sem_decisor: "2. Primeira abordagem — sem decisor", recepcao_sobre_o_que: "3. Recepção: 'sobre o que seria?'",
+  abordagem_com_decisor: "1. Primeira abordagem — decisor conhecido", abordagem_sem_decisor: "2. Primeira abordagem — sem decisor", pos_automacao: "2b. Bot respondeu (mensagem automática) — deixa o motivo", recepcao_sobre_o_que: "3. Recepção: 'sobre o que seria?'",
   decisor_contexto: "4. Chegou ao decisor (para aí, sem pedir reunião)", saber_mais: "4b. Decisor pergunta o que a Lone faz", interesse_cidade: "5. Demonstrou interesse → confirma a cidade",
   visita: "6. Convite: visita (até 80 km)", visita_presente: "7. Convite: visita com presente reservado", online: "8. Convite: Google Meet (longe)",
   oferta_horarios: "9. Oferta de horários", oferta_periodo: "9b. Nenhum serviu: manhã ou tarde?", confirmacao_online: "10. Confirmação Meet", confirmacao_online_sem_link: "10b. Confirmação Meet sem Google",

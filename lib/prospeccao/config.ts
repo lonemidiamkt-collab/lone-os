@@ -41,7 +41,7 @@ export interface Template {
 }
 
 export type ChaveTemplate =
-  | "abordagem_com_decisor" | "abordagem_sem_decisor" | "recepcao_sobre_o_que" | "decisor_contexto" | "saber_mais"
+  | "abordagem_com_decisor" | "abordagem_sem_decisor" | "pos_automacao" | "recepcao_sobre_o_que" | "decisor_contexto" | "saber_mais"
   | "interesse_cidade" | "visita" | "visita_presente" | "online" | "oferta_horarios" | "oferta_periodo"
   | "confirmacao_online" | "confirmacao_online_sem_link" | "confirmacao_visita" | "confirmacao_visita_ok"
   | "e_robo" | "preco" | "ja_tem_agencia" | "nao_perturbe" | "sem_interesse" | "retornar_depois" | "retorno"
@@ -129,6 +129,10 @@ export const TEMPLATES_PADRAO: Templates = {
   abordagem_sem_decisor: T("diretriz",
     "Primeira mensagem, o decisor NÃO é conhecido. Apresente-se como {agente}, {cargo}. Diga que a Lone trabalha exclusivamente com marketing e vendas para o ramo da construção civil e que estava pesquisando a {empresa}. Pergunte quem é a pessoa responsável pela empresa ou pela parte comercial para conversar. Curta, natural. Não venda, não proponha reunião.",
     "Oi, {saudacao}! Tudo bem? Meu nome é {agente}, sou {cargo}.\nA gente trabalha exclusivamente com estratégias de marketing e vendas para empresas do ramo da construção civil e eu estava pesquisando a {empresa}.\nQuem seria a pessoa responsável pela empresa ou pela parte comercial para eu conversar?"),
+  pos_automacao: T("diretriz",
+    "Sua primeira mensagem foi respondida por uma mensagem AUTOMÁTICA de boas-vindas do WhatsApp Business (bot), que costuma pedir para a pessoa descrever o que precisa. Ninguém leu ainda. Deixe 1 ou 2 frases para quem for ler depois: é sobre uma possível parceria em marketing e geração de vendas para a {empresa}; você gostaria de falar com {decisor} (se existir; senão, com a pessoa responsável pela parte comercial); fica no aguardo por aqui. Sem cumprimento, sem repetir a apresentação da Lone, sem vender, sem propor reunião.",
+    "Obrigada! É sobre uma possível parceria em marketing e geração de vendas para a {empresa}. Queria falar com {o_decisor} — quando puder me retornar por aqui, eu explico rapidinho.",
+    ["Obrigada! É sobre uma possível parceria em marketing e geração de vendas para a {empresa}. Quem for responsável pela parte comercial pode me retornar por aqui quando puder, que eu explico rapidinho."]),
   recepcao_sobre_o_que: T("diretriz",
     "A recepção perguntou do que se trata. Explique em 2 ou 3 frases: a Lone é especializada em construção civil, atende {empresas_atendidas}; é sobre uma possível parceria em marketing e geração de vendas; vocês identificaram oportunidades olhando a {empresa} e querem apresentar rapidamente ao responsável. Termine perguntando quem é a melhor pessoa para falar. Não peça o WhatsApp do dono na primeira tentativa, não fale de preço.",
     "Claro! A Lone é especializada no segmento de construção civil e hoje atende {empresas_atendidas} do ramo.\nNós identificamos algumas oportunidades olhando a {empresa} e eu queria apresentar isso rapidamente para o responsável. Não é nada demorado. Quem seria a melhor pessoa para eu falar?",
