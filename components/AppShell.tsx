@@ -17,6 +17,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { Logo } from "@/components/ui/Logo";
 import { Menu } from "lucide-react";
 import NotificationToast from "@/components/NotificationToast";
+import ErroCliente from "@/components/ErroCliente";
 import NotificationCenter from "@/components/NotificationCenter";
 import ScheduledNoticePopup from "@/components/ScheduledNoticePopup";
 import GlobalSearch from "@/components/GlobalSearch";
@@ -159,6 +160,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <NavProvider>
             <MainLayout>{children}</MainLayout>
             <NotificationToast />
+            <ErroCliente />
             <RealtimeToast />
             <ScheduledNoticePopup />
             <GlobalSearch />
