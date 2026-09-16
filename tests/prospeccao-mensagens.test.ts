@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { abordagemInicial, followup, mensagemDecisor, convite, ofertaHorarios, confirmacao, respostaERobo, respostaPreco, respostaJaTemAgencia, perguntaCidade, respostaSaberMais, textoSeguro, lembrete1h, lembrete24h, saudacaoDoDia } from "@/lib/prospeccao/mensagens";
 import { lerIntencaoRegras, ehOptOut } from "@/lib/prospeccao/intencao";
 import { consolidarDecisor } from "@/lib/prospeccao/decisor";
-import { chavesDedup, mesmaEmpresa, telefoneDigitos, cnpjLimpo, instagramHandle, distanciaKm, nomeProprio, primeiroNome, siteNormalizado, celularesNoTexto } from "@/lib/prospeccao/normalizar";
+import { chavesDedup, mesmaEmpresa, telefoneDigitos, cnpjLimpo, instagramHandle, distanciaKm, nomeProprio, primeiroNome, siteNormalizado, celularesNoTexto, nomeDeTratamento } from "@/lib/prospeccao/normalizar";
 import { importarCsv } from "@/lib/prospeccao/providers/importacao";
 import { CONFIG_PADRAO } from "@/lib/prospeccao/config";
 import { prospectBase } from "./prospeccao-score.test";
@@ -148,6 +148,9 @@ describe("normalização e dedup (§25)", () => {
     expect(siteNormalizado("https://instagram.com/x")).toBeNull();
     expect(nomeProprio("MARCELO DA SILVA")).toBe("Marcelo da Silva");
     expect(primeiroNome("marcelo ferreira")).toBe("Marcelo");
+    expect(nomeDeTratamento("ANA DEISE DE LIMA ALVES")).toBe("Ana Deise");
+    expect(nomeDeTratamento("Marcelo Ferreira")).toBe("Marcelo Ferreira");
+    expect(nomeDeTratamento("Marcelo de Souza")).toBe("Marcelo");
   });
   it("mesma empresa por CNPJ, Instagram, telefone ou nome+cidade", () => {
     const a = chavesDedup({ nome: "Casa das Telhas Ltda", cidade: "Araruama", instagram: "@casadastelhas" });
@@ -213,6 +216,6 @@ describe("mensagem automática, uma pessoa só, artigo por gênero", () => {
     expect(primeiraPessoa("Cassio da Silva e Vanessa Pinto")).toBe("Cassio da Silva");
     expect(artigoDe("Mariana Marques")).toBe("a"); expect(artigoDe("Marcelo Ferreira")).toBe("o"); expect(artigoDe("Luca Silva")).toBe("o");
     const a = await abordagemInicial(red(prospectBase({ id: "z9", decisor_nome: "Mariana Marques Amorim", diagnostico: null })));
-    expect(a).toMatch(/com a Mariana Marques Amorim/); expect(a).not.toMatch(/o Mariana/);
+    expect(a).toMatch(/com a Mariana Marques\b/); expect(a).not.toMatch(/Amorim/); expect(a).not.toMatch(/o Mariana/);
   });
 });

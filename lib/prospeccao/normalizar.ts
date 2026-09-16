@@ -152,6 +152,22 @@ export function primeiroNome(nome: string | null | undefined): string | null {
   return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
 }
 
+/**
+ * Como chamar a pessoa numa mensagem: os dois primeiros nomes, sem a cauda do registro.
+ * "ANA DEISE DE LIMA ALVES" → "Ana Deise"; "Marcelo Ferreira" → "Marcelo Ferreira";
+ * "Marcelo de Souza" → "Marcelo". O nome completo do QSA dentro de "Consigo falar com a…?"
+ * soa como cobrança, não como conversa.
+ */
+export function nomeDeTratamento(nome: string | null | undefined): string | null {
+  if (!nome) return null;
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return null;
+  const particula = new Set(["da", "de", "do", "das", "dos", "e"]);
+  const out = [partes[0]];
+  if (partes[1] && !particula.has(partes[1].toLowerCase())) out.push(partes[1]);
+  return nomeProprio(out.join(" "));
+}
+
 /** "MARCELO FERREIRA DA SILVA" → "Marcelo Ferreira da Silva". */
 export function nomeProprio(nome: string | null | undefined): string | null {
   if (!nome) return null;

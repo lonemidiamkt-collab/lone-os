@@ -11,7 +11,7 @@
 
 import type { ProspectRow, IntentLida } from "./tipos";
 import { preencher, type ProspectConfig, type ChaveTemplate, type Template } from "./config";
-import { primeiroNome, nomeProprio, artigoDe, primeiraPessoa } from "./normalizar";
+import { primeiroNome, nomeDeTratamento, artigoDe, primeiraPessoa } from "./normalizar";
 import { porExtensoSP, horaCurtaSP, dataCurtaSP, componentesSP } from "./tempo";
 
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
@@ -46,7 +46,7 @@ export interface ContextoRedacao {
 
 export const saudacaoDoDia = (agora = new Date()) => { const h = componentesSP(agora).hora; return h < 12 ? "bom dia" : h < 18 ? "boa tarde" : "boa noite"; };
 
-const decisorConfiavel = (p: ProspectRow) => (p.decisor_nome && (p.decisor_confianca ?? 0) >= 0.5 ? nomeProprio(primeiraPessoa(p.decisor_nome)) : null);
+const decisorConfiavel = (p: ProspectRow) => (p.decisor_nome && (p.decisor_confianca ?? 0) >= 0.5 ? nomeDeTratamento(primeiraPessoa(p.decisor_nome)) : null);
 export const nomeParaFalar = (p: ProspectRow) => primeiroNome(primeiraPessoa(p.decisor_nome)) ?? "";
 
 /** Um gancho verificado vira frase "por/pela …" quando existe; nada quando não existe. */
