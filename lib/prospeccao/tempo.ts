@@ -129,15 +129,18 @@ export function horaCurtaSP(iso: string): string {
 export function candidatosDeHorario(
   agora: Date, quantos: number, ocupado: (iso: string) => boolean, horas: number[] = [10, 15],
 ): string[] {
+  // Um horário por dia, alternando a hora (quarta 10h, quinta 15h…): duas opções no mesmo dia
+  // parecem uma só. Se o dia inteiro estiver ocupado, pula para o próximo.
   const out: string[] = [];
   let d = new Date(agora);
-  for (let i = 0; i < 15 && out.length < quantos; i++) {
+  for (let i = 0; i < 20 && out.length < quantos; i++) {
     d = somarDiasUteis(d, 1);
-    for (const h of horas) {
-      if (out.length >= quantos) break;
-      const c = componentesSP(d);
+    const c = componentesSP(d);
+    const inicio = out.length % horas.length;
+    for (let k = 0; k < horas.length; k++) {
+      const h = horas[(inicio + k) % horas.length];
       const iso = isoSP(dataSP(c.ano, c.mes, c.dia, h, 0));
-      if (!ocupado(iso)) out.push(iso);
+      if (!ocupado(iso)) { out.push(iso); break; }
     }
   }
   return out;

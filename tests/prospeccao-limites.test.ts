@@ -39,7 +39,8 @@ describe("tempo em São Paulo", () => {
     expect(componentesSP(somarDiasUteis(new Date("2026-09-18T13:00:00Z"), 1)).ymd).toBe("2026-09-21");
     const cands = candidatosDeHorario(new Date("2026-09-18T13:00:00Z"), 3, () => false);
     expect(cands[0]).toMatch(/^2026-09-21T10:00:00-03:00$/);
-    expect(cands[1]).toMatch(/^2026-09-21T15:00:00-03:00$/);
+    expect(cands[1]).toMatch(/^2026-09-22T15:00:00-03:00$/); // dias diferentes, horas alternadas
+    expect(cands[2]).toMatch(/^2026-09-23T10:00:00-03:00$/);
     const soTarde = candidatosDeHorario(T0930, 2, (iso) => iso.includes("T10:"));
     expect(soTarde.every((i) => i.includes("T15:"))).toBe(true);
   });
