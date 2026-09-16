@@ -11,7 +11,7 @@ import { avaliarQualityGate } from "./quality-gate";
 import { abordagemInicial, followup as textoFollowup } from "./mensagens";
 import { enviarAoProspect } from "./envio";
 import { transicionar, CADENCIA_DIAS, registrarEvento } from "./maquina";
-import { ehClienteAtual, atualizarProspect } from "./db";
+import { ehClienteAtual, atualizarProspect, mensagensDoProspect } from "./db";
 import { retomarContato, marcarPrecisaHumano } from "./conversa";
 
 export interface ResumoOutbound {
@@ -45,7 +45,7 @@ export async function rodarOutbound(cfg: ProspectConfig, campanha: CampanhaRow |
       .order("ranking_pos", { ascending: true, nullsFirst: false }).limit(Math.max(1, cfg.envios_por_tick));
     for (const p of (data ?? []) as ProspectRow[]) {
       if (tetoDisponivel(campanha, hoje) <= 0) { out.pulados.push("teto do dia atingido"); break; }
-      const texto = abordagemInicial(p, cfg);
+      const texto = await abordagemInicial({ p, cfg, historico: [], agora, origem: "prospeccao:abordagem" });
       const cli = await ehClienteAtual({ nome: p.nome, instagram: p.instagram, telefone: p.telefone, cidade: p.cidade });
       const gate = avaliarQualityGate(p, { cfg, campanha, agora, momento: "envio", ehClienteAtual: cli.sim, motivoExclusao: cli.texto, mensagem: texto, abordagensHoje: hoje });
       await atualizarProspect(p.id, { quality_gate: gate });
@@ -93,7 +93,9 @@ export async function rodarOutbound(cfg: ProspectConfig, campanha: CampanhaRow |
         out.followups.push({ id: p.id, nome: p.nome, n, ok: true });
         continue;
       }
-      const texto = textoFollowup(p, cfg, n);
+      // Follow-up 1 para o decisor (já falou com ele) tem tom diferente do follow-up para a recepção.
+      const historico = (await mensagensDoProspect(p.id)).map((m) => ({ autor: m.autor, texto: m.texto }));
+      const texto = await textoFollowup({ p, cfg, historico, agora, origem: `prospeccao:followup_${n}` }, n, p.estagio === "decisor_contatado");
       const r = await enviarAoProspect(p, texto, { autor: "agente", delayMs: 3000 + Math.round(Math.random() * 3000), estagio_antes: p.estagio, estagio_depois: "followup", dry: o.dry });
       out.followups.push({ id: p.id, nome: p.nome, n, ok: r.ok, erro: r.ok ? undefined : r.error });
       if (!r.ok) await marcarPrecisaHumano(p, `WhatsApp falhou no follow-up ${n}: ${r.error ?? "erro"}`, o.dry);

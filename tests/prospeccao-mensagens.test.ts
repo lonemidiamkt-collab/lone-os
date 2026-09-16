@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { abordagemInicial, followup, mensagemDecisor, convite, ofertaHorarios, confirmacao, respostaERobo, respostaPreco, textoSeguro, lembrete1h } from "@/lib/prospeccao/mensagens";
+import { abordagemInicial, followup, mensagemDecisor, convite, ofertaHorarios, confirmacao, respostaERobo, respostaPreco, respostaJaTemAgencia, perguntaCidade, respostaSaberMais, textoSeguro, lembrete1h, lembrete24h, saudacaoDoDia } from "@/lib/prospeccao/mensagens";
 import { lerIntencaoRegras, ehOptOut } from "@/lib/prospeccao/intencao";
 import { consolidarDecisor } from "@/lib/prospeccao/decisor";
 import { chavesDedup, mesmaEmpresa, telefoneDigitos, cnpjLimpo, instagramHandle, distanciaKm, nomeProprio, primeiroNome, siteNormalizado } from "@/lib/prospeccao/normalizar";
@@ -11,46 +11,71 @@ const cfg = CONFIG_PADRAO;
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
 const AGORA = new Date("2026-09-15T13:00:00Z");
 
-describe("mensagens (§11–§15): equipe do Roberto, sem emoji, sem preço", () => {
-  it("abordagem usa o decisor quando há confiança; senão pede o proprietário", () => {
-    const a = abordagemInicial(prospectBase(), cfg);
-    expect(a).toContain("equipe do Roberto Lino");
-    expect(a).toContain("Consigo falar com o Marcelo Ferreira?");
+const red = (p: ReturnType<typeof prospectBase>, extra: Record<string, unknown> = {}) => ({ p, cfg, historico: [], agora: AGORA, forcarModo: "fixo" as const, ...extra });
+
+describe("mensagens da Rafaela (modo fixo = reserva quando a IA não está): sem emoji, sem preço, sem fingir ser o Roberto", () => {
+  it("abordagem se apresenta como Rafaela e pede o decisor; sem decisor pergunta quem é o responsável", async () => {
+    const a = await abordagemInicial(red(prospectBase()));
+    expect(a).toMatch(/Rafaela/); expect(a).toMatch(/representante comercial da Lone Mídia/);
+    expect(a).toMatch(/Marcelo Ferreira/); expect(a).toMatch(/bom dia/);
+    expect(a).not.toMatch(/Meu nome é Roberto|Aqui é da equipe do Roberto/);
     expect(a).not.toMatch(EMOJI);
-    const b = abordagemInicial(prospectBase({ decisor_nome: null }), cfg);
-    expect(b).toContain("proprietário ou responsável pela Casa do Piso");
-    const c = abordagemInicial(prospectBase({ decisor_confianca: 0.3 }), cfg);
-    expect(c).toContain("proprietário");
+    const b = await abordagemInicial(red(prospectBase({ decisor_nome: null })));
+    expect(b).toMatch(/Quem seria a pessoa responsável/);
+    const c = await abordagemInicial(red(prospectBase({ decisor_confianca: 0.3 })));
+    expect(c).toMatch(/responsável/);
   });
-  it("todos os templates passam no validador com dados reais", () => {
+  it("variações: a que usa {gancho} só entra quando há gancho; a escolha é estável por prospect", async () => {
+    const sem = await abordagemInicial(red(prospectBase({ id: "b2", diagnostico: null })));
+    expect(sem).not.toMatch(/chamou nossa atenção/);
+    const ids = ["a1", "b2", "c3", "d4", "e5", "f6"];
+    const textos = await Promise.all(ids.map((id) => abordagemInicial(red(prospectBase({ id })))));
+    expect(new Set(textos).size).toBeGreaterThan(1);
+    expect(await abordagemInicial(red(prospectBase({ id: "a1" })))).toBe(textos[0]);
+    const comGancho = textos.find((t) => t.includes("chamou nossa atenção"));
+    if (comGancho) expect(comGancho).toMatch(/porque vi que vocês têm duas lojas/);
+  });
+  it("todos os templates fixos passam no validador com dados reais", async () => {
     const p = prospectBase();
-    for (const t of [abordagemInicial(p, cfg), followup(p, cfg, 1), followup(p, cfg, 2), followup(p, cfg, 3), mensagemDecisor(p, cfg), convite(p, cfg).texto, respostaERobo(cfg), respostaPreco(p, cfg), ofertaHorarios(["2026-09-16T10:00:00-03:00", "2026-09-17T15:00:00-03:00"], cfg)]) {
-      expect(textoSeguro(t), t).toMatchObject({ ok: true });
-      expect(t).not.toMatch(/\{\w+\}/);
-    }
+    const textos = await Promise.all([
+      abordagemInicial(red(p)), followup(red(p), 1), followup(red(p), 1, true), followup(red(p), 2), followup(red(p), 3), mensagemDecisor(red(p)),
+      convite(red(p)).texto, respostaERobo(red(p)), respostaPreco(red(p)), respostaJaTemAgencia(red(p)), perguntaCidade(red(p)), respostaSaberMais(red(p)),
+      ofertaHorarios(red(p), ["2026-09-16T10:00:00-03:00", "2026-09-17T15:00:00-03:00"]), ofertaHorarios(red(p), ["2026-09-16T10:00:00-03:00"]),
+    ]);
+    for (const t of textos) { expect(textoSeguro(t), t).toMatchObject({ ok: true }); expect(t).not.toMatch(/\{\w+\}/); }
   });
-  it("gancho verificado entra na fala com o decisor", () => {
-    expect(mensagemDecisor(prospectBase(), cfg)).toContain("Vi que vocês têm duas lojas e mais de 300 avaliações no Google");
-    expect(mensagemDecisor(prospectBase({ diagnostico: null }), cfg)).not.toContain("undefined");
+  it("mensagem ao decisor traz o gancho e PARA — sem pedir reunião", async () => {
+    const t = await mensagemDecisor(red(prospectBase()));
+    expect(t).toMatch(/vi porque vi que vocês têm duas lojas|vi que vocês têm duas lojas/i);
+    expect(t).not.toMatch(/reuni[aã]o|marcar|hor[aá]rio\?/i);
+    const semGancho = await mensagemDecisor(red(prospectBase({ diagnostico: null })));
+    expect(semGancho).not.toMatch(/vi \./); expect(semGancho).toMatch(/Rafaela/);
   });
-  it("convite: visita até 80 km, Meet acima; presente só se disponível E reservado", () => {
-    expect(convite(prospectBase({ distancia_km: 45, modalidade_preferida: null }), cfg).tipo).toBe("visita");
-    expect(convite(prospectBase({ distancia_km: 130, modalidade_preferida: null }), cfg).tipo).toBe("online");
-    expect(convite(prospectBase({ distancia_km: 45, modalidade_preferida: null }), cfg, "online").tipo).toBe("online");
-    expect(convite(prospectBase({ gift_reserved: true }), cfg).texto).not.toContain("presente");
-    expect(convite(prospectBase({ gift_reserved: true }), { ...cfg, gift_available: true }).texto).toContain("presente");
-    expect(convite(prospectBase({ gift_reserved: false }), { ...cfg, gift_available: true }).texto).not.toContain("presente");
+  it("convite: visita até 80 km pede permissão para olhar a agenda; Meet acima; presente só se disponível E reservado", async () => {
+    const v = convite(red(prospectBase({ distancia_km: 45, modalidade_preferida: null })));
+    expect(v.tipo).toBe("visita"); expect(await v.texto).toMatch(/Araruama/); expect(await v.texto).toMatch(/eu vejo alguns horários/);
+    expect(convite(red(prospectBase({ distancia_km: 130, modalidade_preferida: null }))).tipo).toBe("online");
+    expect(await convite(red(prospectBase({ distancia_km: 130, modalidade_preferida: null }))).texto).toMatch(/Quer que eu veja os próximos horários/);
+    expect(await convite(red(prospectBase({ gift_reserved: true }))).texto).not.toMatch(/presente/);
+    expect(await convite(red(prospectBase({ gift_reserved: true }), { cfg: { ...cfg, gift_available: true } })).texto).toMatch(/presente/);
+    expect(await convite(red(prospectBase({ gift_reserved: false }), { cfg: { ...cfg, gift_available: true } })).texto).not.toMatch(/presente/);
   });
-  it("confirmação online só traz link quando existe; sem Google avisa que o Roberto manda", () => {
-    const com = confirmacao(prospectBase(), cfg, { quandoIso: "2026-09-17T15:00:00-03:00", tipo: "online", link: "https://meet.google.com/abc-defg-hij" });
-    expect(com).toContain("https://meet.google.com/abc-defg-hij");
-    expect(com).toContain("+55 22 98153-0700");
-    const sem = confirmacao(prospectBase(), cfg, { quandoIso: "2026-09-17T15:00:00-03:00", tipo: "online", link: null });
-    expect(sem).not.toContain("meet.google.com");
-    expect(sem).toContain("envia o link");
-    const vis = confirmacao(prospectBase(), cfg, { quandoIso: "2026-09-17T15:00:00-03:00", tipo: "visita" });
-    expect(vis).toContain("passa aí");
-    expect(lembrete1h(prospectBase({ meet_url: "https://meet.google.com/x" }), cfg, "2026-09-17T15:00:00-03:00")).toContain("meet.google.com/x");
+  it("confirmações: Meet com link só quando existe; visita confirma o endereço; sem telefone da Lone", async () => {
+    const com = await confirmacao(red(prospectBase()), { quandoIso: "2026-09-17T15:00:00-03:00", tipo: "online", link: "https://meet.google.com/abc-defg-hij" });
+    expect(com).toMatch(/https:\/\/meet\.google\.com\/abc-defg-hij/); expect(com).toMatch(/17\/09\/2026, às 15:00/); expect(com).not.toMatch(/98153-0700/);
+    const sem = await confirmacao(red(prospectBase()), { quandoIso: "2026-09-17T15:00:00-03:00", tipo: "online", link: null });
+    expect(sem).not.toMatch(/meet\.google\.com/); expect(sem).toMatch(/envia o link/);
+    const vis = await confirmacao(red(prospectBase({ endereco: "Av. Principal, 100" })), { quandoIso: "2026-09-17T15:00:00-03:00", tipo: "visita" });
+    expect(vis).toMatch(/Av\. Principal, 100\. Está certinho\?/);
+    const visSemEnd = await confirmacao(red(prospectBase({ endereco: null })), { quandoIso: "2026-09-17T15:00:00-03:00", tipo: "visita" });
+    expect(visSemEnd).toMatch(/me confirma o endereço/);
+    expect(await lembrete1h(red(prospectBase({ meet_url: "https://meet.google.com/x" })), "2026-09-17T15:00:00-03:00")).toMatch(/meet\.google\.com\/x/);
+    expect(await lembrete24h(red(prospectBase()), "2026-09-17T15:00:00-03:00")).toMatch(/amanhã, às 15:00/);
+  });
+  it("saudação segue a hora de SP", () => {
+    expect(saudacaoDoDia(new Date("2026-09-15T12:00:00Z"))).toBe("bom dia");
+    expect(saudacaoDoDia(new Date("2026-09-15T17:00:00Z"))).toBe("boa tarde");
+    expect(saudacaoDoDia(new Date("2026-09-15T23:00:00Z"))).toBe("boa noite");
   });
 });
 

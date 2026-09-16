@@ -27,6 +27,25 @@ const RX_SAUDACAO = /^\s*(oi|ola|bom dia|boa tarde|boa noite|e ai|eai|opa|tudo b
 const RX_NEGACAO = /\bnao\b/;
 
 export const ehOptOut = (t: string) => RX_OPT_OUT.test(norm(t));
+
+/** "sim", "isso", "pode", "claro", "fechado", "pode ver", "quero"… sem "não" no meio. */
+export const ehAfirmativo = (t: string) => {
+  const n = norm(t);
+  if (RX_NEGACAO.test(n) && !/\bnao,? (pode|claro|fechado)\b/.test(n)) return false;
+  return /^\W*(sim|isso|isso ai|exato|certo|certinho|correto|pode|pode ser|pode sim|pode ver|claro|claro que sim|ok|okay|beleza|blz|fechado|fechou|combinado|perfeito|show|bora|vamos|quero|com certeza|opa|aham|uhum|ta bom|tá bom|ta certo|tudo certo|confirmado|confirmo|positivo|isso mesmo|manda|pode mandar|pode marcar|ve ai|ve sim)\b/.test(n);
+};
+
+/** "manhã" / "tarde" (resposta à pergunta de período). */
+export const lerPeriodo = (t: string): "manha" | "tarde" | null => {
+  const n = norm(t);
+  const manha = /\b(manha|de manha|pela manha|cedo)\b/.test(n), tarde = /\b(tarde|a tarde|de tarde|pela tarde|depois do almoco)\b/.test(n);
+  if (manha && !tarde) return "manha";
+  if (tarde && !manha) return "tarde";
+  return null;
+};
+
+/** Parece um endereço ("Rua X, 120 - Centro", "Av. Brasil 45")? */
+export const pareceEndereco = (t: string) => /\b(rua|r\.|av\.?|avenida|estrada|rodovia|rod\.|travessa|alameda|praca|praça|km)\b/i.test(t) && /\d/.test(t);
 export const perguntaSeERobo = (t: string) => { const n = norm(t); return RX_ROBO.test(n) && /\?|\be\b|voce|vc|falando com/.test(n); };
 
 interface Ctx {

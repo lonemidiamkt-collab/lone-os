@@ -20,8 +20,9 @@ import * as db from "@/lib/supabase/queries";
 export const RESPONSAVEL_LONE = "Roberto";
 
 /** 2–3 horários livres (dias úteis, 10h/15h) checando Google + meetings. */
-export async function horariosDisponiveis(cfg: ProspectConfig, quantos = 2, agora = new Date()): Promise<{ opcoes: string[]; fonte: string }> {
-  const brutos = candidatosDeHorario(agora, 10, () => false);
+export async function horariosDisponiveis(cfg: ProspectConfig, quantos = 2, agora = new Date(), periodo?: "manha" | "tarde" | null, evitarIso: string[] = []): Promise<{ opcoes: string[]; fonte: string }> {
+  const horas = periodo === "manha" ? [9, 10, 11] : periodo === "tarde" ? [14, 15, 16] : [10, 15];
+  const brutos = candidatosDeHorario(agora, 12, (iso) => evitarIso.includes(iso), horas);
   if (!brutos.length) return { opcoes: [], fonte: "nenhum" };
   const g = await estadoGoogle();
   let faixas: { inicio: string; fim: string }[] = [];

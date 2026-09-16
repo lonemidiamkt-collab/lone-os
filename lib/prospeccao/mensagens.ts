@@ -1,20 +1,24 @@
-// lib/prospeccao/mensagens.ts — o que o agente diz. Templates do treinamento (§11–§15, §28–§29)
-// preenchidos com dados PESQUISADOS; a IA só entra para redigir dentro de uma moldura
-// (nutrição com contexto e respostas a perguntas simples) e o resultado passa por um validador.
+// lib/prospeccao/mensagens.ts — o que a Rafaela diz.
+//
+// A lógica pedida pelo Roberto (16/09): CONTEXTO + INTENÇÃO + HISTÓRICO + ESTÁGIO + DADOS → o
+// estágio decide o OBJETIVO da próxima mensagem → o template dá os LIMITES → a IA escreve a
+// mensagem natural. Template em modo `diretriz` = a IA redige; modo `fixo` = sai como está
+// (confirmações, opt-out, lembretes). Em qualquer modo o texto passa pelo validador, e o fixo é a
+// reserva quando a IA falha ou é reprovada.
 //
 // O que nunca sai daqui: emoji, preço, desconto, garantia, "faturamento", promessa de resultado,
-// e "presente" sem `gift_reserved` (§12 da V2).
+// familiaridade inventada, dado que não está em FATOS, e "presente" sem `gift_reserved`.
 
 import type { ProspectRow, IntentLida } from "./tipos";
-import { preencher, type ProspectConfig } from "./config";
+import { preencher, type ProspectConfig, type ChaveTemplate, type Template } from "./config";
 import { primeiroNome, nomeProprio } from "./normalizar";
-import { porExtensoSP, horaCurtaSP } from "./tempo";
+import { porExtensoSP, horaCurtaSP, dataCurtaSP, componentesSP } from "./tempo";
 
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
 const PROIBIDO = /\b(desconto|promo[cç][aã]o|R\$\s?\d|por apenas|garanti(a|mos|do)|ROI|retorno garantido|faturamento|fatura|contrato|proposta comercial)\b/i;
 
 /** Validador de QUALQUER texto que vá ao prospect. */
-export function textoSeguro(t: string | null | undefined, max = 700): { ok: boolean; motivo?: string } {
+export function textoSeguro(t: string | null | undefined, max = 800): { ok: boolean; motivo?: string } {
   if (!t || t.trim().length < 2) return { ok: false, motivo: "texto vazio" };
   if (t.length > max) return { ok: false, motivo: `texto longo demais (${t.length} > ${max})` };
   if (/\{\w+\}/.test(t)) return { ok: false, motivo: "placeholder não preenchido" };
@@ -23,165 +27,210 @@ export function textoSeguro(t: string | null | undefined, max = 700): { ok: bool
   return { ok: true };
 }
 
-const decisorOuGenerico = (p: ProspectRow) =>
-  p.decisor_nome && (p.decisor_confianca ?? 0) >= 0.5 ? nomeProprio(p.decisor_nome) : null;
+export type Historico = { autor: string; texto: string }[];
 
-const nomeParaFalar = (p: ProspectRow) => primeiroNome(p.decisor_nome) ?? "";
-
-export function abordagemInicial(p: ProspectRow, cfg: ProspectConfig): string {
-  const dec = decisorOuGenerico(p);
-  const t = dec ? cfg.templates.abordagem_com_decisor : cfg.templates.abordagem_sem_decisor;
-  return preencher(t, { decisor: dec ? `o ${dec}` : "", empresa: p.nome, apresentacao: cfg.identidade.apresentacao });
+export interface ContextoRedacao {
+  p: ProspectRow;
+  cfg: ProspectConfig;
+  historico?: Historico;
+  ultimaMensagem?: string | null;
+  intent?: IntentLida | null;
+  agora?: Date;
+  /** Valores extras para {chaves}: opcao1, opcao2, quando, data, hora, link, endereco, contexto, oportunidade… */
+  valores?: Record<string, string | number | null | undefined>;
+  /** Força o modo (o simulador/prévia usa "fixo" para não gastar IA). */
+  forcarModo?: Template["modo"];
+  /** Origem da chamada de IA (llm_calls). */
+  origem?: string;
 }
 
-export const mensagemRecepcao = (p: ProspectRow, cfg: ProspectConfig) =>
-  preencher(cfg.templates.recepcao_sobre_o_que, { empresa: p.nome });
+export const saudacaoDoDia = (agora = new Date()) => { const h = componentesSP(agora).hora; return h < 12 ? "bom dia" : h < 18 ? "boa tarde" : "boa noite"; };
 
-export function followup(p: ProspectRow, cfg: ProspectConfig, n: number): string {
-  const dec = decisorOuGenerico(p);
-  const t = n <= 1 ? cfg.templates.followup_1 : n === 2 ? cfg.templates.followup_2 : cfg.templates.followup_3;
-  return preencher(t, { decisor: dec ? `o ${dec}` : "o responsável", empresa: p.nome });
+const decisorConfiavel = (p: ProspectRow) => (p.decisor_nome && (p.decisor_confianca ?? 0) >= 0.5 ? nomeProprio(p.decisor_nome) : null);
+export const nomeParaFalar = (p: ProspectRow) => primeiroNome(p.decisor_nome) ?? "";
+
+/** Um gancho verificado vira frase "por/pela …" quando existe; nada quando não existe. */
+function ganchoFrase(p: ProspectRow): string | null {
+  const g = p.diagnostico?.gancho?.trim();
+  if (!g) return null;
+  // "Vi que vocês têm duas lojas…" → "porque vi que vocês têm duas lojas…"
+  const limpo = g.replace(/\.?$/, "");
+  return /^(por|pela|pelo|porque)\b/i.test(limpo) ? limpo : `porque ${limpo.charAt(0).toLowerCase()}${limpo.slice(1)}`;
 }
 
-/** Ao chegar no decisor: contexto + especialização + gancho pesquisado + convite. */
-export function mensagemDecisor(p: ProspectRow, cfg: ProspectConfig): string {
-  const gancho = p.diagnostico?.gancho?.trim();
-  return preencher(cfg.templates.decisor_contexto, {
-    decisor: nomeParaFalar(p) || "",
-    gancho: gancho ? `${gancho.replace(/\.?$/, ".")} ` : "",
+/** Os valores das {chaves} para este prospect, agora. */
+export function valoresDe(p: ProspectRow, cfg: ProspectConfig, agora = new Date(), extra: ContextoRedacao["valores"] = {}): Record<string, string | number | null | undefined> {
+  const dec = decisorConfiavel(p);
+  const gancho = ganchoFrase(p);
+  return {
+    saudacao: saudacaoDoDia(agora),
+    agente: cfg.identidade.nome,
+    cargo: cfg.identidade.cargo,
+    responsavel: cfg.identidade.quem_faz_reuniao,
+    empresas_atendidas: cfg.identidade.empresas_atendidas,
+    nome: nomeParaFalar(p) || null,
+    decisor: dec,
     empresa: p.nome,
-  }).replace(/^Que bom falar com você, \./, "Que bom falar com você.");
+    cidade: p.cidade,
+    segmento: p.segmento ? p.segmento.toLowerCase() : null,
+    gancho,
+    oportunidade: p.diagnostico?.oportunidades?.[0] ? p.diagnostico.oportunidades[0].replace(/\.$/, "").replace(/^./, (c) => c.toLowerCase()) : null,
+    contexto: p.contexto_comercial?.motivo_retorno ?? null,
+    endereco: p.endereco,
+    ...extra,
+  };
 }
 
-/** Convite: visita (≤ raio) ou Meet. Preferência, não obrigação — o prospect pode pedir o outro. */
-export function convite(p: ProspectRow, cfg: ProspectConfig, forcar?: "visita" | "online"): { texto: string; tipo: "visita" | "online" } {
-  const tipo = forcar ?? p.modalidade_preferida ?? ((p.distancia_km ?? Infinity) <= cfg.raio_visita_km ? "visita" : "online");
-  if (tipo === "visita") {
-    const comPresente = cfg.gift_available && p.gift_reserved;
-    return { texto: preencher(comPresente ? cfg.templates.visita_presente : cfg.templates.visita, { empresa: p.nome }), tipo };
-  }
-  return { texto: preencher(cfg.templates.online, { empresa: p.nome }), tipo };
+/** Chaves que, vazias, tornam uma variação inelegível (a frase ficaria sem sentido). */
+const CHAVES_DE_DADO = new Set(["gancho", "decisor", "cidade", "oportunidade", "endereco", "link", "opcao1", "opcao2", "contexto", "quando", "nome"]);
+const chavesDe = (t: string) => Array.from(t.matchAll(/\{(\w+)\}/g)).map((m) => m[1]);
+const hash = (s: string) => Array.from(s).reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+
+/** Texto fixo: escolhe entre fixo + variações a que tem todos os dados; estável por prospect. */
+export function textoFixo(t: Template, p: ProspectRow, valores: Record<string, unknown>): string {
+  const candidatos = [t.fixo, ...(t.variacoes ?? [])].filter((x) => x && x.trim());
+  const elegiveis = candidatos.filter((c) => chavesDe(c).every((k) => !CHAVES_DE_DADO.has(k) || (valores[k] !== null && valores[k] !== undefined && valores[k] !== "")));
+  const lista = elegiveis.length ? elegiveis : candidatos.slice(0, 1);
+  const escolhido = lista[hash(p.id) % lista.length] ?? t.fixo;
+  return limparPreenchido(preencher(escolhido, valores as Record<string, string | number | null | undefined>));
 }
 
-export function ofertaHorarios(opcoesIso: string[], cfg: ProspectConfig): string {
-  const ext = opcoesIso.map(porExtensoSP);
-  const opcoes = ext.length <= 1 ? ext.join("") : `${ext.slice(0, -1).join(", ")} ou ${ext[ext.length - 1]}`;
-  return preencher(cfg.templates.oferta_horarios, { opcoes });
+/** Frases que ficaram tortas por chave vazia ("Oi, ! Tudo bem?" → "Oi! Tudo bem?"). */
+function limparPreenchido(t: string): string {
+  return t
+    .replace(/, !\s/g, "! ").replace(/, \./g, ".").replace(/, ,/g, ",")
+    .replace(/\bcom o \?/g, "com o responsável?").replace(/\bcom o \./g, "com o responsável.")
+    .replace(/\bvi \.\s*/g, "").replace(/ {2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-export function confirmacao(p: ProspectRow, cfg: ProspectConfig, r: { quandoIso: string; tipo: "visita" | "online"; link?: string | null }): string {
-  const nome = nomeParaFalar(p);
-  const quando = porExtensoSP(r.quandoIso);
-  if (r.tipo === "visita") {
-    return preencher(cfg.templates.confirmacao_visita, {
-      nome, quando, endereco: p.endereco ? `, em ${p.endereco}` : "",
-    }).replace(/^Fechado, \./, "Fechado.");
-  }
-  const t = r.link ? cfg.templates.confirmacao_online : cfg.templates.confirmacao_online_sem_link;
-  return preencher(t, { nome, quando, duracao: cfg.duracao_reuniao_min, link: r.link ?? "" }).replace(/^Fechado, \./, "Fechado.");
-}
+const REGRAS_DURAS = `REGRAS ABSOLUTAS (valem acima de qualquer diretriz):
+- Português do Brasil, tom de WhatsApp: natural, objetivo, cordial. Frases curtas. 1 a 4 frases por mensagem, no máximo 600 caracteres. Pode usar quebra de linha entre ideias.
+- Você é mulher e assina como {agente}. Fale em nome da Lone; NUNCA finja ser o {responsavel} nem diga que é ele.
+- Nunca use emoji.
+- Nunca fale de preço, valores, desconto, condição comercial, contrato, proposta, garantia, ROI ou resultado prometido.
+- Nunca invente familiaridade ("como combinamos", "lembra de mim") nem fatos: use SOMENTE o que está em FATOS VERIFICADOS. Sem fato útil, não cite nada específico da empresa.
+- Nunca mencione faturamento nem estimativas.
+- Nunca repita uma mensagem que já está no HISTÓRICO nem a apresentação inteira da Lone se ela já foi feita nesta conversa.
+- Não pressione. Não pareça telemarketing. Não use linguagem corporativa ("soluções", "sinergia", "alavancar").
+- Escreva só a mensagem, sem aspas, sem assinatura extra, sem explicações.`;
 
-export const respostaERobo = (cfg: ProspectConfig) => preencher(cfg.templates.e_robo, {});
-export const respostaPreco = (p: ProspectRow, cfg: ProspectConfig) => preencher(cfg.templates.preco, { empresa: p.nome });
-export const respostaNaoPerturbe = (cfg: ProspectConfig) => preencher(cfg.templates.nao_perturbe, {});
-export const respostaSemInteresse = (p: ProspectRow, cfg: ProspectConfig) =>
-  preencher(cfg.templates.sem_interesse, { nome: nomeParaFalar(p) }).replace(/^Entendido, \./, "Entendido.");
-export const respostaRetornarDepois = (cfg: ProspectConfig, quandoTexto: string) =>
-  preencher(cfg.templates.retornar_depois, { quando: quandoTexto });
-
-export const lembrete24h = (p: ProspectRow, cfg: ProspectConfig, reuniaoIso: string) =>
-  preencher(cfg.templates.lembrete_24h, { nome: nomeParaFalar(p) || "tudo bem?", hora: horaCurtaSP(reuniaoIso) }).replace(/^Olá tudo bem\?,/, "Olá,");
-export const lembrete1h = (p: ProspectRow, cfg: ProspectConfig, reuniaoIso: string) =>
-  preencher(cfg.templates.lembrete_1h, {
-    nome: nomeParaFalar(p) || "Olá", hora: horaCurtaSP(reuniaoIso),
-    link: p.meet_url ? ` Segue o link: ${p.meet_url}` : "",
+/** A IA escreve dentro da diretriz. Devolve null se não houver IA ou o texto for reprovado. */
+export async function redigirComDiretriz(chave: ChaveTemplate, t: Template, ctx: ContextoRedacao, valores: Record<string, unknown>): Promise<string | null> {
+  const { chatJson, isOpenAIConfigured } = await import("@/lib/ai/openai");
+  if (!isOpenAIConfigured() || !t.diretriz.trim()) return null;
+  const { p, cfg } = ctx;
+  const v = valores as Record<string, string | number | null | undefined>;
+  const fatos: string[] = [];
+  if (p.segmento) fatos.push(`segmento: ${p.segmento}`);
+  if (p.cidade) fatos.push(`cidade: ${p.cidade}${p.uf ? `/${p.uf}` : ""}`);
+  if (p.google_avaliacoes) fatos.push(`Google: ${p.google_nota ?? "?"} estrelas, ${p.google_avaliacoes} avaliações`);
+  if (p.presenca?.instagram_followers) fatos.push(`Instagram @${p.instagram}: ${p.presenca.instagram_followers} seguidores`);
+  if ((p.unidades ?? 0) >= 2) fatos.push(`${p.unidades} unidades`);
+  if (v.gancho) fatos.push(`gancho validado ({gancho}): ${v.gancho}`);
+  if (v.oportunidade) fatos.push(`oportunidade identificada ({oportunidade}): ${v.oportunidade}`);
+  if (p.contexto_comercial?.resumo) fatos.push(`última conversa: ${p.contexto_comercial.resumo}`);
+  if (p.contexto_comercial?.objecao) fatos.push(`objeção anterior: ${p.contexto_comercial.objecao}`);
+  if (v.contexto) fatos.push(`o prospect comentou ({contexto}): ${v.contexto}`);
+  const dados = Object.entries(v).filter(([k, x]) => x !== null && x !== undefined && x !== "" && !["gancho", "oportunidade", "contexto"].includes(k)).map(([k, x]) => `{${k}} = ${x}`).join("\n");
+  const hist = (ctx.historico ?? []).slice(-8).map((h) => `${h.autor === "prospect" ? "PROSPECT" : cfg.identidade.nome.toUpperCase()}: ${h.texto}`).join("\n");
+  const system = `${cfg.identidade.persona}\n\n${preencher(REGRAS_DURAS, { agente: cfg.identidade.nome, responsavel: cfg.identidade.quem_faz_reuniao })}`;
+  const user =
+    `DIRETRIZ DESTA MENSAGEM (${chave}):\n${preencher(t.diretriz, v)}\n\n` +
+    `DADOS (use as chaves como referência do que existe):\n${dados}\n\n` +
+    `FATOS VERIFICADOS sobre a empresa:\n${fatos.length ? fatos.map((f) => `- ${f}`).join("\n") : "- (nenhum fato específico — não cite nada da empresa além do nome)"}\n\n` +
+    `HISTÓRICO DA CONVERSA:\n${hist || "(primeira mensagem)"}\n\n` +
+    (ctx.ultimaMensagem ? `ÚLTIMA MENSAGEM DO PROSPECT: ${ctx.ultimaMensagem}\n\n` : "") +
+    (ctx.intent ? `INTENÇÃO LIDA: ${ctx.intent.intent}\n\n` : "") +
+    `Escreva a mensagem.`;
+  const r = await chatJson<{ mensagem: string }>({
+    model: cfg.modelo_redacao || "gpt-4o", system, user, schemaName: "mensagem_sdr",
+    schema: { type: "object", additionalProperties: false, properties: { mensagem: { type: "string" } }, required: ["mensagem"] },
+    maxTokens: 400, temperature: 0.5, origem: ctx.origem ?? `prospeccao:redigir:${chave}`,
   });
+  const texto = r.ok ? r.data?.mensagem?.trim() : null;
+  if (!texto) return null;
+  const val = textoSeguro(texto, 700);
+  if (!val.ok) { console.warn(`[prospeccao/mensagens] IA reprovada em ${chave} (${val.motivo}): ${texto.slice(0, 80)}`); return null; }
+  return texto;
+}
 
-/** Texto humano para "volto a falar com você …" a partir da data resolvida. */
+/**
+ * A mensagem para um template, respeitando o modo. Sempre devolve algo utilizável: diretriz → IA;
+ * IA indisponível/reprovada → texto fixo (variação elegível); fixo → variação elegível.
+ */
+export async function redigir(chave: ChaveTemplate, ctx: ContextoRedacao): Promise<string> {
+  const t = ctx.cfg.templates[chave];
+  const agora = ctx.agora ?? new Date();
+  const valores = valoresDe(ctx.p, ctx.cfg, agora, ctx.valores);
+  const modo = ctx.forcarModo ?? t.modo;
+  if (modo === "diretriz") {
+    const ia = await redigirComDiretriz(chave, t, ctx, valores);
+    if (ia) return ia;
+  }
+  return textoFixo(t, ctx.p, valores);
+}
+
+// ─── Atalhos por momento da conversa ─────────────────────────────────────────
+
+export const abordagemInicial = (ctx: ContextoRedacao) => redigir(decisorConfiavel(ctx.p) ? "abordagem_com_decisor" : "abordagem_sem_decisor", ctx);
+export const mensagemRecepcao = (ctx: ContextoRedacao) => redigir("recepcao_sobre_o_que", ctx);
+export const mensagemDecisor = (ctx: ContextoRedacao) => redigir("decisor_contexto", ctx);
+export const respostaSaberMais = (ctx: ContextoRedacao) => redigir("saber_mais", ctx);
+export const perguntaCidade = (ctx: ContextoRedacao) => redigir("interesse_cidade", ctx);
+export const respostaERobo = (ctx: ContextoRedacao) => redigir("e_robo", ctx);
+export const respostaPreco = (ctx: ContextoRedacao) => redigir("preco", ctx);
+export const respostaJaTemAgencia = (ctx: ContextoRedacao) => redigir("ja_tem_agencia", ctx);
+export const respostaNaoPerturbe = (ctx: ContextoRedacao) => redigir("nao_perturbe", ctx);
+export const respostaSemInteresse = (ctx: ContextoRedacao) => redigir("sem_interesse", ctx);
+export const respostaRetornarDepois = (ctx: ContextoRedacao, quandoTexto: string) => redigir("retornar_depois", { ...ctx, valores: { ...ctx.valores, quando: quandoTexto } });
+export const mensagemRetorno = (ctx: ContextoRedacao, quandoTexto: string) => redigir("retorno", { ...ctx, valores: { ...ctx.valores, quando: quandoTexto } });
+export const ofertaPeriodo = (ctx: ContextoRedacao) => redigir("oferta_periodo", ctx);
+export const confirmacaoVisitaOk = (ctx: ContextoRedacao) => redigir("confirmacao_visita_ok", ctx);
+export const lembrete24hOk = (ctx: ContextoRedacao) => redigir("lembrete_24h_ok", ctx);
+
+/** Follow-ups 1/2/3: o 1 tem versão para o próprio decisor (quando já se falou com ele). */
+export function followup(ctx: ContextoRedacao, n: number, comDecisor = false): Promise<string> {
+  const chave: ChaveTemplate = n <= 1 ? (comDecisor ? "followup_1_decisor" : "followup_1") : n === 2 ? "followup_2" : "followup_3";
+  return redigir(chave, ctx);
+}
+
+/** Convite: visita (≤ raio) ou Meet. Preferência, não obrigação. Presente só se disponível E reservado. */
+export function convite(ctx: ContextoRedacao, forcar?: "visita" | "online"): { texto: Promise<string>; tipo: "visita" | "online" } {
+  const { p, cfg } = ctx;
+  const tipo = forcar ?? p.modalidade_preferida ?? ((p.distancia_km ?? Infinity) <= cfg.raio_visita_km ? "visita" : "online");
+  const chave: ChaveTemplate = tipo === "online" ? "online" : cfg.gift_available && p.gift_reserved ? "visita_presente" : "visita";
+  return { texto: redigir(chave, ctx), tipo };
+}
+
+export function ofertaHorarios(ctx: ContextoRedacao, opcoesIso: string[]): Promise<string> {
+  const ext = opcoesIso.map(porExtensoSP);
+  const valores = { ...ctx.valores, opcao1: ext[0] ?? null, opcao2: ext[1] ?? null, opcoes: ext.length <= 1 ? ext.join("") : `${ext.slice(0, -1).join(", ")} ou ${ext[ext.length - 1]}` };
+  if (ext.length === 1) {
+    const t = { ...ctx.cfg.templates.oferta_horarios, fixo: "Perfeito. Dei uma olhada aqui na agenda dele. Tenho {opcao1}. Fica bom para você?", variacoes: [] };
+    return Promise.resolve(textoFixo(t, ctx.p, valoresDe(ctx.p, ctx.cfg, ctx.agora, valores)));
+  }
+  return redigir("oferta_horarios", { ...ctx, valores });
+}
+
+export function confirmacao(ctx: ContextoRedacao, r: { quandoIso: string; tipo: "visita" | "online"; link?: string | null }): Promise<string> {
+  const valores = { ...ctx.valores, quando: porExtensoSP(r.quandoIso), data: dataCurtaSP(r.quandoIso), hora: horaCurtaSP(r.quandoIso), link: r.link ?? null };
+  const chave: ChaveTemplate = r.tipo === "visita" ? "confirmacao_visita" : r.link ? "confirmacao_online" : "confirmacao_online_sem_link";
+  return redigir(chave, { ...ctx, valores });
+}
+
+export const lembrete24h = (ctx: ContextoRedacao, reuniaoIso: string) => redigir("lembrete_24h", { ...ctx, valores: { ...ctx.valores, hora: horaCurtaSP(reuniaoIso), data: dataCurtaSP(reuniaoIso) } });
+export const lembrete1h = (ctx: ContextoRedacao, reuniaoIso: string) => redigir("lembrete_1h", { ...ctx, valores: { ...ctx.valores, hora: horaCurtaSP(reuniaoIso), link: ctx.p.meet_url ? `\nDeixo o Meet aqui para facilitar: ${ctx.p.meet_url}` : "" } });
+
+/** "em 15 de outubro" a partir da data resolvida. */
 export function quandoPorExtenso(d: Date): string {
   return `em ${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", timeZone: "America/Sao_Paulo" })}`;
 }
 
-// ─── Redação com IA (moldura fechada) ─────────────────────────────────────────
-
-const SISTEMA_REDATOR = `Você redige mensagens de WhatsApp em nome do assistente comercial da Lone Mídia (agência de marketing de Araruama/RJ, especializada em empresas da construção civil, que atende mais de 70 empresas do segmento). A conversa é com um empresário do ramo. O Roberto Lino é quem faz a reunião.
-
-REGRAS ABSOLUTAS:
-- Português do Brasil, tom humano e direto, 1 a 3 frases, no máximo 350 caracteres.
-- Nunca use emoji.
-- Nunca fale de preço, desconto, condição comercial, contrato, proposta, garantia, ROI ou resultado prometido.
-- Nunca invente dado sobre a empresa: use SOMENTE os fatos listados em "FATOS VERIFICADOS". Se não houver fato útil, não cite nada específico.
-- Nunca diga que o faturamento foi estimado nem mencione faturamento.
-- Não se passe pelo Roberto; você é da equipe dele.
-- O objetivo é sempre levar para uma conversa de 20 minutos com o Roberto (visita ou Google Meet), sem pressionar.
-- Se a pergunta exigir informação que você não tem, responda que o Roberto explica na conversa.`;
-
-interface RedacaoParams {
-  p: ProspectRow;
-  cfg: ProspectConfig;
-  objetivo: string;
-  historico: { autor: string; texto: string }[];
-  ultimaMensagem?: string | null;
-  origem: string;
-}
-
-function fatosVerificados(p: ProspectRow): string[] {
-  const f: string[] = [];
-  if (p.segmento) f.push(`segmento: ${p.segmento}`);
-  if (p.cidade) f.push(`cidade: ${p.cidade}${p.uf ? `/${p.uf}` : ""}`);
-  if (p.google_avaliacoes) f.push(`Google: ${p.google_nota ?? "?"} estrelas, ${p.google_avaliacoes} avaliações`);
-  if (p.presenca?.instagram_followers) f.push(`Instagram @${p.instagram}: ${p.presenca.instagram_followers} seguidores`);
-  if ((p.unidades ?? 0) >= 2) f.push(`${p.unidades} unidades`);
-  if (p.diagnostico?.gancho) f.push(`gancho já validado: ${p.diagnostico.gancho}`);
-  if (p.contexto_comercial?.resumo) f.push(`última conversa: ${p.contexto_comercial.resumo}`);
-  if (p.contexto_comercial?.objecao) f.push(`objeção anterior: ${p.contexto_comercial.objecao}`);
-  if (p.contexto_comercial?.proxima_abordagem) f.push(`próxima abordagem combinada: ${p.contexto_comercial.proxima_abordagem}`);
-  return f;
-}
-
-/** Redige uma resposta curta. Devolve null se a IA não estiver configurada ou o texto não passar no validador. */
-export async function redigirComIA(r: RedacaoParams): Promise<string | null> {
-  const { chatJson, isOpenAIConfigured } = await import("@/lib/ai/openai");
-  if (!isOpenAIConfigured()) return null;
-  const hist = r.historico.slice(-8).map((h) => `${h.autor === "prospect" ? "PROSPECT" : "AGENTE"}: ${h.texto}`).join("\n");
-  const user =
-    `EMPRESA: ${r.p.nome}\nDECISOR: ${r.p.decisor_nome ? nomeProprio(r.p.decisor_nome) : "não identificado"}\n` +
-    `FATOS VERIFICADOS:\n${fatosVerificados(r.p).map((f) => `- ${f}`).join("\n") || "- (nenhum)"}\n\n` +
-    `HISTÓRICO:\n${hist || "(sem histórico)"}\n\n` +
-    (r.ultimaMensagem ? `ÚLTIMA MENSAGEM DO PROSPECT: ${r.ultimaMensagem}\n\n` : "") +
-    `OBJETIVO DESTA MENSAGEM: ${r.objetivo}\n\nEscreva só a mensagem.`;
-  const res = await chatJson<{ mensagem: string }>({
-    model: "gpt-4o-mini", system: SISTEMA_REDATOR, user, schemaName: "mensagem_sdr",
-    schema: { type: "object", additionalProperties: false, properties: { mensagem: { type: "string" } }, required: ["mensagem"] },
-    maxTokens: 300, temperature: 0.4, origem: r.origem,
-  });
-  const texto = res.ok ? res.data?.mensagem?.trim() : null;
-  if (!texto) return null;
-  const v = textoSeguro(texto, 450);
-  if (!v.ok) { console.warn(`[prospeccao/mensagens] IA reprovada (${v.motivo}): ${texto.slice(0, 80)}`); return null; }
-  return texto;
-}
-
 /** Nutrição (§29): volta com o contexto da última conversa, nunca "só passando pra saber". */
-export async function mensagemNutricao(p: ProspectRow, cfg: ProspectConfig, historico: { autor: string; texto: string }[]): Promise<string | null> {
-  const ctx = p.contexto_comercial ?? {};
-  const objetivo = ctx.proxima_abordagem
-    ? `Retomar a conversa: ${ctx.proxima_abordagem}. Pergunte sobre isso de forma genuína e, se couber, proponha a conversa com o Roberto.`
-    : ctx.motivo_retorno
-      ? `Retomar a conversa lembrando que o prospect pediu contato depois (${ctx.motivo_retorno}). Pergunte como ficou e proponha a conversa com o Roberto.`
-      : "Retomar o contato de forma leve, citando o segmento da empresa, e propor a conversa com o Roberto.";
-  const t = await redigirComIA({ p, cfg, objetivo, historico, origem: "prospeccao:nutricao" });
-  if (t) return t;
-  // Sem IA: template honesto, ainda com o contexto quando existe.
-  const nome = nomeParaFalar(p);
-  if (ctx.motivo_retorno) return `${nome ? `${nome}, ` : ""}quando conversamos você comentou: ${ctx.motivo_retorno}. Como ficou? Se fizer sentido, o Roberto pode passar aí ou fazer uma conversa rápida.`;
-  return null;
-}
-
-/** Resposta a "quer saber mais" / pergunta simples dentro do playbook. */
-export async function respostaSaberMais(p: ProspectRow, cfg: ProspectConfig, historico: { autor: string; texto: string }[], ultima: string, intent: IntentLida): Promise<string | null> {
-  const objetivo = intent.intent === "QUER_SABER_MAIS"
-    ? "Explicar em 2 frases o que a Lone faz (assessoria de marketing especializada em construção civil: conteúdo, anúncios e geração de demanda pelo WhatsApp) e convidar para a conversa de 20 minutos com o Roberto."
-    : "Responder à pergunta do prospect de forma honesta e curta, sem inventar, e trazer de volta para a conversa com o Roberto.";
-  return redigirComIA({ p, cfg, objetivo, historico, ultimaMensagem: ultima, origem: "prospeccao:resposta" });
+export async function mensagemNutricao(ctx: ContextoRedacao): Promise<string | null> {
+  const c = ctx.p.contexto_comercial ?? {};
+  const contexto = c.motivo_retorno ?? c.proxima_abordagem ?? c.resumo ?? null;
+  if (!contexto) return null; // sem contexto real não há retorno honesto — quem chama avisa o Roberto
+  const quando = c.retornar_em ? quandoPorExtenso(new Date(c.retornar_em)) : "agora";
+  return mensagemRetorno({ ...ctx, valores: { ...ctx.valores, contexto } }, quando);
 }

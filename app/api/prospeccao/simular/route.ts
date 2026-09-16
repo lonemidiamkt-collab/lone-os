@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const gate = await requireRole(req, GESTAO);
   if (gate instanceof NextResponse) return gate;
   const body = (await req.json().catch(() => null)) as {
-    prospect?: Partial<ProspectRow>; estagio?: Estagio; historico?: { autor: string; texto: string }[]; mensagem?: string; contexto_comercial?: Record<string, unknown>;
+    prospect?: Partial<ProspectRow>; estagio?: Estagio; historico?: { autor: string; texto: string }[]; mensagem?: string; contexto_comercial?: Record<string, unknown>; ia?: boolean;
   } | null;
   if (!body?.mensagem?.trim()) return NextResponse.json({ error: "mensagem obrigatória" }, { status: 400 });
   const cfg = await carregarConfig();
@@ -38,9 +38,12 @@ export async function POST(req: NextRequest) {
     primeira_abordagem_em: agora.toISOString(), ranking_dia: null, ranking_pos: null, quality_gate: null, origem: "simulacao", origem_query: null, created_at: agora.toISOString(), updated_at: agora.toISOString(),
     ...(body.prospect ?? {}),
   } as ProspectRow;
-  const historico = body.historico?.length ? body.historico : [{ autor: "agente", texto: abordagemInicial(p, cfg) }];
+  // ?ia=1 → a Rafaela redige de verdade (gasta IA); sem isso, texto fixo.
+  const comIA = req.nextUrl.searchParams.get("ia") === "1" || body.ia === true;
+  const forcarModo = comIA ? undefined : ("fixo" as const);
   return comExecucao({ origem: "prospeccao:simulador", ator: gate.user.email }, async () => {
-    const r = await decidirEResponder(p, body.mensagem!.trim(), { dry: true, cfg, historico, agora });
+    const historico = body.historico?.length ? body.historico : [{ autor: "agente", texto: await abordagemInicial({ p, cfg, historico: [], agora, forcarModo }) }];
+    const r = await decidirEResponder(p, body.mensagem!.trim(), { dry: true, cfg, historico, agora, forcarModo });
     return NextResponse.json({
       ok: true, resposta: r.resposta ?? null, respondeu: r.respondeu, intent: r.intent ?? null, estagio_antes: r.estagio_antes, estagio_depois: r.estagio_depois,
       motivo: r.motivo ?? null, precisa_humano: !!r.precisa_humano, contexto_comercial: r.prospect.contexto_comercial, abordagem: historico[0]?.texto,

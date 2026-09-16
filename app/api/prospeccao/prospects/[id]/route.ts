@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   if (!p) return NextResponse.json({ error: "prospect não encontrado" }, { status: 404 });
   const [mensagens, eventos, cfg, campanha] = await Promise.all([mensagensDoProspect(id), eventosDoProspect(id), carregarConfig(), campanhaAtual()]);
   const cli = await ehClienteAtual({ nome: p.nome, instagram: p.instagram, telefone: p.telefone, cidade: p.cidade });
-  const rascunho = abordagemInicial(p, cfg);
+  const rascunho = await abordagemInicial({ p, cfg, historico: [], forcarModo: "fixo" });
   const qg = avaliarQualityGate(p, { cfg, campanha, momento: "envio", ehClienteAtual: cli.sim, motivoExclusao: cli.texto, mensagem: rascunho, abordagensHoje: 0 });
   return NextResponse.json({ ok: true, prospect: p, mensagens, eventos, rascunho, quality_gate: qg, transicoes: ESTAGIOS.filter((e) => e !== p.estagio && podeIr(p.estagio, e)) });
 }

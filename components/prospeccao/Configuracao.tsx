@@ -11,18 +11,23 @@ interface Campanha { id: string; nome: string; status: string; iniciado_em: stri
 interface Config {
   ligado: boolean; base: { nome: string; cidade: string; uf: string; lat: number; lng: number }; raio_visita_km: number; uf_permitidas: string[];
   segmentos: { nome: string; termos: string[]; cnaes: string[] }[]; cidades: string[]; excluidos: string[]; queries_por_dia: number; providers: { web_search: boolean; driva: boolean };
-  score: { pesos: Record<string, number>; minimo: number }; identidade: { apresentacao: string; quem_faz_reuniao: string; empresas_atendidas: string };
-  handoff_numero: string; gift_available: boolean; intervalo_min_s: number; intervalo_max_s: number; envios_por_tick: number; duracao_reuniao_min: number; sla_resposta_min: number; templates: Record<string, string>;
+  score: { pesos: Record<string, number>; minimo: number }; identidade: { nome: string; cargo: string; quem_faz_reuniao: string; empresas_atendidas: string; persona: string };
+  modelo_redacao: string; handoff_numero: string; gift_available: boolean; intervalo_min_s: number; intervalo_max_s: number; envios_por_tick: number; duracao_reuniao_min: number; sla_resposta_min: number;
+  templates: Record<string, { modo: "fixo" | "diretriz"; diretriz: string; fixo: string; variacoes?: string[] }>;
 }
 interface Google { configurado: boolean; conectado: boolean; email?: string | null; planilha_id: string | null; planilha_url: string | null; calendario_id: string; redirect_uri: string }
 
 const TEMPLATE_ROTULOS: Record<string, string> = {
-  abordagem_com_decisor: "Abordagem (com decisor)", abordagem_sem_decisor: "Abordagem (sem decisor)", recepcao_sobre_o_que: "Recepção: 'sobre o que seria?'",
-  followup_1: "Follow-up 1 (dia 2)", followup_2: "Follow-up 2 (dia 5)", followup_3: "Último follow-up (dia 12)", decisor_contexto: "Ao chegar no decisor ({gancho})",
-  visita: "Convite: visita (≤ 80 km)", visita_presente: "Convite: visita com presente (só se reservado)", online: "Convite: Google Meet", oferta_horarios: "Oferta de horários ({opcoes})",
-  confirmacao_online: "Confirmação online ({link})", confirmacao_online_sem_link: "Confirmação online sem Google", confirmacao_visita: "Confirmação de visita", e_robo: "'É robô?'", preco: "Pediu preço",
-  nao_perturbe: "Opt-out", sem_interesse: "Sem interesse", retornar_depois: "Retornar depois ({quando})", lembrete_24h: "Lembrete 24h", lembrete_1h: "Lembrete 1h ({link})",
+  abordagem_com_decisor: "1. Primeira abordagem — decisor conhecido", abordagem_sem_decisor: "2. Primeira abordagem — sem decisor", recepcao_sobre_o_que: "3. Recepção: 'sobre o que seria?'",
+  decisor_contexto: "4. Chegou ao decisor (para aí, sem pedir reunião)", saber_mais: "4b. Decisor pergunta o que a Lone faz", interesse_cidade: "5. Demonstrou interesse → confirma a cidade",
+  visita: "6. Convite: visita (até 80 km)", visita_presente: "7. Convite: visita com presente reservado", online: "8. Convite: Google Meet (longe)",
+  oferta_horarios: "9. Oferta de horários", oferta_periodo: "9b. Nenhum serviu: manhã ou tarde?", confirmacao_online: "10. Confirmação Meet", confirmacao_online_sem_link: "10b. Confirmação Meet sem Google",
+  confirmacao_visita: "11. Confirmação de visita (confirma endereço)", confirmacao_visita_ok: "11b. Endereço confirmado", followup_1: "12. Follow-up 1 (dia 2) — recepção", followup_1_decisor: "12b. Follow-up 1 — decisor",
+  followup_2: "13. Follow-up 2 (dia 5) — traz {oportunidade}", followup_3: "14. Último follow-up (dia 12)", preco: "15. 'Quanto custa?'", ja_tem_agencia: "16. 'Já tenho agência'",
+  sem_interesse: "17. 'Não tenho interesse'", retornar_depois: "18. 'Me chama depois'", retorno: "19. Retorno na data combinada", e_robo: "20. 'É robô?'",
+  lembrete_24h: "21. Lembrete 24h", lembrete_24h_ok: "21b. Lembrete confirmado", lembrete_1h: "22. Lembrete 1h", nao_perturbe: "Opt-out",
 };
+const ORDEM_TEMPLATES = Object.keys(TEMPLATE_ROTULOS);
 
 export default function Configuracao({ onChange, googleStatus }: { onChange: () => void; googleStatus?: { status: string; motivo?: string; email?: string } | null }) {
   const [cfg, setCfg] = useState<Config | null>(null);
@@ -34,7 +39,7 @@ export default function Configuracao({ onChange, googleStatus }: { onChange: () 
   const [nova, setNova] = useState({ nome: "Piloto SDR Construção RJ", duracao_dias: 30, limite_dia: 10 });
   const [csv, setCsv] = useState("");
   const [descoberta, setDescoberta] = useState({ segmento: "", cidade: "" });
-  const [sim, setSim] = useState({ estagio: "abordado", mensagem: "", historico: [] as { autor: string; texto: string }[], resultado: null as null | { resposta: string | null; intent: { intent: string } | null; estagio_depois: string; motivo: string | null; precisa_humano: boolean; abordagem?: string } });
+  const [sim, setSim] = useState({ estagio: "abordado", mensagem: "", ia: false, historico: [] as { autor: string; texto: string }[], resultado: null as null | { resposta: string | null; intent: { intent: string } | null; estagio_depois: string; motivo: string | null; precisa_humano: boolean; abordagem?: string; contexto_comercial?: Record<string, unknown> } });
 
   const carregar = async () => {
     const [c, k, g] = await Promise.all([chamar<{ config: Config }>("/api/prospeccao/config"), chamar<{ campanha: Campanha | null; historico: Campanha[] }>("/api/prospeccao/campanha"), chamar<Google>("/api/prospeccao/google")]);
@@ -82,7 +87,7 @@ export default function Configuracao({ onChange, googleStatus }: { onChange: () 
   const simular = async () => {
     if (!sim.mensagem.trim()) return;
     setOcupado("Simulando");
-    const r = await chamar<{ resposta: string | null; intent: { intent: string } | null; estagio_depois: string; motivo: string | null; precisa_humano: boolean; abordagem?: string }>("/api/prospeccao/simular", { estagio: sim.estagio, mensagem: sim.mensagem, historico: sim.historico });
+    const r = await chamar<{ resposta: string | null; intent: { intent: string } | null; estagio_depois: string; motivo: string | null; precisa_humano: boolean; abordagem?: string; contexto_comercial?: Record<string, unknown> }>("/api/prospeccao/simular", { estagio: sim.estagio, mensagem: sim.mensagem, historico: sim.historico, contexto_comercial: sim.resultado?.contexto_comercial, ia: sim.ia });
     setOcupado(null);
     if (!r.ok) { toast.error(r.erro ?? "Falhou"); return; }
     const d = r.data!;
@@ -183,12 +188,47 @@ export default function Configuracao({ onChange, googleStatus }: { onChange: () 
         <p className="mt-2 text-lone-caption text-muted-foreground">Soma atual: {Object.values(cfg.score.pesos).reduce((a, b) => a + b, 0)}. Classes: A 80+, B 60–79, C 40–59, não prioritário abaixo de 40. Faturamento entra como SINAL (estimativa com confiança), nunca como número.</p>
       </Secao>
 
-      <Secao titulo="Mensagens (templates)">
-        <p className="mb-2 text-lone-caption text-muted-foreground">Chaves entre chaves são preenchidas pelo agente: {"{decisor} {empresa} {gancho} {opcoes} {nome} {quando} {duracao} {link} {endereco} {hora}"}. Sem emoji, sem preço, sem promessa — o validador barra.</p>
-        <div className="grid gap-3 lg:grid-cols-2">
-          {Object.entries(cfg.templates).map(([k, v]) => (
-            <Campo key={k} label={TEMPLATE_ROTULOS[k] ?? k}><textarea className={`${inputCls} min-h-[72px]`} defaultValue={v} onBlur={(e) => e.target.value !== v && salvar({ templates: { ...cfg.templates, [k]: e.target.value } as Config["templates"], }, "Template salvo")} /></Campo>
-          ))}
+      <Secao titulo="Identidade da agente">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Campo label="Nome"><input className={inputCls} defaultValue={cfg.identidade.nome} onBlur={(e) => e.target.value.trim() && e.target.value !== cfg.identidade.nome && salvar({ identidade: { ...cfg.identidade, nome: e.target.value.trim() } })} /></Campo>
+          <Campo label="Cargo"><input className={inputCls} defaultValue={cfg.identidade.cargo} onBlur={(e) => e.target.value !== cfg.identidade.cargo && salvar({ identidade: { ...cfg.identidade, cargo: e.target.value } })} /></Campo>
+          <Campo label="Quem faz a reunião"><input className={inputCls} defaultValue={cfg.identidade.quem_faz_reuniao} onBlur={(e) => e.target.value !== cfg.identidade.quem_faz_reuniao && salvar({ identidade: { ...cfg.identidade, quem_faz_reuniao: e.target.value } })} /></Campo>
+          <Campo label="Empresas atendidas"><input className={inputCls} defaultValue={cfg.identidade.empresas_atendidas} onBlur={(e) => e.target.value !== cfg.identidade.empresas_atendidas && salvar({ identidade: { ...cfg.identidade, empresas_atendidas: e.target.value } })} /></Campo>
+        </div>
+        <Campo label="Persona (vira o 'sistema' da IA em todo template no modo diretriz)" className="mt-3"><textarea className={`${inputCls} min-h-[110px]`} defaultValue={cfg.identidade.persona} onBlur={(e) => e.target.value !== cfg.identidade.persona && salvar({ identidade: { ...cfg.identidade, persona: e.target.value } }, "Persona salva")} /></Campo>
+        <Campo label="Modelo que escreve as mensagens" className="mt-3"><input className={inputCls} defaultValue={cfg.modelo_redacao} onBlur={(e) => e.target.value.trim() && e.target.value !== cfg.modelo_redacao && salvar({ modelo_redacao: e.target.value.trim() })} /></Campo>
+      </Secao>
+
+      <Secao titulo="Mensagens: o estágio decide o objetivo, o template dá os limites, a IA escreve">
+        <p className="mb-3 text-lone-caption text-muted-foreground">
+          <span className="font-medium text-foreground">Diretriz para IA</span>: a Rafaela escreve uma mensagem natural dentro do objetivo e dos limites — cada empresa recebe uma construção diferente.
+          <span className="font-medium text-foreground"> Texto fixo</span>: sai exatamente assim (com as chaves preenchidas). O texto fixo é sempre a reserva se a IA falhar ou for reprovada pelo validador (sem emoji, sem preço, sem promessa).
+          Chaves: {"{saudacao} {nome} {decisor} {empresa} {cidade} {segmento} {gancho} {oportunidade} {quando} {data} {hora} {link} {endereco} {opcao1} {opcao2} {contexto} {agente} {responsavel}"} — uma variação que usa {"{gancho}"} só é usada quando o gancho existe.
+        </p>
+        <div className="space-y-4">
+          {ORDEM_TEMPLATES.filter((k) => cfg.templates[k]).map((k) => {
+            const t = cfg.templates[k];
+            const salvarT = (patch: Partial<typeof t>, rotulo = "Template salvo") => salvar({ templates: { ...cfg.templates, [k]: { ...t, ...patch } } }, rotulo);
+            return (
+              <div key={k} className="rounded-lg border border-border p-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-lone-body font-medium text-foreground">{TEMPLATE_ROTULOS[k] ?? k}</span>
+                  <div className="flex gap-1">
+                    {(["diretriz", "fixo"] as const).map((m) => (
+                      <button key={m} onClick={() => t.modo !== m && salvarT({ modo: m }, m === "diretriz" ? "Modo: diretriz para IA" : "Modo: texto fixo")} className={`rounded-md px-2 py-1 text-lone-caption ${t.modo === m ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}>{m === "diretriz" ? "Diretriz para IA" : "Texto fixo"}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid gap-2 lg:grid-cols-2">
+                  <Campo label={t.modo === "diretriz" ? "Diretriz (objetivo + limites)" : "Diretriz (usada só se mudar para o modo IA)"}><textarea className={`${inputCls} min-h-[88px] ${t.modo === "diretriz" ? "" : "opacity-70"}`} defaultValue={t.diretriz} onBlur={(e) => e.target.value !== t.diretriz && salvarT({ diretriz: e.target.value })} /></Campo>
+                  <Campo label={t.modo === "fixo" ? "Texto fixo" : "Texto fixo (reserva quando a IA não escreve)"}><textarea className={`${inputCls} min-h-[88px]`} defaultValue={t.fixo} onBlur={(e) => e.target.value !== t.fixo && salvarT({ fixo: e.target.value })} /></Campo>
+                </div>
+                <Campo label="Variações do texto fixo (uma por bloco, separe com uma linha contendo só ---)" className="mt-2">
+                  <textarea className={`${inputCls} min-h-[56px]`} defaultValue={(t.variacoes ?? []).join("\n---\n")} onBlur={(e) => { const v = e.target.value.split(/\n-{3,}\n/).map((x) => x.trim()).filter(Boolean); if (v.join("|") !== (t.variacoes ?? []).join("|")) void salvarT({ variacoes: v }, "Variações salvas"); }} />
+                </Campo>
+              </div>
+            );
+          })}
         </div>
       </Secao>
 
@@ -216,11 +256,11 @@ export default function Configuracao({ onChange, googleStatus }: { onChange: () 
       </Secao>
 
       <Secao titulo={<span className="inline-flex items-center gap-2"><MessageSquareText size={16} /> Simulador de conversa</span>}>
-        <p className="mb-2 text-lone-caption text-muted-foreground">Você faz o papel do prospect (Casa do Piso, Cabo Frio, 45 km, decisor Marcelo). Nada é enviado nem gravado — só a decisão do agente.</p>
+        <p className="mb-2 text-lone-caption text-muted-foreground">Você faz o papel do prospect (Casa do Piso, Cabo Frio, 45 km, decisor Marcelo). Nada é enviado nem gravado — só a decisão da Rafaela. <label className="ml-2 inline-flex items-center gap-1 text-foreground"><input type="checkbox" checked={sim.ia} onChange={(e) => setSim({ ...sim, ia: e.target.checked })} /> redigir com IA (gasta alguns centavos; sem isso usa o texto fixo)</label></p>
         <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
-          <select className={inputCls} value={sim.estagio} onChange={(e) => setSim({ ...sim, estagio: e.target.value, historico: [], resultado: null })}>{["abordado", "atendente", "decisor_contatado", "interesse", "horario_proposto"].map((e) => <option key={e} value={e}>{ROTULO_ESTAGIO[e]}</option>)}</select>
+          <select className={inputCls} value={sim.estagio} onChange={(e) => setSim({ ...sim, estagio: e.target.value, historico: [], resultado: null })}>{["abordado", "atendente", "decisor_contatado", "interesse", "horario_proposto", "reuniao_agendada"].map((e) => <option key={e} value={e}>{ROTULO_ESTAGIO[e]}</option>)}</select>
           <input className={inputCls} placeholder="Mensagem do prospect" value={sim.mensagem} onChange={(e) => setSim({ ...sim, mensagem: e.target.value })} onKeyDown={(e) => e.key === "Enter" && void simular()} />
-          <div className="flex gap-1"><Button size="sm" disabled={!sim.mensagem.trim() || !!ocupado} onClick={simular}>Enviar</Button><Button size="sm" variant="ghost" onClick={() => setSim({ estagio: "abordado", mensagem: "", historico: [], resultado: null })}>Limpar</Button></div>
+          <div className="flex gap-1"><Button size="sm" disabled={!sim.mensagem.trim() || !!ocupado} onClick={simular}>Enviar</Button><Button size="sm" variant="ghost" onClick={() => setSim({ ...sim, estagio: "abordado", mensagem: "", historico: [], resultado: null })}>Limpar</Button></div>
         </div>
         {sim.historico.length > 0 && (
           <div className="mt-3 space-y-2">

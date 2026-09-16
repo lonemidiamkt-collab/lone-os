@@ -78,8 +78,11 @@ export async function rodarTick(cfg: ProspectConfig, campanha: CampanhaRow | nul
         await definirProximaAcao(p.id, tipo === "24h" ? { type: "LEMBRETE_1H", at: isoSP(new Date(reuniao.getTime() - 3600_000)), owner: "SDR_AI", reason: "Lembrete 1h antes" } : { type: "REGISTRAR_RESULTADO", at: isoSP(new Date(reuniao.getTime() + 2 * 3600_000)), owner: "ROBERTO", reason: "Registrar o resultado" });
         continue;
       }
-      const texto = tipo === "24h" ? lembrete24h(p, cfg, p.reuniao_em!) : lembrete1h(p, cfg, p.reuniao_em!);
+      const ctxRed = { p, cfg, agora, origem: `prospeccao:lembrete_${tipo}` };
+      const texto = tipo === "24h" ? await lembrete24h(ctxRed, p.reuniao_em!) : await lembrete1h(ctxRed, p.reuniao_em!);
       const r = await enviarAoProspect(p, texto, { autor: "agente", delayMs: 2000, estagio_antes: p.estagio, dry: o.dry });
+      // O "sim" do prospect ao lembrete de véspera é respondido pela Rafaela (passo "lembrete").
+      if (r.ok && tipo === "24h" && !o.dry) await supabaseAdmin.from("prospects").update({ contexto_comercial: { ...(p.contexto_comercial ?? {}), passo: "lembrete", lembrete_em: agora.toISOString() } }).eq("id", p.id);
       out.lembretes.push({ id: p.id, nome: p.nome, tipo, ok: r.ok, erro: r.ok ? undefined : r.error });
       await registrarEvento(p.id, { tipo: `lembrete_${tipo}`, mensagem: texto, responsavel: "SDR_AI", motivo: r.ok ? "enviado" : `falhou: ${r.error}` });
       if (!o.dry) await avisarLone(`SDR — lembrete ${tipo}: ${p.reuniao_tipo === "visita" ? "visita" : "reunião"} com ${p.nome} ${porExtensoSP(p.reuniao_em!)}${p.meet_url ? ` · ${p.meet_url}` : ""}`);
