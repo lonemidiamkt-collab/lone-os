@@ -768,7 +768,7 @@ const MODULES: Module[] = [
       "18:30 — relatório do dia no grupo administrativo (abordados, respostas, decisores, reuniões, custo de IA). No fim do piloto, relatório final com o que converteu mais (segmento, cidade, score, distância, horário).",
     ],
     features: [
-      "Visão geral: estado do agente, teto do dia, quem precisa de você, funil 01–17, custo",
+      "Visão geral (cockpit diário): estado do agente, funil por macroetapa com conversão e clique para ver a lista, conversas (quem deve a próxima mensagem), SLA de resposta com semáforo, tempo entre etapas, gargalos calculados, leads por etapa e por tempo parado, fila do dia, eficiência e autonomia do agente",
       "Fila do dia com o resultado do quality gate de cada empresa",
       "Ficha do prospect: dados com fonte e confiança, diagnóstico, score detalhado, conversa e histórico de toda mudança",
       "Assumir a conversa (pausa o agente naquele prospect), responder como você, devolver ao agente",

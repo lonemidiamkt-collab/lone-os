@@ -81,12 +81,13 @@ describe("conversa do SDR (simulador, sem banco, sem IA)", () => {
     const r2 = await fala("nao_perturbe", "oi?");
     expect(r2.respondeu).toBe(false);
   });
-  it("preço: redireciona para o Roberto; na segunda vez chama humano", async () => {
+  it("preço: redireciona para o Roberto e já chama ele (preço é decisão humana)", async () => {
     const r = await fala("decisor_contatado", "quanto custa?");
     expect(r.resposta).toContain("quem fala é o Roberto");
-    expect(r.precisa_humano).toBeFalsy();
+    expect(r.precisa_humano).toBe(true);
+    expect(r.prospect.motivo_humano).toMatch(/pediu preço/);
     const r2 = await fala("decisor_contatado", "mas qual o valor?", { objecoes: ["perguntou preço"] });
-    expect(r2.precisa_humano).toBe(true);
+    expect(r2.prospect.motivo_humano).toMatch(/insistiu/);
   });
   it("'me chama mês que vem' → momento ruim, cadência cancelada, retomar em ~30 dias", async () => {
     const r = await fala("decisor_contatado", "me chama mês que vem, estou fechando a reforma da loja");

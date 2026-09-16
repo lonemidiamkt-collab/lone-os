@@ -96,6 +96,15 @@ export async function rodarTick(cfg: ProspectConfig, campanha: CampanhaRow | nul
       await transicionar(p, { para: "perdido", motivo: "Sem interesse (encerrado)", patch: { motivo_perda: p.motivo_perda ?? "Sem interesse" } });
       out.encerrados++;
     }
+    // Ação do agente vencida há mais de 1 dia = algo travou (cron parado, erro repetido). Avisa uma vez.
+    const vencidaHa1d = somarDias(agora, -1).toISOString();
+    const { data: atrasados } = await supabaseAdmin.from("prospects").select("*")
+      .eq("owner", "SDR_AI").eq("modo_agente", "ativo").eq("precisa_humano", false)
+      .not("next_action_type", "is", null).lt("next_action_at", vencidaHa1d)
+      .not("estagio", "in", "(cliente,nao_perturbe,fora_icp,perdido,descoberto,enriquecido,icp_aprovado)").limit(10);
+    for (const p of (atrasados ?? []) as ProspectRow[]) {
+      await marcarPrecisaHumano(p, `ação do agente atrasada há mais de 1 dia (${p.next_action_type} em ${porExtensoSP(p.next_action_at!)}) — cron parado ou erro repetido`, o.dry);
+    }
     // Reunião que passou há mais de 2 dias sem resultado: cobra o Roberto uma vez.
     const limite = somarDias(agora, -2).toISOString();
     const { data: semResultado } = await supabaseAdmin.from("prospects").select("*")

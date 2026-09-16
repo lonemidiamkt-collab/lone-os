@@ -72,6 +72,7 @@ export async function rodarOutbound(cfg: ProspectConfig, campanha: CampanhaRow |
       } else {
         out.abordagens.push({ id: p.id, nome: p.nome, ok: false, erro: r.error });
         await registrarEvento(p.id, { tipo: "envio_falhou", motivo: r.error ?? "falhou", responsavel: "SDR_AI" });
+        await marcarPrecisaHumano(p, `WhatsApp falhou ao enviar a abordagem: ${r.error ?? "erro"}`, o.dry);
       }
       break; // um envio por tick; o intervalo entre mensagens é o intervalo entre ticks
     }
@@ -95,6 +96,7 @@ export async function rodarOutbound(cfg: ProspectConfig, campanha: CampanhaRow |
       const texto = textoFollowup(p, cfg, n);
       const r = await enviarAoProspect(p, texto, { autor: "agente", delayMs: 3000 + Math.round(Math.random() * 3000), estagio_antes: p.estagio, estagio_depois: "followup", dry: o.dry });
       out.followups.push({ id: p.id, nome: p.nome, n, ok: r.ok, erro: r.ok ? undefined : r.error });
+      if (!r.ok) await marcarPrecisaHumano(p, `WhatsApp falhou no follow-up ${n}: ${r.error ?? "erro"}`, o.dry);
       if (r.ok && !o.dry) {
         await transicionar(p, { para: "followup", motivo: `Follow-up ${n} enviado`, mensagem: texto, patch: { followups: n }, ctx: { agora, followups: n } });
       }

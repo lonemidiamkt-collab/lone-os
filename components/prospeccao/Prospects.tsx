@@ -22,7 +22,9 @@ const GRUPOS: { rotulo: string; estagios: string[] }[] = [
   { rotulo: "Encerrados", estagios: ["sem_interesse", "nao_perturbe", "perdido", "fora_icp"] },
 ];
 
-export default function Prospects({ abrir, versao }: { abrir: (id: string) => void; versao: number }) {
+export interface FiltroCockpit { alcancou?: string; aguardando?: string; aging?: string; sla?: string; estagio?: string; humano?: boolean; rotulo: string }
+
+export default function Prospects({ abrir, versao, filtroInicial, limparFiltro }: { abrir: (id: string) => void; versao: number; filtroInicial?: FiltroCockpit | null; limparFiltro?: () => void }) {
   const [r, setR] = useState<Resp | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [grupo, setGrupo] = useState(0);
@@ -36,7 +38,13 @@ export default function Prospects({ abrir, versao }: { abrir: (id: string) => vo
   useEffect(() => {
     const t = setTimeout(async () => {
       const qs = new URLSearchParams();
-      if (GRUPOS[grupo].estagios.length) qs.set("estagio", GRUPOS[grupo].estagios.join(","));
+      if (filtroInicial?.alcancou) qs.set("alcancou", filtroInicial.alcancou);
+      if (filtroInicial?.aguardando) qs.set("aguardando", filtroInicial.aguardando);
+      if (filtroInicial?.aging) qs.set("aging", filtroInicial.aging);
+      if (filtroInicial?.sla) qs.set("sla", filtroInicial.sla);
+      if (filtroInicial?.estagio) qs.set("estagio", filtroInicial.estagio);
+      else if (GRUPOS[grupo].estagios.length) qs.set("estagio", GRUPOS[grupo].estagios.join(","));
+      if (filtroInicial?.humano) qs.set("humano", "1");
       if (classe) qs.set("classe", classe);
       if (cidade) qs.set("cidade", cidade);
       if (segmento) qs.set("segmento", segmento);
@@ -48,11 +56,17 @@ export default function Prospects({ abrir, versao }: { abrir: (id: string) => vo
       setErro(null); setR(res.data);
     }, 250);
     return () => clearTimeout(t);
-  }, [grupo, classe, cidade, segmento, humano, q, ordem, versao]);
+  }, [grupo, classe, cidade, segmento, humano, q, ordem, versao, filtroInicial]);
 
   return (
     <div className="space-y-4">
       <Erro texto={erro} />
+      {filtroInicial && (
+        <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-lone-body text-foreground">
+          <span>Filtro do cockpit: <span className="font-medium">{filtroInicial.rotulo}</span></span>
+          <button className="ml-auto rounded-md px-2 py-0.5 text-lone-caption text-muted-foreground hover:bg-accent" onClick={limparFiltro}>limpar</button>
+        </div>
+      )}
       <div className="flex flex-wrap gap-1">
         {GRUPOS.map((g, i) => (
           <button key={g.rotulo} onClick={() => setGrupo(i)} className={`rounded-lg px-3 py-1.5 text-lone-body ${grupo === i ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}>{g.rotulo}</button>

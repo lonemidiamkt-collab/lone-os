@@ -16,7 +16,7 @@ import { verificarWhatsapp } from "./envio";
 import { pesquisarEmpresa, notaGoogle, numeroBr, cidadeLimpa } from "./providers/web-search";
 import { cnpjLimpo, distanciaKm, instagramHandle, siteNormalizado, telefoneDigitos, nomeProprio } from "./normalizar";
 import { transicionar, registrarEvento } from "./maquina";
-import { atualizarProspect } from "./db";
+import { atualizarProspect, ehClienteAtual } from "./db";
 
 const UA = "LoneOS-SDR/1.0 (lonemidiamkt@gmail.com)";
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -140,6 +140,12 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
   const fontes: Record<string, string> = { ...(pIn.fontes ?? {}) };
   const fatos: string[] = [...((pIn.presenca as { sinais_descoberta?: string[] } | null)?.sinais_descoberta ?? [])];
   let p = pIn;
+  // Cliente da Lone (tabela clients ou lista de exclusão) não gasta pesquisa nem IA: sai já.
+  const cli = await ehClienteAtual({ nome: p.nome, instagram: p.instagram, telefone: p.telefone, cidade: p.cidade });
+  if (cli.sim) {
+    if (p.estagio !== "fora_icp") p = await transicionar(p, { para: "fora_icp", motivo: `Já é cliente da Lone (${cli.cliente})`, patch: { motivo_perda: `cliente: ${cli.cliente}` } });
+    return { ok: true, etapas: ["cliente"], erros: [], prospect: p };
+  }
   let qsa: { nome: string; qualificacao?: string | null }[] = [];
   let webNome: string | null = null, webCargo: string | null = null, webFonte: string | null = null;
 

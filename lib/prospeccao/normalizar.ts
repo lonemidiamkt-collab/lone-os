@@ -144,3 +144,38 @@ export function nomeProprio(nome: string | null | undefined): string | null {
     .map((p, i) => (i > 0 && minusculas.has(p) ? p : p.charAt(0).toUpperCase() + p.slice(1)))
     .join(" ");
 }
+
+// Palavras que não identificam ninguém: "Varejão da Construção" e "Varejão Material de Construção"
+// são a mesma loja, e o que sobra depois de tirar o genérico ("varejao") é o que diz isso.
+const GENERICOS = new Set([
+  "material", "materiais", "construcao", "construcoes", "loja", "lojas", "casa", "deposito", "depositos", "distribuidora",
+  "distribuidor", "comercial", "atacadao", "atacado", "varejo", "bazar", "center", "home", "ltda", "me", "epp", "eireli",
+  "sa", "cia", "comercio", "empresa", "industria", "servicos", "rj", "araruama", "cabo", "frio", "macae", "marica", "rio",
+  "ostras", "bonito", "unamar", "tintas", "pisos", "piso", "telhas", "ferragens", "ferragem", "madeireira", "materials",
+  "building", "ltd", "de", "do", "da", "dos", "das", "e", "em", "para", "com",
+]);
+
+/** Palavras que identificam a empresa (sem genéricos). Vazio → todas as palavras. */
+export function palavrasSignificativas(nome: string | null | undefined): string[] {
+  const todas = nomeCanonico(nome).split(" ").filter(Boolean);
+  const sig = todas.filter((w) => !GENERICOS.has(w) && w.length >= 3);
+  return sig.length ? sig : todas;
+}
+
+/**
+ * "Varejão da Construção" ≈ "Varejão Material de Construção"; "DelRio" ≈ "Del Rio Atacadão do Piso";
+ * "Ello" ≈ "Ello Material de Construção". Compara as palavras significativas: se todas as de um
+ * nome estão no outro (ou os nomes colados são um prefixo do outro), é a mesma empresa.
+ * Falso positivo aqui é barato (deixa de prospectar alguém); falso negativo é mensagem para cliente.
+ */
+export function nomesParecidos(a: string | null | undefined, b: string | null | undefined): boolean {
+  // 1) Nome inteiro colado: "toppisos" ⊂ "toppisoscabofrio", "delrio…" = "del rio…".
+  const ja = nomeCanonico(a).replace(/\s/g, ""), jb = nomeCanonico(b).replace(/\s/g, "");
+  if (ja.length >= 5 && jb.length >= 5 && (ja === jb || ja.startsWith(jb) || jb.startsWith(ja))) return true;
+  // 2) Palavras significativas de um dentro do outro: "varejao" ⊂ "varejao material construcao".
+  const pa = palavrasSignificativas(a), pb = palavrasSignificativas(b);
+  if (!pa.length || !pb.length) return false;
+  const [curto, longo] = pa.length <= pb.length ? [pa, pb] : [pb, pa];
+  if (curto.join("").length < 4) return false;
+  return curto.every((w) => longo.includes(w) || longo.some((x) => x.startsWith(w) && w.length >= 5));
+}

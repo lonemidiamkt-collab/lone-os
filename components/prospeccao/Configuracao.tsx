@@ -12,7 +12,7 @@ interface Config {
   ligado: boolean; base: { nome: string; cidade: string; uf: string; lat: number; lng: number }; raio_visita_km: number; uf_permitidas: string[];
   segmentos: { nome: string; termos: string[]; cnaes: string[] }[]; cidades: string[]; excluidos: string[]; queries_por_dia: number; providers: { web_search: boolean; driva: boolean };
   score: { pesos: Record<string, number>; minimo: number }; identidade: { apresentacao: string; quem_faz_reuniao: string; empresas_atendidas: string };
-  handoff_numero: string; gift_available: boolean; intervalo_min_s: number; intervalo_max_s: number; envios_por_tick: number; duracao_reuniao_min: number; templates: Record<string, string>;
+  handoff_numero: string; gift_available: boolean; intervalo_min_s: number; intervalo_max_s: number; envios_por_tick: number; duracao_reuniao_min: number; sla_resposta_min: number; templates: Record<string, string>;
 }
 interface Google { configurado: boolean; conectado: boolean; email?: string | null; planilha_id: string | null; planilha_url: string | null; calendario_id: string; redirect_uri: string }
 
@@ -157,6 +157,7 @@ export default function Configuracao({ onChange, googleStatus }: { onChange: () 
           <Campo label="Score mínimo p/ prospectar"><input type="number" className={inputCls} defaultValue={cfg.score.minimo} onBlur={(e) => Number(e.target.value) !== cfg.score.minimo && salvar({ score: { ...cfg.score, minimo: Number(e.target.value) } })} /></Campo>
           <Campo label="Consultas de descoberta/dia"><input type="number" className={inputCls} defaultValue={cfg.queries_por_dia} onBlur={(e) => Number(e.target.value) !== cfg.queries_por_dia && salvar({ queries_por_dia: Number(e.target.value) })} /></Campo>
           <Campo label="Nº de handoff (DDI+DDD)"><input className={inputCls} defaultValue={cfg.handoff_numero} onBlur={(e) => e.target.value.replace(/\D/g, "") !== cfg.handoff_numero && salvar({ handoff_numero: e.target.value.replace(/\D/g, "") })} /></Campo>
+          <Campo label="Meta de SLA: responder em até (min)"><input type="number" className={inputCls} defaultValue={cfg.sla_resposta_min} onBlur={(e) => Number(e.target.value) !== cfg.sla_resposta_min && salvar({ sla_resposta_min: Math.max(1, Number(e.target.value) || 5) })} /></Campo>
         </div>
         <Campo label="Cidades (uma por linha, mais perto da base primeiro)" className="mt-3"><textarea className={`${inputCls} min-h-[120px]`} defaultValue={cfg.cidades.join("\n")} onBlur={(e) => { const v = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean); if (v.join("|") !== cfg.cidades.join("|")) void salvar({ cidades: v }); }} /></Campo>
         <Campo label="Nunca prospectar (uma empresa por linha — clientes de site, parceiros, quem já disse não fora do sistema)" className="mt-3"><textarea className={`${inputCls} min-h-[72px]`} defaultValue={(cfg.excluidos ?? []).join("\n")} onBlur={(e) => { const v = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean); if (v.join("|") !== (cfg.excluidos ?? []).join("|")) void salvar({ excluidos: v }, "Lista de exclusão salva"); }} /></Campo>

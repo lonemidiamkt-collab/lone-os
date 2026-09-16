@@ -70,6 +70,8 @@ export interface ProspectConfig {
   envios_por_tick: number;
   duracao_reuniao_min: number;
   relatorio_hora: string;
+  /** Meta de SLA: responder o prospect em até N minutos (dentro do horário de atendimento). */
+  sla_resposta_min: number;
   templates: Templates;
 }
 
@@ -92,12 +94,11 @@ export const SEGMENTOS_PADRAO: SegmentoIcp[] = [
   { nome: "Marmoraria", termos: ["marmoraria"], cnaes: ["2391501", "2391502", "2391503"] },
 ];
 
+// Foco do piloto (Roberto, 16/09): Rio das Ostras, Unamar, Cabo Frio, Maricá, Macaé e Rio Bonito.
+// A ordem é a do rodízio de descoberta. Araruama ficou de fora de propósito: é a base, e a
+// primeira busca lá trouxe cliente atrás de cliente.
 export const CIDADES_PADRAO = [
-  "Araruama", "Saquarema", "Iguaba Grande", "São Pedro da Aldeia", "Cabo Frio", "Arraial do Cabo",
-  "Armação dos Búzios", "Rio das Ostras", "Macaé", "Casimiro de Abreu", "Silva Jardim", "Rio Bonito",
-  "Maricá", "Tanguá", "Itaboraí", "São Gonçalo", "Niterói", "Magé", "Cachoeiras de Macacu",
-  "Rio de Janeiro", "Duque de Caxias", "Nova Iguaçu", "Campos dos Goytacazes", "Nova Friburgo",
-  "Teresópolis", "Petrópolis",
+  "Rio das Ostras", "Unamar (Cabo Frio)", "Cabo Frio", "Maricá", "Macaé", "Rio Bonito",
 ];
 
 export const TEMPLATES_PADRAO: Templates = {
@@ -143,7 +144,7 @@ export const CONFIG_PADRAO: ProspectConfig = {
   uf_permitidas: ["RJ"],
   segmentos: SEGMENTOS_PADRAO,
   cidades: CIDADES_PADRAO,
-  excluidos: ["Armazém do Ferro", "Bruno das Tintas", "Araruama Tintas"],
+  excluidos: ["Armazém do Ferro", "Bruno das Tintas", "Araruama Tintas", "DelRio Atacadão do Piso", "João da Roçadeira", "Top Pisos", "Ello Material de Construção"],
   queries_por_dia: 4,
   providers: { web_search: true, driva: false },
   score: {
@@ -166,6 +167,7 @@ export const CONFIG_PADRAO: ProspectConfig = {
   envios_por_tick: 2,
   duracao_reuniao_min: 30,
   relatorio_hora: "18:30",
+  sla_resposta_min: 5,
   templates: TEMPLATES_PADRAO,
 };
 

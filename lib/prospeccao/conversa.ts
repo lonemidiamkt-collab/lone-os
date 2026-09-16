@@ -239,12 +239,13 @@ export async function decidirEResponder(pIn: ProspectRow, texto: string, o: Opco
       return fim({ respondeu: true, resposta: r, intent, prospect: p });
     }
     case "PEDIU_PRECO": {
+      // Responde redirecionando para a conversa com o Roberto E avisa: preço/proposta é decisão dele (§32).
       const jaPerguntou = p.objecoes?.includes("perguntou preço");
       const r = msg.respostaPreco(p, cfg);
       await enviar(r);
       await patchP({ objecoes: Array.from(new Set([...(p.objecoes ?? []), "perguntou preço"])) });
-      if (jaPerguntou) p = await marcarPrecisaHumano(p, "insistiu em preço — condição comercial é com você", dry);
-      return fim({ respondeu: true, resposta: r, intent, precisa_humano: jaPerguntou, prospect: p });
+      p = await marcarPrecisaHumano(p, jaPerguntou ? `insistiu em preço: "${texto.slice(0, 80)}"` : `pediu preço/proposta: "${texto.slice(0, 80)}"`, dry);
+      return fim({ respondeu: true, resposta: r, intent, precisa_humano: true, prospect: p });
     }
     case "CLIENTE_NAO_E_ICP": {
       const r = "Entendi, desculpe o incômodo. Bom dia!";

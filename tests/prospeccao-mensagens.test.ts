@@ -146,3 +146,21 @@ describe("números e cidade vindos da busca web", () => {
     expect(cidadeLimpa("Araruama/RJ", "x")).toBe("Araruama"); expect(cidadeLimpa("Cabo Frio - RJ", "x")).toBe("Cabo Frio"); expect(cidadeLimpa(null, "Maricá")).toBe("Maricá");
   });
 });
+
+describe("cliente da Lone nunca vira prospect (casamento de nomes)", () => {
+  it("casa variações reais de nome", async () => {
+    const { nomesParecidos } = await import("@/lib/prospeccao/normalizar");
+    expect(nomesParecidos("Varejão da Construção", "Varejão Material de Construção")).toBe(true);
+    expect(nomesParecidos("DelRio Atacadão do Piso", "Del Rio Atacadão do Piso")).toBe(true);
+    expect(nomesParecidos("Ello Material de Construção", "Ello Material de Construcao Ltda")).toBe(true);
+    expect(nomesParecidos("Top Pisos", "TopPisos Cabo Frio")).toBe(true);
+    expect(nomesParecidos("João da Roçadeira", "Joao da Rocadeira Máquinas")).toBe(true);
+    expect(nomesParecidos("Armazém do Ferro", "Armazem Do Ferro")).toBe(true);
+    // "Império" é a única palavra que identifica os dois — e os dois são clientes. Excluir a mais é barato.
+    expect(nomesParecidos("Imperio dos Pisos", "Império Material de Construção")).toBe(true);
+    expect(nomesParecidos("Império dos Pisos", "Pisos & Cia")).toBe(false);
+    expect(nomesParecidos("Casa do Piso", "Casa das Telhas")).toBe(false);
+    expect(nomesParecidos("Construlagos", "Constrular")).toBe(false);
+    expect(nomesParecidos("Rimil Building Materials", "MRQ Material de Construção")).toBe(false);
+  });
+});

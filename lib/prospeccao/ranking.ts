@@ -28,6 +28,12 @@ export async function montarFilaDoDia(cfg: ProspectConfig, campanha: CampanhaRow
 
   for (const p of candidatos) {
     const cli = await ehClienteAtual({ nome: p.nome, instagram: p.instagram, telefone: p.telefone, cidade: p.cidade });
+    if (cli.sim) {
+      // Virou cliente (ou entrou na lista de exclusão) depois de descoberto: sai do funil de vez.
+      reprovados.push({ id: p.id, nome: p.nome, itens: [`nao_e_cliente: ${cli.cliente}`] });
+      if (!o.dry) await transicionar(p, { para: "fora_icp", motivo: `Já é cliente da Lone (${cli.cliente})`, patch: { motivo_perda: `cliente: ${cli.cliente}`, ranking_dia: null, ranking_pos: null }, ctx: { agora } });
+      continue;
+    }
     const gate = avaliarQualityGate(p, { cfg, campanha, agora, momento: "ranking", ehClienteAtual: cli.sim });
     if (!o.dry) await atualizarProspect(p.id, { quality_gate: gate });
     if (gate.passed) aprovados.push({ p, gate });

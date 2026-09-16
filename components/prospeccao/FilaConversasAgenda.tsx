@@ -44,10 +44,10 @@ export function FilaDoDia({ abrir, versao, onChange }: { abrir: (id: string) => 
           <Button size="sm" disabled={!!rodando} onClick={() => rodar("prospect-outbound", "Abordagem")}><Play size={14} /> Disparar próxima</Button>
         </div>
       }>
-        <p className="mb-3 text-lone-caption text-muted-foreground">Às 08:35 o agente pontua, passa pelo quality gate e escolhe os {d?.agente.campanha?.limite_dia ?? 10} melhores. Entre 09:00 e 11:00 ele manda uma abordagem por vez. Teto hoje: {d?.agente.teto.usado ?? 0}/{d?.agente.teto.limite ?? 10}.{d && !d.agente.pode_abordar.ok ? ` Agora: ${d.agente.pode_abordar.motivo}.` : ""}</p>
-        {!d ? <p className="text-lone-body text-muted-foreground">Carregando…</p> : d.fila_do_dia.length === 0 ? <Vazio texto="Fila vazia. Se há ICP aprovados abaixo, clique em 'Montar fila agora'." /> : (
+        <p className="mb-3 text-lone-caption text-muted-foreground">Às 08:35 o agente pontua, passa pelo quality gate e escolhe os {d?.agente.campanha?.limite_dia ?? 10} melhores. Entre 09:00 e 11:00 ele manda uma abordagem por vez. Teto hoje: {d?.agente.teto.usado ?? 0}/{d?.agente.teto.limite ?? 10} · próximo envio: {d?.agente.proximo_envio ?? "—"}.{d && !d.agente.pode_abordar.ok ? ` Agora: ${d.agente.pode_abordar.motivo}.` : ""}</p>
+        {!d ? <p className="text-lone-body text-muted-foreground">Carregando…</p> : d.fila_lista.length === 0 ? <Vazio texto="Fila vazia. Se há ICP aprovados abaixo, clique em 'Montar fila agora'." /> : (
           <ol className="divide-y divide-border">
-            {d.fila_do_dia.map((p) => (
+            {d.fila_lista.map((p) => (
               <li key={p.id} className="flex cursor-pointer items-center gap-3 py-2 hover:bg-accent/50" onClick={() => abrir(p.id)}>
                 <span className="w-6 text-right tabular-nums text-lone-caption text-muted-foreground">{p.ranking_pos || "—"}</span>
                 <div className="min-w-0 flex-1"><div className="truncate text-lone-body font-medium text-foreground">{p.nome}</div><div className="truncate text-lone-caption text-muted-foreground">{p.cidade ?? "—"} · {p.segmento ?? "—"} · {p.decisor_nome ? `decisor: ${p.decisor_nome}` : "abordagem genérica"}</div></div>

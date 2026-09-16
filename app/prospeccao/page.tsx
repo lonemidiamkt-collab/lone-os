@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useRole } from "@/lib/context/RoleContext";
 import { useNav } from "@/lib/context/NavContext";
-import VisaoGeral from "@/components/prospeccao/VisaoGeral";
+import VisaoGeral, { type FiltroLista } from "@/components/prospeccao/VisaoGeral";
 import Prospects from "@/components/prospeccao/Prospects";
 import { FilaDoDia, Conversas, Agenda } from "@/components/prospeccao/FilaConversasAgenda";
 import Configuracao from "@/components/prospeccao/Configuracao";
@@ -29,6 +29,7 @@ export default function ProspeccaoPage() {
   const [versao, setVersao] = useState(0);
   const [googleStatus, setGoogleStatus] = useState<{ status: string; motivo?: string; email?: string } | null>(null);
   const [veioComProspect, setVeioComProspect] = useState(false);
+  const [filtroLista, setFiltroLista] = useState<FiltroLista | null>(null);
   // Query string lida no mount (useSearchParams exigiria Suspense no prerender).
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
@@ -70,9 +71,9 @@ export default function ProspeccaoPage() {
         </nav>
       </header>
 
-      {tab === "visao" && <VisaoGeral key={versao} abrir={abrir} irPara={(t) => setTab(t as Aba)} />}
+      {tab === "visao" && <VisaoGeral key={versao} abrir={abrir} irPara={(t) => setTab(t as Aba)} abrirLista={(f) => { setFiltroLista(f); setTab("prospects"); }} />}
       {tab === "fila" && <FilaDoDia abrir={abrir} versao={versao} onChange={mudou} />}
-      {tab === "prospects" && <Prospects abrir={abrir} versao={versao} />}
+      {tab === "prospects" && <Prospects abrir={abrir} versao={versao} filtroInicial={filtroLista} limparFiltro={() => setFiltroLista(null)} />}
       {tab === "conversas" && <Conversas abrir={abrir} versao={versao} />}
       {tab === "agenda" && <Agenda abrir={abrir} versao={versao} />}
       {tab === "configuracao" && <Configuracao onChange={mudou} googleStatus={googleStatus} />}

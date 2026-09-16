@@ -96,7 +96,9 @@ export function paraCandidatos(brutas: unknown[], q: ConsultaDescoberta, query: 
 
 export async function buscarEmpresas(q: ConsultaDescoberta, apiKey: string): Promise<Candidato[]> {
   const termo = q.segmento.termos[0] ?? q.segmento.nome;
-  const query = `${termo} em ${q.cidade} ${q.uf}`;
+  // "Unamar (Cabo Frio)" → "Unamar, Cabo Frio": distrito com o município junto ajuda a busca.
+  const lugar = q.cidade.replace(/\s*\(([^)]+)\)\s*$/, ", $1");
+  const query = `${termo} em ${lugar} ${q.uf}`;
   const limite = q.limite ?? 12;
   const t0 = Date.now();
   const res = await fetch("https://api.openai.com/v1/responses", {
@@ -107,7 +109,7 @@ export async function buscarEmpresas(q: ConsultaDescoberta, apiKey: string): Pro
       tools: [{ type: "web_search" }],
       input:
         `Pesquise na web: ${query}\n\n` +
-        `Liste até ${limite} EMPRESAS REAIS desse tipo ("${q.segmento.nome}") sediadas em ${q.cidade}/${q.uf} ou muito próximas. ` +
+        `Liste até ${limite} EMPRESAS REAIS desse tipo ("${q.segmento.nome}") sediadas em ${lugar}/${q.uf} ou muito próximas. ` +
         `Priorize lojas estabelecidas (com endereço físico, avaliações no Google, Instagram ativo). Ignore marketplaces, listas genéricas e grandes redes nacionais (Leroy Merlin, Telhanorte, C&C, Obramax).\n` +
         `Para cada empresa, informe SOMENTE o que a busca mostrou (não invente): nome (o nome fantasia CURTO, como a loja se chama — sem cidade, sem "material de construção" colado), cidade (só o município, sem UF), site, instagram (só o @ ou a URL), telefone (com DDD), cnpj (se aparecer no site/rodapé ou em cadastros públicos), endereco, google_maps_url, google_nota (número de 0 a 5, ex.: 4.6), google_avaliacoes (número inteiro), e "sinais" (até 4 frases curtas com fatos observados: "2 lojas", "anuncia no Instagram", "18 anos de mercado").\n` +
         `Responda APENAS com um array JSON de objetos com essas chaves (use null quando não souber). Sem texto fora do JSON.`,
