@@ -57,6 +57,22 @@ insert into platform_updates (title, description, category, icon, published, cre
   'feature', 'radar', true, 'Sistema');
 ```
 
+```sql
+-- 16/09: caça ao WhatsApp + custo
+insert into platform_updates (title, description, category, icon, published, created_by) values (
+  'Prospecção: Rafaela acha o WhatsApp e gasta menos por empresa',
+  'Lead A/B não fica mais preso no gate por telefone fixo: a pesquisa lê a bio e as legendas do Instagram, os dois telefones do CNPJ e o site, confere todos de uma vez na Evolution e, se ainda faltar, faz uma busca dirigida ao celular. Custo da pesquisa por empresa caiu pela metade (uma busca por empresa) e a descoberta só traz empresa com presença digital. Erro da OpenAI (sem crédito) agora deixa o prospect para a próxima rodada em vez de descartá-lo.',
+  'improvement', 'radar', true, 'Sistema');
+```
+
+## Custo por empresa (medido 16/09)
+
+- Pesquisa web (`prospeccao:pesquisa-empresa`, gpt-5.4-mini + `web_search`, `max_tool_calls: 1`): ~8,3k tokens de entrada ≈ **US$ 0,003**. Sem o limite o modelo fazia 2–3 buscas (15k tokens, US$ 0,0055). `search_context_size: "low"` sozinho não reduz nada.
+- Caça ao WhatsApp (`prospeccao:busca-whatsapp`): só lead com score ≥ mínimo sem celular verificado ≈ US$ 0,0025.
+- Diagnóstico (gpt-4o) só para A/B ≈ US$ 0,0013. Descoberta ≈ US$ 0,006 por consulta (10/dia).
+- Ordem de grandeza: **US$ 0,25–0,35/dia** com 10 consultas e ~60 empresas pesquisadas. MEI/CNPJ inativo saem antes da web (BrasilAPI é grátis).
+- Erro da API da OpenAI (sem crédito, 429, 5xx) **sobe** — o prospect fica `descoberto` e volta na próxima rodada. Conferir créditos em platform.openai.com quando `llm_calls.ok=false` acumular.
+
 ## Guardas que valem a pena conhecer
 
 - Teto duro: `prospect_messages.eh_primeira_abordagem` conta o dia; `limites.ts` bloqueia fora de 09–11.
