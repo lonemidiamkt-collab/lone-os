@@ -122,7 +122,8 @@ async function buscarEmpresasComTermo(q: ConsultaDescoberta, termo: string, apiK
       input:
         `Pesquise na web: ${query}\n\n` +
         `Liste até ${limite} EMPRESAS REAIS desse tipo ("${q.segmento.nome}") sediadas em ${lugar}/${q.uf} ou muito próximas. ` +
-        `Priorize lojas estabelecidas (com endereço físico, avaliações no Google, Instagram ativo). Ignore marketplaces, listas genéricas e grandes redes nacionais (Leroy Merlin, Telhanorte, C&C, Obramax).\n` +
+        `SÓ empresas estabelecidas, com pelo menos UM destes sinais: Instagram com posts recentes, site próprio, ou 30+ avaliações no Google, ou mais de uma unidade. ` +
+        `NÃO liste: MEI, lojinha de bairro sem presença digital, prestador autônomo, marketplace, lista genérica, prefeitura/órgão público, nem grandes redes nacionais (Leroy Merlin, Telhanorte, C&C, Obramax). Menos empresas e melhores é melhor que muitas fracas.\n` +
         `Para cada empresa, informe SOMENTE o que a busca mostrou (não invente): nome (o nome fantasia CURTO, como a loja se chama — sem cidade, sem "material de construção" colado), cidade (só o município, sem UF), site, instagram (só o @ ou a URL), telefone (fixo, com DDD), whatsapp (o CELULAR/WhatsApp da loja com DDD e 9 dígitos, se aparecer no site, Instagram, Google ou anúncio — procure especificamente por isso; é o dado mais importante), cnpj (se aparecer no site/rodapé ou em cadastros públicos), endereco, google_maps_url, google_nota (número de 0 a 5, ex.: 4.6), google_avaliacoes (número inteiro), e "sinais" (até 4 frases curtas com fatos observados: "2 lojas", "anuncia no Instagram", "18 anos de mercado").\n` +
         `Responda APENAS com um array JSON de objetos com essas chaves (use null quando não souber). Sem texto fora do JSON.`,
     }),
@@ -162,6 +163,8 @@ export async function pesquisarEmpresa(p: { nome: string; cidade?: string | null
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: MODELO,
+      // UMA busca por empresa: medido 12,9k → 8,7k tokens de entrada (−33%) sem perder o que o score usa.
+      max_tool_calls: 1,
       tools: [{ type: "web_search", search_context_size: "low" }],
       input:
         `Pesquise na web sobre a empresa: ${ident}\n\n` +
