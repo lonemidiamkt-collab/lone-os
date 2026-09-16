@@ -137,3 +137,12 @@ describe("normalização e dedup (§25)", () => {
     expect(r.ignoradas).toBe(1);
   });
 });
+
+describe("números e cidade vindos da busca web", () => {
+  it("nota do Google em qualquer formato vira 0–5; milhar não vira decimal", async () => {
+    const { numeroBr, notaGoogle, cidadeLimpa } = await import("@/lib/prospeccao/providers/web-search");
+    expect(notaGoogle("4.4")).toBe(4.4); expect(notaGoogle("4,4")).toBe(4.4); expect(notaGoogle(44)).toBe(4.4); expect(notaGoogle("4.6/5")).toBe(4.6); expect(notaGoogle("7")).toBeNull();
+    expect(numeroBr("1.240")).toBe(1240); expect(numeroBr("1,240")).toBe(1240); expect(numeroBr("382 avaliações")).toBe(382); expect(numeroBr("1.240,5")).toBe(1240.5);
+    expect(cidadeLimpa("Araruama/RJ", "x")).toBe("Araruama"); expect(cidadeLimpa("Cabo Frio - RJ", "x")).toBe("Cabo Frio"); expect(cidadeLimpa(null, "Maricá")).toBe("Maricá");
+  });
+});

@@ -57,6 +57,8 @@ export interface ProspectConfig {
   uf_permitidas: string[];
   segmentos: SegmentoIcp[];
   cidades: string[];
+  /** Empresas que NUNCA viram prospect (clientes de site/serviço que não estão em `clients`, parceiros…). */
+  excluidos: string[];
   queries_por_dia: number;
   providers: { web_search: boolean; driva: boolean };
   score: { pesos: PesosScore; minimo: number };
@@ -141,6 +143,7 @@ export const CONFIG_PADRAO: ProspectConfig = {
   uf_permitidas: ["RJ"],
   segmentos: SEGMENTOS_PADRAO,
   cidades: CIDADES_PADRAO,
+  excluidos: ["Armazém do Ferro", "Bruno das Tintas", "Araruama Tintas"],
   queries_por_dia: 4,
   providers: { web_search: true, driva: false },
   score: {
@@ -182,6 +185,7 @@ export function mesclarConfig(salvo: Partial<ProspectConfig> | null | undefined)
     templates: { ...CONFIG_PADRAO.templates, ...(salvo.templates ?? {}) },
     segmentos: salvo.segmentos?.length ? salvo.segmentos : CONFIG_PADRAO.segmentos,
     cidades: salvo.cidades?.length ? salvo.cidades : CONFIG_PADRAO.cidades,
+    excluidos: Array.isArray(salvo.excluidos) ? salvo.excluidos : CONFIG_PADRAO.excluidos,
   };
 }
 

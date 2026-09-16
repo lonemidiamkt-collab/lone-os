@@ -108,6 +108,17 @@ export async function acharDuplicado(chaves: ChavesDedup): Promise<ProspectRow |
  * Prospectar o próprio cliente seria o erro mais constrangedor possível — a checagem é generosa.
  */
 export async function ehClienteAtual(c: { nome?: string | null; instagram?: string | null; telefone?: string | null; cidade?: string | null }): Promise<{ sim: boolean; cliente?: string }> {
+  // Lista de exclusão da config: clientes de site/serviço que não estão em `clients` (Armazém do
+  // Ferro, Bruno das Tintas…). Comparação por nome canônico, um contido no outro.
+  try {
+    const { carregarConfig } = await import("./config");
+    const cfg = await carregarConfig();
+    const alvo = chavesDedup({ nome: c.nome, cidade: "x" }).nomeCidade?.split("|")[0] ?? "";
+    for (const ex of cfg.excluidos ?? []) {
+      const k = chavesDedup({ nome: ex, cidade: "x" }).nomeCidade?.split("|")[0] ?? "";
+      if (k && alvo && (alvo === k || alvo.includes(k) || k.includes(alvo))) return { sim: true, cliente: `${ex} (lista de exclusão)` };
+    }
+  } catch { /* config indisponível: segue com a tabela clients */ }
   const { data } = await supabaseAdmin.from("clients")
     .select("id, name, nome_fantasia, instagram_user, company_phone, contact_phone")
     .limit(500);

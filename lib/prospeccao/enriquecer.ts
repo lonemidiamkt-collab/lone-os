@@ -13,7 +13,7 @@ import type { ProspectConfig } from "./config";
 import { calcularScore, segmentoAderente } from "./score";
 import { consolidarDecisor } from "./decisor";
 import { verificarWhatsapp } from "./envio";
-import { pesquisarEmpresa } from "./providers/web-search";
+import { pesquisarEmpresa, notaGoogle, numeroBr, cidadeLimpa } from "./providers/web-search";
 import { cnpjLimpo, distanciaKm, instagramHandle, siteNormalizado, telefoneDigitos, nomeProprio } from "./normalizar";
 import { transicionar, registrarEvento } from "./maquina";
 import { atualizarProspect } from "./db";
@@ -149,8 +149,9 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
     if (w) {
       etapas.push("web");
       const marca = (k: string, v: unknown) => { if (v !== null && v !== undefined && v !== "" && (p as unknown as Record<string, unknown>)[k] == null) { patch[k] = v; fontes[k] = "web"; } };
-      if (typeof w.google_nota === "number") { patch.google_nota = w.google_nota; fontes.google_nota = "web (Google)"; }
-      if (typeof w.google_avaliacoes === "number") { patch.google_avaliacoes = Math.round(w.google_avaliacoes); fontes.google_avaliacoes = "web (Google)"; }
+      const nota = notaGoogle(w.google_nota), aval = numeroBr(w.google_avaliacoes);
+      if (nota !== null) { patch.google_nota = nota; fontes.google_nota = "web (Google)"; }
+      if (aval !== null) { patch.google_avaliacoes = Math.round(aval); fontes.google_avaliacoes = "web (Google)"; }
       marca("google_maps_url", w.google_maps_url);
       if (typeof w.unidades === "number" && w.unidades >= 1) { patch.unidades = Math.round(w.unidades); fontes.unidades = "web"; }
       marca("instagram", instagramHandle(w.instagram));
@@ -185,7 +186,8 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
       const end = [d.logradouro, d.numero, d.bairro].filter(Boolean).join(", ");
       if (end && !p.endereco) { patch.endereco = `${end}${d.municipio ? ` — ${nomeProprio(d.municipio)}` : ""}${d.uf ? `/${d.uf}` : ""}`; fontes.endereco = "BrasilAPI"; }
       if (d.cep) patch.cep = d.cep.replace(/\D/g, "");
-      if (d.municipio && !p.cidade) { patch.cidade = nomeProprio(d.municipio); fontes.cidade = "BrasilAPI"; }
+      if (d.municipio && (!p.cidade || /[\/,-]\s*[A-Z]{2}\s*$/i.test(p.cidade))) { patch.cidade = nomeProprio(d.municipio); fontes.cidade = "BrasilAPI"; }
+      else if (p.cidade) patch.cidade = cidadeLimpa(p.cidade, p.cidade);
       if (d.uf) { patch.uf = d.uf; fontes.uf = "BrasilAPI"; }
       if (!telefoneAtual && d.ddd_telefone_1) { const t = telefoneDigitos(d.ddd_telefone_1); if (t) { patch.telefone = t; fontes.telefone = "BrasilAPI"; } }
       qsa = (d.qsa ?? []).filter((s) => s.nome_socio).map((s) => ({ nome: s.nome_socio!, qualificacao: s.qualificacao_socio ?? null }));

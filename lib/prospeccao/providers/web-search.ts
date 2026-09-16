@@ -40,13 +40,44 @@ export function extrairArrayJson(texto: string): unknown[] {
   try { const v = JSON.parse(limpo.slice(ini, fim + 1)); return Array.isArray(v) ? v : []; } catch { return []; }
 }
 
+/**
+ * "4.4" → 4.4 · "4,4" → 4.4 · "1.240" → 1240 · "1,240" → 1240 · "382 avaliações" → 382.
+ * A IA devolve tanto formato americano quanto brasileiro; o ponto só é milhar quando vem em grupos de 3.
+ */
+export function numeroBr(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  let s = String(v ?? "").trim().replace(/[^\d.,-]/g, "");
+  if (!s) return null;
+  if (s.includes(",") && s.includes(".")) s = s.lastIndexOf(",") > s.lastIndexOf(".") ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  else if (s.includes(",")) s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, "") : s.replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Nota do Google é 0–5; "44" ou "4.4/5" viram 4.4. */
+export function notaGoogle(v: unknown): number | null {
+  const n = numeroBr(typeof v === "string" ? v.replace(/\/\s*5.*$/, "") : v);
+  if (n === null) return null;
+  // "44" = 4,4 sem a vírgula; "7" não é nota de nada.
+  if (n >= 10 && n <= 50 && Number.isInteger(n)) return n / 10;
+  if (n < 0 || n > 5) return null;
+  return Math.round(n * 10) / 10;
+}
+
+/** "Araruama/RJ", "Araruama - RJ", "Araruama, RJ" → "Araruama". */
+export function cidadeLimpa(v: unknown, padrao: string): string {
+  const s = String(v ?? "").replace(/\s*[\/,-]\s*[A-Z]{2}\s*$/i, "").replace(/\s+RJ$/i, "").trim();
+  return s || padrao;
+}
+
 export function paraCandidatos(brutas: unknown[], q: ConsultaDescoberta, query: string): Candidato[] {
-  const num = (v: unknown) => { const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/\./g, "").replace(",", ".")); return Number.isFinite(n) ? n : null; };
+  const num = (v: unknown) => numeroBr(v);
   return (brutas as EmpresaBruta[])
     .filter((e) => e && typeof e.nome === "string" && e.nome.trim().length >= 3)
     .map((e) => ({
-      nome: e.nome!.trim(),
-      cidade: (e.cidade ?? q.cidade).trim() || q.cidade,
+      nome: e.nome!.trim().replace(/\s*[-–|]\s*(material|materiais|loja|casa|depósito|deposito|distribuidora)\b.*$/i, "").trim() || e.nome!.trim(),
+      cidade: cidadeLimpa(e.cidade, q.cidade),
       uf: q.uf,
       segmento: q.segmento.nome,
       cnpj: e.cnpj ?? null,
@@ -55,7 +86,7 @@ export function paraCandidatos(brutas: unknown[], q: ConsultaDescoberta, query: 
       telefone: e.telefone ?? null,
       endereco: e.endereco ?? null,
       google_maps_url: e.google_maps_url ?? null,
-      google_nota: num(e.google_nota),
+      google_nota: notaGoogle(e.google_nota),
       google_avaliacoes: num(e.google_avaliacoes) === null ? null : Math.round(num(e.google_avaliacoes)!),
       sinais: Array.isArray(e.sinais) ? e.sinais.map(String).slice(0, 6) : [],
       fonte: "web_search",
@@ -78,7 +109,7 @@ export async function buscarEmpresas(q: ConsultaDescoberta, apiKey: string): Pro
         `Pesquise na web: ${query}\n\n` +
         `Liste até ${limite} EMPRESAS REAIS desse tipo ("${q.segmento.nome}") sediadas em ${q.cidade}/${q.uf} ou muito próximas. ` +
         `Priorize lojas estabelecidas (com endereço físico, avaliações no Google, Instagram ativo). Ignore marketplaces, listas genéricas e grandes redes nacionais (Leroy Merlin, Telhanorte, C&C, Obramax).\n` +
-        `Para cada empresa, informe SOMENTE o que a busca mostrou (não invente): nome, cidade, site, instagram (só o @ ou a URL), telefone (com DDD), cnpj (se aparecer no site/rodapé ou em cadastros públicos), endereco, google_maps_url, google_nota, google_avaliacoes, e "sinais" (até 4 frases curtas com fatos observados: "2 lojas", "anuncia no Instagram", "18 anos de mercado").\n` +
+        `Para cada empresa, informe SOMENTE o que a busca mostrou (não invente): nome (o nome fantasia CURTO, como a loja se chama — sem cidade, sem "material de construção" colado), cidade (só o município, sem UF), site, instagram (só o @ ou a URL), telefone (com DDD), cnpj (se aparecer no site/rodapé ou em cadastros públicos), endereco, google_maps_url, google_nota (número de 0 a 5, ex.: 4.6), google_avaliacoes (número inteiro), e "sinais" (até 4 frases curtas com fatos observados: "2 lojas", "anuncia no Instagram", "18 anos de mercado").\n` +
         `Responda APENAS com um array JSON de objetos com essas chaves (use null quando não souber). Sem texto fora do JSON.`,
     }),
     signal: AbortSignal.timeout(180_000),

@@ -10,7 +10,7 @@ import { Secao, Campo, inputCls, Erro, fmtData, ROTULO_ESTAGIO } from "./ui";
 interface Campanha { id: string; nome: string; status: string; iniciado_em: string | null; termina_em: string | null; duracao_dias: number; limite_dia: number; auto_stop: boolean; janela_abordagem: { ini: string; fim: string }; janela_resposta: { ini: string; fim: string }; finalizado_motivo: string | null; reativado_por: string | null }
 interface Config {
   ligado: boolean; base: { nome: string; cidade: string; uf: string; lat: number; lng: number }; raio_visita_km: number; uf_permitidas: string[];
-  segmentos: { nome: string; termos: string[]; cnaes: string[] }[]; cidades: string[]; queries_por_dia: number; providers: { web_search: boolean; driva: boolean };
+  segmentos: { nome: string; termos: string[]; cnaes: string[] }[]; cidades: string[]; excluidos: string[]; queries_por_dia: number; providers: { web_search: boolean; driva: boolean };
   score: { pesos: Record<string, number>; minimo: number }; identidade: { apresentacao: string; quem_faz_reuniao: string; empresas_atendidas: string };
   handoff_numero: string; gift_available: boolean; intervalo_min_s: number; intervalo_max_s: number; envios_por_tick: number; duracao_reuniao_min: number; templates: Record<string, string>;
 }
@@ -159,6 +159,7 @@ export default function Configuracao({ onChange, googleStatus }: { onChange: () 
           <Campo label="Nº de handoff (DDI+DDD)"><input className={inputCls} defaultValue={cfg.handoff_numero} onBlur={(e) => e.target.value.replace(/\D/g, "") !== cfg.handoff_numero && salvar({ handoff_numero: e.target.value.replace(/\D/g, "") })} /></Campo>
         </div>
         <Campo label="Cidades (uma por linha, mais perto da base primeiro)" className="mt-3"><textarea className={`${inputCls} min-h-[120px]`} defaultValue={cfg.cidades.join("\n")} onBlur={(e) => { const v = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean); if (v.join("|") !== cfg.cidades.join("|")) void salvar({ cidades: v }); }} /></Campo>
+        <Campo label="Nunca prospectar (uma empresa por linha — clientes de site, parceiros, quem já disse não fora do sistema)" className="mt-3"><textarea className={`${inputCls} min-h-[72px]`} defaultValue={(cfg.excluidos ?? []).join("\n")} onBlur={(e) => { const v = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean); if (v.join("|") !== (cfg.excluidos ?? []).join("|")) void salvar({ excluidos: v }, "Lista de exclusão salva"); }} /></Campo>
         <Campo label="Segmentos (nome | termos de busca separados por ; | CNAEs separados por ;)" className="mt-3">
           <textarea className={`${inputCls} min-h-[200px] font-mono text-xs`} defaultValue={cfg.segmentos.map((s) => `${s.nome} | ${s.termos.join("; ")} | ${s.cnaes.join("; ")}`).join("\n")} onBlur={(e) => {
             const segs = e.target.value.split("\n").map((l) => l.split("|").map((x) => x.trim())).filter((c) => c[0]).map((c) => ({ nome: c[0], termos: (c[1] ?? "").split(";").map((x) => x.trim()).filter(Boolean), cnaes: (c[2] ?? "").split(";").map((x) => x.replace(/\D/g, "")).filter(Boolean) }));
