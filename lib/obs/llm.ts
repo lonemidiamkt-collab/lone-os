@@ -18,9 +18,23 @@ export interface ChamadaLlm {
   tipo?: string;
 }
 
+// ORIGEM PELA PILHA (16/09): 66 chamadas de gpt-4o em 3 dias chegaram sem origem nem execução —
+// a fatia mais cara ficou anônima. Sem rótulo, o arquivo que chamou vira a origem ("lib/cs/cobranca").
+function origemDaPilha(): string | null {
+  const pilha = new Error().stack ?? "";
+  for (const linha of pilha.split("\n").slice(1)) {
+    const m = linha.match(/\/(lib|app|tests|stores|components)\/([^:)]+?)\.(?:ts|tsx|js)/);
+    if (m && !m[2].startsWith("obs/") && !m[2].startsWith("ai/openai")) return `${m[1]}/${m[2]}`;
+  }
+  return null;
+}
+
+/** Custo por chamada de modelos cobrados por unidade, não por token (US$). Estimativa. */
+const CUSTO_FIXO: Record<string, number> = { "gpt-image-1": 0.063, "gpt-image-1:high": 0.25, "whisper-1": 0.006 };
+
 export function registrarChamadaLlm(c: ChamadaLlm): void {
   const e = execucaoAtual();
-  const custo = custoUsd(c.modelo, c.usage);
+  const custo = c.usage ? custoUsd(c.modelo, c.usage) : (CUSTO_FIXO[c.modelo] ?? custoUsd(c.modelo, c.usage));
   const preco = precoDe(c.modelo);
   const u = c.usage ?? {};
   registrarUsoLlm({
@@ -34,14 +48,14 @@ export function registrarChamadaLlm(c: ChamadaLlm): void {
   });
   void gravar({
     run_id: e?.id ?? null,
-    origem: c.origem ?? e?.origem ?? null,
+    origem: c.origem ?? e?.origem ?? origemDaPilha(),
     tipo: c.tipo ?? "chat",
     modelo: c.modelo,
     tokens_prompt: u.prompt_tokens ?? 0,
     tokens_completion: u.completion_tokens ?? 0,
     tokens_cached: u.prompt_tokens_details?.cached_tokens ?? 0,
     custo_usd: custo,
-    custo_estimado: !!preco?.estimado,
+    custo_estimado: !!preco?.estimado || (!c.usage && c.modelo in CUSTO_FIXO),
     duracao_ms: Math.round(c.ms),
     ok: c.ok,
     erro: c.erro ? String(c.erro).slice(0, 300) : null,

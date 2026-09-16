@@ -32,11 +32,27 @@ export interface VisionResult {
 }
 
 /** Descreve uma imagem (base64) pra virar contexto textual. detail "low" = custo mínimo. */
+// TAMANHO (16/09): a arte chegava inteira (3–4 MB, 2–4k px) com detail "high" = 28 mil tokens por
+// leitura (máx. 48 mil) — a linha mais cara por chamada. Reduzir para 1280 px no lado maior mantém
+// preço/texto legível e corta ~80% dos tokens de imagem.
+async function reduzirImagem(base64: string, mime: string): Promise<{ b64: string; mime: string }> {
+  try {
+    const sharp = (await import("sharp")).default;
+    const bruto = Buffer.from(base64.replace(/^data:[^;]+;base64,/, ""), "base64");
+    if (bruto.length < 400_000) return { b64: bruto.toString("base64"), mime };
+    const saida = await sharp(bruto).rotate().resize({ width: 1280, height: 1280, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
+    return { b64: saida.toString("base64"), mime: "image/jpeg" };
+  } catch {
+    return { b64: base64.replace(/^data:[^;]+;base64,/, ""), mime };
+  }
+}
+
 export async function describeImage(base64: string, mimetype?: string): Promise<VisionResult> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { ok: false, descricao: null, error: "OPENAI_API_KEY não configurada" };
   const mime = mimetype || "image/jpeg";
-  const dataUri = base64.startsWith("data:") ? base64 : `data:${mime};base64,${base64}`;
+  const reduzida = await reduzirImagem(base64, mime);
+  const dataUri = `data:${reduzida.mime};base64,${reduzida.b64}`;
   const t0 = Date.now();
   try {
     const res = await fetch(OPENAI_API_URL, {

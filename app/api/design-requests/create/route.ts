@@ -53,6 +53,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // QUEM VAI RECEBER (16/09): "demanda foi pro destinatário errado" (Rodrigo) era cliente SEM designer
+    // no cadastro — a demanda cai no quadro "(sem designer)" e ninguém puxa. Devolve isso pra tela avisar.
+    const { data: cli } = await supabaseAdmin.from("clients").select("assigned_designer").eq("id", body.clientId).maybeSingle();
+    const designer = ((cli?.assigned_designer as string) ?? "").trim() || null;
+
     // Grava o link reverso (content_cards.design_request_id) no servidor, atômico com a
     // criação. Antes isso era um 2º fetch do cliente que, se falhasse, deixava a demanda
     // ÓRFÃ (sem vínculo nos 2 sentidos) — a entrega do designer não voltava pro card.
@@ -82,7 +87,7 @@ export async function POST(req: NextRequest) {
         .catch((e) => console.error("[design-requests/create] briefing IA falhou (ignorado):", e));
     }
 
-    return NextResponse.json({ id: data.id });
+    return NextResponse.json({ id: data.id, designer, semDesigner: !designer });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
     console.error("[design-requests/create] unhandled:", err);

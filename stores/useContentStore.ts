@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type { ContentCard, DesignRequest, ContentApproval, SocialMonthlyReport, CardComment, Role } from "@/lib/types";
 import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
@@ -348,7 +349,9 @@ export const useContentStore = create<ContentState>()(
         try {
           const r = await authedFetch("/api/design-requests/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          const { id } = await r.json();
+          const { id, semDesigner } = await r.json() as { id: string; semDesigner?: boolean };
+          // Cliente sem designer no cadastro: a demanda existe, mas cai em "(sem designer)" — avisa quem criou.
+          if (semDesigner) toast.warning(`"${req.title}" foi criada, mas ${req.clientName} não tem designer no cadastro — caiu em "(sem designer)". Defina o designer na ficha do cliente pra cair no quadro certo.`, { duration: 9000 });
           const confirmed = { ...optimistic, id };
           set((s) => ({
             designRequests: s.designRequests.map((r) => r.id === tempId ? confirmed : r),
