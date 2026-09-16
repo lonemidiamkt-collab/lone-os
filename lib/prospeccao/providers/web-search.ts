@@ -175,7 +175,7 @@ export async function pesquisarEmpresa(p: { nome: string; cidade?: string | null
         `- anuncia: true se houver evidência de anúncios pagos (Biblioteca de Anúncios da Meta, "patrocinado", Google Ads); false só se você encontrou a empresa na Biblioteca de Anúncios sem anúncios ativos; senão null. anuncia_fonte: onde viu.\n` +
         `- proprietario: nome do dono/sócio/diretor citado em site, Instagram, LinkedIn, matéria ou cadastro público; proprietario_cargo; proprietario_fonte (URL ou nome da fonte)\n` +
         `- whatsapp: o CELULAR/WhatsApp da loja (DDD + 9 dígitos) se aparecer no site, Instagram, Google ou anúncio — procure especificamente; instagram (@), site, telefone fixo (com DDD), cnpj (se visível), endereco\n` +
-        `- fatos: até 3 frases curtas com fatos observados e úteis para uma conversa comercial (ex.: "inaugurou 2ª loja em 2025", "faz lives de ofertas toda sexta")\n` +
+        `- fatos: até 3 frases curtas com fatos COMERCIAIS observados (lojas, tempo de mercado, produtos/marcas, promoções, expansão, eventos — ex.: "inaugurou 2ª loja em 2025", "faz lives de ofertas toda sexta"). Nada burocrático (licença, alvará, cadastro, processo, capital social).\n` +
         `- fontes: até 3 URLs consultadas\n` +
         `Responda APENAS com um objeto JSON com essas chaves.`,
     }),

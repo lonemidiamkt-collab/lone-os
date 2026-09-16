@@ -138,6 +138,7 @@ describe("normalização e dedup (§25)", () => {
   it("gancho que aponta falta não vira {gancho}", () => {
     const v = valoresDe(prospectBase({ diagnostico: { oportunidades: [], por_que_prospectar: "x", abordagem_recomendada: "y", gancho: "Vi que vocês têm site, mas não encontrei o Instagram" } }), CONFIG_PADRAO);
     expect(v.gancho).toBeNull();
+    expect(valoresDe(prospectBase({ diagnostico: { oportunidades: [], por_que_prospectar: "x", abordagem_recomendada: "y", gancho: "Vi que a licença de operação está válida até 2027" } }), CONFIG_PADRAO).gancho).toBeNull();
     const ok = valoresDe(prospectBase({ diagnostico: { oportunidades: [], por_que_prospectar: "x", abordagem_recomendada: "y", gancho: "Vi que vocês têm duas lojas" } }), CONFIG_PADRAO);
     expect(ok.gancho).toMatch(/^porque vi que vocês têm duas lojas$/);
   });
