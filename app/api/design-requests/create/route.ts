@@ -21,8 +21,21 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // IDEMPOTÊNCIA (16/09): 27 demandas duplicadas em 30 dias, sempre a mesma pessoa, o mesmo card,
+    // 1–50 s de diferença — o clique sem resposta visível vira segundo clique. A trava de estado
+    // no botão não segura duplo clique (o valor no closure ainda é o antigo). Aqui é a última
+    // linha: mesmo card com demanda aberta, ou mesmo cliente+título+pessoa nos últimos 2 min,
+    // devolve a existente com 200 e `dedupe: true`.
+    const titulo = String(body.title).trim();
+    const desde = new Date(Date.now() - 2 * 60_000).toISOString();
+    let repetida = body.contentCardId
+      ? supabaseAdmin.from("design_requests").select("id").eq("content_card_id", body.contentCardId).neq("status", "done").order("created_at", { ascending: false }).limit(1).maybeSingle()
+      : supabaseAdmin.from("design_requests").select("id").eq("client_id", body.clientId).eq("title", titulo).eq("requested_by", body.requestedBy ?? user.email).gte("created_at", desde).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const { data: existente } = await repetida;
+    if (existente?.id) return NextResponse.json({ id: existente.id, dedupe: true });
+
     const { data, error } = await supabaseAdmin.from("design_requests").insert({
-      title: body.title,
+      title: titulo,
       client_id: body.clientId,
       client_name: body.clientName ?? "",
       requested_by: body.requestedBy ?? user.email,

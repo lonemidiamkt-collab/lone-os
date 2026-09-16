@@ -56,6 +56,7 @@ import {
 import * as db from "@/lib/supabase/queries";
 import { supabase } from "@/lib/supabase/client";
 import { useRole } from "@/lib/context/RoleContext";
+import { usePathname } from "next/navigation";
 
 // ============================================
 // localStorage Persistence Layer
@@ -576,8 +577,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ---------- Load from Supabase when authenticated (takes priority over localStorage) ----------
+  // SÓ ONDE ALGUÉM LÊ (16/09). Este contexto legado baixava 22 tabelas pelo navegador (PostgREST via
+  // Cloudflare → nginx → Kong) em TODA página, e ninguém usava: as telas leem os stores (/api/data/*).
+  // Consumidores que sobraram: /goals (useOKRMetrics, useSnapshots, useCollaboratorScores); /calendar
+  // e /automations usam só reminders/automationRules (locais, sem banco). Fora do /goals, o
+  // carregamento pesado não roda — nem as assinaturas de realtime abaixo (o container está desligado
+  // e cada aba tentava o websocket a cada 10 s). Era boa parte da lentidão no Social/Design e a
+  // origem do 502 de card_attachments (URL de 3,8 KB) que abria o quadro sem as artes.
+  const pathname = usePathname();
+  const precisaDoLegado = !!pathname && pathname.startsWith("/goals");
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !precisaDoLegado) {
       setDbReady(false);
       return;
     }
@@ -701,7 +711,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
     loadFromDb();
     return () => { cancelled = true; };
-  }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, precisaDoLegado]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Realtime: content_cards ────────────────────────────────
   // Mantém o state sincronizado quando OUTRO user faz INSERT/UPDATE/DELETE.

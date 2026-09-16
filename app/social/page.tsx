@@ -804,8 +804,13 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
     setSubindoRef(false);
   };
 
+  const [criando, setCriando] = useState(false);
   const handleSubmit = async () => {
-    if (!canSubmit || subindoRef) return;
+    if (!canSubmit || subindoRef || criando) return;
+    setCriando(true);
+    try { await criarDeVerdade(); } finally { setCriando(false); }
+  };
+  const criarDeVerdade = async () => {
     // COM REFERÊNCIA, O MODAL ESPERA. Fechando na hora, o upload virava órfão: se falhasse,
     // ninguém via o aviso e a demanda ia pro designer sem a imagem — que é justamente o problema
     // que este campo veio resolver. Sem referência, fecha na hora como antes.
@@ -1004,8 +1009,8 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
           </p>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-            <Button onClick={handleSubmit} disabled={!canSubmit || subindoRef}>
-              Criar Conteúdo
+            <Button onClick={handleSubmit} disabled={!canSubmit || subindoRef || criando}>
+              {criando ? "Criando…" : "Criar Conteúdo"}
             </Button>
           </div>
         </DialogFooter>

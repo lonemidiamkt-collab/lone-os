@@ -11,6 +11,7 @@ interface ContentState {
   socialReports: SocialMonthlyReport[];
   loading: boolean;
   initialized: boolean;
+  versao?: string;
 
   init: (filter?: { socialMedia?: string }) => Promise<void>;
   refresh: (filter?: { socialMedia?: string }) => Promise<void>;
@@ -43,6 +44,10 @@ export const selectCardsByClient = (clientId: string) => (s: ContentState) =>
 export const selectDesignByClient = (clientId: string) => (s: ContentState) =>
   s.designRequests.filter((r) => r.clientId === clientId);
 
+// CRIAÇÕES EM VOO (16/09): duplo clique criava 2 cards/demandas (27+28 em 30 dias). Trava síncrona por
+// chave — estado React no botão não segura, o closure ainda vê o valor antigo.
+const criacoesEmVoo = new Map<string, Promise<unknown>>();
+
 export const useContentStore = create<ContentState>()(
   devtools(
     subscribeWithSelector((set, get) => ({
@@ -60,8 +65,8 @@ export const useContentStore = create<ContentState>()(
           const params = filter?.socialMedia ? `?socialMedia=${encodeURIComponent(filter.socialMedia)}` : "";
           const res = await authedFetch(`/api/data/content${params}`);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const { contentCards, designRequests, contentApprovals, socialReports } = await res.json();
-          set({ contentCards, designRequests, contentApprovals, socialReports, loading: false, initialized: true }, false, "content/init/done");
+          const { contentCards, designRequests, contentApprovals, socialReports, versao } = await res.json();
+          set({ contentCards, designRequests, contentApprovals, socialReports, versao, loading: false, initialized: true }, false, "content/init/done");
         } catch {
           set({ loading: false }, false, "content/init/error");
         }
@@ -73,11 +78,15 @@ export const useContentStore = create<ContentState>()(
         // Substitui as coleções server-authoritative; updates otimistas locais persistem em
         // <1s, então a janela de corrida com um poll de ~45s é desprezível.
         try {
-          const params = filter?.socialMedia ? `?socialMedia=${encodeURIComponent(filter.socialMedia)}` : "";
-          const res = await authedFetch(`/api/data/content${params}`);
+          const q = new URLSearchParams();
+          if (filter?.socialMedia) q.set("socialMedia", filter.socialMedia);
+          const v = get().versao;
+          if (v) q.set("v", v);
+          const res = await authedFetch(`/api/data/content${q.toString() ? `?${q}` : ""}`);
+          if (res.status === 204) return; // nada mudou desde o último tick — zero bytes, zero re-render
           if (!res.ok) return;
-          const { contentCards, designRequests, contentApprovals, socialReports } = await res.json();
-          set({ contentCards, designRequests, contentApprovals, socialReports }, false, "content/refresh");
+          const { contentCards, designRequests, contentApprovals, socialReports, versao } = await res.json();
+          set({ contentCards, designRequests, contentApprovals, socialReports, versao }, false, "content/refresh");
         } catch {}
       },
 
@@ -145,6 +154,11 @@ export const useContentStore = create<ContentState>()(
       },
 
       addContentCard: async (card) => {
+        // Em voo: segundo clique no mesmo cliente+título devolve a criação que já está rodando.
+        const chave = `card|${card.clientId}|${card.title.trim().toLowerCase()}`;
+        const emVoo = criacoesEmVoo.get(chave) as Promise<ContentCard> | undefined;
+        if (emVoo) return emVoo;
+        const p = (async () => {
         const tempId = `temp-cc-${Date.now()}`;
         const optimistic: ContentCard = { ...card, id: tempId };
         set((s) => ({ contentCards: [...s.contentCards, optimistic] }), false, "content/card/add/optimistic");
@@ -161,6 +175,10 @@ export const useContentStore = create<ContentState>()(
           set((s) => ({ contentCards: s.contentCards.filter((c) => c.id !== tempId) }), false, "content/card/add/rollback");
           throw err;
         }
+        })();
+        criacoesEmVoo.set(chave, p);
+        p.finally(() => criacoesEmVoo.delete(chave)).catch(() => {});
+        return p;
       },
 
       updateContentCard: async (id, updates) => {
@@ -320,6 +338,10 @@ export const useContentStore = create<ContentState>()(
       },
 
       addDesignRequest: async (req) => {
+        const chave = `demanda|${req.contentCardId ?? `${req.clientId}|${req.title.trim().toLowerCase()}`}`;
+        const emVoo = criacoesEmVoo.get(chave) as Promise<DesignRequest> | undefined;
+        if (emVoo) return emVoo;
+        const p = (async () => {
         const tempId = `temp-dr-${Date.now()}`;
         const optimistic: DesignRequest = { ...req, id: tempId } as DesignRequest;
         set((s) => ({ designRequests: [optimistic, ...s.designRequests] }), false, "content/design/add/optimistic");
@@ -336,6 +358,10 @@ export const useContentStore = create<ContentState>()(
           set((s) => ({ designRequests: s.designRequests.filter((r) => r.id !== tempId) }), false, "content/design/add/rollback");
           throw err;
         }
+        })();
+        criacoesEmVoo.set(chave, p);
+        p.finally(() => criacoesEmVoo.delete(chave)).catch(() => {});
+        return p;
       },
 
       updateDesignRequest: async (id, updates) => {

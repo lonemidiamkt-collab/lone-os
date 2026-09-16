@@ -440,12 +440,22 @@ export async function fetchContentCards(filter?: { socialMedia?: string; archive
     // Multi-arte: carrega os anexos de todos os cards em lote e define a capa.
     // Resiliente: se a tabela ainda não existe (migration 044 não aplicada),
     // o board continua funcionando com o image_url legado.
+    // EM LOTES DE 60: com 100+ cards o `in.(…)` virava uma URL de 3,8 KB, o PostgREST devolvia
+    // essa URL inteira no header Content-Location e o nginx respondia 502 ("upstream sent too big
+    // header"). O erro caía neste console.error e o quadro abria SEM as artes — foi o "clico e a
+    // arte não aparece, dou reload e às vezes volta" (13 × 502 em 48 h, 15–16/09).
     const cardIds = cards.map((c) => c.id);
-    const { data: atts, error: attErr } = await db
-      .from("card_attachments")
-      .select("id, card_id, url, path, position, created_at")
-      .in("card_id", cardIds)
-      .order("position", { ascending: true });
+    let atts: Record<string, unknown>[] | null = [];
+    let attErr: { message: string } | null = null;
+    for (let i = 0; i < cardIds.length; i += 60) {
+      const lote = await db
+        .from("card_attachments")
+        .select("id, card_id, url, path, position, created_at")
+        .in("card_id", cardIds.slice(i, i + 60))
+        .order("position", { ascending: true });
+      if (lote.error) { attErr = lote.error; atts = null; break; }
+      atts.push(...(lote.data ?? []));
+    }
     if (attErr) {
       console.error("[DB] fetchContentCards attachments:", attErr.message);
     } else if (atts) {
@@ -526,9 +536,16 @@ export function snakeToDesignRequest(row: Record<string, unknown>): DesignReques
   };
 }
 
-export async function fetchDesignRequests(filter?: { assignedSocialClients?: string[] }): Promise<DesignRequest[]> {
+export async function fetchDesignRequests(filter?: { assignedSocialClients?: string[]; historico?: boolean }): Promise<DesignRequest[]> {
   let query = db.from("design_requests").select("*").order("created_at", { ascending: false });
   if (filter?.assignedSocialClients?.length) query = query.in("client_id", filter.assignedSocialClients);
+  // RECORTE (16/09): 789 demandas, 783 concluídas, TODAS iam no payload de toda tela a cada 20 s
+  // (971 KB de 1,2 MB — briefing + briefing IA + anexos de coisa entregue em junho). O quadro
+  // mostra as abertas e o que foi concluído nos últimos 30 dias; histórico completo só quem pedir.
+  if (!filter?.historico) {
+    const desde = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    query = query.or(`status.neq.done,updated_at.gte.${desde}`);
+  }
   const { data, error } = await query;
   if (error) { console.error("[DB] fetchDesignRequests:", error); return []; }
   return (data ?? []).map(snakeToDesignRequest);

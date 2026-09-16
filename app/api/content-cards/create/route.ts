@@ -21,8 +21,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // IDEMPOTÊNCIA (16/09): 28 cards duplicados em 30 dias — mesmo cliente+título pela mesma pessoa
+    // em segundos. Dentro de 2 min, devolve o existente em vez de criar outro.
+    const titulo = String(body.title).trim();
+    const desde = new Date(Date.now() - 2 * 60_000).toISOString();
+    const { data: existente } = await supabaseAdmin.from("content_cards").select("id").eq("client_id", body.clientId).eq("title", titulo).is("archived_at", null).gte("created_at", desde).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (existente?.id) return NextResponse.json({ id: existente.id, dedupe: true });
+
     const { data, error } = await supabaseAdmin.from("content_cards").insert({
-      title: body.title,
+      title: titulo,
       client_id: body.clientId,
       client_name: body.clientName ?? "",
       social_media: body.socialMedia ?? null,
