@@ -859,6 +859,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
                 // Não manda pro designer sem data de postagem — toda demanda precisa de pauta datada.
                 if (!dueDate) {
                   pushNotification("system", "Falta a data de postagem", `Defina quando "${card.title}" vai ao ar antes de mandar pro designer.`, card.clientId);
+                  toast.error("Falta a data de postagem — preencha ali em cima antes de solicitar o design.");
                   return;
                 }
                 setSendingDesign(true);
@@ -878,9 +879,12 @@ export default function ContentCardModal({ card, onClose }: Props) {
                   .then((req) => {
                     updateContentCard(card.id, { designRequestId: req.id });
                     pushNotification("content", "Design solicitado", `Pedido de arte para "${card.title}" enviado ao designer.`, card.clientId, card.id);
+                    toast.success(`Design solicitado — "${card.title}" está no quadro do designer.`);
                   })
-                  .catch(() => {
+                  .catch((err: unknown) => {
+                    const m = err instanceof Error ? err.message : "";
                     pushNotification("system", "Falha ao solicitar design", `Não deu pra enviar "${card.title}" pro designer. Tente de novo.`, card.clientId);
+                    toast.error(`Não consegui solicitar o design${m ? ` (${m})` : ""}. Nada foi criado — tenta de novo.`);
                   })
                   .finally(() => setSendingDesign(false));
               }}

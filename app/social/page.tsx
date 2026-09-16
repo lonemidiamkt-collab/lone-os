@@ -3099,13 +3099,17 @@ export default function SocialPage() {
                 // e o CS usam pra cobrar no momento certo. Abre o card pro social preencher.
                 if (!card.dueDate) {
                   pushNotification("system", "Falta a data de postagem", `Defina a data de postagem no card "${card.title}" antes de enviar pro designer — é o prazo que o designer e o CS usam.`, card.clientId);
+                  toast.error(`"${card.title}" não foi pro designer: falta a data de postagem. Abri o card pra você preencher.`);
                   setSelectedCard(card);
                   return;
                 }
                 // Etiqueta "A fazer": envia a ideia automaticamente pro designer (cria a demanda).
                 // Guard de in-flight (ref) evita demanda DUPLICADA em duplo-clique — designRequestId
                 // só fica setado depois do round-trip. Notifica conforme o resultado real.
-                if (card.designRequestId || card.designerDeliveredAt || sendingDesignRef.current.has(card.id)) return;
+                // Antes: `return` mudo — a pessoa marcava "A fazer", nada acontecia e não sabia por quê.
+                if (sendingDesignRef.current.has(card.id)) return;
+                if (card.designRequestId) { toast.info(`"${card.title}" já está com o designer — a demanda existe; abre o card pra ver o status.`); return; }
+                if (card.designerDeliveredAt) { toast.info(`"${card.title}" já tem arte entregue pelo designer. Pra pedir alteração, use "Solicitar alteração" no card.`); return; }
                 sendingDesignRef.current.add(card.id);
                 addDesignRequest({
                   title: `Arte: ${card.title}`,
