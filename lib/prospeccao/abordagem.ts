@@ -24,13 +24,13 @@ export interface ResumoOutbound {
 
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function rodarOutbound(cfg: ProspectConfig, campanha: CampanhaRow | null, o: { agora?: Date; dry?: boolean; semJitter?: boolean } = {}): Promise<ResumoOutbound> {
+export async function rodarOutbound(cfg: ProspectConfig, campanha: CampanhaRow | null, o: { agora?: Date; dry?: boolean; semJitter?: boolean; forcarJanela?: boolean } = {}): Promise<ResumoOutbound> {
   const agora = o.agora ?? new Date();
   const out: ResumoOutbound = { abordagens: [], followups: [], retomadas: [], pulados: [], teto: { usado: 0, limite: campanha?.limite_dia ?? 10 } };
   let hoje = await abordagensHoje();
   out.teto.usado = hoje;
 
-  const dec = podeAbordarAgora({ cfg, campanha, abordagensHoje: hoje, agora });
+  const dec = podeAbordarAgora({ cfg, campanha, abordagensHoje: hoje, agora, forcarJanela: o.forcarJanela });
   if (!dec.ok) { out.pulados.push(dec.motivo ?? "bloqueado"); }
 
   const ultimo = await ultimoEnvioDoAgente();
@@ -47,7 +47,7 @@ export async function rodarOutbound(cfg: ProspectConfig, campanha: CampanhaRow |
       if (tetoDisponivel(campanha, hoje) <= 0) { out.pulados.push("teto do dia atingido"); break; }
       const texto = await abordagemInicial({ p, cfg, historico: [], agora, origem: "prospeccao:abordagem" });
       const cli = await ehClienteAtual({ nome: p.nome, instagram: p.instagram, telefone: p.telefone, cidade: p.cidade });
-      const gate = avaliarQualityGate(p, { cfg, campanha, agora, momento: "envio", ehClienteAtual: cli.sim, motivoExclusao: cli.texto, mensagem: texto, abordagensHoje: hoje });
+      const gate = avaliarQualityGate(p, { cfg, campanha, agora, momento: "envio", ehClienteAtual: cli.sim, motivoExclusao: cli.texto, mensagem: texto, abordagensHoje: hoje, forcarJanela: o.forcarJanela });
       await atualizarProspect(p.id, { quality_gate: gate });
       if (!gate.passed) {
         const itens = gate.itens.filter((i) => !i.ok).map((i) => `${i.chave}${i.detalhe ? `: ${i.detalhe}` : ""}`).join("; ");

@@ -41,7 +41,7 @@ export function FilaDoDia({ abrir, versao, onChange }: { abrir: (id: string) => 
       <Secao titulo="Fila de hoje" acao={
         <div className="flex gap-1">
           <Button size="sm" variant="secondary" disabled={!!rodando} onClick={() => rodar("prospect-ranking", "Ranking")}><RefreshCw size={14} /> Montar fila agora</Button>
-          <Button size="sm" disabled={!!rodando} onClick={() => rodar("prospect-outbound", "Abordagem")}><Play size={14} /> Disparar próxima</Button>
+          <Button size="sm" disabled={!!rodando} onClick={() => rodar("prospect-outbound?forcar=1", "Abordagem")}><Play size={14} /> Disparar próxima (vale fora do horário)</Button>
         </div>
       }>
         <p className="mb-3 text-lone-caption text-muted-foreground">Às 08:35 o agente pontua, passa pelo quality gate e escolhe os {d?.agente.campanha?.limite_dia ?? 10} melhores. Entre 09:00 e 11:00 ele manda uma abordagem por vez. Teto hoje: {d?.agente.teto.usado ?? 0}/{d?.agente.teto.limite ?? 10} · próximo envio: {d?.agente.proximo_envio ?? "—"}.{d && !d.agente.pode_abordar.ok ? ` Agora: ${d.agente.pode_abordar.motivo}.` : ""}</p>

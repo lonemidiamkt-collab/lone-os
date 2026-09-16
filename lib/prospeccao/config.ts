@@ -120,11 +120,11 @@ const T = (modo: Template["modo"], diretriz: string, fixo: string, variacoes?: s
 // {oportunidade} {quando} {data} {hora} {link} {endereco} {opcao1} {opcao2} {contexto} {agente} {responsavel}.
 export const TEMPLATES_PADRAO: Templates = {
   abordagem_com_decisor: T("diretriz",
-    "Primeira mensagem, o decisor é conhecido. Apresente-se como {agente}, {cargo}. Diga em uma frase que a Lone atende {empresas_atendidas} do ramo da construção civil (marketing e estrutura comercial para gerar oportunidades e vendas). Use NO MÁXIMO um dado pesquisado da empresa, e só se ele existir em FATOS ({gancho}). O objetivo é chegar ao {decisor}: pergunte se consegue falar com ele por esse número. Não venda, não proponha reunião, não peça WhatsApp do dono.",
-    "Olá, {saudacao}! Tudo bem?\nMeu nome é {agente}, sou {cargo}.\nHoje a gente atende {empresas_atendidas} ligadas ao ramo da construção civil, trabalhando estratégias de marketing e estrutura comercial focadas em gerar mais oportunidades e vendas.\nEu estava olhando a {empresa} e queria falar com o {decisor}. Consigo falar com ele por aqui?",
+    "Primeira mensagem, o decisor é conhecido. Apresente-se como {agente}, {cargo}. Diga em uma frase que a Lone atende {empresas_atendidas} do ramo da construção civil (marketing e estrutura comercial para gerar oportunidades e vendas). Use NO MÁXIMO um dado pesquisado da empresa, e só se ele existir em FATOS ({gancho}). O objetivo é chegar a {decisor} (respeite o gênero do nome: 'com a Mariana', 'com o Marcelo'): pergunte se consegue falar com essa pessoa por esse número. Não venda, não proponha reunião, não peça WhatsApp do dono.",
+    "Olá, {saudacao}! Tudo bem?\nMeu nome é {agente}, sou {cargo}.\nHoje a gente atende {empresas_atendidas} ligadas ao ramo da construção civil, trabalhando estratégias de marketing e estrutura comercial focadas em gerar mais oportunidades e vendas.\nEu estava olhando a {empresa} e queria falar com {o_decisor}. Consigo falar com {ele_ela} por aqui?",
     [
-      "Oi, {saudacao}! Tudo bem? Sou a {agente}, {cargo}.\nA gente é especializado no ramo da construção civil e hoje atende {empresas_atendidas} do segmento. Eu queria falar com o {decisor} sobre a {empresa}. Consigo falar com ele por aqui?",
-      "Oi, {saudacao}! Tudo bem? Sou a {agente}, da Lone Mídia.\nNós somos especializados em empresas do ramo da construção civil e eu estava pesquisando algumas empresas de {cidade}. A {empresa} chamou nossa atenção {gancho}.\nQueria conversar com o {decisor}. Ele fala por esse número?",
+      "Oi, {saudacao}! Tudo bem? Sou a {agente}, {cargo}.\nA gente é especializado no ramo da construção civil e hoje atende {empresas_atendidas} do segmento. Eu queria falar com {o_decisor} sobre a {empresa}. Consigo falar com {ele_ela} por aqui?",
+      "Oi, {saudacao}! Tudo bem? Sou a {agente}, da Lone Mídia.\nNós somos especializados em empresas do ramo da construção civil e eu estava pesquisando algumas empresas de {cidade}. A {empresa} chamou nossa atenção {gancho}.\nQueria conversar com {o_decisor}. {ele_ela} fala por esse número?",
     ]),
   abordagem_sem_decisor: T("diretriz",
     "Primeira mensagem, o decisor NÃO é conhecido. Apresente-se como {agente}, {cargo}. Diga que a Lone trabalha exclusivamente com marketing e vendas para o ramo da construção civil e que estava pesquisando a {empresa}. Pergunte quem é a pessoa responsável pela empresa ou pela parte comercial para conversar. Curta, natural. Não venda, não proponha reunião.",
@@ -174,7 +174,7 @@ export const TEMPLATES_PADRAO: Templates = {
     "Oi, {nome}! {agente} aqui, da Lone. Tudo certo?\nQuando conversamos você comentou que {contexto}. Combinei de te procurar agora {quando}. Como ficaram as coisas por aí?"),
   followup_1: T("diretriz",
     "Follow-up 1 (2 dias sem resposta), a mensagem anterior pediu para falar com o {decisor} ou com o responsável. Cumprimente, assine como {agente} da Lone, diga que estão conversando com algumas empresas de {segmento} no RJ e que a {empresa} tem aderência ao trabalho. Pergunte se conseguiu falar com o {decisor} (ou quem seria o responsável). NÃO repita a apresentação inteira nem a frase 'passando pra saber se viu minha mensagem'. Traga algo novo.",
-    "Oi, {nome}! Tudo bem? {agente} aqui, da Lone.\nTe chamei porque estamos conversando com algumas empresas de {segmento} aqui no RJ e achei que a {empresa} tem bastante aderência ao trabalho que fazemos.\nConseguiu falar com o {decisor}?"),
+    "Oi, {nome}! Tudo bem? {agente} aqui, da Lone.\nTe chamei porque estamos conversando com algumas empresas de {segmento} aqui no RJ e achei que a {empresa} tem bastante aderência ao trabalho que fazemos.\nConseguiu falar com {o_decisor}?"),
   followup_1_decisor: T("diretriz",
     "Follow-up 1 direto com o decisor ({decisor}), 2 dias sem resposta. Retome dizendo que achou interessante o perfil da {empresa} e ofereça explicar em duas mensagens o que chamou a atenção antes de falar em reunião. Curta. NÃO repita a apresentação.",
     "Oi, {decisor}! {agente} aqui novamente.\nQueria só retomar porque realmente achei interessante o perfil da {empresa}. Se fizer sentido, consigo te explicar em duas mensagens o que chamou nossa atenção antes da gente falar em reunião."),
@@ -200,7 +200,7 @@ export const CONFIG_PADRAO: ProspectConfig = {
   segmentos: SEGMENTOS_PADRAO,
   cidades: CIDADES_PADRAO,
   excluidos: ["Armazém do Ferro", "Bruno das Tintas", "Araruama Tintas", "DelRio Atacadão do Piso", "João da Roçadeira", "Top Pisos", "Ello Material de Construção"],
-  queries_por_dia: 4,
+  queries_por_dia: 10,
   providers: { web_search: true, driva: false },
   score: {
     pesos: {

@@ -26,6 +26,19 @@ const RX_QUER_MEET = /\b(online|meet|video ?chamada|chamada de video|call|zoom|p
 const RX_SAUDACAO = /^\s*(oi|ola|bom dia|boa tarde|boa noite|e ai|eai|opa|tudo bem\??|fala)[\s!.,]*$/;
 const RX_NEGACAO = /\bnao\b/;
 
+/**
+ * Mensagem automática do WhatsApp Business ("agradecemos seu contato, responderemos em breve",
+ * "seja bem-vindo à loja X, como podemos ajudar?"). Não é gente: não se responde, e não se conta
+ * como resposta. Quem quiser saber "sobre o que seria" vai perguntar de novo, com alguém do outro lado.
+ */
+const RX_AUTO = /\b(mensagem automatica|resposta automatica|agradecemos (o |seu |pelo )?contato|agradecemos sua mensagem|obrigad[oa] por entrar em contato|nao estamos disponiveis|fora do (nosso )?horario|horario de atendimento|em breve (um )?(atendente|responderemos|retornaremos)|retornaremos (em breve|o mais)|responderemos (em breve|assim)|seja bem[- ]vind[oa]|bem[- ]vind[oa] (a|ao) |aguarde (um momento|que)|digite (o numero|a opcao|1 para)|escolha uma (das )?op[cç]|menu de atendimento)/;
+export const ehMensagemAutomatica = (t: string) => {
+  const n = norm(t);
+  if (RX_AUTO.test(n)) return true;
+  // Saudação de bot: começa com "olá! somos a …" / "oi! seja bem-vindo" e termina em pergunta genérica.
+  return /^(ola|oi|bem[- ]vind)/.test(n) && /\b(somos a|sou (o|a) (vendedor|atendente)|aqui voce encontra)\b/.test(n);
+};
+
 export const ehOptOut = (t: string) => RX_OPT_OUT.test(norm(t));
 
 /** "sim", "isso", "pode", "claro", "fechado", "pode ver", "quero"… sem "não" no meio. */

@@ -11,7 +11,7 @@
 
 import type { ProspectRow, IntentLida } from "./tipos";
 import { preencher, type ProspectConfig, type ChaveTemplate, type Template } from "./config";
-import { primeiroNome, nomeProprio } from "./normalizar";
+import { primeiroNome, nomeProprio, artigoDe, primeiraPessoa } from "./normalizar";
 import { porExtensoSP, horaCurtaSP, dataCurtaSP, componentesSP } from "./tempo";
 
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
@@ -46,8 +46,8 @@ export interface ContextoRedacao {
 
 export const saudacaoDoDia = (agora = new Date()) => { const h = componentesSP(agora).hora; return h < 12 ? "bom dia" : h < 18 ? "boa tarde" : "boa noite"; };
 
-const decisorConfiavel = (p: ProspectRow) => (p.decisor_nome && (p.decisor_confianca ?? 0) >= 0.5 ? nomeProprio(p.decisor_nome) : null);
-export const nomeParaFalar = (p: ProspectRow) => primeiroNome(p.decisor_nome) ?? "";
+const decisorConfiavel = (p: ProspectRow) => (p.decisor_nome && (p.decisor_confianca ?? 0) >= 0.5 ? nomeProprio(primeiraPessoa(p.decisor_nome)) : null);
+export const nomeParaFalar = (p: ProspectRow) => primeiroNome(primeiraPessoa(p.decisor_nome)) ?? "";
 
 /** Um gancho verificado vira frase "por/pela …" quando existe; nada quando não existe. */
 function ganchoFrase(p: ProspectRow): string | null {
@@ -70,6 +70,9 @@ export function valoresDe(p: ProspectRow, cfg: ProspectConfig, agora = new Date(
     empresas_atendidas: cfg.identidade.empresas_atendidas,
     nome: nomeParaFalar(p) || null,
     decisor: dec,
+    /** "o Marcelo" / "a Mariana" — para templates fixos; a IA cuida do gênero sozinha. */
+    o_decisor: dec ? `${artigoDe(dec)} ${dec}` : null,
+    ele_ela: dec ? (artigoDe(dec) === "a" ? "ela" : "ele") : "ele",
     empresa: p.nome,
     cidade: p.cidade,
     segmento: p.segmento ? p.segmento.toLowerCase() : null,
@@ -82,7 +85,7 @@ export function valoresDe(p: ProspectRow, cfg: ProspectConfig, agora = new Date(
 }
 
 /** Chaves que, vazias, tornam uma variação inelegível (a frase ficaria sem sentido). */
-const CHAVES_DE_DADO = new Set(["gancho", "decisor", "cidade", "oportunidade", "endereco", "link", "opcao1", "opcao2", "contexto", "quando", "nome"]);
+const CHAVES_DE_DADO = new Set(["gancho", "decisor", "o_decisor", "cidade", "oportunidade", "endereco", "link", "opcao1", "opcao2", "contexto", "quando", "nome"]);
 const chavesDe = (t: string) => Array.from(t.matchAll(/\{(\w+)\}/g)).map((m) => m[1]);
 const hash = (s: string) => Array.from(s).reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 

@@ -16,10 +16,12 @@ export async function POST(req: NextRequest) {
   // Cron (CRON_SECRET) ou gestão logada (botões da página /prospeccao).
   if (requireCron(req)) { const gate = await requireRole(req, GESTAO); if (gate instanceof NextResponse) return gate; }
   const dry = req.nextUrl.searchParams.get("dry") !== null;
+  // ?forcar=1 — completar o dia fora da janela 09–11 (decisão do Roberto). Teto e quality gate continuam.
+  const forcarJanela = req.nextUrl.searchParams.get("forcar") !== null;
   return comExecucao({ origem: "prospeccao:outbound", ator: "sdr" }, async () => {
     const cfg = await carregarConfig();
     const campanha = await campanhaAtual();
-    const r = await rodarOutbound(cfg, campanha, { dry, semJitter: dry });
+    const r = await rodarOutbound(cfg, campanha, { dry, semJitter: dry || forcarJanela, forcarJanela });
     console.log(`[prospect-outbound] abordagens=${r.abordagens.filter((a) => a.ok).length} followups=${r.followups.length} retomadas=${r.retomadas.length} teto=${r.teto.usado}/${r.teto.limite} pulados=${r.pulados.join("; ")}`);
     return NextResponse.json({ ok: true, dry, ...r });
   });

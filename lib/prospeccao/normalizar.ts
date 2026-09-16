@@ -179,3 +179,19 @@ export function nomesParecidos(a: string | null | undefined, b: string | null | 
   if (curto.join("").length < 4) return false;
   return curto.every((w) => longo.includes(w) || longo.some((x) => x.startsWith(w) && w.length >= 5));
 }
+
+/** "Luiz Ribamar; Maria Adaelta" / "Cassio e Vanessa" / "João, Pedro" → só a primeira pessoa. */
+export function primeiraPessoa(nome: string | null | undefined): string | null {
+  if (!nome) return null;
+  const um = nome.split(/\s*(?:;|\/|,| e |&)\s*/i)[0]?.trim();
+  return um || null;
+}
+
+const MASCULINOS_EM_A = new Set(["luca", "lucca", "josue", "jonatha", "nikita", "sasha", "misha", "kaka", "cuca", "juca"]);
+/** "o"/"a" para o primeiro nome (heurística: termina em "a" = feminino, salvo exceções). */
+export function artigoDe(nome: string | null | undefined): "o" | "a" {
+  const primeiro = semAcento((nome ?? "").trim().split(/\s+/)[0] ?? "").toLowerCase();
+  if (!primeiro) return "o";
+  if (MASCULINOS_EM_A.has(primeiro)) return "o";
+  return primeiro.endsWith("a") ? "a" : "o";
+}

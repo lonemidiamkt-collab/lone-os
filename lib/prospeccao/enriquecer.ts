@@ -162,7 +162,10 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
       if (typeof w.unidades === "number" && w.unidades >= 1) { patch.unidades = Math.round(w.unidades); fontes.unidades = "web"; }
       marca("instagram", instagramHandle(w.instagram));
       marca("site", siteNormalizado(w.site));
-      marca("telefone", telefoneDigitos(w.telefone));
+      // Celular achado na web vence o fixo que veio da descoberta (o gate exige WhatsApp).
+      const cel = telefoneDigitos(w.whatsapp);
+      if (cel && cel.length === 13 && cel[4] === "9") { patch.telefone = cel; patch.whatsapp_jid = `${cel}@s.whatsapp.net`; patch.whatsapp_verificado = null; fontes.telefone = "web (WhatsApp)"; }
+      else marca("telefone", telefoneDigitos(w.telefone));
       marca("endereco", w.endereco);
       if (!p.cnpj && cnpjLimpo(w.cnpj)) { patch.cnpj = cnpjLimpo(w.cnpj); fontes.cnpj = "web"; }
       if (w.proprietario) { webNome = w.proprietario; webCargo = w.proprietario_cargo ?? null; webFonte = w.proprietario_fonte ?? null; }
@@ -269,7 +272,16 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
   patch.score = sc.score; patch.classe = sc.classe; patch.score_detalhe = sc.detalhe; patch.faturamento_sinal = sc.faturamento;
   patch.fontes = fontes;
 
-  p = await atualizarProspect(p.id, patch);
+  try {
+    p = await atualizarProspect(p.id, patch);
+  } catch (err) {
+    // CNPJ já existe em outra linha = a mesma empresa descoberta duas vezes com nomes diferentes.
+    if (err instanceof Error && /uq_prospects_cnpj|duplicate key/.test(err.message)) {
+      p = await transicionar(p, { para: "fora_icp", motivo: `Duplicado: o CNPJ ${patch.cnpj ?? p.cnpj} já está em outro prospect`, patch: { motivo_perda: "duplicado (mesmo CNPJ)" } });
+      return { ok: true, etapas: ["duplicado"], erros: [], prospect: p };
+    }
+    throw err;
+  }
   await registrarEvento(p.id, { tipo: "enriquecido", motivo: `etapas: ${etapas.join(", ") || "nenhuma"}${erros.length ? ` · falhas: ${erros.join("; ")}` : ""}`, responsavel: "SDR_AI", detalhe: { score: sc.score, classe: sc.classe } });
 
   // 9) Estágio

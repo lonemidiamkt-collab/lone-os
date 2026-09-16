@@ -18,12 +18,13 @@ export const janelaAbordagem = (c: CampanhaRow | null): Janela => c?.janela_abor
 export const janelaResposta = (c: CampanhaRow | null): Janela => c?.janela_resposta ?? JANELA_RESPOSTA_PADRAO;
 
 /** Pode iniciar uma NOVA prospecção agora? (kill-switch → piloto → janela 09–11 → teto do dia) */
-export function podeAbordarAgora(p: { cfg: ProspectConfig; campanha: CampanhaRow | null; abordagensHoje: number; agora?: Date }): Decisao {
+export function podeAbordarAgora(p: { cfg: ProspectConfig; campanha: CampanhaRow | null; abordagensHoje: number; agora?: Date; forcarJanela?: boolean }): Decisao {
   const agora = p.agora ?? new Date();
   if (!p.cfg.ligado) return { ok: false, motivo: "agente desligado (kill-switch)" };
   if (!pilotoRodando(p.campanha, agora)) return { ok: false, motivo: p.campanha ? `piloto ${p.campanha.status === "running" ? "vencido" : p.campanha.status}` : "sem piloto ativo" };
   const j = janelaAbordagem(p.campanha);
-  if (!dentroDaJanela(j, agora)) return { ok: false, motivo: `fora da janela de abordagem (${j.ini}–${j.fim}, dias úteis)` };
+  // `forcarJanela` = o Roberto mandou completar o dia fora do horário; teto e gate continuam valendo.
+  if (!p.forcarJanela && !dentroDaJanela(j, agora)) return { ok: false, motivo: `fora da janela de abordagem (${j.ini}–${j.fim}, dias úteis)` };
   const limite = p.campanha?.limite_dia ?? 10;
   if (p.abordagensHoje >= limite) return { ok: false, motivo: `teto do dia atingido (${p.abordagensHoje}/${limite})` };
   return { ok: true };

@@ -3,7 +3,7 @@
 // que a busca web mostrou. Sem IA: a consolidação é regra, e a confiança vem da quantidade e
 // da qualidade das fontes — nunca de um palpite.
 
-import { nomeProprio } from "./normalizar";
+import { nomeProprio, primeiraPessoa } from "./normalizar";
 
 export interface Socio { nome: string; qualificacao?: string | null }
 
@@ -52,7 +52,7 @@ export function consolidarDecisor(p: {
   const alternativas: DecisorAchado["alternativas"] = [];
   const candidatos: { nome: string; cargo: string; pontos: number; fontes: Set<string> }[] = [];
   const add = (nome: string | null | undefined, cargo: string, pontos: number, fonte: string) => {
-    const n = nomeProprio(nome?.trim());
+    const n = nomeProprio(primeiraPessoa(nome?.trim()));
     if (!n || n.length < 4 || ehPessoaJuridica(n)) return;
     const existente = candidatos.find((c) => mesmaPessoa(c.nome, n));
     if (existente) { existente.pontos += pontos; existente.fontes.add(fonte); if (n.length > existente.nome.length) existente.nome = n; if (cargo && pontos > 2) existente.cargo = cargo; return; }

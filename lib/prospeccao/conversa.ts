@@ -14,7 +14,7 @@ import type { IntentLida, ProspectRow, Estagio } from "./tipos";
 import { carregarConfig, type ProspectConfig } from "./config";
 import { campanhaAtual } from "./piloto";
 import { podeResponderAgora, proximaHoraDeResposta } from "./limites";
-import { lerIntencao, ehAfirmativo, lerPeriodo, pareceEndereco } from "./intencao";
+import { lerIntencao, ehAfirmativo, lerPeriodo, pareceEndereco, ehMensagemAutomatica } from "./intencao";
 import { transicionar, registrarEvento, resolverQuando, definirProximaAcao, TERMINAIS, POS_REUNIAO, podeIr, proximaAcaoPadrao, etapaPipeline } from "./maquina";
 import { atualizarProspect, gravarMensagem, mensagensDoProspect } from "./db";
 import { enviarAoProspect, enviarTexto, verificarWhatsapp } from "./envio";
@@ -131,6 +131,11 @@ export async function decidirEResponder(pIn: ProspectRow, texto: string, o: Opco
 
   // ── Freios ─────────────────────────────────────────────────────────────────
   if (p.estagio === "nao_perturbe") return fim({ respondeu: false, motivo: "opt-out: silêncio" });
+  // Mensagem automática do WhatsApp Business não é gente: registra e espera alguém de verdade.
+  if (ehMensagemAutomatica(texto)) {
+    if (!dry) await registrarEvento(p.id, { tipo: "mensagem_automatica", mensagem: texto.slice(0, 200), responsavel: "SDR_AI", motivo: "resposta automática ignorada" });
+    return fim({ respondeu: false, motivo: "mensagem automática do WhatsApp Business — ignorada" });
+  }
 
   const cc = (p.contexto_comercial ?? {}) as Passos;
   const propostoIso = cc.proposto_iso ?? null;
@@ -154,8 +159,14 @@ export async function decidirEResponder(pIn: ProspectRow, texto: string, o: Opco
     return p;
   };
   const evento = async (tipo: string, motivo?: string) => { if (!dry) await registrarEvento(p.id, { tipo, mensagem: texto, motivo, responsavel: "SDR_AI" }); };
+  const ultimaSaida = [...historico].reverse().find((h) => h.autor !== "prospect")?.texto ?? null;
   const enviar = async (r: string, depois?: Estagio) => {
     if (dry) return { ok: true };
+    // Nunca a mesma mensagem duas vezes seguidas (rajada de respostas automáticas fazia isso).
+    if (ultimaSaida && ultimaSaida.trim() === r.trim()) {
+      await registrarEvento(p.id, { tipo: "envio_suprimido", motivo: "mesma mensagem já enviada por último", responsavel: "SDR_AI" });
+      return { ok: true, suprimido: true };
+    }
     return enviarAoProspect(p, r, { autor: "agente", delayMs: DELAY_DIGITANDO(), estagio_antes: p.estagio, estagio_depois: depois ?? null });
   };
 

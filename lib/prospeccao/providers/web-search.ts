@@ -10,7 +10,7 @@ import type { Candidato } from "../tipos";
 const MODELO = "gpt-5.4-mini";
 
 interface EmpresaBruta {
-  nome?: string; cidade?: string; site?: string; instagram?: string; telefone?: string; cnpj?: string;
+  nome?: string; cidade?: string; site?: string; instagram?: string; telefone?: string; whatsapp?: string; cnpj?: string;
   endereco?: string; google_maps_url?: string; google_nota?: number | string; google_avaliacoes?: number | string; sinais?: string[];
 }
 
@@ -73,8 +73,9 @@ export function cidadeLimpa(v: unknown, padrao: string): string {
 
 export function paraCandidatos(brutas: unknown[], q: ConsultaDescoberta, query: string): Candidato[] {
   const num = (v: unknown) => numeroBr(v);
+  const nomeRuim = (n: string) => /^(null|undefined|n\/a|-+|sem nome|desconhecid[oa])$/i.test(n.trim());
   return (brutas as EmpresaBruta[])
-    .filter((e) => e && typeof e.nome === "string" && e.nome.trim().length >= 3)
+    .filter((e) => e && typeof e.nome === "string" && e.nome.trim().length >= 3 && !nomeRuim(e.nome))
     .map((e) => ({
       nome: e.nome!.trim().replace(/\s*[-–|]\s*(material|materiais|loja|casa|depósito|deposito|distribuidora)\b.*$/i, "").trim() || e.nome!.trim(),
       cidade: cidadeLimpa(e.cidade, q.cidade),
@@ -83,7 +84,8 @@ export function paraCandidatos(brutas: unknown[], q: ConsultaDescoberta, query: 
       cnpj: e.cnpj ?? null,
       site: e.site ?? null,
       instagram: e.instagram ?? null,
-      telefone: e.telefone ?? null,
+      // Celular/WhatsApp vale mais que o fixo: é o que a Rafaela consegue chamar.
+      telefone: e.whatsapp ?? e.telefone ?? null,
       endereco: e.endereco ?? null,
       google_maps_url: e.google_maps_url ?? null,
       google_nota: notaGoogle(e.google_nota),
@@ -94,8 +96,17 @@ export function paraCandidatos(brutas: unknown[], q: ConsultaDescoberta, query: 
     }));
 }
 
+/** Tenta o 1º termo do segmento; se a busca volta vazia, tenta o 2º ("depósito de material…"). */
 export async function buscarEmpresas(q: ConsultaDescoberta, apiKey: string): Promise<Candidato[]> {
-  const termo = q.segmento.termos[0] ?? q.segmento.nome;
+  const termos = q.segmento.termos.length ? q.segmento.termos : [q.segmento.nome];
+  for (const termo of termos.slice(0, 2)) {
+    const achados = await buscarEmpresasComTermo(q, termo, apiKey);
+    if (achados.length) return achados;
+  }
+  return [];
+}
+
+async function buscarEmpresasComTermo(q: ConsultaDescoberta, termo: string, apiKey: string): Promise<Candidato[]> {
   // "Unamar (Cabo Frio)" → "Unamar, Cabo Frio": distrito com o município junto ajuda a busca.
   const lugar = q.cidade.replace(/\s*\(([^)]+)\)\s*$/, ", $1");
   const query = `${termo} em ${lugar} ${q.uf}`;
@@ -111,7 +122,7 @@ export async function buscarEmpresas(q: ConsultaDescoberta, apiKey: string): Pro
         `Pesquise na web: ${query}\n\n` +
         `Liste até ${limite} EMPRESAS REAIS desse tipo ("${q.segmento.nome}") sediadas em ${lugar}/${q.uf} ou muito próximas. ` +
         `Priorize lojas estabelecidas (com endereço físico, avaliações no Google, Instagram ativo). Ignore marketplaces, listas genéricas e grandes redes nacionais (Leroy Merlin, Telhanorte, C&C, Obramax).\n` +
-        `Para cada empresa, informe SOMENTE o que a busca mostrou (não invente): nome (o nome fantasia CURTO, como a loja se chama — sem cidade, sem "material de construção" colado), cidade (só o município, sem UF), site, instagram (só o @ ou a URL), telefone (com DDD), cnpj (se aparecer no site/rodapé ou em cadastros públicos), endereco, google_maps_url, google_nota (número de 0 a 5, ex.: 4.6), google_avaliacoes (número inteiro), e "sinais" (até 4 frases curtas com fatos observados: "2 lojas", "anuncia no Instagram", "18 anos de mercado").\n` +
+        `Para cada empresa, informe SOMENTE o que a busca mostrou (não invente): nome (o nome fantasia CURTO, como a loja se chama — sem cidade, sem "material de construção" colado), cidade (só o município, sem UF), site, instagram (só o @ ou a URL), telefone (fixo, com DDD), whatsapp (o CELULAR/WhatsApp da loja com DDD e 9 dígitos, se aparecer no site, Instagram, Google ou anúncio — procure especificamente por isso; é o dado mais importante), cnpj (se aparecer no site/rodapé ou em cadastros públicos), endereco, google_maps_url, google_nota (número de 0 a 5, ex.: 4.6), google_avaliacoes (número inteiro), e "sinais" (até 4 frases curtas com fatos observados: "2 lojas", "anuncia no Instagram", "18 anos de mercado").\n` +
         `Responda APENAS com um array JSON de objetos com essas chaves (use null quando não souber). Sem texto fora do JSON.`,
     }),
     signal: AbortSignal.timeout(180_000),
@@ -134,6 +145,7 @@ export const webSearchProvider: DiscoveryProvider = {
  * proprietário. Devolve só o que foi visto, com a fonte de cada item.
  */
 export interface AchadoEmpresa {
+  whatsapp?: string | null;
   google_nota?: number | null; google_avaliacoes?: number | null; google_maps_url?: string | null;
   unidades?: number | null; anuncia?: boolean | null; anuncia_fonte?: string | null;
   proprietario?: string | null; proprietario_cargo?: string | null; proprietario_fonte?: string | null;
@@ -157,7 +169,7 @@ export async function pesquisarEmpresa(p: { nome: string; cidade?: string | null
         `- unidades: quantas lojas/filiais a empresa tem (número)\n` +
         `- anuncia: true se houver evidência de anúncios pagos (Biblioteca de Anúncios da Meta, "patrocinado", Google Ads); false só se você encontrou a empresa na Biblioteca de Anúncios sem anúncios ativos; senão null. anuncia_fonte: onde viu.\n` +
         `- proprietario: nome do dono/sócio/diretor citado em site, Instagram, LinkedIn, matéria ou cadastro público; proprietario_cargo; proprietario_fonte (URL ou nome da fonte)\n` +
-        `- instagram (@), site, telefone (com DDD), cnpj (se visível), endereco\n` +
+        `- whatsapp: o CELULAR/WhatsApp da loja (DDD + 9 dígitos) se aparecer no site, Instagram, Google ou anúncio — procure especificamente; instagram (@), site, telefone fixo (com DDD), cnpj (se visível), endereco\n` +
         `- fatos: até 5 frases curtas com fatos observados e úteis para uma conversa comercial (ex.: "inaugurou 2ª loja em 2025", "faz lives de ofertas toda sexta")\n` +
         `- fontes: lista das URLs consultadas\n` +
         `Responda APENAS com um objeto JSON com essas chaves.`,

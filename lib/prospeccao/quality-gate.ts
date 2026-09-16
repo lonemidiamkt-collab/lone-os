@@ -24,6 +24,8 @@ export interface ContextoGate {
   /** Texto da abordagem já montado (no envio) — validado aqui. */
   mensagem?: string | null;
   abordagensHoje?: number;
+  /** Envio manual fora da janela (o Roberto mandou completar o dia). */
+  forcarJanela?: boolean;
 }
 
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
@@ -65,7 +67,7 @@ export function avaliarQualityGate(p: ProspectRow, ctx: ContextoGate): QualityGa
   if (ctx.momento === "envio") {
     const mv = mensagemValida(ctx.mensagem);
     item("mensagem_validada", mv.ok, mv.motivo);
-    const dec = podeAbordarAgora({ cfg: ctx.cfg, campanha: ctx.campanha, abordagensHoje: ctx.abordagensHoje ?? 0, agora });
+    const dec = podeAbordarAgora({ cfg: ctx.cfg, campanha: ctx.campanha, abordagensHoje: ctx.abordagensHoje ?? 0, agora, forcarJanela: ctx.forcarJanela });
     item("janela_e_teto", dec.ok, dec.motivo);
   } else {
     item("mensagem_validada", true, "verificada no envio");

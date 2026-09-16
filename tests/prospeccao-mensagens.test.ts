@@ -189,3 +189,23 @@ describe("cliente da Lone nunca vira prospect (casamento de nomes)", () => {
     expect(nomesParecidos("Rimil Building Materials", "MRQ Material de Construção")).toBe(false);
   });
 });
+
+describe("mensagem automática, uma pessoa só, artigo por gênero", () => {
+  it("detecta bot do WhatsApp Business", async () => {
+    const { ehMensagemAutomatica } = await import("@/lib/prospeccao/intencao");
+    expect(ehMensagemAutomatica("Agradecemos sua mensagem. Não estamos disponíveis no momento, mas responderemos em breve.")).toBe(true);
+    expect(ehMensagemAutomatica("Olá! Seja bem-vindo(a) à M A Shop 🛍️ Sou Vendedor Lucas. Aqui você encontra ofertas")).toBe(true);
+    expect(ehMensagemAutomatica("Ola! Somos a DISTRIBUIDORA MR agradecemos seu contato\nComo podemos ajudar?")).toBe(true);
+    expect(ehMensagemAutomatica("Ola !!! Me chamo Edilson e agradeço seu contato. Como podemos ajudar?")).toBe(false);
+    expect(ehMensagemAutomatica("sobre o que seria?")).toBe(false);
+    expect(ehMensagemAutomatica("pode falar, sou o dono")).toBe(false);
+  });
+  it("só a primeira pessoa e o artigo certo", async () => {
+    const { primeiraPessoa, artigoDe } = await import("@/lib/prospeccao/normalizar");
+    expect(primeiraPessoa("Luiz Ribamar Pereira; Maria Adaelta Gomes Pereira")).toBe("Luiz Ribamar Pereira");
+    expect(primeiraPessoa("Cassio da Silva e Vanessa Pinto")).toBe("Cassio da Silva");
+    expect(artigoDe("Mariana Marques")).toBe("a"); expect(artigoDe("Marcelo Ferreira")).toBe("o"); expect(artigoDe("Luca Silva")).toBe("o");
+    const a = await abordagemInicial(red(prospectBase({ id: "z9", decisor_nome: "Mariana Marques Amorim", diagnostico: null })));
+    expect(a).toMatch(/com a Mariana Marques Amorim/); expect(a).not.toMatch(/o Mariana/);
+  });
+});
