@@ -4,6 +4,7 @@ export const maxDuration = 120;
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole, GESTAO } from "@/lib/api/require-role";
+import { requireCron } from "@/lib/api/cron-guard";
 import { comExecucao } from "@/lib/obs/correlacao";
 import { carregarConfig } from "@/lib/prospeccao/config";
 import { decidirEResponder } from "@/lib/prospeccao/conversa";
@@ -15,8 +16,9 @@ import type { ProspectRow, Estagio } from "@/lib/prospeccao/tipos";
 // nem gravar. Corpo: { prospect: {nome, cidade, segmento, decisor_nome, distancia_km, ...},
 // estagio, historico: [{autor, texto}], mensagem, contexto_comercial }.
 export async function POST(req: NextRequest) {
-  const gate = await requireRole(req, GESTAO);
-  if (gate instanceof NextResponse) return gate;
+  // Gestão logada, ou o segredo do cron (teste operacional da Rafaela direto na VPS).
+  let ator = "cron";
+  if (requireCron(req)) { const gate = await requireRole(req, GESTAO); if (gate instanceof NextResponse) return gate; ator = gate.user.email; }
   const body = (await req.json().catch(() => null)) as {
     prospect?: Partial<ProspectRow>; estagio?: Estagio; historico?: { autor: string; texto: string }[]; mensagem?: string; contexto_comercial?: Record<string, unknown>; ia?: boolean;
   } | null;
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
   // ?ia=1 → a Rafaela redige de verdade (gasta IA); sem isso, texto fixo.
   const comIA = req.nextUrl.searchParams.get("ia") === "1" || body.ia === true;
   const forcarModo = comIA ? undefined : ("fixo" as const);
-  return comExecucao({ origem: "prospeccao:simulador", ator: gate.user.email }, async () => {
+  return comExecucao({ origem: "prospeccao:simulador", ator }, async () => {
     const historico = body.historico?.length ? body.historico : [{ autor: "agente", texto: await abordagemInicial({ p, cfg, historico: [], agora, forcarModo }) }];
     const r = await decidirEResponder(p, body.mensagem!.trim(), { dry: true, cfg, historico, agora, forcarModo });
     return NextResponse.json({
