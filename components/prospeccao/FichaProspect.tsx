@@ -32,7 +32,7 @@ interface Ficha { prospect: Prospect; mensagens: Msg[]; eventos: Ev[]; rascunho:
 
 const FAIXA: Record<string, string> = { indeterminado: "sem sinais", abaixo_100k: "provável < R$ 100k/mês", "100k_300k": "provável R$ 100–300k/mês", acima_300k: "provável > R$ 300k/mês" };
 const GATE: Record<string, string> = {
-  empresa_valida: "Empresa válida", segmento_valido: "Segmento no ICP", telefone_valido: "Telefone/WhatsApp válido", nao_e_cliente: "Não é cliente da Lone",
+  empresa_valida: "Empresa válida", segmento_valido: "Segmento no ICP", telefone_valido: "Telefone/WhatsApp válido", nao_e_cliente: "Não é cliente nem está em 'nunca prospectar'",
   nao_opt_out: "Sem opt-out", nao_abordado_antes: "Nunca abordado", dentro_da_regiao: "Dentro do RJ", icp_aprovado: "ICP aprovado", pesquisa_concluida: "Pesquisa concluída",
   score_minimo: "Score mínimo", decisor_ou_generica: "Decisor ou abordagem genérica", mensagem_validada: "Mensagem validada", janela_e_teto: "Janela 09–11 e teto", piloto_rodando: "Piloto rodando",
 };

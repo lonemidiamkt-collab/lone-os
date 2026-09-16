@@ -143,8 +143,8 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
   // Cliente da Lone (tabela clients ou lista de exclusão) não gasta pesquisa nem IA: sai já.
   const cli = await ehClienteAtual({ nome: p.nome, instagram: p.instagram, telefone: p.telefone, cidade: p.cidade });
   if (cli.sim) {
-    if (p.estagio !== "fora_icp") p = await transicionar(p, { para: "fora_icp", motivo: `Já é cliente da Lone (${cli.cliente})`, patch: { motivo_perda: `cliente: ${cli.cliente}` } });
-    return { ok: true, etapas: ["cliente"], erros: [], prospect: p };
+    if (p.estagio !== "fora_icp") p = await transicionar(p, { para: "fora_icp", motivo: `Não abordar: ${cli.texto}`, patch: { motivo_perda: cli.texto } });
+    return { ok: true, etapas: [cli.motivo ?? "excluido"], erros: [], prospect: p };
   }
   let qsa: { nome: string; qualificacao?: string | null }[] = [];
   let webNome: string | null = null, webCargo: string | null = null, webFonte: string | null = null;

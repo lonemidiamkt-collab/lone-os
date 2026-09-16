@@ -19,6 +19,8 @@ export interface ContextoGate {
   agora?: Date;
   momento: "ranking" | "envio";
   ehClienteAtual: boolean;
+  /** Por que não abordar ("já é cliente…" ou "na lista nunca prospectar…"), quando `ehClienteAtual`. */
+  motivoExclusao?: string | null;
   /** Texto da abordagem já montado (no envio) — validado aqui. */
   mensagem?: string | null;
   abordagensHoje?: number;
@@ -48,7 +50,7 @@ export function avaliarQualityGate(p: ProspectRow, ctx: ContextoGate): QualityGa
   const tel = telefoneDigitos(p.decisor_telefone) ?? telefoneDigitos(p.telefone);
   const telOk = !!tel && (p.whatsapp_verificado !== false);
   item("telefone_valido", telOk, !tel ? "sem telefone" : p.whatsapp_verificado === false ? "número sem WhatsApp" : ehCelular(tel) ? undefined : "telefone fixo (pode não ter WhatsApp)");
-  item("nao_e_cliente", !ctx.ehClienteAtual, ctx.ehClienteAtual ? "já é cliente da Lone" : undefined);
+  item("nao_e_cliente", !ctx.ehClienteAtual, ctx.ehClienteAtual ? (ctx.motivoExclusao ?? "cliente da Lone ou na lista 'nunca prospectar'") : undefined);
   item("nao_opt_out", p.estagio !== "nao_perturbe", p.estagio === "nao_perturbe" ? "pediu para não ser contatado" : undefined);
   item("nao_abordado_antes", !p.primeira_abordagem_em, p.primeira_abordagem_em ? `já abordado em ${p.primeira_abordagem_em.slice(0, 10)}` : undefined);
   const ufOk = !!p.uf && ctx.cfg.uf_permitidas.map((u) => u.toUpperCase()).includes(p.uf.toUpperCase());

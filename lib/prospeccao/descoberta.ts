@@ -59,7 +59,7 @@ export async function inserirCandidatos(cands: Candidato[], o: { campanhaId?: st
     const dup = await acharDuplicado(chaves);
     if (dup) { r.duplicados++; continue; }
     const cli = await ehClienteAtual({ nome: c.nome, instagram: c.instagram, telefone: c.telefone, cidade: c.cidade });
-    if (cli.sim) { r.excluidos++; r.motivos.push(`${c.nome}: já é cliente (${cli.cliente})`); continue; }
+    if (cli.sim) { r.excluidos++; r.motivos.push(`${c.nome}: ${cli.texto}`); continue; }
     if (o.dry) { r.novos++; continue; }
 
     const fontes: Record<string, string> = {};

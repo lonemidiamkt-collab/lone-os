@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const [mensagens, eventos, cfg, campanha] = await Promise.all([mensagensDoProspect(id), eventosDoProspect(id), carregarConfig(), campanhaAtual()]);
   const cli = await ehClienteAtual({ nome: p.nome, instagram: p.instagram, telefone: p.telefone, cidade: p.cidade });
   const rascunho = abordagemInicial(p, cfg);
-  const qg = avaliarQualityGate(p, { cfg, campanha, momento: "envio", ehClienteAtual: cli.sim, mensagem: rascunho, abordagensHoje: 0 });
+  const qg = avaliarQualityGate(p, { cfg, campanha, momento: "envio", ehClienteAtual: cli.sim, motivoExclusao: cli.texto, mensagem: rascunho, abordagensHoje: 0 });
   return NextResponse.json({ ok: true, prospect: p, mensagens, eventos, rascunho, quality_gate: qg, transicoes: ESTAGIOS.filter((e) => e !== p.estagio && podeIr(p.estagio, e)) });
 }
 

@@ -47,7 +47,7 @@ export async function rodarOutbound(cfg: ProspectConfig, campanha: CampanhaRow |
       if (tetoDisponivel(campanha, hoje) <= 0) { out.pulados.push("teto do dia atingido"); break; }
       const texto = abordagemInicial(p, cfg);
       const cli = await ehClienteAtual({ nome: p.nome, instagram: p.instagram, telefone: p.telefone, cidade: p.cidade });
-      const gate = avaliarQualityGate(p, { cfg, campanha, agora, momento: "envio", ehClienteAtual: cli.sim, mensagem: texto, abordagensHoje: hoje });
+      const gate = avaliarQualityGate(p, { cfg, campanha, agora, momento: "envio", ehClienteAtual: cli.sim, motivoExclusao: cli.texto, mensagem: texto, abordagensHoje: hoje });
       await atualizarProspect(p.id, { quality_gate: gate });
       if (!gate.passed) {
         const itens = gate.itens.filter((i) => !i.ok).map((i) => `${i.chave}${i.detalhe ? `: ${i.detalhe}` : ""}`).join("; ");

@@ -57,7 +57,7 @@ export interface ProspectConfig {
   uf_permitidas: string[];
   segmentos: SegmentoIcp[];
   cidades: string[];
-  /** Empresas que NUNCA viram prospect (clientes de site/serviço que não estão em `clients`, parceiros…). */
+  /** "Nunca prospectar": empresas que o Roberto não quer que o agente pegue — cliente ou não (DelRio, Top Pisos…). */
   excluidos: string[];
   queries_por_dia: number;
   providers: { web_search: boolean; driva: boolean };

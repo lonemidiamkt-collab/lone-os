@@ -107,14 +107,18 @@ export async function acharDuplicado(chaves: ChavesDedup): Promise<ProspectRow |
  * A empresa já é cliente da Lone? Compara com `clients` por nome canônico, Instagram e telefone.
  * Prospectar o próprio cliente seria o erro mais constrangedor possível — a checagem é generosa.
  */
-export async function ehClienteAtual(c: { nome?: string | null; instagram?: string | null; telefone?: string | null; cidade?: string | null }): Promise<{ sim: boolean; cliente?: string }> {
-  // Lista de exclusão da config: clientes de site/serviço que não estão em `clients` (Armazém do
-  // Ferro, Bruno das Tintas…). Comparação por nome canônico, um contido no outro.
+/**
+ * Não abordar: (a) já é cliente da Lone (tabela `clients`: nome, Instagram ou telefone) ou (b) está
+ * na lista "nunca prospectar" da config — empresas que o Roberto simplesmente não quer que o agente
+ * pegue (DelRio, João da Roçadeira, Top Pisos, Ello…), cliente ou não. `motivo` diz qual dos dois:
+ * a ficha não pode chamar de cliente quem não é.
+ */
+export async function ehClienteAtual(c: { nome?: string | null; instagram?: string | null; telefone?: string | null; cidade?: string | null }): Promise<{ sim: boolean; cliente?: string; motivo?: "cliente" | "lista"; texto?: string }> {
   try {
     const { carregarConfig } = await import("./config");
     const cfg = await carregarConfig();
     for (const ex of cfg.excluidos ?? []) {
-      if (nomesParecidos(c.nome, ex)) return { sim: true, cliente: `${ex} (lista de exclusão)` };
+      if (nomesParecidos(c.nome, ex)) return { sim: true, cliente: ex, motivo: "lista", texto: `na lista "nunca prospectar" (${ex})` };
     }
   } catch { /* config indisponível: segue com a tabela clients */ }
   const { data } = await supabaseAdmin.from("clients")
@@ -124,9 +128,10 @@ export async function ehClienteAtual(c: { nome?: string | null; instagram?: stri
   const tel = telefoneDigitos(c.telefone);
   for (const cl of (data ?? []) as Array<Record<string, unknown>>) {
     const nomes = [cl.name, cl.nome_fantasia].filter(Boolean) as string[];
-    if (ig && instagramHandle(cl.instagram_user as string) === ig) return { sim: true, cliente: nomes[0] };
-    if (tel && [cl.company_phone, cl.contact_phone].some((t) => telefoneDigitos(t as string) === tel)) return { sim: true, cliente: nomes[0] };
-    if (nomes.some((n) => nomesParecidos(c.nome, n))) return { sim: true, cliente: nomes[0] };
+    const achou = (ig && instagramHandle(cl.instagram_user as string) === ig)
+      || (tel && [cl.company_phone, cl.contact_phone].some((t) => telefoneDigitos(t as string) === tel))
+      || nomes.some((n) => nomesParecidos(c.nome, n));
+    if (achou) return { sim: true, cliente: nomes[0], motivo: "cliente", texto: `já é cliente da Lone (${nomes[0]})` };
   }
   return { sim: false };
 }
