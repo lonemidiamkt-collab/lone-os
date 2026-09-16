@@ -27,7 +27,10 @@ export async function POST(req: NextRequest) {
     const fila = [];
     for (const p of candidatos) {
       if (fila.length >= lote) break;
-      const { data } = await supabaseAdmin.from("prospects").update({ next_action_type: "ENRIQUECENDO" }).eq("id", p.id).neq("next_action_type", "ENRIQUECENDO").select("id");
+      // `neq` sozinho não casa NULL (SQL: NULL <> x é NULL) — um prospect recém-descoberto sem
+      // next_action ficaria para sempre fora da fila.
+      const { data } = await supabaseAdmin.from("prospects").update({ next_action_type: "ENRIQUECENDO" }).eq("id", p.id)
+        .or("next_action_type.is.null,next_action_type.neq.ENRIQUECENDO").select("id");
       if (data?.length) fila.push(p);
     }
     const resultados: { id: string; nome: string; estagio: string; score: number | null; classe: string | null; etapas: string[]; erros: string[] }[] = [];
