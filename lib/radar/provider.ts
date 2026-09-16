@@ -15,6 +15,10 @@ export interface PerfilPublico {
   igUserId?: string;
   followers: number;
   mediaCount: number;
+  /** Bio e link do perfil — é onde a loja local costuma deixar o WhatsApp (prospecção). */
+  name?: string;
+  biography?: string;
+  website?: string;
 }
 
 export interface MidiaPublica {
@@ -58,7 +62,7 @@ export function metaProvider(token: string, igUserIdDaAgencia: string): Instagra
 
       const campos =
         `business_discovery.username(${limpo})` +
-        `{username,followers_count,media_count,` +
+        `{username,name,biography,website,followers_count,media_count,` +
         `media.limit(${Math.min(50, Math.max(1, limiteMidias))})` +
         `{id,media_type,permalink,caption,timestamp,like_count,comments_count,media_url,thumbnail_url}}`;
 
@@ -67,7 +71,7 @@ export function metaProvider(token: string, igUserIdDaAgencia: string): Instagra
       const res = await fetch(url, { signal: AbortSignal.timeout(25_000) });
       const json = await res.json().catch(() => null) as {
         business_discovery?: {
-          username?: string; followers_count?: number; media_count?: number;
+          username?: string; name?: string; biography?: string; website?: string; followers_count?: number; media_count?: number;
           media?: { data?: Array<Record<string, unknown>> };
         };
         error?: { code?: number; message?: string };
@@ -99,6 +103,9 @@ export function metaProvider(token: string, igUserIdDaAgencia: string): Instagra
           username: String(bd.username ?? limpo),
           followers: Number(bd.followers_count ?? 0),
           mediaCount: Number(bd.media_count ?? 0),
+          name: bd.name ? String(bd.name) : undefined,
+          biography: bd.biography ? String(bd.biography) : undefined,
+          website: bd.website ? String(bd.website) : undefined,
         },
         midias,
       };

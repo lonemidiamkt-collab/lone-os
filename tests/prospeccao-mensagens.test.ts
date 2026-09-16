@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { abordagemInicial, followup, mensagemDecisor, convite, ofertaHorarios, confirmacao, respostaERobo, respostaPreco, respostaJaTemAgencia, perguntaCidade, respostaSaberMais, textoSeguro, lembrete1h, lembrete24h, saudacaoDoDia } from "@/lib/prospeccao/mensagens";
 import { lerIntencaoRegras, ehOptOut } from "@/lib/prospeccao/intencao";
 import { consolidarDecisor } from "@/lib/prospeccao/decisor";
-import { chavesDedup, mesmaEmpresa, telefoneDigitos, cnpjLimpo, instagramHandle, distanciaKm, nomeProprio, primeiroNome, siteNormalizado } from "@/lib/prospeccao/normalizar";
+import { chavesDedup, mesmaEmpresa, telefoneDigitos, cnpjLimpo, instagramHandle, distanciaKm, nomeProprio, primeiroNome, siteNormalizado, celularesNoTexto } from "@/lib/prospeccao/normalizar";
 import { importarCsv } from "@/lib/prospeccao/providers/importacao";
 import { CONFIG_PADRAO } from "@/lib/prospeccao/config";
 import { prospectBase } from "./prospeccao-score.test";
@@ -134,6 +134,13 @@ describe("normalização e dedup (§25)", () => {
     expect(telefoneDigitos("(22) 99999-8888")).toBe("5522999998888");
     expect(telefoneDigitos("+55 22 2665 1234")).toBe("552226651234");
     expect(telefoneDigitos("123")).toBeNull();
+  });
+  it("acha o celular na bio do Instagram, no wa.me e ignora fixo, CNPJ e nº de pedido", () => {
+    expect(celularesNoTexto("Pedidos pelo WhatsApp (22) 99876-5432 ou 22 9 8765-4321")).toEqual(["5522998765432", "5522987654321"]);
+    expect(celularesNoTexto("https://wa.me/5522998765432?text=oi")).toEqual(["5522998765432"]);
+    expect(celularesNoTexto("+55 22 99876-5432 · CNPJ 12.345.678/0001-90 · fixo (22) 2664-1234")).toEqual(["5522998765432"]);
+    expect(celularesNoTexto("pedido 20259987654321 tel 2299876543")).toEqual([]);
+    expect(celularesNoTexto(null)).toEqual([]);
     expect(cnpjLimpo("11.222.333/0001-81")).toBe("11222333000181");
     expect(cnpjLimpo("11.222.333/0001-80")).toBeNull();
     expect(instagramHandle("https://instagram.com/Casa.Das.Telhas/")).toBe("casa.das.telhas");

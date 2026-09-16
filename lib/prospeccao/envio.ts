@@ -53,7 +53,9 @@ export async function checarInstanciaOutbound(): Promise<{ ok: boolean; connecte
 export async function verificarWhatsapp(numeros: string[]): Promise<{ numero: string; existe: boolean; jid: string | null }[]> {
   if (!numeros.length) return [];
   const r = await evo<Array<{ number?: string; exists?: boolean; jid?: string }>>("/chat/whatsappNumbers/", { numbers: numeros }, 20_000);
-  if (!r.ok || !Array.isArray(r.data)) return numeros.map((n) => ({ numero: n, existe: false, jid: null }));
+  // Evolution fora do ar NÃO é "número sem WhatsApp": devolve vazio e quem chama não carimba nada
+  // (senão o lead cai no gate por engano e ainda paga uma caça na web à toa).
+  if (!r.ok || !Array.isArray(r.data)) return [];
   return numeros.map((n) => {
     const hit = r.data!.find((x) => (x.number ?? "").replace(/\D/g, "") === n || (x.jid ?? "").startsWith(n));
     return { numero: n, existe: !!hit?.exists, jid: hit?.exists ? (hit.jid ?? `${n}@s.whatsapp.net`) : null };

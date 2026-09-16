@@ -13,8 +13,8 @@ import type { ProspectConfig } from "./config";
 import { calcularScore, segmentoAderente } from "./score";
 import { consolidarDecisor } from "./decisor";
 import { verificarWhatsapp } from "./envio";
-import { pesquisarEmpresa, notaGoogle, numeroBr, cidadeLimpa } from "./providers/web-search";
-import { cnpjLimpo, distanciaKm, instagramHandle, siteNormalizado, telefoneDigitos, nomeProprio } from "./normalizar";
+import { pesquisarEmpresa, procurarWhatsapp, notaGoogle, numeroBr, cidadeLimpa } from "./providers/web-search";
+import { cnpjLimpo, distanciaKm, instagramHandle, siteNormalizado, telefoneDigitos, nomeProprio, ehCelular, celularesNoTexto } from "./normalizar";
 import { transicionar, registrarEvento } from "./maquina";
 import { atualizarProspect, ehClienteAtual } from "./db";
 
@@ -63,7 +63,7 @@ export async function geocodificar(consulta: string): Promise<{ lat: number; lng
 
 // ─── Instagram ──────────────────────────────────────────────────────────────
 
-async function lerInstagram(handle: string): Promise<{ ok: boolean; presenca?: Partial<PresencaDigital>; error?: string }> {
+async function lerInstagram(handle: string): Promise<{ ok: boolean; presenca?: Partial<PresencaDigital>; celulares?: string[]; error?: string }> {
   const { data: cfg } = await supabaseAdmin.from("agency_settings").select("value").eq("key", "meta_token").maybeSingle();
   const token = cfg?.value as string | undefined;
   if (!token) return { ok: false, error: "meta_token ausente" };
@@ -82,7 +82,9 @@ async function lerInstagram(handle: string): Promise<{ ok: boolean; presenca?: P
     const eng = r.midias.length && r.perfil.followers
       ? Math.round((r.midias.reduce((s, m) => s + m.likes + m.comments, 0) / r.midias.length / r.perfil.followers) * 10000) / 100
       : null;
-    return { ok: true, presenca: {
+    // Bio, link e legendas: é onde a loja deixa o WhatsApp. De graça — antes de qualquer busca paga.
+    const celulares = celularesNoTexto([r.perfil.biography, r.perfil.website, ...r.midias.map((m) => m.caption ?? "")].join("\n"));
+    return { ok: true, celulares, presenca: {
       instagram_followers: r.perfil.followers, instagram_posts: r.perfil.mediaCount, posts_por_semana: postsSemana,
       pct_reels: r.midias.length ? Math.round((reels / r.midias.length) * 100) : null, engajamento_medio: eng,
       ultimo_post_em: datas.length ? new Date(datas[datas.length - 1]).toISOString() : null, lido_em: new Date().toISOString(),
@@ -149,6 +151,12 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
   }
   let qsa: { nome: string; qualificacao?: string | null }[] = [];
   let webNome: string | null = null, webCargo: string | null = null, webFonte: string | null = null;
+  // Todo telefone visto em qualquer fonte vira candidato; a Evolution confere todos de uma vez
+  // e fica o primeiro que tem WhatsApp. Antes só o 1º número era testado — 7 leads B do dia 1
+  // ficaram presos no gate por um fixo sem WhatsApp enquanto o celular estava na bio do Instagram.
+  const candidatos: { numero: string; fonte: string }[] = [];
+  const candidato = (n: string | null | undefined, fonte: string) => { if (n && !candidatos.some((c) => c.numero === n)) candidatos.push({ numero: n, fonte }); };
+  candidato(p.telefone, p.fontes?.telefone ?? "descoberta");
 
   // 0) CNPJ já conhecido? Consulta grátis primeiro: MEI e cadastro inativo não são ICP e não
   //    merecem pesquisa web (era 47% do custo, quase todo em empresa descartada).
@@ -182,8 +190,10 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
       marca("site", siteNormalizado(w.site));
       // Celular achado na web vence o fixo que veio da descoberta (o gate exige WhatsApp).
       const cel = telefoneDigitos(w.whatsapp);
-      if (cel && cel.length === 13 && cel[4] === "9") { patch.telefone = cel; patch.whatsapp_jid = `${cel}@s.whatsapp.net`; patch.whatsapp_verificado = null; fontes.telefone = "web (WhatsApp)"; }
+      if (cel && ehCelular(cel)) { patch.telefone = cel; patch.whatsapp_jid = `${cel}@s.whatsapp.net`; patch.whatsapp_verificado = null; fontes.telefone = "web (WhatsApp)"; }
       else marca("telefone", telefoneDigitos(w.telefone));
+      candidato(telefoneDigitos(w.whatsapp), "web (WhatsApp)");
+      candidato(telefoneDigitos(w.telefone), "web");
       marca("endereco", w.endereco);
       if (!p.cnpj && cnpjLimpo(w.cnpj)) { patch.cnpj = cnpjLimpo(w.cnpj); fontes.cnpj = "web"; }
       if (w.proprietario) { webNome = w.proprietario; webCargo = w.proprietario_cargo ?? null; webFonte = w.proprietario_fonte ?? null; }
@@ -217,6 +227,8 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
       else if (p.cidade) patch.cidade = cidadeLimpa(p.cidade, p.cidade);
       if (d.uf) { patch.uf = d.uf; fontes.uf = "BrasilAPI"; }
       if (!telefoneAtual && d.ddd_telefone_1) { const t = telefoneDigitos(d.ddd_telefone_1); if (t) { patch.telefone = t; fontes.telefone = "BrasilAPI"; } }
+      candidato(telefoneDigitos(d.ddd_telefone_1), "BrasilAPI");
+      candidato(telefoneDigitos(d.ddd_telefone_2), "BrasilAPI");
       qsa = (d.qsa ?? []).filter((s) => s.nome_socio).map((s) => ({ nome: s.nome_socio!, qualificacao: s.qualificacao_socio ?? null }));
       if (d.descricao_situacao_cadastral && !/ATIVA/i.test(d.descricao_situacao_cadastral)) fatos.push(`situação cadastral: ${d.descricao_situacao_cadastral}`);
       if (d.porte) fatos.push(`porte ${d.porte}`);
@@ -251,19 +263,30 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
       patch.presenca = { ...((patch.presenca as PresencaDigital | undefined) ?? p.presenca ?? {}), ...ig.presenca };
       fontes.instagram_followers = "Meta Business Discovery";
       fatos.push(`Instagram @${instagramAtual}: ${ig.presenca.instagram_followers} seguidores, ${ig.presenca.posts_por_semana ?? "?"} posts/semana, ${ig.presenca.pct_reels ?? "?"}% Reels`);
+      for (const c of ig.celulares ?? []) candidato(c, "Instagram (bio/legenda)");
     } else erros.push(`instagram: ${ig.error}`);
   }
 
-  // 5) WhatsApp (verifica, não manda)
-  if (o.comWhatsapp !== false && telefoneAtual) {
-    const v = await verificarWhatsapp([telefoneAtual]);
-    if (v.length) {
-      etapas.push("whatsapp");
-      patch.whatsapp_verificado = v[0].existe;
-      patch.whatsapp_jid = v[0].jid ?? (v[0].existe ? `${telefoneAtual}@s.whatsapp.net` : null);
-      fontes.whatsapp_verificado = "Evolution";
+  // 5) WhatsApp (verifica, não manda): todos os candidatos numa chamada só; celular antes de fixo.
+  candidato((patch.telefone as string | undefined) ?? telefoneAtual, fontes.telefone ?? "descoberta");
+  const ordenados = [...candidatos].sort((a, b) => Number(ehCelular(b.numero)) - Number(ehCelular(a.numero)));
+  let whatsappOk = false, evolutionCaiu = false;
+  const conferir = async (lista: { numero: string; fonte: string }[]) => {
+    if (!lista.length) return;
+    const v = await verificarWhatsapp(lista.map((c) => c.numero));
+    if (!v.length) { evolutionCaiu = true; erros.push("whatsapp: Evolution não respondeu"); return; }
+    if (!etapas.includes("whatsapp")) etapas.push("whatsapp");
+    const achou = v.find((x) => x.existe);
+    if (achou) {
+      const c = lista.find((x) => x.numero === achou.numero)!;
+      patch.telefone = c.numero; patch.whatsapp_jid = achou.jid ?? `${c.numero}@s.whatsapp.net`; patch.whatsapp_verificado = true;
+      fontes.telefone = c.fonte; fontes.whatsapp_verificado = "Evolution";
+      whatsappOk = true;
+    } else {
+      patch.whatsapp_verificado = false; patch.whatsapp_jid = null; fontes.whatsapp_verificado = "Evolution";
     }
-  }
+  };
+  if (o.comWhatsapp !== false) await conferir(ordenados);
 
   // 6) Decisor
   const dec = consolidarDecisor({ qsa, webNome, webCargo, webFonte });
@@ -282,6 +305,14 @@ export async function enriquecerProspect(pIn: ProspectRow, cfg: ProspectConfig, 
   if (pParcial.site) fatos.push(`site: ${pParcial.site}`);
   if (pParcial.presenca?.anuncia === true) fatos.push(`anuncia (${pParcial.presenca.anuncia_fonte ?? "fonte web"})`);
   const scPrevio = calcularScore(pParcial, cfg);
+
+  // 7b) Lead A/B sem WhatsApp: uma busca dirigida ao celular (≈ US$ 0,003) antes de desistir dele.
+  if (!whatsappOk && !evolutionCaiu && o.comWhatsapp !== false && o.comWeb !== false && isOpenAIConfigured() && scPrevio.score >= cfg.score.minimo) {
+    const h = await procurarWhatsapp({ nome: p.nome, cidade: pParcial.cidade, uf: pParcial.uf, instagram: pParcial.instagram, site: pParcial.site }, process.env.OPENAI_API_KEY as string);
+    const novos = h.numeros.filter((n) => !candidatos.some((c) => c.numero === n)).map((n) => ({ numero: n, fonte: `web (caça ao WhatsApp${h.fontes[0] ? `: ${h.fontes[0]}` : ""})` }));
+    if (novos.length) { etapas.push("caca-whatsapp"); await conferir(novos); }
+    if (!whatsappOk) erros.push(`whatsapp: nenhum dos ${candidatos.length + novos.length} números tem WhatsApp`);
+  }
 
   // 8) Diagnóstico só para A/B (ou quando pedido explicitamente — ex.: Roberto promoveu um C).
   if (scPrevio.score >= cfg.score.minimo || o.comDiagnostico) {

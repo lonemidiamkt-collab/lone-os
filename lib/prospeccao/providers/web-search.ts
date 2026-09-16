@@ -6,6 +6,7 @@
 import { registrarChamadaLlm } from "@/lib/obs/llm";
 import type { DiscoveryProvider, ConsultaDescoberta } from "./tipos";
 import type { Candidato } from "../tipos";
+import { celularesNoTexto } from "../normalizar";
 
 const MODELO = "gpt-5.4-mini";
 
@@ -192,4 +193,44 @@ export async function pesquisarEmpresa(p: { nome: string; cidade?: string | null
   const ini = texto.indexOf("{"), fim = texto.lastIndexOf("}");
   if (ini < 0 || fim <= ini) return null;
   try { return JSON.parse(texto.slice(ini, fim + 1)) as AchadoEmpresa; } catch { return null; }
+}
+
+/**
+ * Caça dirigida ao WhatsApp de UMA empresa. Só roda para lead A/B que ficou sem celular
+ * verificado — perder um B por telefone fixo custa mais que a busca (≈ US$ 0,003).
+ * Devolve celulares candidatos (55DD9XXXXXXXX), na ordem de confiança que a busca deu.
+ */
+export async function procurarWhatsapp(p: { nome: string; cidade?: string | null; uf?: string | null; instagram?: string | null; site?: string | null }, apiKey: string): Promise<{ numeros: string[]; fontes: string[] }> {
+  const t0 = Date.now();
+  const ident = `${p.nome}${p.cidade ? ` — ${p.cidade}/${p.uf ?? "RJ"}` : ""}${p.instagram ? ` (Instagram @${p.instagram})` : ""}${p.site ? ` (site ${p.site})` : ""}`;
+  const res = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: MODELO,
+      max_tool_calls: 1,
+      tools: [{ type: "web_search", search_context_size: "low" }],
+      input:
+        `Encontre o número de WhatsApp (celular, DDD + 9 dígitos) da empresa: ${ident}\n` +
+        `Procure na bio/links do Instagram, no site, no Google Business/Maps, no Facebook e em anúncios. ` +
+        `Só números que APARECERAM como sendo dessa empresa (nunca invente, nunca use número de outra loja). ` +
+        `Responda APENAS com JSON: {"numeros": ["55DD9XXXXXXXX", ...], "fontes": ["url ou nome da fonte", ...]} — "numeros" vazio se não achou.`,
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
+  const json = await res.json().catch(() => null) as Record<string, unknown> | null;
+  const usage = (json?.usage ?? null) as { input_tokens?: number; output_tokens?: number } | null;
+  const erroApi = (json?.error as { message?: string } | undefined)?.message ?? (!json ? "sem resposta" : null);
+  registrarChamadaLlm({ modelo: MODELO, ms: Date.now() - t0, ok: !!json && res.ok && !json.error, origem: "prospeccao:busca-whatsapp", tipo: "responses",
+    usage: usage ? { prompt_tokens: usage.input_tokens, completion_tokens: usage.output_tokens } : null, erro: erroApi });
+  if (erroApi || !json) throw new Error(`OpenAI: ${erroApi ?? "sem resposta"}`);
+  const texto = textoDaResposta(json).replace(/```(?:json)?/gi, "").trim();
+  const ini = texto.indexOf("{"), fim = texto.lastIndexOf("}");
+  if (ini < 0 || fim <= ini) return { numeros: [], fontes: [] };
+  try {
+    const r = JSON.parse(texto.slice(ini, fim + 1)) as { numeros?: unknown; fontes?: unknown };
+    const numeros = celularesNoTexto((Array.isArray(r.numeros) ? r.numeros : []).map(String).join(" | "));
+    const fontes = (Array.isArray(r.fontes) ? r.fontes : []).map(String).slice(0, 3);
+    return { numeros, fontes };
+  } catch { return { numeros: [], fontes: [] }; }
 }

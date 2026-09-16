@@ -59,6 +59,22 @@ export function telefoneDigitos(v: string | null | undefined): string | null {
 
 export const ehCelular = (digitos: string) => digitos.length === 13 && digitos[4] === "9";
 
+/**
+ * Celulares brasileiros citados num texto livre (bio do Instagram, legenda, site, link wa.me):
+ * "(22) 99999-9999", "22 9 9999 9999", "+55 22 99999-9999", "wa.me/5522999999999". Devolve
+ * 55DD9XXXXXXXX, sem repetir, na ordem em que aparecem. Fixo não entra: o gate exige WhatsApp.
+ */
+export function celularesNoTexto(texto: string | null | undefined): string[] {
+  if (!texto) return [];
+  const out: string[] = [];
+  const re = /(?<!\d)(?:\+?55[\s.-]?)?\(?\s*([1-9]\d)\s*\)?[\s.-]?(9)[\s.-]?(\d{4})[\s.-]?(\d{4})(?!\d)/g;
+  for (const m of texto.matchAll(re)) {
+    const d = `55${m[1]}${m[2]}${m[3]}${m[4]}`;
+    if (ehCelular(d) && !out.includes(d)) out.push(d);
+  }
+  return out;
+}
+
 export const jidDeTelefone = (digitos: string) => `${digitos}@s.whatsapp.net`;
 
 /** "5522999999999@s.whatsapp.net" → "5522999999999"; "…@lid" → null (LID não é telefone). */
