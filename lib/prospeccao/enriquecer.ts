@@ -103,7 +103,7 @@ Receberá os FATOS pesquisados sobre uma empresa. Produza um mini diagnóstico c
 - "oportunidades": 2 a 5 frases curtas, cada uma ancorada em um fato (ex.: "1.240 avaliações no Google e Instagram com 3 posts/semana, mas sem Reels").
 - "por_que_prospectar": 1 parágrafo (até 300 caracteres) explicando por que vale o tempo da Lone.
 - "abordagem_recomendada": 1 frase com o ângulo da conversa (ex.: "transformar as ofertas estáticas em fluxo constante de WhatsApp").
-- "gancho": UMA frase curta, em tom de conversa, que o vendedor pode dizer ao decisor citando um fato verificado ("Vi que vocês têm duas lojas e mais de 600 avaliações no Google"). Se não houver fato bom o bastante, null.
+- "gancho": UMA frase curta, em tom de conversa, que o vendedor pode dizer ao decisor citando um fato POSITIVO verificado ("Vi que vocês têm duas lojas e mais de 600 avaliações no Google"). NUNCA uma falta ("não encontrei o Instagram", "não têm site", "poucas avaliações") — isso vai em "oportunidades", não no gancho. Se não houver fato bom o bastante, null.
 - Nunca mencione faturamento, nem estimativas de faturamento.`;
 
 async function gerarDiagnostico(p: ProspectRow, fatos: string[]): Promise<Diagnostico | null> {
@@ -126,6 +126,8 @@ async function gerarDiagnostico(p: ProspectRow, fatos: string[]): Promise<Diagno
   if (!r.ok && /credit|quota|rate limit|429|5\d\d/i.test(r.error ?? "")) throw new Error(`OpenAI: ${r.error}`);
   if (!r.ok || !r.data) return null;
   const d = r.data;
+  // Gancho que aponta falta ("não encontrei o Instagram") abre a conversa criticando: não serve.
+  if (d.gancho && /\b(n[aã]o|sem|falta|pouc[ao]s?|ausência|nenhum[a]?)\b/i.test(d.gancho)) d.gancho = null;
   if (/fatura/i.test(`${d.por_que_prospectar} ${d.gancho ?? ""} ${d.oportunidades.join(" ")}`)) {
     d.gancho = null;
     d.por_que_prospectar = d.por_que_prospectar.replace(/[^.]*fatura[^.]*\./gi, "").trim();

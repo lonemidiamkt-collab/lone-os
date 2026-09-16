@@ -53,6 +53,8 @@ export const nomeParaFalar = (p: ProspectRow) => primeiroNome(primeiraPessoa(p.d
 function ganchoFrase(p: ProspectRow): string | null {
   const g = p.diagnostico?.gancho?.trim();
   if (!g) return null;
+  // Falta ("não encontrei o Instagram") não é gancho: abre a conversa apontando defeito.
+  if (/\b(n[aã]o|sem|falta|pouc[ao]s?|ausência|nenhum[a]?)\b/i.test(g)) return null;
   // "Vi que vocês têm duas lojas…" → "porque vi que vocês têm duas lojas…"
   const limpo = g.replace(/\.?$/, "");
   return /^(por|pela|pelo|porque)\b/i.test(limpo) ? limpo : `porque ${limpo.charAt(0).toLowerCase()}${limpo.slice(1)}`;
@@ -116,6 +118,7 @@ const REGRAS_DURAS = `REGRAS ABSOLUTAS (valem acima de qualquer diretriz):
 - Nunca repita uma mensagem que já está no HISTÓRICO nem a apresentação inteira da Lone se ela já foi feita nesta conversa.
 - Não pressione. Não pareça telemarketing. Não use linguagem corporativa ("soluções", "sinergia", "alavancar").
 - Sem elogios exagerados ("incrível", "maravilhoso", "parabéns"): cite o fato de forma neutra.
+- Nunca aponte o que falta ou o que você não encontrou na empresa ("não achei o Instagram", "não têm site", "poucas avaliações"): ou cita um fato positivo, ou não cita nada.
 - Cumprimento ("Oi, tudo bem?") só na primeira mensagem da conversa ou quando a última troca foi há mais de um dia. No meio da conversa, vá direto ao ponto.
 - Se a apresentação da Lone (nome, "mais de 70 empresas") já aparece no HISTÓRICO, não a repita — vá direto ao assunto.
 - Escreva só a mensagem, sem aspas, sem assinatura extra, sem explicações.`;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { abordagemInicial, followup, mensagemDecisor, convite, ofertaHorarios, confirmacao, respostaERobo, respostaPreco, respostaJaTemAgencia, perguntaCidade, respostaSaberMais, textoSeguro, lembrete1h, lembrete24h, saudacaoDoDia } from "@/lib/prospeccao/mensagens";
+import { abordagemInicial, followup, mensagemDecisor, convite, ofertaHorarios, confirmacao, respostaERobo, respostaPreco, respostaJaTemAgencia, perguntaCidade, respostaSaberMais, textoSeguro, lembrete1h, lembrete24h, saudacaoDoDia, valoresDe } from "@/lib/prospeccao/mensagens";
 import { lerIntencaoRegras, ehOptOut } from "@/lib/prospeccao/intencao";
 import { consolidarDecisor } from "@/lib/prospeccao/decisor";
 import { chavesDedup, mesmaEmpresa, telefoneDigitos, cnpjLimpo, instagramHandle, distanciaKm, nomeProprio, primeiroNome, siteNormalizado, celularesNoTexto, nomeDeTratamento } from "@/lib/prospeccao/normalizar";
@@ -134,6 +134,12 @@ describe("normalização e dedup (§25)", () => {
     expect(telefoneDigitos("(22) 99999-8888")).toBe("5522999998888");
     expect(telefoneDigitos("+55 22 2665 1234")).toBe("552226651234");
     expect(telefoneDigitos("123")).toBeNull();
+  });
+  it("gancho que aponta falta não vira {gancho}", () => {
+    const v = valoresDe(prospectBase({ diagnostico: { oportunidades: [], por_que_prospectar: "x", abordagem_recomendada: "y", gancho: "Vi que vocês têm site, mas não encontrei o Instagram" } }), CONFIG_PADRAO);
+    expect(v.gancho).toBeNull();
+    const ok = valoresDe(prospectBase({ diagnostico: { oportunidades: [], por_que_prospectar: "x", abordagem_recomendada: "y", gancho: "Vi que vocês têm duas lojas" } }), CONFIG_PADRAO);
+    expect(ok.gancho).toMatch(/^porque vi que vocês têm duas lojas$/);
   });
   it("acha o celular na bio do Instagram, no wa.me e ignora fixo, CNPJ e nº de pedido", () => {
     expect(celularesNoTexto("Pedidos pelo WhatsApp (22) 99876-5432 ou 22 9 8765-4321")).toEqual(["5522998765432", "5522987654321"]);
