@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
+import { marcarMutacao } from "@/stores/useContentStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
@@ -213,6 +214,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
   const handleAttachmentsChange = (next: CardAttachment[]) => {
     const real = next.filter((a) => a.id !== "legacy");
     const cover = next[0]?.url; // 1ª arte visível (real ou capa legada)
+    marcarMutacao();
     useContentStore.setState((s) => ({
       contentCards: s.contentCards.map((c) =>
         c.id === card.id ? { ...c, cardAttachments: real, imageUrl: cover } : c,

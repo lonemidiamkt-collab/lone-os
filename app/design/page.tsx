@@ -12,6 +12,7 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { ehDoQuadro, quadrosDisponiveis, contagemPorQuadro, donoDaDemanda, SEM_DONO } from "@/lib/design/dono";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
+import { marcarMutacao } from "@/stores/useContentStore";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { getPriorityColor, getPriorityLabel, spDateStr } from "@/lib/utils";
 import {
@@ -139,6 +140,7 @@ function UploadArtModal({
     setAttachments(next);
     const real = next.filter((a) => a.id !== "legacy");
     const cover = next[0]?.url;
+    marcarMutacao();
     useContentStore.setState((s) => ({
       contentCards: s.contentCards.map((c) =>
         c.id === card.id ? { ...c, cardAttachments: real, imageUrl: cover } : c,
@@ -597,6 +599,7 @@ export default function DesignPage() {
           // Modo card: a arte já entrou em card_attachments pela rota → reflete no store (capa +
           // contagem no board social). Modo avulso (PDF/vídeo): cai no imageUrl legado.
           if (created.length > 0) {
+            marcarMutacao();
             useContentStore.setState((s) => ({
               contentCards: s.contentCards.map((c) =>
                 c.id === linkedCard.id

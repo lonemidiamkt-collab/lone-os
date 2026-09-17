@@ -6,6 +6,7 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
+import { marcarMutacao } from "@/stores/useContentStore";
 import type { ContentCard } from "@/lib/types";
 import {
   Dialog,
@@ -69,6 +70,7 @@ export default function ArchivedDemandsModal({ workspace, onClose }: { workspace
       // via o item sumir da lista, ia pro quadro e não achava: parecia trabalho perdido.
       const alvo = (cards ?? []).find((c) => c.id === id);
       if (alvo) {
+        marcarMutacao();
         useContentStore.setState((st) => ({
           contentCards: st.contentCards.some((c) => c.id === id)
             ? st.contentCards.map((c) => (c.id === id ? { ...c, archivedAt: undefined } : c))

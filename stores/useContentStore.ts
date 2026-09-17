@@ -49,6 +49,18 @@ export const selectDesignByClient = (clientId: string) => (s: ContentState) =>
 // chave — estado React no botão não segura, o closure ainda vê o valor antigo.
 const criacoesEmVoo = new Map<string, Promise<unknown>>();
 
+// A CORRIDA QUE FAZIA "REFAZER 3 VEZES" (17/09). O board refaz a busca a cada 20 s E toda vez que a
+// janela ganha foco — e a equipe vive alternando com o WhatsApp/Finder/Photoshop para copiar
+// referência. A busca (800 KB, 1–3 s na internet de casa) ainda estava em voo quando a pessoa clicava
+// em Criar/Anexar/Entregar: a resposta VELHA chegava depois da escrita otimista e a substituía
+// inteira; o card/anexo sumia da tela (o servidor tinha gravado) e só voltava 20 s depois — ou no
+// reload. A pessoa criava de novo. Regra agora: escrita local carimba `mutadoEm`; resposta de busca
+// disparada ANTES da última escrita é descartada (e uma nova busca sai em seguida).
+let mutadoEm = 0;
+export function marcarMutacao(): void { mutadoEm = Date.now(); }
+let refreshEmVoo = false;
+let ultimoRefresh = 0;
+
 export const useContentStore = create<ContentState>()(
   devtools(
     subscribeWithSelector((set, get) => ({
@@ -76,19 +88,34 @@ export const useContentStore = create<ContentState>()(
       refresh: async (filter) => {
         // Refetch silencioso p/ polling do board: SEM flag de loading (não pisca a tela) e
         // sem o guard de init (serve justamente pra atualizar depois de já inicializado).
-        // Substitui as coleções server-authoritative; updates otimistas locais persistem em
-        // <1s, então a janela de corrida com um poll de ~45s é desprezível.
+        if (!get().initialized) return;            // antes do init, o init é quem carrega
+        if (refreshEmVoo) return;                  // uma busca por vez
+        if (Date.now() - ultimoRefresh < 3000) return; // foco + tick no mesmo segundo = uma busca só
+        if (criacoesEmVoo.size > 0) return;        // alguém está criando: não atropela
+        refreshEmVoo = true;
+        const disparadoEm = Date.now();
         try {
           const q = new URLSearchParams();
           if (filter?.socialMedia) q.set("socialMedia", filter.socialMedia);
           const v = get().versao;
           if (v) q.set("v", v);
           const res = await authedFetch(`/api/data/content${q.toString() ? `?${q}` : ""}`);
+          ultimoRefresh = Date.now();
           if (res.status === 204) return; // nada mudou desde o último tick — zero bytes, zero re-render
           if (!res.ok) return;
           const { contentCards, designRequests, contentApprovals, socialReports, versao } = await res.json();
-          set({ contentCards, designRequests, contentApprovals, socialReports, versao }, false, "content/refresh");
-        } catch {}
+          // Escrita local depois que esta busca saiu? A resposta é velha: descarta e busca de novo.
+          if (mutadoEm > disparadoEm || criacoesEmVoo.size > 0) {
+            refreshEmVoo = false; ultimoRefresh = 0;
+            setTimeout(() => { void get().refresh(filter); }, 1500);
+            return;
+          }
+          // Otimistas ainda em voo (id temp-*) não existem no servidor: preserva até confirmar.
+          const cards = get().contentCards, reqs = get().designRequests;
+          const cardsTemp = cards.filter((c) => c.id.startsWith("temp-"));
+          const reqsTemp = reqs.filter((r) => r.id.startsWith("temp-"));
+          set({ contentCards: [...contentCards, ...cardsTemp], designRequests: [...reqsTemp, ...designRequests], contentApprovals, socialReports, versao }, false, "content/refresh");
+        } catch {} finally { refreshEmVoo = false; }
       },
 
       subscribeRealtime: (socialMediaFilter) => {
@@ -162,12 +189,14 @@ export const useContentStore = create<ContentState>()(
         const p = (async () => {
         const tempId = `temp-cc-${Date.now()}`;
         const optimistic: ContentCard = { ...card, id: tempId };
+        marcarMutacao();
         set((s) => ({ contentCards: [...s.contentCards, optimistic] }), false, "content/card/add/optimistic");
         try {
           const r = await authedFetch("/api/content-cards/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(card) });
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           const { id } = await r.json();
           const confirmed = { ...optimistic, id };
+          marcarMutacao();
           set((s) => ({
             contentCards: s.contentCards.map((c) => c.id === tempId ? confirmed : c),
           }), false, "content/card/add/confirmed");
@@ -184,6 +213,7 @@ export const useContentStore = create<ContentState>()(
 
       updateContentCard: async (id, updates) => {
         const prev = get().contentCards.find((c) => c.id === id);
+        marcarMutacao();
         set((s) => ({
           contentCards: s.contentCards.map((c) => c.id === id ? { ...c, ...updates } : c),
         }), false, "content/card/update/optimistic");
@@ -202,6 +232,7 @@ export const useContentStore = create<ContentState>()(
 
       deleteContentCard: async (id) => {
         const prev = get().contentCards.find((c) => c.id === id);
+        marcarMutacao();
         set((s) => ({ contentCards: s.contentCards.filter((c) => c.id !== id) }), false, "content/card/delete/optimistic");
         try {
           const res = await authedFetch("/api/content-cards/delete", {
@@ -345,6 +376,7 @@ export const useContentStore = create<ContentState>()(
         const p = (async () => {
         const tempId = `temp-dr-${Date.now()}`;
         const optimistic: DesignRequest = { ...req, id: tempId } as DesignRequest;
+        marcarMutacao();
         set((s) => ({ designRequests: [optimistic, ...s.designRequests] }), false, "content/design/add/optimistic");
         try {
           const r = await authedFetch("/api/design-requests/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
@@ -353,6 +385,7 @@ export const useContentStore = create<ContentState>()(
           // Cliente sem designer no cadastro: a demanda existe, mas cai em "(sem designer)" — avisa quem criou.
           if (semDesigner) toast.warning(`"${req.title}" foi criada, mas ${req.clientName} não tem designer no cadastro — caiu em "(sem designer)". Defina o designer na ficha do cliente pra cair no quadro certo.`, { duration: 9000 });
           const confirmed = { ...optimistic, id };
+          marcarMutacao();
           set((s) => ({
             designRequests: s.designRequests.map((r) => r.id === tempId ? confirmed : r),
           }), false, "content/design/add/confirmed");
@@ -369,6 +402,7 @@ export const useContentStore = create<ContentState>()(
 
       updateDesignRequest: async (id, updates) => {
         const prev = get().designRequests.find((r) => r.id === id);
+        marcarMutacao();
         set((s) => ({
           designRequests: s.designRequests.map((r) => r.id === id ? { ...r, ...updates } : r),
         }), false, "content/design/update/optimistic");
@@ -419,6 +453,7 @@ export const useContentStore = create<ContentState>()(
 
       deleteDesignRequest: async (id) => {
         const prev = get().designRequests.find((r) => r.id === id);
+        marcarMutacao();
         set((s) => ({ designRequests: s.designRequests.filter((r) => r.id !== id) }), false, "content/design/delete/optimistic");
         try {
           const res = await authedFetch("/api/design-requests/delete", {
