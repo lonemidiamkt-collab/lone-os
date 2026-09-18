@@ -9,6 +9,7 @@ import {
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { marcarMutacao } from "@/stores/useContentStore";
+import { trilha } from "@/lib/obs/trilha";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { useRole } from "@/lib/context/RoleContext";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
@@ -62,7 +63,12 @@ interface Props {
   onClose: () => void;
 }
 
-export default function ContentCardModal({ card, onClose }: Props) {
+export default function ContentCardModal({ card: cardProp, onClose }: Props) {
+  // CARD VIVO (18/09): a prop era um retrato do momento do clique. Depois de "A fazer" ou de anexar,
+  // o store mudava (designRequestId, anexos, entrega) mas o modal seguia mostrando o retrato — o
+  // botão "Solicitar Design" continuava lá, a arte não aparecia, e a pessoa clicava de novo.
+  const cardVivo = useContentStore((s) => s.contentCards.find((c) => c.id === cardProp.id));
+  const card = cardVivo ?? cardProp;
   const clients = useClientsStore((s) => s.clients);
   const updateContentCard = useContentStore((s) => s.updateContentCard);
   const addCardComment = useContentStore((s) => s.addCardComment);
@@ -204,9 +210,9 @@ export default function ContentCardModal({ card, onClose }: Props) {
   useEffect(() => {
     let alive = true;
     authedFetch(`/api/cards/${card.id}/attachments`)
-      .then((r) => (r.ok ? r.json() : { attachments: [] }))
-      .then((d) => { if (alive) setAttachments((d.attachments as CardAttachment[]) ?? []); })
-      .catch(() => { if (alive) setAttachments([]); });
+      .then((r) => { if (!r.ok) trilha("modal:anexos:erro", { id: card.id, status: r.status }); return r.ok ? r.json() : { attachments: [] }; })
+      .then((d) => { if (alive) { const l = (d.attachments as CardAttachment[]) ?? []; setAttachments(l); trilha("modal:aberto", { id: card.id, anexos: l.length, temDr: !!card.designRequestId, entregue: !!card.designerDeliveredAt, img: !!card.imageUrl }); } })
+      .catch(() => { if (alive) { setAttachments([]); trilha("modal:anexos:falha-rede", { id: card.id }); } });
     return () => { alive = false; };
   }, [card.id]);
 
@@ -857,6 +863,7 @@ export default function ContentCardModal({ card, onClose }: Props) {
               disabled={sendingDesign}
               className="flex items-center gap-2 text-[var(--chart-4)] border-[var(--chart-4)]/30 hover:bg-[var(--chart-4)]/10"
               onClick={() => {
+                trilha("solicitar-design:clique", { id: card.id, data: dueDate || null, enviando: sendingDesign });
                 if (sendingDesign) return;          // anti-duplo-clique: evita demanda duplicada
                 // Não manda pro designer sem data de postagem — toda demanda precisa de pauta datada.
                 if (!dueDate) {

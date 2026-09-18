@@ -4,6 +4,7 @@ import { devtools, subscribeWithSelector } from "zustand/middleware";
 import type { ContentCard, DesignRequest, ContentApproval, SocialMonthlyReport, CardComment, Role } from "@/lib/types";
 import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { trilha } from "@/lib/obs/trilha";
 
 interface ContentState {
   contentCards: ContentCard[];
@@ -106,6 +107,7 @@ export const useContentStore = create<ContentState>()(
           const { contentCards, designRequests, contentApprovals, socialReports, versao } = await res.json();
           // Escrita local depois que esta busca saiu? A resposta é velha: descarta e busca de novo.
           if (mutadoEm > disparadoEm || criacoesEmVoo.size > 0) {
+            trilha("refresh:descartado-por-escrita-local");
             refreshEmVoo = false; ultimoRefresh = 0;
             setTimeout(() => { void get().refresh(filter); }, 1500);
             return;
@@ -193,8 +195,9 @@ export const useContentStore = create<ContentState>()(
         set((s) => ({ contentCards: [...s.contentCards, optimistic] }), false, "content/card/add/optimistic");
         try {
           const r = await authedFetch("/api/content-cards/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(card) });
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          const { id } = await r.json();
+          if (!r.ok) { trilha("card:criar:erro", { titulo: card.title, status: r.status }); throw new Error(`HTTP ${r.status}`); }
+          const { id, dedupe } = await r.json() as { id: string; dedupe?: boolean };
+          trilha("card:criar:ok", { titulo: card.title, id, dedupe: !!dedupe });
           const confirmed = { ...optimistic, id };
           marcarMutacao();
           set((s) => ({
@@ -223,7 +226,7 @@ export const useContentStore = create<ContentState>()(
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id, ...updates }),
           });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          if (!res.ok) { trilha("card:update:erro", { id, campos: Object.keys(updates), status: res.status }); throw new Error(`HTTP ${res.status}`); }
         } catch (err) {
           if (prev) set((s) => ({ contentCards: s.contentCards.map((c) => c.id === id ? prev : c) }), false, "content/card/update/rollback");
           throw err;
@@ -380,8 +383,9 @@ export const useContentStore = create<ContentState>()(
         set((s) => ({ designRequests: [optimistic, ...s.designRequests] }), false, "content/design/add/optimistic");
         try {
           const r = await authedFetch("/api/design-requests/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          const { id, semDesigner } = await r.json() as { id: string; semDesigner?: boolean };
+          if (!r.ok) { trilha("demanda:criar:erro", { titulo: req.title, status: r.status }); throw new Error(`HTTP ${r.status}`); }
+          const { id, semDesigner, dedupe } = await r.json() as { id: string; semDesigner?: boolean; dedupe?: boolean };
+          trilha("demanda:criar:ok", { titulo: req.title, id, card: req.contentCardId ?? null, dedupe: !!dedupe, semDesigner: !!semDesigner });
           // Cliente sem designer no cadastro: a demanda existe, mas cai em "(sem designer)" — avisa quem criou.
           if (semDesigner) toast.warning(`"${req.title}" foi criada, mas ${req.clientName} não tem designer no cadastro — caiu em "(sem designer)". Defina o designer na ficha do cliente pra cair no quadro certo.`, { duration: 9000 });
           const confirmed = { ...optimistic, id };

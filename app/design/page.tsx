@@ -13,6 +13,7 @@ import { ehDoQuadro, quadrosDisponiveis, contagemPorQuadro, donoDaDemanda, SEM_D
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { marcarMutacao } from "@/stores/useContentStore";
+import { trilha } from "@/lib/obs/trilha";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { getPriorityColor, getPriorityLabel, spDateStr } from "@/lib/utils";
 import {
@@ -158,6 +159,7 @@ function UploadArtModal({
     setError("");
     const link = artLink.trim();
     const real = (attachments ?? []).filter((a) => a.id !== "legacy");
+    trilha("entregar:clique", { card: card.id, artes: real.length, link: !!link, dr: card.designRequestId ?? null });
 
     // Precisa de pelo menos uma arte anexada OU um link do Drive
     if (real.length === 0 && !link) {
@@ -193,6 +195,7 @@ function UploadArtModal({
         const nextAttachments = [...(dr?.attachments ?? []), ...deliveredUrls];
         await updateDesignRequest(card.designRequestId, { attachments: nextAttachments, status: "done" });
       }
+      trilha("entregar:ok", { card: card.id, artes: deliveredUrls.length });
       pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmação.`, card.clientId, card.id);
       // REVISÃO AUTOMÁTICA na entrega (IA de visão): confere TODAS as artes contra o briefing —
       // preço/texto/localização/regras. Sempre roda (não só quem tem regra) — foi o gap que deixou
@@ -207,6 +210,7 @@ function UploadArtModal({
       setTimeout(() => { setSaved(false); onClose(); }, 800);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
+      trilha("entregar:erro", { card: card.id, msg });
       console.error("[UploadArt] deliver failed:", err);
       setError(`Não foi possível entregar: ${msg}`);
       setSaving(false);

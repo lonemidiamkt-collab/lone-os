@@ -5,6 +5,7 @@ import { X, Plus, Upload, ImageIcon, ChevronLeft, ChevronRight, Download, Loader
 import type { CardAttachment } from "@/lib/types";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
+import { trilha } from "@/lib/obs/trilha";
 import { useImagePaste } from "@/lib/hooks/useImagePaste";
 
 const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
@@ -277,6 +278,7 @@ export default function CardArtAttachments({
         // `chamar` trata os dois modos de falha que faltavam: rede caída (authedFetch rejeitava e a
         // exceção subia sem ninguém tratar) e corpo em HTML num 502 de deploy.
         const res = await chamar("/api/upload-art", formData);
+        trilha("upload:resultado", { card: cardId, arquivos: files.length, ok: res.ok, status: res.status, erro: res.ok ? null : res.erro });
 
         if (!res.ok) {
           const msg = res.erro ?? "Erro no upload";

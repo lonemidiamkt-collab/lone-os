@@ -11,6 +11,8 @@ export async function POST(req: NextRequest) {
   const user = await getServerUser(req);
   const body = await req.json().catch(() => null) as { msg?: string; stack?: string; url?: string; acao?: string } | null;
   if (!body?.msg) return NextResponse.json({ ok: false }, { status: 400 });
-  console.error(`[erro-cliente] ${user?.email ?? "anon"} @ ${String(body.url ?? "").slice(0, 120)}${body.acao ? ` (${body.acao})` : ""}: ${String(body.msg).slice(0, 300)}${body.stack ? `\n  ${String(body.stack).slice(0, 600).replace(/\n/g, "\n  ")}` : ""}`);
+  const tag = body.acao === "trilha" ? "[trilha]" : "[erro-cliente]";
+  const log = body.acao === "trilha" ? console.log : console.error;
+  log(`${tag} ${user?.email ?? "anon"} @ ${String(body.url ?? "").slice(0, 120)}${body.acao ? ` (${body.acao})` : ""}: ${String(body.msg).slice(0, 300)}${body.stack ? `\n  ${String(body.stack).slice(0, 600).replace(/\n/g, "\n  ")}` : ""}`);
   return NextResponse.json({ ok: true });
 }

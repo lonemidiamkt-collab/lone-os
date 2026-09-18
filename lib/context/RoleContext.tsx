@@ -126,18 +126,23 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         ?? USER_PROFILES.find((p) => p.email.toLowerCase() === e);
   }, []);
 
-  useEffect(() => {
-    let vivo = true;
-    fetch("/api/team/roster")
+  // A lista viva é carregada UMA vez e quem restaura a sessão espera por ela: quem não está na
+  // reserva (Gabriel entrou depois da lista) caía na tela de login a cada reload — a sessão existia,
+  // mas `acharPorEmail` rodava antes do roster chegar e não achava o perfil.
+  const rosterPronto = useRef<Promise<void> | null>(null);
+  const carregarRoster = useCallback((): Promise<void> => {
+    if (rosterPronto.current) return rosterPronto.current;
+    rosterPronto.current = fetch("/api/team/roster")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         const lista = d?.profiles as UserProfile[] | undefined;
         // Lista vazia = consulta falhou. Fica na reserva: melhor nome velho que tela sem ninguém.
-        if (vivo && lista?.length) setProfiles(lista);
+        if (lista?.length) { profilesRef.current = lista; setProfiles(lista); }
       })
       .catch(() => { /* sem rede: segue na reserva */ });
-    return () => { vivo = false; };
+    return rosterPronto.current;
   }, []);
+  useEffect(() => { void carregarRoster(); }, [carregarRoster]);
 
   // Restore session from Supabase on mount
   useEffect(() => {
@@ -149,6 +154,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         const { data: { session } } = await supabase.auth.getSession();
 
         if (session?.user && mounted) {
+          if (!acharPorEmail(session.user.email)) await carregarRoster(); // fora da reserva: espera a lista viva
           const profile = acharPorEmail(session.user.email);
           if (profile) {
             const teamMemberId = await fetchTeamMemberId(session.user.id);
@@ -176,6 +182,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
                   return false;
                 });
               } else if (event === "SIGNED_IN" && session?.user) {
+                if (!acharPorEmail(session.user.email)) await carregarRoster();
                 const profile = acharPorEmail(session.user.email);
                 if (profile) {
                   const teamMemberId = await fetchTeamMemberId(session.user.id);

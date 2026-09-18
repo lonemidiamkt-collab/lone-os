@@ -1,6 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
+import { trilha } from "@/lib/obs/trilha";
 import Header from "@/components/Header";
 import EmptyState from "@/components/ui/EmptyState";
 import KanbanBoard from "@/components/KanbanBoard";
@@ -832,8 +833,10 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
       return null;
     });
     if (criado === null) return; // modal fica aberto com tudo preenchido
+    trilha("novo-conteudo:criado", { id: criado?.id, refs: refs.length });
     if (criado?.id && refs.length) {
       await anexarReferencias(criado.id);
+      trilha("novo-conteudo:refs", { id: criado.id, erro: erroRefRef.current });
       // Falhou algum anexo: mantém o modal aberto com o aviso — a demanda já existe, mas a pessoa
       // precisa saber que a referência não foi junto.
       if (erroRefRef.current) return;
@@ -3097,6 +3100,7 @@ export default function SocialPage() {
               onSendToDesigner={(card) => {
                 // TRAVA: sem data de postagem, não vai pro designer. A data é o prazo que o designer
                 // e o CS usam pra cobrar no momento certo. Abre o card pro social preencher.
+                trilha("a-fazer:clique", { id: card.id, temDr: !!card.designRequestId, entregue: !!card.designerDeliveredAt, data: card.dueDate ?? null });
                 if (!card.dueDate) {
                   pushNotification("system", "Falta a data de postagem", `Defina a data de postagem no card "${card.title}" antes de enviar pro designer — é o prazo que o designer e o CS usam.`, card.clientId);
                   toast.error(`"${card.title}" não foi pro designer: falta a data de postagem. Abri o card pra você preencher.`);
