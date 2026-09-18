@@ -28,7 +28,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     .from("content_cards")
     .select("id, title, format, status, image_url, due_date, scheduled_at, published_at, designer_delivered_at, client_approved_at")
     .eq("client_id", client.id as string)
-    .is("archived_at", null)   // card arquivado não deve aparecer pro cliente
+    // ARQUIVADO NÃO É APAGADO (18/09): a equipe arquiva o card depois de postar para limpar o quadro —
+    // 25 por dia. O portal excluía arquivados e o cliente abria "Conteúdo" VAZIO (UNAFER: 9 artes
+    // entregues, 9 arquivadas, 0 visíveis; Calabria 0/27, CIIL 0/24). Arquivar é organização do time;
+    // para o cliente, arte entregue é arte entregue. Só fica de fora o que foi apagado de verdade
+    // (não existe apagar: soft-delete é o próprio archived_at + sem entrega — coberto pelo .or).
     .or("image_url.not.is.null,designer_delivered_at.not.is.null")
     .order("due_date", { ascending: false })
     .limit(40);
@@ -38,12 +42,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   const capaDeAnexo = new Map<string, string>();
   if (semCapa.length) {
     const { data: anexos } = await supabaseAdmin
-      .from("card_attachments").select("card_id, url, position")
+      .from("card_attachments").select("card_id, url, position, tipo")
       .in("card_id", semCapa).order("position", { ascending: true });
+    // A capa é a ARTE, nunca a referência: "referencia" é o print/foto que o social mandou pro designer
+    // (às vezes do próprio cliente, às vezes de concorrente). Preferência: entrega > sem tipo (legado).
+    const peso = (t: unknown) => (t === "entrega" ? 0 : t == null ? 1 : 9);
+    const melhor = new Map<string, { url: string; peso: number }>();
     for (const a of anexos ?? []) {
-      const cid = a.card_id as string;
-      if (!capaDeAnexo.has(cid) && (a.url as string)) capaDeAnexo.set(cid, a.url as string);
+      const cid = a.card_id as string; const w = peso(a.tipo);
+      if (w === 9 || !(a.url as string)) continue;
+      const atual = melhor.get(cid);
+      if (!atual || w < atual.peso) melhor.set(cid, { url: a.url as string, peso: w });
     }
+    for (const [cid, m] of melhor) capaDeAnexo.set(cid, m.url);
   }
 
   const items = (cards ?? [])
