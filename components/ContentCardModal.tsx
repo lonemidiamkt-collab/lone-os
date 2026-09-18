@@ -367,6 +367,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                   existingAttachments={attachments}
                   legacyImageUrl={card.imageUrl}
                   onAttachmentsChange={handleAttachmentsChange}
+                  tipo={role === "designer" ? "entrega" : "referencia"}
                 />
               )}
               <p className="text-[9px] text-muted-foreground text-center">

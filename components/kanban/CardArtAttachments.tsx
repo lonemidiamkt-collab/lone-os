@@ -18,6 +18,12 @@ interface CardArtAttachmentsProps {
   onAttachmentsChange: (attachments: CardAttachment[]) => void;
   maxItems?: number;
   readOnly?: boolean;
+  /**
+   * O que ESTE uploader sobe: "entrega" (arte final do designer) ou "referencia" (material do social).
+   * Sem isso o anexo nascia com tipo NULL e virava um terceiro caminho de entrega (18/09: mesmo card
+   * com `entrega,null`), que a publicação recusa e o quadro não sabe ler.
+   */
+  tipo?: "entrega" | "referencia";
 }
 
 interface PendingUpload {
@@ -179,6 +185,7 @@ export default function CardArtAttachments({
   onAttachmentsChange,
   maxItems = 10,
   readOnly = false,
+  tipo,
 }: CardArtAttachmentsProps) {
   const [attachments, setAttachments] = useState<CardAttachment[]>(() =>
     buildVisibleArts(existingAttachments, cardId, legacyImageUrl),
@@ -273,6 +280,7 @@ export default function CardArtAttachments({
       try {
         const formData = new FormData();
         formData.append("cardId", cardId);
+        if (tipo) formData.append("tipo", tipo);
         for (const f of files) formData.append("file", f);
 
         // `chamar` trata os dois modos de falha que faltavam: rede caída (authedFetch rejeitava e a
@@ -297,7 +305,7 @@ export default function CardArtAttachments({
         setPending((prev) => prev.filter((p) => !tempIds.includes(p.tempId)));
       }
     },
-    [cardId, attachments, maxItems, reloadAttachments, updateAttachments],
+    [cardId, attachments, maxItems, reloadAttachments, updateAttachments, tipo],
   );
 
   // ── paste ──────────────────────────────────────────────────────────────────

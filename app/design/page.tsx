@@ -264,6 +264,7 @@ function UploadArtModal({
                 existingAttachments={attachments.filter((a) => a.id !== "legacy")}
                 legacyImageUrl={card.imageUrl}
                 onAttachmentsChange={handleAttachmentsChange}
+                tipo="entrega"
               />
             )}
           </div>

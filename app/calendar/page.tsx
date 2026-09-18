@@ -482,6 +482,16 @@ export default function CalendarPage() {
 
   // Busca as reuniões do mês em exibição. Refaz ao trocar de mês porque o ciclo é mensal — puxar
   // tudo de uma vez traria meses de histórico que o calendário não mostra.
+  // RECARREGA (18/09): só recarregava ao trocar de mês. Reunião marcada na Criação Rápida — ou pelo
+  // Loninho no WhatsApp — não aparecia até o F5; a pessoa marcava de novo e batia na duplicata.
+  const [versaoReunioes, setVersaoReunioes] = useState(0);
+  const recarregarReunioes = useCallback(() => setVersaoReunioes((v) => v + 1), []);
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === "visible") recarregarReunioes(); };
+    const i = setInterval(tick, 60_000);
+    window.addEventListener("focus", tick);
+    return () => { clearInterval(i); window.removeEventListener("focus", tick); };
+  }, [recarregarReunioes]);
   useEffect(() => {
     let vivo = true;
     const mes = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}`;
@@ -509,7 +519,7 @@ export default function CalendarPage() {
       })
       .catch(() => { /* calendário sem reunião é melhor que calendário quebrado */ });
     return () => { vivo = false; };
-  }, [viewYear, viewMonth]);
+  }, [viewYear, viewMonth, versaoReunioes]);
 
   const filteredEvents = useMemo(() => {
     return allEvents.filter((e) => {
@@ -1355,6 +1365,7 @@ export default function CalendarPage() {
           currentUser={currentUser}
           role={role}
           onClose={() => setShowCreate(false)}
+          onReuniaoSalva={recarregarReunioes}
           onCreateTask={(task) => {
             addTask(task);
             setShowCreate(false);
@@ -1389,6 +1400,7 @@ function QuickCreateModal({
   onCreateContent,
   onCreateReminder,
   onSaveAndOpen,
+  onReuniaoSalva,
 }: {
   date: string;
   clients: { id: string; name: string; assignedSocial: string; assignedTraffic: string; assignedDesigner: string }[];
@@ -1398,6 +1410,7 @@ function QuickCreateModal({
   onCreateTask: (task: Omit<Task, "id">) => void;
   onCreateContent: (card: Omit<ContentCard, "id">) => void;
   onCreateReminder: (rem: Omit<Reminder, "id">) => void;
+  onReuniaoSalva?: () => void;
   onSaveAndOpen: (task: Omit<Task, "id">) => void;
 }) {
   const { profiles } = useRole();   // equipe do banco, não lista em arquivo
@@ -1512,7 +1525,8 @@ function QuickCreateModal({
             colaboradores: assignees.filter((a) => a !== currentUser),
           avisarCliente,
         });
-        if (!r.ok) { alert(r.erro ?? "Não consegui agendar a reunião."); return; }
+        if (!r.ok) { alert(r.erro ?? "Não consegui agendar a reunião."); onReuniaoSalva?.(); return; }
+        onReuniaoSalva?.();
         onClose();
       } finally {
         setSalvandoReuniao(false);

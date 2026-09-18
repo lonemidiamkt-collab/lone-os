@@ -121,7 +121,17 @@ export async function POST(req: NextRequest) {
       link_reuniao: b.link?.trim() || null,
       convidado_por: quem,
     }).select("id").single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      // MESMO CLIENTE, MESMO HORÁRIO (18/09): a reunião já existia (o Loninho ou a própria pessoa
+      // tinha marcado) e o calendário não tinha recarregado — a pessoa marcava de novo e recebia
+      // o erro cru do Postgres num alert. Agora diz o que é, quem marcou e quando.
+      if (/duplicate key|uniq_meeting_cliente_inicio/i.test(error.message)) {
+        const { data: ex } = await supabaseAdmin.from("meetings").select("id, created_by, created_at, responsavel").eq("client_id", b.clientId).eq("start_at", inicio.toISOString()).is("deleted_at", null).maybeSingle();
+        const quando = ex?.created_at ? new Date(ex.created_at as string).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+        return NextResponse.json({ error: `Essa reunião já está marcada: ${nomeCli}, ${inicio.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}${ex?.created_by ? ` — marcada por ${ex.created_by}${quando ? ` em ${quando}` : ""}` : ""}. Ela já está no calendário; se não aparece, recarregue a página.`, jaExistia: true, reuniaoId: ex?.id ?? null }, { status: 409 });
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
     // A ficha do cliente precisa saber da próxima — é o que serve para preparar.
     await supabaseAdmin.from("client_journey")
