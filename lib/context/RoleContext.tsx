@@ -116,6 +116,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   // a lista do primeiro quadro — e alguém que entrasse no time hoje não seria reconhecido até dar
   // F5. É o mesmo tipo de armadilha que criou este bug, agora dentro do React.
   const profilesRef = useRef<UserProfile[]>(USER_PROFILES);
+  /** id do usuário já autenticado nesta aba — SIGNED_IN repetido para ele (aba voltando) é ignorado. */
+  const usuarioAtivoRef = useRef<string | null>(null);
   useEffect(() => { profilesRef.current = profiles; }, [profiles]);
 
   /** Quem é o dono deste e-mail. Tenta a lista viva; cai na reserva se não achar. */
@@ -165,6 +167,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
               perfilEmEsperaRef.current = { ...profile, teamMemberId };
               setDuasEtapasPendente(true);
             } else {
+              usuarioAtivoRef.current = session.user.id;
               setCurrentProfileState({ ...profile, teamMemberId });
               setIsAuthenticated(true);
             }
@@ -172,30 +175,52 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         }
 
         // Listen for auth state changes
+        //
+        // O BUG DO "TROQUEI DE ABA E O SISTEMA TRAVOU" (18/09). Toda vez que a aba volta a ficar
+        // visível, o supabase-js roda _recoverAndRefresh() SEGURANDO o lock de autenticação e, de
+        // dentro dele, emite SIGNED_IN e ESPERA cada callback terminar. Este callback chamava
+        // estadoDuasEtapas() → supabase.auth.mfa.listFactors() → que precisa do MESMO lock → fila
+        // circular: o lock espera o callback, o callback espera o lock. A partir daí TODO
+        // getSession() da página (todo authedFetch: criar card, anexar, entregar, a própria trilha)
+        // fica pendurado até o F5. Entrou em 13/09 com o 2FA; reproduzido no navegador em 18/09
+        // (clique em "Criar Conteúdo" após trocar de aba: handler rodou, pedido nunca saiu).
+        // Regra (documentada pela Supabase): nada de supabase.auth.* dentro do callback — o trabalho
+        // sai para fora do lock com setTimeout(0). E SIGNED_IN repetido para o MESMO usuário já
+        // autenticado não faz nada: é a aba voltando, não um login.
         try {
           const { data } = supabase.auth.onAuthStateChange(
-            async (event, session) => {
+            (event, session) => {
               if (!mounted) return;
               if (event === "SIGNED_OUT") {
+                usuarioAtivoRef.current = null;
                 setIsAuthenticated((prev) => {
                   if (prev) setCurrentProfileState(DEFAULT_PROFILE);
                   return false;
                 });
-              } else if (event === "SIGNED_IN" && session?.user) {
-                if (!acharPorEmail(session.user.email)) await carregarRoster();
-                const profile = acharPorEmail(session.user.email);
-                if (profile) {
-                  const teamMemberId = await fetchTeamMemberId(session.user.id);
+                return;
+              }
+              if (event !== "SIGNED_IN" || !session?.user) return;
+              if (usuarioAtivoRef.current === session.user.id) return; // aba voltou; já está logado
+              const user = session.user;
+              setTimeout(() => {
+                void (async () => {
+                  if (!mounted) return;
+                  if (!acharPorEmail(user.email)) await carregarRoster();
+                  const profile = acharPorEmail(user.email);
+                  if (!profile) return;
+                  const teamMemberId = await fetchTeamMemberId(user.id);
                   const de = await estadoDuasEtapas();
+                  if (!mounted) return;
                   if (de.precisaCodigo) {
                     perfilEmEsperaRef.current = { ...profile, teamMemberId };
                     setDuasEtapasPendente(true);
                   } else {
+                    usuarioAtivoRef.current = user.id;
                     setCurrentProfileState({ ...profile, teamMemberId });
                     setIsAuthenticated(true);
                   }
-                }
-              }
+                })();
+              }, 0);
             }
           );
           subscription = data.subscription;
@@ -261,6 +286,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           setDuasEtapasPendente(true);
           return true;
         }
+        usuarioAtivoRef.current = data.user.id;
         setCurrentProfileState({ ...profile, teamMemberId });
         setIsAuthenticated(true);
         return true;
@@ -273,6 +299,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     try { await supabase.auth.signOut(); } catch { /* ignore */ }
+    usuarioAtivoRef.current = null;
     setIsAuthenticated(false);
     setDuasEtapasPendente(false);
     perfilEmEsperaRef.current = null;
@@ -286,6 +313,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     perfilEmEsperaRef.current = null;
     setDuasEtapasPendente(false);
     if (perfil) setCurrentProfileState(perfil);
+    try { const { data } = await supabase.auth.getSession(); usuarioAtivoRef.current = data.session?.user.id ?? null; } catch { /* sem sessão */ }
     setIsAuthenticated(true);
     return { ok: true };
   }, []);

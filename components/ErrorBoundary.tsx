@@ -1,6 +1,6 @@
 "use client";
 
-import { Component, type ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
 interface Props {
@@ -21,6 +21,13 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
+  }
+
+  // Erro de RENDER de uma página inteira (AppShell) não passa pelo window.onerror — ficava só no
+  // console da pessoa. Manda para a trilha do servidor (18/09).
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[ErrorBoundary · app]", error, info.componentStack);
+    import("@/lib/supabase/authed-fetch").then(({ authedFetch }) => authedFetch("/api/system/erro-cliente", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ msg: `[render · app] ${error.message}`, stack: `${error.stack ?? ""}\n--- componente ---${(info.componentStack ?? "").slice(0, 800)}`, url: location.pathname, acao: "error-boundary" }) }).catch(() => {})).catch(() => {});
   }
 
   render() {

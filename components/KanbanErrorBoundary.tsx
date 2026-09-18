@@ -35,6 +35,9 @@ export default class KanbanErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error(`[ErrorBoundary${this.props.context ? ` · ${this.props.context}` : ""}]`, error, info.componentStack);
+    // Erro de RENDER não passa pelo window.onerror — a caixa "Erro ao carregar este componente" era
+    // invisível para o servidor. Manda para a trilha (18/09).
+    import("@/lib/supabase/authed-fetch").then(({ authedFetch }) => authedFetch("/api/system/erro-cliente", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ msg: `[render${this.props.context ? ` · ${this.props.context}` : ""}] ${error.message}`, stack: `${error.stack ?? ""}\n--- componente ---${(info.componentStack ?? "").slice(0, 800)}`, url: location.pathname, acao: "error-boundary" }) }).catch(() => {})).catch(() => {});
     // Aqui dá pra plugar Sentry/Logflare etc no futuro
   }
 
