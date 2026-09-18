@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   // NÃO VIA NENHUMA ARTE. Em produção: 60 cards entregues, 0 com image_url, 60 com anexo.
   const { data: cards } = await supabaseAdmin
     .from("content_cards")
-    .select("id, title, format, status, image_url, due_date, scheduled_at, publish_verified_at, designer_delivered_at, client_approved_at")
+    .select("id, title, format, status, image_url, due_date, scheduled_at, publish_verified_at, designer_delivered_at, client_approved_at, archived_at")
     .eq("client_id", client.id as string)
     // ARQUIVADO NÃO É APAGADO (18/09): a equipe arquiva o card depois de postar para limpar o quadro —
     // 25 por dia. O portal excluía arquivados e o cliente abria "Conteúdo" VAZIO (UNAFER: 9 artes
@@ -66,7 +66,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       const entregue = !!c.designer_delivered_at;
       const publicado = ["published", "scheduled"].includes((c.status as string) || "");
       // Pendente de aprovação DO CLIENTE: arte entregue, ainda não aprovada e ainda não publicada/agendada.
-      const pendente = entregue && !aprovada && !publicado;
+      // Card ARQUIVADO pelo time não está pendente de nada — o time já deu o assunto por encerrado;
+      // mostrar "Onboarding" de agosto como "aguardando sua aprovação" confunde o cliente.
+      const pendente = entregue && !aprovada && !publicado && !c.archived_at;
       return {
         id: c.id as string,
         title: (c.title as string) || "Post",
@@ -79,7 +81,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         pendente, aprovada,
       };
     })
-    .sort((a, b) => Number(b.pendente) - Number(a.pendente)); // pendentes primeiro
+    .sort((a, b) => Number(b.pendente) - Number(a.pendente) || (b.date ?? "").localeCompare(a.date ?? "")); // pendentes primeiro, depois mais recente
 
   return NextResponse.json({ items });
 }
