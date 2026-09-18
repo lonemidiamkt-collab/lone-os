@@ -2882,17 +2882,29 @@ function NewTaskModal({
   const handleSubmit = async () => {
     if (!canSubmit || !client || saving) return;
     setSaving(true); setErroRef(null); erroRefRef.current = null;
-    const criada = await addDesignRequest({
-      title: title.trim(),
-      clientId: client.id,
-      clientName: client.nomeFantasia || client.name,
-      requestedBy,
-      priority,
-      status: "queued",
-      format,
-      briefing: briefing.trim(),
-      deadline: deadline || undefined,
-    });
+    trilha("nova-demanda:submit", { clientId: client.id, refs: refs.length });
+    // Antes o await sem try: qualquer falha (401 do instante, 5xx, rede) subia sem tratamento — o
+    // botão ficava em "Salvando…" para sempre e a pessoa recarregava e criava de novo.
+    let criada: DesignRequest | null = null;
+    try {
+      criada = await addDesignRequest({
+        title: title.trim(),
+        clientId: client.id,
+        clientName: client.nomeFantasia || client.name,
+        requestedBy,
+        priority,
+        status: "queued",
+        format,
+        briefing: briefing.trim(),
+        deadline: deadline || undefined,
+      });
+    } catch (err) {
+      const m = err instanceof Error ? err.message : "erro";
+      trilha("nova-demanda:erro", { msg: m });
+      setErroRef(`Não consegui criar a demanda (${m}). Nada foi salvo — tenta de novo.`);
+      setSaving(false);
+      return;
+    }
 
     // Sobe as referências DEPOIS de criar (o upload precisa do id da demanda). Se falhar, a
     // demanda continua criada — perdê-la por causa de um anexo seria pior — e o aviso aparece.

@@ -41,11 +41,24 @@ export async function authedFetch(input: RequestInfo | URL, init?: RequestInit):
     }
   } catch { /* ignore — cookie handles same-origin auth */ }
 
-  const res = await fetch(input, { ...init, headers });
+  let res = await fetch(input, { ...init, headers });
 
-  // Se ainda assim o servidor recusou, avisa a UI (o AppShell mostra a faixa "entre de novo").
+  // 401 COM SESSÃO (18/09): 20 por dia nos quadros. O GoTrue nunca recusou um token válido (1.207
+  // de 1.207 em 6 h) — o 401 era pedido que saiu SEM o header, porque getSession() devolveu vazio
+  // naquele instante (renovação em curso, outra aba, storage). Numa criação isso virava exceção e a
+  // tela travava em "Salvando…" até o reload. Agora: renova a sessão e repete UMA vez, com o corpo
+  // original (init.body é reutilizável para JSON e FormData).
   if (res.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(SESSAO_EXPIRADA));
+    try {
+      const { data } = await supabase.auth.refreshSession();
+      const tok = data.session?.access_token;
+      if (tok) {
+        const h2 = new Headers(init?.headers);
+        h2.set("Authorization", `Bearer ${tok}`);
+        res = await fetch(input, { ...init, headers: h2 });
+      }
+    } catch { /* sem sessão para renovar */ }
+    if (res.status === 401) window.dispatchEvent(new CustomEvent(SESSAO_EXPIRADA));
   }
   return res;
 }

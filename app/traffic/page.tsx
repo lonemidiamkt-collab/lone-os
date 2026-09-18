@@ -578,7 +578,7 @@ export default function TrafficPage() {
           currentUser={currentUser}
           onClose={() => setShowDesignModal(false)}
           onSubmit={(req) => {
-            addDesignRequest(req);
+            addDesignRequest(req).catch((err: unknown) => toast.error(`Não consegui criar a demanda${err instanceof Error && err.message ? ` (${err.message})` : ""}. Tenta de novo.`));
             pushNotification("content", "Arte solicitada ao Designer", `Pedido de arte para "${req.clientName}" enviado para a fila do Designer.`, req.clientId);
             import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
             setShowDesignModal(false);
@@ -594,7 +594,7 @@ export default function TrafficPage() {
           currentUser={currentUser}
           onClose={() => setCreativeModal(null)}
           onSubmit={(req) => {
-            addDesignRequest(req);
+            addDesignRequest(req).catch((err: unknown) => toast.error(`Não consegui criar a demanda${err instanceof Error && err.message ? ` (${err.message})` : ""}. Tenta de novo.`));
             pushNotification("content", "Criativo solicitado ao Design", `Pedido de criativo para campanha "${creativeModal.campaign.name}" enviado para a fila do Designer com prioridade ${req.priority === "critical" ? "critica" : "alta"}.`, creativeModal.client.id);
             // Audio feedback
             import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});

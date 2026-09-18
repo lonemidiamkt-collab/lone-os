@@ -15,9 +15,18 @@ export default function ErroCliente() {
     };
     const onErro = (e: ErrorEvent) => mandar(e.message, e.error?.stack, "window.error");
     const onRejeicao = (e: PromiseRejectionEvent) => { const r = e.reason; mandar(r instanceof Error ? r.message : String(r), r instanceof Error ? r.stack : undefined, "unhandledrejection"); };
+    // Sessão recusada mesmo depois de renovar: dizer, em vez de deixar o botão mudo (1 aviso/min).
+    let ultimoAviso = 0;
+    const onSessao = () => {
+      if (Date.now() - ultimoAviso < 60_000) return;
+      ultimoAviso = Date.now();
+      mandar("sessao-expirada: servidor recusou depois de renovar", undefined, "sessao");
+      import("sonner").then(({ toast }) => toast.error("Sua sessão expirou. Recarregue a página e entre de novo — o que você acabou de fazer não foi salvo.", { duration: 12000, action: { label: "Recarregar", onClick: () => location.reload() } })).catch(() => {});
+    };
     window.addEventListener("error", onErro);
     window.addEventListener("unhandledrejection", onRejeicao);
-    return () => { window.removeEventListener("error", onErro); window.removeEventListener("unhandledrejection", onRejeicao); };
+    window.addEventListener("lone:sessao-expirada", onSessao);
+    return () => { window.removeEventListener("error", onErro); window.removeEventListener("unhandledrejection", onRejeicao); window.removeEventListener("lone:sessao-expirada", onSessao); };
   }, []);
   return null;
 }

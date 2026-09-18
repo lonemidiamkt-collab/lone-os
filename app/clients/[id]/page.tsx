@@ -1777,7 +1777,7 @@ export default function ClientDetailPage() {
                     format: designReqForm.format,
                     briefing: designReqForm.briefing.trim(),
                     deadline: designReqForm.deadline || undefined,
-                  });
+                  }).catch((err: unknown) => toast.error(`Não consegui criar a demanda${err instanceof Error && err.message ? ` (${err.message})` : ""}. Tenta de novo.`));
                   setDesignReqForm({ title: "", format: "Post Feed", briefing: "", priority: "medium", deadline: "" });
                   setShowDesignReqForm(false);
                 }}
