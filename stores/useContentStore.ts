@@ -78,8 +78,9 @@ export const useContentStore = create<ContentState>()(
         try {
           const params = filter?.socialMedia ? `?socialMedia=${encodeURIComponent(filter.socialMedia)}` : "";
           const res = await authedFetch(`/api/data/content${params}`);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          if (!res.ok) { trilha("init:erro", { status: res.status }); throw new Error(`HTTP ${res.status}`); }
           const { contentCards, designRequests, contentApprovals, socialReports, versao } = await res.json();
+          trilha("init:ok", { cards: contentCards.length, demandas: designRequests.length });
           set({ contentCards, designRequests, contentApprovals, socialReports, versao, loading: false, initialized: true }, false, "content/init/done");
         } catch {
           set({ loading: false }, false, "content/init/error");
@@ -103,7 +104,7 @@ export const useContentStore = create<ContentState>()(
           const res = await authedFetch(`/api/data/content${q.toString() ? `?${q}` : ""}`);
           ultimoRefresh = Date.now();
           if (res.status === 204) return; // nada mudou desde o último tick — zero bytes, zero re-render
-          if (!res.ok) return;
+          if (!res.ok) { trilha("refresh:erro", { status: res.status }); return; }
           const { contentCards, designRequests, contentApprovals, socialReports, versao } = await res.json();
           // Escrita local depois que esta busca saiu? A resposta é velha: descarta e busca de novo.
           if (mutadoEm > disparadoEm || criacoesEmVoo.size > 0) {
@@ -189,6 +190,7 @@ export const useContentStore = create<ContentState>()(
         const emVoo = criacoesEmVoo.get(chave) as Promise<ContentCard> | undefined;
         if (emVoo) return emVoo;
         const p = (async () => {
+        trilha("card:criar:inicio", { titulo: card.title, clientId: card.clientId });
         const tempId = `temp-cc-${Date.now()}`;
         const optimistic: ContentCard = { ...card, id: tempId };
         marcarMutacao();
@@ -377,6 +379,7 @@ export const useContentStore = create<ContentState>()(
         const emVoo = criacoesEmVoo.get(chave) as Promise<DesignRequest> | undefined;
         if (emVoo) return emVoo;
         const p = (async () => {
+        trilha("demanda:criar:inicio", { titulo: req.title, card: req.contentCardId ?? null, clientId: req.clientId });
         const tempId = `temp-dr-${Date.now()}`;
         const optimistic: DesignRequest = { ...req, id: tempId } as DesignRequest;
         marcarMutacao();

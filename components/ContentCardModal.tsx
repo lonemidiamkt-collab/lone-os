@@ -868,6 +868,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                 if (sendingDesign) return;          // anti-duplo-clique: evita demanda duplicada
                 // Não manda pro designer sem data de postagem — toda demanda precisa de pauta datada.
                 if (!dueDate) {
+                  trilha("solicitar-design:pulou", { id: card.id, motivo: "sem-data" });
                   pushNotification("system", "Falta a data de postagem", `Defina quando "${card.title}" vai ao ar antes de mandar pro designer.`, card.clientId);
                   toast.error("Falta a data de postagem — preencha ali em cima antes de solicitar o design.");
                   return;
@@ -887,12 +888,14 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                   deadline: dueDate,      // data de postagem do card = prazo da arte pro designer ver
                 })
                   .then((req) => {
+                    trilha("solicitar-design:ok", { id: card.id, dr: req.id });
                     updateContentCard(card.id, { designRequestId: req.id });
                     pushNotification("content", "Design solicitado", `Pedido de arte para "${card.title}" enviado ao designer.`, card.clientId, card.id);
                     toast.success(`Design solicitado — "${card.title}" está no quadro do designer.`);
                   })
                   .catch((err: unknown) => {
                     const m = err instanceof Error ? err.message : "";
+                    trilha("solicitar-design:erro", { id: card.id, msg: m });
                     pushNotification("system", "Falha ao solicitar design", `Não deu pra enviar "${card.title}" pro designer. Tente de novo.`, card.clientId);
                     toast.error(`Não consegui solicitar o design${m ? ` (${m})` : ""}. Nada foi criado — tenta de novo.`);
                   })

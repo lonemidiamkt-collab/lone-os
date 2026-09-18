@@ -807,6 +807,7 @@ function NewContentCardModal({ defaultDate, defaultClient, onClose }: NewContent
 
   const [criando, setCriando] = useState(false);
   const handleSubmit = async () => {
+    trilha("novo-conteudo:submit", { canSubmit: !!canSubmit, subindoRef, criando, clientId: clientId || null, faltando });
     if (!canSubmit || subindoRef || criando) return;
     setCriando(true);
     try { await criarDeVerdade(); } finally { setCriando(false); }
@@ -3111,9 +3112,9 @@ export default function SocialPage() {
                 // Guard de in-flight (ref) evita demanda DUPLICADA em duplo-clique — designRequestId
                 // só fica setado depois do round-trip. Notifica conforme o resultado real.
                 // Antes: `return` mudo — a pessoa marcava "A fazer", nada acontecia e não sabia por quê.
-                if (sendingDesignRef.current.has(card.id)) return;
-                if (card.designRequestId) { toast.info(`"${card.title}" já está com o designer — a demanda existe; abre o card pra ver o status.`); return; }
-                if (card.designerDeliveredAt) { toast.info(`"${card.title}" já tem arte entregue pelo designer. Pra pedir alteração, use "Solicitar alteração" no card.`); return; }
+                if (sendingDesignRef.current.has(card.id)) { trilha("a-fazer:pulou", { id: card.id, motivo: "em-voo" }); return; }
+                if (card.designRequestId) { trilha("a-fazer:pulou", { id: card.id, motivo: "ja-tem-demanda", dr: card.designRequestId }); toast.info(`"${card.title}" já está com o designer — a demanda existe; abre o card pra ver o status.`); return; }
+                if (card.designerDeliveredAt) { trilha("a-fazer:pulou", { id: card.id, motivo: "ja-entregue" }); toast.info(`"${card.title}" já tem arte entregue pelo designer. Pra pedir alteração, use "Solicitar alteração" no card.`); return; }
                 sendingDesignRef.current.add(card.id);
                 addDesignRequest({
                   title: `Arte: ${card.title}`,
@@ -3128,11 +3129,14 @@ export default function SocialPage() {
                   deadline: card.dueDate, // data de postagem = prazo da arte (designer precisa ver)
                 })
                   .then((req) => {
+                    trilha("a-fazer:ok", { id: card.id, dr: req.id });
                     updateContentCard(card.id, { designRequestId: req.id });
                     pushNotification("content", "A fazer → Designer", `"${card.title}" (${card.clientName}) foi marcado como A fazer e enviado pro designer.`, card.clientId, card.id);
                   })
-                  .catch(() => {
+                  .catch((err: unknown) => {
+                    trilha("a-fazer:erro", { id: card.id, msg: err instanceof Error ? err.message : String(err) });
                     pushNotification("system", "Falha ao enviar pro designer", `Não deu pra enviar "${card.title}". Tente de novo.`, card.clientId);
+                    toast.error(`Não consegui enviar "${card.title}" pro designer${err instanceof Error && err.message ? ` (${err.message})` : ""}. Tenta de novo.`);
                   })
                   .finally(() => { sendingDesignRef.current.delete(card.id); });
               }}
