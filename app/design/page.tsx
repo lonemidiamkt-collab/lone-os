@@ -14,6 +14,7 @@ import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { marcarMutacao } from "@/stores/useContentStore";
 import { trilha } from "@/lib/obs/trilha";
+import { entregarArte, novoOperationId } from "@/lib/ops/entregar-arte";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { getPriorityColor, getPriorityLabel, spDateStr } from "@/lib/utils";
 import {
@@ -115,6 +116,8 @@ function UploadArtModal({
   const [initialRefs, setInitialRefs] = useState<CardAttachment[]>([]); // artes já no card ao abrir = referência do social
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Um id por clique em "Entregar": repetição (rede caiu, clique duplo) reaproveita o mesmo id → mesma entrega.
+  const operationIdRef = useRef<string | null>(null);
   const [error, setError] = useState("");
 
   const clientDriveLink = clients.find((c) => c.id === card.clientId)?.driveLink;
@@ -177,24 +180,24 @@ function UploadArtModal({
 
     setSaving(true);
     try {
-      // URLs entregues: as artes anexadas (multi) OU o link do Drive (legado)
-      const deliveredUrls = real.length > 0 ? real.map((a) => a.url) : [link];
-
-      // AWAIT: se o servidor recusar, o store dá rollback e cai no catch — assim "Entregue!" só
-      // aparece se realmente gravou. Sem await, a UI marcava entregue e fechava mesmo em falha,
-      // e o social nunca recebia a arte (a ação mais crítica do designer falhava em silêncio).
-      await updateContentCard(card.id, {
-        designerDeliveredAt: new Date().toISOString(),
-        designerDeliveredBy: currentUser,
-        // Só grava imageUrl no caminho legado (link). Com anexos, a capa vem de card_attachments.
-        ...(real.length === 0 ? { imageUrl: link } : {}),
-      }, { bypassWorkflow: true });
-
-      if (card.designRequestId) {
-        const dr = designRequests.find((r) => r.id === card.designRequestId);
-        const nextAttachments = [...(dr?.attachments ?? []), ...deliveredUrls];
-        await updateDesignRequest(card.designRequestId, { attachments: nextAttachments, status: "done" });
-      }
+      // OPERAÇÃO ÚNICA (Fase 1, 18/09): anexos → entrega, versão, card, demanda e audit numa transação
+      // no banco. O mesmo operationId em qualquer repetição (duplo clique, rede) = a mesma entrega.
+      if (!operationIdRef.current) operationIdRef.current = novoOperationId();
+      const r = await entregarArte({
+        cardId: card.id, designRequestId: card.designRequestId ?? null,
+        attachmentIds: real.map((a) => a.id), urlsExternas: real.length === 0 && link ? [link] : [],
+        operationId: operationIdRef.current,
+      });
+      if (!r.ok || !r.data?.card) throw new Error(r.erro ?? r.data?.error ?? "não entregou");
+      const estado = r.data;
+      operationIdRef.current = null;
+      const deliveredUrls = estado.delivery.urls;
+      // Estado final vem do servidor: o store reflete exatamente o que foi gravado.
+      marcarMutacao();
+      useContentStore.setState((s) => ({
+        contentCards: s.contentCards.map((c) => c.id === card.id ? { ...c, designerDeliveredAt: estado.card.designer_delivered_at ?? undefined, designerDeliveredBy: estado.card.designer_delivered_by ?? undefined, imageUrl: estado.card.image_url ?? c.imageUrl } : c),
+        designRequests: estado.demanda ? s.designRequests.map((d) => d.id === estado.demanda!.id ? { ...d, status: estado.demanda!.status as DesignRequest["status"], attachments: estado.demanda!.attachments } : d) : s.designRequests,
+      }));
       trilha("entregar:ok", { card: card.id, artes: deliveredUrls.length });
       pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para confirmação.`, card.clientId, card.id);
       // REVISÃO AUTOMÁTICA na entrega (IA de visão): confere TODAS as artes contra o briefing —
@@ -596,33 +599,38 @@ export default function DesignPage() {
       const nextAttachments = [...(briefingReq.attachments ?? []), artUrl];
 
       if (isDelivery) {
-        // Designer entrega arte final → marca como done + propaga para ContentCard
-        updateDesignRequest(briefingReq.id, { attachments: nextAttachments, status: "done" });
-        setBriefingReq({ ...briefingReq, attachments: nextAttachments, status: "done" });
-        if (linkedCard) {
-          const deliveredAt = new Date().toISOString();
-          // Modo card: a arte já entrou em card_attachments pela rota → reflete no store (capa +
-          // contagem no board social). Modo avulso (PDF/vídeo): cai no imageUrl legado.
-          if (created.length > 0) {
-            marcarMutacao();
-            useContentStore.setState((s) => ({
-              contentCards: s.contentCards.map((c) =>
-                c.id === linkedCard.id
-                  ? { ...c, cardAttachments: [...(c.cardAttachments ?? []), ...created], imageUrl: c.imageUrl || created[0].url }
-                  : c,
-              ),
-            }));
-          }
-          updateContentCard(linkedCard.id, {
-            designerDeliveredAt: deliveredAt,
-            designerDeliveredBy: currentUser,
-            ...(created.length === 0 ? { imageUrl: artUrl } : {}),
-          }, { bypassWorkflow: true });
+        // OPERAÇÃO ÚNICA (Fase 1, 18/09): era o "segundo caminho" de entrega — gravava demanda e card
+        // em chamadas separadas, na ordem inversa do modal Entregar Arte, e sem a revisão por IA.
+        // Agora chama a mesma operação; o estado final vem do servidor.
+        const r = linkedCard ? await entregarArte({
+          cardId: linkedCard.id,
+          designRequestId: briefingReq.id,
+          attachmentIds: created.map((a) => a.id),
+          urlsExternas: created.length === 0 ? [artUrl] : [],
+          operationId: novoOperationId(),
+        }) : null;
+        if (!linkedCard || !r) {
+          // Demanda sem card vinculado (PDF/vídeo ou demanda solta): a operação exige card. Mantém o
+          // comportamento antigo só para este caso — vira card de serviço na Fase 2.
+          updateDesignRequest(briefingReq.id, { attachments: nextAttachments, status: "done" });
+          setBriefingReq({ ...briefingReq, attachments: nextAttachments, status: "done" });
+        } else if (!r.ok || !r.data?.card) {
+          setBriefingUploadError(r.erro ?? r.data?.error ?? "A arte subiu, mas a entrega não foi registrada. Tente de novo.");
+          trilha("entregar:erro", { card: linkedCard.id, msg: r.erro ?? r.data?.error ?? "?", via: "briefing" });
+          return;
+        } else {
+          const estado = r.data;
+          marcarMutacao();
+          useContentStore.setState((s) => ({
+            contentCards: s.contentCards.map((c) => c.id === linkedCard.id
+              ? { ...c, cardAttachments: [...(c.cardAttachments ?? []), ...created], imageUrl: estado.card.image_url ?? c.imageUrl ?? created[0]?.url, designerDeliveredAt: estado.card.designer_delivered_at ?? undefined, designerDeliveredBy: estado.card.designer_delivered_by ?? undefined }
+              : c),
+            designRequests: s.designRequests.map((d) => d.id === briefingReq.id ? { ...d, status: estado.demanda?.status as DesignRequest["status"] ?? "done", attachments: estado.demanda?.attachments ?? nextAttachments } : d),
+          }));
+          setBriefingReq({ ...briefingReq, attachments: estado.demanda?.attachments ?? nextAttachments, status: (estado.demanda?.status as DesignRequest["status"]) ?? "done" });
+          trilha("entregar:ok", { card: linkedCard.id, artes: estado.delivery.urls.length, via: "briefing" });
+          authedFetch("/api/cs/revisar-entrega", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId: linkedCard.id }) }).catch(() => {});
         }
-        // O CARD, NÃO SÓ O CLIENTE. Sem cardId a notificação cai no cadastro do cliente em vez de
-        // abrir a arte (NotificationCenter usa /social?card=… e só cai em /clients/… como último
-        // recurso). Eram 478 avisos de "Arte entregue" assim, todos levando ao lugar errado —
-        // `linkedCard` já estava aqui no escopo, só não era usado.
         pushNotification("content", "Arte entregue pelo Designer", `"${briefingReq.title}" (${briefingReq.clientName}) — arte pronta para confirmação.`, briefingReq.clientId, linkedCard?.id);
         import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
       } else {
