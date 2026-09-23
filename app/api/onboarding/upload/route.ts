@@ -93,17 +93,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `docType invalido: ${docType}` }, { status: 400 });
   }
 
-  const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"];
-  const allowedExts = /\.(jpg|jpeg|png|webp|heic|heif|pdf)$/i;
-  if (!allowedTypes.includes(file.type) && !allowedExts.test(file.name)) {
-    return NextResponse.json({ error: "Formato nao suportado. Use JPG, PNG ou PDF." }, { status: 400 });
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId)) {
+    return NextResponse.json({ error: "clientId inválido." }, { status: 400 });
+  }
+
+  // Extensão E tipo precisam bater com a lista, e o content-type gravado vem daqui, não do
+  // navegador: antes um "x.pdf" enviado como text/html era servido como HTML pelo domínio do painel.
+  const CONTENT_TYPE_BY_EXT: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
+    heic: "image/heic", heif: "image/heif", pdf: "application/pdf",
+  };
+  const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+  const contentType = CONTENT_TYPE_BY_EXT[ext];
+  const tipoDeclaradoOk = !file.type || file.type === contentType || (ext === "jpg" && file.type === "image/jpeg");
+  if (!contentType || !tipoDeclaradoOk) {
+    return NextResponse.json({ error: "Formato não suportado. Use JPG, PNG, WEBP, HEIC ou PDF." }, { status: 400 });
   }
 
   if (file.size > 10 * 1024 * 1024) {
-    return NextResponse.json({ error: "Arquivo muito grande. Maximo 10MB." }, { status: 400 });
+    return NextResponse.json({ error: "Arquivo muito grande. Máximo 10MB." }, { status: 400 });
   }
 
-  const ext = file.name.split(".").pop() ?? "jpg";
   const path = `${clientId}/${docType}-${Date.now()}.${ext}`;
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -111,7 +121,7 @@ export async function POST(req: NextRequest) {
   const { error } = await supabase.storage
     .from(bucket)
     .upload(path, buffer, {
-      contentType: file.type,
+      contentType,
       upsert: true,
     });
 

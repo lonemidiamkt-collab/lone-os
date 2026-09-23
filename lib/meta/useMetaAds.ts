@@ -153,8 +153,9 @@ export function useMetaConnection() {
       // 2. Load from Supabase first (source of truth — shared across all users)
       const global = await loadGlobalToken();
       if (global) {
+        // Não apaga o token do servidor: o relógio do navegador pode estar errado e esse token é o
+        // mesmo que os jobs (saldos, portal, Instagram) usam. Quem invalida é o check-meta-token.
         if (global.expiresAt && Date.now() > global.expiresAt) {
-          await clearGlobalToken();
           if (!cancelled) setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null, exchangeFailed: false });
           return;
         }
@@ -229,8 +230,10 @@ export function useMetaConnection() {
     setState({ connected: false, loading: false, token: null, tokenExpired: false, tokenType: null, tokenExpiresAt: null, exchangeFailed: false });
   }, []);
 
+  // Um 401 visto num navegador (rede, permissão da conta, rate limit) NÃO pode apagar o token
+  // compartilhado: ele alimenta sync de saldos, portal e conferência do Instagram da agência toda.
+  // Só marca a sessão local; apagar de verdade é o botão Desconectar (com confirmação).
   const handleTokenError = useCallback(async () => {
-    await clearGlobalToken();
     setState({ connected: false, loading: false, token: null, tokenExpired: true, tokenType: null, tokenExpiresAt: null, exchangeFailed: false });
   }, []);
 

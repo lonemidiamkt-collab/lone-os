@@ -37,11 +37,20 @@ export default function SettingsPage() {
   const [editingClauses, setEditingClauses] = useState<string | null>(null);
   const [agencySaving, setAgencySaving] = useState(false);
   const [agencySaved, setAgencySaved] = useState(false);
+  // Só libera o Salvar depois de ler o cadastro de verdade: salvar com o form em branco (leitura
+  // que falhou) gravava "" por cima da CONTRATADA de todo contrato.
+  const [agencyLoaded, setAgencyLoaded] = useState(false);
+  const [agencyError, setAgencyError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return;
-    supabase.from("agency_settings").select("*").eq("key", "main").maybeSingle().then(({ data }) => {
-      if (data) setAgencyForm({
+    supabase.from("agency_settings").select("*").eq("key", "main").maybeSingle().then(({ data, error }) => {
+      if (error || !data) {
+        setAgencyError(error ? `Não consegui carregar o cadastro da agência (${error.message}). Recarregue a página antes de editar.` : "Cadastro da agência não encontrado.");
+        return;
+      }
+      setAgencyLoaded(true);
+      setAgencyForm({
         razaoSocial: data.razao_social || "", nomeFantasia: data.nome_fantasia || "",
         cnpj: data.cnpj || "", endereco: data.endereco || "", email: data.email || "",
         telefone: data.telefone || "", signatarioNome: data.signatario_nome || "",
@@ -59,23 +68,31 @@ export default function SettingsPage() {
   }, [isAdmin]);
 
   const handleAgencySave = async () => {
+    if (!agencyLoaded) return;
     setAgencySaving(true);
-    await supabase.from("agency_settings").update({
+    setAgencyError(null);
+    const { error: agencyErr } = await supabase.from("agency_settings").update({
       razao_social: agencyForm.razaoSocial, nome_fantasia: agencyForm.nomeFantasia,
       cnpj: agencyForm.cnpj, endereco: agencyForm.endereco, email: agencyForm.email,
       telefone: agencyForm.telefone, signatario_nome: agencyForm.signatarioNome,
       signatario_cpf: agencyForm.signatarioCpf, signatario_email: agencyForm.signatarioEmail,
       updated_at: new Date().toISOString(),
     }).eq("key", "main");
+    const falhas: string[] = agencyErr ? [`cadastro da agência: ${agencyErr.message}`] : [];
     for (const t of templates) {
-      await supabase.from("contract_templates").update({
+      const { error: tErr } = await supabase.from("contract_templates").update({
         duration_months: t.durationMonths,
         clauses: t.clauses,
         conditional_clauses: t.conditionalClauses,
         updated_at: new Date().toISOString(),
       }).eq("id", t.id);
+      if (tErr) falhas.push(`modelo ${t.name}: ${tErr.message}`);
     }
     setAgencySaving(false);
+    if (falhas.length) {
+      setAgencyError(`Não salvou: ${falhas.join("; ")}.`);
+      return;
+    }
     setAgencySaved(true);
     setTimeout(() => setAgencySaved(false), 2000);
   };
@@ -335,12 +352,18 @@ export default function SettingsPage() {
                   <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
                     <Building2 size={14} className="text-primary" /> Dados da Agencia
                   </h3>
-                  <button onClick={handleAgencySave} disabled={agencySaving}
+                  <button onClick={handleAgencySave} disabled={agencySaving || !agencyLoaded}
+                    title={agencyLoaded ? undefined : "Carregando o cadastro da agência…"}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground text-xs font-medium transition-colors disabled:opacity-50">
                     {agencySaving ? <Loader2 size={12} className="animate-spin" /> : agencySaved ? <Check size={12} /> : <Save size={12} />}
                     {agencySaved ? "Salvo!" : "Salvar Tudo"}
                   </button>
                 </div>
+                {agencyError && (
+                  <p role="alert" className="mb-4 rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-lone-danger">
+                    {agencyError}
+                  </p>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   {([
                     { key: "razaoSocial", label: "Razao Social" },

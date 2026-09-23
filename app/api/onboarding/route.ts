@@ -3,6 +3,7 @@ export const runtime = "nodejs"; // vault usa crypto nativo de Node
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { encryptVault } from "@/lib/crypto/vault";
+import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { espelharNoCofre } from "@/lib/cofre/espelhar";
@@ -28,7 +29,8 @@ function newOnboardingToken(): string {
 
 // Ações do PORTAL EXTERNO do cliente (sem login) — autenticadas pelo token de
 // onboarding. Todas as outras ações do POST são administrativas e exigem admin logado.
-const PUBLIC_ONBOARDING_ACTIONS = new Set(["auto_save", "submit", "check_duplicate"]);
+const PUBLIC_ONBOARDING_ACTIONS = new Set(["auto_save", "submit"]);
+const GESTAO_ONBOARDING_ACTIONS = new Set(["approve", "provision", "reject"]);
 
 const supabaseUrl = process.env.SUPABASE_INTERNAL_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://supabase-kong-1:8000";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -84,6 +86,12 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
+  }
+  // Aprovar, provisionar e rejeitar mexem na carteira (rejeitar APAGA): só gestão. Estar logado
+  // não basta — designer ou SDR chamando a rota direto apagava qualquer cliente.
+  if (GESTAO_ONBOARDING_ACTIONS.has(body.action)) {
+    const gate = await requireRole(req, GESTAO);
+    if (gate instanceof NextResponse) return gate;
   }
 
   // ─── Generate link WITH draft client (main flow from modal / conversão Ganho→Cliente do CRM) ───
@@ -260,6 +268,24 @@ export async function POST(req: NextRequest) {
   if (body.action === "submit") {
     const { token, ...formData } = body;
 
+    // O cliente vem do REGISTRO do token, nunca do corpo: antes, um token qualquer + o UUID de outro
+    // cliente reescrevia o cadastro dele (nome, CNPJ, contatos, senhas) sem login nenhum.
+    if (typeof token !== "string" || !token) {
+      return NextResponse.json({ error: "Link de cadastro inválido." }, { status: 400 });
+    }
+    const { data: sub, error: subErr } = await supabase
+      .from("client_onboarding_submissions")
+      .select("id, client_id")
+      .eq("token", token)
+      .maybeSingle();
+    if (subErr) return NextResponse.json({ error: "Não consegui validar o link de cadastro. Tente de novo." }, { status: 500 });
+    if (!sub) return NextResponse.json({ error: "Link de cadastro inválido ou expirado." }, { status: 404 });
+    const clientId: string | null = (sub.client_id as string | null) ?? null;
+
+    // Senha em branco = "não mexer": o formulário não recebe as senhas guardadas de volta, então
+    // gravar o campo vazio apagava a credencial que já existia.
+    const senha = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
+
     // ── Integrity gate: re-validate required fields server-side (defense vs DevTools bypass) ──
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contactEmail || "");
     const phoneDigits = (formData.contactWhatsapp || "").replace(/\D/g, "");
@@ -304,13 +330,13 @@ export async function POST(req: NextRequest) {
         endereco_estado: formData.enderecoEstado || null,
         endereco_cep: formData.enderecoCep || null,
         meta_login: formData.metaLogin || null,
-        meta_password: safeEncrypt(formData.metaPassword),
+        ...(senha(formData.metaPassword) ? { meta_password: safeEncrypt(formData.metaPassword) } : {}),
         meta_status: formData.metaStatus || "pending",
         instagram_login: formData.instagramLogin || null,
-        instagram_password: safeEncrypt(formData.instagramPassword),
+        ...(senha(formData.instagramPassword) ? { instagram_password: safeEncrypt(formData.instagramPassword) } : {}),
         instagram_status: formData.instagramStatus || "pending",
         google_login: formData.googleLogin || null,
-        google_password: safeEncrypt(formData.googlePassword),
+        ...(senha(formData.googlePassword) ? { google_password: safeEncrypt(formData.googlePassword) } : {}),
         google_status: formData.googleStatus || "pending",
         doc_contrato_social: formData.docContratoSocial || null,
         doc_identidade: formData.docIdentidade || null,
@@ -319,17 +345,19 @@ export async function POST(req: NextRequest) {
         status: "submitted",
         submitted_at: new Date().toISOString(),
       })
-      .eq("token", token);
+      .eq("id", sub.id);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     // Move draft client to awaiting_approval + sync ALL data to clients table
-    if (formData.clientId) {
-      const { data: clientRow } = await supabase.from("clients").select("name, nome_fantasia").eq("id", formData.clientId).maybeSingle();
+    if (clientId) {
+      const { data: clientRow } = await supabase.from("clients").select("name, nome_fantasia, draft_status").eq("id", clientId).maybeSingle();
       const clientName = formData.nomeFantasia || clientRow?.nome_fantasia || clientRow?.name || formData.contactName || "Cliente";
 
       await supabase.from("clients").update({
-        draft_status: "awaiting_approval",
+        // Cliente já ativo completando o cadastro (draft_status nulo) continua ativo: voltar pra
+        // "aguardando aprovação" o tirava da carteira, dos relatórios e do cockpit.
+        ...(clientRow?.draft_status ? { draft_status: "awaiting_approval" } : {}),
         nome_fantasia: formData.nomeFantasia || null,
         razao_social: formData.razaoSocial || null,
         cnpj: formData.cnpj || null,
@@ -350,28 +378,28 @@ export async function POST(req: NextRequest) {
         endereco_estado: formData.enderecoEstado || null,
         endereco_cep: formData.enderecoCep || null,
         facebook_login: formData.metaLogin || null,
-        facebook_password: safeEncrypt(formData.metaPassword),
+        ...(senha(formData.metaPassword) ? { facebook_password: safeEncrypt(formData.metaPassword) } : {}),
         instagram_login: formData.instagramLogin || null,
-        instagram_password: safeEncrypt(formData.instagramPassword),
+        ...(senha(formData.instagramPassword) ? { instagram_password: safeEncrypt(formData.instagramPassword) } : {}),
         google_ads_login: formData.googleLogin || null,
-        google_ads_password: safeEncrypt(formData.googlePassword),
+        ...(senha(formData.googlePassword) ? { google_ads_password: safeEncrypt(formData.googlePassword) } : {}),
         doc_contrato_social: formData.docContratoSocial || null,
         doc_identidade: formData.docIdentidade || null,
         doc_logo: formData.docLogo || null,
         notes: formData.notes || null,
-      }).eq("id", formData.clientId);
+      }).eq("id", clientId);
 
       // Send notification to admins
       await supabase.from("notifications").insert({
         type: "system",
         title: "Novo cadastro pendente",
         body: `${clientName} finalizou o formulario de onboarding e aguarda revisao.`,
-        client_id: formData.clientId,
+        client_id: clientId,
       });
 
       // Auto-create timeline entry
       await supabase.from("timeline_entries").insert({
-        client_id: formData.clientId,
+        client_id: clientId,
         type: "onboarding",
         actor: formData.contactName || "Cliente",
         description: `${clientName} preencheu o formulario de onboarding externo.`,
@@ -383,7 +411,7 @@ export async function POST(req: NextRequest) {
       try {
         const { data: cli } = await supabase.from("clients")
           .select("assigned_social, assigned_designer, assigned_traffic")
-          .eq("id", formData.clientId).maybeSingle();
+          .eq("id", clientId).maybeSingle();
         const time = [
           cli?.assigned_social ? `social *${cli.assigned_social}*` : null,
           cli?.assigned_designer ? `designer *${cli.assigned_designer}*` : null,
@@ -401,7 +429,7 @@ export async function POST(req: NextRequest) {
           const base = process.env.NEXT_PUBLIC_PORTAL_DOMAIN
             || process.env.NEXT_PUBLIC_SITE_URL
             || "https://painel.lonemidia.com";
-          const linkFicha = `${base}/clients/${formData.clientId}`;
+          const linkFicha = `${base}/clients/${clientId}`;
           const msg = `🎉 *${clientName}* concluiu o cadastro do onboarding (100%)!\n`
             + `${time ? `Time: ${time} — já podem se preparar.\n` : ""}`
             + `\n👉 ${linkFicha}\n`
@@ -411,12 +439,12 @@ export async function POST(req: NextRequest) {
             + `_Vigência é a padrão: ciclos de 3 meses com renovação automática. Se for teste de prazo fechado, diga "teste de 1 mês"._`;
           // Fire-and-forget: não segura a resposta ao cliente (Evolution pode levar até ~21s no pior
           // caso). O servidor Node é persistente (VPS), então o envio completa em background.
-          void csSendGroupText(jid, msg, undefined, { origem: "contrato-oferta-aviso", destino: "interno", clientId: formData.clientId })
+          void csSendGroupText(jid, msg, undefined, { origem: "contrato-oferta-aviso", destino: "interno", clientId: clientId })
             .catch((e) => console.error("[onboarding submit] aviso no grupo falhou:", e));
           // Registra DE QUEM é a oferta. Sem isso, responder "1797, dia 10" não tem cliente:
           // quem responde uma pergunta não repete o assunto, e o agente ficava mudo.
           void import("@/lib/contracts/oferta")
-            .then((m) => m.registrarOferta(jid, formData.clientId, clientName))
+            .then((m) => m.registrarOferta(jid, clientId, clientName))
             .catch((e) => console.error("[onboarding submit] oferta não registrada:", e));
         }
       } catch (e) {
@@ -425,20 +453,6 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  }
-
-  // ─── Check duplicate CNPJ/phone ───
-  if (body.action === "check_duplicate") {
-    const checks: string[] = [];
-    if (body.cnpj) {
-      const { data } = await supabase.from("clients").select("id, name").eq("cnpj", body.cnpj).is("draft_status", null).limit(1);
-      if (data && data.length > 0) checks.push(`CNPJ ja cadastrado (${data[0].name})`);
-    }
-    if (body.phone) {
-      const { data } = await supabase.from("clients").select("id, name").eq("phone", body.phone).is("draft_status", null).limit(1);
-      if (data && data.length > 0) checks.push(`WhatsApp ja cadastrado (${data[0].name})`);
-    }
-    return NextResponse.json({ duplicates: checks });
   }
 
   // ─── Approve client (admin action) ───
@@ -666,8 +680,11 @@ export async function POST(req: NextRequest) {
   // ─── Reject/delete draft (admin action) ───
   if (body.action === "reject") {
     const { clientId } = body;
-    const { error } = await supabase.from("clients").delete().eq("id", clientId);
+    // Só rascunho (draft_status preenchido) pode ser rejeitado; cliente ativo sai por "Encerrar parceria".
+    const { data: apagados, error } = await supabase.from("clients").delete()
+      .eq("id", clientId).not("draft_status", "is", null).select("id");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!apagados?.length) return NextResponse.json({ error: "Só dá pra rejeitar cadastro em rascunho." }, { status: 409 });
     return NextResponse.json({ success: true });
   }
 
