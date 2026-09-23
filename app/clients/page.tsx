@@ -21,12 +21,13 @@ import {
 import {
   Search, UserPlus, ChevronRight,
   ExternalLink, MoreHorizontal, Facebook, AlertTriangle, Zap,
-  Check, X, Loader2, Clock, Send, Archive, RotateCcw, Trash2,
+  Check, X, Loader2, Clock, Send, Archive, RotateCcw, Trash2, Pause, Play,
 } from "lucide-react";
 import Link from "next/link";
 import { mockAdCampaigns } from "@/lib/mockData";
 import { fetchDraftClients, fetchChurnedClients } from "@/lib/supabase/queries";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
+import { rotuloPausa } from "@/lib/clients/pausa";
 
 // Health score: uses shared calcHealthScore from lib/utils.ts
 
@@ -49,6 +50,7 @@ export default function ClientsPage() {
   const clients = useClientsStore((s) => s.clients);
   const init = useClientsStore((s) => s.init);
   const subscribeRealtime = useClientsStore((s) => s.subscribeRealtime);
+  const updateClientData = useClientsStore((s) => s.updateClient);
   const { role, currentUser } = useRole();
 
   useEffect(() => {
@@ -150,6 +152,9 @@ export default function ClientsPage() {
   const [archived, setArchived] = useState<Client[]>([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<Client | null>(null);
+  const [pauseTarget, setPauseTarget] = useState<Client | null>(null);
+  const [pauseReason, setPauseReason] = useState("");
+  const [pauseUntil, setPauseUntil] = useState("");
   const [archiveReason, setArchiveReason] = useState("");
   // Motivo da saída passou a ser obrigatório: antes era opcional e 5 dos 6 clientes arquivados
   // saíram sem ninguém registrar por quê.
@@ -185,6 +190,36 @@ export default function ClientsPage() {
   useEffect(() => {
     if (showArchived && isAdmin) loadArchived();
   }, [showArchived, isAdmin]);
+
+  // PAUSA: o cliente para de receber tudo, mas continua na carteira — ver lib/clients/pausa.ts.
+  const confirmPause = async () => {
+    if (!pauseTarget || pauseReason.trim().length < 3) return;
+    setLifecycleBusy(true); setLifecycleError(null);
+    try {
+      const res = await authedFetch(`/api/clients/${pauseTarget.id}/lifecycle`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "pause", reason: pauseReason.trim(), until: pauseUntil || undefined }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
+      updateClientData(pauseTarget.id, { pausedAt: new Date().toISOString(), pausedReason: pauseReason.trim(), pausedUntil: pauseUntil || null });
+      setPauseTarget(null); setPauseReason(""); setPauseUntil("");
+    } catch (e) {
+      setLifecycleError(e instanceof Error ? e.message : "Erro ao pausar");
+    } finally { setLifecycleBusy(false); }
+  };
+
+  const handleResume = async (clientId: string) => {
+    setLifecycleBusy(true); setLifecycleError(null);
+    try {
+      const res = await authedFetch(`/api/clients/${clientId}/lifecycle`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "resume" }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
+      updateClientData(clientId, { pausedAt: null, pausedReason: null, pausedUntil: null });
+    } catch (e) {
+      setLifecycleError(e instanceof Error ? e.message : "Erro ao retomar");
+    } finally { setLifecycleBusy(false); }
+  };
 
   const confirmArchive = async () => {
     if (!archiveTarget) return;
@@ -329,6 +364,31 @@ export default function ClientsPage() {
               >
                 <Trash2 size={13} /> {excluindo ? "Excluindo…" : "Excluir de vez"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pauseTarget && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !lifecycleBusy && setPauseTarget(null)}>
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-5 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2"><Pause size={14} className="text-lone-warning" /> Pausar {pauseTarget.name}</h3>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Enquanto pausado: <b>sem</b> relatório, mensagem no grupo, alerta de verba e painel de resultados.
+              O cliente <b>continua</b> na carteira do time, com o motivo à vista. Para encerrar de vez, use Arquivar.
+            </p>
+            <label htmlFor="pausa-motivo" className="block text-[10px] uppercase tracking-wider text-muted-foreground mt-4 mb-1">Motivo (o time lê isto)</label>
+            <input id="pausa-motivo" value={pauseReason} onChange={(e) => setPauseReason(e.target.value)} autoFocus
+                   placeholder="ex.: férias do cliente · pagamento em atraso · campanha suspensa"
+                   className="w-full h-9 rounded-lg border border-input bg-background px-3 text-xs text-foreground outline-none focus:border-primary" />
+            <label htmlFor="pausa-ate" className="block text-[10px] uppercase tracking-wider text-muted-foreground mt-3 mb-1">Retomar em (opcional — volta sozinho)</label>
+            <input id="pausa-ate" type="date" value={pauseUntil} onChange={(e) => setPauseUntil(e.target.value)}
+                   className="w-full h-9 rounded-lg border border-input bg-background px-3 text-xs text-foreground outline-none focus:border-primary" />
+            {lifecycleError && <p className="text-xs text-destructive mt-3">{lifecycleError}</p>}
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setPauseTarget(null)} disabled={lifecycleBusy} className="btn-ghost text-xs">Cancelar</button>
+              <button onClick={confirmPause} disabled={lifecycleBusy || pauseReason.trim().length < 3}
+                      className="btn-primary text-xs disabled:opacity-50">{lifecycleBusy ? "Pausando…" : "Pausar cliente"}</button>
             </div>
           </div>
         </div>
@@ -677,6 +737,14 @@ export default function ClientsPage() {
                           <div className="flex items-center gap-2">
                             <h4 className="font-semibold text-foreground tracking-tight">{client.name}</h4>
                             <span className="text-xs text-muted-foreground">{getStatusLabel(client.status)}</span>
+                            {/* PAUSA (23/09): o cliente continua na carteira — o selo existe para
+                                ninguém cobrar post de quem está pausado. */}
+                            {rotuloPausa(client as never) && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full border bg-lone-warning-bg text-lone-warning border-lone-warning-border whitespace-nowrap"
+                                    title={client.pausedBy ? `Pausado por ${client.pausedBy}` : undefined}>
+                                ⏸️ {rotuloPausa(client as never)}
+                              </span>
+                            )}
                             {/* O SEMÁFORO DA REUNIÃO. Verde é reunião que ACONTECEU; amarelo é
                                 promessa no calendário; vermelho é ninguém marcou nada. */}
                             {(() => {
@@ -751,6 +819,19 @@ export default function ClientsPage() {
                                 <ExternalLink size={12} />
                                 Abrir Perfil
                               </Link>
+                              {isAdmin && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuOpen(null);
+                                    if (client.pausedAt) { void handleResume(client.id); return; }
+                                    setPauseTarget(client); setPauseReason(""); setPauseUntil(""); setLifecycleError(null);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors flex items-center gap-2"
+                                >
+                                  {client.pausedAt ? <><Play size={12} /> Retomar cliente</> : <><Pause size={12} /> Pausar temporariamente</>}
+                                </button>
+                              )}
                               {isAdmin && (
                                 <button
                                   onClick={(e) => {

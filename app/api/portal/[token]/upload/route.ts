@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { estaPausado } from "@/lib/clients/pausa";
 
 // POST /api/portal/[token]/upload — o CLIENTE manda material pelo painel.
 //
@@ -38,10 +39,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const { token } = await params;
 
   const { data: client } = await supabaseAdmin.from("clients")
-    .select("id, name, public_report_enabled, public_report_token_revoked_at, active, churned_at, whatsapp_group_jid")
+    .select("id, name, public_report_enabled, public_report_token_revoked_at, active, churned_at, paused_at, paused_until, whatsapp_group_jid")
     .eq("public_report_token", token).single();
   // Ex-cliente (inativo/arquivado) não acessa mais o portal — ver app/portal/[token]/page.tsx.
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at) {
+  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at || estaPausado(client)) {
     return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
   }
   if (limitado(token)) {

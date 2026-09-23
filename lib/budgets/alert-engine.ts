@@ -285,6 +285,40 @@ export function buildRunHeader(accounts: DigestAccount[], now: Date = new Date()
 }
 
 /** Resumo consolidado das contas saudáveis (verdes) num único texto organizado. */
+/** Cliente com conta de anúncio rodando mas cadastro incompleto — o alerta de saldo fica sem régua. */
+export interface PendenciaCadastro {
+  clientName: string;
+  /** o que falta: "verba", "gestor" ou os dois */
+  falta: ("verba" | "gestor")[];
+  /** gasto médio diário, quando houver — mostra que a conta está de fato rodando */
+  avgDailySpend?: number | null;
+}
+
+/**
+ * Seção "cadastro incompleto" do digest (Roberto, 23/09): verba R$ 0 no cadastro faz o alerta
+ * calcular "% da verba" contra zero — o cliente nunca entra em atenção, ou entra sempre. Em vez de
+ * silêncio, o digest passa a cobrar o cadastro toda vez que sai, com o nome de quem falta.
+ */
+export function buildCadastroSection(pendencias: PendenciaCadastro[]): string {
+  if (pendencias.length === 0) return "";
+  const ordenadas = [...pendencias].sort((a, b) => a.clientName.localeCompare(b.clientName));
+  const linhas = ordenadas.map((p) => {
+    const oque = p.falta.includes("verba") && p.falta.includes("gestor")
+      ? "sem verba e sem gestor no cadastro"
+      : p.falta.includes("verba") ? "sem verba no cadastro" : "sem gestor no cadastro";
+    const gasto = p.avgDailySpend && p.avgDailySpend > 0
+      ? ` (gastando ${fmtBRL(p.avgDailySpend, "BRL")}/dia)`
+      : "";
+    return `⚙️ ${p.clientName} — ${oque}${gasto}`;
+  });
+  return [
+    "",
+    `⚙️ *Cadastro incompleto (${pendencias.length})* — o alerta de saldo não consegue medir`,
+    ...linhas,
+    "_Preencha a verba mensal em Clientes › Editar para o aviso de saldo funcionar._",
+  ].join("\n");
+}
+
 export function buildGreensSummary(accounts: DigestAccount[]): string {
   const sorted = [...accounts].sort((a, b) =>
     (a.daysRemaining ?? Infinity) - (b.daysRemaining ?? Infinity) || a.clientName.localeCompare(b.clientName),

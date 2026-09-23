@@ -157,6 +157,11 @@ export interface Client {
   activatedAt?: string;
   ttvDays?: number;
   // ─── Portal Público de Resultados ──────────────────────
+  /** Pausa temporária: não recebe nada, mas continua na carteira do time (23/09). */
+  pausedAt?: string | null;
+  pausedReason?: string | null;
+  pausedUntil?: string | null;
+  pausedBy?: string | null;
   publicReportToken?: string;
   publicReportTokenCreatedAt?: string;
   publicReportTokenRevokedAt?: string;

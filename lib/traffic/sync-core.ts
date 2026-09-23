@@ -150,7 +150,7 @@ export async function runBalanceSync(opts?: {
     .from("ad_accounts")
     .select(`
       id, meta_account_id, account_name, is_prepaid, spend_cap, monthly_budget, billing_type_source,
-      clients!inner ( id, name, nome_fantasia, client_pix_key )
+      clients!inner ( id, name, nome_fantasia, client_pix_key, paused_at, paused_until )
     `)
     .neq("clients.active", false); // não sincroniza contas de ex-clientes (churned)
   if (targetAccountIds && targetAccountIds.length > 0) {
@@ -159,7 +159,11 @@ export async function runBalanceSync(opts?: {
 
   const { data: accountsData, error: aErr } = await query;
   if (aErr) throw new Error(aErr.message);
-  const accounts = (accountsData ?? []) as unknown as AccountRow[];
+  // PAUSA (23/09): conta de cliente pausado não sincroniza nem gera alerta de saldo — ele não está
+  // gastando e o aviso só faria ruído. Volta sozinho quando a pausa vence. Ver lib/clients/pausa.ts.
+  const { estaPausado } = await import("@/lib/clients/pausa");
+  const accounts = ((accountsData ?? []) as unknown as AccountRow[])
+    .filter((a) => !estaPausado((a as unknown as { clients?: { paused_at?: string | null; paused_until?: string | null } }).clients));
   if (accounts.length === 0) return emptyResult({});
 
   const metaIds = accounts.map((a) => a.meta_account_id);

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { estaPausado } from "@/lib/clients/pausa";
 
 // GET /api/portal/[token]/content — conteúdo/artes ENTREGUES do cliente (pro portal de quem tem
 // pacote de social/design). Público via token, igual ao snapshot. Retorna posts com arte, recentes.
@@ -11,11 +12,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
 
   const { data: client } = await supabaseAdmin
     .from("clients")
-    .select("id, public_report_enabled, public_report_token_revoked_at, active, churned_at")
+    .select("id, public_report_enabled, public_report_token_revoked_at, active, churned_at, paused_at, paused_until")
     .eq("public_report_token", token)
     .single();
   // Ex-cliente (inativo/arquivado) não acessa mais o portal — ver app/portal/[token]/page.tsx.
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at) {
+  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at || estaPausado(client)) {
     return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
   }
 

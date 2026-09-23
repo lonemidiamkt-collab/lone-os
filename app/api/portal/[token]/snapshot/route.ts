@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { buildSnapshot } from "@/lib/portal/buildSnapshot";
 import type { PeriodKind } from "@/lib/portal/types";
+import { estaPausado } from "@/lib/clients/pausa";
 
 const VALID_PERIODS: PeriodKind[] = ["last_week", "last_2_weeks", "this_month", "last_month"];
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
@@ -37,12 +38,12 @@ export async function POST(
   // Valida token
   const { data: client } = await supabaseAdmin
     .from("clients")
-    .select("id, public_report_enabled, public_report_token_revoked_at, active, churned_at")
+    .select("id, public_report_enabled, public_report_token_revoked_at, active, churned_at, paused_at, paused_until")
     .eq("public_report_token", token)
     .single();
 
   // Ex-cliente (inativo/arquivado) não acessa mais o portal — ver app/portal/[token]/page.tsx.
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at) {
+  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at || estaPausado(client)) {
     return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
   }
 

@@ -33,6 +33,14 @@ const Schema = z.discriminatedUnion("action", [
     message: "Com motivo \"Outro\", descreva o que aconteceu.", path: ["reason"],
   }),
   z.object({ action: z.literal("reactivate") }),
+  // PAUSA (23/09): estado novo, entre ativo e arquivado. Não recebe nada, mas CONTINUA na carteira
+  // do time — que é a diferença para o arquivamento. Ver lib/clients/pausa.ts.
+  z.object({
+    action: z.literal("pause"),
+    reason: z.string().trim().min(3, "Diga por que está pausando (o time lê isso no card).").max(512),
+    until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data no formato AAAA-MM-DD.").optional(),
+  }),
+  z.object({ action: z.literal("resume") }),
 ]);
 
 export async function POST(
@@ -50,6 +58,31 @@ export async function POST(
   }
 
   const d = parsed.data;
+  if (d.action === "pause" || d.action === "resume") {
+    const { data: membro } = await supabaseAdmin
+      .from("team_members").select("name").eq("email", user.email).maybeSingle();
+    const quem = (membro?.name as string) || user.email;
+    const pausa = d.action === "pause"
+      ? { paused_at: new Date().toISOString(), paused_reason: d.reason.trim(), paused_until: d.until ?? null, paused_by: quem }
+      : { paused_at: null, paused_reason: null, paused_until: null, paused_by: null };
+    const { data: cli, error: errPausa } = await supabaseAdmin
+      .from("clients").update(pausa).eq("id", id)
+      .select("id, name, nome_fantasia, paused_at, paused_reason, paused_until").single();
+    if (errPausa) return NextResponse.json({ error: errPausa.message }, { status: 500 });
+    // O time precisa saber: pausa que ninguém vê vira cobrança injusta no board.
+    try {
+      const { csSendGroupText } = await import("@/lib/cs/notify");
+      const nome = (cli?.nome_fantasia as string) || (cli?.name as string) || "Cliente";
+      const ate = d.action === "pause" && d.until ? ` até ${d.until.split("-").reverse().join("/")}` : "";
+      const texto = d.action === "pause"
+        ? `⏸️ *${nome} pausado${ate}* por ${quem}\nMotivo: ${d.reason.trim()}\n\nEnquanto durar: sem relatório, sem mensagem no grupo, sem alerta de verba e sem painel de resultados. O cliente CONTINUA na carteira de vocês.`
+        : `▶️ *${nome} voltou a operar* — ${quem} tirou a pausa. Relatórios, mensagens e alertas voltam ao normal.`;
+      const jid = process.env.CS_TEAM_GROUP_JID;
+      if (jid) await csSendGroupText(jid, texto, undefined, { origem: "cliente:pausa", destino: "interno" });
+    } catch { /* aviso é secundário — a pausa já está gravada */ }
+    return NextResponse.json({ ok: true, client: cli });
+  }
+
   const row =
     d.action === "archive"
       ? {

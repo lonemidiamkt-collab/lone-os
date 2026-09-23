@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { aplicarAjusteNoCard } from "@/lib/cs/card";
+import { estaPausado } from "@/lib/clients/pausa";
 
 // POST /api/portal/[token]/approve — o CLIENTE aprova (ou pede ajuste em) uma arte entregue, pelo
 // próprio link do portal. Valida token + que o card é DELE. Aprovar → client_approved_at + notifica o
@@ -34,10 +35,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   if (limited(token)) return NextResponse.json({ error: "Muitas ações. Aguarde 1 minuto." }, { status: 429 });
 
   const { data: client } = await supabaseAdmin
-    .from("clients").select("id, name, nome_fantasia, public_report_enabled, public_report_token_revoked_at, active, churned_at")
+    .from("clients").select("id, name, nome_fantasia, public_report_enabled, public_report_token_revoked_at, active, churned_at, paused_at, paused_until")
     .eq("public_report_token", token).single();
   // Ex-cliente (inativo/arquivado) não acessa mais o portal — ver app/portal/[token]/page.tsx.
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at) {
+  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at || estaPausado(client)) {
     return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
   }
 

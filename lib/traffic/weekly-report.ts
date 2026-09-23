@@ -3,6 +3,7 @@
 // grupos dos clientes (/api/system/client-messages).
 
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { estaPausado, type ClienteComPausa } from "@/lib/clients/pausa";
 import { fetchCampaignInsights, fetchAccountDemographics, fetchAccountReach } from "@/lib/meta/insights-server";
 import { buildTrafficReportData, buildClientReportHtml } from "@/lib/exportTrafficPdf";
 import { htmlToPdf } from "@/lib/traffic/renderPdf";
@@ -74,7 +75,7 @@ export async function selectActiveMetaClients(
 ): Promise<ReportClientRow[]> {
   let q = supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
+    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, ig_business_account_id, ig_public_username, status, draft_status, whatsapp_group_jid, whatsapp_group_name, paused_at, paused_until")
     .in("status", ["good", "average", "onboarding"])
     .is("draft_status", null)
     .order("nome_fantasia");
@@ -87,7 +88,9 @@ export async function selectActiveMetaClients(
   if (onlyClientId) q = q.eq("id", onlyClientId);
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return (data ?? []) as ReportClientRow[];
+  // PAUSA (23/09): cliente pausado continua na carteira do time, mas NÃO recebe mensagem, relatório
+  // nem alerta até a pausa vencer (paused_until no passado volta sozinho). Ver lib/clients/pausa.ts.
+  return (data ?? []).filter((c) => !estaPausado(c as ClienteComPausa)) as ReportClientRow[];
 }
 
 /**
@@ -109,7 +112,7 @@ export async function selectActiveClientsWithGroup(onlyClientId?: string | null)
     // Sem esse campo no select, `podeFalarDeAnuncio` receberia undefined e — por ser prudente por
     // desenho — calaria a mensagem de tráfego de TODO MUNDO. O silêncio geral seria pior que o erro
     // que ele corrige.
-    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name")
+    .select("id, name, nome_fantasia, service_type, meta_ad_account_id, status, draft_status, whatsapp_group_jid, whatsapp_group_name, paused_at, paused_until")
     .in("status", ["good", "average", "onboarding", "at_risk"])
     .is("draft_status", null)
     .neq("active", false) // ex-clientes (churned) não recebem mensagem/relatório
@@ -117,7 +120,9 @@ export async function selectActiveClientsWithGroup(onlyClientId?: string | null)
   if (onlyClientId) q = q.eq("id", onlyClientId);
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return (data ?? []) as ReportClientRow[];
+  // PAUSA (23/09): cliente pausado continua na carteira do time, mas NÃO recebe mensagem, relatório
+  // nem alerta até a pausa vencer (paused_until no passado volta sozinho). Ver lib/clients/pausa.ts.
+  return (data ?? []).filter((c) => !estaPausado(c as ClienteComPausa)) as ReportClientRow[];
 }
 
 /**

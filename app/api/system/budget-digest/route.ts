@@ -20,9 +20,40 @@ import { requireCron } from "@/lib/api/cron-guard";
 import { runBalanceSync, getAlertSettings } from "@/lib/traffic/sync-core";
 import {
   buildDigestMessage, countBySeverity, buildRunHeader, buildAccountMessage, sortBySeverity,
-  buildGreensSummary,
+  buildGreensSummary, buildCadastroSection, type PendenciaCadastro,
 } from "@/lib/budgets/alert-engine";
 import { isEvolutionConfigured, checkInstance, sendGroupText } from "@/lib/whatsapp/evolution";
+
+/**
+ * Cliente com conta de anúncio mas cadastro incompleto (verba R$ 0 ou sem gestor). Roberto (23/09):
+ * "se o cliente tiver com zero de verba, tem que ficar soltando um alerta". Sem verba, o alerta de
+ * saldo calcula "% da verba" contra zero e nunca acerta; sem gestor, ninguém é cobrado pelo resultado.
+ */
+async function secaoCadastro(accounts: { clientId?: string; avgDailySpend: number | null }[]): Promise<string> {
+  try {
+    const { data } = await supabaseAdmin
+      .from("clients")
+      .select("id, name, nome_fantasia, monthly_budget, assigned_traffic")
+      .eq("active", true).is("churned_at", null).is("draft_status", null)
+      .not("meta_ad_account_id", "is", null);
+    if (!data?.length) return "";
+    const gastoPorCliente = new Map(accounts.filter((a) => a.clientId).map((a) => [a.clientId as string, a.avgDailySpend]));
+    const pendencias: PendenciaCadastro[] = [];
+    for (const c of data) {
+      if (/\(teste\)|🧪/i.test((c.name as string) ?? "")) continue;
+      const falta: PendenciaCadastro["falta"] = [];
+      if (!c.monthly_budget || Number(c.monthly_budget) <= 0) falta.push("verba");
+      if (!((c.assigned_traffic as string) ?? "").trim()) falta.push("gestor");
+      if (falta.length) pendencias.push({
+        clientName: (c.nome_fantasia as string) || (c.name as string),
+        falta, avgDailySpend: gastoPorCliente.get(c.id as string) ?? null,
+      });
+    }
+    return buildCadastroSection(pendencias);
+  } catch {
+    return ""; // cobrança de cadastro nunca derruba o digest de saldo
+  }
+}
 
 const ADMIN_EMAIL = "lonemidiamkt@gmail.com";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -116,8 +147,10 @@ export async function POST(req: NextRequest) {
       const greens = sorted.filter((a) => a.alert.severity === "ok");
       messages = [buildRunHeader(sync.accounts), ...alertas.map(buildAccountMessage)];
       if (includeGreens && greens.length > 0) messages.push(buildGreensSummary(greens));
+      const cad = await secaoCadastro(sync.accounts);
+      if (cad) messages.push(cad.trimStart());
     } else {
-      messages = [buildDigestMessage(sync.accounts)];
+      messages = [buildDigestMessage(sync.accounts) + (await secaoCadastro(sync.accounts))];
     }
 
     if (dryRun) {

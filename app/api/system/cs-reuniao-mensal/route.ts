@@ -180,10 +180,12 @@ export async function POST(req: NextRequest) {
 
   const { data: clientes } = await supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, assigned_social, service_type, status, whatsapp_group_jid")
+    .select("id, name, nome_fantasia, assigned_social, service_type, status, whatsapp_group_jid, paused_at, paused_until")
     .or("active.is.null,active.eq.true")
     .eq("agente_ativo", true)
-    .neq("status", "onboarding");
+    .neq("status", "onboarding")
+    // PAUSA (23/09): cliente pausado não é cobrado por reunião — ver lib/clients/pausa.ts.
+    .is("paused_at", null);
 
   // Reunião mensal é de quem tem acompanhamento. Cliente só de anúncio não entra na roda de
   // social — cobrar reunião dele inventaria pendência.
