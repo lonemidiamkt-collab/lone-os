@@ -15,50 +15,51 @@
 @layer base {
   html.dark {
     /* ═══════════════════════════════════════════════════════════
-       LONE OS — Sober Premium / Executive Clean (DARK)
-       Inspired by Vercel, Stripe, Linear
+       LONE OS — Sober Premium / Executive Clean (DARK, grafite)
+       Inspired by Vercel, Stripe, Linear. Set/2026: saiu do navy quase-preto (#060814)
+       pro grafite — o painel lia "escuro demais"; o azul Lone ficou só nos destaques.
        Zero glow. Zero neon. Authority through restraint.
        ═══════════════════════════════════════════════════════════ */
     /* Faz os controles NATIVOS (dropdown de <select>, date picker, scrollbar) renderizarem
        em dark — senão o <option> fica texto escuro em fundo escuro (nomes "sumiam" no select). */
     color-scheme: dark;
-    --background: #060814;
+    --background: #111318;
     --foreground: #eef0f6;
 
-    --card: #0b0e1e;
-    --card-solid: #0b0e1e;
+    --card: #181b22;
+    --card-solid: #181b22;
     --card-foreground: #eef0f6;
-    --popover: #0e1226;
+    --popover: #1d2029;
     --popover-foreground: #eef0f6;
 
     --primary: #2b3cff;
     --primary-foreground: #ffffff;
 
-    --secondary: #0e1226;
-    --secondary-foreground: #c7cbd8;
+    --secondary: #1d2029;
+    --secondary-foreground: #c5c9d3;
 
-    --muted: #0e1226;
-    --muted-foreground: #8b91a1;
+    --muted: #1d2029;
+    --muted-foreground: #9ca3b4;
 
-    --accent: #101638;
+    --accent: #252936;
     --accent-foreground: #eef0f6;
 
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
 
-    --border: #1a1f33;
+    --border: #272b36;
     --border-glow: rgba(90, 104, 255, 0.18);
-    --input: #1a1f33;
+    --input: #272b36;
     --ring: #2b3cff;
     --radius: 0.75rem;
 
     /* Canais RGB p/ opacidade (bg-primary/15 etc.) — companheiros dos hex acima */
-    --background-rgb: 6 8 20;
+    --background-rgb: 17 19 24;
     --foreground-rgb: 238 240 246;
-    --card-rgb: 11 14 30;
+    --card-rgb: 24 27 34;
     --primary-rgb: 43 60 255;
-    --secondary-rgb: 14 18 38;
-    --muted-rgb: 14 18 38;
+    --secondary-rgb: 29 32 41;
+    --muted-rgb: 29 32 41;
     --destructive-rgb: 239 68 68;
 
     /* Charts */
@@ -69,13 +70,13 @@
     --chart-5: #26d07c;
 
     /* Sidebar */
-    --sidebar: #070a16;
-    --sidebar-foreground: #9aa1b5;
+    --sidebar: #0e1014;
+    --sidebar-foreground: #9ca3b4;
     --sidebar-primary: #2b3cff;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #0e1226;
+    --sidebar-accent: #1d2029;
     --sidebar-accent-foreground: #eef0f6;
-    --sidebar-border: #161b2e;
+    --sidebar-border: #23262f;
     --sidebar-ring: #2b3cff;
 
     /* LED system */
@@ -93,18 +94,18 @@
        ─────────────────────────────────────────────────────────── */
 
     /* Fundos */
-    --lone-bg-primary:  #0b0e1e;
-    --lone-bg-card:     #0e1226;
-    --lone-bg-elevated: #141a38;
+    --lone-bg-primary:  #181b22;
+    --lone-bg-card:     #1d2029;
+    --lone-bg-elevated: #242833;
 
     /* Bordas */
-    --lone-border-default: #1e2440;
-    --lone-border-strong:  #2a3255;
+    --lone-border-default: #272b36;
+    --lone-border-strong:  #363b49;
 
     /* Texto */
     --lone-text-primary:   #FFFFFF;
     --lone-text-secondary: #9EA1AB;
-    --lone-text-tertiary:  #7B7E89;
+    --lone-text-tertiary:  #878B97;
     --lone-text-disabled:  #6B6E78;
 
     /* Marca */
@@ -119,10 +120,10 @@
     --lone-info:    #8DA4FF;
 
     /* Semântico com opacidade — para fundos de badge/banner */
-    --lone-danger-bg:  rgba(248, 113, 113, 0.08);
-    --lone-warning-bg: rgba(251, 177, 60,  0.08);
-    --lone-success-bg: rgba(74,  222, 128, 0.08);
-    --lone-info-bg:    rgba(141, 164, 255, 0.08);
+    --lone-danger-bg:  rgba(248, 113, 113, 0.10);
+    --lone-warning-bg: rgba(251, 177, 60,  0.10);
+    --lone-success-bg: rgba(74,  222, 128, 0.10);
+    --lone-info-bg:    rgba(141, 164, 255, 0.10);
 
     --lone-danger-border:  rgba(248, 113, 113, 0.25);
     --lone-warning-border: rgba(251, 177, 60,  0.25);
@@ -141,7 +142,7 @@
 
     /* Véu atrás de modal/drawer; "strong" = lightbox de imagem. overlay-foreground = texto
        sobre foto/véu, branco nos dois temas. */
-    --overlay:            rgba(2, 4, 12, 0.72);
+    --overlay:            rgba(6, 7, 10, 0.7);
     --overlay-strong:     rgba(0, 0, 0, 0.9);
     --overlay-foreground: #ffffff;
 
@@ -263,12 +264,12 @@
     letter-spacing: -0.011em;
   }
 
-  /* Brilho radial azul no tema escuro — dá o "azulado" navy do material da Lone
-     (o fundo chapado #060814 lê como quase-preto; o glow é o que faz parecer premium). */
+  /* Brilho radial azul no tema escuro — toque da marca sobre o grafite; fraco de propósito,
+     senão o fundo volta a puxar pro navy. */
   html.dark body {
     background-image:
-      radial-gradient(1100px 620px at 82% -8%, rgb(var(--primary-rgb) / 0.16), transparent 58%),
-      radial-gradient(820px 560px at -6% 6%, rgb(var(--primary-rgb) / 0.10), transparent 55%);
+      radial-gradient(1100px 620px at 82% -8%, rgb(var(--primary-rgb) / 0.08), transparent 58%),
+      radial-gradient(820px 560px at -6% 6%, rgb(var(--primary-rgb) / 0.05), transparent 55%);
     background-attachment: fixed;
     background-repeat: no-repeat;
   }
