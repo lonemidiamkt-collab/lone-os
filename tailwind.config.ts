@@ -1,5 +1,6 @@
 import type { Config } from "tailwindcss";
 import typography from "@tailwindcss/typography";
+import tailwindcssAnimate from "tailwindcss-animate";
 
 const config: Config = {
   // Dark-only, no toggle needed
@@ -160,7 +161,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [typography],
+  plugins: [typography, tailwindcssAnimate],
 };
 
 export default config;

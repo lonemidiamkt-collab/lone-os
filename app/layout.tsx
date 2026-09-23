@@ -3,7 +3,7 @@ import { Montserrat, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import ConditionalAppShell from "@/components/ConditionalAppShell";
 import { ThemeProvider } from "@/lib/context/ThemeContext";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 
 // Sistema existente — intacto
 const montserrat = Montserrat({
@@ -46,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${inter.variable} ${montserrat.variable} ${jetbrainsMono.variable} font-sans bg-background text-foreground`}>
         <ThemeProvider>
           <ConditionalAppShell>{children}</ConditionalAppShell>
-          <Toaster position="bottom-right" richColors />
+          <Toaster />
         </ThemeProvider>
         <script dangerouslySetInnerHTML={{ __html: `if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{})}` }} />
       </body>

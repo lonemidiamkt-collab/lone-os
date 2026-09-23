@@ -24,7 +24,6 @@ import GlobalSearch from "@/components/GlobalSearch";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
 import OnboardingTour from "@/components/OnboardingTour";
 import SessionTimeout from "@/components/SessionTimeout";
-import RealtimeToast from "@/components/RealtimeToast";
 
 // Routes that have a secondary sidebar (240px extra)
 const SECONDARY_ROUTES = ["/traffic", "/social", "/design", "/clients", "/crm", "/prospeccao"];
@@ -161,7 +160,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <MainLayout>{children}</MainLayout>
             <NotificationToast />
             <ErroCliente />
-            <RealtimeToast />
             <ScheduledNoticePopup />
             <GlobalSearch />
             <KeyboardShortcuts />

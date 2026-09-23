@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   LayoutDashboard, TrendingUp, Instagram, Palette, Users, Lock,
-  MessageCircle, Calendar, LogOut, Sun, Moon,
+  MessageCircle, Calendar, LogOut, Sun,
   ClipboardCheck, BarChart2, Megaphone, Brain, FileText,
   ChevronLeft, Activity, Layers, AlertTriangle, Settings,
   Users2, Globe, Target, Inbox, ShieldCheck, ShieldAlert, Package, Zap, PanelLeftClose, PanelLeft, Thermometer, Bot, Handshake, CalendarClock, HeartPulse,  BookOpen,
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { useRole } from "@/lib/context/RoleContext";
 import MedievalAvatar, { getUserAvatar } from "@/components/MedievalAvatars";
 import { Logo } from "@/components/ui/Logo";
-import { useTheme } from "@/lib/context/ThemeContext";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
@@ -24,41 +24,53 @@ import { useNav, SIDEBAR_W, SIDEBAR_W_EXPANDED } from "@/lib/context/NavContext"
 import { useState, useEffect, useMemo } from "react";
 
 // ─── Primary nav config ────────────────────────────────────────
+// Grupos do rail primário: os 5 mais usados ficam sem grupo (fixos no topo, sem embaralhar
+// quem já decorou a posição); o resto ganha seção pra não ser 24 ícones do mesmo peso visual.
+type PrimaryGroupKey = "operacao" | "clientes" | "time" | "ceo";
+
 interface PrimaryItem {
   href: string;
   icon: LucideIcon;
   label: string;
   roles: string[];
   hasSecondary?: boolean;
+  group?: PrimaryGroupKey;
 }
+
+const PRIMARY_GROUPS: { key: PrimaryGroupKey; label: string }[] = [
+  { key: "operacao", label: "Operação" },
+  { key: "clientes", label: "Clientes & Comercial" },
+  { key: "time",     label: "Time & Sistema" },
+  { key: "ceo",      label: "CEO" },
+];
 
 export const PRIMARY_NAV: PrimaryItem[] = [
   { href: "/",              icon: LayoutDashboard, label: "Dashboard",  roles: ["admin","manager","traffic","social","designer"] },
   { href: "/my-work",       icon: Inbox,           label: "Meu Trabalho", roles: ["admin","manager","traffic","social","designer"] },
   { href: "/tarefas",       icon: ClipboardCheck,  label: "Tarefas",    roles: ["admin","manager","traffic","social","designer","comercial"] },
   { href: "/processos",     icon: BookOpen,        label: "Processos",  roles: ["admin","manager","traffic","social","designer","comercial"] },
-  { href: "/traffic",       icon: TrendingUp,      label: "Tráfego",    roles: ["admin","manager","traffic"],                    hasSecondary: true },
-  { href: "/social",        icon: Instagram,       label: "Social",     roles: ["admin","manager","social","designer"],          hasSecondary: true },
-  { href: "/meus-clientes", icon: Users,           label: "Meus Clientes", roles: ["traffic","social","designer"] },
+  { href: "/calendar",      icon: Calendar,        label: "Calendário", roles: ["admin","manager","traffic","social","designer"] },
+  { href: "/traffic",       icon: TrendingUp,      label: "Tráfego",    roles: ["admin","manager","traffic"],                    hasSecondary: true, group: "operacao" },
+  { href: "/social",        icon: Instagram,       label: "Social",     roles: ["admin","manager","social","designer"],          hasSecondary: true, group: "operacao" },
+  { href: "/meus-clientes", icon: Users,           label: "Meus Clientes", roles: ["traffic","social","designer"],               group: "operacao" },
   // O Radar mora DENTRO daqui: olhar o que o mercado mostra faz parte de planejar a semana, não é
   // outra área. Uma aba a menos pra quem já trabalha com Social, Design e Tarefas abertas.
-  { href: "/planejamento",  icon: CalendarClock,   label: "Planejamento", roles: ["admin","manager","social","designer"] },
-  { href: "/design",        icon: Palette,         label: "Designer",   roles: ["admin","manager","designer","social"],          hasSecondary: true },
-  { href: "/clients",       icon: Users,           label: "Clientes",   roles: ["admin","manager"],                              hasSecondary: true },
-  { href: "/crm",           icon: Handshake,       label: "Comercial",  roles: ["admin","manager","comercial"], hasSecondary: true },
-  { href: "/prospeccao",    icon: Radar,           label: "Prospecção", roles: ["admin","manager"], hasSecondary: true },
-  { href: "/contratos",     icon: FileText,        label: "Contratos",  roles: ["admin","manager"] },
-  { href: "/churn",         icon: Thermometer,     label: "Termômetro",  roles: ["admin","manager"] },
-  { href: "/jornada",       icon: HeartPulse,      label: "Jornada CS",  roles: ["admin","manager","social"] },
-  { href: "/carteira",      icon: Layers,          label: "Carteira",    roles: ["admin","manager"] },
-  { href: "/defesa",        icon: ShieldAlert,     label: "Defesa Ativa",roles: ["admin","manager","traffic"] },
-  { href: "/calendar",      icon: Calendar,        label: "Calendário", roles: ["admin","manager","traffic","social","designer"] },
-  { href: "/broadcasts",    icon: Megaphone,       label: "Comunicados", roles: ["admin","manager"] },
-  { href: "/sobre",         icon: FileText,        label: "Sobre o Sistema", roles: ["admin","manager","traffic","social","designer"] },
-  { href: "/automations",   icon: Zap,             label: "Automações", roles: ["admin","manager"] },
-  { href: "/agente",        icon: Bot,             label: "Agente Lone", roles: ["admin","manager"] },
-  { href: "/goals",         icon: Target,          label: "Metas & OKRs", roles: ["admin","manager"] },
-  { href: "/ceo",           icon: Lock,            label: "Área CEO",   roles: ["admin"] },
+  { href: "/planejamento",  icon: CalendarClock,   label: "Planejamento", roles: ["admin","manager","social","designer"],        group: "operacao" },
+  { href: "/design",        icon: Palette,         label: "Designer",   roles: ["admin","manager","designer","social"],          hasSecondary: true, group: "operacao" },
+  { href: "/defesa",        icon: ShieldAlert,     label: "Defesa Ativa",roles: ["admin","manager","traffic"],                   group: "operacao" },
+  { href: "/clients",       icon: Users,           label: "Clientes",   roles: ["admin","manager"],                              hasSecondary: true, group: "clientes" },
+  { href: "/crm",           icon: Handshake,       label: "Comercial",  roles: ["admin","manager","comercial"], hasSecondary: true, group: "clientes" },
+  { href: "/prospeccao",    icon: Radar,           label: "Prospecção", roles: ["admin","manager"], hasSecondary: true,           group: "clientes" },
+  { href: "/contratos",     icon: FileText,        label: "Contratos",  roles: ["admin","manager"],                              group: "clientes" },
+  { href: "/churn",         icon: Thermometer,     label: "Termômetro",  roles: ["admin","manager"],                             group: "clientes" },
+  { href: "/jornada",       icon: HeartPulse,      label: "Jornada CS",  roles: ["admin","manager","social"],                    group: "clientes" },
+  { href: "/carteira",      icon: Layers,          label: "Carteira",    roles: ["admin","manager"],                             group: "clientes" },
+  { href: "/broadcasts",    icon: Megaphone,       label: "Comunicados", roles: ["admin","manager"],                             group: "time" },
+  { href: "/sobre",         icon: FileText,        label: "Sobre o Sistema", roles: ["admin","manager","traffic","social","designer"], group: "time" },
+  { href: "/automations",   icon: Zap,             label: "Automações", roles: ["admin","manager"],                              group: "time" },
+  { href: "/agente",        icon: Bot,             label: "Agente Lone", roles: ["admin","manager"],                             group: "time" },
+  { href: "/goals",         icon: Target,          label: "Metas & OKRs", roles: ["admin","manager"],                            group: "ceo" },
+  { href: "/ceo",           icon: Lock,            label: "Área CEO",   roles: ["admin"],                                        group: "ceo" },
 ];
 
 // ─── Secondary nav config ──────────────────────────────────────
@@ -218,7 +230,6 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
   const { role, currentProfile, roleLabel, logout } = useRole();
-  const { theme, toggleTheme } = useTheme();
   const clients = useClientsStore((s) => s.clients);
   const contentCards = useContentStore((s) => s.contentCards);
   const designRequests = useContentStore((s) => s.designRequests);
@@ -231,6 +242,16 @@ export default function Sidebar() {
     () => PRIMARY_NAV.filter((item) => item.roles.includes(role)),
     [role]
   );
+
+  // Itens sem grupo (os 5 mais usados) ficam soltos no topo; o resto entra nas seções de
+  // PRIMARY_GROUPS, na ordem declarada ali — só aparece o divisor de um grupo que tiver item.
+  const groupedNav = useMemo(() => {
+    const ungrouped = visibleItems.filter((item) => !item.group);
+    const groups = PRIMARY_GROUPS
+      .map((g) => ({ ...g, items: visibleItems.filter((item) => item.group === g.key) }))
+      .filter((g) => g.items.length > 0);
+    return { ungrouped, groups };
+  }, [visibleItems]);
 
   // Which primary item matches the current route
   const matchedHref = useMemo(
@@ -337,6 +358,46 @@ export default function Sidebar() {
     setMobileOpen(false);
   }
 
+  // ── Nav item button (compartilhado entre itens soltos e agrupados) ────────────
+  function renderNavItem(item: PrimaryItem) {
+    const isPage    = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+    const isSection = activePrimary === item.href && secondaryOpen;
+    const Icon      = item.icon;
+    return (
+      <button
+        key={item.href}
+        onClick={() => handlePrimaryClick(item)}
+        title={expanded ? undefined : item.label}
+        className={cn(
+          "relative shrink-0 rounded-xl flex items-center transition-all duration-200 ease-out group",
+          expanded ? "w-full gap-3 px-3 h-10" : "w-10 h-10 justify-center",
+          isPage
+            ? "text-primary bg-lone-brand-bg-soft border border-primary"
+            : isSection
+            ? "text-primary bg-lone-brand-bg-soft"
+            : "text-muted-foreground hover:text-foreground hover:bg-accent"
+        )}
+      >
+        <Icon size={17} strokeWidth={isPage ? 2.3 : 1.7} className="shrink-0" />
+        {expanded && (
+          <span className={`text-xs font-medium truncate ${isPage ? "text-primary" : "text-muted-foreground"}`}>
+            {item.label}
+          </span>
+        )}
+
+        {/* Active page: blue pill on right edge */}
+        {isPage && (
+          <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-primary -mr-px" />
+        )}
+
+        {/* Pulse dot for Design when there are queued requests */}
+        {item.href === "/design" && designQueued > 0 && !isPage && (
+          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
+        )}
+      </button>
+    );
+  }
+
   // ── Render ────────────────────────────────────────────────────
   return (
     <>
@@ -346,7 +407,7 @@ export default function Sidebar() {
       {/* Mobile backdrop */}
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          className="lg:hidden fixed inset-0 z-40 bg-background/70 backdrop-blur-sm"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -383,55 +444,25 @@ export default function Sidebar() {
           "flex flex-col gap-0.5 flex-1 min-h-0 overflow-y-auto overscroll-contain no-scrollbar justify-start pt-1 pb-1 shrink",
           expanded ? "w-full" : "items-center"
         )}>
-          {visibleItems.map((item) => {
-            const isPage    = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-            const isSection = activePrimary === item.href && secondaryOpen;
-            const Icon      = item.icon;
-            return (
-              <button
-                key={item.href}
-                onClick={() => handlePrimaryClick(item)}
-                title={expanded ? undefined : item.label}
-                className={cn(
-                  "relative shrink-0 rounded-xl flex items-center transition-all duration-200 ease-out group",
-                  expanded ? "w-full gap-3 px-3 h-10" : "w-10 h-10 justify-center",
-                  isPage
-                    ? "text-primary bg-lone-brand-bg-soft border border-primary"
-                    : isSection
-                    ? "text-primary bg-lone-brand-bg-soft"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                )}
-              >
-                <Icon size={17} strokeWidth={isPage ? 2.3 : 1.7} className="shrink-0" />
-                {expanded && (
-                  <span className={`text-xs font-medium truncate ${isPage ? "text-primary" : "text-muted-foreground"}`}>
-                    {item.label}
-                  </span>
-                )}
+          {groupedNav.ungrouped.map(renderNavItem)}
 
-                {/* Active page: blue pill on right edge */}
-                {isPage && (
-                  <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-primary -mr-px" />
-                )}
-
-                {/* Pulse dot for Design when there are queued requests */}
-                {item.href === "/design" && designQueued > 0 && !isPage && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
-                )}
-              </button>
-            );
-          })}
+          {groupedNav.groups.map((g) => (
+            <div key={g.key} className={cn("flex flex-col gap-0.5 pt-1", expanded ? "w-full" : "items-center")}>
+              {expanded ? (
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.08em] px-3 pt-2 pb-1">
+                  {g.label}
+                </p>
+              ) : (
+                <div className="w-6 h-px bg-border my-1" />
+              )}
+              {g.items.map(renderNavItem)}
+            </div>
+          ))}
         </nav>
 
         {/* Bottom controls */}
         <div className="flex flex-col items-center gap-1 shrink-0">
-          <button
-            onClick={toggleTheme}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
-            title={theme === "dark" ? "Modo claro" : "Modo escuro"}
-          >
-            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
+          <ThemeToggle variant={expanded ? "pill" : "icon"} className={expanded ? "mb-1" : undefined} />
 
           <button
             onClick={() => { router.push("/settings"); setMobileOpen(false); }}

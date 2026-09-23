@@ -9,6 +9,7 @@ import {
 import { useRole } from "@/lib/context/RoleContext";
 import { useTheme } from "@/lib/context/ThemeContext";
 import { RestartTourButton } from "@/components/OnboardingTour";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { supabase } from "@/lib/supabase/client";
 import { useEffect } from "react";
 import DuasEtapas from "@/components/settings/DuasEtapas";
@@ -23,7 +24,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function SettingsPage() {
   const { currentProfile, role, logout } = useRole();
-  const { theme, toggleTheme } = useTheme();
+  const { theme } = useTheme();
   const [activeSection, setActiveSection] = useState<"profile" | "appearance" | "notifications" | "security" | "juridico">("profile");
   const isAdmin = role === "admin" || role === "manager";
 
@@ -230,16 +231,7 @@ export default function SettingsPage() {
                         <p className="text-xs text-muted-foreground">{theme === "dark" ? "Modo escuro ativo" : "Modo claro ativo"}</p>
                       </div>
                     </div>
-                    <button
-                      onClick={toggleTheme}
-                      className={`relative w-12 h-6 rounded-full transition-all ${
-                        theme === "dark" ? "bg-primary" : "bg-muted"
-                      }`}
-                    >
-                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-card shadow transition-all ${
-                        theme === "dark" ? "left-[26px]" : "left-0.5"
-                      }`} />
-                    </button>
+                    <ThemeToggle variant="pill" />
                   </div>
 
                   <div className="p-4 rounded-xl border border-border bg-muted/30">

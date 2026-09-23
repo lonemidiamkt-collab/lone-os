@@ -74,12 +74,18 @@ export function getDashboardData({
 
   const pipelineCards = contentCards.filter((c) => c.status !== "published");
   const publishedThisMonth = contentCards.filter((c) => c.status === "published").length;
+  // Tempo-na-coluna (48h+), de propósito diferente do "atrasados" por due_date que
+  // lib/cs/snapshot.ts calcula pro "O que precisa de atenção" — não unificar os dois:
+  // um mede SLA de fila, o outro mede prazo prometido ao cliente.
   const stuckCards = pipelineCards.filter((c) => {
     const enteredAt = c.columnEnteredAt?.[c.status] ?? c.statusChangedAt;
     return hoursSince(enteredAt) >= 48;
   });
+  // clientApprovedAt já setado = cliente aprovou, só falta postar — não é mais "pendente".
+  // Sem esse filtro, o mesmo card aparecia em "Urgências do dia" como aguardando aprovação
+  // E em "O que precisa de atenção" (insights de client_approved_at) como já aprovado.
   const pendingApproval = contentCards.filter(
-    (c) => c.status === "approval" || c.status === "client_approval"
+    (c) => (c.status === "approval" || c.status === "client_approval") && !c.clientApprovedAt
   ).length;
 
   const designQueued = designRequests.filter((r) => r.status === "queued").length;
