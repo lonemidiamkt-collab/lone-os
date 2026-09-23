@@ -426,7 +426,11 @@ const MODULES: Module[] = [
       "O Morning Briefing (IA) analisa cada conta e gera o plano do dia: urgências, oportunidades e o que está ok.",
       "Alertas aparecem conforme a gravidade — vermelho pra crítico, amarelo pra atenção, azul pra oportunidade.",
       "Os cards do topo mostram métricas-chave (clientes ativos, em risco, onboarding, tarefas urgentes).",
+      "Em 'Urgências do dia', 'posts aguardando aprovação' conta só o que o cliente AINDA não aprovou. Arte já aprovada pelo cliente aparece em 'O que precisa de atenção' como pronta pra postar — um card nunca aparece nos dois.",
       "Novidades do Lone OS aparecem num widget azul quando há algo novo que você ainda não leu.",
+      "Menu lateral: os 5 itens mais usados (Dashboard, Meu Trabalho, Tarefas, Processos, Calendário) ficam fixos no topo; o resto está agrupado em Operação, Clientes & Comercial, Time & Sistema e CEO.",
+      "Tema claro/escuro: o botão sol/lua no pé do menu (ou em Configurações → Aparência) troca na hora. O escuro agora é grafite, menos fechado que o navy antigo.",
+      "Avisos (toasts) aparecem no canto inferior direito: somem em 4s, exceto os de SLA, que ficam até você fechar. 'Ver agora' abre o card ou o cliente do aviso.",
     ],
     features: [
       "Briefing matinal gerado por IA com urgências e oportunidades",
