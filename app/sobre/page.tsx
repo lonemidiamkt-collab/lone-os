@@ -648,6 +648,7 @@ const MODULES: Module[] = [
     howItWorks: [
       "Na aba /design, o sidebar tem 4 opções: Quadro de Tarefas, Meus Clientes, Minhas Tarefas, Performance.",
       "No topo, 'Quadro de' escolhe de quem são as demandas na tela. O designer abre no dele; a escolha fica salva entre sessões.",
+      "NENHUMA DEMANDA NASCE SEM DONO (23/09): se o cliente não tem designer na ficha — é o caso dos clientes só de tráfego, que não entram na carteira do designer mas pedem criativo —, o servidor escolhe o quadro na hora de criar: primeiro quem já faz as artes daquele cliente, senão quem está com menos demanda aberta. Quem criou vê na tela pra qual quadro foi e por quê.",
       "Pra ajudar o colega: troca o quadro, abre a demanda e clica 'Assumir esta demanda' — ela passa a contar no seu quadro sem mexer no cadastro do cliente. 'Devolver à carteira' desfaz.",
       "Em 'Meus Clientes' vê o grid dos 26 clientes — logo, status, pedidos abertos, última entrega.",
       "Clica num cliente → drawer abre com briefing completo (tom de voz, branding, campanha atual).",
@@ -659,7 +660,8 @@ const MODULES: Module[] = [
       "GERAR VARIAÇÕES (IA) — 14/09, desligado até a sombra aprovar: numa demanda de replicação (que tem anúncio pai), o botão gera 2 propostas de imagem mantendo os elementos travados do briefing (preço, texto, logo, produto) e alterando só a variável do teste. Entram como REFERÊNCIA anexada; o designer revisa e finaliza — a IA não entrega nada sozinha. Liga em agency_settings ia_imagem = on.",
       "Quadro por designer, tirado da carteira do cliente — designer novo ganha quadro sozinho, sem mexer no código",
       "Botão pra assumir demanda do colega, com o dono registrado na demanda (antes o nome ia escrito no título, tipo '[Gabriel] SEX 11')",
-      "Quadro 'sem designer' agrupa os clientes que ainda não têm responsável no cadastro",
+      "Atribuição automática na criação: cliente sem designer na ficha não manda mais a demanda pro limbo — ela cai no quadro de alguém e a escolha fica registrada (era o caso do Edumar: 23 demandas que o Rodrigo fazia sem nunca ver no próprio quadro)",
+      "Quadro 'sem designer' só sobra pro que é histórico — demanda nova só vai parar nele se não houver designer ativo no time",
       "Grid de carteira com visual rápido (logo, stats, pedidos abertos)",
       "Drawer com briefing completo + edição inline",
       "Botão 'Nova Tarefa' pro designer criar trabalho próprio",
@@ -671,7 +673,7 @@ const MODULES: Module[] = [
     ],
     tips: [
       "Abra o drawer do cliente ANTES de começar uma tarefa — é onde está o tom de voz e o que não fazer.",
-      "Se uma demanda aparecer no quadro errado, o que está errado é o designer do cliente no cadastro — corrija lá, não no título da demanda.",
+      "Se uma demanda aparecer no quadro errado, corrija o designer do cliente no cadastro (nunca no título da demanda) — ou, se for caso pontual, use 'Assumir esta demanda'. Cliente só de tráfego não precisa de designer na ficha: a demanda dele é distribuída sozinha.",
       "Se o briefing estiver vazio, preencha ali mesmo — vale pra sempre.",
       "Use tarefa auto-iniciada pra bloquear tempo de trabalho em brainstorming, não só execução.",
     ],

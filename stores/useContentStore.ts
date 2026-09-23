@@ -5,6 +5,7 @@ import type { ContentCard, DesignRequest, ContentApproval, SocialMonthlyReport, 
 import { supabase, REALTIME_ENABLED } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { trilha } from "@/lib/obs/trilha";
+import { avisoDeAtribuicao, type MotivoEscolha } from "@/lib/design/atribuicao";
 
 interface ContentState {
   contentCards: ContentCard[];
@@ -387,11 +388,18 @@ export const useContentStore = create<ContentState>()(
         try {
           const r = await authedFetch("/api/design-requests/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
           if (!r.ok) { trilha("demanda:criar:erro", { titulo: req.title, status: r.status }); throw new Error(`HTTP ${r.status}`); }
-          const { id, semDesigner, dedupe } = await r.json() as { id: string; semDesigner?: boolean; dedupe?: boolean };
-          trilha("demanda:criar:ok", { titulo: req.title, id, card: req.contentCardId ?? null, dedupe: !!dedupe, semDesigner: !!semDesigner });
-          // Cliente sem designer no cadastro: a demanda existe, mas cai em "(sem designer)" — avisa quem criou.
-          if (semDesigner) toast.warning(`"${req.title}" foi criada, mas ${req.clientName} não tem designer no cadastro — caiu em "(sem designer)". Defina o designer na ficha do cliente pra cair no quadro certo.`, { duration: 9000 });
-          const confirmed = { ...optimistic, id };
+          const { id, semDesigner, dedupe, designer, atribuicao } = await r.json() as
+            { id: string; semDesigner?: boolean; dedupe?: boolean; designer?: string | null; atribuicao?: MotivoEscolha | null };
+          trilha("demanda:criar:ok", { titulo: req.title, id, card: req.contentCardId ?? null, dedupe: !!dedupe, semDesigner: !!semDesigner, designer: designer ?? null, atribuicao: atribuicao ?? null });
+          // O servidor escolhe o dono quando o cliente não tem designer na ficha. Quem criou precisa
+          // saber pra qual quadro foi — antes essa frase era um pedido de "arrume na ficha" que
+          // ninguém arrumava, e a demanda ficava invisível em "(sem designer)".
+          if (semDesigner) {
+            toast.warning(`"${req.title}" foi criada, mas não há designer ativo no time pra receber — ela ficou em "(sem designer)".`, { duration: 9000 });
+          } else if (designer && atribuicao && atribuicao !== "carteira") {
+            toast.info(avisoDeAtribuicao({ designer, motivo: atribuicao }, req.clientName), { duration: 7000 });
+          }
+          const confirmed = { ...optimistic, id, assignedDesigner: designer ?? undefined } as DesignRequest;
           marcarMutacao();
           set((s) => ({
             designRequests: s.designRequests.map((r) => r.id === tempId ? confirmed : r),

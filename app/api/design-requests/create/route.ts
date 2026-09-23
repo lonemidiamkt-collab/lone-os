@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/auth-server";
+import { designerDaDemanda } from "@/lib/design/atribuir-server";
 
 /**
  * POST /api/design-requests/create
@@ -34,9 +35,16 @@ export async function POST(req: NextRequest) {
     const { data: existente } = await repetida;
     if (existente?.id) return NextResponse.json({ id: existente.id, dedupe: true });
 
+    // QUEM VAI RECEBER — resolvido ANTES do insert, pra gravar junto (uma escrita só).
+    // Rodrigo (23/09): cliente sem designer na ficha some do quadro dele; eram 26 demandas
+    // invisíveis, 23 do Edumar. Cliente de tráfego não entra na carteira do designer (decisão do
+    // Roberto), então o dono é resolvido aqui, na demanda. Ver lib/design/atribuicao.ts.
+    const escolha = await designerDaDemanda(String(body.clientId));
+
     const { data, error } = await supabaseAdmin.from("design_requests").insert({
       title: titulo,
       client_id: body.clientId,
+      assigned_designer: escolha?.designer ?? null,
       client_name: body.clientName ?? "",
       requested_by: body.requestedBy ?? user.email,
       priority: body.priority ?? "medium",
@@ -52,11 +60,6 @@ export async function POST(req: NextRequest) {
       console.error("[design-requests/create]", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-
-    // QUEM VAI RECEBER (16/09): "demanda foi pro destinatário errado" (Rodrigo) era cliente SEM designer
-    // no cadastro — a demanda cai no quadro "(sem designer)" e ninguém puxa. Devolve isso pra tela avisar.
-    const { data: cli } = await supabaseAdmin.from("clients").select("assigned_designer").eq("id", body.clientId).maybeSingle();
-    const designer = ((cli?.assigned_designer as string) ?? "").trim() || null;
 
     // Grava o link reverso (content_cards.design_request_id) no servidor, atômico com a
     // criação. Antes isso era um 2º fetch do cliente que, se falhasse, deixava a demanda
@@ -87,7 +90,14 @@ export async function POST(req: NextRequest) {
         .catch((e) => console.error("[design-requests/create] briefing IA falhou (ignorado):", e));
     }
 
-    return NextResponse.json({ id: data.id, designer, semDesigner: !designer });
+    return NextResponse.json({
+      id: data.id,
+      designer: escolha?.designer ?? null,
+      // `semDesigner` agora só é verdade quando NÃO EXISTE designer no time — o caso do cliente sem
+      // designer na ficha deixou de ser um aviso pra quem cria e virou uma atribuição de verdade.
+      semDesigner: !escolha,
+      atribuicao: escolha?.motivo ?? null,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
     console.error("[design-requests/create] unhandled:", err);
