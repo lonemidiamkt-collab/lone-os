@@ -16,11 +16,15 @@ export default async function PortalPage({
   // Valida token
   const { data: client } = await supabaseAdmin
     .from("clients")
-    .select("id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, public_report_enabled, public_report_token_revoked_at, service_type, meta_ad_account_id, ig_business_account_id, status, join_date")
+    .select("id, name, nome_fantasia, whatsapp_team_phone, portal_welcome_message, public_report_enabled, public_report_token_revoked_at, service_type, meta_ad_account_id, ig_business_account_id, status, join_date, active, churned_at")
     .eq("public_report_token", token)
     .single();
 
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at) {
+  // EX-CLIENTE NÃO VÊ MAIS (23/09): desativar/arquivar o cliente parava o sync, as mensagens e a
+  // carteira do time — mas NÃO o link público. Três ex-clientes (Dinho Cell, Dr. Cauana Barboza,
+  // Quero Tintas) seguiam com o painel de resultados aberto, servindo dado da conta deles.
+  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at
+      || client.active === false || client.churned_at) {
     notFound();
   }
 

@@ -34,9 +34,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   if (limited(token)) return NextResponse.json({ error: "Muitas ações. Aguarde 1 minuto." }, { status: 429 });
 
   const { data: client } = await supabaseAdmin
-    .from("clients").select("id, name, nome_fantasia, public_report_enabled, public_report_token_revoked_at")
+    .from("clients").select("id, name, nome_fantasia, public_report_enabled, public_report_token_revoked_at, active, churned_at")
     .eq("public_report_token", token).single();
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at) {
+  // Ex-cliente (inativo/arquivado) não acessa mais o portal — ver app/portal/[token]/page.tsx.
+  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at) {
     return NextResponse.json({ error: "Link inválido ou expirado" }, { status: 404 });
   }
 

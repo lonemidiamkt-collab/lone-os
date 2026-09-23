@@ -38,9 +38,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const { token } = await params;
 
   const { data: client } = await supabaseAdmin.from("clients")
-    .select("id, name, public_report_enabled, public_report_token_revoked_at, whatsapp_group_jid")
+    .select("id, name, public_report_enabled, public_report_token_revoked_at, active, churned_at, whatsapp_group_jid")
     .eq("public_report_token", token).single();
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at) {
+  // Ex-cliente (inativo/arquivado) não acessa mais o portal — ver app/portal/[token]/page.tsx.
+  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at) {
     return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
   }
   if (limitado(token)) {

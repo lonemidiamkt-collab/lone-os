@@ -11,10 +11,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
 
   const { data: client } = await supabaseAdmin
     .from("clients")
-    .select("id, public_report_enabled, public_report_token_revoked_at")
+    .select("id, public_report_enabled, public_report_token_revoked_at, active, churned_at")
     .eq("public_report_token", token)
     .single();
-  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at) {
+  // Ex-cliente (inativo/arquivado) não acessa mais o portal — ver app/portal/[token]/page.tsx.
+  if (!client || !client.public_report_enabled || client.public_report_token_revoked_at || client.active === false || client.churned_at) {
     return NextResponse.json({ error: "Token inválido ou revogado" }, { status: 404 });
   }
 
