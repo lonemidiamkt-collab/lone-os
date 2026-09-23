@@ -775,13 +775,13 @@ export default function CalendarPage() {
           {monthAwareness.length > 0 && (
             <div className="mb-3 rounded-xl border border-rose-500/20 bg-rose-500/[0.05] p-3">
               <div className="flex items-start gap-2 flex-wrap">
-                <Heart size={12} className="text-rose-300 mt-0.5 shrink-0" />
-                <p className="text-[11px] text-rose-300 font-semibold uppercase tracking-wider">
+                <Heart size={12} className="text-rose-500 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-rose-500 font-semibold uppercase tracking-wider">
                   Mês de conscientização
                 </p>
                 <div className="flex flex-wrap gap-1.5 ml-1">
                   {monthAwareness.map((a) => (
-                    <span key={a.name} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-200 border border-rose-500/20">
+                    <span key={a.name} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-500 border border-rose-500/20">
                       <span>{a.name}</span>
                     </span>
                   ))}
@@ -832,15 +832,15 @@ export default function CalendarPage() {
 
           {/* Banner de feriados municipais do mês */}
           {monthMunicipalHolidays.length > 0 && (
-            <div className="mb-3 rounded-xl border border-lime-500/20 bg-lime-500/[0.05] p-3">
+            <div className="mb-3 rounded-xl border border-[color-mix(in_srgb,var(--chart-5)_25%,transparent)] bg-[color-mix(in_srgb,var(--chart-5)_5%,transparent)] p-3">
               <div className="flex items-start gap-2 flex-wrap">
-                <Flag size={12} className="text-lime-400 mt-0.5 shrink-0" />
-                <p className="text-[11px] text-lime-400 font-semibold uppercase tracking-wider">
+                <Flag size={12} className="text-chart-5 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-chart-5 font-semibold uppercase tracking-wider">
                   {monthMunicipalHolidays.length} feriado{monthMunicipalHolidays.length > 1 ? "s" : ""} municipa{monthMunicipalHolidays.length > 1 ? "is" : "l"}
                 </p>
                 <div className="flex flex-wrap gap-1.5 ml-1">
                   {monthMunicipalHolidays.map((h) => (
-                    <span key={`${h.day}-${h.name}`} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-lime-500/10 text-lime-300 border border-lime-500/20">
+                    <span key={`${h.day}-${h.name}`} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-[color-mix(in_srgb,var(--chart-5)_12%,transparent)] text-chart-5 border border-[color-mix(in_srgb,var(--chart-5)_25%,transparent)]">
                       <strong className="font-bold">{String(h.day).padStart(2, "0")}</strong>
                       <span>{h.name}{h.cities && h.cities.length > 0 ? ` · ${h.cities.join(", ")}` : ""}</span>
                     </span>
@@ -852,15 +852,15 @@ export default function CalendarPage() {
 
           {/* Banner de datas comemorativas do mês */}
           {monthCommemoratives.length > 0 && (
-            <div className="mb-3 rounded-xl border border-pink-500/20 bg-pink-500/[0.05] p-3">
+            <div className="mb-3 rounded-xl border border-[color-mix(in_srgb,var(--chart-4)_25%,transparent)] bg-[color-mix(in_srgb,var(--chart-4)_5%,transparent)] p-3">
               <div className="flex items-start gap-2 flex-wrap">
-                <Sparkles size={12} className="text-pink-300 mt-0.5 shrink-0" />
-                <p className="text-[11px] text-pink-300 font-semibold uppercase tracking-wider">
+                <Sparkles size={12} className="text-chart-4 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-chart-4 font-semibold uppercase tracking-wider">
                   {monthCommemoratives.length} data{monthCommemoratives.length > 1 ? "s" : ""} comemorativa{monthCommemoratives.length > 1 ? "s" : ""}
                 </p>
                 <div className="flex flex-wrap gap-1.5 ml-1">
                   {monthCommemoratives.map((c) => (
-                    <span key={`${c.day}-${c.name}`} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-pink-500/10 text-pink-200 border border-pink-500/20">
+                    <span key={`${c.day}-${c.name}`} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-[color-mix(in_srgb,var(--chart-4)_12%,transparent)] text-chart-4 border border-[color-mix(in_srgb,var(--chart-4)_25%,transparent)]">
                       <strong className="font-bold">{String(c.day).padStart(2, "0")}</strong>
                       <span>{c.name}</span>
                     </span>
@@ -934,11 +934,11 @@ export default function CalendarPage() {
                             : isState
                             ? "text-lone-warning font-bold"
                             : isMunicipal
-                            ? "text-lime-400 font-bold"
+                            ? "text-chart-5 font-bold"
                             : isCommemorative
-                            ? "text-pink-300 font-medium"
+                            ? "text-chart-4 font-medium"
                             : "text-foreground";
-                          const flagColor = isNational ? "text-lone-warning" : isState ? "text-lone-warning" : isMunicipal ? "text-lime-400" : "";
+                          const flagColor = isNational ? "text-lone-warning" : isState ? "text-lone-warning" : isMunicipal ? "text-chart-5" : "";
                           return (
                             <span className={`text-xs font-medium flex items-center gap-1 ${dayColor}`} title={titleAttr}>
                               {day}
@@ -949,7 +949,7 @@ export default function CalendarPage() {
                                 <Flag size={9} className={flagColor} aria-label={obs!.name} />
                               )}
                               {!hasDeadline && isCommemorative && (
-                                <Sparkles size={9} className="text-pink-300" aria-label={obs!.name} />
+                                <Sparkles size={9} className="text-chart-4" aria-label={obs!.name} />
                               )}
                             </span>
                           );
@@ -1287,11 +1287,11 @@ export default function CalendarPage() {
                   const Icon = isOfficial ? Flag : Sparkles;
                   return (
                     <div key={`${o.date}-${idx}`} className="flex items-center gap-2 py-1.5 px-1">
-                      <span className={`text-[10px] w-10 shrink-0 text-right font-medium ${isOfficial ? "text-lone-warning" : "text-pink-300"}`}>
+                      <span className={`text-[10px] w-10 shrink-0 text-right font-medium ${isOfficial ? "text-lone-warning" : "text-chart-4"}`}>
                         {d} {MONTHS_SHORT[m - 1]}
                       </span>
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOfficial ? "bg-lone-warning-bg" : "bg-pink-300"}`} />
-                      <Icon size={11} className={`shrink-0 ${isOfficial ? "text-lone-warning" : "text-pink-300/70"}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOfficial ? "bg-lone-warning-bg" : "bg-chart-4"}`} />
+                      <Icon size={11} className={`shrink-0 ${isOfficial ? "text-lone-warning" : "text-chart-4 opacity-70"}`} />
                       <div className="flex-1 min-w-0">
                         <span className="text-xs text-foreground truncate block">{o.name}</span>
                         <span className="text-[10px] text-muted-foreground">{weekday}</span>
@@ -1600,8 +1600,8 @@ function QuickCreateModal({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-black border border-border rounded-2xl animate-fade-in overflow-hidden">
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-card border border-border rounded-2xl animate-fade-in overflow-hidden">
         {/* Top glow bar */}
         <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
 
@@ -2037,7 +2037,7 @@ function TaskDetailModal({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg mx-4 bg-card border border-border rounded-2xl shadow-2xl animate-fade-in overflow-hidden">
         <div className={`h-1 w-full ${task.status === "done" ? "bg-lone-success-bg" : isDeadlinePassed ? "bg-destructive" : "bg-primary"}`} />
 

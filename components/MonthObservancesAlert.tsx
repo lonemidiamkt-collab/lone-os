@@ -20,11 +20,11 @@ const MONTHS_PT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "
 const CATEGORY_VISUAL: Record<HolidayCategory, { color: string; bg: string; border: string; label: string; Icon: typeof Flag }> = {
   national:        { color: "text-lone-warning", bg: "bg-lone-warning-bg", border: "border-lone-warning-border", label: "Feriado nacional", Icon: Flag },
   estadual:        { color: "text-lone-warning", bg: "bg-lone-warning-bg", border: "border-lone-warning-border", label: "Feriado estadual", Icon: Flag },
-  municipal:       { color: "text-lime-300", bg: "bg-lime-500/10", border: "border-lime-500/20", label: "Feriado municipal", Icon: Flag },
-  comercial:       { color: "text-pink-300", bg: "bg-pink-500/10", border: "border-pink-500/20", label: "Comercial", Icon: Heart },
-  cultural:        { color: "text-purple-300", bg: "bg-purple-500/10", border: "border-purple-500/20", label: "Cultural", Icon: Sparkles },
-  awareness_month: { color: "text-rose-300", bg: "bg-rose-500/10", border: "border-rose-500/20", label: "Awareness", Icon: Heart },
-  profissao:       { color: "text-cyan-300", bg: "bg-cyan-500/10", border: "border-cyan-500/20", label: "Profissão", Icon: Sparkles },
+  municipal:       { color: "text-chart-5", bg: "bg-[color-mix(in_srgb,var(--chart-5)_10%,transparent)]", border: "border-[color-mix(in_srgb,var(--chart-5)_20%,transparent)]", label: "Feriado municipal", Icon: Flag },
+  comercial:       { color: "text-pink-500", bg: "bg-pink-500/10", border: "border-pink-500/20", label: "Comercial", Icon: Heart },
+  cultural:        { color: "text-chart-4", bg: "bg-[color-mix(in_srgb,var(--chart-4)_10%,transparent)]", border: "border-[color-mix(in_srgb,var(--chart-4)_20%,transparent)]", label: "Cultural", Icon: Sparkles },
+  awareness_month: { color: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/20", label: "Awareness", Icon: Heart },
+  profissao:       { color: "text-chart-3", bg: "bg-[color-mix(in_srgb,var(--chart-3)_10%,transparent)]", border: "border-[color-mix(in_srgb,var(--chart-3)_20%,transparent)]", label: "Profissão", Icon: Sparkles },
 };
 
 interface Props {

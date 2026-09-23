@@ -121,7 +121,7 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
                         {urlPrevia && <a href={urlPrevia} target="_blank" rel="noreferrer" className="mt-1 block w-20 overflow-hidden rounded border border-border" title="Prévia da IA — rascunho"><img src={urlPrevia} alt="" className="w-full" /></a>}
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           {feita || aberta ? (
-                            <span className="text-[10px] text-emerald-600">✓ Demanda {feita ? "criada" : "já aberta"}{feita?.designer ? ` para ${feita.designer}` : ""}{feita?.prazo ? ` · prazo ${feita.prazo.split("-").reverse().join("/")}` : ""} · <a href="/design" className="underline">abrir quadro</a></span>
+                            <span className="text-[10px] text-lone-success">✓ Demanda {feita ? "criada" : "já aberta"}{feita?.designer ? ` para ${feita.designer}` : ""}{feita?.prazo ? ` · prazo ${feita.prazo.split("-").reverse().join("/")}` : ""} · <a href="/design" className="underline">abrir quadro</a></span>
                           ) : podeCriarArte ? (
                             <button onClick={() => void criarArte(c.ad_id, v)} disabled={criando === chave} className="rounded-lg bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">{criando === chave ? "Criando…" : "🧬 Criar arte com essa variação"}</button>
                           ) : <span className="text-[10px] text-muted-foreground">Gestor de tráfego ou admin cria a arte.</span>}
@@ -160,7 +160,7 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
         <ul className="mt-2 divide-y divide-border text-[11px]">
           {d?.testes.map((t) => (
             <li key={t.id} className="flex flex-wrap items-center gap-x-3 py-1.5">
-              <span className={`rounded px-1.5 py-0.5 text-[10px] ${t.resultado?.veredito === "validada" ? "bg-emerald-500/10 text-emerald-600" : t.resultado?.veredito === "refutada" ? "bg-destructive/10 text-destructive" : t.child_ad_id ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+              <span className={`rounded px-1.5 py-0.5 text-[10px] ${t.resultado?.veredito === "validada" ? "bg-lone-success-bg text-lone-success" : t.resultado?.veredito === "refutada" ? "bg-destructive/10 text-destructive" : t.child_ad_id ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
                 {t.resultado?.veredito === "validada" ? "✓ validada" : t.resultado?.veredito === "refutada" ? "✗ refutada" : t.child_ad_id ? "no ar — medindo" : "com o designer"}
               </span>
               <span className="text-foreground/80">variável: {t.variavel}{t.muda ? ` — ${t.muda}` : ""}</span>
@@ -176,7 +176,7 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
           <p className="mb-2 text-[11px] text-muted-foreground">Só o que foi testado e medido — hipótese validada ou refutada. Nada de "achamos que".</p>
           {d && d.aprendizados.length === 0 && <p className="text-xs text-muted-foreground">Ainda nenhum veredito. O primeiro chega quando um teste de variação tiver gasto de decisão.</p>}
           <ul className="space-y-1 text-[11px]">
-            {d?.aprendizados.map((a, k) => <li key={k}><span className={a.veredito === "validada" ? "text-emerald-600" : "text-destructive"}>{a.veredito === "validada" ? "✓" : "✗"}</span> <span className="text-foreground/90">{a.hipotese ?? a.variavel}</span> <span className="text-muted-foreground">({a.variavel})</span></li>)}
+            {d?.aprendizados.map((a, k) => <li key={k}><span className={a.veredito === "validada" ? "text-lone-success" : "text-destructive"}>{a.veredito === "validada" ? "✓" : "✗"}</span> <span className="text-foreground/90">{a.hipotese ?? a.variavel}</span> <span className="text-muted-foreground">({a.variavel})</span></li>)}
           </ul>
         </section>
         <section className="rounded-xl border border-border bg-card p-4">

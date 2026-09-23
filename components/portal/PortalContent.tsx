@@ -70,41 +70,37 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
           <div className="flex items-center gap-2 mb-3">
             <span className="text-lg">✋</span>
             <h2 className="text-base font-bold">Aprove suas artes</h2>
-            <span className="text-xs font-semibold rounded-full px-2 py-0.5" style={{ background: "#2B3CFF22", color: "#7d8cff" }}>{pendentes.length}</span>
+            <span className="text-xs font-semibold rounded-full px-2 py-0.5 bg-primary/[.13] text-lone-brand-soft">{pendentes.length}</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {pendentes.map((it) => (
-              <div key={it.id} className="rounded-xl overflow-hidden" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
+              <div key={it.id} className="rounded-xl overflow-hidden bg-card border border-border">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={it.imageUrl} alt={it.title} className="w-full aspect-square object-cover" loading="lazy" />
                 <div className="p-3">
                   <p className="text-sm font-semibold truncate">{it.title}</p>
-                  <p className="text-[11px] mb-3" style={{ color: "#6B7280" }}>{it.format}{it.date ? ` · ${fmtDate(it.date)}` : ""}</p>
+                  <p className="text-[11px] mb-3 text-lone-text-tertiary">{it.format}{it.date ? ` · ${fmtDate(it.date)}` : ""}</p>
 
                   {flash?.id === it.id ? (
-                    <p className="text-sm font-medium py-2" style={{ color: "#22c55e" }}>{flash.msg}</p>
+                    <p className="text-sm font-medium py-2 text-lone-success">{flash.msg}</p>
                   ) : ajusteOpen === it.id ? (
                     <div className="space-y-2">
                       <textarea autoFocus value={ajusteText} onChange={(e) => setAjusteText(e.target.value)} rows={3}
                         placeholder="O que você quer que a gente ajuste?"
-                        className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none"
-                        style={{ background: "#060814", border: "1px solid #1A1F33", color: "#fff" }} />
+                        className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none bg-background border border-border text-foreground" />
                       <div className="flex gap-2">
                         <button disabled={busy === it.id || !ajusteText.trim()} onClick={() => act(it.id, "ajuste", ajusteText)}
-                          className="flex-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 min-h-[44px]"
-                          style={{ background: "#2B3CFF", color: "#fff" }}>{busy === it.id ? "Enviando…" : "Enviar ajuste"}</button>
+                          className="flex-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 min-h-[44px] bg-primary text-primary-foreground">{busy === it.id ? "Enviando…" : "Enviar ajuste"}</button>
                         <button onClick={() => { setAjusteOpen(null); setAjusteText(""); }}
-                          className="rounded-lg py-2.5 px-3 text-sm min-h-[44px]" style={{ color: "#8b91a1" }}>Cancelar</button>
+                          className="rounded-lg py-2.5 px-3 text-sm min-h-[44px] text-muted-foreground">Cancelar</button>
                       </div>
                     </div>
                   ) : (
                     <div className="flex gap-2">
                       {aprovacaoLigada && <button disabled={busy === it.id} onClick={() => act(it.id, "approve")}
-                        className="flex-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 min-h-[44px] flex items-center justify-center gap-1.5"
-                        style={{ background: "#22c55e", color: "#04120a" }}>✅ Aprovar</button>}
+                        className="flex-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 min-h-[44px] flex items-center justify-center gap-1.5 bg-lone-success text-background">✅ Aprovar</button>}
                       <button disabled={busy === it.id} onClick={() => setAjusteOpen(it.id)}
-                        className="flex-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 min-h-[44px]"
-                        style={{ background: "#0B0E1E", color: "#c7cbd8", border: "1px solid #1A1F33" }}>✏️ Pedir ajuste</button>
+                        className="flex-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 min-h-[44px] bg-card text-secondary-foreground border border-border">✏️ Pedir ajuste</button>
                     </div>
                   )}
                 </div>
@@ -123,16 +119,15 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {entregues.map((it) => (
-              <div key={it.id} className="rounded-xl overflow-hidden relative" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
+              <div key={it.id} className="rounded-xl overflow-hidden relative bg-card border border-border">
                 {it.aprovada && (
-                  <span className="absolute top-2 right-2 text-[10px] font-bold rounded-full px-1.5 py-0.5 z-10"
-                    style={{ background: "rgba(34,197,94,0.9)", color: "#04120a" }}>✓ Aprovada</span>
+                  <span className="absolute top-2 right-2 text-[10px] font-bold rounded-full px-1.5 py-0.5 z-10 bg-lone-success text-background">✓ Aprovada</span>
                 )}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={it.imageUrl} alt={it.title} className="w-full aspect-square object-cover" loading="lazy" />
                 <div className="p-2.5">
                   <p className="text-xs font-medium truncate">{it.title}</p>
-                  <p className="text-[10px] mt-0.5" style={{ color: "#6B7280" }}>{it.format}{it.date ? ` · ${fmtDate(it.date)}` : ""}</p>
+                  <p className="text-[10px] mt-0.5 text-lone-text-tertiary">{it.format}{it.date ? ` · ${fmtDate(it.date)}` : ""}</p>
                 </div>
               </div>
             ))}

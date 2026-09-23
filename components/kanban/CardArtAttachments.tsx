@@ -76,7 +76,7 @@ function Lightbox({
 
   return (
     <div
-      className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center"
+      className="fixed inset-0 z-[200] bg-overlay-strong flex items-center justify-center"
       onClick={onClose}
       onKeyDown={handleKey}
       tabIndex={-1}
@@ -85,7 +85,7 @@ function Lightbox({
       {/* Prev */}
       {idx > 0 && (
         <button
-          className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-[color-mix(in_srgb,var(--overlay-foreground)_10%,transparent)] hover:bg-[color-mix(in_srgb,var(--overlay-foreground)_20%,transparent)] text-overlay-foreground transition-colors"
           onClick={(e) => { e.stopPropagation(); prev(); }}
           aria-label="Arte anterior"
         >
@@ -101,14 +101,14 @@ function Lightbox({
           className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
         />
         <div className="flex items-center justify-between mt-3">
-          <span className="text-white/60 text-xs">
+          <span className="text-[color-mix(in_srgb,var(--overlay-foreground)_60%,transparent)] text-xs">
             {idx + 1} / {arts.length}
           </span>
           <a
             href={current.url}
             download
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1.5 text-xs text-white/60 hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-xs text-[color-mix(in_srgb,var(--overlay-foreground)_60%,transparent)] hover:text-overlay-foreground transition-colors"
           >
             <Download size={12} /> Baixar
           </a>
@@ -118,7 +118,7 @@ function Lightbox({
       {/* Next */}
       {idx < arts.length - 1 && (
         <button
-          className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-[color-mix(in_srgb,var(--overlay-foreground)_10%,transparent)] hover:bg-[color-mix(in_srgb,var(--overlay-foreground)_20%,transparent)] text-overlay-foreground transition-colors"
           onClick={(e) => { e.stopPropagation(); next(); }}
           aria-label="Próxima arte"
         >
@@ -128,7 +128,7 @@ function Lightbox({
 
       {/* Close */}
       <button
-        className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+        className="absolute top-4 right-4 p-2 rounded-full bg-[color-mix(in_srgb,var(--overlay-foreground)_10%,transparent)] hover:bg-[color-mix(in_srgb,var(--overlay-foreground)_20%,transparent)] text-overlay-foreground transition-colors"
         onClick={onClose}
         aria-label="Fechar (ESC)"
       >
@@ -148,7 +148,7 @@ function ConfirmRemoveDialog({
   onCancel: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[150] bg-black/60 flex items-center justify-center" onClick={onCancel}>
+    <div className="fixed inset-0 z-[150] bg-overlay flex items-center justify-center" onClick={onCancel}>
       <div
         className="bg-card border border-border rounded-xl p-5 max-w-xs w-full mx-4 space-y-4"
         onClick={(e) => e.stopPropagation()}
@@ -450,9 +450,9 @@ export default function CardArtAttachments({
                         className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide transition-all disabled:opacity-40 ${
                           ativo
                             ? t === "entrega"
-                              ? "bg-lone-success text-white"
-                              : "bg-amber-500 text-white"
-                            : "bg-black/55 text-white/70 hover:bg-black/75"
+                              ? "bg-lone-success text-background"
+                              : "bg-lone-warning text-background"
+                            : "bg-overlay text-[color-mix(in_srgb,var(--overlay-foreground)_70%,transparent)] hover:bg-overlay-strong"
                         }`}
                       >
                         {t === "referencia" ? "ref" : "entrega"}
@@ -461,7 +461,7 @@ export default function CardArtAttachments({
                   })}
                   {!art.tipo && (
                     <span
-                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-600 text-white"
+                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-destructive text-destructive-foreground"
                       title="Sem classificação — a publicação automática recusa até você marcar"
                     >
                       ?
@@ -475,7 +475,7 @@ export default function CardArtAttachments({
                 download={`arte-${idx + 1}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="absolute top-1 left-1 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary"
+                className="absolute top-1 left-1 p-1 rounded-full bg-overlay text-overlay-foreground opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary"
                 onClick={(e) => e.stopPropagation()}
                 aria-label="Baixar arte"
                 title="Baixar / abrir em tamanho grande"
@@ -485,7 +485,7 @@ export default function CardArtAttachments({
               {/* Remove button */}
               {!readOnly && (
                 <button
-                  className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/80"
+                  className="absolute top-1 right-1 p-1 rounded-full bg-overlay text-overlay-foreground opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/80"
                   onClick={(e) => { e.stopPropagation(); setConfirmRemoveId(art.id); }}
                   aria-label="Remover arte"
                 >
@@ -493,12 +493,12 @@ export default function CardArtAttachments({
                 </button>
               )}
               {/* Dica de ampliar (canto inferior direito) */}
-              <span className="absolute bottom-1 right-1 text-[8px] bg-black/60 text-white rounded px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="absolute bottom-1 right-1 text-[8px] bg-overlay text-overlay-foreground rounded px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 🔍 ampliar
               </span>
               {/* Position badge */}
               {art.id !== "legacy" && (
-                <span className="absolute bottom-1 left-1 text-[9px] bg-black/60 text-white rounded px-1 py-0.5">
+                <span className="absolute bottom-1 left-1 text-[9px] bg-overlay text-overlay-foreground rounded px-1 py-0.5">
                   {art.position + 1}
                 </span>
               )}

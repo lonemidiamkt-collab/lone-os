@@ -17,7 +17,7 @@ function Tile({ label, value, sub, tone }: { label: string; value: string | numb
   return (
     <div className="rounded-lg border border-border bg-card p-3">
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`mt-0.5 text-xl font-bold ${tone === "bad" ? "text-destructive" : tone === "good" ? "text-emerald-600" : "text-foreground"}`}>{value}</div>
+      <div className={`mt-0.5 text-xl font-bold ${tone === "bad" ? "text-destructive" : tone === "good" ? "text-lone-success" : "text-foreground"}`}>{value}</div>
       {sub && <div className="text-[10px] text-muted-foreground">{sub}</div>}
     </div>
   );

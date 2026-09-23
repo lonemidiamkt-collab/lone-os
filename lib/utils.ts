@@ -23,10 +23,10 @@ export function getStatusLabel(status: ClientStatus) {
 // Neutral badge — no colored backgrounds
 export function getStatusColor(status: ClientStatus) {
   const map: Record<ClientStatus, string> = {
-    onboarding: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20",
-    good: "text-zinc-300 bg-zinc-500/10 border-zinc-500/20",
-    average: "text-zinc-300 bg-zinc-500/10 border-zinc-500/20",
-    at_risk: "text-red-500 bg-red-500/10 border-red-500/20",
+    onboarding: "text-muted-foreground bg-muted border-border",
+    good: "text-secondary-foreground bg-muted border-border",
+    average: "text-secondary-foreground bg-muted border-border",
+    at_risk: "text-lone-danger bg-lone-danger-bg border-lone-danger-border",
   };
   return map[status];
 }
@@ -64,10 +64,10 @@ export function getAttentionColor(level: AttentionLevel) {
 
 export function getPriorityColor(priority: Priority) {
   const map: Record<Priority, string> = {
-    low: "text-zinc-500 bg-zinc-500/10 border-zinc-500/20",
-    medium: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20",
-    high: "text-zinc-300 bg-zinc-400/10 border-zinc-400/20",
-    critical: "text-red-500 bg-red-500/10 border-red-500/20",
+    low: "text-lone-text-tertiary bg-muted border-border",
+    medium: "text-muted-foreground bg-muted border-border",
+    high: "text-secondary-foreground bg-muted border-lone-border-strong",
+    critical: "text-lone-danger bg-lone-danger-bg border-lone-danger-border",
   };
   return map[priority];
 }

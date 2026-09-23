@@ -33,8 +33,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (!hydrated) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-10 h-10 rounded-xl bg-black flex items-center justify-center animate-pulse overflow-hidden">
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-10 h-10 rounded-xl bg-card flex items-center justify-center animate-pulse overflow-hidden">
           <Logo className="w-6 h-6" priority />
         </div>
       </div>

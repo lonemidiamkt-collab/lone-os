@@ -40,9 +40,9 @@ interface Summary {
 type FilterStatus = "unack" | "ack" | "all";
 
 const SEVERITY_CONFIG = {
-  critical: { label: "Crítico", color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/30", icon: ShieldAlert },
-  high: { label: "Alto", color: "text-orange-400", bg: "bg-orange-500/10", border: "border-orange-500/30", icon: AlertTriangle },
-  medium: { label: "Médio", color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/30", icon: AlertTriangle },
+  critical: { label: "Crítico", color: "text-lone-danger", bg: "bg-lone-danger-bg", border: "border-lone-danger-border", icon: ShieldAlert },
+  high: { label: "Alto", color: "text-lone-high", bg: "bg-lone-high-bg", border: "border-lone-high-border", icon: AlertTriangle },
+  medium: { label: "Médio", color: "text-lone-warning", bg: "bg-lone-warning-bg", border: "border-lone-warning-border", icon: AlertTriangle },
 };
 
 function formatDate(iso: string): string {
@@ -136,7 +136,7 @@ export default function DefesaAtivaPage() {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <ShieldAlert size={22} className="text-[#2b3cff]" />
+              <ShieldAlert size={22} className="text-primary" />
               Defesa Ativa
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
@@ -156,34 +156,34 @@ export default function DefesaAtivaPage() {
         {summary && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <SumCard label="Ativos" value={summary.unack_total} color="text-foreground" />
-            <SumCard label="Crítico" value={summary.unack_critical} color="text-red-400" />
-            <SumCard label="Alto" value={summary.unack_high} color="text-orange-400" />
-            <SumCard label="Resolvidos" value={summary.ack_total} color="text-emerald-400" />
+            <SumCard label="Crítico" value={summary.unack_critical} color="text-lone-danger" />
+            <SumCard label="Alto" value={summary.unack_high} color="text-lone-high" />
+            <SumCard label="Resolvidos" value={summary.ack_total} color="text-lone-success" />
           </div>
         )}
 
         <div className="flex items-center gap-2 flex-wrap">
           {(["unack", "ack", "all"] as FilterStatus[]).map((f) => (
             <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-lg border text-xs transition-colors ${filter === f ? "border-[#2b3cff]/50 bg-[#2b3cff]/10 text-[#2b3cff]" : "border-border text-zinc-400 hover:text-foreground"}`}>
+              className={`px-3 py-1.5 rounded-lg border text-xs transition-colors ${filter === f ? "border-primary/50 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
               {f === "unack" ? "Ativos" : f === "ack" ? "Resolvidos" : "Todos"}
             </button>
           ))}
         </div>
 
         {err && (
-          <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3">
-            <p className="text-xs text-red-400">{err}</p>
+          <div className="rounded-xl border border-lone-danger-border bg-lone-danger-bg p-3">
+            <p className="text-xs text-lone-danger">{err}</p>
           </div>
         )}
 
         {loading ? (
-          <div className="flex justify-center py-16"><Loader2 size={20} className="text-[#2b3cff] animate-spin" /></div>
+          <div className="flex justify-center py-16"><Loader2 size={20} className="text-primary animate-spin" /></div>
         ) : alerts.length === 0 ? (
           <div className="text-center py-16 space-y-2">
-            <CheckCircle size={32} className="text-emerald-500/60 mx-auto" />
+            <CheckCircle size={32} className="text-lone-success opacity-60 mx-auto" />
             <p className="text-sm text-foreground">Nenhum alerta {filter === "unack" ? "ativo" : filter === "ack" ? "resolvido" : ""}.</p>
-            <p className="text-xs text-zinc-500">Todas as contas estão dentro do esperado.</p>
+            <p className="text-xs text-muted-foreground">Todas as contas estão dentro do esperado.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -203,34 +203,34 @@ export default function DefesaAtivaPage() {
                         <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border ${cfg.border} ${cfg.color}`}>
                           {cfg.label}
                         </span>
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
                           {metricLabel(a.metric)}
                         </span>
-                        <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded ${trendDown ? "bg-red-500/10 text-red-400" : "bg-orange-500/10 text-orange-400"} border ${trendDown ? "border-red-500/20" : "border-orange-500/20"}`}>
+                        <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded ${trendDown ? "bg-lone-danger-bg text-lone-danger" : "bg-lone-high-bg text-lone-high"} border ${trendDown ? "border-lone-danger-border" : "border-lone-high-border"}`}>
                           {trendDown ? <TrendingDown size={10} /> : <TrendingUp size={10} />}
                           {a.percent_change >= 0 ? "+" : ""}{a.percent_change.toFixed(0)}%
                         </span>
                       </div>
                       <p className="text-sm text-foreground mt-2">{a.description}</p>
-                      <div className="flex items-center gap-4 mt-2 text-[11px] text-zinc-500 flex-wrap">
+                      <div className="flex items-center gap-4 mt-2 text-[11px] text-muted-foreground flex-wrap">
                         <span>Atual: <strong className="text-foreground">{formatValue(a.metric, a.current_value)}</strong></span>
                         <span>Baseline 7d: <strong className="text-foreground">{formatValue(a.metric, a.baseline_value)}</strong></span>
                         <span className="flex items-center gap-1"><Clock size={10} /> {formatDate(a.detected_at)}</span>
                       </div>
                       {a.acknowledged_at && (
-                        <p className="text-[10px] text-emerald-500 mt-1">
+                        <p className="text-[10px] text-lone-success mt-1">
                           ✓ Resolvido por {a.acknowledged_by} em {formatDate(a.acknowledged_at)}
                         </p>
                       )}
                     </div>
                     <div className="flex flex-col items-end gap-2 shrink-0">
                       <Link href={`/clients/${a.client_id}`}
-                        className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-foreground">
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
                         Ver cliente <ChevronRight size={12} />
                       </Link>
                       {!a.acknowledged_at && (
                         <button onClick={() => acknowledge(a.id)} disabled={ackingId === a.id}
-                          className="flex items-center gap-1 px-3 py-1 rounded bg-emerald-500/10 text-emerald-400 text-[11px] hover:bg-emerald-500/20 border border-emerald-500/20 disabled:opacity-50">
+                          className="flex items-center gap-1 px-3 py-1 rounded bg-lone-success-bg text-lone-success text-[11px] hover:opacity-80 border border-lone-success-border disabled:opacity-50">
                           {ackingId === a.id ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
                           Marcar resolvido
                         </button>
@@ -250,7 +250,7 @@ export default function DefesaAtivaPage() {
 function SumCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">{label}</p>
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</p>
       <p className={`${color} font-bold mt-1 text-2xl`}>{value}</p>
     </div>
   );

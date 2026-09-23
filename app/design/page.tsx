@@ -221,8 +221,8 @@ function UploadArtModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-black border border-border rounded-2xl w-full max-w-md mx-4 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 animate-fade-in" onClick={(e) => e.stopPropagation()}>
         <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
         <div className="flex items-center justify-between p-5 border-b border-border">
           <div>
@@ -1597,7 +1597,7 @@ export default function DesignPage() {
       {/* Non-delivery report modal */}
       {/* Block Reason Modal — Designer's Panic Button */}
       {blockingCard && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setBlockingCard(null); setBlockReason(""); }}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={() => { setBlockingCard(null); setBlockReason(""); }}>
           <div className="bg-card border border-destructive/20 rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border">
               <h3 className="font-semibold text-destructive text-sm flex items-center gap-2">
@@ -1660,7 +1660,7 @@ export default function DesignPage() {
       )}
 
       {nonDeliveryCard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); setNonDeliveryCustomReason(""); }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); setNonDeliveryCustomReason(""); }}>
           <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border">
               <h3 className="font-semibold text-foreground text-sm">Reportar Não Entrega</h3>
@@ -1727,7 +1727,7 @@ export default function DesignPage() {
 
       {/* Briefing Modal — with designer actions */}
       {briefingReq && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setBriefingReq(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={() => setBriefingReq(null)}>
           <div className="bg-card border border-border rounded-2xl w-full max-w-lg mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between p-5 border-b border-border">
               <div>
@@ -1884,7 +1884,7 @@ export default function DesignPage() {
                                 <ExternalLink size={12} /> Abrir referência {i + 1}
                               </div>
                             )}
-                            <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/60 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-overlay py-1 text-[10px] text-overlay-foreground opacity-0 group-hover:opacity-100 transition-opacity">
                               <Eye size={11} /> abrir
                             </span>
                           </a>
@@ -2125,7 +2125,7 @@ export default function DesignPage() {
                     {geracaoIa && (
                       <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
                         Serviu?
-                        <button onClick={() => void feedbackIa("serviu")} className="rounded border border-border px-1.5 hover:bg-emerald-500/10" title="A proposta ajudou">👍</button>
+                        <button onClick={() => void feedbackIa("serviu")} className="rounded border border-border px-1.5 hover:bg-lone-success-bg" title="A proposta ajudou">👍</button>
                         <button onClick={() => { const m = window.prompt("O que saiu errado? (ex.: logo errada, cores, texto inventado)") ?? ""; void feedbackIa("nao_serviu", m); }} className="rounded border border-border px-1.5 hover:bg-destructive/10" title="Não ajudou — diga o porquê">👎</button>
                       </span>
                     )}
@@ -2609,7 +2609,7 @@ function ClientDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end animate-fade-in" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" />
       <div
         className="relative bg-card border-l border-border w-full max-w-md h-full overflow-y-auto animate-slide-in-right"
         onClick={(e) => e.stopPropagation()}
@@ -2952,7 +2952,7 @@ function NewTaskModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-overlay backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
       <div
         onPaste={aoColar}
         onDragOver={(e) => { e.preventDefault(); setArrastando(true); }}

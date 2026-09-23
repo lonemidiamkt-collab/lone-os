@@ -30,7 +30,7 @@ interface Resposta { dia: string | null; itens: Item[]; testes?: Teste[]; brief?
 const ETAPA: Record<string, { rotulo: string; cls: string }> = {
   na_fila: { rotulo: "na fila do designer", cls: "bg-muted text-muted-foreground" }, em_producao: { rotulo: "em produção", cls: "bg-lone-warning-bg text-lone-warning" },
   entregue: { rotulo: "arte entregue — falta subir", cls: "bg-primary/10 text-primary" }, no_ar: { rotulo: "no ar — medindo", cls: "bg-primary/10 text-primary" },
-  medindo: { rotulo: "medindo (ainda sem amostra)", cls: "bg-primary/10 text-primary" }, validada: { rotulo: "✓ validada", cls: "bg-emerald-500/10 text-emerald-600" }, refutada: { rotulo: "✗ refutada", cls: "bg-destructive/10 text-destructive" },
+  medindo: { rotulo: "medindo (ainda sem amostra)", cls: "bg-primary/10 text-primary" }, validada: { rotulo: "✓ validada", cls: "bg-lone-success-bg text-lone-success" }, refutada: { rotulo: "✗ refutada", cls: "bg-destructive/10 text-destructive" },
 };
 
 const ESTADO: Record<string, { rotulo: string; cls: string }> = {
@@ -38,7 +38,7 @@ const ESTADO: Record<string, { rotulo: string; cls: string }> = {
   FATIGUE_PROBABLE: { rotulo: "Cansaço provável", cls: "bg-lone-warning-bg text-lone-warning" },
   FATIGUE_POSSIBLE: { rotulo: "Cansaço possível", cls: "bg-lone-warning-bg text-lone-warning" },
   WATCH: { rotulo: "Observar", cls: "bg-muted text-muted-foreground" },
-  HEALTHY: { rotulo: "Saudável", cls: "bg-emerald-500/10 text-emerald-600" },
+  HEALTHY: { rotulo: "Saudável", cls: "bg-lone-success-bg text-lone-success" },
 };
 const ORDEM = ["CRITICAL", "FATIGUE_PROBABLE", "FATIGUE_POSSIBLE", "WATCH", "HEALTHY"];
 const brl = (n?: number) => (n ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -123,7 +123,7 @@ export default function CriativosPage() {
           <button onClick={() => setFiltro(filtro === "vencedores" ? "todos" : "vencedores")} className={`rounded-full bg-primary/10 px-2.5 py-1 text-primary ${filtro === "vencedores" ? "ring-2 ring-primary/40" : ""}`}>🏆 Vencedores {vencedores}</button>
           <span className="ml-auto rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
             Rotulados hoje: {rotulados}/{itens.length}
-            {dados?.precisao && <> · Precisão acumulada: <span className={`font-medium ${dados.precisao.taxa >= 80 ? "text-emerald-600" : "text-foreground"}`}>{dados.precisao.taxa}%</span> ({dados.precisao.concordo}/{dados.precisao.total})</>}
+            {dados?.precisao && <> · Precisão acumulada: <span className={`font-medium ${dados.precisao.taxa >= 80 ? "text-lone-success" : "text-foreground"}`}>{dados.precisao.taxa}%</span> ({dados.precisao.concordo}/{dados.precisao.total})</>}
           </span>
         </div>
         {erro && <p className="mt-2 text-xs text-destructive">{erro}</p>}
@@ -221,7 +221,7 @@ export default function CriativosPage() {
                                   const chave = `${i.ad_id}|${v.nome}`;
                                   const feita = criadas[chave];
                                   return feita ? (
-                                    <p className="mt-1 text-[10px] text-emerald-600">✓ Demanda criada{feita.designer ? ` para ${feita.designer}` : " (cliente sem designer — cai em \"sem designer\")"} · prazo {feita.prazo.split("-").reverse().join("/")} · <a href="/design" className="underline">abrir quadro</a></p>
+                                    <p className="mt-1 text-[10px] text-lone-success">✓ Demanda criada{feita.designer ? ` para ${feita.designer}` : " (cliente sem designer — cai em \"sem designer\")"} · prazo {feita.prazo.split("-").reverse().join("/")} · <a href="/design" className="underline">abrir quadro</a></p>
                                   ) : (
                                     <button onClick={() => replicar(i.ad_id, v)} disabled={replicando === chave}
                                       className="mt-1 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
@@ -264,7 +264,7 @@ export default function CriativosPage() {
                 <div className="mt-2 flex gap-1.5">
                   {(["concordo", "discordo"] as const).map((r) => (
                     <button key={r} onClick={() => rotular(i.ad_id, r)} disabled={ocupado === i.ad_id}
-                      className={`rounded-lg px-2.5 py-1 text-[11px] transition disabled:opacity-50 ${i.rotulo === r ? (r === "concordo" ? "bg-emerald-500 text-white" : "bg-destructive text-white") : "border border-border text-muted-foreground hover:text-foreground"}`}>
+                      className={`rounded-lg px-2.5 py-1 text-[11px] transition disabled:opacity-50 ${i.rotulo === r ? (r === "concordo" ? "bg-lone-success text-background" : "bg-destructive text-destructive-foreground") : "border border-border text-muted-foreground hover:text-foreground"}`}>
                       {r === "concordo" ? "Concordo" : "Discordo"}
                     </button>
                   ))}

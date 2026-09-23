@@ -407,7 +407,7 @@ export default function Sidebar() {
       {/* Mobile backdrop */}
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-background/70 backdrop-blur-sm"
+          className="lg:hidden fixed inset-0 z-40 bg-overlay backdrop-blur-sm"
           onClick={() => setMobileOpen(false)}
         />
       )}

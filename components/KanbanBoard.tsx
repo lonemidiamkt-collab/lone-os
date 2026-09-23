@@ -115,7 +115,7 @@ export default function KanbanBoard<T extends { id: string }>({
                   <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10">
                     <button
                       onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === item.id ? null : item.id); }}
-                      className="w-6 h-6 rounded-md flex items-center justify-center bg-black/60 backdrop-blur-sm text-muted-foreground hover:text-foreground transition-all"
+                      className="w-6 h-6 rounded-md flex items-center justify-center bg-card/80 backdrop-blur-sm text-muted-foreground hover:text-foreground transition-all"
                     >
                       <MoreHorizontal size={12} />
                     </button>

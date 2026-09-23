@@ -136,7 +136,7 @@ export default function InstagramOrganico({ clientId }: { clientId: string }) {
 
       {/* Modal de mapeamento */}
       {mapOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMapOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4" onClick={() => setMapOpen(false)}>
           <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-5 max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
             <h4 className="font-semibold text-foreground mb-1">Mapear conta de Instagram</h4>
             <p className="text-[11px] text-muted-foreground mb-3">Scanner varre todas as Páginas e Business Managers que o token enxerga.</p>

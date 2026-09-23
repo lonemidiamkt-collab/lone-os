@@ -64,7 +64,7 @@ export default function NovoProcessoDialog({ onClose, onCriado }: { onClose: () 
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-overlay flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-lone-bg-card rounded-2xl border border-lone-border w-full max-w-2xl max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-lone-border sticky top-0 bg-lone-bg-card">

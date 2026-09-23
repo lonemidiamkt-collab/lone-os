@@ -59,7 +59,7 @@ export default function BroadcastsPage() {
         <Header title="Comunicados" subtitle="Acesso restrito" />
         <div className="p-6">
           <div className="card text-center py-12">
-            <AlertCircle size={32} className="mx-auto text-amber-400 mb-3" />
+            <AlertCircle size={32} className="mx-auto text-lone-warning mb-3" />
             <p className="text-sm text-muted-foreground">Apenas administradores podem acessar Comunicados.</p>
           </div>
         </div>
@@ -85,7 +85,7 @@ export default function BroadcastsPage() {
           </div>
           <button
             onClick={() => setComposerOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2b3cff] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium transition-all"
           >
             <Plus size={14} /> Novo Comunicado
           </button>
@@ -121,8 +121,8 @@ export default function BroadcastsPage() {
 function BroadcastRow({ broadcast: b }: { broadcast: Broadcast }) {
   const sentDate = b.sent_at ? new Date(b.sent_at).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
   const successRate = b.recipients_total > 0 ? Math.round((b.recipients_success / b.recipients_total) * 100) : 0;
-  const statusColor = b.status === "sent" ? "text-emerald-400" : b.status === "sending" ? "text-amber-400" : b.status === "failed" ? "text-red-400" : "text-muted-foreground";
-  const statusBg = b.status === "sent" ? "bg-emerald-500/10" : b.status === "sending" ? "bg-amber-500/10" : b.status === "failed" ? "bg-red-500/10" : "bg-muted";
+  const statusColor = b.status === "sent" ? "text-lone-success" : b.status === "sending" ? "text-lone-warning" : b.status === "failed" ? "text-lone-danger" : "text-muted-foreground";
+  const statusBg = b.status === "sent" ? "bg-lone-success-bg" : b.status === "sending" ? "bg-lone-warning-bg" : b.status === "failed" ? "bg-lone-danger-bg" : "bg-muted";
 
   return (
     <div className="card flex items-center gap-4">
@@ -140,8 +140,8 @@ function BroadcastRow({ broadcast: b }: { broadcast: Broadcast }) {
       </div>
       <div className="text-right shrink-0">
         <p className="text-xs font-semibold text-foreground">{b.recipients_success}/{b.recipients_total}</p>
-        <p className={`text-[10px] ${successRate >= 95 ? "text-emerald-400" : successRate >= 80 ? "text-amber-400" : "text-red-400"}`}>{successRate}% sucesso</p>
-        {b.recipients_failed > 0 && <p className="text-[10px] text-red-400">{b.recipients_failed} falha(s)</p>}
+        <p className={`text-[10px] ${successRate >= 95 ? "text-lone-success" : successRate >= 80 ? "text-lone-warning" : "text-lone-danger"}`}>{successRate}% sucesso</p>
+        {b.recipients_failed > 0 && <p className="text-[10px] text-lone-danger">{b.recipients_failed} falha(s)</p>}
       </div>
     </div>
   );
@@ -307,7 +307,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 bg-overlay backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
       <div className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-2xl bg-card border border-border shadow-2xl">
         {/* Header */}
         <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between z-10">
@@ -475,7 +475,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
             type="button"
             onClick={handleSend}
             disabled={testing || sending || audienceCount === 0}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#2b3cff] hover:bg-[#1a56ff] text-white text-sm font-medium transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium transition-all disabled:opacity-50"
           >
             {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
             {sending ? "Enviando..." : `Enviar para ${audienceCount}`}
@@ -486,8 +486,8 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
       {toast && (
         <div className={`fixed bottom-6 right-6 flex items-center gap-2 px-4 py-3 rounded-xl border shadow-lg animate-fade-in z-[60] ${
           toast.type === "success"
-            ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-            : "bg-red-500/15 border-red-500/30 text-red-400"
+            ? "bg-lone-success-bg border-lone-success-border text-lone-success"
+            : "bg-lone-danger-bg border-lone-danger-border text-lone-danger"
         }`}>
           {toast.type === "success" ? <Check size={14} /> : <AlertCircle size={14} />}
           <span className="text-xs font-medium">{toast.msg}</span>

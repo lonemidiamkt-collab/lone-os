@@ -114,7 +114,7 @@ export default function LegacyContractModal({ clientId, clientName, open, onClos
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={handleClose} />
       <div className="relative w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl max-h-[90vh] overflow-auto animate-fade-in">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-border sticky top-0 bg-card z-10">

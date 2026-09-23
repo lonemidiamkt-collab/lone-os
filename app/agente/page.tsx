@@ -49,11 +49,11 @@ function fmtData(iso: string): string {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 const STATUS_CLS: Record<string, string> = {
-  confirmada: "text-emerald-500", descartada: "text-destructive", pendente: "text-amber-500",
+  confirmada: "text-lone-success", descartada: "text-destructive", pendente: "text-lone-warning",
 };
 
 function Tile({ label, value, sub, tone }: { label: string; value: string | number; sub?: string; tone?: "good" | "bad" }) {
-  const cls = tone === "good" ? "text-emerald-500" : tone === "bad" ? "text-destructive" : "text-foreground";
+  const cls = tone === "good" ? "text-lone-success" : tone === "bad" ? "text-destructive" : "text-foreground";
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="text-xs text-muted-foreground">{label}</div>
@@ -117,10 +117,10 @@ export default function AgentePage() {
         <h1 className="text-2xl font-bold text-foreground">🤖 Agente Lone</h1>
         <p className="text-sm text-muted-foreground">Visão geral, aprendizado e onde melhorar.</p>
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
-          <span className={`rounded-full px-2.5 py-1 ${config.modoTeste ? "bg-amber-500/10 text-amber-600" : "bg-emerald-500/10 text-emerald-600"}`}>
+          <span className={`rounded-full px-2.5 py-1 ${config.modoTeste ? "bg-lone-warning-bg text-lone-warning" : "bg-lone-success-bg text-lone-success"}`}>
             {config.modoTeste ? "🧪 Modo teste" : "🟢 Produção"}
           </span>
-          <span className={`rounded-full px-2.5 py-1 ${config.iaOk ? "bg-emerald-500/10 text-emerald-600" : "bg-destructive/10 text-destructive"}`}>
+          <span className={`rounded-full px-2.5 py-1 ${config.iaOk ? "bg-lone-success-bg text-lone-success" : "bg-destructive/10 text-destructive"}`}>
             IA {config.iaOk ? "ok" : "off"}
           </span>
           <span className="rounded-full bg-muted px-2.5 py-1 text-muted-foreground">{config.gruposMonitorados} grupos monitorados</span>
@@ -132,7 +132,7 @@ export default function AgentePage() {
 
       {/* Pendentes — precisam do ok/não da equipe. Decidir aqui espelha o "ok" do WhatsApp. */}
       {pendentes.length > 0 && (
-        <section className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-5">
+        <section className="rounded-xl border border-lone-warning-border bg-lone-warning-bg p-5">
           <div className="mb-1 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-foreground">⏳ Esperando você ({pendentes.length})</h2>
             {erro && <span className="text-xs text-destructive">{erro}</span>}
@@ -153,7 +153,7 @@ export default function AgentePage() {
                   <button
                     onClick={() => decidir(p.id, "confirmar")}
                     disabled={busy === p.id}
-                    className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-600 disabled:opacity-50">
+                    className="rounded-lg bg-lone-success px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50">
                     {busy === p.id ? "…" : "Criar card"}
                   </button>
                   <button

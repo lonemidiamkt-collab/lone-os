@@ -162,7 +162,7 @@ function Grupo({
               <button
                 onClick={() => marcarFeita(t)}
                 title={concluida ? "Reabrir" : "Marcar como feita"}
-                className={`mt-0.5 shrink-0 w-5 h-5 rounded-md border flex items-center justify-center transition-all ${concluida ? "bg-lone-success border-lone-success-border text-white" : "border-border hover:border-lone-success hover:bg-lone-success-bg"}`}
+                className={`mt-0.5 shrink-0 w-5 h-5 rounded-md border flex items-center justify-center transition-all ${concluida ? "bg-lone-success border-lone-success-border text-background" : "border-border hover:border-lone-success hover:bg-lone-success-bg"}`}
               >
                 {concluida && <Check size={12} />}
               </button>
@@ -233,7 +233,7 @@ function NovaTarefaModal({
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4 animate-fade-in max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold text-foreground flex items-center gap-2"><ListChecks size={18} className="text-primary" /> Nova tarefa</h2>

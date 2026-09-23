@@ -133,6 +133,20 @@
     --lone-warning-icon-bg: rgba(251, 177, 60,  0.15);
     --lone-success-icon-bg: rgba(74,  222, 128, 0.15);
     --lone-info-icon-bg:    rgba(141, 164, 255, 0.15);
+
+    /* Nível "alto": entre atenção e perigo (risco de churn, severidade, jornada). */
+    --lone-high:        #fb923c;
+    --lone-high-bg:     rgba(251, 146, 60, 0.12);
+    --lone-high-border: rgba(251, 146, 60, 0.25);
+
+    /* Véu atrás de modal/drawer; "strong" = lightbox de imagem. overlay-foreground = texto
+       sobre foto/véu, branco nos dois temas. */
+    --overlay:            rgba(2, 4, 12, 0.72);
+    --overlay-strong:     rgba(0, 0, 0, 0.9);
+    --overlay-foreground: #ffffff;
+
+    /* Marca de terceiros — mesma cor nos dois temas. */
+    --whatsapp: #25d366;
   }
 
   /* ─── Light theme = base / :root (next-themes injeta .dark no html) ─── */
@@ -218,6 +232,22 @@
     --lone-warning-icon-bg: rgba(217, 119, 6, 0.12);
     --lone-success-icon-bg: rgba(22, 163, 74, 0.12);
     --lone-info-icon-bg:    rgba(43, 60, 255, 0.12);
+
+    --lone-high:        #ea580c;
+    --lone-high-bg:     rgba(234, 88, 12, 0.08);
+    --lone-high-border: rgba(234, 88, 12, 0.25);
+
+    --chart-1: #2b3cff;
+    --chart-2: #5a68ff;
+    --chart-3: #0891b2;
+    --chart-4: #7c3aed;
+    --chart-5: #16a34a;
+
+    --overlay:            rgba(24, 24, 27, 0.45);
+    --overlay-strong:     rgba(9, 9, 11, 0.88);
+    --overlay-foreground: #ffffff;
+
+    --whatsapp: #25d366;
   }
 
   * {
@@ -226,30 +256,6 @@
     scrollbar-color: rgba(255,255,255,0.06) transparent;
   }
   .light * { scrollbar-color: #d4d4d8 #fafafa; }
-
-  /* ─── Light-mode overrides ─── */
-  .light .bg-black { background-color: var(--background) !important; }
-  .light .bg-black\/50 { background-color: rgba(0,0,0,0.1) !important; }
-  .light .bg-black\/60 { background-color: rgba(0,0,0,0.12) !important; }
-  .light .bg-black\/70 { background-color: rgba(0,0,0,0.18) !important; }
-  .light .bg-black\/80 { background-color: rgba(0,0,0,0.22) !important; }
-  .light .bg-zinc-950 { background-color: var(--background) !important; }
-  .light .bg-zinc-900 { background-color: var(--secondary) !important; }
-  .light .bg-zinc-900\/80,.light .bg-zinc-900\/50,.light .bg-zinc-900\/30 { background-color: rgba(244,244,245,0.5) !important; }
-  .light .bg-zinc-800 { background-color: var(--muted) !important; }
-  .light .bg-zinc-800\/30,.light .bg-zinc-800\/50 { background-color: rgba(0,0,0,0.03) !important; }
-  .light .bg-zinc-700 { background-color: #d4d4d8 !important; }
-  .light .text-zinc-300 { color: #3f3f46 !important; }
-  .light .text-zinc-400 { color: #52525b !important; }
-  .light .text-zinc-500 { color: #71717a !important; }
-  .light .text-zinc-600 { color: #a1a1aa !important; }
-  .light .text-zinc-700 { color: #d4d4d8 !important; }
-  .light .border-zinc-600,.light .border-zinc-700,.light .border-zinc-800,.light .border-zinc-900 { border-color: var(--border) !important; }
-  .light .hover\:bg-zinc-800:hover,.light .hover\:bg-zinc-900:hover { background-color: var(--muted) !important; }
-  .light .hover\:text-zinc-300:hover,.light .hover\:text-zinc-400:hover { color: #3f3f46 !important; }
-  .light .divide-zinc-800 > * + *,.light .divide-zinc-700 > * + * { border-color: var(--border) !important; }
-  .light .ring-zinc-800,.light .ring-zinc-700 { --tw-ring-color: var(--border) !important; }
-  .light .placeholder\:text-zinc-600::placeholder,.light .placeholder\:text-zinc-500::placeholder { color: #a1a1aa !important; }
 
   body {
     @apply bg-background text-foreground antialiased;
@@ -261,8 +267,8 @@
      (o fundo chapado #060814 lê como quase-preto; o glow é o que faz parecer premium). */
   html.dark body {
     background-image:
-      radial-gradient(1100px 620px at 82% -8%, rgba(43, 60, 255, 0.16), transparent 58%),
-      radial-gradient(820px 560px at -6% 6%, rgba(43, 60, 255, 0.10), transparent 55%);
+      radial-gradient(1100px 620px at 82% -8%, rgb(var(--primary-rgb) / 0.16), transparent 58%),
+      radial-gradient(820px 560px at -6% 6%, rgb(var(--primary-rgb) / 0.10), transparent 55%);
     background-attachment: fixed;
     background-repeat: no-repeat;
   }
@@ -274,7 +280,7 @@
 
   /* Opções nativas do <select> legíveis no dark (reforço além do color-scheme: alguns browsers
      renderiam texto escuro em fundo escuro → os nomes "sumiam" na lista). */
-  html.dark select option { background-color: #0b0e1e; color: #eef0f6; }
+  html.dark select option { background-color: var(--card); color: var(--foreground); }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -287,33 +293,25 @@
   .card {
     @apply rounded-xl p-3 sm:p-4 lg:p-5;
     background: var(--card);
-    border: 0.5px solid rgba(255, 255, 255, 0.06);
+    border: 0.5px solid var(--border);
     transition: border-color 0.2s ease;
   }
-  .card:hover {
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-  .light .card {
-    background: var(--card);
-    border-color: var(--border);
-  }
+  .card:hover { border-color: var(--lone-border-strong); }
 
   /* ─── CARD GLOW — subtle top accent line only ────────────── */
   .card-glow {
     @apply rounded-xl p-5 relative overflow-hidden;
     background: var(--card);
-    border: 0.5px solid rgba(255, 255, 255, 0.06);
+    border: 0.5px solid var(--border);
   }
   .card-glow::before {
     content: ""; position: absolute;
     top: 0; left: 20%; right: 20%; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+    background: linear-gradient(90deg, transparent, var(--lone-border-strong), transparent);
   }
-  .light .card-glow { background: var(--card); border-color: var(--border); }
-  .light .card-glow::before { background: linear-gradient(90deg, transparent, rgba(0,0,0,0.04), transparent); }
 
   /* ─── CARD ACTIVE — subtle border only ──────────────────── */
-  .card-active { border-color: rgba(43, 60, 255, 0.3) !important; }
+  .card-active { border-color: rgb(var(--primary-rgb) / 0.3) !important; }
 
   /* ─── BADGE ──────────────────────────────────────────────── */
   .badge { @apply inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium tracking-normal; }
@@ -321,12 +319,12 @@
   /* ─── BUTTONS — Solid, no glow, no gradient ─────────────── */
   .btn-primary {
     @apply px-5 py-2.5 rounded-xl text-sm font-semibold;
-    background: #2b3cff;
-    color: white;
+    background: var(--primary);
+    color: var(--primary-foreground);
     border: none;
     transition: all 0.15s ease;
   }
-  .btn-primary:hover { background: #4553ff; transform: translateY(-1px); }
+  .btn-primary:hover { background: rgb(var(--primary-rgb) / 0.9); transform: translateY(-1px); }
   .btn-primary:active { transform: translateY(0); }
   .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
@@ -334,71 +332,69 @@
     @apply px-4 py-2 rounded-xl text-sm font-medium text-muted-foreground;
     border: none; transition: all 0.15s ease;
   }
-  .btn-ghost:hover { background: rgba(255,255,255,0.04); color: var(--foreground); }
+  .btn-ghost:hover { background: var(--accent); color: var(--foreground); }
 
   .btn-outline {
     @apply px-4 py-2 rounded-xl text-sm font-medium;
     background: transparent; color: var(--foreground);
-    border: 0.5px solid rgba(255, 255, 255, 0.1);
+    border: 0.5px solid var(--lone-border-strong);
     transition: all 0.15s ease;
   }
-  .btn-outline:hover { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.15); }
+  .btn-outline:hover { background: var(--accent); }
 
   /* ─── TAGS ──────────────────────────────────────────────── */
-  .tag-premium { @apply text-[#3b82f6] bg-[#2b3cff]/[0.08] border-[#2b3cff]/[0.12]; }
-  .tag-risk    { @apply text-red-400 bg-red-500/[0.08] border-red-500/[0.12]; }
-  .tag-matcon  { @apply text-zinc-400 bg-zinc-500/[0.08] border-zinc-500/[0.12]; }
+  .tag-premium { @apply text-primary bg-primary/[0.08] border-primary/[0.12]; }
+  .tag-risk    { @apply text-lone-danger bg-lone-danger-bg border-lone-danger-border; }
+  .tag-matcon  { @apply text-muted-foreground bg-muted border-border; }
 
   /* ─── LED STATUS — smaller, no heavy glow ───────────────── */
   .led { @apply w-2 h-2 rounded-full shrink-0; }
-  .led-healthy { background: #2b3cff; }
-  .led-attention { background: #f59e0b; }
-  .led-critical { background: #ef4444; animation: pulse 2s ease-in-out infinite; }
+  .led-healthy { background: var(--led-healthy); }
+  .led-attention { background: var(--led-attention); }
+  .led-critical { background: var(--led-critical); animation: pulse 2s ease-in-out infinite; }
 
   /* ─── ATTENTION LEVELS ─────────────────────────────────── */
-  .level-low      { @apply text-zinc-400 bg-zinc-500/[0.08] border-zinc-500/[0.12]; }
-  .level-medium   { @apply text-amber-400 bg-amber-500/[0.08] border-amber-500/[0.12]; }
-  .level-high     { @apply text-[#2b3cff] bg-[#2b3cff]/[0.08] border-[#2b3cff]/[0.12]; }
-  .level-critical { @apply text-red-400 bg-red-500/[0.08] border-red-500/[0.12]; }
+  .level-low      { @apply text-muted-foreground bg-muted border-border; }
+  .level-medium   { @apply text-lone-warning bg-lone-warning-bg border-lone-warning-border; }
+  .level-high     { @apply text-primary bg-primary/[0.08] border-primary/[0.12]; }
+  .level-critical { @apply text-lone-danger bg-lone-danger-bg border-lone-danger-border; }
 
   /* ─── INPUT — solid background, no blur ─────────────────── */
   .input-glass {
     @apply w-full rounded-xl px-4 py-3 text-sm outline-none;
     background: var(--muted);
-    border: 0.5px solid rgba(255, 255, 255, 0.06);
+    border: 0.5px solid var(--border);
     color: var(--foreground);
     transition: border-color 0.15s ease;
   }
   .input-glass::placeholder { color: var(--muted-foreground); }
-  .input-glass:hover { border-color: rgba(255,255,255,0.1); }
-  .input-glass:focus { border-color: #2b3cff; }
+  .input-glass:hover { border-color: var(--lone-border-strong); }
+  .input-glass:focus { border-color: var(--primary); }
   .input-glass:disabled { opacity: 0.3; cursor: not-allowed; }
 
   /* ─── METRIC CARD — subtle top line ─────────────────────── */
   .metric-card {
     @apply rounded-xl p-5 relative overflow-hidden;
     background: var(--card);
-    border: 0.5px solid rgba(255, 255, 255, 0.06);
+    border: 0.5px solid var(--border);
   }
   .metric-card::after {
     content: ""; position: absolute;
     top: -1px; left: 25%; right: 25%; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+    background: linear-gradient(90deg, transparent, var(--lone-border-strong), transparent);
   }
-  .light .metric-card { background: var(--card); border-color: var(--border); }
-  .light .metric-card::after { background: linear-gradient(90deg, transparent, rgba(0,0,0,0.03), transparent); }
 
   /* ─── KPI STATES — border color only, no shadow ─────────── */
-  .kpi-good { border-color: rgba(43, 60, 255, 0.2); }
-  .kpi-warning { border-color: rgba(245, 158, 11, 0.2); }
-  .kpi-danger { border-color: rgba(239, 68, 68, 0.25); animation: pulse-border 3s ease-in-out infinite; }
+  .kpi-good { border-color: rgb(var(--primary-rgb) / 0.2); }
+  .kpi-warning { border-color: var(--lone-warning-border); }
+  .kpi-danger { border-color: var(--lone-danger-border); animation: pulse-border 3s ease-in-out infinite; }
 
   /* ─── HOVER — border only ───────────────────────────────── */
   .glow-hover { transition: border-color 0.15s ease; }
-  .glow-hover:hover { border-color: rgba(255, 255, 255, 0.1); }
+  .glow-hover:hover { border-color: var(--lone-border-strong); }
 
   /* ─── GLASS — solid, no blur ────────────────────────────── */
-  .glass { background: var(--card); border: 0.5px solid rgba(255, 255, 255, 0.06); }
+  .glass { background: var(--card); border: 0.5px solid var(--border); }
 }
 
 /* ═══════════════════════════════════════════════════════════

@@ -29,11 +29,10 @@ export type SignedImageProps = {
 
 const DEFAULT_FALLBACK = (
   <div
-    className="flex flex-col items-center justify-center gap-1 w-full h-full rounded-lg"
-    style={{ background: "#1a1a2e" }}
+    className="flex flex-col items-center justify-center gap-1 w-full h-full rounded-lg bg-muted"
   >
-    <ImageIcon size={18} color="#6B7280" />
-    <span className="text-[10px]" style={{ color: "#6B7280" }}>Sem imagem</span>
+    <ImageIcon size={18} className="text-lone-text-tertiary" />
+    <span className="text-[10px] text-lone-text-tertiary">Sem imagem</span>
   </div>
 );
 

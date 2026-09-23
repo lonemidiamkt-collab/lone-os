@@ -452,7 +452,7 @@ export default function PendingClientsPage() {
                         {prog.missing.length > 0 && <span className="text-[9px] text-muted-foreground">faltam {prog.missing.length}</span>}
                       </div>
                       <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${prog.pct}%`, background: done ? "var(--lone-success)" : "#2b3cff" }} />
+                        <div className="h-full rounded-full transition-all" style={{ width: `${prog.pct}%`, background: done ? "var(--lone-success)" : "var(--primary)" }} />
                       </div>
                     </div>
                   );
@@ -505,7 +505,7 @@ export default function PendingClientsPage() {
                       <span className={`text-base font-bold tabular-nums ${done ? "text-lone-success" : "text-primary"}`}>{prog.pct}%</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${prog.pct}%`, background: done ? "var(--lone-success)" : "#2b3cff" }} />
+                      <div className="h-full rounded-full transition-all" style={{ width: `${prog.pct}%`, background: done ? "var(--lone-success)" : "var(--primary)" }} />
                     </div>
                     {prog.missing.length > 0 ? (
                       <div className="mt-3">
@@ -756,7 +756,7 @@ export default function PendingClientsPage() {
 
       {/* ═══ LIGHTBOX ═══ */}
       {lightbox && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+        <div className="fixed inset-0 z-50 bg-overlay-strong flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
           <div className="max-w-4xl max-h-[90vh] overflow-auto rounded-xl border border-border bg-card p-3" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3 px-1">
               <p className="text-xs text-muted-foreground">Documento</p>

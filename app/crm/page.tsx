@@ -868,7 +868,7 @@ export default function CrmPage() {
 
       {/* Modal add/editar */}
       {draft && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setDraft(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4" onClick={() => setDraft(null)}>
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-border bg-card p-5" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-foreground">{draft.id ? "Editar lead" : "Novo lead"}</h2>

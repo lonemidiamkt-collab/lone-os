@@ -196,8 +196,8 @@ function StatusBadge({ display, syncError }: { display: BalanceDisplay; syncErro
     );
   }
   const config: Record<DisplaySeverity, { label: string; cls: string }> = {
-    critical: { label: "Crítico",     cls: "bg-[rgba(226,75,74,0.12)] text-destructive border-[rgba(226,75,74,0.25)]"   },
-    warning:  { label: "Atenção",     cls: "bg-[rgba(186,117,23,0.10)] text-lone-warning border-[rgba(186,117,23,0.20)]" },
+    critical: { label: "Crítico",     cls: "bg-lone-danger-bg text-destructive border-lone-danger-border"   },
+    warning:  { label: "Atenção",     cls: "bg-lone-warning-bg text-lone-warning border-lone-warning-border" },
     review:   { label: display.primary, cls: "bg-lone-warning-bg text-lone-warning border-lone-warning-border"                     },
     ok:       { label: "Ativa",       cls: "bg-lone-success-bg text-lone-success border-lone-success-border"                 },
     paused:   { label: display.primary, cls: "bg-muted text-muted-foreground border-border"                              },
@@ -329,7 +329,7 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
     setter: typeof setWarning;
   }) => {
     const borderColor = color === "critical" ? "border-destructive/25" : "border-lone-warning/25";
-    const bgColor = color === "critical" ? "bg-[rgba(226,75,74,0.04)]" : "bg-[rgba(186,117,23,0.04)]";
+    const bgColor = color === "critical" ? "bg-lone-danger-bg" : "bg-lone-warning-bg";
     const textColor = color === "critical" ? "text-destructive" : "text-lone-warning";
     const dotColor = color === "critical" ? "bg-destructive" : "bg-lone-warning";
 
@@ -402,8 +402,8 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
                     "text-[10px] px-2.5 py-1 rounded-full border transition-all capitalize",
                     rule.channels.includes(ch)
                       ? color === "critical"
-                        ? "bg-[rgba(226,75,74,0.15)] border-[rgba(226,75,74,0.4)] text-destructive"
-                        : "bg-[rgba(186,117,23,0.15)] border-[rgba(186,117,23,0.4)] text-lone-warning"
+                        ? "bg-lone-danger-bg border-lone-danger-border text-destructive"
+                        : "bg-lone-warning-bg border-lone-warning-border text-lone-warning"
                       : "bg-surface border-border text-muted-foreground hover:border-border",
                   )}
                 >
@@ -418,7 +418,7 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4">
       <div className="bg-card border border-border rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-2xl">
         {/* Header */}
         <div className="p-5 border-b border-border flex items-start justify-between">
@@ -430,7 +430,7 @@ function AlertModal({ account, onClose, onSaved }: AlertModalProps) {
                 "text-[10px] px-2 py-0.5 rounded-full border",
                 account.is_prepaid
                   ? "bg-primary/10 border-primary/20 text-primary"
-                  : "bg-purple-500/10 border-purple-500/20 text-purple-400",
+                  : "bg-[color-mix(in_srgb,var(--chart-4)_10%,transparent)] border-[color-mix(in_srgb,var(--chart-4)_20%,transparent)] text-chart-4",
               )}>
                 {account.is_prepaid ? "Pré-pago" : "Pós-pago"}
               </span>
@@ -663,7 +663,7 @@ function AddAccountModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-4">
       <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -1145,7 +1145,7 @@ export default function BudgetsPage() {
                           "text-[9px] px-1.5 py-0.5 rounded border transition-all cursor-pointer hover:opacity-70 disabled:opacity-40",
                           account.is_prepaid
                             ? "text-primary border-primary/20 bg-primary/[0.06]"
-                            : "text-purple-400 border-purple-500/20 bg-purple-500/[0.06]",
+                            : "text-chart-4 border-[color-mix(in_srgb,var(--chart-4)_20%,transparent)] bg-[color-mix(in_srgb,var(--chart-4)_6%,transparent)]",
                         )}
                       >
                         {account.is_prepaid ? "pré" : "pós"}
@@ -1227,7 +1227,7 @@ export default function BudgetsPage() {
                         className={cn(
                           "p-1.5 rounded-lg border transition-all",
                           isCritical
-                            ? "text-destructive border-[rgba(226,75,74,0.25)] hover:bg-[rgba(226,75,74,0.10)]"
+                            ? "text-destructive border-lone-danger-border hover:bg-lone-danger-bg"
                             : "text-muted-foreground border-border hover:text-lone-success hover:border-lone-success-border",
                         )}
                       >

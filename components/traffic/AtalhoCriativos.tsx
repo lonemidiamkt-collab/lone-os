@@ -21,9 +21,9 @@ export default function AtalhoCriativos() {
   return (
     <Link href="/traffic/criativos" className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-border bg-card px-4 py-3 text-xs transition hover:border-primary/40">
       <span className="inline-flex items-center gap-1.5 font-semibold text-foreground"><HeartPulse size={14} className="text-primary" /> Inteligência Criativa <span className="font-normal text-muted-foreground">· {d.dia.split("-").reverse().join("/")}</span></span>
-      <span className="text-foreground"><b className="text-emerald-600">{vencedores.length}</b> vencedor{vencedores.length === 1 ? "" : "es"}{vencedores.length ? <span className="text-muted-foreground"> — {nomes(vencedores)}</span> : null}</span>
+      <span className="text-foreground"><b className="text-lone-success">{vencedores.length}</b> vencedor{vencedores.length === 1 ? "" : "es"}{vencedores.length ? <span className="text-muted-foreground"> — {nomes(vencedores)}</span> : null}</span>
       <span className="text-foreground"><b className="text-destructive">{criticos.length}</b> crítico{criticos.length === 1 ? "" : "s"}{criticos.length ? <span className="text-muted-foreground"> — {nomes(criticos)}</span> : null}</span>
-      {fadiga.length > 0 && <span className="text-foreground"><b className="text-amber-600">{fadiga.length}</b> com fadiga</span>}
+      {fadiga.length > 0 && <span className="text-foreground"><b className="text-lone-warning">{fadiga.length}</b> com fadiga</span>}
       <span className="text-foreground"><b>{testes.length}</b> teste{testes.length === 1 ? "" : "s"} de variação no ar</span>
       {d.precisao && <span className="text-muted-foreground">rótulos do Julio: {d.precisao.concordo}/{d.precisao.total} ({d.precisao.taxa}%)</span>}
       <span className="ml-auto text-primary">Abrir Saúde dos Criativos →</span>

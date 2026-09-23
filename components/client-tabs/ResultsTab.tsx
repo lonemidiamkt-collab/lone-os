@@ -502,7 +502,7 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
 
       {/* Add Record Modal */}
       {showAddRecord && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setShowAddRecord(false)}>
+        <div className="fixed inset-0 z-50 bg-overlay flex items-center justify-center p-4" onClick={() => setShowAddRecord(false)}>
           <div className="bg-card border border-border rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-foreground text-sm">Inserir Faturamento Mensal</h3>
@@ -566,7 +566,7 @@ export default function ResultsTab({ client, currentUser, role }: Props) {
 
       {/* Add Interaction Modal */}
       {showAddInteraction && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setShowAddInteraction(false)}>
+        <div className="fixed inset-0 z-50 bg-overlay flex items-center justify-center p-4" onClick={() => setShowAddInteraction(false)}>
           <div className="bg-card border border-border rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-foreground text-sm">Registrar Interacao</h3>

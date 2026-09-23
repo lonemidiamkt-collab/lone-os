@@ -11,11 +11,14 @@ interface Resumo { alcance: number | null; alcanceJanelaDias?: number | null; se
 interface Audiencia { generoMascPct: number | null; generoFemPct: number | null; idades: { faixa: string; pct: number }[]; cidades: { nome: string; pct: number }[] }
 interface Snap { conta?: { username: string; seguidores: number | null; posts: number | null }; resumo?: Resumo; audiencia?: Audiencia; posts?: Post[]; fonte?: "owned" | "publico" }
 
+// Rosa da marca Instagram (exceção de marca, igual nos dois temas).
+const IG_PINK = "#c13584";
+
 function Bar({ label, pct, color, max = 100 }: { label: string; pct: number; color: string; max?: number }) {
   return (
     <div className="flex items-center gap-2 mb-1.5">
-      <span className="text-[11px] shrink-0" style={{ width: 58, color: "#8b91a1" }}>{label}</span>
-      <div className="flex-1 rounded-full overflow-hidden" style={{ height: 6, background: "#1A1F33" }}>
+      <span className="text-[11px] shrink-0 text-muted-foreground" style={{ width: 58 }}>{label}</span>
+      <div className="flex-1 rounded-full overflow-hidden bg-border" style={{ height: 6 }}>
         <div className="h-full rounded-full" style={{ width: `${Math.max(Math.round((pct / max) * 100), 3)}%`, background: color }} />
       </div>
       <span className="text-[11px] font-bold text-right" style={{ width: 42 }}>{pct.toFixed(1)}%</span>
@@ -50,11 +53,11 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
   // não havia resultado. Agora a aba explica o que falta e dá o caminho.
   if (hide) {
     return (
-      <div className="mb-6 lg:mb-8 rounded-xl p-6 text-center" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
-        <p className="text-sm font-semibold mb-1" style={{ color: "#c9ced9" }}>
+      <div className="mb-6 lg:mb-8 rounded-xl p-6 text-center bg-card border border-border">
+        <p className="text-sm font-semibold mb-1 text-secondary-foreground">
           Instagram ainda não conectado
         </p>
-        <p className="text-xs leading-relaxed" style={{ color: "#8b91a1" }}>
+        <p className="text-xs leading-relaxed text-muted-foreground">
           Assim que a gente conectar o perfil, esta aba passa a mostrar seguidores, alcance,
           engajamento e os posts que mais performaram.
           <br />
@@ -88,12 +91,11 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
         <div className="flex items-center gap-2">
           <span className="text-lg">📸</span>
           <h2 className="text-base font-bold">Instagram</h2>
-          {data?.conta?.username && <span className="text-xs" style={{ color: "#6B7280" }}>@{data.conta.username}</span>}
+          {data?.conta?.username && <span className="text-xs text-lone-text-tertiary">@{data.conta.username}</span>}
         </div>
-        <div className="flex gap-0.5 rounded-full p-0.5" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
+        <div className="flex gap-0.5 rounded-full p-0.5 bg-card border border-border">
           {PERIODOS.map(([p, l]) => (
-            <button key={p} onClick={() => setPeriod(p)} className="rounded-full text-xs font-semibold px-3 py-1.5 min-h-[36px]"
-              style={period === p ? { background: "#2B3CFF", color: "#fff" } : { color: "#8b91a1" }}>{l}</button>
+            <button key={p} onClick={() => setPeriod(p)} className={`rounded-full text-xs font-semibold px-3 py-1.5 min-h-[36px] ${period === p ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>{l}</button>
           ))}
         </div>
       </div>
@@ -101,15 +103,15 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
       {/* Resumo do período */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         {cards.map((k) => (
-          <div key={k.l} className="rounded-xl p-4" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
-            <p className="text-xs mb-1" style={{ color: "#6B7280" }}>{k.l}</p>
+          <div key={k.l} className="rounded-xl p-4 bg-card border border-border">
+            <p className="text-xs mb-1 text-lone-text-tertiary">{k.l}</p>
             <p className="text-2xl font-bold">{loading && !data ? "…" : k.v}</p>
           </div>
         ))}
       </div>
 
       {isPublico && (
-        <p className="text-[11px] mb-4" style={{ color: "#6B7280" }}>
+        <p className="text-[11px] mb-4 text-lone-text-tertiary">
           📊 Alcance, seguidores ganhos e público (gênero/idade/cidades) ficam disponíveis quando o perfil é conectado ao nosso Business Manager.
         </p>
       )}
@@ -117,46 +119,46 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
       {/* O alcance do perfil conta também quem chegou por anúncio — sem dizer isso, o cliente soma
           com o alcance do relatório de tráfego e conta a mesma pessoa duas vezes. */}
       {!isPublico && r?.alcance != null && (
-        <p className="text-[11px] mb-4" style={{ color: "#6B7280" }}>
+        <p className="text-[11px] mb-4 text-lone-text-tertiary">
           O alcance do perfil inclui quem chegou pelos anúncios — não some com o alcance do tráfego pago.
         </p>
       )}
 
       {/* Sem post no período, os números da conta sozinhos dão a impressão de que houve trabalho. */}
       {!loading && data && (r?.postsNoPeriodo ?? 0) === 0 && (
-        <p className="text-[11px] mb-4" style={{ color: "#8b91a1" }}>
-          <strong style={{ color: "#c9ced9" }}>Nenhum post publicado neste período.</strong> Os números acima são do perfil como um todo.
+        <p className="text-[11px] mb-4 text-muted-foreground">
+          <strong className="text-secondary-foreground">Nenhum post publicado neste período.</strong> Os números acima são do perfil como um todo.
         </p>
       )}
 
       {/* Público do perfil (gênero / idade / cidades) */}
       {temAudiencia && (
-        <div className="rounded-xl p-4 mb-3" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
-          <p className="text-xs font-semibold mb-3" style={{ color: "#8b91a1" }}>Público do perfil</p>
+        <div className="rounded-xl p-4 mb-3 bg-card border border-border">
+          <p className="text-xs font-semibold mb-3 text-muted-foreground">Público do perfil</p>
           <div className="grid gap-5 sm:grid-cols-3">
             {a!.generoMascPct != null && (
               <div>
-                <p className="text-[10px] uppercase tracking-wide mb-2" style={{ color: "#6B7280" }}>Gênero</p>
-                <Bar label="Homens" pct={a!.generoMascPct} color="#2B3CFF" />
-                {a!.generoFemPct != null && <Bar label="Mulheres" pct={a!.generoFemPct} color="#c13584" />}
+                <p className="text-[10px] uppercase tracking-wide mb-2 text-lone-text-tertiary">Gênero</p>
+                <Bar label="Homens" pct={a!.generoMascPct} color="var(--primary)" />
+                {a!.generoFemPct != null && <Bar label="Mulheres" pct={a!.generoFemPct} color={IG_PINK} />}
               </div>
             )}
             {a!.idades.length > 0 && (
               <div>
-                <p className="text-[10px] uppercase tracking-wide mb-2" style={{ color: "#6B7280" }}>Faixa etária</p>
+                <p className="text-[10px] uppercase tracking-wide mb-2 text-lone-text-tertiary">Faixa etária</p>
                 {a!.idades.slice(0, 5).map((x) => (
-                  <Bar key={x.faixa} label={x.faixa} pct={x.pct} color="#2B3CFF" max={Math.max(...a!.idades.map((i) => i.pct), 1)} />
+                  <Bar key={x.faixa} label={x.faixa} pct={x.pct} color="var(--primary)" max={Math.max(...a!.idades.map((i) => i.pct), 1)} />
                 ))}
               </div>
             )}
             {a!.cidades.length > 0 && (
               <div>
-                <p className="text-[10px] uppercase tracking-wide mb-2" style={{ color: "#6B7280" }}>Principais cidades</p>
+                <p className="text-[10px] uppercase tracking-wide mb-2 text-lone-text-tertiary">Principais cidades</p>
                 {a!.cidades.map((c, i) => (
                   <div key={c.nome} className="flex items-center gap-2 mb-2">
-                    <span className="flex items-center justify-center text-[9px] font-bold rounded-full shrink-0" style={{ width: 16, height: 16, background: "#c1358422", color: "#c13584" }}>{i + 1}</span>
+                    <span className="flex items-center justify-center text-[9px] font-bold rounded-full shrink-0" style={{ width: 16, height: 16, background: `color-mix(in srgb, ${IG_PINK} 13%, transparent)`, color: IG_PINK }}>{i + 1}</span>
                     <span className="flex-1 text-xs truncate">{c.nome}</span>
-                    <span className="text-[11px] font-semibold" style={{ color: "#8b91a1" }}>{c.pct.toFixed(1)}%</span>
+                    <span className="text-[11px] font-semibold text-muted-foreground">{c.pct.toFixed(1)}%</span>
                   </div>
                 ))}
               </div>
@@ -168,13 +170,13 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
       {/* Posts mais engajados do período */}
       {(data?.posts?.length ?? 0) > 0 && (
         <>
-          <p className="text-xs font-semibold mb-2" style={{ color: "#8b91a1" }}>5 melhores posts</p>
+          <p className="text-xs font-semibold mb-2 text-muted-foreground">5 melhores posts</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             {(data!.posts ?? []).slice(0, 5).map((p) => (
-              <a key={p.id} href={p.permalink ?? "#"} target="_blank" rel="noopener noreferrer" className="rounded-xl overflow-hidden block" style={{ background: "#0B0E1E", border: "1px solid #1A1F33" }}>
+              <a key={p.id} href={p.permalink ?? "#"} target="_blank" rel="noopener noreferrer" className="rounded-xl overflow-hidden block bg-card border border-border">
                 {p.thumb
                   ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={p.thumb} alt="" className="w-full aspect-square object-cover" loading="lazy" />
-                  : <div className="w-full aspect-square" style={{ background: "#1A1F33" }} />}
+                  : <div className="w-full aspect-square bg-border" />}
                 <div className="p-2 flex items-center gap-3 text-xs flex-wrap">
                   <span>❤️ {nf(p.curtidas)}</span>
                   <span>💬 {nf(p.comentarios)}</span>

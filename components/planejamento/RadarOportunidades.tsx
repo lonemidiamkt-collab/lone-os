@@ -105,7 +105,7 @@ export default function RadarOportunidades() {
                 <article key={p.id} className="rounded-xl border border-border bg-card p-4">
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <TrendingUp size={13} className="text-amber-500" />
+                      <TrendingUp size={13} className="text-lone-warning" />
                       <span className="truncate" title={p.tendencia}>{p.tendencia}</span>
                     </div>
                     <div className="flex shrink-0 gap-1.5 text-[11px]">
@@ -189,7 +189,7 @@ export default function RadarOportunidades() {
                       <button
                         onClick={() => decidir(p.id, "usada")}
                         disabled={ocupado === p.id}
-                        className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+                        className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-lone-success text-background hover:opacity-90 disabled:opacity-50"
                       >
                         <Check size={14} /> Vou usar
                       </button>

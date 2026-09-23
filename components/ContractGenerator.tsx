@@ -580,7 +580,7 @@ export default function ContractGenerator({ client, currentUser }: Props) {
 
       {/* Generator Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => { setShowForm(false); setPreviewUrl(null); setRenewFrom(null); }}>
+        <div className="fixed inset-0 z-50 bg-overlay flex items-center justify-center p-4" onClick={() => { setShowForm(false); setPreviewUrl(null); setRenewFrom(null); }}>
           <div className="bg-card border border-border rounded-xl max-w-lg w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-foreground text-sm">{renewFrom ? `Renovar Contrato V${renewFrom.version}` : "Gerar Contrato"}</h3>

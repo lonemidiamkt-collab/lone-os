@@ -60,7 +60,7 @@ function BoolBadge({ label, value }: { label: string; value: boolean | null | un
   if (value === null || value === undefined) return null;
   return (
     <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full mr-2 mb-1 ${
-      value ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-500/10 text-zinc-400"
+      value ? "bg-lone-success-bg text-lone-success" : "bg-muted text-muted-foreground"
     }`}>
       {value ? "✓" : "✗"} {label}
     </span>
@@ -68,7 +68,7 @@ function BoolBadge({ label, value }: { label: string; value: boolean | null | un
 }
 
 function CompletenessBar({ pct }: { pct: number }) {
-  const color = pct >= 70 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-zinc-500";
+  const color = pct >= 70 ? "bg-lone-success" : pct >= 40 ? "bg-lone-warning" : "bg-muted-foreground";
   return (
     <div className="flex items-center gap-3 mb-5 p-3 bg-muted/40 rounded-xl border border-border">
       <div className="flex-1 h-2 bg-border rounded-full overflow-hidden">
@@ -302,7 +302,7 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
       <p className="text-xs font-medium text-muted-foreground mb-1">{text}</p>
     );
     const hint = (text: string) => (
-      <p className="text-[11px] text-zinc-600 mt-0.5">{text}</p>
+      <p className="text-[11px] text-lone-text-disabled mt-0.5">{text}</p>
     );
 
     return (
@@ -332,7 +332,7 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
         </div>
 
         {saveError && (
-          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
+          <div className="p-3 bg-lone-danger-bg border border-lone-danger-border rounded-lg text-sm text-lone-danger">
             {saveError}
           </div>
         )}
@@ -403,7 +403,7 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
         {/* ── Interno ────────────────────────────────────────── */}
         <div className="card space-y-4">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Interno <span className="text-zinc-600 normal-case font-normal">(só staff, nunca exibido ao cliente)</span>
+            Interno <span className="text-lone-text-disabled normal-case font-normal">(só staff, nunca exibido ao cliente)</span>
           </h3>
           <div>{label("Observações internas")}{ta("observacoes_internas", 3, "Contexto sensível, histórico de conflitos, acordos informais…")}</div>
         </div>
@@ -519,7 +519,7 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
 
           {/* Interno — só staff */}
           {briefing.observacoes_internas && (role === "admin" || role === "manager" || role === "traffic" || role === "social" || role === "designer") && (
-            <div className="card border-amber-500/20">
+            <div className="card border-lone-warning-border">
               <Section title="Interno (apenas staff)">
                 <Field label="" value={briefing.observacoes_internas} />
               </Section>

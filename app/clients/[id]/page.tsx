@@ -1711,7 +1711,7 @@ export default function ClientDetailPage() {
 
       {/* ── SOLICITAR DESIGN MODAL ─────────────────────────────────────── */}
       {showDesignReqForm && client && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowDesignReqForm(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={() => setShowDesignReqForm(false)}>
           <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border">
               <h3 className="font-semibold text-foreground text-sm">Solicitar Design</h3>
@@ -1798,7 +1798,7 @@ export default function ClientDetailPage() {
 
       {/* Delete Client Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setShowDeleteModal(false)}>
+        <div className="fixed inset-0 z-50 bg-overlay flex items-center justify-center p-4" onClick={() => setShowDeleteModal(false)}>
           <div className="bg-card border border-border rounded-xl p-6 max-w-sm w-full space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-destructive/15 flex items-center justify-center">

@@ -47,6 +47,16 @@ Tudo abaixo é regra de aplicação, não sugestão.
 - Texto: `text-lone-text-primary` `text-lone-text-secondary` `text-lone-text-tertiary` `text-lone-text-disabled`
 - Marca: `text-lone-brand` `bg-lone-brand-bg-soft`
 - Status: `text-lone-danger|warning|success|info` + fundos tintados prontos `bg-lone-danger-bg` (idem warning/success/info) e bordas `border-lone-danger-border` etc.
+- Nível "alto" (entre atenção e perigo — risco de churn, severidade): `text-lone-high`, `bg-lone-high-bg`, `border-lone-high-border`.
+- Texto sobre fundo sólido `bg-lone-success`/`bg-lone-warning`: use `text-background` (o verde/amarelo do escuro são claros demais pra branco).
+
+**Véu, mídia, marca e gráficos:**
+- Véu atrás de modal/drawer: `bg-overlay`; lightbox de imagem: `bg-overlay-strong`; texto/ícone sobre foto ou véu: `text-overlay-foreground` (branco nos dois temas).
+- WhatsApp: `bg-whatsapp` / `text-whatsapp`.
+- Séries de gráfico e cores de categoria: `chart-1..5` (`bg-chart-4`, ou `"var(--chart-1)"` em prop de recharts/SVG — CSS var funciona em `fill`/`stroke`).
+- Cor vinda de dado (config de métrica etc.): string `"var(--lone-warning)"`; tinta de cor dinâmica: `color-mix(in srgb, var(--x) 15%, transparent)`.
+
+**Exceções permitidas (única cor literal aceita):** logo/cor de marca de terceiros (Facebook, Instagram, Google); HTML de documento impresso/PDF/e-mail (ex.: `app/relatorio/[token]`, `lib/**/*-pdf.ts`); cor que é DADO do usuário (color picker, cor da marca do cliente); fundo branco atrás de QR code; `themeColor` em `app/layout.tsx`; categorias além das 5 de `chart-*` (tom 500). Sempre com um comentário curto dizendo por quê.
 
 **Opacidade:** os tokens **`primary, foreground, background, card, muted, secondary, destructive`** são channelizados (canais RGB `--*-rgb` + `rgb(var(--x-rgb) / <alpha-value>)` no `tailwind.config.ts`), então **`bg-primary/15`, `bg-muted/30`, `text-foreground/50` etc. funcionam**. Os demais (accent, popover, sidebar, os `-foreground`, e os `lone-*`) **NÃO** são channelizados — pra fundo tintado deles use os tokens `*-bg` prontos (`bg-lone-danger-bg`), não `bg-accent/15`. Ao precisar de opacidade num token novo, channelize-o do mesmo jeito (hex→RGB no `--x-rgb` dos dois temas).
 
@@ -94,5 +104,5 @@ por isso). Classes cruas abaixo = fallback quando o componente base não serve.
 - [ ] Sem glow/neon; sombra no máximo `shadow-sm`.
 - [ ] CSS compila (`npx tailwindcss -i app/globals.css -o /tmp/x.css`).
 
-## 8. Migração em andamento
-A UI legada ainda tem cor hard-coded (≈81 arquivos). Há um shim temporário `.light .bg-zinc-* { ... !important }` em `globals.css` que tampa parte disso no claro — **objetivo é deletar esse shim** convertendo os componentes pra token. Ao tocar numa tela legada, converta-a (cor → token) como parte da tarefa e remova as linhas de shim correspondentes.
+## 8. Migração concluída (set/2026)
+As ~780 cores fixas de `app/` e `components/` viraram token e o shim `.light .bg-zinc-* { !important }` foi **apagado** de `globals.css`, junto com o override da paleta `zinc` no `tailwind.config.ts`. Não existe mais rede de segurança: classe `bg-black`, `bg-zinc-*`, `text-white`, `text-emerald-400` etc. volta a quebrar o tema claro. Rode o grep do §7 em todo arquivo tocado.

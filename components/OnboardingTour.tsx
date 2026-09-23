@@ -154,7 +154,7 @@ export default function OnboardingTour() {
       }`}
     >
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" />
 
       {/* Tooltip */}
       <div className={`absolute ${getTooltipPosition()} w-full max-w-md mx-4`}>

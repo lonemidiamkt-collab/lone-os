@@ -3,7 +3,6 @@ import typography from "@tailwindcss/typography";
 import tailwindcssAnimate from "tailwindcss-animate";
 
 const config: Config = {
-  // Dark-only, no toggle needed
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -12,20 +11,6 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        /* Override zinc palette → Cyber-Dark (Black & Blue) */
-        zinc: {
-          50:  "#f0f0f4",
-          100: "#dcdce4",
-          200: "#b0b0c0",
-          300: "#8a8a9e",
-          400: "#6a6a80",
-          500: "#4a4a5e",
-          600: "#333344",
-          700: "#222230",
-          800: "#141420",
-          900: "#0a0a10",
-          950: "#050508",
-        },
         background: "rgb(var(--background-rgb) / <alpha-value>)",
         foreground: "rgb(var(--foreground-rgb) / <alpha-value>)",
         card: {
@@ -97,6 +82,23 @@ const config: Config = {
           info:    "var(--lone-info)",
           "info-bg":     "var(--lone-info-bg)",
           "info-border": "var(--lone-info-border)",
+          high: "var(--lone-high)",
+          "high-bg":     "var(--lone-high-bg)",
+          "high-border": "var(--lone-high-border)",
+        },
+
+        overlay: {
+          DEFAULT: "var(--overlay)",
+          strong: "var(--overlay-strong)",
+          foreground: "var(--overlay-foreground)",
+        },
+        whatsapp: "var(--whatsapp)",
+        chart: {
+          1: "var(--chart-1)",
+          2: "var(--chart-2)",
+          3: "var(--chart-3)",
+          4: "var(--chart-4)",
+          5: "var(--chart-5)",
         },
 
         sidebar: {

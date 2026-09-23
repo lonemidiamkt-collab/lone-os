@@ -48,7 +48,7 @@ export default function DeleteConfirmModal({
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" />
       <div
         onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-md bg-card border border-destructive/30 rounded-2xl overflow-hidden"

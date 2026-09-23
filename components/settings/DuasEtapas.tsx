@@ -88,6 +88,7 @@ export default function DuasEtapas({ obrigatorio }: { obrigatorio: boolean }) {
           </ol>
           <div className="flex flex-wrap items-start gap-4">
             {/* O GoTrue devolve o QR como SVG em data: URI */}
+            {/* fundo branco fixo: leitor de QR precisa de contraste nos dois temas */}
             <img src={qr.qr} alt="QR code do autenticador" width={168} height={168} className="rounded-lg border border-border bg-white p-2" />
             <div className="flex-1 min-w-[200px] space-y-2">
               <button type="button" onClick={() => setMostrarSegredo((v) => !v)} className="text-[11px] text-primary hover:underline">

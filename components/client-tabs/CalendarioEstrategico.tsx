@@ -17,9 +17,9 @@ interface Objetivo { objetivoPrincipal: string; narrativa: string; mixPilares: {
 interface Plano { diagnostico: unknown; objetivo: Objetivo; decisoes: Decisao[] }
 
 const PILAR_COR: Record<string, string> = {
-  autoridade: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
-  aproximacao: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-  comercial: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  autoridade: "bg-primary/15 text-primary",
+  aproximacao: "bg-lone-warning-bg text-lone-warning",
+  comercial: "bg-lone-success-bg text-lone-success",
 };
 
 export default function CalendarioEstrategico({ clientId }: { clientId: string }) {

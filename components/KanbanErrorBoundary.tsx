@@ -56,7 +56,7 @@ export default class KanbanErrorBoundary extends React.Component<Props, State> {
             Algo deu errado ao renderizar. O resto do app continua funcionando.
           </p>
           {process.env.NODE_ENV !== "production" && (
-            <pre className="text-[10px] text-destructive/70 mt-2 overflow-auto max-h-32 bg-black/40 rounded p-2 whitespace-pre-wrap break-all">
+            <pre className="text-[10px] text-destructive/70 mt-2 overflow-auto max-h-32 bg-muted rounded p-2 whitespace-pre-wrap break-all">
               {this.state.error.message}
             </pre>
           )}

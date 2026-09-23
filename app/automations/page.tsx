@@ -179,7 +179,7 @@ export default function AutomationsPage() {
                   <input type="number" min="1"
                     value={triggerConfig[phase.id] || phase.defaultHours}
                     onChange={(e) => setTriggerConfig((prev) => ({ ...prev, [phase.id]: e.target.value }))}
-                    className="w-16 bg-black border border-border rounded-lg px-2 py-1.5 text-xs text-foreground text-center focus:border-primary/50 outline-none" />
+                    className="w-16 bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground text-center focus:border-primary/50 outline-none" />
                   <span className="text-[10px] text-muted-foreground">h</span>
                 </div>
               </div>
@@ -358,8 +358,8 @@ export default function AutomationsPage() {
       {/* Create / Edit Modal */}
       {showCreate && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setShowCreate(false); setEditingRule(null); }} />
-          <div className="relative w-full max-w-lg mx-4 bg-black border border-border rounded-2xl shadow-lg animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={() => { setShowCreate(false); setEditingRule(null); }} />
+          <div className="relative w-full max-w-lg mx-4 bg-card border border-border rounded-2xl shadow-lg animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
             <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/30 to-transparent shrink-0" />
 
             <div className="p-6 space-y-5 overflow-y-auto flex-1">

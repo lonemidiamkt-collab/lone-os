@@ -144,7 +144,7 @@ export default function FeedPrioridades() {
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5 sm:flex-col sm:items-stretch">
                   {link && <a href={link} className="rounded-lg bg-primary px-3 py-1.5 text-center text-xs font-medium text-primary-foreground transition hover:bg-primary/90">Abrir</a>}
-                  <button onClick={() => decidir(i.id, "executada")} disabled={ocupado === i.id} className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-600 disabled:opacity-50">Feito</button>
+                  <button onClick={() => decidir(i.id, "executada")} disabled={ocupado === i.id} className="rounded-lg bg-lone-success px-3 py-1.5 text-xs font-medium text-background transition hover:opacity-90 disabled:opacity-50">Feito</button>
                   <button onClick={() => decidir(i.id, "ignorada")} disabled={ocupado === i.id} className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-muted disabled:opacity-50">Ignorar</button>
                   <button onClick={() => decidir(i.id, "incorreta")} disabled={ocupado === i.id} className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-50" title="O dado está errado ou a leitura não faz sentido — isso ensina o motor">Incorreta</button>
                 </div>

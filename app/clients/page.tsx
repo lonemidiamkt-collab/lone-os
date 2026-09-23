@@ -370,7 +370,7 @@ export default function ClientsPage() {
       )}
 
       {pauseTarget && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !lifecycleBusy && setPauseTarget(null)}>
+        <div className="fixed inset-0 z-50 bg-overlay backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !lifecycleBusy && setPauseTarget(null)}>
           <div className="w-full max-w-md bg-card border border-border rounded-2xl p-5 animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2"><Pause size={14} className="text-lone-warning" /> Pausar {pauseTarget.name}</h3>
             <p className="text-xs text-muted-foreground mt-1.5">
@@ -396,12 +396,12 @@ export default function ClientsPage() {
 
       {archiveTarget && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4"
           onClick={() => !lifecycleBusy && setArchiveTarget(null)}
         >
           <div className="bg-card border border-border rounded-xl w-full max-w-md p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2 mb-1">
-              <Archive size={16} className="text-amber-500" />
+              <Archive size={16} className="text-lone-warning" />
               <h3 className="font-semibold text-foreground">Arquivar cliente</h3>
             </div>
             <p className="text-sm text-muted-foreground mb-3">
@@ -409,12 +409,12 @@ export default function ClientsPage() {
               toda a automação (mensagens, relatórios, sync). O histórico é mantido e pode ser reativado.
             </p>
             <label className="text-xs text-muted-foreground">
-              Por que o cliente saiu? <span className="text-amber-500">obrigatório</span>
+              Por que o cliente saiu? <span className="text-lone-warning">obrigatório</span>
             </label>
             <select
               value={archiveCategory}
               onChange={(e) => setArchiveCategory(e.target.value as MotivoSaida | "")}
-              className="w-full mt-1 mb-3 bg-muted rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-amber-500"
+              className="w-full mt-1 mb-3 bg-muted rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-lone-warning"
             >
               <option value="">Selecione o motivo…</option>
               {MOTIVOS_LISTA.map(([valor, rotulo]) => (
@@ -430,7 +430,7 @@ export default function ClientsPage() {
               onChange={(e) => setArchiveReason(e.target.value)}
               rows={3}
               placeholder="Ex.: achou caro depois do reajuste; resultado caiu nos últimos 2 meses…"
-              className="w-full mt-1 bg-muted rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-amber-500 resize-none"
+              className="w-full mt-1 bg-muted rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-lone-warning resize-none"
             />
             {lifecycleError && <p className="text-xs text-destructive mt-2">{lifecycleError}</p>}
             <div className="flex justify-end gap-2 mt-4">
@@ -441,7 +441,7 @@ export default function ClientsPage() {
                 onClick={confirmArchive}
                 disabled={lifecycleBusy || !archiveCategory || (archiveCategory === "outro" && archiveReason.trim().length < 3)}
                 title={!archiveCategory ? "Escolha o motivo da saída" : undefined}
-                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium bg-amber-500 text-black hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium bg-lone-warning text-background hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {lifecycleBusy ? <Loader2 className="animate-spin" size={14} /> : <Archive size={14} />}
                 Arquivar
@@ -462,7 +462,7 @@ export default function ClientsPage() {
               {[
                 { label: isOperator ? "Meus Clientes" : "Total de Clientes", value: filtered.length, color: "text-foreground", bg: "bg-muted" },
                 { label: "Bons Resultados", value: filtered.filter((c) => c.status === "good").length, color: "text-primary", bg: "bg-primary/10" },
-                { label: "Em Risco (Churn)", value: filtered.filter((c) => c.status === "at_risk").length, color: "text-red-500", bg: "bg-red-500/10" },
+                { label: "Em Risco (Churn)", value: filtered.filter((c) => c.status === "at_risk").length, color: "text-lone-danger", bg: "bg-lone-danger-bg" },
                 { label: "Em Onboarding", value: filtered.filter((c) => c.status === "onboarding").length, color: "text-primary", bg: "bg-primary/10" },
               ].map((stat) => (
                 <div key={stat.label} className={`rounded-xl p-4 ${stat.bg} border border-border`}>
@@ -505,20 +505,20 @@ export default function ClientsPage() {
             )}
 
             {isAdmin && drafts.length > 0 && (
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4 space-y-3">
+              <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Clock size={14} className="text-amber-500" />
-                    <h3 className="text-sm font-semibold text-amber-400">
+                    <Clock size={14} className="text-lone-warning" />
+                    <h3 className="text-sm font-semibold text-lone-warning">
                       Cadastros Pendentes ({drafts.length})
                     </h3>
                   </div>
-                  <Link href="/clients/pending" className="text-xs text-[#2b3cff] hover:underline flex items-center gap-1">
+                  <Link href="/clients/pending" className="text-xs text-primary hover:underline flex items-center gap-1">
                     Revisar todos <ExternalLink size={10} />
                   </Link>
                 </div>
                 {draftActionError && (
-                  <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-3 py-2">{draftActionError}</p>
+                  <p className="text-xs text-lone-danger bg-lone-danger-bg border border-lone-danger-border rounded-md px-3 py-2">{draftActionError}</p>
                 )}
                 <div className="space-y-2">
                   {drafts.map((draft) => (
@@ -526,26 +526,26 @@ export default function ClientsPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground">{draft.name}</p>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] text-zinc-500">{draft.industry}</span>
+                          <span className="text-[10px] text-muted-foreground">{draft.industry}</span>
                           {draft.draftStatus === "pending_invite" && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border flex items-center gap-1">
                               <Send size={8} /> Link enviado
                             </span>
                           )}
                           {draft.draftStatus === "awaiting_approval" && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#2b3cff]/10 text-[#2b3cff] border border-[#2b3cff]/20 flex items-center gap-1">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
                               <Check size={8} /> Formulario recebido
                             </span>
                           )}
                           {draft.contactName && (
-                            <span className="text-[10px] text-zinc-500">Contato: {draft.contactName}</span>
+                            <span className="text-[10px] text-muted-foreground">Contato: {draft.contactName}</span>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <Link
                           href={`/clients/pending?client=${draft.id}`}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#2b3cff]/10 text-[#2b3cff] text-xs font-medium hover:bg-[#2b3cff]/20 transition-colors border border-[#2b3cff]/20"
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors border border-primary/20"
                         >
                           <ExternalLink size={10} /> Revisar
                         </Link>
@@ -553,7 +553,7 @@ export default function ClientsPage() {
                           <button
                             onClick={() => handleApprove(draft.id)}
                             disabled={approvingId === draft.id}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-colors border border-emerald-500/20"
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-lone-success-bg text-lone-success text-xs font-medium hover:opacity-80 transition-colors border border-lone-success-border"
                           >
                             {approvingId === draft.id ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
                             Aprovar
@@ -561,7 +561,7 @@ export default function ClientsPage() {
                         )}
                         <button
                           onClick={() => handleReject(draft.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-zinc-500 text-xs hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-muted-foreground text-xs hover:text-lone-danger hover:bg-destructive/10 transition-colors"
                         >
                           <X size={10} /> Rejeitar
                         </button>
@@ -586,7 +586,7 @@ export default function ClientsPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-card border border-border text-sm text-[#c0c0cc] rounded-lg px-3 py-2 outline-none focus:border-primary"
+                className="bg-card border border-border text-sm text-secondary-foreground rounded-lg px-3 py-2 outline-none focus:border-primary"
               >
                 <option value="all">Todos os status</option>
                 <option value="onboarding">Onboarding</option>
@@ -610,7 +610,7 @@ export default function ClientsPage() {
                 <select
                   value={responsibleFilter}
                   onChange={(e) => setResponsibleFilter(e.target.value)}
-                  className="bg-card border border-border text-sm text-[#c0c0cc] rounded-lg px-3 py-2 outline-none focus:border-primary"
+                  className="bg-card border border-border text-sm text-secondary-foreground rounded-lg px-3 py-2 outline-none focus:border-primary"
                 >
                   <option value="mine">Meus clientes</option>
                   <option value="all">Todos os clientes</option>
@@ -624,7 +624,7 @@ export default function ClientsPage() {
                   onClick={() => setShowArchived((v) => !v)}
                   className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm border transition-colors ${
                     showArchived
-                      ? "bg-amber-500/15 text-amber-500 border-amber-500/30"
+                      ? "bg-lone-warning-bg text-lone-warning border-lone-warning-border"
                       : "bg-card text-muted-foreground border-border hover:text-foreground"
                   }`}
                 >
@@ -710,11 +710,11 @@ export default function ClientsPage() {
                 return (
                   <div
                     key={client.id}
-                    className={`card card-interactive cursor-pointer select-none hover:border-primary/40 hover:bg-zinc-800/50 hover:shadow-lg ${
-                      client.status === "at_risk" ? "border-red-500/20" : ""
+                    className={`card card-interactive cursor-pointer select-none hover:border-primary/40 hover:bg-muted/50 hover:shadow-lg ${
+                      client.status === "at_risk" ? "border-lone-danger-border" : ""
                     } ${
-                      hasMetaLinked ? "ring-1 ring-[#2b3cff]/30" : ""
-                    } ${hasAdError ? "ring-1 ring-red-500/40" : ""}`}
+                      hasMetaLinked ? "ring-1 ring-primary/30" : ""
+                    } ${hasAdError ? "ring-1 ring-destructive/40" : ""}`}
                     onClick={() => {
                       if (client.status === "onboarding") {
                         router.push(`/clients/${client.id}?tab=onboarding`);
@@ -769,13 +769,13 @@ export default function ClientsPage() {
                               );
                             })()}
                             {hasMetaLinked && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#2b3cff]/10 text-[#2b3cff] border border-[#2b3cff]/20">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary border border-primary/20">
                                 <Facebook size={9} />
                                 Meta
                               </span>
                             )}
                             {hasAdError && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/10 text-red-400 border border-red-500/20 animate-pulse">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-lone-danger-bg text-lone-danger border border-lone-danger-border animate-pulse">
                                 <AlertTriangle size={9} />
                                 Erro em campanha
                               </span>
@@ -841,7 +841,7 @@ export default function ClientsPage() {
                                     setLifecycleError(null);
                                     setMenuOpen(null);
                                   }}
-                                  className="w-full text-left px-3 py-2 text-xs text-amber-500 hover:bg-muted transition-colors flex items-center gap-2"
+                                  className="w-full text-left px-3 py-2 text-xs text-lone-warning hover:bg-muted transition-colors flex items-center gap-2"
                                 >
                                   <Archive size={12} />
                                   Arquivar (churn)
@@ -854,7 +854,7 @@ export default function ClientsPage() {
                     </div>
 
                     {client.notes && (
-                      <p className="mt-3 text-xs text-muted-foreground bg-muted rounded-lg px-3 py-2 border-l-2 border-zinc-600">
+                      <p className="mt-3 text-xs text-muted-foreground bg-muted rounded-lg px-3 py-2 border-l-2 border-lone-border-strong">
                         {client.notes}
                       </p>
                     )}

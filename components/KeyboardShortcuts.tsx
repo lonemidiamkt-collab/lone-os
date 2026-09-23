@@ -61,7 +61,7 @@ export default function KeyboardShortcuts() {
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowHelp(false)} />
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={() => setShowHelp(false)} />
       <div className="relative bg-card border border-border rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4 animate-fade-in">
         <h2 className="text-sm font-bold text-foreground mb-4">Atalhos de Teclado</h2>
 

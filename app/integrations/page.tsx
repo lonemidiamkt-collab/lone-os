@@ -406,10 +406,10 @@ export default function IntegrationsPage() {
   const connectedCount = INTEGRATIONS.filter((i) => getStatus(i.id) === "connected").length;
 
   const STATUS_CONFIG = {
-    connected:    { label: "Conectado",    color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20", icon: CheckCircle },
-    disconnected: { label: "Desconectado", color: "text-zinc-500 bg-zinc-500/10 border-zinc-500/20", icon: XCircle },
-    expired:      { label: "Expirado",     color: "text-amber-400 bg-amber-500/10 border-amber-500/20", icon: AlertTriangle },
-    coming_soon:  { label: "Em breve",     color: "text-zinc-700 bg-zinc-800/50 border-zinc-800", icon: Clock },
+    connected:    { label: "Conectado",    color: "text-lone-success bg-lone-success-bg border-lone-success-border", icon: CheckCircle },
+    disconnected: { label: "Desconectado", color: "text-muted-foreground bg-muted border-border", icon: XCircle },
+    expired:      { label: "Expirado",     color: "text-lone-warning bg-lone-warning-bg border-lone-warning-border", icon: AlertTriangle },
+    coming_soon:  { label: "Em breve",     color: "text-lone-text-disabled bg-muted/50 border-border", icon: Clock },
   };
 
   return (
@@ -417,7 +417,7 @@ export default function IntegrationsPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-3">
-          <Plug size={24} className="text-[#2b3cff]" />
+          <Plug size={24} className="text-primary" />
           Integrações
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -427,13 +427,13 @@ export default function IntegrationsPage() {
 
       {/* Stats */}
       <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-          <CheckCircle size={12} className="text-emerald-400" />
-          <span className="text-xs text-emerald-400 font-medium">{connectedCount} ativa(s)</span>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-lone-success-bg border border-lone-success-border">
+          <CheckCircle size={12} className="text-lone-success" />
+          <span className="text-xs text-lone-success font-medium">{connectedCount} ativa(s)</span>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-500/10 border border-zinc-500/20">
-          <Plug size={12} className="text-zinc-500" />
-          <span className="text-xs text-zinc-500 font-medium">{INTEGRATIONS.length} disponíveis</span>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted border border-border">
+          <Plug size={12} className="text-muted-foreground" />
+          <span className="text-xs text-muted-foreground font-medium">{INTEGRATIONS.length} disponíveis</span>
         </div>
       </div>
 
@@ -443,7 +443,7 @@ export default function IntegrationsPage() {
           onClick={() => setActiveCategory("all")}
           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
             activeCategory === "all"
-              ? "bg-[#2b3cff] text-white"
+              ? "bg-primary text-primary-foreground"
               : "bg-muted text-muted-foreground hover:text-foreground hover:bg-hover"
           }`}
         >
@@ -458,7 +458,7 @@ export default function IntegrationsPage() {
               onClick={() => setActiveCategory(cat.key)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 activeCategory === cat.key
-                  ? "bg-[#2b3cff] text-white"
+                  ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:text-foreground hover:bg-hover"
               }`}
             >
@@ -484,8 +484,8 @@ export default function IntegrationsPage() {
               key={integration.id}
               className={`card border transition-all ${
                 status === "connected"
-                  ? "border-[#2b3cff]/20 hover:border-[#2b3cff]/40"
-                  : "border-border hover:border-zinc-600"
+                  ? "border-primary/20 hover:border-primary/40"
+                  : "border-border hover:border-lone-border-strong"
               }`}
             >
               <div className="flex items-start gap-4">
@@ -515,7 +515,7 @@ export default function IntegrationsPage() {
                     {isMeta && meta.connected && meta.tokenExpired && (
                       <button
                         onClick={() => meta.connect()}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 text-xs font-medium border border-amber-500/20 hover:bg-amber-500/20 transition-all"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-lone-warning-bg text-lone-warning text-xs font-medium border border-lone-warning-border hover:opacity-80 transition-all"
                       >
                         <RefreshCw size={12} /> Reconectar
                       </button>
@@ -523,7 +523,7 @@ export default function IntegrationsPage() {
                     {isMeta && meta.connected && !meta.tokenExpired && (
                       <button
                         onClick={() => setDisconnectConfirm("meta")}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20 hover:bg-red-500/20 transition-all"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-lone-danger-bg text-lone-danger text-xs font-medium border border-lone-danger-border hover:bg-destructive/20 transition-all"
                       >
                         <XCircle size={12} /> Desconectar
                       </button>
@@ -533,7 +533,7 @@ export default function IntegrationsPage() {
                     {!isMeta && status === "disconnected" && (
                       <button
                         onClick={() => handleConnect(integration)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2b3cff] text-white text-xs font-medium hover:bg-[#2b3cff]/80 transition-all"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all"
                       >
                         <Plug size={12} /> Conectar
                       </button>
@@ -542,7 +542,7 @@ export default function IntegrationsPage() {
                       <>
                         <button
                           onClick={() => handleManualSync(integration.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2b3cff]/10 text-[#2b3cff] text-xs font-medium border border-[#2b3cff]/20 hover:bg-[#2b3cff]/20 transition-all"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium border border-primary/20 hover:bg-primary/20 transition-all"
                         >
                           <RefreshCw size={12} /> Sincronizar
                         </button>
@@ -556,7 +556,7 @@ export default function IntegrationsPage() {
                         </button>
                         <button
                           onClick={() => setDisconnectConfirm(integration.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20 hover:bg-red-500/20 transition-all"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-lone-danger-bg text-lone-danger text-xs font-medium border border-lone-danger-border hover:bg-destructive/20 transition-all"
                         >
                           <XCircle size={12} />
                         </button>
@@ -597,7 +597,7 @@ export default function IntegrationsPage() {
                     <select
                       value={conn.syncFrequency}
                       onChange={(e) => handleSyncFrequencyChange(integration.id, e.target.value as SyncFrequency)}
-                      className="mt-1 w-full bg-muted border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-[#2b3cff]/40"
+                      className="mt-1 w-full bg-muted border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary/40"
                     >
                       {Object.entries(SYNC_LABELS).map(([val, label]) => (
                         <option key={val} value={val}>{label}</option>
@@ -617,7 +617,7 @@ export default function IntegrationsPage() {
                         className="shrink-0 p-1.5 rounded-lg bg-muted hover:bg-hover text-muted-foreground hover:text-foreground transition-all"
                         title="Copiar URL"
                       >
-                        {copiedUrl === conn.webhookUrl ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                        {copiedUrl === conn.webhookUrl ? <Check size={14} className="text-lone-success" /> : <Copy size={14} />}
                       </button>
                     </div>
                   </div>
@@ -625,7 +625,7 @@ export default function IntegrationsPage() {
                   {/* Disconnect button */}
                   <button
                     onClick={() => setDisconnectConfirm(integration.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20 hover:bg-red-500/20 transition-all w-full justify-center"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-lone-danger-bg text-lone-danger text-xs font-medium border border-lone-danger-border hover:bg-destructive/20 transition-all w-full justify-center"
                   >
                     <Trash2 size={12} /> Desconectar integração
                   </button>
@@ -640,7 +640,7 @@ export default function IntegrationsPage() {
       {webhookLog.length > 0 && (
         <div className="card border border-border">
           <div className="flex items-center gap-2 mb-4">
-            <Globe size={16} className="text-[#2b3cff]" />
+            <Globe size={16} className="text-primary" />
             <h2 className="text-sm font-semibold text-foreground">Webhook Log</h2>
             <span className="text-[10px] text-muted-foreground ml-auto">Últimos {Math.min(webhookLog.length, 10)} eventos</span>
           </div>
@@ -648,12 +648,12 @@ export default function IntegrationsPage() {
           <div className="space-y-2">
             {webhookLog.slice(0, 10).map((event) => (
               <div key={event.id} className="flex items-start gap-3 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-all">
-                <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${event.status === "success" ? "bg-emerald-400" : "bg-red-400"}`} />
+                <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${event.status === "success" ? "bg-lone-success" : "bg-lone-danger"}`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs text-foreground font-medium">{event.message}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                      event.status === "success" ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                      event.status === "success" ? "bg-lone-success-bg text-lone-success" : "bg-lone-danger-bg text-lone-danger"
                     }`}>
                       {event.status}
                     </span>
@@ -674,7 +674,7 @@ export default function IntegrationsPage() {
 
       {/* Connect Modal */}
       {connectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm animate-fade-in">
           <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-slide-up">
             <div className="flex items-center justify-between p-5 border-b border-border">
               <div className="flex items-center gap-3">
@@ -697,13 +697,13 @@ export default function IntegrationsPage() {
             <div className="p-5 space-y-4">
               <div>
                 <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5 mb-2">
-                  <Shield size={12} className="text-[#2b3cff]" />
+                  <Shield size={12} className="text-primary" />
                   Permissões necessárias
                 </h4>
                 <ul className="space-y-1.5">
                   {connectModal.permissions.map((perm, idx) => (
                     <li key={idx} className="flex items-start gap-2 text-xs text-muted-foreground">
-                      <Eye size={11} className="mt-0.5 shrink-0 text-zinc-600" />
+                      <Eye size={11} className="mt-0.5 shrink-0 text-lone-text-disabled" />
                       {perm}
                     </li>
                   ))}
@@ -729,7 +729,7 @@ export default function IntegrationsPage() {
               <button
                 onClick={handleAuthorize}
                 disabled={connectLoading}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#2b3cff] text-white text-xs font-medium hover:bg-[#2b3cff]/80 transition-all disabled:opacity-70"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all disabled:opacity-70"
               >
                 {connectLoading ? (
                   <>
@@ -750,11 +750,11 @@ export default function IntegrationsPage() {
 
       {/* Disconnect Confirmation Modal */}
       {disconnectConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm animate-fade-in">
           <div className="bg-card border border-border rounded-2xl w-full max-w-sm mx-4 shadow-2xl animate-slide-up p-5 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
-                <AlertTriangle size={20} className="text-red-400" />
+              <div className="w-10 h-10 rounded-xl bg-lone-danger-bg flex items-center justify-center">
+                <AlertTriangle size={20} className="text-lone-danger" />
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-foreground">Desconectar integração?</h3>
@@ -776,7 +776,7 @@ export default function IntegrationsPage() {
               </button>
               <button
                 onClick={() => handleDisconnect(disconnectConfirm)}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20 hover:bg-red-500/20 transition-all"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-lone-danger-bg text-lone-danger text-xs font-medium border border-lone-danger-border hover:bg-destructive/20 transition-all"
               >
                 <Trash2 size={12} /> Desconectar
               </button>

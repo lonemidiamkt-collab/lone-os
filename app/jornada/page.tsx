@@ -22,10 +22,10 @@ interface Ficha {
 }
 
 const RISCO_COR: Record<string, string> = {
-  saudavel: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-  atencao: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-  risco: "bg-orange-500/15 text-orange-600 dark:text-orange-400",
-  critico: "bg-red-500/15 text-red-600 dark:text-red-400",
+  saudavel: "bg-lone-success-bg text-lone-success",
+  atencao: "bg-lone-warning-bg text-lone-warning",
+  risco: "bg-lone-high-bg text-lone-high",
+  critico: "bg-lone-danger-bg text-lone-danger",
 };
 const RISCO_LABEL: Record<string, string> = { saudavel: "Saudável", atencao: "Atenção", risco: "Risco", critico: "Crítico" };
 type Filtro = "todos" | "risco" | "atencao" | "pendencias" | "sem_acao" | "sem_valor" | "atrasados";
@@ -139,12 +139,12 @@ export default function JornadaPage() {
                     <span className="font-medium">{f.nome}</span>
                     <span className={`text-[11px] px-1.5 py-0.5 rounded ${RISCO_COR[f.risco.nivel] || "bg-muted"}`}>{RISCO_LABEL[f.risco.nivel] || f.risco.nivel}</span>
                     <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{f.estado}</span>
-                    {f.cardsAtrasados > 0 && <span className="text-[11px] text-orange-500">⏳ {f.cardsAtrasados} atrasado(s)</span>}
-                    {f.pendenciasCliente.length > 0 && <span className="text-[11px] text-amber-500">📋 {f.pendenciasCliente.length} do cliente</span>}
+                    {f.cardsAtrasados > 0 && <span className="text-[11px] text-lone-high">⏳ {f.cardsAtrasados} atrasado(s)</span>}
+                    {f.pendenciasCliente.length > 0 && <span className="text-[11px] text-lone-warning">📋 {f.pendenciasCliente.length} do cliente</span>}
                     {!f.percebeValor && <span className="text-[11px] text-muted-foreground">⚠️ valor</span>}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {f.temProximaAcao ? <>➡️ <span className="text-foreground">{f.proximaAcao}</span>{f.responsavel ? ` · ${f.responsavel}` : ""}{f.prazo ? ` · até ${f.prazo}` : ""}</> : <span className="text-orange-500">Sem próxima ação definida</span>}
+                    {f.temProximaAcao ? <>➡️ <span className="text-foreground">{f.proximaAcao}</span>{f.responsavel ? ` · ${f.responsavel}` : ""}{f.prazo ? ` · até ${f.prazo}` : ""}</> : <span className="text-lone-high">Sem próxima ação definida</span>}
                   </p>
                   {f.risco.motivos.length > 0 && <p className="text-[11px] text-muted-foreground mt-0.5">{f.risco.motivos.join(" · ")}</p>}
                 </div>
@@ -180,7 +180,7 @@ export default function JornadaPage() {
                         {checkins.map((ck, i) => (
                           <div key={i} className="text-xs rounded bg-background/60 p-2">
                             <div className="text-muted-foreground">{ck.pergunta} <span className="opacity-60">· {ck.origem}</span></div>
-                            {ck.resposta ? <div className="text-foreground mt-0.5">↳ {ck.resposta}</div> : <div className="text-amber-500 mt-0.5">aguardando resposta…</div>}
+                            {ck.resposta ? <div className="text-foreground mt-0.5">↳ {ck.resposta}</div> : <div className="text-lone-warning mt-0.5">aguardando resposta…</div>}
                           </div>
                         ))}
                       </div>

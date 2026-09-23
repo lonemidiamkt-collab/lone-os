@@ -194,7 +194,7 @@ interface OnboardingCompleteModalProps {
 function OnboardingCompleteModal({ client, onMoveActive, onMoveActiveAndIdeas, onClose }: OnboardingCompleteModalProps) {
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-6 animate-fade-in">
         <div className="text-center mb-5">
           <div className="text-4xl mb-3">🎉</div>
@@ -668,7 +668,7 @@ function MoodModal({ clientName, onSave, onClose }: MoodModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl p-6 animate-fade-in">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-foreground text-sm">Check-in de Humor</h3>
@@ -1099,8 +1099,8 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl mx-4 bg-black border border-border rounded-2xl shadow-lg animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-2xl mx-4 bg-card border border-border rounded-2xl shadow-lg animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
         <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/20 to-transparent shrink-0" />
 
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
@@ -1348,7 +1348,7 @@ function AddMemberModal({ onAdd, onClose }: { onAdd: (name: string, password: st
   const [password, setPassword] = useState("");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-sm bg-card border border-border rounded-lg shadow-2xl p-6 animate-fade-in">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
@@ -1933,7 +1933,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                     <SignedImage src={card.imageUrl!} alt={card.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     {(card.cardAttachments?.length ?? 0) > 1 && (
-                      <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-black/70 text-white">
+                      <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-overlay text-overlay-foreground">
                         <ImageIcon size={10} /> {card.cardAttachments!.length}
                       </span>
                     )}
@@ -2159,12 +2159,12 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                         <div className="aspect-square w-full overflow-hidden bg-muted relative">
                           <SignedImage src={card.imageUrl!} alt={card.title} className="w-full h-full object-cover" />
                           {arteNova && (
-                            <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-[var(--chart-4)] text-black shadow">
+                            <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-chart-4 text-background shadow">
                               <Palette size={10} /> ARTE NOVA
                             </span>
                           )}
                           {(card.cardAttachments?.length ?? 0) > 1 && (
-                            <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-black/70 text-white">
+                            <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-overlay text-overlay-foreground">
                               <ImageIcon size={10} /> {card.cardAttachments!.length}
                             </span>
                           )}
@@ -2589,7 +2589,7 @@ export default function SocialPage() {
       )}
       {/* Non-delivery report modal */}
       {nonDeliveryCard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={() => { setNonDeliveryCard(null); setNonDeliveryReason(""); }}>
           <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border">
               <h3 className="font-semibold text-foreground text-sm">Reportar Não Entrega</h3>
@@ -2629,7 +2629,7 @@ export default function SocialPage() {
       )}
       {/* ── PUBLISH VERIFICATION MODAL ── */}
       {verifyingCard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setVerifyingCard(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={() => setVerifyingCard(null)}>
           <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border">
               <div className="flex items-center gap-2">

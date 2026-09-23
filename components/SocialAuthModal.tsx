@@ -21,12 +21,12 @@ export default function SocialAuthModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
       <div className="w-full max-w-sm mx-4">
         {/* Logo */}
         <div className="flex flex-col items-center mb-10">
           <div className="w-12 h-12 rounded-lg bg-primary flex items-center justify-center mb-4">
-            <Zap size={24} className="text-foreground" />
+            <Zap size={24} className="text-primary-foreground" />
           </div>
           <h1 className="text-xl font-bold text-foreground tracking-tight">LONE OS</h1>
           <p className="text-xs text-muted-foreground tracking-widest uppercase mt-1">Social Media</p>

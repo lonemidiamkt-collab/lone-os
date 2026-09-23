@@ -105,7 +105,7 @@ export function SpendAreaChart({ data, visibleMetrics }: { data: DailyChartPoint
             fill={`url(#grad-${key})`}
             strokeWidth={2.5}
             dot={false}
-            activeDot={{ r: 5, fill: CHART_COLORS[key] ?? "var(--primary)", stroke: "#fff", strokeWidth: 2 }}
+            activeDot={{ r: 5, fill: CHART_COLORS[key] ?? "var(--primary)", stroke: "var(--card)", strokeWidth: 2 }}
           />
         ))}
       </AreaChart>

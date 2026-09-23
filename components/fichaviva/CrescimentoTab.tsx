@@ -97,7 +97,7 @@ export default function CrescimentoTab({ client, currentUser }: { client: Client
 
       {/* Modal registrar interação */}
       {showAdd && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setShowAdd(false)}>
+        <div className="fixed inset-0 z-50 bg-overlay flex items-center justify-center p-4" onClick={() => setShowAdd(false)}>
           <div className="bg-card border border-border rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-foreground text-sm">Registrar interação</h3>

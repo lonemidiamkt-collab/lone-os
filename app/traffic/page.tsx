@@ -649,7 +649,7 @@ function TrafficDesignRequestModal({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4 animate-fade-in">
         <div className="flex items-center justify-between">
           <div>
@@ -858,8 +858,8 @@ function CreativeRequestModal({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-xl mx-4 bg-black border border-border rounded-2xl shadow-lg animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-xl mx-4 bg-card border border-border rounded-2xl shadow-lg animate-fade-in overflow-hidden max-h-[90vh] flex flex-col">
         <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/30 to-transparent shrink-0" />
 
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
@@ -2029,7 +2029,7 @@ function NewTaskModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={onClose}>
       <div className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h3 className="font-semibold text-foreground">Nova Tarefa de Trafego</h3>
@@ -4370,11 +4370,11 @@ function InvestmentControlTab({
                 </div>
               )}
               {pacingStatus === "slow" && (
-                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-purple-500/25 bg-purple-500/8">
-                  <AlertCircle size={16} className="text-purple-400 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 p-3.5 rounded-xl border border-[color-mix(in_srgb,var(--chart-4)_25%,transparent)] bg-[color-mix(in_srgb,var(--chart-4)_8%,transparent)]">
+                  <AlertCircle size={16} className="text-chart-4 shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-semibold text-purple-400">Campanha abaixo do ritmo — verba sobrando</p>
-                    <p className="text-xs text-purple-400/70 mt-0.5">
+                    <p className="text-sm font-semibold text-chart-4">Campanha abaixo do ritmo — verba sobrando</p>
+                    <p className="text-xs text-chart-4 opacity-70 mt-0.5">
                       Esperado até hoje: <strong>R$ {fmtBRL(expectedSpend)}</strong> · Gasto real: <strong>R$ {fmtBRL(monthlySpend)}</strong> · Desvio: {deviationPct.toFixed(0)}%
                     </p>
                   </div>
@@ -4654,7 +4654,7 @@ function InvestmentControlTab({
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
                   style={{
                     backgroundColor: form.dirty ? INVESTMENT_BLUE : undefined,
-                    color: form.dirty ? "#fff" : undefined,
+                    color: form.dirty ? "var(--primary-foreground)" : undefined,
                   }}
                 >
                   <Save size={13} />
@@ -4714,7 +4714,7 @@ function ContentRequestModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-overlay z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
         className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl animate-fade-in"
         onClick={(e) => e.stopPropagation()}

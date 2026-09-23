@@ -158,10 +158,10 @@ export default function ContratosGlobalPage() {
   };
 
   const statusBadge = (c: Row): { label: string; cls: string; icon: typeof CheckCircle } => {
-    if (c.signed_at) return { label: "Assinado", cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", icon: FileCheck2 };
-    if (c.status === "expired") return { label: "Vencido", cls: "bg-red-500/10 text-red-400 border-red-500/20", icon: AlertTriangle };
-    if (c.status === "active") return { label: "Ativo", cls: "bg-[#2b3cff]/10 text-[#2b3cff] border-[#2b3cff]/20", icon: CheckCircle };
-    return { label: "Pendente", cls: "bg-amber-500/10 text-amber-400 border-amber-500/20", icon: Clock };
+    if (c.signed_at) return { label: "Assinado", cls: "bg-lone-success-bg text-lone-success border-lone-success-border", icon: FileCheck2 };
+    if (c.status === "expired") return { label: "Vencido", cls: "bg-lone-danger-bg text-lone-danger border-lone-danger-border", icon: AlertTriangle };
+    if (c.status === "active") return { label: "Ativo", cls: "bg-primary/10 text-primary border-primary/20", icon: CheckCircle };
+    return { label: "Pendente", cls: "bg-lone-warning-bg text-lone-warning border-lone-warning-border", icon: Clock };
   };
 
   const filteredContracts = useMemo(() => contracts, [contracts]);
@@ -183,7 +183,7 @@ export default function ContratosGlobalPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <FileText size={22} className="text-[#2b3cff]" />
+              <FileText size={22} className="text-primary" />
               Contratos
             </h1>
             <p className="text-sm text-muted-foreground mt-1">Todos os contratos da base. Upload do PDF assinado fecha o ciclo.</p>
@@ -194,38 +194,38 @@ export default function ContratosGlobalPage() {
         {summary && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <SummaryCard label="Total" value={summary.total} color="text-foreground" />
-            <SummaryCard label="Assinados" value={summary.signed} color="text-emerald-400" />
-            <SummaryCard label="Pendentes" value={summary.pending} color="text-amber-400" />
-            <SummaryCard label="Vencidos" value={summary.expired} color="text-red-400" />
+            <SummaryCard label="Assinados" value={summary.signed} color="text-lone-success" />
+            <SummaryCard label="Pendentes" value={summary.pending} color="text-lone-warning" />
+            <SummaryCard label="Vencidos" value={summary.expired} color="text-lone-danger" />
           </div>
         )}
 
         {/* Filters */}
         <div className="rounded-xl border border-border bg-card p-4 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por nome ou CNPJ..."
-              className="w-full bg-surface border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-foreground outline-none focus:border-[#2b3cff]/50"
+              className="w-full bg-surface border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
             />
           </div>
           <div className="flex items-center gap-1.5 text-xs">
-            <Filter size={12} className="text-zinc-500" />
-            <span className="text-zinc-500">Status:</span>
+            <Filter size={12} className="text-muted-foreground" />
+            <span className="text-muted-foreground">Status:</span>
             {(["all", "pending", "signed", "active", "expired"] as StatusFilter[]).map((s) => (
               <button key={s} onClick={() => setStatusFilter(s)}
-                className={`px-2.5 py-1 rounded border text-xs transition-all ${statusFilter === s ? "border-[#2b3cff]/50 bg-[#2b3cff]/10 text-[#2b3cff]" : "border-border text-zinc-500 hover:text-foreground"}`}>
+                className={`px-2.5 py-1 rounded border text-xs transition-all ${statusFilter === s ? "border-primary/50 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
                 {s === "all" ? "Tudo" : s === "pending" ? "Pendentes" : s === "signed" ? "Assinados" : s === "active" ? "Ativos" : "Vencidos"}
               </button>
             ))}
           </div>
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-zinc-500">Serviço:</span>
+            <span className="text-muted-foreground">Serviço:</span>
             {(["all", "assessoria_trafego", "assessoria_social", "lone_growth", "trafego_social_site"] as ServiceFilter[]).map((s) => (
               <button key={s} onClick={() => setServiceFilter(s)}
-                className={`px-2.5 py-1 rounded border text-xs transition-all ${serviceFilter === s ? "border-[#2b3cff]/50 bg-[#2b3cff]/10 text-[#2b3cff]" : "border-border text-zinc-500 hover:text-foreground"}`}>
+                className={`px-2.5 py-1 rounded border text-xs transition-all ${serviceFilter === s ? "border-primary/50 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
                 {s === "all" ? "Tudo" : s === "trafego_social_site" ? "Site" : SERVICE_LABELS[s]?.split(" ")[0] ?? s}
               </button>
             ))}
@@ -233,16 +233,16 @@ export default function ContratosGlobalPage() {
         </div>
 
         {err && (
-          <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 flex items-start gap-2">
-            <AlertTriangle size={14} className="text-red-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-red-400 flex-1">{err}</p>
-            <button onClick={() => setErr("")} className="text-red-400/50 hover:text-red-400"><X size={12} /></button>
+          <div className="rounded-xl border border-lone-danger-border bg-lone-danger-bg p-3 flex items-start gap-2">
+            <AlertTriangle size={14} className="text-lone-danger mt-0.5 shrink-0" />
+            <p className="text-xs text-lone-danger flex-1">{err}</p>
+            <button onClick={() => setErr("")} className="text-lone-danger opacity-50 hover:opacity-100"><X size={12} /></button>
           </div>
         )}
 
         {/* Table / list */}
         {loading ? (
-          <div className="flex justify-center py-16"><Loader2 size={20} className="text-[#2b3cff] animate-spin" /></div>
+          <div className="flex justify-center py-16"><Loader2 size={20} className="text-primary animate-spin" /></div>
         ) : filteredContracts.length === 0 ? (
           <EmptyState icon={<FileText size={20} />} title="Nenhum contrato encontrado" subtitle="Nenhum contrato bate com esses filtros. Ajuste a busca ou crie um novo." />
         ) : (
@@ -250,7 +250,7 @@ export default function ContratosGlobalPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/30">
-                  <tr className="text-left text-[10px] uppercase tracking-wider text-zinc-500">
+                  <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                     <th className="px-4 py-3 font-medium">Cliente</th>
                     <th className="px-4 py-3 font-medium">Serviço</th>
                     <th className="px-4 py-3 font-medium">Valor/mês</th>
@@ -267,19 +267,19 @@ export default function ContratosGlobalPage() {
                     return (
                       <tr key={c.id} className="hover:bg-muted/20 transition-colors">
                         <td className="px-4 py-3">
-                          <Link href={`/clients/${c.client_id}`} className="text-foreground hover:text-[#2b3cff] font-medium flex items-center gap-1 group">
+                          <Link href={`/clients/${c.client_id}`} className="text-foreground hover:text-primary font-medium flex items-center gap-1 group">
                             {clientName}
                             <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                           </Link>
-                          <p className="text-[10px] text-zinc-500 mt-0.5">V{c.version} · {c.clients?.cnpj || "sem CNPJ"}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">V{c.version} · {c.clients?.cnpj || "sem CNPJ"}</p>
                         </td>
-                        <td className="px-4 py-3 text-xs text-zinc-400">{SERVICE_LABELS[c.service_type] ?? c.service_type}</td>
-                        <td className="px-4 py-3 text-[#2b3cff] font-semibold text-xs">
-                          {Number(c.monthly_value) > 0 ? formatCurrency(Number(c.monthly_value)) : <span className="text-zinc-600 font-normal">— ver PDF</span>}
+                        <td className="px-4 py-3 text-xs text-muted-foreground">{SERVICE_LABELS[c.service_type] ?? c.service_type}</td>
+                        <td className="px-4 py-3 text-primary font-semibold text-xs">
+                          {Number(c.monthly_value) > 0 ? formatCurrency(Number(c.monthly_value)) : <span className="text-lone-text-disabled font-normal">— ver PDF</span>}
                         </td>
-                        <td className="px-4 py-3 text-[10px] text-zinc-400">
+                        <td className="px-4 py-3 text-[10px] text-muted-foreground">
                           <div>{formatDate(c.start_date)} → {formatDate(c.end_date)}</div>
-                          <div className="text-zinc-600">{c.duration_months}m · pgto dia {c.payment_day ?? 10}</div>
+                          <div className="text-lone-text-disabled">{c.duration_months}m · pgto dia {c.payment_day ?? 10}</div>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border ${badge.cls}`}>
@@ -287,30 +287,30 @@ export default function ContratosGlobalPage() {
                             {badge.label}
                           </span>
                           {c.signed_at && (
-                            <p className="text-[10px] text-zinc-600 mt-0.5">em {formatDate(c.signed_at)}</p>
+                            <p className="text-[10px] text-lone-text-disabled mt-0.5">em {formatDate(c.signed_at)}</p>
                           )}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5 justify-end">
                             {c.pdf_url && (
                               <button onClick={() => handleViewSigned(c.pdf_url!)}
-                                className="p-1.5 rounded hover:bg-muted text-zinc-500 hover:text-foreground" title="Ver PDF preliminar">
+                                className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Ver PDF preliminar">
                                 <Download size={13} />
                               </button>
                             )}
                             {c.signed_pdf_path ? (
                               <button onClick={() => handleViewSigned(c.signed_pdf_path!)}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#2b3cff]/10 text-[#2b3cff] text-[10px] hover:bg-[#2b3cff]/20 border border-[#2b3cff]/20">
+                                className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary/10 text-primary text-[10px] hover:bg-primary/20 border border-primary/20">
                                 <FileCheck2 size={10} /> Ver Assinado
                               </button>
                             ) : (
                               <button onClick={() => handleUpload(c.id)} disabled={uploadingId === c.id}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-400 text-[10px] hover:bg-emerald-500/20 border border-emerald-500/20 disabled:opacity-50">
+                                className="flex items-center gap-1 px-2.5 py-1 rounded bg-lone-success-bg text-lone-success text-[10px] hover:opacity-80 border border-lone-success-border disabled:opacity-50">
                                 {uploadingId === c.id ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
                                 {uploadingId === c.id ? "Enviando" : "Upload"}
                               </button>
                             )}
-                            <Link href={`/clients/${c.client_id}?tab=contratos`} className="p-1.5 rounded hover:bg-muted text-zinc-500 hover:text-foreground" title="Abrir aba de contratos do cliente">
+                            <Link href={`/clients/${c.client_id}?tab=contratos`} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Abrir aba de contratos do cliente">
                               <ExternalLink size={12} />
                             </Link>
                           </div>
@@ -334,7 +334,7 @@ export default function ContratosGlobalPage() {
 function SummaryCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">{label}</p>
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</p>
       <p className={`${color} font-bold mt-1 text-2xl`}>{value}</p>
     </div>
   );

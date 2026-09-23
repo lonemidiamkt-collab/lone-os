@@ -8,7 +8,7 @@ import { computeOperationalKpis, stageLabel } from "@/lib/kpis/operational";
 // (columnEnteredAt, dueDate, total_time_spent_ms, non_delivery_reason) em indicadores.
 
 function Tile({ label, value, caption, tone }: { label: string; value: string | number; caption?: string; tone?: "good" | "bad" }) {
-  const valueCls = tone === "good" ? "text-emerald-500" : tone === "bad" ? "text-destructive" : "text-foreground";
+  const valueCls = tone === "good" ? "text-lone-success" : tone === "bad" ? "text-destructive" : "text-foreground";
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="text-xs text-muted-foreground">{label}</div>

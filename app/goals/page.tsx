@@ -389,7 +389,7 @@ export default function GoalsPage() {
       const html2canvas = h2cModule.default ?? h2cModule;
       const jspdfModule = await import("jspdf");
       const JsPDF = jspdfModule.jsPDF ?? jspdfModule.default;
-      const canvas = await html2canvas(el, { backgroundColor: "#000000", scale: 2, useCORS: true, logging: false });
+      const canvas = await html2canvas(el, { backgroundColor: getComputedStyle(document.documentElement).getPropertyValue("--background").trim() || null, scale: 2, useCORS: true, logging: false });
       const imgData = canvas.toDataURL("image/png");
       const w = canvas.width / 2;
       const h = canvas.height / 2;
@@ -439,7 +439,7 @@ export default function GoalsPage() {
       ref={pageRef}
       className={`animate-fade-in ${
         presentationMode
-          ? "fixed inset-0 z-[9999] bg-black overflow-auto p-8"
+          ? "fixed inset-0 z-[9999] bg-background overflow-auto p-8"
           : "p-6"
       }`}
     >
@@ -1115,7 +1115,7 @@ export default function GoalsPage() {
 
       {/* OKR Manager Panel */}
       {showOKRManager && isAdmin && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex justify-end" onClick={() => setShowOKRManager(false)}>
+        <div className="fixed inset-0 z-50 bg-overlay flex justify-end" onClick={() => setShowOKRManager(false)}>
           <div className="bg-card border-l border-border w-full max-w-md h-full overflow-auto animate-slide-in-right" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-card border-b border-border p-5 flex items-center justify-between z-10">
               <div>

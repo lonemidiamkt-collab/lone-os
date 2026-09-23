@@ -77,12 +77,10 @@ export default function NotificationCenter() {
         <>
           <div className="fixed inset-0 z-[150]" onClick={() => setOpen(false)} />
           <div
-            className="fixed top-0 right-0 bottom-0 z-[151] w-[380px] max-w-[90vw] flex flex-col animate-slide-in-right"
+            className="fixed top-0 right-0 bottom-0 z-[151] w-[380px] max-w-[90vw] flex flex-col animate-slide-in-right bg-background/90 border-l-[0.5px] border-border"
             style={{
-              background: "rgba(0, 0, 0, 0.92)",
               backdropFilter: "blur(24px)",
               WebkitBackdropFilter: "blur(24px)",
-              borderLeft: "0.5px solid rgba(255,255,255,0.04)",
             }}
           >
             {/* Header */}

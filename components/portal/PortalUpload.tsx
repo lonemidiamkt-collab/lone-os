@@ -58,34 +58,32 @@ export default function PortalUpload({ token, clientName }: { token: string; cli
   }, [token, observacao, enviadoPor]);
 
   return (
-    <section className="rounded-2xl p-5 lg:p-6 mb-5" style={{ background: "#0b0e1e", border: "1px solid #1a1f33" }}>
-      <h2 className="text-base lg:text-lg font-bold mb-1" style={{ color: "#eef0f6" }}>
+    <section className="rounded-2xl p-5 lg:p-6 mb-5 bg-card border border-border">
+      <h2 className="text-base lg:text-lg font-bold mb-1 text-foreground">
         Enviar material
       </h2>
-      <p className="text-xs lg:text-sm mb-4" style={{ color: "#8b91a1" }}>
+      <p className="text-xs lg:text-sm mb-4 text-muted-foreground">
         Foto de produto, logo, tabela de preço, vídeo da loja — o que chegar aqui fica guardado com
         o time da {clientName}, sem se perder no WhatsApp.
       </p>
 
-      <label className="block text-xs mb-1" style={{ color: "#8b91a1" }}>
-        O que é esse material? <span style={{ color: "#6b7280" }}>(ajuda muito)</span>
+      <label className="block text-xs mb-1 text-muted-foreground">
+        O que é esse material? <span className="text-lone-text-tertiary">(ajuda muito)</span>
       </label>
       <textarea
         value={observacao}
         onChange={(e) => setObservacao(e.target.value)}
         rows={2}
         placeholder="Ex.: fotos do produto novo que chegou, pra usar nos posts da semana"
-        className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none mb-3"
-        style={{ background: "#060814", border: "1px solid #1a1f33", color: "#eef0f6" }}
+        className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none mb-3 bg-background border border-border text-foreground"
       />
 
-      <label className="block text-xs mb-1" style={{ color: "#8b91a1" }}>Seu nome</label>
+      <label className="block text-xs mb-1 text-muted-foreground">Seu nome</label>
       <input
         value={enviadoPor}
         onChange={(e) => setEnviadoPor(e.target.value)}
         placeholder="Quem está enviando"
-        className="w-full rounded-lg px-3 py-2 text-sm outline-none mb-4"
-        style={{ background: "#060814", border: "1px solid #1a1f33", color: "#eef0f6" }}
+        className="w-full rounded-lg px-3 py-2 text-sm outline-none mb-4 bg-background border border-border text-foreground"
       />
 
       <input
@@ -100,21 +98,21 @@ export default function PortalUpload({ token, clientName }: { token: string; cli
       />
       <label
         htmlFor="portal-upload-input"
-        className="flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold cursor-pointer min-h-[48px] transition-opacity"
-        style={{ background: enviando ? "#1a1f33" : "#2B3CFF", color: "#fff", opacity: enviando ? 0.7 : 1 }}
+        className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold cursor-pointer min-h-[48px] transition-opacity text-primary-foreground ${enviando ? "bg-border" : "bg-primary"}`}
+        style={{ opacity: enviando ? 0.7 : 1 }}
       >
         {enviando ? "Enviando…" : "📎 Escolher arquivos"}
       </label>
 
-      {erro && <p className="text-xs mt-3" style={{ color: "#f0b357" }}>{erro}</p>}
+      {erro && <p className="text-xs mt-3 text-lone-warning">{erro}</p>}
 
       {enviados.length > 0 && (
-        <div className="mt-4 pt-3" style={{ borderTop: "1px solid #1a1f33" }}>
-          <p className="text-xs mb-2" style={{ color: "#6ddba0" }}>
+        <div className="mt-4 pt-3 border-t border-border">
+          <p className="text-xs mb-2 text-lone-success">
             ✓ {enviados.length} arquivo{enviados.length > 1 ? "s" : ""} enviado{enviados.length > 1 ? "s" : ""} — o time já foi avisado
           </p>
           {enviados.map((n, i) => (
-            <p key={`${n}-${i}`} className="text-xs truncate" style={{ color: "#8b91a1" }}>{n}</p>
+            <p key={`${n}-${i}`} className="text-xs truncate text-muted-foreground">{n}</p>
           ))}
         </div>
       )}

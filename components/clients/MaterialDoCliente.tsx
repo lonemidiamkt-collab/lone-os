@@ -57,7 +57,7 @@ export default function MaterialDoCliente({ clientId }: { clientId: string }) {
       <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">
         Material enviado pelo cliente
         {pendentes > 0 && (
-          <span className="ml-2 text-amber-500 normal-case tracking-normal">
+          <span className="ml-2 text-lone-warning normal-case tracking-normal">
             {pendentes} novo{pendentes > 1 ? "s" : ""}
           </span>
         )}
@@ -67,7 +67,7 @@ export default function MaterialDoCliente({ clientId }: { clientId: string }) {
         {itens.map((it) => (
           <div
             key={it.id}
-            className={`rounded-lg border p-3 ${it.visto_em ? "border-border bg-card/50" : "border-amber-500/40 bg-card"}`}
+            className={`rounded-lg border p-3 ${it.visto_em ? "border-border bg-card/50" : "border-lone-warning-border bg-card"}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
