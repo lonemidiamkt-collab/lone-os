@@ -21,6 +21,7 @@ import { useOperationalStore } from "@/stores/useOperationalStore";
 import { ehDoQuadro } from "@/lib/design/dono";
 import { useNav, SIDEBAR_W, SIDEBAR_W_EXPANDED } from "@/lib/context/NavContext";
 import { useState, useEffect, useMemo } from "react";
+import { motion } from "framer-motion";
 
 // ─── Primary nav config ────────────────────────────────────────
 // Grupos do rail primário: os 5 mais usados ficam sem grupo (fixos no topo, sem embaralhar
@@ -255,6 +256,7 @@ export default function Sidebar() {
 
   // Track which section is "active" in the secondary sidebar
   const [activePrimary, setActivePrimary] = useState<string | null>(null);
+  const [hoverNav, setHoverNav] = useState<string | null>(null);
   // `expanded` mora no NavContext: o painel secundário e o conteúdo da página precisam saber a
   // largura da barra pra não ficarem por baixo dela (era o bug do menu com subitens).
 
@@ -348,32 +350,39 @@ export default function Sidebar() {
   function renderNavItem(item: PrimaryItem) {
     const isPage    = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
     const isSection = activePrimary === item.href && secondaryOpen;
+    const destaque  = isPage || isSection;
     const Icon      = item.icon;
     return (
       <button
         key={item.href}
         onClick={() => handlePrimaryClick(item)}
+        onMouseEnter={() => setHoverNav(item.href)}
         title={expanded ? undefined : item.label}
+        aria-current={isPage ? "page" : undefined}
         className={cn(
-          "relative shrink-0 rounded-xl flex items-center transition-all duration-200 ease-out group",
+          "relative shrink-0 rounded-xl flex items-center outline-none focus-visible:ring-2 focus-visible:ring-ring group",
           expanded ? "w-full gap-3 px-3 h-10" : "w-10 h-10 justify-center",
-          isPage
-            ? "text-primary bg-lone-brand-bg-soft"
-            : isSection
-            ? "text-primary bg-lone-brand-bg-soft"
-            : "text-muted-foreground hover:text-foreground hover:bg-accent"
+          destaque ? "text-sidebar-accent-foreground" : "text-muted-foreground hover:text-foreground",
         )}
       >
-        <Icon size={17} strokeWidth={isPage ? 2.3 : 1.7} className="shrink-0" />
+        {/* Realce que DESLIZA: o do mouse acompanha o cursor; o ativo viaja de um item ao outro
+            quando a página muda (layoutId compartilhado). */}
+        {hoverNav === item.href && !destaque && (
+          <motion.span layoutId="nav-hover" className="absolute inset-0 rounded-xl bg-accent"
+            transition={{ type: "spring", bounce: 0, duration: 0.3 }} />
+        )}
+        {destaque && (
+          <motion.span layoutId="nav-ativo" className="absolute inset-0 rounded-xl bg-lone-brand-bg-soft ring-1 ring-inset ring-primary/40"
+            transition={{ type: "spring", bounce: 0.15, duration: 0.45 }}>
+            <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-lone-brand-soft" />
+          </motion.span>
+        )}
+        <Icon size={17} strokeWidth={destaque ? 2.2 : 1.7}
+          className={cn("relative shrink-0 transition-transform duration-200 group-hover:scale-110", destaque && "text-lone-brand-soft")} />
         {expanded && (
-          <span className={`text-xs font-medium truncate ${isPage ? "text-primary" : "text-muted-foreground"}`}>
+          <span className={cn("relative text-xs font-medium truncate", destaque ? "text-foreground" : "")}>
             {item.label}
           </span>
-        )}
-
-        {/* Active page: blue pill on right edge */}
-        {isPage && (
-          <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-primary -mr-px" />
         )}
 
         {/* Pulse dot for Design when there are queued requests */}
@@ -406,9 +415,12 @@ export default function Sidebar() {
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         {/* Logo: a barra é sempre grafite, então sempre a versão de fundo escuro (L branco). */}
-        <Link href="/" className="group shrink-0 w-10 h-10 flex items-center justify-center" aria-label="Lone Mídia — início">
-          <img src="/brand/logo-mark-on-dark.png" alt="Lone Mídia" width={192} height={239}
-            className="w-7 h-auto group-hover:scale-[1.04] transition-transform duration-300" />
+        <Link href="/" aria-label="Lone Mídia — início"
+          className={cn("group shrink-0 flex items-center gap-3 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring", expanded && "px-1")}>
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent ring-1 ring-sidebar-border transition-all duration-300 group-hover:ring-primary/50 group-hover:-rotate-6">
+            <img src="/brand/logo-mark-on-dark.png" alt="" width={192} height={239} className="h-auto w-[18px]" />
+          </span>
+          {expanded && <span className="text-sm font-semibold tracking-tight text-foreground">Lone OS</span>}
         </Link>
 
         {/* Expand/Collapse toggle */}
@@ -423,7 +435,7 @@ export default function Sidebar() {
         {/* Nav icons */}
         {/* `min-h-0` + `overflow-y-auto`: sem isso o flex-1 estica a nav além da tela e os últimos
             itens (Área CEO, Metas) ficavam inalcançáveis — a roda do mouse não pegava em nada. */}
-        <nav className={cn(
+        <nav onMouseLeave={() => setHoverNav(null)} className={cn(
           "flex flex-col gap-0.5 flex-1 min-h-0 overflow-y-auto overscroll-contain no-scrollbar justify-start pt-1 pb-1 shrink",
           expanded ? "w-full" : "items-center"
         )}>

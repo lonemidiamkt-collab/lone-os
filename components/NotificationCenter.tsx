@@ -1,26 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ABRIR_NOTIFICACOES } from "@/components/TopActions";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, X, CheckCheck, AlertTriangle, Activity, FileText, Settings, Clock, Trash2 } from "lucide-react";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
+import {
+  AlertOctagon, AlertTriangle, Bell, Check, CheckCheck, ChevronDown, FileImage, MessageCircle, Settings, TrendingDown, X,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { ABRIR_NOTIFICACOES } from "@/components/TopActions";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
-
-const TYPE_CONFIG: Record<string, { icon: typeof Bell; color: string; bg: string }> = {
-  sla:     { icon: AlertTriangle, color: "text-destructive",   bg: "bg-destructive/[0.08]" },
-  status:  { icon: Activity,      color: "text-primary", bg: "bg-primary/[0.08]" },
-  content: { icon: FileText,      color: "text-primary", bg: "bg-primary/[0.08]" },
-  checkin: { icon: Clock,         color: "text-primary", bg: "bg-primary/[0.08]" },
-  system:  { icon: Settings,      color: "text-muted-foreground",  bg: "bg-card/[0.03]" },
-};
-
-function timeAgo(iso: string): string {
-  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return "agora";
-  if (diff < 3600) return `${Math.floor(diff / 60)}min`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-  return `${Math.floor(diff / 86400)}d`;
-}
+import { cn } from "@/lib/utils";
+import type { AppNotification } from "@/lib/types";
 
 /**
  * Para onde o clique leva — null quando não há para onde ir.
@@ -30,170 +20,306 @@ function timeAgo(iso: string): string {
  * item aparece como texto, sem convite ao clique.
  */
 export function destinoDaNotificacao(n: { title?: string; cardId?: string; clientId?: string }): string | null {
-  // Card arquivado NÃO abre no quadro (ele não está lá) — abre a lista de Arquivadas, que é
-  // onde a pessoa desarquiva. Mandar pro cadastro do cliente era um beco sem saída.
   if (/arquivad/i.test(n.title ?? "")) return "/social?arquivadas=1";
   if (n.cardId) return `/social?card=${n.cardId}`;
   if (n.clientId) return `/clients/${n.clientId}`;
   return null;
 }
 
-export default function NotificationCenter({ semBotao = false }: { semBotao?: boolean }) {
+type Gravidade = "critico" | "alerta" | "info";
+type Area = "trafego" | "conteudo" | "clientes" | "sistema";
+
+const AREAS: { key: Area; label: string }[] = [
+  { key: "trafego", label: "Tráfego" },
+  { key: "conteudo", label: "Conteúdo" },
+  { key: "clientes", label: "Clientes" },
+  { key: "sistema", label: "Sistema" },
+];
+
+const ICONE: Record<Area, LucideIcon> = { trafego: TrendingDown, conteudo: FileImage, clientes: MessageCircle, sistema: Settings };
+
+const TOM: Record<Gravidade, string> = {
+  critico: "bg-lone-danger-bg text-lone-danger",
+  alerta: "bg-lone-warning-bg text-lone-warning",
+  info: "bg-primary/10 text-primary",
+};
+
+interface Lida {
+  n: AppNotification;
+  titulo: string;
+  gravidade: Gravidade;
+  area: Area;
+}
+
+// Os títulos chegam como "🚨 CRÍTICO: Nova União" / "⚠️ Alerta: Óticas Raki": a gravidade vira cor
+// do ícone e o título fica só com o que importa (o cliente ou o assunto).
+function ler(n: AppNotification): Lida {
+  let t = (n.title ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+  let gravidade: Gravidade = n.type === "sla" ? "critico" : "info";
+  if (/^cr[ií]tico\s*:/i.test(t)) { gravidade = "critico"; t = t.replace(/^cr[ií]tico\s*:\s*/i, ""); }
+  else if (/^alerta\s*:/i.test(t)) { gravidade = "alerta"; t = t.replace(/^alerta\s*:\s*/i, ""); }
+  else if (/^⚠/.test(n.title ?? "")) gravidade = "alerta";
+  const texto = `${n.title} ${n.body}`.toLowerCase();
+  const area: Area =
+    /cpl|ctr|impress|verba|saldo|campanha|an[uú]ncio|meta ads|pacing|conta de an/.test(texto) ? "trafego"
+    : n.type === "content" || /arte|card|post|design|legenda|conte[uú]do/.test(texto) ? "conteudo"
+    : n.type === "checkin" || n.clientId ? "clientes"
+    : "sistema";
+  return { n, titulo: t || n.title, gravidade, area };
+}
+
+function diaSP(d: Date) { return d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); }
+
+function blocoDoTempo(iso: string): string {
+  const d = new Date(iso);
+  const min = (Date.now() - d.getTime()) / 60000;
+  if (min < 60) return "Agora";
+  const hoje = diaSP(new Date());
+  const ontem = diaSP(new Date(Date.now() - 86400000));
+  const dia = diaSP(d);
+  if (dia === hoje) return "Hoje";
+  if (dia === ontem) return "Ontem";
+  if (min < 7 * 1440) return "Esta semana";
+  return "Anteriores";
+}
+
+function quando(iso: string): string {
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 1) return "agora";
+  if (min < 60) return `${min} min`;
+  if (min < 1440) return `${Math.floor(min / 60)} h`;
+  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" });
+}
+
+// Vários avisos da mesma área e gravidade em até 15 min viram UMA pilha (ex.: o scan de tráfego que
+// dispara 6 alertas de uma vez). Lê-se o resumo; abre-se se quiser os detalhes.
+type Bloco = { chave: string; itens: Lida[] };
+function empilhar(lista: Lida[]): Bloco[] {
+  const out: Bloco[] = [];
+  for (const l of lista) {
+    const ult = out[out.length - 1];
+    const base = ult?.itens[0];
+    if (base && base.area === l.area && base.gravidade === l.gravidade
+      && Math.abs(new Date(base.n.createdAt).getTime() - new Date(l.n.createdAt).getTime()) < 15 * 60000) {
+      ult.itens.push(l);
+    } else {
+      out.push({ chave: l.n.id, itens: [l] });
+    }
+  }
+  return out;
+}
+
+const NOME_AREA: Record<Area, [string, string]> = {
+  trafego: ["alerta de tráfego", "alertas de tráfego"],
+  conteudo: ["aviso de conteúdo", "avisos de conteúdo"],
+  clientes: ["aviso de clientes", "avisos de clientes"],
+  sistema: ["aviso do sistema", "avisos do sistema"],
+};
+
+export default function NotificationCenter(_props: { semBotao?: boolean }) {
   const notifications = useNotificationsStore((s) => s.notifications);
-  const markNotificationRead = useNotificationsStore((s) => s.markRead);
-  const markAllNotificationsRead = useNotificationsStore((s) => s.markAllRead);
+  const markRead = useNotificationsStore((s) => s.markRead);
+  const markAllRead = useNotificationsStore((s) => s.markAllRead);
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [filtro, setFiltro] = useState<"todas" | "nao_lidas" | Area>("todas");
+  const [abertas, setAbertas] = useState<Set<string>>(new Set());
   const router = useRouter();
 
-  // A barra de ações do topo abre a gaveta por evento (o sino mora nela agora).
+  // O sino mora na barra de ações do topo e abre este painel por evento.
   useEffect(() => {
-    const abrir = () => setOpen((o) => !o);
-    window.addEventListener(ABRIR_NOTIFICACOES, abrir);
-    return () => window.removeEventListener(ABRIR_NOTIFICACOES, abrir);
+    const alternar = () => setOpen((o) => !o);
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener(ABRIR_NOTIFICACOES, alternar);
+    window.addEventListener("keydown", esc);
+    return () => { window.removeEventListener(ABRIR_NOTIFICACOES, alternar); window.removeEventListener("keydown", esc); };
   }, []);
 
-  // Clique na notificação: marca como lida e ABRE o alvo — card direto no board (/social?card=)
-  // ou a ficha do cliente. Sem alvo, só marca como lida.
-  const abrir = (notif: { id: string; read: boolean; title?: string; cardId?: string; clientId?: string }) => {
-    if (!notif.read) markNotificationRead(notif.id);
-    const destino = destinoDaNotificacao(notif);
+  const lidas = useMemo(() => notifications.map(ler), [notifications]);
+  const naoLidas = lidas.filter((l) => !l.n.read).length;
+  const porArea = useMemo(() => {
+    const m: Record<Area, number> = { trafego: 0, conteudo: 0, clientes: 0, sistema: 0 };
+    lidas.forEach((l) => { if (!l.n.read) m[l.area] += 1; });
+    return m;
+  }, [lidas]);
+
+  const visiveis = lidas.filter((l) =>
+    filtro === "todas" ? true : filtro === "nao_lidas" ? !l.n.read : l.area === filtro);
+
+  const grupos = useMemo(() => {
+    const ordem = ["Agora", "Hoje", "Ontem", "Esta semana", "Anteriores"];
+    const m = new Map<string, Lida[]>();
+    visiveis.forEach((l) => { const b = blocoDoTempo(l.n.createdAt); m.set(b, [...(m.get(b) ?? []), l]); });
+    return ordem.filter((o) => m.has(o)).map((o) => ({ titulo: o, blocos: empilhar(m.get(o)!) }));
+  }, [visiveis]);
+
+  const abrir = (l: Lida) => {
+    if (!l.n.read) markRead(l.n.id);
+    const destino = destinoDaNotificacao(l.n);
     if (destino) { setOpen(false); router.push(destino); }
   };
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
-  const filtered = filter === "unread" ? notifications.filter((n) => !n.read) : notifications;
+  const chips: { key: typeof filtro; label: string; n?: number }[] = [
+    { key: "todas", label: "Todas" },
+    { key: "nao_lidas", label: "Não lidas", n: naoLidas },
+    ...AREAS.filter((a) => porArea[a.key] > 0).map((a) => ({ key: a.key, label: a.label, n: porArea[a.key] })),
+  ];
 
-  return (
-    <>
-      {/* Bell trigger */}
-      {!semBotao && <button
-        onClick={() => setOpen(!open)}
-        className="relative w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/[0.04] transition-all"
-        title="Notificações"
+  let ordemAnim = 0;
+
+  const renderItem = (l: Lida, compacto = false) => {
+    const Icone = l.gravidade === "critico" ? AlertOctagon : l.gravidade === "alerta" ? AlertTriangle : ICONE[l.area];
+    const clicavel = !!destinoDaNotificacao(l.n);
+    const i = ordemAnim++;
+    return (
+      <motion.div
+        key={l.n.id}
+        layout="position"
+        initial={{ opacity: 0, x: 12, filter: "blur(6px)" }}
+        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+        transition={{ duration: 0.28, delay: Math.min(i, 8) * 0.035, ease: [0.16, 1, 0.3, 1] }}
+        className={cn(
+          "group relative flex gap-3 rounded-xl px-3 transition-colors",
+          compacto ? "py-2" : "py-2.5",
+          clicavel ? "cursor-pointer hover:bg-accent" : "",
+        )}
+        onClick={clicavel ? () => abrir(l) : undefined}
       >
-        <Bell size={17} strokeWidth={1.8} />
-        {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-[9px] font-bold text-foreground flex items-center justify-center animate-pulse">
-            {unreadCount > 99 ? "99+" : unreadCount}
+        {!l.n.read && <span className="absolute left-1 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-primary" aria-label="não lida" />}
+        {!compacto && (
+          <span className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", TOM[l.gravidade])}>
+            <Icone size={15} strokeWidth={2} />
           </span>
         )}
-      </button>}
-
-      {/* Drawer */}
-      {open && (
-        <>
-          <div className="fixed inset-0 z-[150]" onClick={() => setOpen(false)} />
-          <div
-            className="fixed top-0 right-0 bottom-0 z-[151] w-[380px] max-w-[90vw] flex flex-col animate-slide-in-right bg-background/90 border-l-[0.5px] border-border"
-            style={{
-              backdropFilter: "blur(24px)",
-              WebkitBackdropFilter: "blur(24px)",
-            }}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <div className="flex items-center gap-2.5">
-                <Bell size={15} className="text-primary" />
-                <h2 className="text-sm font-semibold text-foreground">Notificacoes</h2>
-                {unreadCount > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary font-bold tabular-nums">
-                    {unreadCount}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1">
-                {unreadCount > 0 && (
-                  <button onClick={markAllNotificationsRead}
-                    className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/[0.05] transition-all"
-                    title="Marcar todas como lidas">
-                    <CheckCheck size={12} /> Lidas
-                  </button>
-                )}
-                <button onClick={() => setOpen(false)}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/[0.04] transition-all">
-                  <X size={14} />
-                </button>
-              </div>
-            </div>
-
-            {/* Filter tabs */}
-            <div className="flex gap-1 px-5 py-2.5 border-b border-border">
-              {(["all", "unread"] as const).map((f) => (
-                <button key={f} onClick={() => setFilter(f)}
-                  className={`text-[11px] px-3 py-1.5 rounded-lg font-medium transition-all ${
-                    filter === f
-                      ? "bg-card/[0.06] text-foreground"
-                      : "text-muted-foreground hover:text-muted-foreground"
-                  }`}>
-                  {f === "all" ? "Todas" : `Nao lidas (${unreadCount})`}
-                </button>
-              ))}
-            </div>
-
-            {/* List */}
-            <div className="flex-1 overflow-y-auto">
-              {filtered.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center px-6">
-                  <div className="w-12 h-12 rounded-2xl bg-card/[0.03] flex items-center justify-center mb-3">
-                    <Bell size={20} strokeWidth={1.2} className="text-muted-foreground" />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {filter === "unread" ? "Nenhuma notificacao nao lida" : "Nenhuma notificacao"}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Tudo sob controle.</p>
-                </div>
-              ) : (
-                <div className="py-1">
-                  {filtered.slice(0, 50).map((notif) => {
-                    const config = TYPE_CONFIG[notif.type] ?? TYPE_CONFIG.system;
-                    const Icon = config.icon;
-                    const clicavel = !!destinoDaNotificacao(notif);
-                    return (
-                      <button
-                        key={notif.id}
-                        onClick={() => abrir(notif)}
-                        aria-disabled={!clicavel}
-                        title={clicavel ? undefined : "Este aviso não tem tela pra abrir."}
-                        className={`w-full text-left px-5 py-3 transition-all ${
-                          clicavel ? "hover:bg-card/[0.02]" : "cursor-default"
-                        } ${!notif.read ? "bg-primary/[0.015]" : ""}`}
-                      >
-                        <div className="flex gap-3">
-                          <div className={`w-7 h-7 rounded-lg ${config.bg} flex items-center justify-center shrink-0 mt-0.5`}>
-                            <Icon size={13} className={config.color} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <p className={`text-[12px] font-medium leading-tight truncate ${!notif.read ? "text-foreground" : "text-muted-foreground"}`}>
-                                {notif.title}
-                              </p>
-                              {!notif.read && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                              )}
-                            </div>
-                            <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2">{notif.body}</p>
-                            <p className="text-[10px] text-muted-foreground mt-1 tabular-nums">{timeAgo(notif.createdAt)}</p>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            {notifications.length > 0 && (
-              <div className="px-5 py-3 border-t border-border">
-                <p className="text-[10px] text-muted-foreground text-center">
-                  {notifications.length} notificacao(es) total
-                </p>
-              </div>
-            )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className={cn("truncate text-[13px]", l.n.read ? "font-medium text-muted-foreground" : "font-semibold text-foreground")}>{l.titulo}</p>
+            <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{quando(l.n.createdAt)}</span>
           </div>
-        </>
-      )}
-    </>
+          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{l.n.body}</p>
+        </div>
+        {!l.n.read && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); markRead(l.n.id); }}
+            className="absolute right-2 top-2 hidden h-6 w-6 items-center justify-center rounded-md bg-card text-muted-foreground shadow-sm ring-1 ring-border hover:text-foreground group-hover:flex"
+            aria-label="Marcar como lida" title="Marcar como lida"
+          >
+            <Check size={13} />
+          </button>
+        )}
+      </motion.div>
+    );
+  };
+
+  return (
+    <MotionConfig reducedMotion="user">
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-[150]" onClick={() => setOpen(false)} aria-hidden />
+            <motion.section
+              role="dialog"
+              aria-label="Notificações"
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+              transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+              style={{ transformOrigin: "top right" }}
+              className="fixed right-4 top-[68px] z-[151] flex max-h-[min(680px,calc(100vh-88px))] w-[440px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-xl"
+            >
+              <header className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-[15px] font-semibold tracking-tight">Notificações</h2>
+                  {naoLidas > 0 && (
+                    <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary-foreground">{naoLidas}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  {naoLidas > 0 && (
+                    <button type="button" onClick={() => markAllRead()}
+                      className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
+                      <CheckCheck size={14} /> Marcar todas como lidas
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setOpen(false)} aria-label="Fechar"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground">
+                    <X size={15} />
+                  </button>
+                </div>
+              </header>
+
+              <div className="flex gap-1.5 overflow-x-auto px-4 pb-3 no-scrollbar">
+                {chips.map((c) => (
+                  <button key={c.key} type="button" onClick={() => setFiltro(c.key)}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                      filtro === c.key ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+                    )}>
+                    {c.label}
+                    {!!c.n && <span className="tabular-nums opacity-80">{c.n}</span>}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex-1 overflow-y-auto border-t border-border px-2 pb-3">
+                {grupos.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-lone-success-bg text-lone-success"><Bell size={18} /></span>
+                    <p className="text-sm font-medium text-foreground">Tudo em dia</p>
+                    <p className="text-xs text-muted-foreground">Nenhuma notificação {filtro === "todas" ? "" : "neste filtro "}por aqui.</p>
+                  </div>
+                ) : grupos.map((g) => (
+                  <div key={g.titulo} className="pt-3">
+                    <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{g.titulo}</p>
+                    {g.blocos.map((b) => {
+                      if (b.itens.length === 1) return renderItem(b.itens[0]);
+                      const base = b.itens[0];
+                      const aberta = abertas.has(b.chave);
+                      const nomes = b.itens.map((i) => i.titulo);
+                      const naoLidasPilha = b.itens.filter((i) => !i.n.read).length;
+                      const Icone = base.gravidade === "critico" ? AlertOctagon : base.gravidade === "alerta" ? AlertTriangle : ICONE[base.area];
+                      return (
+                        <div key={b.chave} className="relative">
+                          <button type="button"
+                            onClick={() => setAbertas((s) => { const n = new Set(s); if (n.has(b.chave)) n.delete(b.chave); else n.add(b.chave); return n; })}
+                            className="relative flex w-full gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-accent"
+                            aria-expanded={aberta}
+                          >
+                            {naoLidasPilha > 0 && <span className="absolute left-1 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-primary" />}
+                            <span className={cn("relative mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", TOM[base.gravidade])}>
+                              <Icone size={15} strokeWidth={2} />
+                              <span className="absolute -bottom-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-popover px-1 text-[10px] font-semibold tabular-nums ring-1 ring-border">{b.itens.length}</span>
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-baseline justify-between gap-3">
+                                <p className="text-[13px] font-semibold text-foreground">{b.itens.length} {NOME_AREA[base.area][1]}</p>
+                                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{quando(base.n.createdAt)}</span>
+                              </div>
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {nomes.slice(0, 3).join(" · ")}{nomes.length > 3 ? ` +${nomes.length - 3}` : ""}
+                              </p>
+                            </div>
+                            <ChevronDown size={15} className={cn("mt-2 shrink-0 text-muted-foreground transition-transform", aberta && "rotate-180")} />
+                          </button>
+                          <AnimatePresence initial={false}>
+                            {aberta && (
+                              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                                className="ml-[22px] overflow-hidden border-l border-border pl-3">
+                                {b.itens.map((l) => renderItem(l, true))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </motion.section>
+          </>
+        )}
+      </AnimatePresence>
+    </MotionConfig>
   );
 }
