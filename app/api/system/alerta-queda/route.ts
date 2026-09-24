@@ -5,7 +5,9 @@ export const maxDuration = 300;
 import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { csSendGroupText } from "@/lib/cs/notify";
+import { csSendGroupText, csSendGroupDocument } from "@/lib/cs/notify";
+import { carregarQuemFoiBem, ontemSP, type FoiBem } from "@/lib/traffic/resultado-dia";
+import { resultadoDiaPdfHtml, legendaResultadoDia, textoResultadoDia, type QuedaDia } from "@/lib/reports/resultadoDiaPdf";
 import { carregarVistos } from "@/lib/traffic/hoje/vistos";
 import { estaVisto, nivelDaAnomalia } from "@/lib/traffic/hoje/visto";
 
@@ -52,12 +54,12 @@ export async function POST(req: NextRequest) {
   const { mapa: vistos } = await carregarVistos();
   const alertas = (lidos ?? []).filter((a) =>
     !estaVisto(vistos, a.client_id as string, "entrega", nivelDaAnomalia(a.severity as string)));
-  if (!alertas.length) return NextResponse.json({ ok: true, alertas: 0, clientes: 0, enviado: false, vistos: (lidos?.length ?? 0) - alertas.length });
 
   // Nomes: um alerta com UUID no lugar do nome do cliente não serve pra ninguém agir.
   const ids = [...new Set(alertas.map((a) => a.client_id as string))];
-  const { data: clientes } = await supabaseAdmin.from("clients")
-    .select("id, name, active, draft_status").in("id", ids);
+  const { data: clientes } = ids.length
+    ? await supabaseAdmin.from("clients").select("id, name, active, draft_status").in("id", ids)
+    : { data: [] as { id: string; name: string | null; active: boolean | null; draft_status: string | null }[] };
   const porId = new Map((clientes ?? []).map((c) => [c.id as string, c]));
 
   // Um item por cliente, com o sintoma mais grave. Cliente inativo ou rascunho não entra: verba
@@ -82,35 +84,50 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (!porCliente.size) {
-    // Havia alertas, mas todos de cliente inativo. Marca como notificados pra não reprocessar.
-    await supabaseAdmin.from("anomaly_alerts").update({ notified_at: new Date().toISOString() })
-      .in("id", alertas.map((a) => a.id as string));
-    return NextResponse.json({ ok: true, alertas: alertas.length, clientes: 0, enviado: false, motivo: "só clientes inativos" });
+  // Alerta de cliente inativo/rascunho: marca como notificado pra não reprocessar.
+  const deInativos = alertas.filter((a) => !porCliente.has(a.client_id as string)).map((a) => a.id as string);
+  if (deInativos.length) {
+    await supabaseAdmin.from("anomaly_alerts").update({ notified_at: new Date().toISOString() }).in("id", deInativos);
   }
 
-  const lista = [...porCliente.values()].sort((a, b) =>
-    (a.severidade === "critical" ? 0 : 1) - (b.severidade === "critical" ? 0 : 1));
+  const quedas: QuedaDia[] = [...porCliente.values()]
+    .sort((a, b) => (a.severidade === "critical" ? 0 : 1) - (b.severidade === "critical" ? 0 : 1))
+    .map(({ nome, sintoma, severidade }) => ({ nome, sintoma, severidade }));
 
-  const texto = [
-    `⚠️ *Queda de resultado — ${lista.length} cliente${lista.length > 1 ? "s" : ""}*`, "",
-    ...lista.map((c) => `• *${c.nome}* — ${c.sintoma}`),
-    "", "Comparado com a média dos últimos 7 dias da própria conta.",
-    "Vale conferir hoje: o cliente costuma perceber a queda antes da gente.",
-  ].join("\n");
+  // O lado bom (Roberto, 24/09): quem foi acima da própria média ontem, pelos dias FECHADOS.
+  // Quem está na lista de queda não entra aqui. Falha ao ler não derruba o aviso de queda.
+  const { ontem, bons } = await carregarQuemFoiBem(new Set(porCliente.keys()))
+    .catch((e) => { console.error("[alerta-queda] quem foi bem:", e); return { ontem: ontemSP(), bons: [] as FoiBem[] }; });
 
-  if (dry) return NextResponse.json({ ok: true, alertas: alertas.length, clientes: lista.length, dry: true, texto });
+  if (!quedas.length && !bons.length) {
+    return NextResponse.json({ ok: true, alertas: alertas.length, clientes: 0, bons: 0, enviado: false,
+      vistos: (lidos?.length ?? 0) - alertas.length });
+  }
+
+  const legenda = legendaResultadoDia(quedas, bons, ontem);
+  const texto = textoResultadoDia(quedas, bons, ontem);
+  if (dry) return NextResponse.json({ ok: true, dry: true, alertas: alertas.length, clientes: quedas.length, bons: bons.length, legenda, texto });
 
   const jid = process.env.CS_TRAFFIC_GROUP_JID || "";
   if (!jid) return NextResponse.json({ error: "CS_TRAFFIC_GROUP_JID não configurado" }, { status: 500 });
 
-  const r = await csSendGroupText(jid, texto, undefined, { origem: "alerta-queda", destino: "interno" });
-  if (!r.ok) return NextResponse.json({ error: r.error, clientes: lista.length }, { status: 500 });
+  // PDF com legenda curta (o Roberto pediu PDF no lugar do textão); se o gerador falhar, vai o texto.
+  const { htmlToPdf } = await import("@/lib/traffic/renderPdf");
+  const { loadLoneLogo } = await import("@/lib/cs/roteiro-pdf");
+  const logo = await loadLoneLogo().catch(() => "");
+  const pdf = await htmlToPdf(resultadoDiaPdfHtml(quedas, bons, ontem, logo));
+  const formato = pdf.ok && pdf.buffer ? "pdf" : "texto";
+  const r = formato === "pdf"
+    ? await csSendGroupDocument(jid, pdf.buffer!.toString("base64"), `resultado-de-ontem-${ontem}.pdf`, legenda)
+    : await csSendGroupText(jid, texto, undefined, { origem: "alerta-queda", destino: "interno" });
+  if (!r.ok) return NextResponse.json({ error: r.error, clientes: quedas.length, bons: bons.length }, { status: 500 });
 
   // Só marca como notificado DEPOIS de o envio confirmar. Marcar antes perderia o alerta se a
   // Evolution estivesse fora — e ninguém saberia que houve queda.
-  await supabaseAdmin.from("anomaly_alerts").update({ notified_at: new Date().toISOString() })
-    .in("id", [...porCliente.values()].flatMap((c) => c.ids));
+  const notificados = [...porCliente.values()].flatMap((c) => c.ids);
+  if (notificados.length) {
+    await supabaseAdmin.from("anomaly_alerts").update({ notified_at: new Date().toISOString() }).in("id", notificados);
+  }
 
-  return NextResponse.json({ ok: true, alertas: alertas.length, clientes: lista.length, enviado: true });
+  return NextResponse.json({ ok: true, alertas: alertas.length, clientes: quedas.length, bons: bons.length, formato, enviado: true });
 }
