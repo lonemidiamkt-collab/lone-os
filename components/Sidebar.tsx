@@ -399,17 +399,16 @@ export default function Sidebar() {
       )}
 
       <aside className={cn(
-        "fixed left-0 top-0 bottom-0 z-50 flex flex-col justify-between py-5 bg-sidebar border-r border-sidebar-border transition-all duration-[400ms]",
+        // tema-escuro: a barra principal é grafite nos dois temas (decisão V1); só o conteúdo segue o tema.
+        "tema-escuro fixed left-0 top-0 bottom-0 z-50 flex flex-col justify-between py-5 bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-[400ms]",
         "ease-[cubic-bezier(0.16,1,0.3,1)]",
         expanded ? "w-[200px] items-start px-3" : "w-[72px] items-center",
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
-        {/* Logo — o tailwind.config não tem darkMode:"class", então `dark:` seguiria o SO e não o tema escolhido. */}
+        {/* Logo: a barra é sempre grafite, então sempre a versão de fundo escuro (L branco). */}
         <Link href="/" className="group shrink-0 w-10 h-10 flex items-center justify-center" aria-label="Lone Mídia — início">
-          <img src="/brand/logo-mark-on-light.png" alt="Lone Mídia" width={192} height={239}
-            className="w-7 h-auto [.dark_&]:hidden group-hover:scale-[1.04] transition-transform duration-300" />
-          <img src="/brand/logo-mark-on-dark.png" alt="" aria-hidden width={192} height={239}
-            className="w-7 h-auto hidden [.dark_&]:block group-hover:scale-[1.04] transition-transform duration-300" />
+          <img src="/brand/logo-mark-on-dark.png" alt="Lone Mídia" width={192} height={239}
+            className="w-7 h-auto group-hover:scale-[1.04] transition-transform duration-300" />
         </Link>
 
         {/* Expand/Collapse toggle */}
