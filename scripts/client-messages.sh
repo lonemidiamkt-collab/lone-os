@@ -1,8 +1,8 @@
 #!/bin/bash
 # Wrapper de cron para /api/system/client-messages com ?kind=.
-# Uso: client-messages.sh <monday|support>   (default = support)
+# Uso: client-messages.sh <monday|wed|fri>
+# Passa pelo cron-call.sh para a Central de Automações registrar e poder desligar cada dia
+# separado (client-messages-monday / -wed / -fri).
 KIND="${1:-support}"
-CRON_SECRET=$(grep "^CRON_SECRET=" /opt/loneos/.env | cut -d= -f2)
-curl -s -m 1800 -X POST "http://localhost:3000/api/system/client-messages?kind=${KIND}" \
-  -H "Authorization: Bearer ${CRON_SECRET}" \
-  -H "Content-Type: application/json"
+CRON_JOB="client-messages-${KIND}" CRON_MAX_TIME=1800 \
+  exec "$(dirname "$0")/cron-call.sh" "client-messages?kind=${KIND}" POST

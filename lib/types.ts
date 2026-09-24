@@ -665,34 +665,6 @@ export interface AdDailyMetric {
   leads?: number;
 }
 
-// ─── Automations ───────────────────────────────────────────────
-export type AutomationTrigger =
-  | "client_status_change"
-  | "task_overdue"
-  | "content_approval_pending"
-  | "budget_threshold"
-  | "onboarding_stalled";
-
-export type AutomationAction =
-  | "send_notification"
-  | "assign_task"
-  | "change_status"
-  | "send_chat_message";
-
-export interface AutomationRule {
-  id: string;
-  name: string;
-  description: string;
-  trigger: AutomationTrigger;
-  triggerConfig: Record<string, string>;
-  action: AutomationAction;
-  actionConfig: Record<string, string>;
-  enabled: boolean;
-  createdAt: string;
-  lastTriggeredAt?: string;
-  triggerCount: number;
-}
-
 // ─── OKRs ──────────────────────────────────────────────────────
 export type OKRStatus = "on_track" | "at_risk" | "off_track";
 

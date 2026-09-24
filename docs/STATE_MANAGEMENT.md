@@ -2,7 +2,7 @@
 
 ## Architecture
 
-All mutable application state lives in Zustand stores (`stores/`). The legacy `AppStateContext` is preserved for two localStorage-only features (`reminders`, `automationRules`) until those get DB tables and can be migrated (Task 10).
+All mutable application state lives in Zustand stores (`stores/`). The legacy `AppStateContext` is preserved for one localStorage-only feature (`reminders`) until it gets a DB table and can be migrated (Task 10). The old `automationRules` (5 regras fixas avaliadas no navegador) saiu em set/2026: `/automations` agora é a Central de Automações, lida do banco (`automation_runs`, `automation_settings`).
 
 ## Stores
 
@@ -92,6 +92,5 @@ Every page that uses store data calls `init()` in a `useEffect` on mount. `init(
 | File | State kept | Reason |
 |---|---|---|
 | `app/calendar/page.tsx` | `reminders`, `addReminder`, `toggleReminder`, `updateReminder` | No DB table yet — localStorage only |
-| `app/automations/page.tsx` | `automationRules`, all rule mutations | No DB table yet — localStorage only |
 
-These will be migrated in Task 10 after the corresponding DB migrations are created.
+This will be migrated in Task 10 after the corresponding DB migration is created.

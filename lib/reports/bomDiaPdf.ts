@@ -106,7 +106,7 @@ export function legendaBomDia(bloco: BlocoDia, mencao: string): string {
  * Quatro linhas no máximo. O que o gestor precisa saber de manhã é o tamanho de cada fila — quem
  * resolve o quê está no PDF de cada um.
  */
-export function manchetePanorama(p: {
+export interface PanoramaBomDia {
   data: string;
   esperandoOk: number;
   emProducao: number;
@@ -114,8 +114,10 @@ export function manchetePanorama(p: {
   semPostPlanejado: number;
   esfriando: number;
   encalhados: number;
-}): string {
-  const l = [`☀️ *Bom dia, time!* (${p.data})`, ""];
+}
+
+/** Só a linha das filas ("" quando está tudo zerado) — a manchete e a manhã unificada usam a mesma. */
+export function filasPanorama(p: PanoramaBomDia): string {
   const filas: string[] = [];
   if (p.esperandoOk) filas.push(`📋 ${p.esperandoOk} esperando ok/não`);
   if (p.artesProntas) filas.push(`✅ ${p.artesProntas} arte(s) pronta(s) só pra postar`);
@@ -123,7 +125,15 @@ export function manchetePanorama(p: {
   if (p.semPostPlanejado) filas.push(`📭 ${p.semPostPlanejado} sem post planejado`);
   if (p.esfriando) filas.push(`👀 ${p.esfriando} esfriando`);
   if (p.encalhados) filas.push(`🧹 ${p.encalhados} encalhados (+30d)`);
-  l.push(filas.length ? filas.join(" · ") : "Nada em fila — dia limpo! 🚀");
-  l.push("", "_Mandei o de cada um em PDF abaixo._");
+  return filas.join(" · ");
+}
+
+export function manchetePanorama(
+  p: PanoramaBomDia,
+  rodape: string | null = "_Mandei o de cada um em PDF abaixo._",
+): string {
+  const l = [`☀️ *Bom dia, time!* (${p.data})`, ""];
+  l.push(filasPanorama(p) || "Nada em fila — dia limpo! 🚀");
+  if (rodape) l.push("", rodape);
   return l.join("\n");
 }

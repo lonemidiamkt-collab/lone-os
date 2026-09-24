@@ -5,10 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/cron-guard";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { spNow, ymd, isBusinessDay } from "@/lib/cs/vigilancia";
-import { montarSnapshotCS } from "@/lib/cs/snapshot";
-import { buildBomDiaDigest } from "@/lib/cs/bom-dia";
-import { fatoEsfriando } from "@/lib/cs/porta-voz";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { coletarBomDia } from "@/lib/cs/manha-fontes";
+import { manchetePanorama, bomDiaPessoaPdfHtml, legendaBomDia } from "@/lib/reports/bomDiaPdf";
 
 // POST /api/system/cs-bom-dia — "bom dia" diário da Lone no grupo interno: raio-x rápido do dia
 // (pendências esperando ok/não, produção, atrasados, quem esfriou) pro time começar sabendo o que
@@ -26,12 +24,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skip: "fora de dia útil", dia: ymd(now) });
   }
 
-  const snap = await montarSnapshotCS();
-    // O time real, pra "Carlos" e "Carlos Augusto" não virarem dois blocos (o snapshot encurta
-  // o dono do card e mantém o completo na pendência).
-  const { data: membros } = await supabaseAdmin.from("team_members").select("name");
-  const time = (membros ?? []).map((m) => m.name as string).filter(Boolean);
-  const msg = buildBomDiaDigest(snap, now, time);
+  // Snapshot, time real e blocos por dono: lib/cs/manha-fontes.ts (a manhã unificada usa o mesmo).
+  const { snap, blocos, panorama, digest: msg, fatos } = await coletarBomDia(now);
   // Bom dia vai pro grupo da EQUIPE (onde a Lone é "do time"); cai no grupo de artes se não houver.
   const internalJid = process.env.CS_TEAM_GROUP_JID || process.env.CS_INTERNAL_GROUP_JID || null;
 
@@ -41,20 +35,7 @@ export async function POST(req: NextRequest) {
   // tinha 2.314 caracteres em 45 linhas, misturando o PANORAMA da operação com a lista de cada
   // pessoa. O panorama serve ao gestor e cabe em quatro linhas; a lista é trabalho, e trabalho de
   // outro é o que faz o time parar de ler.
-  const { coletarItens, agruparPorDono } = await import("@/lib/cs/cobranca-nominal");
-  const { manchetePanorama, bomDiaPessoaPdfHtml, legendaBomDia } = await import("@/lib/reports/bomDiaPdf");
-  const blocos = agruparPorDono(coletarItens(snap), time);
-
-  const dataBR = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" });
-  const manchete = manchetePanorama({
-    data: dataBR,
-    esperandoOk: snap.pendentes.length,
-    emProducao: snap.emProducao ?? 0,
-    artesProntas: snap.prontasPraPostar?.length ?? 0,
-    semPostPlanejado: snap.semPostsSemana.length,
-    esfriando: snap.esfriando.length,
-    encalhados: snap.encalhados ?? 0,
-  });
+  const manchete = manchetePanorama(panorama);
 
   let postada = false;
   const pdfsEnviados: string[] = [];
@@ -64,7 +45,7 @@ export async function POST(req: NextRequest) {
     // Declara os esfriando que a manchete JÁ cita — assim o cron das 9h30 não repete os mesmos.
     const r = await csSendGroupText(internalJid, manchete, undefined, {
       origem: "cs-bom-dia", destino: "interno",
-      fatos: snap.esfriando.map((e) => fatoEsfriando(e.cliente)),
+      fatos,
     });
     postada = r.ok;
     if (!r.ok) console.error("[cs-bom-dia] manchete falhou:", r.error);

@@ -12,7 +12,7 @@ describe("treinamento base do Loninho", () => {
     expect(ids.length).toBeGreaterThanOrEqual(10);
     const nomes: Record<string, RegExp> = {
       dashboard: /Dashboard/, clientes: /Clientes & Onboarding/, trafego: /Tráfego Pago/, social: /Social Media/,
-      designer: /\*Designer\*/, tarefas: /Tarefas/, contratos: /Contratos/, comunicados: /Comunicados/, prospeccao: /Prospecção/, ceo: /Área CEO/, sobre: /Sobre o Sistema/,
+      designer: /\*Designer\*/, tarefas: /Tarefas/, contratos: /Contratos/, comunicados: /Comunicados/, prospeccao: /Prospecção/, ceo: /Área CEO/, automacoes: /Central de Automações/, sobre: /Sobre o Sistema/,
     };
     for (const id of ids) {
       expect(nomes[id], `módulo "${id}" do manual sem regex no teste`).toBeTruthy();

@@ -74,6 +74,10 @@ export const SISTEMA = `# Como o painel (Lone OS) funciona — responda isto sem
 - *Agente (/agente)*: "O que precisa de você hoje" (feed de prioridades de todas as fontes, com
   fato e recomendação, Feito/Ignorar/Incorreta), sugestões esperando ok/não, sua acurácia, o que
   você aprendeu.
+- *Central de Automações* (/automations, só gestão): os jobs agendados do servidor (mensagens de
+  seg/qua/sex aos clientes, avisos no grupo, coletas da Meta, backup) com agenda, última execução e
+  saúde; liga/desliga, Ensaio (roda sem enviar) e Rodar agora. Se perguntarem por que uma mensagem
+  automática não saiu, mande olhar lá — o job pode estar desligado ou ter falhado.
 - *Configurações*: perfil, aparência, verificação em duas etapas (senha + código do celular).
 - *Sobre o Sistema* (/sobre): o manual vivo, módulo por módulo, com changelog. Quando não souber um
   detalhe de tela, mande a pessoa lá — não descreva um botão que você não tem certeza que existe.

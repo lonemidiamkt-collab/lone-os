@@ -47,7 +47,7 @@ const PAGES: SearchResult[] = [
   { id: "p-calendar", type: "page", title: "Calendário", subtitle: "Agenda de publicações", href: "/calendar", icon: Calendar, roles: OPERACAO },
   { id: "p-integrations", type: "page", title: "Conexão Meta", subtitle: "Token e contas de anúncio", href: "/integrations", icon: Plug, roles: ["admin", "manager", "traffic"] },
   { id: "p-agente", type: "page", title: "Agente Lone", subtitle: "Prioridades e decisões do agente", href: "/agente", icon: Bot, roles: GESTAO },
-  { id: "p-automations", type: "page", title: "Automações", subtitle: "Regras e gatilhos do sistema", href: "/automations", icon: Zap, roles: GESTAO },
+  { id: "p-automations", type: "page", title: "Automações", subtitle: "Rotinas agendadas do servidor", href: "/automations", icon: Zap, roles: GESTAO },
   { id: "p-goals", type: "page", title: "Metas & OKRs", subtitle: "Objetivos do time", href: "/goals", icon: Target, roles: GESTAO },
   { id: "p-sobre", type: "page", title: "Sobre o Sistema", subtitle: "Documentação interna", href: "/sobre", icon: Info, roles: OPERACAO },
   { id: "p-ceo", type: "page", title: "Área CEO", subtitle: "Visão da diretoria", href: "/ceo", icon: Lock, roles: ["admin"] },

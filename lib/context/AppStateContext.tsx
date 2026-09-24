@@ -34,7 +34,6 @@ import type {
   ClientInvestmentData,
   InvestmentPaymentMethod,
   Reminder,
-  AutomationRule,
 } from "@/lib/types";
 import {
   mockClients,
@@ -260,13 +259,6 @@ interface AppStateContextValue {
   toggleReminder: (id: string) => void;
   updateReminder: (id: string, updates: Partial<Reminder>) => void;
 
-  // Automations
-  automationRules: AutomationRule[];
-  addAutomationRule: (rule: Omit<AutomationRule, "id" | "createdAt" | "triggerCount">) => AutomationRule;
-  updateAutomationRule: (id: string, updates: Partial<AutomationRule>) => void;
-  toggleAutomationRule: (id: string) => void;
-  deleteAutomationRule: (id: string) => void;
-
   // Investment Control
   investmentData: Record<string, ClientInvestmentData>;
   updateInvestmentData: (clientId: string, data: Partial<ClientInvestmentData>, actor: string) => void;
@@ -344,24 +336,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return [];
   });
 
-  const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
-    { id: "auto-1", name: "Risco de Churn", description: "Cliente marcado como em risco de cancelamento — notifica CS + Gerente imediatamente", trigger: "client_status_change", triggerConfig: { status: "at_risk" }, action: "send_notification", actionConfig: { target: "cs,manager", message: "Cliente em risco de churn" }, enabled: true, createdAt: new Date().toISOString(), triggerCount: 3 },
-    { id: "auto-2", name: "Task Vencida", description: "Tarefa passou do prazo de entrega — notifica o responsavel", trigger: "task_overdue", triggerConfig: {}, action: "send_notification", actionConfig: { target: "assignee", message: "Tarefa vencida" }, enabled: true, createdAt: new Date().toISOString(), triggerCount: 7 },
-    { id: "auto-3", name: "SLA de Aprovacao (48h)", description: "Conteudo aguardando aprovacao ha mais de 48h — alerta o time social", trigger: "content_approval_pending", triggerConfig: { hours: "48" }, action: "send_notification", actionConfig: { target: "social", message: "Conteudo parado em aprovacao alem do SLA" }, enabled: true, createdAt: new Date().toISOString(), triggerCount: 2 },
-    { id: "auto-4", name: "Limite de Verba (90%)", description: "Investimento atingiu 90% do orcamento mensal — alerta trafego + gerente", trigger: "budget_threshold", triggerConfig: { percent: "90" }, action: "send_notification", actionConfig: { target: "traffic,manager", message: "Verba acima de 90% do orcamento" }, enabled: true, createdAt: new Date().toISOString(), triggerCount: 1 },
-    { id: "auto-5", name: "SLA de Onboarding (7 Dias)", description: "Funil de onboarding com SLA por fase: Setup 24h, Coleta 72h, Kickoff 168h", trigger: "onboarding_stalled", triggerConfig: { phase1: "24", phase2: "72", phase3: "168" }, action: "send_notification", actionConfig: { target: "cs,manager", message: "[Urgente] Gargalo no onboarding" }, enabled: true, createdAt: new Date().toISOString(), triggerCount: 0 },
-  ];
-
-  const [automationRules, setAutomationRules] = useState<AutomationRule[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("lone_automations");
-        if (saved) return JSON.parse(saved) as AutomationRule[];
-      } catch {}
-    }
-    return DEFAULT_AUTOMATION_RULES;
-  });
-
   const [dbReady, setDbReady] = useState(false);
 
   // ─── Delivery Log (BI tracking) ──────────────────────────
@@ -373,179 +347,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   // ---------- Supabase is the source of truth — no more localStorage save loop ----------
   // All mutations (addClient, updateTask, etc.) already call db.* functions directly.
   // localStorage is only used for initial migration (one-time) and is cleared after.
-
-  // ---------- Automation Rules Engine ----------
-  // Refs to hold latest state so the interval callback never goes stale
-  const automationRulesRef = useRef(automationRules);
-  automationRulesRef.current = automationRules;
-  const clientsRef = useRef(clients);
-  clientsRef.current = clients;
-  const tasksRef = useRef(tasks);
-  tasksRef.current = tasks;
-  const contentCardsRef = useRef(contentCards);
-  contentCardsRef.current = contentCards;
-  const investmentDataRef = useRef(investmentData);
-  investmentDataRef.current = investmentData;
-  const onboardingRef = useRef(onboarding);
-  onboardingRef.current = onboarding;
-
-  // Track which (ruleId, itemId) pairs have already been triggered to avoid duplicates
-  const automationTriggeredRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    function evaluateAutomationRules() {
-      const rules = automationRulesRef.current;
-      const enabledRules = rules.filter((r) => r.enabled);
-      if (enabledRules.length === 0) return;
-
-      const now = new Date();
-      const triggered = automationTriggeredRef.current;
-      let rulesUpdated = false;
-      const ruleUpdates: Record<string, { triggerCount: number; lastTriggeredAt: string }> = {};
-
-      for (const rule of enabledRules) {
-        let matchedIds: string[] = [];
-
-        switch (rule.trigger) {
-          case "client_status_change": {
-            const targetStatus = rule.triggerConfig.status;
-            if (!targetStatus) break;
-            matchedIds = clientsRef.current
-              .filter((c) => c.status === targetStatus)
-              .map((c) => c.id);
-            break;
-          }
-
-          case "task_overdue": {
-            const todayStr = now.toISOString().split("T")[0];
-            matchedIds = tasksRef.current
-              .filter((t) => t.status !== "done" && t.dueDate && t.dueDate < todayStr)
-              .map((t) => t.id);
-            break;
-          }
-
-          case "content_approval_pending": {
-            const thresholdHours = parseInt(rule.triggerConfig.hours || "48", 10);
-            matchedIds = contentCardsRef.current
-              .filter((card) => {
-                if (card.status !== "approval" && card.status !== "client_approval") return false;
-                if (!card.statusChangedAt) return false;
-                const changedAt = new Date(card.statusChangedAt);
-                const hoursElapsed = (now.getTime() - changedAt.getTime()) / (1000 * 60 * 60);
-                return hoursElapsed >= thresholdHours;
-              })
-              .map((card) => card.id);
-            break;
-          }
-
-          case "budget_threshold": {
-            // Budget threshold requires actual spend data.
-            // Currently investmentData only has monthlyBudget/dailyBudget without actual spend tracking.
-            // This trigger will activate when spend tracking is implemented.
-            break;
-          }
-
-          case "onboarding_stalled": {
-            // Phase-based SLA: check each onboarding phase threshold
-            const phase1h = parseInt(rule.triggerConfig.phase1 || "24", 10);
-            const phase2h = parseInt(rule.triggerConfig.phase2 || "72", 10);
-            const phase3h = parseInt(rule.triggerConfig.phase3 || "168", 10);
-            const fallbackDays = parseInt(rule.triggerConfig.days || "7", 10);
-
-            clientsRef.current.forEach((c) => {
-              if (c.status !== "onboarding" || !c.joinDate) return;
-              const joinDate = new Date(c.joinDate);
-              const hoursElapsed = (now.getTime() - joinDate.getTime()) / (1000 * 60 * 60);
-
-              // Check which phase is breached (most urgent first)
-              if (hoursElapsed >= phase3h) {
-                matchedIds.push(`${c.id}::phase3`);
-              } else if (hoursElapsed >= phase2h) {
-                matchedIds.push(`${c.id}::phase2`);
-              } else if (hoursElapsed >= phase1h) {
-                matchedIds.push(`${c.id}::phase1`);
-              } else if (hoursElapsed >= fallbackDays * 24) {
-                matchedIds.push(`${c.id}::general`);
-              }
-            });
-            break;
-          }
-        }
-
-        // Filter out already-triggered (ruleId + itemId) combos
-        const newMatches = matchedIds.filter((itemId) => !triggered.has(`${rule.id}::${itemId}`));
-
-        if (newMatches.length > 0) {
-          // Mark as triggered
-          for (const itemId of newMatches) {
-            triggered.add(`${rule.id}::${itemId}`);
-          }
-
-          // Execute action — build notification body
-          const actionMessage = rule.actionConfig.message || rule.name;
-          let body: string;
-          let clientId: string | undefined;
-
-          if (rule.trigger === "onboarding_stalled") {
-            // Onboarding: include phase info in notification
-            const phaseLabels: Record<string, string> = { phase1: "Setup", phase2: "Coleta de Dados", phase3: "Kickoff Operacional", general: "Geral" };
-            const details = newMatches.map((m) => {
-              const [cId, phase] = m.split("::");
-              const client = clientsRef.current.find((c) => c.id === cId);
-              return `${client?.name ?? cId} na fase ${phaseLabels[phase] ?? phase}`;
-            });
-            body = `[Urgente] Gargalo no onboarding: ${details.join(", ")}`;
-            clientId = newMatches[0]?.split("::")[0];
-          } else {
-            const matchCount = newMatches.length;
-            body = matchCount === 1 ? actionMessage : `${actionMessage} (${matchCount} itens)`;
-            if (rule.trigger === "client_status_change") clientId = newMatches[0];
-          }
-
-          // Use the pushNotification via a direct state update to avoid stale closure
-          const notif: AppNotification = {
-            id: `notif-auto-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-            type: "system",
-            title: `[Auto] ${rule.name}`,
-            body,
-            clientId,
-            read: false,
-            createdAt: new Date().toISOString(),
-          };
-          setNotifications((prev) => [notif, ...prev]);
-
-          // Track rule update
-          const prevCount = ruleUpdates[rule.id]?.triggerCount ?? rule.triggerCount;
-          ruleUpdates[rule.id] = {
-            triggerCount: prevCount + newMatches.length,
-            lastTriggeredAt: new Date().toISOString(),
-          };
-          rulesUpdated = true;
-        }
-      }
-
-      // Batch-update rules that fired
-      if (rulesUpdated) {
-        setAutomationRules((prev) => {
-          const next = prev.map((r) =>
-            ruleUpdates[r.id]
-              ? { ...r, triggerCount: ruleUpdates[r.id].triggerCount, lastTriggeredAt: ruleUpdates[r.id].lastTriggeredAt }
-              : r
-          );
-          // Automation rules persisted via Supabase (no localStorage)
-          return next;
-        });
-      }
-    }
-
-    // Run once on mount, then every 60 seconds
-    // Run once after 5s delay (not immediately, to avoid spam on page load)
-    const initTimer = setTimeout(evaluateAutomationRules, 5000);
-    // Then check every 10 minutes (was 60s — too aggressive)
-    const intervalId = setInterval(evaluateAutomationRules, 600_000);
-
-    return () => { clearTimeout(initTimer); clearInterval(intervalId); };
-  }, []); // Empty deps — uses refs for latest state
 
   // ---------- Reset state — clears localStorage and reloads mock data ----------
   const resetState = useCallback(() => {
@@ -580,7 +381,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   // SÓ ONDE ALGUÉM LÊ (16/09). Este contexto legado baixava 22 tabelas pelo navegador (PostgREST via
   // Cloudflare → nginx → Kong) em TODA página, e ninguém usava: as telas leem os stores (/api/data/*).
   // Consumidores que sobraram: /goals (useOKRMetrics, useSnapshots, useCollaboratorScores); /calendar
-  // e /automations usam só reminders/automationRules (locais, sem banco). Fora do /goals, o
+  // usa só reminders (locais, sem banco). Fora do /goals, o
   // carregamento pesado não roda — nem as assinaturas de realtime abaixo (o container está desligado
   // e cada aba tentava o websocket a cada 10 s). Era boa parte da lentidão no Social/Design e a
   // origem do 502 de card_attachments (URL de 3,8 KB) que abria o quadro sem as artes.
@@ -1910,53 +1711,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  // ─── Automation Rules ───────────────────────────────────────
-  const addAutomationRule = useCallback(
-    (rule: Omit<AutomationRule, "id" | "createdAt" | "triggerCount">): AutomationRule => {
-      const newRule: AutomationRule = { ...rule, id: `auto-${Date.now()}`, createdAt: new Date().toISOString(), triggerCount: 0 };
-      setAutomationRules((prev) => {
-        const next = [newRule, ...prev];
-        try { localStorage.setItem("lone_automations", JSON.stringify(next)); } catch {}
-        return next;
-      });
-      return newRule;
-    },
-    []
-  );
-
-  const updateAutomationRule = useCallback(
-    (id: string, updates: Partial<AutomationRule>) => {
-      setAutomationRules((prev) => {
-        const next = prev.map((r) => r.id === id ? { ...r, ...updates } : r);
-        try { localStorage.setItem("lone_automations", JSON.stringify(next)); } catch {}
-        return next;
-      });
-    },
-    []
-  );
-
-  const toggleAutomationRule = useCallback(
-    (id: string) => {
-      setAutomationRules((prev) => {
-        const next = prev.map((r) => r.id === id ? { ...r, enabled: !r.enabled } : r);
-        try { localStorage.setItem("lone_automations", JSON.stringify(next)); } catch {}
-        return next;
-      });
-    },
-    []
-  );
-
-  const deleteAutomationRule = useCallback(
-    (id: string) => {
-      setAutomationRules((prev) => {
-        const next = prev.filter((r) => r.id !== id);
-        try { localStorage.setItem("lone_automations", JSON.stringify(next)); } catch {}
-        return next;
-      });
-    },
-    []
-  );
-
   const addTrafficReport = useCallback(
     (report: Omit<TrafficMonthlyReport, "id" | "createdAt">): TrafficMonthlyReport => {
       const newReport: TrafficMonthlyReport = {
@@ -2350,11 +2104,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         addReminder,
         toggleReminder,
         updateReminder,
-        automationRules,
-        addAutomationRule,
-        updateAutomationRule,
-        toggleAutomationRule,
-        deleteAutomationRule,
         investmentData,
         updateInvestmentData,
         dbReady,

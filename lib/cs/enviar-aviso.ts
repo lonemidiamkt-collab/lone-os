@@ -32,6 +32,11 @@ export interface ResultadoAviso {
   error?: string;
 }
 
+/** A legenda que acompanha o PDF. Exportada pra o ?dry=1 mostrar exatamente o que sairia. */
+export function legendaDoAviso(opts: Pick<OpcoesAviso, "titulo" | "resumo">): string {
+  return `📋 *${opts.titulo}*${opts.resumo ? `\n${opts.resumo}` : ""}`;
+}
+
 /** Conta os itens de lista do texto — é o que decide o formato junto com o tamanho. */
 export function contarItens(texto: string): number {
   return (texto ?? "").split("\n").filter((l) => /^\s*[•\-*]\s+\S/.test(l)).length;
@@ -76,7 +81,7 @@ export async function enviarAviso(
     const nome = `${base} — ${new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }).replace(/\//g, "-")}.pdf`;
 
     // A legenda tem que bastar para decidir se abre agora ou depois.
-    const legenda = `📋 *${opts.titulo}*${opts.resumo ? `\n${opts.resumo}` : ""}`;
+    const legenda = legendaDoAviso(opts);
     const env = await csSendGroupDocument(jid, pdf.buffer.toString("base64"), nome, legenda, "application/pdf", opts.mencionados);
     if (!env.ok) throw new Error(env.error ?? "envio falhou");
     return { ok: true, formato: "pdf" };

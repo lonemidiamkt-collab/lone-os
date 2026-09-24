@@ -43,7 +43,7 @@ export interface BlocoDono {
   maiorEspera: number;
 }
 
-const SEM_DONO = "sem dono";
+export const SEM_DONO = "sem dono";
 
 /**
  * Mesma pessoa, grafias diferentes. O snapshot encurta o dono dos CARDS pro primeiro nome
@@ -158,12 +158,15 @@ export function paraEscalar(blocos: BlocoDono[]): { dono: string; cliente: strin
   return fora.sort((a, b) => b.dias - a.dias);
 }
 
-/** A seção do bom-dia. "" quando não há nada — digest sem cobrança é digest bom. */
-export function textoPorDono(blocos: BlocoDono[]): string {
+/**
+ * A seção do bom-dia. "" quando não há nada — digest sem cobrança é digest bom.
+ * `rotulo` troca o "*Nome*" pela menção real (@número) quando a mensagem sai como texto.
+ */
+export function textoPorDono(blocos: BlocoDono[], rotulo?: (dono: string) => string): string {
   if (!blocos.length) return "";
   const l: string[] = ["", "*O que é de cada um hoje:*"];
   for (const b of blocos) {
-    const titulo = b.dono === SEM_DONO ? "_sem dono_" : `*${b.dono}*`;
+    const titulo = b.dono === SEM_DONO ? "_sem dono_" : (rotulo ? rotulo(b.dono) : `*${b.dono}*`);
     l.push("", `👤 ${titulo}`);
     for (const i of b.itens) {
       // 🔴 só no que passou do limite: se tudo é urgente, nada é.

@@ -42,3 +42,22 @@ export function buildPendenciasDigest(itens: PendenciaItem[]): string {
 
   return `${abre}\n\n${linhas.join("\n")}\n\n${fecha}`;
 }
+
+/**
+ * Aviso das pendências que a expiração de 14 dias acabou de arquivar. "" quando nenhuma morreu.
+ * Morrer em silêncio era o pior desfecho: a maioria era pedido real de cliente que nunca virou trabalho.
+ */
+export function textoArquivadas(mortas: { cliente: string; resumo: string }[]): string {
+  if (!mortas.length) return "";
+  const linhas = mortas.slice(0, 10).map((m) => `• *${m.cliente}* — ${m.resumo.slice(0, 80)}`);
+  return [
+    mortas.length === 1
+      ? "🗑️ *Um pedido de cliente foi arquivado por falta de decisão* (14 dias sem ok nem não):"
+      : `🗑️ *${mortas.length} pedidos de cliente foram arquivados por falta de decisão* (14 dias sem ok nem não):`,
+    "",
+    linhas.join("\n"),
+    mortas.length > 10 ? `\n_e mais ${mortas.length - 10}._` : "",
+    "",
+    "Se algum ainda vale, me diz o cliente e o que era que eu crio o card agora.",
+  ].filter(Boolean).join("\n");
+}

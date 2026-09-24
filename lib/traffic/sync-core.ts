@@ -344,42 +344,69 @@ export async function runBalanceSync(opts?: {
 // Envia no máximo 1 mensagem por (conta, severidade, dia) ao grupo.
 // Dedup persistido em budget_alert_log.cycle_key.
 
-async function dispatchRealtimeAlerts(
+export interface AlertaSaldo {
+  snap: DigestAccount;
+  severidade: "critical" | "warning";
+  cycleKey: string;
+  texto: string;
+}
+
+/**
+ * Os alertas que sairiam AGORA: conta que cruzou o limite e ainda não foi avisada hoje nessa
+ * severidade. Só lê — o ?dry=1 do sync-saldos usa isto pra mostrar o que seria enviado.
+ */
+export async function alertasPendentes(
   snapshots: DigestAccount[],
   settings: AlertSettings,
   now: string,
-): Promise<number> {
-  if (!settings.enabled || !settings.groupJid) return 0;
+): Promise<AlertaSaldo[]> {
+  if (!settings.enabled || !settings.groupJid) return [];
 
   const today = toBRTDateStr(new Date(now)); // dia de São Paulo — UTC virava o dia às 21h
-  let sent = 0;
+  const vistos = new Set<string>();
+  const out: AlertaSaldo[] = [];
 
   for (const snap of snapshots) {
     const sev = snap.alert.severity;
     if (sev !== "critical" && sev !== "warning") continue;
-    const adAccountId = snap.adAccountId;
-    if (!adAccountId) continue;
+    if (!snap.adAccountId) continue;
 
     const cycleKey = `${snap.metaAccountId}|${sev}|${today}`;
+    if (vistos.has(cycleKey)) continue; // mesma conta em dois cadastros: um aviso só
     const { data: existing } = await supabaseAdmin
       .from("budget_alert_log")
       .select("id")
       .eq("cycle_key", cycleKey)
       .limit(1);
     if (existing && existing.length > 0) continue; // já avisado hoje nessa severidade
+    vistos.add(cycleKey);
+    out.push({ snap, severidade: sev, cycleKey, texto: buildUrgentMessage(snap) });
+  }
+  return out;
+}
 
-    const res = await sendGroupText(settings.groupJid, buildUrgentMessage(snap));
+async function dispatchRealtimeAlerts(
+  snapshots: DigestAccount[],
+  settings: AlertSettings,
+  now: string,
+): Promise<number> {
+  const pendentes = await alertasPendentes(snapshots, settings, now);
+  if (!pendentes.length || !settings.groupJid) return 0;
+  let sent = 0;
+
+  for (const a of pendentes) {
+    const res = await sendGroupText(settings.groupJid, a.texto);
     if (!res.ok) {
-      console.error(`[budget-alert] Falha ao enviar alerta de ${snap.clientName}:`, res.error);
+      console.error(`[budget-alert] Falha ao enviar alerta de ${a.snap.clientName}:`, res.error);
       continue;
     }
 
     await supabaseAdmin.from("budget_alert_log").insert({
       rule_id: null,
-      ad_account_id: adAccountId,
-      balance_at_trigger: snap.available ?? 0,
+      ad_account_id: a.snap.adAccountId,
+      balance_at_trigger: a.snap.available ?? 0,
       channel: "whatsapp_group",
-      cycle_key: cycleKey,
+      cycle_key: a.cycleKey,
       sent_at: now,
     });
     sent++;
