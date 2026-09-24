@@ -494,9 +494,10 @@ export default function ClientsPage() {
               </Link>
             )}
 
-            {/* Filters + Add Button */}
-            <div className="flex gap-3">
-              <div className="flex-1 flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
+            {/* Filters + Add Button — a linha quebra; a busca nunca encolhe abaixo de 240px (com o filtro
+                de Saúde da Leva 6 ela chegou a sumir, espremida pelos selects). */}
+            <div className="flex flex-wrap gap-3">
+              <div className="flex min-w-[240px] flex-[1_1_280px] items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
                 <Search size={14} className="text-muted-foreground" />
                 <input
                   value={search}
