@@ -164,6 +164,8 @@
   /* ─── Light theme = base / :root (next-themes injeta .dark no html) ─── */
   :root {
     color-scheme: light;
+    /* Sem isto, rounded-lg/md/sm (que usam var(--radius)) ficavam quadrados no tema claro. */
+    --radius: 0.75rem;
     --background: #f4f5f8;
     --foreground: #18181b;
     --card: #ffffff;

@@ -1,6 +1,16 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
 import type { AttentionLevel, Client, ClientStatus, Priority } from "./types";
+
+// Os tamanhos lone-* (tailwind.config → fontSize) não são conhecidos do twMerge: sem isto ele os
+// trata como COR e, quando a mesma lista traz uma cor de texto, descarta o tamanho em silêncio.
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [{ text: ["lone-hero", "lone-h1", "lone-h2", "lone-body", "lone-caption", "lone-eyebrow"] }],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
