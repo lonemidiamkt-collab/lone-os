@@ -61,6 +61,10 @@ function pctChange(current: number, baseline: number): number {
   return ((current - baseline) / baseline) * 100;
 }
 
+/** Dia parcial: a partir de quando cada coisa é avaliada (fração do dia em BRT). */
+export const FRACAO_ZERO_PARCIAL = 9 / 24;
+export const FRACAO_QUEDA_PARCIAL = 12 / 24;
+
 export function detectAnomalies(
   current: CurrentMetric,
   history: HistoricalMetric[],
@@ -70,9 +74,14 @@ export function detectAnomalies(
   const past = history.filter((h) => h.metric_date !== current.metric_date);
   if (past.length < 3) return []; // histórico insuficiente
 
-  // Não detecta anomalias muito cedo no dia — sinal/ruído é ruim e false positives dominam
-  // (0.3 = após ~7h20 decorridas do dia em BRT; antes disso, só coleta snapshot)
-  if (ctx.elapsedFraction < 0.3) return [];
+  // Dia em andamento: a entrega não é linear (de madrugada quase não roda) e o "hoje" da Meta chega
+  // com 1–3h de atraso. Com o corte antigo (7h20) e o pro-rateio linear, TODA conta parecia ter caído
+  // 70–90% de manhã — 24 alertas falsos em 24/09, e o mesmo pico todo dia às 7h. Então, no dia parcial:
+  // gasto ZERO (conta parada de verdade) vale a partir das 9h; queda de volume e CPL/CTR só do
+  // meio-dia em diante. Dia fechado (fração 1) compara tudo, como sempre.
+  const parcial = ctx.elapsedFraction < 1;
+  if (parcial && ctx.elapsedFraction < FRACAO_ZERO_PARCIAL) return [];
+  const soGastoZero = parcial && ctx.elapsedFraction < FRACAO_QUEDA_PARCIAL;
 
   const anomalies: AnomalyResult[] = [];
   const frac = Math.min(Math.max(ctx.elapsedFraction, 0.01), 1.0);
@@ -80,7 +89,7 @@ export function detectAnomalies(
   // 1. Spend drop crítico — pro-rateia baseline de volume pela fração do dia
   const spendBaselineFull = mean(past.map((h) => h.spend));
   const spendBaselineProRated = spendBaselineFull * frac;
-  if (spendBaselineFull >= MIN_BASELINE.spend) {
+  if (spendBaselineFull >= MIN_BASELINE.spend && (!soGastoZero || current.spend === 0)) {
     const change = pctChange(current.spend, spendBaselineProRated);
     if (change <= -THRESHOLDS.spend_drop.value) {
       anomalies.push({
@@ -95,6 +104,8 @@ export function detectAnomalies(
       });
     }
   }
+
+  if (soGastoZero) return anomalies;
 
   // 2. CPL spike — CPL é RATIO (spend/conversions), não pro-rateia
   const cplHistory = past.filter((h) => h.cpl !== null && h.cpl > 0).map((h) => h.cpl!);
