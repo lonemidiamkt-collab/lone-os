@@ -13,9 +13,9 @@ const RAIZ = path.resolve(__dirname, "..");
 
 // O registro descreve o crontab DEPOIS do deploy em curso; o retrato pode estar um passo atrás.
 // Só estas diferenças são aceitas. Depois de regenerar o retrato do servidor, podem sair daqui.
-const EM_TRANSICAO = {
-  saindo: ["cs-bom-dia", "cs-postagem", "cs-pendencias", "cs-setup", "cs-esfriando", "cs-risco", "cs-saude@0 14 * * 1-5"],
-  entrando: ["cs-manha", "cs-risco-semanal", "sync-saldos", "automacoes/vigia", "cs-saude@0 14 * * 1"],
+const EM_TRANSICAO: { saindo: string[]; entrando: string[] } = {
+  saindo: [],
+  entrando: [],
 };
 
 interface LinhaCron { cron: string; chave: string; metodo?: string; bruta: string }
