@@ -1,37 +1,46 @@
 "use client";
 
+// Painel de Resultados — a página que o CLIENTE abre pelo link com token (pública). Tudo o que
+// aparece aqui vem do snapshot montado no servidor (lib/portal/buildSnapshot.ts) ou das rotas
+// públicas do portal: nada interno (notas do time, outros clientes, saúde, alertas, financeiro da
+// agência) e nenhuma chamada à Meta a partir do navegador.
+//
+// Modernização (24/09, pedido do CEO): uma família visual só nas duas abas, evolução diária no
+// mesmo desenho do painel comparativo do topo, "Ver todos os anúncios ativos", público com
+// percentuais, conteúdo que respeita o período e seletores sem o anel de foco "preso".
+
 import { useState, useEffect, useCallback } from "react";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis,
-  CartesianGrid, Tooltip, BarChart, Bar, Cell,
-} from "recharts";
-import { ImageIcon, Palette, Wallet, Pause, Zap, Pin, Film, BarChart3, TrendingUp, Star, type LucideIcon } from "lucide-react";
-import type { SnapshotData, PeriodKind } from "@/lib/portal/types";
+  BarChart3, ChevronDown, ClipboardList, Pause, Pin, Palette, RefreshCw, Star, Trophy, TrendingUp, Wallet, Zap,
+  type LucideIcon,
+} from "lucide-react";
+import type { SnapshotData, PeriodKind, CreativeItem } from "@/lib/portal/types";
 import MobileFAB from "./MobileFAB";
 import PortalContent from "./PortalContent";
-import PortalInstagram from "./PortalInstagram";
+import PortalInstagram, { IG_PERIODOS, type IgPeriodo } from "./PortalInstagram";
 import PortalUpload from "@/components/portal/PortalUpload";
+import EvolucaoDiaria from "./EvolucaoDiaria";
+import PublicoCard from "./PublicoCard";
+import AnunciosAtivos from "./AnunciosAtivos";
+import CriativoThumb from "./CriativoThumb";
+import { Aviso, Cartao, CabecalhoSecao, Segmentado, entrada } from "./ui";
+import Skeleton from "@/components/ui/Skeleton";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { chamar } from "@/lib/api/chamar";
+import { cn } from "@/lib/utils";
 import { WHATSAPP_EQUIPE, linkWhatsapp } from "@/lib/portal/contato";
 import { fraseDelta, periodoAnterior, resumoConversas, type MetricType } from "@/lib/portal/formatDelta";
+import { formatarBRL, formatarNumero, rotuloDia } from "@/lib/portal/formatos";
 import { PainelComparativo, type KpiComparativo } from "@/components/ui/painel-comparativo";
 import { tomDaVariacao } from "@/components/ui/painel-comparativo-utils";
 
-const PERIODS: { value: PeriodKind; label: string }[] = [
-  { value: "last_week",    label: "7 dias"      },
-  { value: "last_2_weeks", label: "14 dias"     },
-  { value: "this_month",   label: "Este mês"    },
-  { value: "last_month",   label: "Mês passado" },
+const PERIODS: { valor: PeriodKind; rotulo: string }[] = [
+  { valor: "last_week",    rotulo: "7 dias"      },
+  { valor: "last_2_weeks", rotulo: "14 dias"     },
+  { valor: "this_month",   rotulo: "Este mês"    },
+  { valor: "last_month",   rotulo: "Mês passado" },
 ];
-
-const METRICS = [
-  // fg: verde/amarelo do tema escuro são claros demais pra texto branco.
-  { key: "messages", label: "Mensagens", color: "var(--primary)",      fg: "text-primary-foreground" },
-  { key: "clicks",   label: "Cliques",   color: "var(--chart-4)",      fg: "text-primary-foreground" },
-  { key: "spend",    label: "Investido", color: "var(--lone-warning)", fg: "text-background" },
-  { key: "reach",    label: "Alcance",   color: "var(--lone-success)", fg: "text-background" },
-] as const;
-type MetricKey = typeof METRICS[number]["key"];
 
 const ICON_MAP: Record<string, LucideIcon> = {
   new_creative:  Palette,
@@ -40,21 +49,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   optimization:  Zap,
 };
 
-function fmt(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;
-  return n.toLocaleString("pt-BR");
-}
-function fmtBrl(n: number): string {
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-// Data pura (YYYY-MM-DD) lida ao meio-dia UTC e formatada em UTC: o mesmo dia no servidor e no celular.
-function fmtDate(d: string): string {
-  return new Date(d + "T12:00:00Z").toLocaleDateString("pt-BR", {
-    day: "2-digit", month: "short", timeZone: "UTC",
-  });
-}
-/** Timestamp completo (ISO) em horário de Brasília — usado no aviso de dado desatualizado. */
+/** Timestamp completo (ISO) em horário de Brasília — "Atualizado em" e aviso de dado antigo. */
 function fmtDataHora(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", {
     day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
@@ -62,60 +57,7 @@ function fmtDataHora(iso: string): string {
   });
 }
 
-
-function Thumbnail({ url, path, name }: { url: string | null; path: string | null; name: string }) {
-  const [broken, setBroken] = useState(false);
-
-  // Prefere imagem cacheada no nosso Storage (não expira) sobre URL direta da Meta CDN
-  const src = (() => {
-    if (path) {
-      return `/supabase/storage/v1/object/public/meta-thumbnails/${path}`;
-    }
-    return url;
-  })();
-
-  if (!src || broken) {
-    const isVideo = name.toLowerCase().includes("video") || name.toLowerCase().includes("vídeo") || name.toLowerCase().includes("reel");
-    return (
-      <div
-        className="w-14 h-14 rounded-lg shrink-0 flex flex-col items-center justify-center gap-0.5 bg-border border border-border"
-      >
-        {isVideo ? <Film size={18} className="text-lone-text-tertiary" aria-hidden="true" /> : <ImageIcon size={18} className="text-lone-text-tertiary" aria-hidden="true" />}
-        <span className="text-[8px] text-center px-1 text-lone-text-tertiary" style={{ lineHeight: 1.2 }}>
-          {isVideo ? "Vídeo" : "Arte"}
-        </span>
-      </div>
-    );
-  }
-  return (
-    <img
-      src={src} alt={name} loading="lazy"
-      onError={() => setBroken(true)}
-      className="w-14 h-14 rounded-lg object-cover shrink-0 border border-border"
-    />
-  );
-}
-
-const scrollRow = "flex flex-nowrap gap-2 overflow-x-auto pb-1 no-scrollbar";
-
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <div className="mb-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-        {title}
-      </h2>
-    </div>
-  );
-}
-
-// Card container reutilizável
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`rounded-xl bg-card border border-border ${className}`}>
-      {children}
-    </div>
-  );
-}
+const fmt = (n: number) => formatarNumero(n);
 
 interface Props {
   token: string;
@@ -135,20 +77,18 @@ interface Props {
   mesRelatorio?: string;
 }
 
-export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, hasAds = true, hasSocial = false, hasIg = false, comecando = false, desde = null, aprovacaoLigada = false, mesRelatorio = "" }: Props) {
-  const [period, setPeriod]         = useState<PeriodKind>("last_week");
-  const [data, setData]             = useState<SnapshotData | null>(initialData);
-  const [loading, setLoading]       = useState(false);
+export default function PortalDashboard({ token, clientId, clientName, whatsappPhone, welcomeMessage, initialData, hasAds = true, hasSocial = false, comecando = false, desde = null, aprovacaoLigada = false, mesRelatorio = "" }: Props) {
+  const [period, setPeriod]   = useState<PeriodKind>("last_week");
+  const [data, setData]       = useState<SnapshotData | null>(initialData);
+  const [loading, setLoading] = useState(false);
   // Sem dado no primeiro render = a busca do servidor não completou. Já abre avisando, em vez de
   // pintar a tela de zeros.
-  const [erro, setErro]             = useState<string | null>(
+  const [erro, setErro]       = useState<string | null>(
     initialData ? null : "Não consegui carregar seus resultados agora.",
   );
-  const [metric, setMetric]         = useState<MetricKey>("messages");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [chartHeight, setChartHeight]     = useState(240);
-  const [hideGrid, setHideGrid]           = useState(false);
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const [igPeriod, setIgPeriod] = useState<IgPeriodo>("7d");
+  const [montado, setMontado]   = useState(false);
+  useEffect(() => setMontado(true), []);
 
   // Cliente escolhe o que ver: Anúncios (tráfego) ou Crescimento nas redes (Instagram orgânico).
   // Só mostra o seletor quando o pacote tem os dois; senão abre direto no que existe.
@@ -156,18 +96,6 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   const [view, setView] = useState<"ads" | "social">(hasAds ? "ads" : "social");
 
   const phone = whatsappPhone || WHATSAPP_EQUIPE;
-
-  useEffect(() => {
-    function update() {
-      const w = window.innerWidth;
-      setChartHeight(w < 640 ? 180 : w < 1024 ? 220 : 280);
-      setHideGrid(w < 480);
-    }
-    setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
 
   // Buscar resultado pode falhar (a Meta recusa em rajada, ou demora). Antes era
   // `if (res.ok) setData(...)` e mais nada: quando falhava, o spinner sumia e ficava na tela o
@@ -198,24 +126,13 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
   const kpis    = atualizando ? undefined : data?.kpis;
   const chart   = atualizando ? undefined : data?.chart;
   const top     = atualizando ? [] : data?.top_creatives ?? [];
+  const ativos  = atualizando ? null : data?.active_ads ?? null;
   const demo    = atualizando ? undefined : data?.demographics;
   const actions = data?.agency_actions ?? [];
-
-  const chartData = (chart?.days ?? []).map((day, i) => ({
-    day: fmtDate(day),
-    messages: chart?.series.messages[i] ?? 0,
-    clicks:   chart?.series.clicks[i]   ?? 0,
-    spend:    chart?.series.spend[i]    ?? 0,
-    reach:    chart?.series.reach[i]    ?? 0,
-  }));
-
-  const activeMetric = METRICS.find((m) => m.key === metric)!;
 
   const genAt = data?.generated_at && !atualizando ? fmtDataHora(data.generated_at) : null;
   const periodoDado: PeriodKind = data?.period?.kind ?? period;
   const resumo = kpis ? resumoConversas(kpis.messages.value, kpis.messages.delta_pct, periodoDado) : null;
-
-  const pulse = reducedMotion ? "" : "animate-pulse";
 
   const kpiItems: Array<{
     key: MetricType; label: string;
@@ -223,14 +140,15 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
     format: (v: number) => string;
   }> = [
     { key: "messages", label: "Mensagens",          val: kpis?.messages, format: (v) => fmt(v) },
-    { key: "spend",    label: "Investido",          val: kpis?.spend,    format: (v) => fmtBrl(v) },
-    { key: "cpa",      label: "Custo por conversa", val: kpis?.cpa,      format: (v) => fmtBrl(v) },
+    { key: "spend",    label: "Investido",          val: kpis?.spend,    format: (v) => formatarBRL(v) },
+    { key: "cpa",      label: "Custo por conversa", val: kpis?.cpa,      format: (v) => formatarBRL(v) },
     { key: "reach",    label: "Pessoas alcançadas", val: kpis?.reach,    format: (v) => fmt(v) },
   ];
 
   // Resumo do topo: conversas por dia × mesmo dia do período anterior + os 4 números principais.
+  const dias = chart?.days ?? [];
   const prevConversas = chart?.previous_messages ?? null;
-  const serieConversas = chartData.map((d, i) => ({ rotulo: d.day, atual: d.messages, anterior: prevConversas?.[i] ?? null }));
+  const serieConversas = dias.map((d, i) => ({ rotulo: rotuloDia(d), atual: chart?.series.messages[i] ?? 0, anterior: prevConversas?.[i] ?? null }));
   const kpisResumo: KpiComparativo[] = kpiItems.map(({ key, label, val, format }) => ({
     rotulo: label,
     valor: val?.value != null ? format(val.value) : "—",
@@ -240,376 +158,337 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
     dica: fraseDelta(key, val?.delta_pct ?? null, periodoDado) ?? undefined,
   }));
   const per = data?.period;
-  const datasPeriodo = per ? `${fmtDate(per.start)} a ${fmtDate(per.end)}, comparado com ${fmtDate(per.previous_start)} a ${fmtDate(per.previous_end)}.` : undefined;
+  const datasPeriodo = per ? `${rotuloDia(per.start)} a ${rotuloDia(per.end)}, comparado com ${rotuloDia(per.previous_start)} a ${rotuloDia(per.previous_end)}.` : undefined;
+
+  const mostraPublico = loading || !!demo?.gender || (demo?.age_ranges?.length ?? 0) > 0;
+  const mostraCriativos = loading || top.length > 0 || (ativos?.total ?? 0) > 0;
+  const mostraTimeline = loading || actions.length > 0;
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="min-h-screen bg-background text-foreground">
       <MobileFAB phone={phone} clientName={clientName} />
 
-      {/* ── Container principal — mais largo no desktop ─────────────── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
 
-        {/* ── Header ─────────────────────────────────────────────────── */}
-        <div className="flex items-start justify-between gap-4 mb-4 lg:mb-6">
+        {/* ── Cabeçalho ─────────────────────────────────────────────── */}
+        <header className="mb-5 flex items-start justify-between gap-4 lg:mb-7">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <img src="/logo.png" alt="Lone Mídia" className="h-4 w-auto opacity-60" />
-              <p className="text-[11px] font-medium text-lone-text-tertiary">Painel de Resultados</p>
+            <div className="flex items-center gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Lone Mídia" className="h-4 w-auto opacity-70" />
+              <p className="text-lone-eyebrow uppercase text-muted-foreground">Painel de Resultados</p>
             </div>
-            <h1
-              className="font-bold tracking-tight break-words"
-              style={{ fontSize: "clamp(20px, 4vw, 36px)", lineHeight: 1.15 }}
-            >
+            <h1 className="mt-2 break-words text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl lg:text-4xl">
               {clientName}
             </h1>
-            {genAt && (
-              <p className="text-xs mt-1 text-lone-text-tertiary">Atualizado em {genAt}</p>
+            {genAt && view === "ads" && (
+              <p className="mt-1.5 inline-flex items-center gap-1.5 text-lone-caption text-muted-foreground">
+                <RefreshCw size={12} aria-hidden /> Atualizado em {genAt}
+              </p>
             )}
           </div>
-          {/* Desktop: botão no header / Mobile: FAB */}
-          <a
-            href={linkWhatsapp(phone)}
-            target="_blank" rel="noopener noreferrer"
-            className="hidden lg:inline-flex shrink-0 items-center gap-2 text-sm px-5 py-2.5 rounded-full font-semibold bg-whatsapp text-primary-foreground"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z" />
-            </svg>
-            Falar com a equipe
-          </a>
-        </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Só depois de montar: o tema do cliente só é conhecido no navegador (evita ícone trocado). */}
+            {montado ? <ThemeToggle /> : <span className="h-9 w-9" aria-hidden />}
+            {/* Desktop: botão no cabeçalho / Celular: botão flutuante (MobileFAB) */}
+            <a
+              href={linkWhatsapp(phone)}
+              target="_blank" rel="noopener noreferrer"
+              className="hidden h-10 shrink-0 items-center gap-2 rounded-lg bg-whatsapp px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 lg:inline-flex"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z" />
+              </svg>
+              Falar com a equipe
+            </a>
+          </div>
+        </header>
 
         {welcomeMessage && (
-          <div className="rounded-xl px-4 py-3 mb-4 lg:mb-6 text-sm bg-card border border-border text-muted-foreground">
-            {welcomeMessage}
-          </div>
+          <Cartao className="mb-5 px-4 py-3 text-sm text-muted-foreground lg:mb-7">{welcomeMessage}</Cartao>
         )}
 
         {/* Seletor: Anúncios × Crescimento nas redes (só quando o pacote tem os dois) */}
         {showToggle && (
-          <div className="flex gap-1.5 mb-6 p-1.5 rounded-2xl bg-card border border-border">
-            {([["ads", BarChart3, "Anúncios"], ["social", TrendingUp, "Crescimento nas redes"]] as const).map(([v, Ic, l]) => (
-              <button key={v} onClick={() => setView(v)}
-                className={`flex-1 rounded-xl py-3 px-2 text-sm font-semibold transition-all flex items-center justify-center gap-2 min-h-[48px] ${view === v ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
-                <Ic size={16} className="shrink-0" aria-hidden="true" /><span className="whitespace-nowrap">{l}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Crescimento nas redes (Instagram orgânico + Conteúdo entregue) */}
-        {hasSocial && view === "social" && (<>
-          {/* Nada vinculado ainda (JP Barbearia, 15/09: link enviado 1 semana após o cadastro e o cliente
-              abriu "Instagram ainda não conectado" + upload). Aqui o cliente lê o que vem, não o que falta. */}
-          {comecando ? (
-            <div className="rounded-2xl px-5 py-5 mb-4 lg:mb-6 bg-card border border-border">
-              <p className="text-base font-semibold text-foreground">Estamos começando</p>
-              <p className="text-sm mt-1 text-muted-foreground">
-                {desde ? `Sua conta com a Lone foi aberta em ${desde.split("-").reverse().join("/")}. ` : ""}Esta página vai ser o seu painel de resultados — assim que a operação estiver rodando, você acompanha aqui:
-              </p>
-              <ul className="mt-3 space-y-1.5 text-sm text-secondary-foreground">
-                <li><b>Anúncios</b> — investimento, conversas e custo por conversa, semana a semana</li>
-                <li><b>Instagram</b> — seguidores, alcance e os posts que mais renderam</li>
-                <li><b>Conteúdo</b> — as artes que a equipe entregou para você</li>
-              </ul>
-              <p className="text-sm mt-3 text-muted-foreground">Enquanto isso, o que mais ajuda é mandar o material da loja aqui embaixo — logo, fotos, tabela de preço, vídeo.</p>
-            </div>
-          ) : (
-            <PortalInstagram token={token} clientId={clientId} />
-          )}
-          <PortalContent token={token} aprovacaoLigada={aprovacaoLigada} />
-          <PortalUpload token={token} clientName={clientName} />
-        </>)}
-
-        {/* Bloco de TRÁFEGO — só pra pacote que tem anúncios */}
-        {hasAds && view === "ads" && (<>
-        {/* Tabs de período */}
-        <div className={`${scrollRow} mb-5 lg:mb-7`}>
-          {PERIODS.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => handlePeriod(p.value)}
-              disabled={loading}
-              className={`shrink-0 rounded-full text-xs font-semibold transition-all disabled:opacity-50 min-h-[44px] px-4 py-2 ${period === p.value
-                ? "bg-primary text-primary-foreground"
-                : "bg-card text-muted-foreground border border-border"}`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Falhou a busca: fala com o cliente em vez de mostrar zeros ou o período anterior. */}
-        {erro && !loading && (
-          <div className="rounded-xl px-4 py-3.5 mb-5 flex flex-wrap items-center gap-3 text-sm bg-lone-warning-bg border border-lone-warning-border text-lone-warning">
-            <span className="flex-1 min-w-[200px]">{erro} Os dados continuam guardados — é só tentar de novo.</span>
-            <button onClick={() => fetchPeriod(period)}
-              className="rounded-lg px-3.5 py-2 text-xs font-semibold min-h-[40px] bg-[color-mix(in_srgb,var(--lone-warning)_50%,black)] text-primary-foreground">
-              Tentar de novo
-            </button>
-          </div>
-        )}
-
-        {/* Meta sem resposta e nenhum dado recente guardado: avisa em vez de pintar zeros. */}
-        {!erro && !loading && atualizando && (
-          <div className="rounded-xl px-4 py-3.5 mb-5 text-sm bg-lone-info-bg border border-lone-info-border text-lone-info" role="status">
-            Seus números estão sendo atualizados — volte em alguns minutos.
-          </div>
-        )}
-
-        {/* Caiu de volta no último dado bom porque a Meta não respondeu: mostra, mas datado. */}
-        {!erro && data?.stale_since && (
-          <div className="rounded-xl px-4 py-3 mb-5 text-sm bg-card border border-border text-muted-foreground">
-            Mostrando os últimos resultados que conseguimos buscar, de {fmtDataHora(data.stale_since)}. Estamos atualizando.
-          </div>
-        )}
-
-        {/* ── Resumo: conversas × período anterior, frase do período (N34) e os 4 números.
-             Some com erro ou "números sendo atualizados" — nunca pinta zero no lugar. */}
-        {(loading || (!erro && !atualizando && kpis)) && (
-          <PainelComparativo
-            className="mb-6 lg:mb-7"
-            carregando={loading}
-            titulo="Conversas por dia"
-            subtitulo={per ? `${per.label}, comparado com ${periodoAnterior(periodoDado)}` : undefined}
-            rotuloAtual="Este período"
-            rotuloAnterior="Período anterior"
-            serie={serieConversas}
-            formatarValor={(v) => v.toLocaleString("pt-BR")}
-            destaque={resumo ? { texto: resumo, tom: tomDaVariacao(kpis?.messages.delta_pct, "direta", 5), detalhe: datasPeriodo } : null}
-            kpis={kpisResumo}
-            limiarNeutroPct={5}
-            tomRuim="atencao"
-            vazio="Ainda não houve conversas neste período."
+          <Segmentado
+            className="mb-6 sm:inline-flex sm:w-auto"
+            rotulo="O que ver"
+            cheio
+            destaque
+            opcoes={[
+              { valor: "ads", rotulo: "Anúncios", icone: BarChart3 },
+              { valor: "social", rotulo: "Crescimento nas redes", icone: TrendingUp },
+            ]}
+            valor={view}
+            onChange={setView}
           />
         )}
 
-        {/* ══════════════════════════════════════════════════════════════
-            DESKTOP: 2 colunas lado a lado
-            Coluna esquerda (3/5): Gráfico + Demografia
-            Coluna direita  (2/5): Top Criativos + Timeline
-            MOBILE/TABLET: empilhado normalmente
-        ══════════════════════════════════════════════════════════════ */}
-        <div className="lg:grid lg:grid-cols-5 lg:gap-6 space-y-6 lg:space-y-0">
-
-          {/* ── COLUNA ESQUERDA ───────────────────────────────────────── */}
-          <div className="lg:col-span-3 space-y-5">
-
-            {/* Gráfico */}
-            <Card className="p-4 lg:p-5">
-              <SectionHeader title="Evolução diária" />
-
-              {/* Metric tabs */}
-              <div className={`${scrollRow} mb-4`}>
-                {METRICS.map((m) => (
-                  <button
-                    key={m.key}
-                    onClick={() => setMetric(m.key)}
-                    className={`shrink-0 rounded-full text-xs font-medium transition-all min-h-[44px] px-3 py-2 ${metric === m.key
-                      ? m.fg
-                      : "bg-background text-muted-foreground border border-border"}`}
-                    style={metric === m.key ? { background: m.color } : undefined}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-
-              {loading || chartData.length === 0 ? (
-                <div className="flex items-center justify-center text-lone-text-tertiary" style={{ height: chartHeight }}>
-                  {loading ? "Carregando…" : !data || atualizando ? "Aguardando os números…" : "Sem dados para o período"}
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={chartHeight}>
-                  <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: chartHeight <= 180 ? 20 : 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={hideGrid ? 0 : 1} />
-                    <XAxis
-                      dataKey="day"
-                      tick={{ fill: "var(--lone-text-tertiary)", fontSize: 10 }}
-                      axisLine={false} tickLine={false}
-                      interval="preserveStartEnd"
-                      angle={chartHeight <= 180 ? -30 : 0}
-                      textAnchor={chartHeight <= 180 ? "end" : "middle"}
-                    />
-                    <YAxis
-                      tick={{ fill: "var(--lone-text-tertiary)", fontSize: 10 }}
-                      axisLine={false} tickLine={false}
-                      width={38} tickFormatter={fmt}
-                    />
-                    <Tooltip
-                      contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--foreground)" }}
-                      labelStyle={{ color: "var(--muted-foreground)" }}
-                    />
-                    <Line
-                      type="monotone" dataKey={metric}
-                      stroke={activeMetric.color} strokeWidth={2}
-                      dot={false} activeDot={{ r: 4, fill: activeMetric.color }}
-                      isAnimationActive={!reducedMotion}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={view}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
+          {/* ── Crescimento nas redes (Instagram orgânico + Conteúdo entregue + Enviar material) ── */}
+          {hasSocial && view === "social" && (
+            <div className="space-y-6">
+              {!comecando && (
+                <Segmentado
+                  rotulo="Período"
+                  opcoes={IG_PERIODOS.map((p) => ({ valor: p.valor, rotulo: p.rotulo }))}
+                  valor={igPeriod}
+                  onChange={setIgPeriod}
+                />
               )}
-            </Card>
+              {/* Nada vinculado ainda (JP Barbearia, 15/09: link enviado 1 semana após o cadastro e o cliente
+                  abriu "Instagram ainda não conectado" + upload). Aqui o cliente lê o que vem, não o que falta. */}
+              {comecando ? (
+                <Cartao className="p-5">
+                  <p className="text-lone-h2 tracking-tight text-foreground">Estamos começando</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {desde ? `Sua conta com a Lone foi aberta em ${desde.split("-").reverse().join("/")}. ` : ""}Esta página vai ser o seu painel de resultados — assim que a operação estiver rodando, você acompanha aqui:
+                  </p>
+                  <ul className="mt-3 space-y-1.5 text-sm text-secondary-foreground">
+                    <li><span className="font-medium text-foreground">Anúncios</span> — investimento, conversas e custo por conversa, semana a semana</li>
+                    <li><span className="font-medium text-foreground">Instagram</span> — seguidores, alcance e os posts que mais renderam</li>
+                    <li><span className="font-medium text-foreground">Conteúdo</span> — as artes que a equipe entregou para você</li>
+                  </ul>
+                  <p className="mt-3 text-sm text-muted-foreground">Enquanto isso, o que mais ajuda é mandar o material da loja aqui embaixo — logo, fotos, tabela de preço, vídeo.</p>
+                </Cartao>
+              ) : (
+                <PortalInstagram token={token} clientId={clientId} period={igPeriod} />
+              )}
+              <PortalContent token={token} aprovacaoLigada={aprovacaoLigada}
+                dias={IG_PERIODOS.find((p) => p.valor === igPeriod)?.dias ?? 7} />
+              <PortalUpload token={token} clientName={clientName} />
+            </div>
+          )}
 
-            {/* Demografia */}
-            {(loading || demo?.gender || (demo?.age_ranges?.length ?? 0) > 0) && (
-              <div>
-                <SectionHeader title="Quem está vendo seus anúncios" />
-                <div className="rounded-xl p-4 lg:p-5 bg-card border border-border">
-                  {loading ? (
-                    <div className={`h-28 rounded-lg bg-border ${pulse}`} />
-                  ) : (
-                    <div className="space-y-4">
-                      {demo?.gender && (
-                        <div>
-                          <p className="text-xs font-semibold mb-3 text-muted-foreground">Gênero</p>
-                          <div className="flex gap-3">
-                            {[
-                              // Rosa de categoria sem token equivalente; tom médio, legível nos dois temas.
-                              { label: "Mulheres", pct: demo.gender.female_pct, color: "#E879F9" },
-                              { label: "Homens",   pct: demo.gender.male_pct,   color: "var(--chart-2)" },
-                            ].map((g) => (
-                              <div key={g.label} className="flex-1 rounded-xl p-3 text-center bg-background border border-border">
-                                <p className="text-2xl font-bold" style={{ color: g.color }}>{g.pct}%</p>
-                                <p className="text-xs mt-1 text-muted-foreground">{g.label}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+          {/* ── Anúncios (tráfego) — só pra pacote que tem anúncios ── */}
+          {hasAds && view === "ads" && (
+            <div className="space-y-5 lg:space-y-6">
+              <Segmentado
+                rotulo="Período dos anúncios"
+                opcoes={PERIODS}
+                valor={period}
+                onChange={handlePeriod}
+                desabilitado={loading}
+                cheio
+                className="sm:inline-flex sm:w-auto"
+              />
+
+              {/* Falhou a busca: fala com o cliente em vez de mostrar zeros ou o período anterior. */}
+              {erro && !loading && (
+                <Aviso tom="atencao" role="alert" acao={
+                  <button onClick={() => fetchPeriod(period)}
+                    className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-xs font-medium text-foreground hover:bg-accent">
+                    <RefreshCw size={13} aria-hidden /> Tentar de novo
+                  </button>
+                }>
+                  {erro} Os dados continuam guardados — é só tentar de novo.
+                </Aviso>
+              )}
+
+              {/* Meta sem resposta e nenhum dado recente guardado: avisa em vez de pintar zeros. */}
+              {!erro && !loading && atualizando && (
+                <Aviso tom="info" role="status">Seus números estão sendo atualizados — volte em alguns minutos.</Aviso>
+              )}
+
+              {/* Caiu de volta no último dado bom porque a Meta não respondeu: mostra, mas datado. */}
+              {!erro && data?.stale_since && (
+                <Aviso tom="neutro">
+                  Mostrando os últimos resultados que conseguimos buscar, de {fmtDataHora(data.stale_since)}. Estamos atualizando.
+                </Aviso>
+              )}
+
+              {/* Resumo: conversas × período anterior, frase do período (N34) e os 4 números.
+                  Some com erro ou "números sendo atualizados" — nunca pinta zero no lugar. */}
+              {(loading || (!erro && !atualizando && kpis)) && (
+                <PainelComparativo
+                  carregando={loading}
+                  titulo="Conversas por dia"
+                  subtitulo={per ? `${per.label}, comparado com ${periodoAnterior(periodoDado)}` : undefined}
+                  rotuloAtual="Este período"
+                  rotuloAnterior="Período anterior"
+                  serie={serieConversas}
+                  formatarValor={(v) => v.toLocaleString("pt-BR")}
+                  destaque={resumo ? { texto: resumo, tom: tomDaVariacao(kpis?.messages.delta_pct, "direta", 5), detalhe: datasPeriodo } : null}
+                  kpis={kpisResumo}
+                  limiarNeutroPct={5}
+                  tomRuim="atencao"
+                  vazio="Ainda não houve conversas neste período."
+                />
+              )}
+
+              {/* Celular: um bloco embaixo do outro, na ordem de interesse do cliente (gráfico,
+                  criativos, público, o que fizemos). Computador: duas colunas — os wrappers viram
+                  `contents` no celular pra ordem valer entre as colunas. */}
+              <div className="flex flex-col gap-5 lg:grid lg:grid-cols-5 lg:items-start lg:gap-6">
+                <div className="contents lg:col-span-3 lg:flex lg:flex-col lg:gap-6">
+                  <motion.div variants={entrada} initial="oculto" animate="visivel" className="order-1 min-w-0">
+                    <EvolucaoDiaria
+                      dias={dias}
+                      series={{
+                        messages: chart?.series.messages ?? [],
+                        clicks: chart?.series.clicks ?? [],
+                        spend: chart?.series.spend ?? [],
+                        reach: chart?.series.reach ?? [],
+                      }}
+                      anteriores={{
+                        messages: chart?.previous_messages,
+                        clicks: chart?.previous_series?.clicks,
+                        spend: chart?.previous_series?.spend,
+                        reach: chart?.previous_series?.reach,
+                      }}
+                      carregando={loading}
+                      vazio={!data || atualizando ? "Aguardando os números…" : "Sem dados para o período."}
+                    />
+                  </motion.div>
+
+                  {mostraPublico && (
+                    <motion.div variants={entrada} initial="oculto" animate="visivel" custom={2} className="order-3 min-w-0">
+                      <PublicoCard
+                        titulo="Quem está vendo seus anúncios"
+                        descricao="Pessoas alcançadas no período, por gênero e idade"
+                        carregando={loading}
+                        genero={demo?.gender ? { mulheres: demo.gender.female_pct, homens: demo.gender.male_pct } : null}
+                        idades={(demo?.age_ranges ?? []).map((r) => ({ faixa: r.label, pct: r.pct }))}
+                      />
+                    </motion.div>
+                  )}
+                </div>
+
+                <div className="contents lg:col-span-2 lg:flex lg:flex-col lg:gap-6">
+                  {mostraCriativos && (
+                    <motion.section variants={entrada} initial="oculto" animate="visivel" custom={1} className="order-2 min-w-0 space-y-3">
+                      <CabecalhoSecao icone={Trophy} titulo="Top criativos" descricao="Os anúncios que mais trouxeram conversas no período" />
+                      <div className="space-y-2">
+                        {loading
+                          ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-[72px] rounded-xl" />)
+                          : top.map((c, i) => <CardCriativo key={c.id} criativo={c} posicao={i + 1} />)}
+                      </div>
+                      {!loading && ativos && ativos.total > 0 && per && (
+                        <AnunciosAtivos lista={ativos} periodo={per.kind} />
                       )}
-                      {demo?.age_ranges && demo.age_ranges.length > 0 && (
-                        <div>
-                          <p className="text-xs font-semibold mb-3 text-muted-foreground">Faixa etária</p>
-                          <ResponsiveContainer width="100%" height={110}>
-                            <BarChart data={demo.age_ranges} margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
-                              <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} axisLine={false} tickLine={false} />
-                              <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} axisLine={false} tickLine={false} unit="%" width={28} />
-                              <Tooltip
-                                contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--foreground)" }}
-                                formatter={(v) => [`${v}%`, "Alcance"]}
-                              />
-                              <Bar dataKey="pct" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                                {demo.age_ranges.map((_, i) => (
-                                  <Cell key={i} fill={i === 0 ? "var(--primary)" : "color-mix(in srgb, var(--chart-2) 55%, var(--card))"} />
-                                ))}
-                              </Bar>
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </div>
+                    </motion.section>
+                  )}
+
+                  {mostraTimeline && (
+                    <motion.section variants={entrada} initial="oculto" animate="visivel" custom={3} className="order-4 min-w-0 space-y-3">
+                      <CabecalhoSecao icone={ClipboardList} titulo="O que fizemos" descricao="Ações da equipe nas suas campanhas neste período" />
+                      {loading ? (
+                        <Skeleton className="h-28 rounded-xl" />
+                      ) : (
+                        <Cartao className="p-4">
+                          <ol className="relative space-y-4 before:absolute before:bottom-3 before:left-[15px] before:top-3 before:w-px before:bg-border">
+                            {actions.map((a) => {
+                              const Icone = ICON_MAP[a.icon ?? ""] ?? Pin;
+                              return (
+                                <li key={a.id} className="relative flex items-start gap-3">
+                                  <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-card text-primary">
+                                    <Icone size={15} aria-hidden="true" />
+                                  </span>
+                                  <div className="min-w-0 pt-0.5">
+                                    <p className="text-lone-caption text-muted-foreground">{rotuloDia(a.action_date)}</p>
+                                    <p className="text-sm font-medium text-foreground">{a.title}</p>
+                                    {a.description && <p className="mt-0.5 text-lone-caption text-muted-foreground">{a.description}</p>}
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ol>
+                        </Cartao>
                       )}
-                    </div>
+                    </motion.section>
                   )}
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+          </motion.div>
+        </AnimatePresence>
 
-          {/* ── COLUNA DIREITA ────────────────────────────────────────── */}
-          <div className="lg:col-span-2 space-y-5">
-
-            {/* Top Criativos */}
-            {(loading || top.length > 0) && (
-              <div>
-                <SectionHeader title="Top criativos" />
-                <div className="space-y-2">
-                  {loading
-                    ? Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className={`h-20 rounded-xl bg-card ${pulse}`} />
-                      ))
-                    : top.map((c) => (
-                        <div key={c.id}>
-                          <button
-                            className={`w-full rounded-xl p-3 text-left transition-colors bg-card border ${expandedId === c.id ? "border-primary" : "border-border"}`}
-                            style={{ minHeight: 68 }}
-                            onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
-                          >
-                            <div className="flex items-center gap-3">
-                              <Thumbnail url={c.thumbnail_url} path={c.thumbnail_path ?? null} name={c.name} />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-start gap-1.5 flex-wrap">
-                                  <p className="text-sm font-semibold leading-snug break-words">{c.name}</p>
-                                  {c.is_winner && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 whitespace-nowrap bg-primary/[.13] text-primary border border-primary/[.27] inline-flex items-center gap-0.5">
-                                      <Star size={9} aria-hidden="true" /> Top
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-1 text-xs text-muted-foreground">
-                                  <span><strong className="text-foreground">{fmt(c.messages)}</strong> msgs</span>
-                                  <span><strong className="text-foreground">{fmtBrl(c.spend)}</strong></span>
-                                  {c.cpa && <span><strong className="text-foreground">{fmtBrl(c.cpa)}</strong> por conversa</span>}
-                                </div>
-                              </div>
-                              <svg className="shrink-0 text-lone-text-tertiary" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d={expandedId === c.id ? "M18 15l-6-6-6 6" : "M6 9l6 6 6-6"} />
-                              </svg>
-                            </div>
-                          </button>
-                          {expandedId === c.id && (
-                            <div className="rounded-b-xl px-3 py-2.5 -mt-px bg-muted border border-primary border-t-0">
-                              <div className="grid grid-cols-3 gap-2 text-xs">
-                                <div>
-                                  <p className="text-lone-text-tertiary">Taxa de clique</p>
-                                  <p className="font-semibold mt-0.5">{c.ctr.toFixed(2)}%</p>
-                                </div>
-                                <div>
-                                  <p className="text-lone-text-tertiary">Vezes que cada pessoa viu</p>
-                                  <p className="font-semibold mt-0.5">{c.frequency.toFixed(1)}x</p>
-                                </div>
-                                <div>
-                                  <p className="text-lone-text-tertiary">Custo por conversa</p>
-                                  <p className="font-semibold mt-0.5">{c.cpa ? fmtBrl(c.cpa) : "—"}</p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                </div>
-              </div>
-            )}
-
-            {/* Timeline */}
-            {(loading || actions.length > 0) && (
-              <div>
-                <SectionHeader title="O que fizemos" />
-                <div className="space-y-2">
-                  {loading
-                    ? Array.from({ length: 2 }).map((_, i) => (
-                        <div key={i} className={`h-14 rounded-xl bg-card ${pulse}`} />
-                      ))
-                    : actions.map((a) => (
-                        <Card key={a.id} className="p-3">
-                          <div className="flex items-start gap-2.5">
-                            {(() => { const Icone = ICON_MAP[a.icon ?? ""] ?? Pin; return <Icone size={18} className="shrink-0 mt-0.5 text-primary" aria-hidden="true" />; })()}
-                            <div className="min-w-0">
-                              <p className="text-[11px] mb-0.5 text-lone-text-tertiary">{fmtDate(a.action_date)}</p>
-                              <p className="text-sm font-medium">{a.title}</p>
-                              {a.description && (
-                                <p className="text-xs mt-0.5 text-muted-foreground">{a.description}</p>
-                              )}
-                            </div>
-                          </div>
-                        </Card>
-                      ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-        </>)}
-
-        {/* ── Footer ───────────────────────────────────────────────────── */}
-        <div className="text-center mt-10 pb-20 lg:pb-10 space-y-2">
-          <img src="/logo.png" alt="Lone Mídia" className="h-6 w-auto mx-auto opacity-50" />
-          <p className="text-xs text-lone-text-tertiary">
+        {/* ── Rodapé ───────────────────────────────────────────────────── */}
+        <footer className="mt-12 space-y-2 border-t border-border pb-20 pt-6 text-center lg:pb-10">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Lone Mídia" className="mx-auto h-6 w-auto opacity-50" />
+          <p className="text-lone-caption text-muted-foreground">
             Relatório exclusivo{mesRelatorio ? ` · ${mesRelatorio}` : ""}
           </p>
-          <p className="text-xs text-lone-text-tertiary">
+          <p className="mx-auto max-w-prose text-lone-caption text-muted-foreground">
             Atribuição: 7 dias de clique + 1 dia de visualização · Valores podem divergir em até 5% do Gerenciador por atribuição diferida
           </p>
-        </div>
+        </footer>
       </div>
     </div>
+    </MotionConfig>
+  );
+}
+
+/** Criativo do topo: toca pra ver taxa de clique, frequência e custo por conversa. */
+function CardCriativo({ criativo: c, posicao }: { criativo: CreativeItem; posicao: number }) {
+  const [aberto, setAberto] = useState(false);
+  const idDetalhe = `criativo-${c.id}`;
+  return (
+    <Cartao className={cn("overflow-hidden transition-colors", aberto && "border-primary/40")}>
+      <button
+        type="button"
+        aria-expanded={aberto}
+        aria-controls={idDetalhe}
+        onClick={() => setAberto((v) => !v)}
+        className="flex min-h-[72px] w-full items-center gap-3 p-3 text-left [-webkit-tap-highlight-color:transparent] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+      >
+        <span className="w-4 shrink-0 text-center text-lone-caption font-medium tabular-nums text-muted-foreground" aria-hidden>{posicao}</span>
+        <CriativoThumb url={c.thumbnail_url} path={c.thumbnail_path ?? null} name={c.name} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-1.5">
+            <p className="line-clamp-2 break-words text-sm font-medium leading-snug text-foreground">{c.name}</p>
+            {c.is_winner && (
+              <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-lone-brand-soft">
+                <Star size={9} aria-hidden="true" /> Top
+              </span>
+            )}
+          </div>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-lone-caption text-muted-foreground">
+            <span><span className="font-medium tabular-nums text-foreground">{fmt(c.messages)}</span> {c.messages === 1 ? "conversa" : "conversas"}</span>
+            <span aria-hidden>·</span>
+            <span className="tabular-nums">{formatarBRL(c.spend)}</span>
+            {c.cpa != null && <><span aria-hidden>·</span><span><span className="tabular-nums">{formatarBRL(c.cpa)}</span> por conversa</span></>}
+          </p>
+        </div>
+        <ChevronDown size={16} className={cn("shrink-0 text-muted-foreground transition-transform duration-200", aberto && "rotate-180")} aria-hidden />
+      </button>
+      <AnimatePresence initial={false}>
+        {aberto && (
+          <motion.div
+            id={idDetalhe}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <dl className="grid grid-cols-3 gap-2 border-t border-border bg-muted/50 px-3 py-2.5 text-xs">
+              <div>
+                <dt className="text-muted-foreground">Taxa de clique</dt>
+                <dd className="mt-0.5 font-medium tabular-nums text-foreground">{c.ctr.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Vezes que cada pessoa viu</dt>
+                <dd className="mt-0.5 font-medium tabular-nums text-foreground">{c.frequency.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}x</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Custo por conversa</dt>
+                <dd className="mt-0.5 font-medium tabular-nums text-foreground">{c.cpa != null ? formatarBRL(c.cpa) : "—"}</dd>
+              </div>
+            </dl>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Cartao>
   );
 }

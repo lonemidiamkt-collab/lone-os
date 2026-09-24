@@ -269,3 +269,62 @@ export async function getDemographicBreakdown(
   });
   return data.data ?? [];
 }
+
+// ── Portal: anúncios ativos ──────────────────────────────────────────────────
+
+/** Anúncio no ar (effective_status ACTIVE) — só o que o portal do cliente precisa. */
+export interface MetaActiveAd {
+  id: string;
+  name?: string;
+  effective_status?: string;
+  creative?: { thumbnail_url?: string };
+}
+
+const PAGINAS_ANUNCIOS_ATIVOS = 3;
+
+/**
+ * Todos os anúncios ATIVOS da conta + os números deles no período (atribuição 7d clique, igual aos
+ * criativos do topo). Duas chamadas em paralelo, juntadas por ad_id em lib/portal/anunciosAtivos.ts:
+ * anúncio ativo sem linha de insight = não veiculou no período (aparece, marcado, nunca some).
+ * LANÇA se a Meta recusar — quem chama decide (o portal mostra a lista como indisponível).
+ */
+export async function getActiveAdsWithInsights(
+  accountId: string,
+  accessToken: string,
+  since: string,
+  until: string,
+): Promise<{ ads: MetaActiveAd[]; insights: MetaAdInsight[] }> {
+  async function paginar<T>(primeira: string, label: string): Promise<T[]> {
+    const out: T[] = [];
+    let url: string | null = primeira;
+    for (let i = 0; url && i < PAGINAS_ANUNCIOS_ATIVOS; i++) {
+      const pagina: { data?: T[]; paging?: { next?: string } } = await metaJson(url, { label: `${label} p${i + 1}` });
+      out.push(...(pagina.data ?? []));
+      url = pagina.paging?.next ?? null;
+    }
+    return out;
+  }
+
+  const adsParams = new URLSearchParams({
+    access_token: accessToken,
+    // 256px: a miniatura padrão da Meta é 64×64 e fica borrada no celular (tela 2x/3x).
+    fields: "id,name,effective_status,creative.thumbnail_width(256).thumbnail_height(256){thumbnail_url}",
+    effective_status: '["ACTIVE"]',
+    limit: "200",
+  });
+  const insightsParams = new URLSearchParams({
+    access_token: accessToken,
+    fields: "ad_id,ad_name,spend,impressions,reach,clicks,ctr,actions",
+    time_range: JSON.stringify({ since, until }),
+    action_attribution_windows: '["7d_click"]',
+    level: "ad",
+    filtering: JSON.stringify([{ field: "ad.effective_status", operator: "IN", value: ["ACTIVE"] }]),
+    limit: "500",
+  });
+
+  const [ads, insights] = await Promise.all([
+    paginar<MetaActiveAd>(`${getGraphUrl(`/${accountId}/ads`)}?${adsParams}`, `anúncios ativos ${accountId}`),
+    paginar<MetaAdInsight>(`${getGraphUrl(`/${accountId}/insights`)}?${insightsParams}`, `insights anúncios ativos ${accountId} ${since}→${until}`),
+  ]);
+  return { ads, insights };
+}

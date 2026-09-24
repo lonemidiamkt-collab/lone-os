@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Paperclip } from "lucide-react";
+import { CheckCircle2, Paperclip } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 
 // O cliente manda material pelo painel (Roberto, 31/08). Hoje foto de produto, logo e tabela de
@@ -59,11 +59,12 @@ export default function PortalUpload({ token, clientName }: { token: string; cli
   }, [token, observacao, enviadoPor]);
 
   return (
-    <section className="rounded-2xl p-5 lg:p-6 mb-5 bg-card border border-border">
-      <h2 className="text-base lg:text-lg font-bold mb-1 text-foreground">
+    <section className="rounded-xl p-4 sm:p-5 bg-card border border-border">
+      <h2 className="flex items-center gap-2 text-lone-h2 tracking-tight mb-1 text-foreground">
+        <Paperclip size={16} className="shrink-0 text-muted-foreground" aria-hidden="true" />
         Enviar material
       </h2>
-      <p className="text-xs lg:text-sm mb-4 text-muted-foreground">
+      <p className="text-lone-caption sm:text-sm mb-4 text-muted-foreground">
         Foto de produto, logo, tabela de preço, vídeo da loja — o que chegar aqui fica guardado com
         o time da {clientName}, sem se perder no WhatsApp.
       </p>
@@ -76,7 +77,7 @@ export default function PortalUpload({ token, clientName }: { token: string; cli
         onChange={(e) => setObservacao(e.target.value)}
         rows={2}
         placeholder="Ex.: fotos do produto novo que chegou, pra usar nos posts da semana"
-        className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none mb-3 bg-background border border-border text-foreground"
+        className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none mb-3 bg-background border border-border text-foreground focus:border-primary"
       />
 
       <label className="block text-xs mb-1 text-muted-foreground">Seu nome</label>
@@ -84,7 +85,7 @@ export default function PortalUpload({ token, clientName }: { token: string; cli
         value={enviadoPor}
         onChange={(e) => setEnviadoPor(e.target.value)}
         placeholder="Quem está enviando"
-        className="w-full rounded-lg px-3 py-2 text-sm outline-none mb-4 bg-background border border-border text-foreground"
+        className="w-full rounded-lg px-3 py-2 text-sm outline-none mb-4 bg-background border border-border text-foreground focus:border-primary"
       />
 
       <input
@@ -99,7 +100,7 @@ export default function PortalUpload({ token, clientName }: { token: string; cli
       />
       <label
         htmlFor="portal-upload-input"
-        className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold cursor-pointer min-h-[48px] transition-opacity text-primary-foreground ${enviando ? "bg-border" : "bg-primary"}`}
+        className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-medium cursor-pointer min-h-[48px] transition-opacity text-primary-foreground ${enviando ? "bg-border" : "bg-primary"}`}
         style={{ opacity: enviando ? 0.7 : 1 }}
       >
         {enviando ? "Enviando…" : <><Paperclip size={16} aria-hidden="true" /> Escolher arquivos</>}
@@ -109,8 +110,8 @@ export default function PortalUpload({ token, clientName }: { token: string; cli
 
       {enviados.length > 0 && (
         <div className="mt-4 pt-3 border-t border-border">
-          <p className="text-xs mb-2 text-lone-success">
-            ✓ {enviados.length} arquivo{enviados.length > 1 ? "s" : ""} enviado{enviados.length > 1 ? "s" : ""} — o time já foi avisado
+          <p className="text-xs mb-2 text-lone-success inline-flex items-center gap-1.5">
+            <CheckCircle2 size={14} aria-hidden="true" /> {enviados.length} arquivo{enviados.length > 1 ? "s" : ""} enviado{enviados.length > 1 ? "s" : ""} — o time já foi avisado
           </p>
           {enviados.map((n, i) => (
             <p key={`${n}-${i}`} className="text-xs truncate text-muted-foreground">{n}</p>

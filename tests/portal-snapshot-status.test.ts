@@ -8,6 +8,7 @@ const meta = vi.hoisted(() => ({
   getTopAdInsights: vi.fn(),
   getAdThumbnail: vi.fn(),
   getDemographicBreakdown: vi.fn(),
+  getActiveAdsWithInsights: vi.fn(),
   fetchAccountReach: vi.fn(),
 }));
 
@@ -16,6 +17,7 @@ vi.mock("@/lib/meta/api", () => ({
   getTopAdInsights: meta.getTopAdInsights,
   getAdThumbnail: meta.getAdThumbnail,
   getDemographicBreakdown: meta.getDemographicBreakdown,
+  getActiveAdsWithInsights: meta.getActiveAdsWithInsights,
 }));
 vi.mock("@/lib/meta/insights-server", () => ({ fetchAccountReach: meta.fetchAccountReach }));
 vi.mock("@sentry/nextjs", () => ({
@@ -59,6 +61,7 @@ beforeEach(() => {
   meta.getTopAdInsights.mockResolvedValue([]);
   meta.getDemographicBreakdown.mockResolvedValue([]);
   meta.getAdThumbnail.mockResolvedValue(null);
+  meta.getActiveAdsWithInsights.mockResolvedValue({ ads: [], insights: [] });
   meta.fetchAccountReach.mockResolvedValue(800);
 });
 

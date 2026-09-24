@@ -85,6 +85,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         // `published_at` NÃO EXISTE em content_cards (a data de publicação é publish_verified_at). O select
         // com a coluna inexistente devolvia 400 e o portal mostrava "Conteúdo" vazio para TODOS os clientes.
         date: (c.publish_verified_at as string) || (c.scheduled_at as string) || (c.due_date as string) || null,
+        // Quando a arte foi ENTREGUE pelo time — é por ela que o portal filtra "entregue no período"
+        // (antes uma arte de 29/jul aparecia na visão de 7 dias, porque não havia filtro nenhum).
+        entregueEm: (c.designer_delivered_at as string) || null,
         pendente, aprovada,
       };
     })

@@ -5,11 +5,13 @@ import {
   getTopAdInsights,
   getAdThumbnail,
   getDemographicBreakdown,
+  getActiveAdsWithInsights,
 } from "@/lib/meta/api";
 import { countMessagesFromActions } from "@/lib/meta/messages";
 import { fetchAccountReach } from "@/lib/meta/insights-server";
 import { hojeSP } from "@/lib/clients/pausa";
-import type { PeriodKind, SnapshotData, CreativeItem, DemographicRow, AdsStatus } from "./types";
+import { montarAnunciosAtivos } from "./anunciosAtivos";
+import type { PeriodKind, SnapshotData, CreativeItem, DemographicRow, AdsStatus, ActiveAdsList } from "./types";
 
 const THUMBNAIL_BUCKET = "meta-thumbnails";
 
@@ -169,6 +171,7 @@ function snapshotIndisponivel(
     kpis: { messages: nada, spend: nada, cpa: nada, reach: nada },
     chart: { days: [], series: { messages: [], clicks: [], spend: [], reach: [] }, peak: null },
     top_creatives: [],
+    active_ads: null,
     demographics: { gender: null, age_ranges: [] },
     agency_actions,
     generated_at: new Date().toISOString(),
@@ -233,6 +236,7 @@ export async function buildSnapshot(params: {
       kpis: { messages: emptyKpi, spend: emptyKpi, cpa: emptyKpi, reach: emptyKpi },
       chart: emptyChart,
       top_creatives: [],
+      active_ads: { items: [], total: 0, with_messages: 0 },
       demographics: { gender: null, age_ranges: [] },
       agency_actions,
       generated_at: new Date().toISOString(),
@@ -240,7 +244,7 @@ export async function buildSnapshot(params: {
   }
 
   // ── Fetch insights em paralelo (período atual + anterior) ─────────────────
-  const [currentInsights, prevInsights, adInsights, demographics, curReachR, prevReachR] = await Promise.allSettled([
+  const [currentInsights, prevInsights, adInsights, demographics, curReachR, prevReachR, activeAdsR] = await Promise.allSettled([
     getInsightsByDateRange(metaAccountId, metaToken, period.start, period.end),
     getInsightsByDateRange(metaAccountId, metaToken, period.previous_start, period.previous_end),
     getTopAdInsights(metaAccountId, metaToken, period.start, period.end, 10),
@@ -249,6 +253,9 @@ export async function buildSnapshot(params: {
     // super-conta (mesma pessoa atingida em 2 dias = 2). Usa a janela exata do período.
     fetchAccountReach(metaToken, metaAccountId, 7, period.start, period.end),
     fetchAccountReach(metaToken, metaAccountId, 7, period.previous_start, period.previous_end),
+    // Todos os anúncios ativos + números do período ("Ver todos os anúncios ativos"). Dentro de um
+    // .then pra que qualquer falha, até síncrona, vire rejeição aqui e não derrube o snapshot.
+    Promise.resolve().then(() => getActiveAdsWithInsights(metaAccountId, metaToken, period.start, period.end)),
   ]);
 
   const cur = currentInsights.status === "fulfilled" ? currentInsights.value : [];
@@ -305,13 +312,23 @@ export async function buildSnapshot(params: {
   const days = sortedDays.map((r) => r.date_start);
   const msgSeries  = sortedDays.map((r) => countMessagesFromActions(r.actions));
   // Mesmo dia relativo do período anterior (a Meta omite dia sem veiculação: ausente = 0; dia além
-  // do fim do período anterior, ex. 31/mar × fevereiro, não existe = null).
-  const prevPorDia = new Map(prev.map((r) => [r.date_start, countMessagesFromActions(r.actions)]));
-  const previous_messages = prevInsights.status === "fulfilled"
-    ? days.map((d) => {
-        const par = somaDias(period.previous_start, diasNoIntervalo(period.start, d) - 1);
-        return par > period.previous_end ? null : prevPorDia.get(par) ?? 0;
-      })
+  // do fim do período anterior, ex. 31/mar × fevereiro, não existe = null). O período anterior já
+  // vem inteiro na mesma chamada — as outras abas (cliques, investido, alcance) saem de graça.
+  const prevPorDataIso = new Map(prev.map((r) => [r.date_start, r]));
+  const alinharAnterior = (valor: (r: (typeof prev)[number]) => number) => days.map((d) => {
+    const par = somaDias(period.previous_start, diasNoIntervalo(period.start, d) - 1);
+    if (par > period.previous_end) return null;
+    const linha = prevPorDataIso.get(par);
+    return linha ? valor(linha) : 0;
+  });
+  const temAnterior = prevInsights.status === "fulfilled";
+  const previous_messages = temAnterior ? alinharAnterior((r) => countMessagesFromActions(r.actions)) : null;
+  const previous_series = temAnterior
+    ? {
+        clicks: alinharAnterior((r) => parseFloat(r.clicks) || 0),
+        spend:  alinharAnterior((r) => parseFloat(r.spend)  || 0),
+        reach:  alinharAnterior((r) => parseFloat(r.reach)  || 0),
+      }
     : null;
   const peakIdx    = msgSeries.indexOf(Math.max(...msgSeries));
 
@@ -355,6 +372,21 @@ export async function buildSnapshot(params: {
       is_winner: i === winnerIdx && a.msgs > 5,
     };
   });
+
+  // ── Anúncios ativos (todos, limitado) ─────────────────────────────────────
+  // Falhou → null ("lista indisponível agora"), sem mexer no ads_status: é um extra, e contaminar o
+  // status impediria o cache do snapshot inteiro por causa dele.
+  let active_ads: ActiveAdsList | null = null;
+  if (activeAdsR.status === "fulfilled") {
+    const thumbPaths = new Map(top_creatives.map((c) => [c.id, c.thumbnail_path]));
+    active_ads = montarAnunciosAtivos(activeAdsR.value.ads, activeAdsR.value.insights, { thumbPaths });
+  } else {
+    console.error(`[buildSnapshot] ${params.clientId} ${params.periodKind} → anúncios ativos: ${activeAdsR.reason}`);
+    Sentry.captureMessage("Portal: lista de anúncios ativos falhou", {
+      level: "warning",
+      extra: { clientId: params.clientId, periodKind: params.periodKind, motivo: String(activeAdsR.reason) },
+    });
+  }
 
   // ── Demographics ──────────────────────────────────────────────────────────
   let femalePct = 0, malePct = 0;
@@ -407,11 +439,13 @@ export async function buildSnapshot(params: {
         reach:   sortedDays.map((r) => parseFloat(r.reach)  || 0),
       },
       previous_messages,
+      previous_series,
       peak: days.length > 0 && peakIdx >= 0 && msgSeries[peakIdx] > 0
         ? { metric: "messages", day: days[peakIdx], value: msgSeries[peakIdx] }
         : null,
     },
     top_creatives,
+    active_ads,
     demographics: { gender, age_ranges },
     agency_actions,
     generated_at: new Date().toISOString(),

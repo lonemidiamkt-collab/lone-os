@@ -21,6 +21,30 @@ export interface CreativeItem {
   is_winner: boolean;
 }
 
+/** Anúncio ATIVO do cliente com os números do período — a lista "Ver todos os anúncios ativos".
+ *  Enxuto de propósito: vai inteiro no snapshot público (nada de conta, campanha, público ou verba
+ *  diária — só o que o cliente já vê do próprio anúncio). Montado em lib/portal/anunciosAtivos.ts. */
+export interface ActiveAdItem {
+  id: string;
+  name: string;
+  thumbnail_url: string | null;
+  /** Mesmo cache do Storage dos criativos do topo, quando o anúncio também está lá. */
+  thumbnail_path: string | null;
+  messages: number;
+  spend: number;
+  /** null = sem conversa no período (não há custo por conversa pra calcular). */
+  cpa: number | null;
+  clicks: number;
+}
+
+export interface ActiveAdsList {
+  items: ActiveAdItem[];
+  /** Quantos anúncios ativos a conta tem — pode passar de items.length (lista limitada). */
+  total: number;
+  /** Quantos dos `total` trouxeram ao menos uma conversa no período (conta antes do limite). */
+  with_messages: number;
+}
+
 export interface DemographicRow {
   label: string;
   pct: number;
@@ -73,9 +97,19 @@ export interface SnapshotData {
     /** Conversas por dia do período anterior, na mesma posição de `days` (mesmo dia relativo).
      *  Ausente/null = sem comparação (snapshot antigo ou o período anterior falhou). */
     previous_messages?: (number | null)[] | null;
+    /** Mesmo alinhamento de `previous_messages`, para as outras abas da evolução diária.
+     *  Ausente/null = sem comparação (snapshot antigo ou o período anterior falhou). */
+    previous_series?: {
+      clicks: (number | null)[];
+      spend: (number | null)[];
+      reach: (number | null)[];
+    } | null;
     peak: { metric: "messages"; day: string; value: number } | null;
   };
   top_creatives: CreativeItem[];
+  /** Todos os anúncios ativos (limitado). Ausente = snapshot antigo; null = a Meta não entregou a
+   *  lista agora (o resto do snapshot vale). */
+  active_ads?: ActiveAdsList | null;
   demographics: {
     gender: { female_pct: number; male_pct: number } | null;
     age_ranges: DemographicRow[];
