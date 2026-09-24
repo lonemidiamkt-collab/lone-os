@@ -182,7 +182,7 @@ describe("criativos em destaque", () => {
 // ── Período, comparação e resultado pelo objetivo ────────────────────────────
 
 describe("período × período anterior", () => {
-  it("Horto: 38 conversas contra 34, custo só das campanhas que trouxeram conversa", () => {
+  it("Horto: 38 conversas contra 34, custo = investimento total ÷ conversas (mesma regra do portal)", () => {
     const r = relatorioHorto();
     expect(r.tipo).toBe("mensagens");
     expect(r.palavras.Varios).toBe("Conversas");
@@ -192,9 +192,9 @@ describe("período × período anterior", () => {
     expect(k.resultados.tom).toBe("bom");
     expect(k.investimento.valor).toBeCloseTo(252.45, 2);
     expect(k.investimento.tom).toBe("neutro"); // investimento não é bom nem ruim
-    // 199,95 = 252,45 − 52,50 do impulsionamento que não traz conversa
-    expect(k.custo.valor).toBeCloseTo(199.95 / 38, 4);
-    expect(sp(k.custo.nota)).toContain("R$ 199,95");
+    // Gasto total, inclusive o impulsionamento que não traz conversa (Roberto, 24/09: "melhor total").
+    expect(k.custo.valor).toBeCloseTo(252.45 / 38, 4);
+    expect(k.custo.nota).toBeNull();
     expect(k.custo.tom).toBe("bom"); // custo caiu: bom (natureza inversa)
     expect(k.alcance.valor).toBe(13696);
   });
@@ -210,7 +210,7 @@ describe("período × período anterior", () => {
     const r = relatorioHorto({ anterior: null });
     expect(r.kpis.every((k) => k.variacaoPct === null)).toBe(true);
     expect(r.serie.every((p) => p.anterior === null)).toBe(true);
-    expect(sp(r.frase)).toBe("Na última semana, seus anúncios trouxeram 38 conversas, a R$ 5,26 cada.");
+    expect(sp(r.frase)).toBe("Na última semana, seus anúncios trouxeram 38 conversas, a R$ 6,64 cada.");
   });
 
   it("anterior sem veiculação não é base (0 → 38 não é +∞%)", () => {
@@ -245,7 +245,7 @@ describe("período × período anterior", () => {
 
 describe("a frase da semana", () => {
   it("resultado, variação e custo", () => {
-    expect(relatorioHorto().frase).toBe("Na última semana, seus anúncios trouxeram 38 conversas, 12% a mais que na semana anterior — e cada conversa saiu 9% mais barata.");
+    expect(relatorioHorto().frase).toBe("Na última semana, seus anúncios trouxeram 38 conversas, 12% a mais que na semana anterior — e cada conversa saiu 6% mais barata.");
   });
 
   it("mês fechado compara com o mês anterior pelo nome", () => {

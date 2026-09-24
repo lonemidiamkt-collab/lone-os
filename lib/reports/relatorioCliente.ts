@@ -294,17 +294,6 @@ export function tipoDoRelatorio(atual: ResumoPeriodo, anterior: ResumoPeriodo | 
   return tipoDominante(atual.porTipo, atual.pedidos);
 }
 
-/**
- * Investimento das campanhas que trouxeram o resultado do relatório. É a base do custo por resultado —
- * o mesmo critério do relatório antigo: gasto de campanha de alcance/engajamento que não traz conversa
- * não entra na conta do "custo por conversa". O PDF diz isso embaixo do número quando faz diferença.
- */
-export function investimentoComResultado(r: ResumoPeriodo, tipo: TipoResultadoConta): number {
-  let s = 0;
-  for (const c of r.campanhas.values()) if (resultadoDoTipo(c.porTipo, tipo) > 0) s += c.investimento;
-  return s;
-}
-
 // ── Criativos e conjuntos ────────────────────────────────────────────────────
 
 const contaNoTipo = (objetivo: string | undefined, actions: Acao[] | undefined, tipo: TipoResultadoConta): number => {
@@ -462,24 +451,22 @@ export function montarRelatorio(e: EntradaRelatorio): RelatorioAnuncios {
   const antValido = !!ant && ant.linhas > 0;
   const totalAnterior = antValido ? resultadoDoTipo(ant!.porTipo, tipo) : null;
 
-  const baseCusto = investimentoComResultado(atual, tipo);
-  const custo = total > 0 ? baseCusto / total : null;
-  const baseCustoAnt = antValido ? investimentoComResultado(ant!, tipo) : 0;
-  const custoAnt = antValido && totalAnterior! > 0 ? baseCustoAnt / totalAnterior! : null;
+  // Custo por resultado = investimento TOTAL ÷ resultados — a mesma regra do portal (Roberto, 24/09:
+  // "melhor total"). Antes só contava o gasto das campanhas que trouxeram resultado, e o PDF mostrava
+  // um custo menor que o portal para o mesmo cliente e período.
+  const custo = total > 0 ? atual.investimento / total : null;
+  const custoAnt = antValido && totalAnterior! > 0 ? ant!.investimento / totalAnterior! : null;
 
   const kpi = (chave: KpiRelatorio["chave"], rotulo: string, valor: number | null, anterior: number | null, natureza: Natureza, nota?: string | null): KpiRelatorio => {
     const v = variacao(valor, anterior);
     return { chave, rotulo, valor, anterior, variacaoPct: v, natureza, tom: tomDaVariacao(v, natureza, LIMIAR_NEUTRO), nota: nota ?? null };
   };
 
-  const notaCusto = custo != null && atual.investimento - baseCusto > Math.max(1, atual.investimento * 0.01)
-    ? `Sobre ${formatarBRL(baseCusto)} das campanhas que trouxeram ${palavras.varios}`
-    : null;
 
   const kpis: KpiRelatorio[] = [
     kpi("resultados", palavras.Varios, total, totalAnterior, "direta"),
     kpi("investimento", "Investimento", atual.investimento, antValido ? ant!.investimento : null, "neutra"),
-    kpi("custo", palavras.custo, custo, custoAnt, "inversa", notaCusto),
+    kpi("custo", palavras.custo, custo, custoAnt, "inversa"),
     kpi("alcance", "Pessoas alcançadas", e.alcance, antValido ? e.anterior!.alcance : null, "direta"),
   ];
 
