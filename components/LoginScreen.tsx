@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRole } from "@/lib/context/RoleContext";
 import { Logo } from "@/components/ui/Logo";
+import { fotoDaPessoa } from "@/lib/equipe/fotos";
 import { Eye, EyeOff, ArrowRight, ChevronDown, Check, Loader2 } from "lucide-react";
 
 // Login: vídeo de fundo (handoff LoneHub) + card. Regras da Lone PRESERVADAS: fonte Montserrat,
@@ -239,9 +240,7 @@ export default function LoginScreen() {
               >
                 {selectedProfile ? (
                   <div className="flex items-center gap-3">
-                    <div className="grid h-9 w-9 place-items-center rounded-lg border border-primary/20 bg-primary/15">
-                      <span className="text-[11px] font-semibold text-primary">{selectedProfile.initials}</span>
-                    </div>
+                    <AvatarLogin name={selectedProfile.name} initials={selectedProfile.initials} active />
                     <div>
                       <p className="text-sm font-medium text-foreground">{selectedProfile.name}</p>
                       <p className="text-[11px] text-muted-foreground">{ROLE_LABELS[selectedProfile.role]}</p>
@@ -263,9 +262,7 @@ export default function LoginScreen() {
                         onClick={() => handleSelectUser(profile.id)}
                         className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent ${active ? "bg-primary/10" : ""}`}
                       >
-                        <div className={`grid h-9 w-9 place-items-center rounded-lg border ${active ? "border-primary/30 bg-primary/15" : "border-border bg-secondary"}`}>
-                          <span className={`text-[11px] font-semibold ${active ? "text-primary" : "text-muted-foreground"}`}>{profile.initials}</span>
-                        </div>
+                        <AvatarLogin name={profile.name} initials={profile.initials} active={active} />
                         <div className="min-w-0 flex-1">
                           <p className={`text-sm font-medium ${active ? "text-primary" : "text-foreground"}`}>{profile.name}</p>
                           <p className="text-[11px] text-muted-foreground">{ROLE_LABELS[profile.role]}</p>
@@ -324,6 +321,28 @@ export default function LoginScreen() {
         </p>
           </section>
       </div>
+    </div>
+  );
+}
+
+// Foto do time quando existe (public/equipe); senão, as iniciais de sempre.
+function AvatarLogin({ name, initials, active }: { name: string; initials: string; active?: boolean }) {
+  const foto = fotoDaPessoa(name);
+  if (foto) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={foto}
+        alt=""
+        width={36}
+        height={36}
+        className={`h-9 w-9 shrink-0 rounded-full object-cover ring-2 ${active ? "ring-primary" : "ring-border"}`}
+      />
+    );
+  }
+  return (
+    <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full border ${active ? "border-primary/30 bg-primary/15" : "border-border bg-secondary"}`}>
+      <span className={`text-[11px] font-semibold ${active ? "text-primary" : "text-muted-foreground"}`}>{initials}</span>
     </div>
   );
 }
