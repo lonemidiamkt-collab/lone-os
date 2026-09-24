@@ -30,7 +30,7 @@ export function formatarPct(pct: number): string {
 const plural = (n: number, um: string, varios: string) => (Math.round(n) === 1 ? um : varios);
 
 export const ROTULO_METRICA: Record<MetricaDiaria, string> = {
-  messages: "Mensagens",
+  messages: "Conversas",
   clicks: "Cliques",
   spend: "Investido",
   reach: "Alcance",

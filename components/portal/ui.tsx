@@ -76,7 +76,7 @@ export function Segmentado<T extends string>({
   const idRealce = `seg-${useId()}`;
   return (
     <div role="group" aria-label={rotulo}
-      className={cn("max-w-full gap-1 rounded-xl bg-muted p-1", cheio ? "flex w-full" : "inline-flex", className)}>
+      className={cn("max-w-full gap-1 overflow-x-auto rounded-xl bg-muted p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", cheio ? "flex w-full" : "inline-flex", className)}>
       {opcoes.map((o) => {
         const ativo = o.valor === valor;
         const Icone = o.icone;
@@ -93,9 +93,11 @@ export function Segmentado<T extends string>({
               "[-webkit-tap-highlight-color:transparent] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
               "disabled:cursor-not-allowed disabled:opacity-60",
               // 13px no celular: "7 dias · 14 dias · Este mês · Mês passado" cabe inteiro em 375px sem cortar.
-              tamanho === "md" ? "min-h-[44px] px-2.5 text-[13px] sm:px-3 sm:text-sm" : "min-h-[36px] px-2.5 text-xs sm:text-[13px]",
+              tamanho === "md" ? "min-h-[44px] px-2.5 text-[13px] sm:px-3 sm:text-sm" : "min-h-[36px] px-2 text-xs sm:px-2.5 sm:text-[13px]",
               // flex-auto: cresce na proporção do rótulo ("Mês passado" precisa de mais que "7 dias").
-              cheio && "flex-auto shrink",
+              // Não encolhe abaixo do rótulo: se não couber (tela muito estreita), o grupo desliza pro
+              // lado em vez de cortar o texto ("Mensage…", "Cliqu…" em 375px).
+              cheio && "flex-auto",
               ativo
                 ? destaque ? "text-primary-foreground" : "text-foreground"
                 : "text-muted-foreground hover:text-foreground",
@@ -114,7 +116,7 @@ export function Segmentado<T extends string>({
             )}
             <span className="relative flex min-w-0 items-center gap-1.5">
               {Icone && <Icone size={15} className="shrink-0" aria-hidden />}
-              <span className="truncate">{o.rotulo}</span>
+              <span className="whitespace-nowrap">{o.rotulo}</span>
             </span>
           </button>
         );
