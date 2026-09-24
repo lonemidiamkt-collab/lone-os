@@ -32,3 +32,6 @@ COMMENT ON COLUMN radar_pautas.content_card_id IS
 
 ALTER TABLE content_cards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE radar_pautas  ENABLE ROW LEVEL SECURITY;
+
+-- A API do Supabase (PostgREST) só enxerga colunas novas depois de recarregar o cache.
+notify pgrst, 'reload schema';
