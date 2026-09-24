@@ -13,7 +13,9 @@ import PortalInstagram from "./PortalInstagram";
 import PortalUpload from "@/components/portal/PortalUpload";
 import { chamar } from "@/lib/api/chamar";
 import { WHATSAPP_EQUIPE, linkWhatsapp } from "@/lib/portal/contato";
-import { formatDelta, resumoConversas, type MetricType } from "@/lib/portal/formatDelta";
+import { fraseDelta, periodoAnterior, resumoConversas, type MetricType } from "@/lib/portal/formatDelta";
+import { PainelComparativo, type KpiComparativo } from "@/components/ui/painel-comparativo";
+import { tomDaVariacao } from "@/components/ui/painel-comparativo-utils";
 
 const PERIODS: { value: PeriodKind; label: string }[] = [
   { value: "last_week",    label: "7 dias"      },
@@ -226,6 +228,20 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
     { key: "reach",    label: "Pessoas alcançadas", val: kpis?.reach,    format: (v) => fmt(v) },
   ];
 
+  // Resumo do topo: conversas por dia × mesmo dia do período anterior + os 4 números principais.
+  const prevConversas = chart?.previous_messages ?? null;
+  const serieConversas = chartData.map((d, i) => ({ rotulo: d.day, atual: d.messages, anterior: prevConversas?.[i] ?? null }));
+  const kpisResumo: KpiComparativo[] = kpiItems.map(({ key, label, val, format }) => ({
+    rotulo: label,
+    valor: val?.value != null ? format(val.value) : "—",
+    variacaoPct: val?.delta_pct ?? null,
+    // Custo por conversa: cair é bom. Investimento: nem bom nem ruim.
+    natureza: key === "cpa" ? "inversa" : key === "spend" ? "neutra" : "direta",
+    dica: fraseDelta(key, val?.delta_pct ?? null, periodoDado) ?? undefined,
+  }));
+  const per = data?.period;
+  const datasPeriodo = per ? `${fmtDate(per.start)} a ${fmtDate(per.end)}, comparado com ${fmtDate(per.previous_start)} a ${fmtDate(per.previous_end)}.` : undefined;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <MobileFAB phone={phone} clientName={clientName} />
@@ -341,11 +357,6 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           </div>
         )}
 
-        {/* Frase de resumo do período (N34): o número que importa, em português. */}
-        {!erro && !loading && resumo && (
-          <p className="text-base font-medium mb-4 text-foreground">{resumo}</p>
-        )}
-
         {/* Caiu de volta no último dado bom porque a Meta não respondeu: mostra, mas datado. */}
         {!erro && data?.stale_since && (
           <div className="rounded-xl px-4 py-3 mb-5 text-sm bg-card border border-border text-muted-foreground">
@@ -353,26 +364,25 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
           </div>
         )}
 
-        {/* ── KPIs — 2×2 no celular, 4 colunas no desktop; Mensagens é o destaque */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6 lg:mb-7">
-          {kpiItems.map(({ key, label, val, format }) => {
-            const heroi = key === "messages";
-            const d = !loading && val ? formatDelta(key, val.delta_pct, periodoDado) : null;
-            return (
-              <div key={key} className={`rounded-xl bg-card border p-3.5 sm:p-4 min-w-0 ${heroi ? "border-primary" : "border-border"}`}>
-                <p className={`text-xs mb-2 sm:mb-3 ${heroi ? "font-semibold text-primary" : "text-lone-text-tertiary"}`}>{label}</p>
-                {loading ? (
-                  <div className={`h-8 w-24 max-w-full rounded bg-border ${pulse}`} />
-                ) : (
-                  <p className={`font-bold leading-none break-words ${heroi ? "text-3xl sm:text-4xl" : "text-2xl sm:text-3xl"}`}>
-                    {val?.value != null ? format(val.value) : "—"}
-                  </p>
-                )}
-                {d && <p className="text-xs mt-2 leading-snug" style={{ color: d.color }}>{d.text}</p>}
-              </div>
-            );
-          })}
-        </div>
+        {/* ── Resumo: conversas × período anterior, frase do período (N34) e os 4 números.
+             Some com erro ou "números sendo atualizados" — nunca pinta zero no lugar. */}
+        {(loading || (!erro && !atualizando && kpis)) && (
+          <PainelComparativo
+            className="mb-6 lg:mb-7"
+            carregando={loading}
+            titulo="Conversas por dia"
+            subtitulo={per ? `${per.label}, comparado com ${periodoAnterior(periodoDado)}` : undefined}
+            rotuloAtual="Este período"
+            rotuloAnterior="Período anterior"
+            serie={serieConversas}
+            formatarValor={(v) => v.toLocaleString("pt-BR")}
+            destaque={resumo ? { texto: resumo, tom: tomDaVariacao(kpis?.messages.delta_pct, "direta", 5), detalhe: datasPeriodo } : null}
+            kpis={kpisResumo}
+            limiarNeutroPct={5}
+            tomRuim="atencao"
+            vazio="Ainda não houve conversas neste período."
+          />
+        )}
 
         {/* ══════════════════════════════════════════════════════════════
             DESKTOP: 2 colunas lado a lado

@@ -10,6 +10,9 @@
 // são do ANO-CALENDÁRIO escolhido (Q1=Jan–Mar … Q4=Out–Dez; S1=Jan–Jun, S2=Jul–Dez), então Dez/25
 // não vaza pro trimestre de 2026 nem o semestre vira 7 meses. Health/insight usam a série contínua
 // (trajetória real do cliente), só os gráficos/KPIs são do ano.
+//
+// RESUMO NO TOPO (set/2026): PainelComparativo com a série contínua — últimos meses × mesmos meses
+// do ano anterior (ou × mês anterior, se não há histórico), meta, frase e KPIs do último mês lançado.
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { TrendingUp, TrendingDown, Minus, Loader2, Check, Link2, ChevronLeft, ChevronRight, Download } from "lucide-react";
@@ -21,6 +24,8 @@ import { supabase } from "@/lib/supabase/client";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
 import { Target } from "lucide-react";
+import { PainelComparativo, type DestaqueComparativo, type KpiComparativo, type MetaComparativa } from "@/components/ui/painel-comparativo";
+import { formatarVariacao, serieMensalComparada, somaMeses, tomDaVariacao, variacao } from "@/components/ui/painel-comparativo-utils";
 
 interface Props {
   clientId: string;
@@ -48,6 +53,11 @@ const intBR = (n: number) => Math.round(n || 0).toLocaleString("pt-BR");
 const ticketOf = (r: Row) => (r.vendas && r.vendas > 0 ? r.revenue / r.vendas : null);
 const mLabel = (ym: string) => { const [y, m] = ym.split("-"); return `${MESES[+m - 1]}/${y.slice(2)}`; };
 const pctFmt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")}%`;
+const pctSemSinal = (v: number) => formatarVariacao(Math.abs(v)).replace(/^[+−]/, "");
+const mesesEntre = (de: string, ate: string) => {
+  const [y0, m0] = de.split("-").map(Number), [y1, m1] = ate.split("-").map(Number);
+  return (y1 - y0) * 12 + (m1 - m0);
+};
 
 /** Parse pt-BR de faturamento: aceita "654.177,07", "650000", "R$ 1.200.000". Ponto = milhar,
  *  vírgula = decimal. Sem isso, o input type=number comia a vírgula e corrompia o valor. */
@@ -353,6 +363,72 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
     return { tone, label: pctFmt(pct) };
   }, [allWithData]);
 
+  // Resumo do topo — série contínua, não presa ao ano do seletor. KPIs = último mês lançado × o anterior.
+  const resumo = useMemo(() => {
+    if (!allWithData.length) return null;
+    const fim = allWithData[allWithData.length - 1].month;
+    const meses = Math.min(12, Math.max(6, mesesEntre(allWithData[0].month, fim) + 1));
+    const valores = new Map(allWithData.map((r) => [r.month, r.revenue]));
+    const { base, serie } = serieMensalComparada(valores, fim, meses, mLabel);
+
+    const atual = byMonth.get(fim)!;
+    const mesAnt = somaMeses(fim, -1);
+    const ant = byMonth.get(mesAnt);
+    const vs = (pct: number | null) => (pct == null ? `sem base em ${mLabel(mesAnt)}` : `vs ${mLabel(mesAnt)}`);
+    const kpi = (rotulo: string, valor: string, variacaoPct: number | null, natureza: KpiComparativo["natureza"]): KpiComparativo =>
+      ({ rotulo, valor, variacaoPct, natureza, dica: vs(variacaoPct) });
+
+    // Frase: prefere o mesmo mês do ano anterior (tira a sazonalidade); senão, o mês anterior.
+    const mesAno = somaMeses(fim, -12);
+    const ref = (byMonth.get(mesAno)?.revenue ?? 0) > 0 ? mesAno : mesAnt;
+    const refRow = byMonth.get(ref);
+    const dFat = variacao(atual.revenue, refRow?.revenue ?? null);
+    const dVen = variacao(atual.vendas, refRow?.vendas ?? null);
+    let destaque: DestaqueComparativo;
+    if (dFat == null) {
+      destaque = { texto: `${mLabel(fim)} fechou em ${brl(atual.revenue)}. Lance ${mLabel(mesAnt)} para ter com o que comparar.`, tom: "neutro" };
+    } else {
+      const verbo = Math.abs(dFat) <= 1 ? "ficou estável em relação a" : `${dFat > 0 ? "subiu" : "caiu"} ${pctSemSinal(dFat)} sobre`;
+      const vendas = dVen == null ? "" : Math.abs(dVen) <= 1 ? ", com vendas estáveis" : `, com ${pctSemSinal(dVen)} ${dVen > 0 ? "mais" : "menos"} vendas`;
+      destaque = { texto: `Faturamento de ${mLabel(fim)} ${verbo} ${mLabel(ref)}${vendas}.`, tom: tomDaVariacao(dFat, "direta") };
+    }
+
+    const kpis: KpiComparativo[] = [
+      kpi(`Faturamento · ${mLabel(fim)}`, brl(atual.revenue), variacao(atual.revenue, ant?.revenue ?? null), "direta"),
+    ];
+    if (atual.vendas != null) kpis.push(kpi("Vendas", intBR(atual.vendas), variacao(atual.vendas, ant?.vendas ?? null), "direta"));
+    // Investimento em anúncios só existe em meses lançados pela antiga aba Resultados.
+    if (atual.investment > 0) {
+      const invAnt = ant && ant.investment > 0 ? ant.investment : null;
+      kpis.push(kpi("Investimento em anúncios", brl(atual.investment), variacao(atual.investment, invAnt), "neutra"));
+      if (atual.vendas && atual.vendas > 0) {
+        const cpvAnt = invAnt && ant?.vendas ? invAnt / ant.vendas : null;
+        kpis.push(kpi("Custo por venda", brl(atual.investment / atual.vendas), variacao(atual.investment / atual.vendas, cpvAnt), "inversa"));
+      } else {
+        const roas = atual.revenue / atual.investment;
+        kpis.push(kpi("ROAS", `${roas.toFixed(1).replace(".", ",")}x`, variacao(roas, invAnt ? (ant?.revenue ?? 0) / invAnt : null), "direta"));
+      }
+    }
+    const tk = ticketOf(atual);
+    if (tk != null) {
+      kpis.push(kpi("Ticket médio", brl(tk), variacao(tk, ant ? ticketOf(ant) : null), "direta"));
+    }
+    // Acumulado do ano só compara se o ano anterior tem os mesmos meses lançados.
+    const ano = +fim.slice(0, 4), ateMes = +fim.slice(5, 7);
+    const doAno = (y: number) => Array.from({ length: ateMes }, (_, i) => byMonth.get(`${y}-${String(i + 1).padStart(2, "0")}`)?.revenue ?? 0);
+    const acum = doAno(ano), acumAnt = doAno(ano - 1);
+    const anoAntCompleto = acum.every((v, i) => !(v > 0) || acumAnt[i] > 0);
+    const somaAcum = acum.reduce((a, b) => a + b, 0);
+    const somaAnt = acumAnt.reduce((s, v, i) => s + (acum[i] > 0 ? v : 0), 0); // só os meses pareados
+    kpis.push({
+      rotulo: `Acumulado ${ano}`, valor: brl(somaAcum),
+      variacaoPct: anoAntCompleto ? variacao(somaAcum, somaAnt) : null,
+      natureza: "direta", dica: anoAntCompleto ? `vs ${MESES[0]}–${MESES[ateMes - 1]} de ${ano - 1}` : `${MESES[0]}–${MESES[ateMes - 1]}, sem ${ano - 1} completo`,
+    });
+
+    return { base, serie, meses, destaque, kpis: kpis.slice(0, 4) };
+  }, [allWithData, byMonth]);
+
   // Baixar PDF de crescimento — declarado ANTES do early return abaixo (ordem de hooks estável).
   const [baixandoPdf, setBaixandoPdf] = useState(false);
   const baixarPdf = useCallback(async () => {
@@ -369,7 +445,7 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
     finally { setBaixandoPdf(false); }
   }, [clientId]);
 
-  if (loading) return <div className="flex justify-center py-10"><Loader2 size={20} className="text-primary animate-spin" /></div>;
+  if (loading) return <PainelComparativo titulo="Faturamento do cliente" serie={[]} kpis={[]} carregando />;
   if (erroCarga) {
     return (
       <div className="rounded-xl border border-lone-danger-border bg-lone-danger-bg p-4 flex flex-wrap items-center gap-3" role="alert">
@@ -425,6 +501,17 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
       adiantado: false,
     };
   })();
+  // Mesma regra do card de meta abaixo: sem veredito antes do mês da meta fechar.
+  const metaResumo: MetaComparativa | null = goal && goalProgress ? {
+    rotulo: "Meta de faturamento",
+    atual: goalProgress.latest, alvo: goal.value, formato: brlBar,
+    prazo: `por mês, até ${mLabel(goal.month)}`,
+    pendente: goalProgress.aguardando ? "Aguardando" : null,
+    nota: goalProgress.aguardando
+      ? `O veredito sai quando ${mLabel(goal.month)} fechar. Último mês lançado: ${brlBar(goalProgress.latest)}.`
+      : goalProgress.batido ? `Batida: fechou em ${brlBar(goalProgress.latest)}.` : `Não batida: fechou em ${brlBar(goalProgress.latest)}.`,
+  } : null;
+
   const growthCls = growth == null ? "" : growth > 0 ? "bg-lone-success-bg text-lone-success" : growth < 0 ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
 
   return (
@@ -445,6 +532,22 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
           {baixandoPdf ? "Gerando PDF…" : "Baixar PDF de Crescimento"}
         </button>
       </div>
+
+      {/* Resumo comparativo (série contínua) */}
+      <PainelComparativo
+        titulo="Faturamento do cliente"
+        subtitulo={resumo ? `Últimos ${resumo.meses} meses, comparados com ${resumo.base === "ano_anterior" ? "os mesmos meses do ano anterior" : "o mês anterior"}` : undefined}
+        rotuloAtual="Faturamento"
+        rotuloAnterior={resumo?.base === "ano_anterior" ? "Ano anterior" : "Mês anterior"}
+        serie={resumo?.serie ?? []}
+        formatarValor={brl}
+        formatarEixo={brlBar}
+        larguraEixo={60}
+        meta={metaResumo}
+        destaque={resumo?.destaque ?? null}
+        kpis={resumo?.kpis ?? []}
+        vazio="Nenhum faturamento lançado ainda. Preencha o grid abaixo para ver o comparativo."
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">

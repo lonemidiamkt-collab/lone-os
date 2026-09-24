@@ -13,7 +13,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/lib/context/RoleContext";
-import MedievalAvatar, { getUserAvatar } from "@/components/MedievalAvatars";
+import { FotoPessoa } from "@/components/ui/FotoPessoa";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
@@ -482,7 +482,7 @@ export default function Sidebar() {
           </button>
 
           {/* Avatar */}
-          <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={36} className="mt-1" />
+          <FotoPessoa perfil={currentProfile} size={36} className="mt-1" />
         </div>
       </aside>
 
@@ -594,7 +594,7 @@ export default function Sidebar() {
             {/* Footer — user info */}
             <div className="px-3 py-3 border-t border-border">
               <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-accent transition-colors cursor-default">
-                <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={28} />
+                <FotoPessoa perfil={currentProfile} size={28} />
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-semibold text-foreground truncate leading-none">{currentProfile.name}</p>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">{roleLabel}</p>

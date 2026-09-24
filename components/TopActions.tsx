@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { create } from "zustand";
 import { Bell, LogOut, Moon, Plus, Search, Settings, Sun } from "lucide-react";
 import { ExpandableTabs, type ExpandableItem } from "@/components/ui/expandable-tabs";
-import MedievalAvatar, { getUserAvatar } from "@/components/MedievalAvatars";
+import { FotoPessoa } from "@/components/ui/FotoPessoa";
 import { useRole } from "@/lib/context/RoleContext";
 import { useTheme } from "@/lib/context/ThemeContext";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
@@ -57,7 +57,7 @@ export default function TopActions({ flutuante = false }: { flutuante?: boolean 
     <div className={flutuante ? "fixed right-4 top-3 z-30 hidden lg:flex items-center gap-2" : "hidden lg:flex items-center gap-2 shrink-0"}>
       <ExpandableTabs items={items} />
       <div className="flex items-center gap-2 rounded-2xl border border-border bg-card py-1 pl-1 pr-3 shadow-sm" title={`${currentProfile.name} · ${roleLabel}`}>
-        <MedievalAvatar type={getUserAvatar(currentProfile.id)} size={30} />
+        <FotoPessoa perfil={currentProfile} size={30} />
         <div className="hidden xl:block leading-tight">
           <p className="max-w-[120px] truncate text-xs font-medium text-foreground">{currentProfile.name}</p>
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{roleLabel}</p>

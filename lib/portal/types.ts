@@ -70,6 +70,9 @@ export interface SnapshotData {
       spend: number[];
       reach: number[];
     };
+    /** Conversas por dia do período anterior, na mesma posição de `days` (mesmo dia relativo).
+     *  Ausente/null = sem comparação (snapshot antigo ou o período anterior falhou). */
+    previous_messages?: (number | null)[] | null;
     peak: { metric: "messages"; day: string; value: number } | null;
   };
   top_creatives: CreativeItem[];

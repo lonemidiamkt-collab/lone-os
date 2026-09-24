@@ -64,6 +64,21 @@ export function formatDelta(
   return null;
 }
 
+/** A leitura da variação em palavras, sem o número (o número vai no selo ao lado do KPI). */
+export function fraseDelta(metric: MetricType, deltaPercent: number | null, period: PeriodKind): string | null {
+  if (deltaPercent === null || !Number.isFinite(deltaPercent)) return null;
+  if (Math.abs(deltaPercent) <= THRESHOLD) return `parecido ${A[period]}`;
+  const up = deltaPercent > 0;
+  if (metric === "spend") return `${up ? "mais" : "menos"} investido ${QUE[period]}`;
+  if (metric === "cpa") return `${up ? "mais caro" : "mais barato"} ${QUE[period]}`;
+  return `${up ? "a mais" : "a menos"} ${QUE[period]}`;
+}
+
+/** "a semana anterior", "o mês anterior"… — pra legenda "comparado com …". */
+export function periodoAnterior(period: PeriodKind): string {
+  return ANTERIOR[period];
+}
+
 const ABERTURA: Record<PeriodKind, string> = {
   last_week:    "Nos últimos 7 dias",
   last_2_weeks: "Nas últimas 2 semanas",

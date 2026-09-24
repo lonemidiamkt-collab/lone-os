@@ -7,7 +7,7 @@ vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn(), captureMessage: vi
 
 const { calcPeriod } = await import("@/lib/portal/buildSnapshot");
 const { cacheValido, CACHE_TTL_MS } = await import("@/lib/portal/snapshotCache");
-const { formatDelta, resumoConversas } = await import("@/lib/portal/formatDelta");
+const { formatDelta, resumoConversas, fraseDelta, periodoAnterior } = await import("@/lib/portal/formatDelta");
 const { criarLimite, criarTrava } = await import("@/lib/portal/limite");
 const { mesesPermitidosCliente, inicioJanelaMeses } = await import("@/lib/portal/mesesCliente");
 
@@ -66,6 +66,14 @@ describe("formatDelta / resumo", () => {
     expect(formatDelta("cpa", -20, "last_week")?.text).toContain("20% mais barato");
     expect(formatDelta("reach", 3, "last_week")?.text).toContain("Parecido");
     expect(formatDelta("spend", null, "last_week")).toBeNull();
+  });
+  it("frase sem número (vai ao lado do selo de variação no KPI)", () => {
+    expect(fraseDelta("cpa", -20, "last_week")).toBe("mais barato que a semana passada");
+    expect(fraseDelta("messages", 12, "last_month")).toBe("a mais que o mês anterior");
+    expect(fraseDelta("spend", -30, "last_week")).toBe("menos investido que a semana passada");
+    expect(fraseDelta("reach", 5, "last_week")).toBe("parecido à semana passada");
+    expect(fraseDelta("reach", null, "last_week")).toBeNull();
+    expect(periodoAnterior("last_2_weeks")).toBe("as 2 semanas anteriores");
   });
   it("frase de topo", () => {
     expect(resumoConversas(48, 12, "last_week")).toBe("Nos últimos 7 dias: 48 conversas, 12% a mais que a semana anterior.");

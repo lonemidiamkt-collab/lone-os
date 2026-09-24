@@ -304,6 +304,15 @@ export async function buildSnapshot(params: {
   const sortedDays = [...cur].sort((a, b) => a.date_start.localeCompare(b.date_start));
   const days = sortedDays.map((r) => r.date_start);
   const msgSeries  = sortedDays.map((r) => countMessagesFromActions(r.actions));
+  // Mesmo dia relativo do período anterior (a Meta omite dia sem veiculação: ausente = 0; dia além
+  // do fim do período anterior, ex. 31/mar × fevereiro, não existe = null).
+  const prevPorDia = new Map(prev.map((r) => [r.date_start, countMessagesFromActions(r.actions)]));
+  const previous_messages = prevInsights.status === "fulfilled"
+    ? days.map((d) => {
+        const par = somaDias(period.previous_start, diasNoIntervalo(period.start, d) - 1);
+        return par > period.previous_end ? null : prevPorDia.get(par) ?? 0;
+      })
+    : null;
   const peakIdx    = msgSeries.indexOf(Math.max(...msgSeries));
 
   // ── Top 5 criativos ───────────────────────────────────────────────────────
@@ -397,6 +406,7 @@ export async function buildSnapshot(params: {
         spend:   sortedDays.map((r) => parseFloat(r.spend)  || 0),
         reach:   sortedDays.map((r) => parseFloat(r.reach)  || 0),
       },
+      previous_messages,
       peak: days.length > 0 && peakIdx >= 0 && msgSeries[peakIdx] > 0
         ? { metric: "messages", day: days[peakIdx], value: msgSeries[peakIdx] }
         : null,
