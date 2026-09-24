@@ -252,7 +252,7 @@ export function tendenciaConversa(s: SinaisCliente): { variacao: number | null; 
 export function observacoes(s: SinaisCliente): string[] {
   const o: string[] = [];
   if (s.diasSemContato !== null && s.diasSemContato > 15) o.push(`${s.diasSemContato} dias sem contato no grupo`);
-  if (s.reclamacoes30d > 0) o.push(`${s.reclamacoes30d} reclamação${s.reclamacoes30d > 1 ? "ões" : ""} nos últimos 30 dias`);
+  if (s.reclamacoes30d > 0) o.push(`${s.reclamacoes30d} ${s.reclamacoes30d > 1 ? "reclamações" : "reclamação"} nos últimos 30 dias`);
   if (s.pedidosSemResposta > 0) o.push(`${s.pedidosSemResposta} pedido${s.pedidosSemResposta > 1 ? "s" : ""} sem resposta do time`);
   if (s.retrabalhos30d >= 3) {
     const top = s.motivosRetrabalho[0];
