@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { MarkdownView } from "@/components/Markdown";
 import EntregarArteModal from "@/components/conteudo/EntregarArteModal";
 import MotivoModal, { type TipoMotivo } from "@/components/conteudo/MotivoModal";
+import CompararVersoes from "@/components/conteudo/CompararVersoes";
 import { useProducao } from "@/components/conteudo/useProducao";
 import { useContentStore } from "@/stores/useContentStore";
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -265,6 +266,11 @@ export default function EtapaDesign({ card, briefingIa }: {
             </button>
           )}
         </div>
+
+        {/* Versão anterior × atual com o motivo fixado (N17): na revisão, conferir se o pedido foi
+            atendido; na alteração, ver o que mudar. Some quando não há o que comparar. */}
+        <CompararVersoes cardId={card.id} alteracaoPendente={estado === "alteracao" ? card.alteracaoMotivo : null}
+          gatilho={`${card.designerDeliveredAt ?? ""}|${card.alteracaoPendenteEm ?? ""}`} />
 
         {/* Proposta por IA com a identidade do cliente — vira referência, não entrega. */}
         {(ehDesigner || gestao) && pedido && designerDeve(estado) && (

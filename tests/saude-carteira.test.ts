@@ -163,7 +163,8 @@ describe("a mesma resposta em toda tela", () => {
   it("nenhuma tela que diz 'em risco' voltou a ler clients.status = at_risk", () => {
     const telas = [
       "components/Sidebar.tsx", "components/conteudo/QuadroProducao.tsx", "app/ceo/page.tsx",
-      "lib/metrics/cockpit.ts", "lib/priority/fontes/index.ts", "lib/hooks/useSnapshots.ts",
+      // lib/hooks/useSnapshots.ts saiu na Leva 7D (N33): a tela de Metas passou a ler do servidor.
+      "lib/metrics/cockpit.ts", "lib/priority/fontes/index.ts",
       "app/api/system/cs-saude/route.ts", "app/api/system/cs-risco-semanal/route.ts",
     ];
     for (const t of telas) {

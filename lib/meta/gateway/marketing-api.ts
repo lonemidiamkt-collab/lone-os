@@ -1,7 +1,7 @@
 // Provider da Marketing API (Graph). É a infraestrutura principal de execução, como o documento
 // define — e hoje a única disponível, já que o MCP recusa o token da Lone com 401.
 
-import { countMessagesFromActions } from "@/lib/meta/messages";
+import { resultadoDaCampanha } from "@/lib/meta/resultado";
 import type { CapacidadeMeta, CriativoAnuncio, InsightEntidade, NivelEntidade, ProviderMeta } from "./index";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -12,6 +12,7 @@ interface LinhaGraph {
   ad_id?: string; ad_name?: string;
   spend?: string; impressions?: string; clicks?: string;
   ctr?: string; cpm?: string; frequency?: string; reach?: string;
+  objective?: string;
   actions?: { action_type: string; value: string }[];
   date_start?: string;
 }
@@ -44,7 +45,7 @@ export const marketingApiProvider: ProviderMeta = {
   async insightsPorEntidade({ token, accountId, nivel, desde, ate, agregado }): Promise<InsightEntidade[]> {
     const campos = [
       "campaign_id", "campaign_name", "adset_id", "adset_name", "ad_id", "ad_name",
-      "spend", "impressions", "clicks", "ctr", "cpm", "frequency", "actions",
+      "spend", "impressions", "clicks", "ctr", "cpm", "frequency", "actions", "objective",
       ...(agregado ? ["reach"] : []),
     ].join(",");
     const timeRange = encodeURIComponent(JSON.stringify({ since: desde, until: ate }));
@@ -74,7 +75,12 @@ export const marketingApiProvider: ProviderMeta = {
         cpm: r.cpm ? Number(r.cpm) : undefined,
         frequency: r.frequency ? Number(r.frequency) : undefined,
         reach: r.reach != null ? Number(r.reach) : undefined,
-        conversions: countMessagesFromActions(r.actions),
+        // Leva 7A (N4): o resultado segue o OBJETIVO da campanha (conversa, lead ou compra). Para
+        // campanha de mensagem nada muda; formulário e venda deixam de aparecer como "zero conversas".
+        ...(() => {
+          const res = resultadoDaCampanha(r.objective, r.actions);
+          return { conversions: res.valor, tipoResultado: res.tipo, objetivo: r.objective };
+        })(),
       };
     }).filter((r) => r.entityId && r.date);
   },

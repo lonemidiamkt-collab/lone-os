@@ -104,11 +104,15 @@ export async function criarCardDemanda(opts: {
  *  tudo isso à mão, e o do portal e o da reprovação faziam cada um o seu. */
 export async function aplicarAjusteNoCard(opts: {
   cardId: string; correcao: string; clientId: string; clienteNome: string;
+  /** Por onde o pedido chegou. "portal" = botão "Pedir alteração" do portal do cliente (Leva 7D). */
+  canal?: "whatsapp" | "portal";
 }): Promise<boolean> {
   const { data: card } = await supabaseAdmin
     .from("content_cards").select("briefing, title").eq("id", opts.cardId).is("archived_at", null).maybeSingle();
   if (!card) return false;
-  const briefingNovo = `${(card.briefing as string) || ""}\n\n---\n✏️ AJUSTE DO CLIENTE (via Agente CS): ${opts.correcao}`.slice(0, 6000);
+  const viaPortal = opts.canal === "portal";
+  const via = viaPortal ? "pelo portal do cliente" : "via Agente CS";
+  const briefingNovo = `${(card.briefing as string) || ""}\n\n---\n✏️ AJUSTE DO CLIENTE (${via}): ${opts.correcao}`.slice(0, 6000);
   const { error } = await supabaseAdmin.from("content_cards").update({ briefing: briefingNovo }).eq("id", opts.cardId);
   if (error) { console.error("[CS] aplicar ajuste no card (briefing):", error.message); return false; }
   const r = await executarTransicao(opts.cardId, { tipo: "pedir_alteracao", motivo: opts.correcao }, {
@@ -116,10 +120,10 @@ export async function aplicarAjusteNoCard(opts: {
   });
   if (!r.ok) { console.error("[CS] aplicar ajuste no card:", r.erro); return false; }
   await supabaseAdmin.from("card_comments").insert({
-    card_id: opts.cardId, author: "🤖 Agente CS", role: "system", text: `✏️ Ajuste do cliente: ${opts.correcao.slice(0, 400)}`,
+    card_id: opts.cardId, author: viaPortal ? "Portal do cliente" : "🤖 Agente CS", role: "system", text: `✏️ Ajuste do cliente: ${opts.correcao.slice(0, 400)}`,
   }).then(() => {}, () => {});
   await supabaseAdmin.from("notifications").insert({
-    type: "content", title: "✏️ Ajuste na arte (Agente CS)",
+    type: "content", title: viaPortal ? "✏️ Ajuste pedido pelo portal" : "✏️ Ajuste na arte (Agente CS)",
     body: `"${(card.title as string) || "arte"}" (${opts.clienteNome}) — o cliente pediu ajuste. Voltou pro designer.`,
     client_id: opts.clientId, card_id: opts.cardId,
   }).then(() => {}, () => {});

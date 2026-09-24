@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
+import CofreStatus from "@/components/client/ficha/CofreStatus";
 
 interface Props {
   client: Client;
@@ -635,6 +636,8 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
               );
             })}
           </div>
+          {/* Leva 7C (N24): ok / pendente / inválido, pedido por link e quem revelou. */}
+          <CofreStatus clientId={client.id} telefone={form.phone || client.phone} />
         </div>
       )}
 

@@ -13,6 +13,7 @@
 // Só entra quem COMPROU tráfego (lib/clients/servico) e está operando: sem pausado, ex-cliente,
 // rascunho nem "(teste)".
 
+import { comoTipoResultado, type TipoResultadoConta } from "@/lib/meta/resultado";
 import { evaluateAccount, DEFAULT_ALERT_CONFIG } from "@/lib/budgets/alert-engine";
 import { metaAccountStatus } from "@/lib/budgets/account-status";
 import { temTrafego } from "@/lib/clients/servico";
@@ -77,7 +78,11 @@ export interface MetricaDiaRow {
   client_id: string | null;
   metric_date: string | null;
   spend: number | string | null;
+  /** Conversas (a coluna de sempre). */
   conversions: number | string | null;
+  /** Leva 7A (N4): resultado pelo objetivo (conversa, lead ou compra) e qual. Ausente antes da migração. */
+  results?: number | string | null;
+  result_kind?: string | null;
 }
 
 /** Um achado do diagnóstico diário, achatado (a função vira `funcao`). */
@@ -177,13 +182,20 @@ function agrupar<T>(linhas: readonly T[], chave: (t: T) => string | null | undef
 // ── Números do dia ──────────────────────────────────────────────────────────
 
 export function numerosDoDia(metricas: readonly MetricaDiaRow[], ontem: string): Pick<NumerosHoje,
-  "gastoOntem" | "conversasOntem" | "custoOntem" | "conversasMedia7d" | "custoMedio7d"> {
+  "gastoOntem" | "conversasOntem" | "custoOntem" | "conversasMedia7d" | "custoMedio7d" | "tipoResultado"> {
   // Uma linha por dia (o metric_snapshots já teve cópias do mesmo dia — a última vence).
-  const porDia = new Map<string, { gasto: number; conv: number }>();
+  // O "resultado" é o do objetivo (results) quando o defense-scan já gravou; senão, as conversas.
+  const porDia = new Map<string, { gasto: number; conv: number; tipo: TipoResultadoConta | null }>();
   for (const m of metricas) {
     if (!m.metric_date) continue;
-    porDia.set(m.metric_date.slice(0, 10), { gasto: num(m.spend) ?? 0, conv: num(m.conversions) ?? 0 });
+    porDia.set(m.metric_date.slice(0, 10), {
+      gasto: num(m.spend) ?? 0,
+      conv: num(m.results ?? null) ?? num(m.conversions) ?? 0,
+      tipo: comoTipoResultado(m.result_kind),
+    });
   }
+  // Tipo: o do dia mais recente que disse qual era.
+  const tipoResultado = [...porDia.entries()].sort(([a], [b]) => b.localeCompare(a)).find(([, v]) => v.tipo)?.[1].tipo ?? "mensagens";
   const dOntem = porDia.get(ontem) ?? null;
   const desde = somarDias(ontem, -7);
   const semana = [...porDia.entries()].filter(([d]) => d >= desde && d < ontem).map(([, v]) => v);
@@ -195,6 +207,7 @@ export function numerosDoDia(metricas: readonly MetricaDiaRow[], ontem: string):
     custoOntem: dOntem && dOntem.conv > 0 ? dOntem.gasto / dOntem.conv : null,
     conversasMedia7d: semana.length ? convSemana / semana.length : null,
     custoMedio7d: convSemana > 0 ? gastoSemana / convSemana : null,
+    tipoResultado,
   };
 }
 

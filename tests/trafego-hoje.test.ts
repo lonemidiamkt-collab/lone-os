@@ -203,8 +203,21 @@ describe("números e links", () => {
       ...["2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22"].map((d) => m(d, 100, 10)),
       m("2026-09-15", 999, 1), // fora da janela
     ], ONTEM);
-    expect(n).toEqual({ gastoOntem: 120, conversasOntem: 6, custoOntem: 20, conversasMedia7d: 10, custoMedio7d: 10 });
-    expect(numerosDoDia([], ONTEM)).toEqual({ gastoOntem: null, conversasOntem: null, custoOntem: null, conversasMedia7d: null, custoMedio7d: null });
+    expect(n).toEqual({ gastoOntem: 120, conversasOntem: 6, custoOntem: 20, conversasMedia7d: 10, custoMedio7d: 10, tipoResultado: "mensagens" });
+    expect(numerosDoDia([], ONTEM)).toEqual({ gastoOntem: null, conversasOntem: null, custoOntem: null, conversasMedia7d: null, custoMedio7d: null, tipoResultado: "mensagens" });
+  });
+
+  it("Leva 7A: resultado pelo objetivo (results) vence as conversas e diz o tipo", () => {
+    const n = numerosDoDia([
+      { client_id: "a", metric_date: "2026-09-23", spend: 100, conversions: 1, results: 8, result_kind: "leads" },
+      { client_id: "a", metric_date: "2026-09-22", spend: 100, conversions: 0, results: 4, result_kind: "leads" },
+      // Dia gravado antes da migração: sem results, vale a conversa.
+      { client_id: "a", metric_date: "2026-09-21", spend: 100, conversions: 2 },
+    ], ONTEM);
+    expect(n.conversasOntem).toBe(8);
+    expect(n.custoOntem).toBe(12.5);
+    expect(n.conversasMedia7d).toBe(3);
+    expect(n.tipoResultado).toBe("leads");
   });
 
   it("ontem é em São Paulo (às 23h de SP ainda é o mesmo dia)", () => {

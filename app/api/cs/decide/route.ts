@@ -7,6 +7,34 @@ import { getServerUser } from "@/lib/supabase/auth-server";
 import { criarCardDemanda, criarCardsPauta } from "@/lib/cs/card";
 import { parsePautaItens } from "@/lib/cs/pauta";
 import { csSendGroupText } from "@/lib/cs/notify";
+import { papelDoUsuario } from "@/lib/api/require-role";
+
+// GET /api/cs/decide?codigos=a1b2,c3d4 — o "Decidir" do feed do Agente (Leva 7C, N25) abre a
+// sugestão antes de decidir: o que o cliente escreveu, o que o agente entendeu e o briefing que vai
+// para o card. Só as PENDENTES (código só é único entre elas). Designer e comercial não leem a conversa.
+export async function GET(req: NextRequest) {
+  const user = await getServerUser(req);
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const papel = await papelDoUsuario(user);
+  if (!papel || papel === "designer" || papel === "comercial") {
+    return NextResponse.json({ error: "Sem permissão para esta área." }, { status: 403 });
+  }
+  const codigos = (req.nextUrl.searchParams.get("codigos") ?? "")
+    .split(",").map((c) => c.trim()).filter((c) => /^[\w-]{2,40}$/.test(c)).slice(0, 20);
+  if (!codigos.length) return NextResponse.json({ error: "codigos obrigatório" }, { status: 400 });
+  const { data, error } = await supabaseAdmin.from("cs_demandas")
+    .select("codigo, cliente_nome, tipo, resumo, message_text, briefing, author, urgencia, created_at")
+    .in("codigo", codigos).eq("status", "pendente").order("created_at", { ascending: true });
+  if (error) return NextResponse.json({ error: `Não consegui ler as sugestões: ${error.message}` }, { status: 500 });
+  return NextResponse.json({
+    demandas: (data ?? []).map((d) => ({
+      codigo: d.codigo as string, cliente: (d.cliente_nome as string) || "Cliente", tipo: (d.tipo as string) || "demanda",
+      resumo: (d.resumo as string) || "", mensagem: ((d.message_text as string) || "").slice(0, 1200),
+      briefing: ((d.briefing as string) || "").slice(0, 1500), autor: (d.author as string) || null,
+      urgencia: (d.urgencia as string) || null, criadaEm: d.created_at as string,
+    })),
+  });
+}
 
 // POST /api/cs/decide — a equipe decide uma sugestão do Agente CS PELA PLATAFORMA (painel Agente
 // Lone), espelhando o "ok/não" do WhatsApp: cria o ContentCard (ou descarta), marca a demanda e

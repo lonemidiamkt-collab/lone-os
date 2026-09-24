@@ -7,6 +7,9 @@ import { requireRole, GESTAO } from "@/lib/api/require-role";
 import { getServerUser } from "@/lib/supabase/auth-server";
 import { csSendGroupText } from "@/lib/cs/notify";
 import { espelharNoCofre } from "@/lib/cofre/espelhar";
+import {
+  itensOnboardingPara, nichoValido, pacoteValido, prazoEm, tarefasDaConversao, PROXIMA_ACAO_CONVERSAO,
+} from "@/lib/clients/conversao";
 
 /**
  * Grupo de CADASTRO. Os avisos de onboarding (handoff do comercial, cadastro concluído, cliente
@@ -112,6 +115,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // GANHO → ONBOARDING CERTO (Leva 7C, N27). Vindo do CRM: um lead vira UM cliente, e o pacote e o
+    // ramo são escolhidos na conversão (antes nascia sempre Lone Growth / "Outro").
+    if (body.leadId) {
+      if (!lead) return NextResponse.json({ error: "Lead não encontrado." }, { status: 404 });
+      const { data: ja } = await supabase.from("clients").select("id, name, nome_fantasia")
+        .eq("source_lead_id", body.leadId).limit(1).maybeSingle();
+      if (ja) {
+        return NextResponse.json({
+          error: `Este lead já virou cliente (${(ja.nome_fantasia as string) || (ja.name as string)}).`,
+          clientId: ja.id, jaConvertido: true,
+        }, { status: 409 });
+      }
+      if (!pacoteValido(body.serviceType)) return NextResponse.json({ error: "Escolha o pacote contratado." }, { status: 400 });
+      if (body.nicho != null && !nichoValido(body.nicho)) return NextResponse.json({ error: "Ramo (nicho) inválido." }, { status: 400 });
+    }
+
     // 1. Create draft client (invisible to main app) — enriquecido com o que o comercial já coletou.
     const { data: client, error: clientErr } = await supabase.from("clients").insert({
       name: body.name,
@@ -124,6 +143,7 @@ export async function POST(req: NextRequest) {
       attention_level: "medium",
       monthly_budget: 0,
       payment_method: "pix",
+      ...(nichoValido(body.nicho) ? { nicho: body.nicho } : {}),
       ...(lead ? {
         phone: (lead.telefone as string) || null,
         email: (lead.email as string) || null,
@@ -132,6 +152,10 @@ export async function POST(req: NextRequest) {
       } : {}),
     }).select("id").maybeSingle();
 
+    if (clientErr?.code === "23505" && lead) {
+      // Dois cliques ao mesmo tempo: o índice único (migration 20260926100000) segurou o segundo.
+      return NextResponse.json({ error: "Este lead já virou cliente.", jaConvertido: true }, { status: 409 });
+    }
     if (clientErr || !client) {
       return NextResponse.json({ error: clientErr?.message ?? "Falha ao criar rascunho" }, { status: 500 });
     }
@@ -159,7 +183,7 @@ export async function POST(req: NextRequest) {
         };
         await supabase.from("client_journey").upsert({
           client_id: client.id,
-          proxima_acao: "Iniciar onboarding com o cliente",
+          proxima_acao: PROXIMA_ACAO_CONVERSAO,
           notas: montarNotaHandoff(leadHandoff, atividades),
           updated_by: "🤝 handoff comercial",
           updated_at: new Date().toISOString(),
@@ -171,6 +195,32 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         console.error("[onboarding] handoff comercial→CS falhou (segue):", e);
       }
+
+      // O cliente nasce com o checklist da frente que contratou e com as tarefas do grupo do WhatsApp
+      // (nenhum fluxo cria grupo sozinho: vira tarefa do CS). Best-effort, como o handoff.
+      const avisos: string[] = [];
+      try {
+        const { data: existentes } = await supabase.from("onboarding_items").select("id").eq("client_id", client.id).limit(1);
+        if (!existentes?.length) {
+          const { error: eItens } = await supabase.from("onboarding_items").insert(
+            itensOnboardingPara(body.serviceType).map((i) => ({ client_id: client.id, label: i.label, department: i.department, sort_order: i.sort_order, completed: false })));
+          if (eItens) avisos.push(`checklist: ${eItens.message}`);
+        }
+        const nomeCliente = String(body.name || lead.empresa || lead.contato_nome || "Cliente");
+        const hojeSP = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+        const { error: eTar } = await supabase.from("tasks").insert(tarefasDaConversao(nomeCliente).map((t) => ({
+          title: t.title, client_id: client.id, client_name: nomeCliente,
+          // assigned_to é NOT NULL: sem social escalado ainda, a tarefa vai para o papel (aparece "sem dono").
+          assigned_to: "social", role: t.role, status: "pending", priority: t.priority,
+          start_date: hojeSP, due_date: prazoEm(hojeSP, t.dias), description: t.description,
+          created_by: (lead.responsavel as string) || "comercial",
+        })));
+        if (eTar) avisos.push(`tarefas: ${eTar.message}`);
+      } catch (e) {
+        avisos.push(e instanceof Error ? e.message : "erro");
+      }
+      if (avisos.length) console.error("[onboarding] conversão: parte do setup falhou (segue):", avisos.join(" · "));
+      return NextResponse.json({ token, url: `/onboarding/${token}`, clientId: client.id, avisos });
     }
 
     return NextResponse.json({ token, url: `/onboarding/${token}`, clientId: client.id });
@@ -531,27 +581,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Generate onboarding checklist items based on service type
-    const allItems = [
-      { label: "Pixel de rastreamento instalado", department: "traffic", sort_order: 0 },
-      { label: "Contas de anuncios configuradas", department: "traffic", sort_order: 1 },
-      { label: "Estrategia inicial de campanhas definida", department: "traffic", sort_order: 2 },
-      { label: "Paleta de cores e fontes definidas", department: "design", sort_order: 3 },
-      { label: "Briefing de marca preenchido", department: "design", sort_order: 4 },
-      { label: "Assets organizados no Drive", department: "design", sort_order: 5 },
-      { label: "Acessos as redes sociais recebidos", department: "social", sort_order: 6 },
-      { label: "Tom de voz e persona definidos", department: "social", sort_order: 7 },
-      { label: "Calendario inicial criado", department: "social", sort_order: 8 },
-      { label: "Primeira reuniao de alinhamento realizada", department: "social", sort_order: 9 },
-    ];
-
-    const deptMap: Record<string, string[]> = {
-      lone_growth: ["traffic", "design", "social"],
-      assessoria_trafego: ["traffic"],
-      assessoria_social: ["social"],
-      assessoria_design: ["design"],
-    };
-    const allowedDepts = new Set(deptMap[serviceType] ?? ["traffic", "design", "social"]);
-    const items = allItems.filter((i) => allowedDepts.has(i.department));
+    // Checklist por frente contratada — a lista mora em lib/clients/conversao.ts (a conversão do CRM usa a mesma).
+    const items = itensOnboardingPara(serviceType);
 
     // Check if onboarding items already exist
     const { data: existing } = await supabase.from("onboarding_items").select("id").eq("client_id", clientId).limit(1);
@@ -628,26 +659,8 @@ export async function POST(req: NextRequest) {
     const clientName = clientRow?.nome_fantasia || clientRow?.name || "Cliente";
     const serviceType = clientRow?.service_type ?? "lone_growth";
 
-    const allItems = [
-      { label: "Pixel de rastreamento instalado", department: "traffic", sort_order: 0 },
-      { label: "Contas de anuncios configuradas", department: "traffic", sort_order: 1 },
-      { label: "Estrategia inicial de campanhas definida", department: "traffic", sort_order: 2 },
-      { label: "Paleta de cores e fontes definidas", department: "design", sort_order: 3 },
-      { label: "Briefing de marca preenchido", department: "design", sort_order: 4 },
-      { label: "Assets organizados no Drive", department: "design", sort_order: 5 },
-      { label: "Acessos as redes sociais recebidos", department: "social", sort_order: 6 },
-      { label: "Tom de voz e persona definidos", department: "social", sort_order: 7 },
-      { label: "Calendario inicial criado", department: "social", sort_order: 8 },
-      { label: "Primeira reuniao de alinhamento realizada", department: "social", sort_order: 9 },
-    ];
-    const deptMap: Record<string, string[]> = {
-      lone_growth: ["traffic", "design", "social"],
-      assessoria_trafego: ["traffic"],
-      assessoria_social: ["social"],
-      assessoria_design: ["design"],
-    };
-    const allowedDepts = new Set(deptMap[serviceType] ?? ["traffic", "design", "social"]);
-    const items = allItems.filter((i) => allowedDepts.has(i.department));
+    // Checklist por frente contratada — a lista mora em lib/clients/conversao.ts (a conversão do CRM usa a mesma).
+    const items = itensOnboardingPara(serviceType);
 
     const { data: existing } = await supabase.from("onboarding_items").select("id").eq("client_id", clientId).limit(1);
     if (!existing || existing.length === 0) {

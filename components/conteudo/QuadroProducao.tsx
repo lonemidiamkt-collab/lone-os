@@ -28,6 +28,8 @@ import { cn, todaySP } from "@/lib/utils";
 import { SEM_DONO } from "@/lib/design/dono";
 import { ETAPAS, infoEtapa, type Etapa } from "@/lib/conteudo/etapas";
 import { somarDias } from "@/lib/conteudo/no-ar";
+import { cargaPorDesigner } from "@/lib/conteudo/capacidade";
+import { FaixaDeCarga } from "@/components/conteudo/Cronometro";
 import { emRisco as clienteEmRisco } from "@/lib/saude/carteira";
 import {
   VISTAS, colunasPorCliente, colunasPorDesigner, colunasPorEtapa, montarItens, passaNoFiltro, resumir,
@@ -123,8 +125,11 @@ export default function QuadroProducao({ pessoa, modo, vista, onVista, onAbrirCa
     if (it) void aoMover(it, etapa);
   };
 
+  // Nome do responsável de cada cliente: a saudação do rascunho de "Cobrar cliente" (N11).
+  const contatoDe = useMemo(() => new Map(todosClientes.map((c) => [c.id, c.contactName ?? null])), [todosClientes]);
   const cartao = (it: ItemQuadro, extra?: { compacto?: boolean; mostrarCliente?: boolean; arrastavel?: boolean }) => (
-    <CartaoProducao key={it.card.id} item={it} hoje={hoje} papel={papel} emRisco={emRisco.has(it.card.clientId)} acoes={acoes} {...extra} />
+    <CartaoProducao key={it.card.id} item={it} hoje={hoje} papel={papel} emRisco={emRisco.has(it.card.clientId)} acoes={acoes}
+      contatoCliente={contatoDe.get(it.card.clientId) ?? null} {...extra} />
   );
 
   if (erroDeCarga && !carregado) {
@@ -284,6 +289,8 @@ export default function QuadroProducao({ pessoa, modo, vista, onVista, onAbrirCa
       {carregado && vista === "designer" && (() => {
         const nomes = [...new Set(todosClientes.map((c) => (c.assignedDesigner ?? "").trim()).filter(Boolean))];
         const cols = colunasPorDesigner(itens, nomes);
+        // Carga diária de cada designer (N18): artes que ele deve, pelo prazo, nos próximos dias úteis.
+        const cargas = new Map(cargaPorDesigner(itens, hoje, { designers: nomes }).map((c) => [c.designer, c]));
         return (
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">Cards em <span className="text-foreground font-medium">{infoEtapa("com_designer").rotulo}</span>, por dono da arte. O que pede ação vem primeiro; depois o prazo mais perto.</p>
@@ -301,6 +308,7 @@ export default function QuadroProducao({ pessoa, modo, vista, onVista, onAbrirCa
                       <p className="text-[11px] text-muted-foreground">
                         {fila} na fila · {fazendo} fazendo{alt > 0 && <span className="text-destructive font-medium"> · {alt} alteraç{alt > 1 ? "ões" : "ão"}</span>}
                       </p>
+                      {cargas.get(col.id) && <FaixaDeCarga carga={cargas.get(col.id)!} hoje={hoje} className="mt-2" />}
                     </header>
                     <div className="p-2 space-y-2 overflow-y-auto" style={{ maxHeight: "70vh" }}>
                       {col.itens.length === 0 && <p className="text-[11px] text-muted-foreground text-center py-6">Nada na fila</p>}

@@ -14,7 +14,11 @@ import { cn, getPriorityColor, getPriorityLabel } from "@/lib/utils";
 import { ETAPAS, ROTULO_BLOQUEADO, corDoStatus, estaBloqueado, infoEtapa, type Etapa } from "@/lib/conteudo/etapas";
 import { ROTULO_ESTADO_DESIGN, designerDeve, type EstadoDesign } from "@/lib/conteudo/producao";
 import { diasEntre } from "@/lib/conteudo/no-ar";
+import { cronometroDaEtapa } from "@/lib/conteudo/capacidade";
+import { cobrancaDoCard } from "@/lib/conteudo/cobrar-cliente";
 import type { ItemQuadro } from "@/lib/conteudo/quadro";
+import CobrarCliente from "@/components/conteudo/CobrarCliente";
+import { CronometroDaEtapa } from "@/components/conteudo/Cronometro";
 
 /** Tom da linha "onde está a arte". */
 const TOM_ESTADO: Record<EstadoDesign, string> = {
@@ -56,11 +60,9 @@ function urgencia(prazo: string | null, hoje: string): { rotulo: string; cls: st
 }
 
 /** Parado na etapa há mais de um dia (só onde parar é problema). */
-function parado(it: ItemQuadro): string | null {
-  if (it.etapa === "pauta" || it.etapa === "agendado" || it.etapa === "no_ar") return null;
-  const desde = it.card.columnEnteredAt?.[it.card.status] ?? it.card.statusChangedAt;
-  if (!desde) return null;
-  const h = (Date.now() - new Date(desde).getTime()) / 3_600_000;
+function parado(msNaEtapa: number | null): string | null {
+  if (msNaEtapa === null) return null;
+  const h = msNaEtapa / 3_600_000;
   if (h < 24) return null;
   return h >= 48 ? `${Math.floor(h / 24)}d parado` : `${Math.floor(h)}h parado`;
 }
@@ -103,10 +105,12 @@ export function SeletorDeEtapa({ status, onEscolher, desabilitado }: {
   );
 }
 
-export default function CartaoProducao({ item: it, hoje, papel, compacto, mostrarCliente = true, emRisco, arrastavel, acoes }: {
+export default function CartaoProducao({ item: it, hoje, papel, compacto, mostrarCliente = true, emRisco, arrastavel, acoes, contatoCliente }: {
   item: ItemQuadro;
   hoje: string;
   papel: string;
+  /** Nome do responsável do cliente (saudação do rascunho de "Cobrar cliente"). */
+  contatoCliente?: string | null;
   /** Nas colunas de cliente/designer: miniatura menor, sem prioridade. */
   compacto?: boolean;
   mostrarCliente?: boolean;
@@ -126,7 +130,13 @@ export default function CartaoProducao({ item: it, hoje, papel, compacto, mostra
   const vencidoSemArte = !!urg && urg.rotulo === "Vencido" && designerDeve(estado);
   const podeReportar = !!acoes.onReportar && !card.nonDeliveryReason && !!urg && urg.rotulo === "Vencido" && etapa !== "agendado" && etapa !== "no_ar";
   const IconeEstado = ICONE_ESTADO[estado];
-  const tempo = parado(it);
+  // Cronômetro da etapa (N18): tempo na etapa contra o prazo dela. O chip "parado" continua para
+  // quem bate o olho na coluna; a barra diz se esse tempo é problema.
+  const agoraMs = Date.now();
+  const cronometro = cronometroDaEtapa(it, agoraMs);
+  const tempo = parado(cronometro?.msNaEtapa ?? null);
+  // "Cobrar cliente" (N11): rascunho para copiar quando está com o cliente há 24h/48h. Nunca envia.
+  const cobrar = etapa === "com_cliente" && !ehDesigner && !!cobrancaDoCard(card, { agoraMs, hoje, contato: contatoCliente });
   const mostrarEstado = etapa === "com_designer" || estado === "alteracao" || estado === "bloqueado" || (etapa === "pauta" && estado !== "sem_pedido");
 
   return (
@@ -208,6 +218,8 @@ export default function CartaoProducao({ item: it, hoje, papel, compacto, mostra
           <p className="text-[11px] font-medium text-lone-success flex items-center gap-1"><Check size={11} aria-hidden="true" /> Cliente aprovou</p>
         )}
 
+        {cronometro && <CronometroDaEtapa cronometro={cronometro} />}
+
         {prazo && (
           <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/60">
             <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -219,7 +231,7 @@ export default function CartaoProducao({ item: it, hoje, papel, compacto, mostra
           </div>
         )}
 
-        {(podePedir || podeIniciar || podeEntregar || podeDesbloquear || podeReportar || card.nonDeliveryReason || (card.imageUrl && !compacto)) && (
+        {(podePedir || podeIniciar || podeEntregar || podeDesbloquear || podeReportar || cobrar || card.nonDeliveryReason || (card.imageUrl && !compacto)) && (
           <div className="flex items-center gap-1 pt-1.5 border-t border-border/60 flex-wrap" onClick={(e) => e.stopPropagation()}>
             {podePedir && acoes.onPedirArte && (
               <button type="button" onClick={() => acoes.onPedirArte!(it)} title="Manda o card pro designer (abre o pedido de arte)"
@@ -239,6 +251,7 @@ export default function CartaoProducao({ item: it, hoje, papel, compacto, mostra
                 <Upload size={11} aria-hidden="true" /> {estado === "alteracao" ? "Entregar de novo" : "Entregar arte"}
               </button>
             )}
+            {cobrar && <CobrarCliente card={card} contato={contatoCliente} />}
             {podeDesbloquear && acoes.onDesbloquear && (
               <button type="button" onClick={() => acoes.onDesbloquear!(it)} title="Resolvido — devolve pra fila do designer"
                 className="text-[11px] px-2 py-1 rounded-md bg-muted text-foreground hover:bg-accent transition-colors inline-flex items-center gap-1 font-medium">

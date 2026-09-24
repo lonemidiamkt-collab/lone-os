@@ -4,6 +4,7 @@
 // do lado ruim. Agora: legenda curta no grupo com os números e o PDF com os dois lados.
 // Mesmo visual do PDF do bom-dia (lib/reports/bomDiaPdf.ts).
 
+import { ROTULO_RESULTADO } from "@/lib/meta/resultado";
 import type { FoiBem } from "@/lib/traffic/resultado-dia";
 
 const BRAND = "#2b3cff";
@@ -47,8 +48,8 @@ export function resultadoDiaPdfHtml(quedas: QuedaDia[], bons: FoiBem[], ontem: s
         <div style="color:${BOM};font-size:11px;margin:3px 0 0 15px">${esc(b.motivos.join(" · "))}</div>
       </td>
       <td style="padding:8px 0;border-bottom:1px solid ${LINHA};text-align:right;font-size:11.5px;color:${SUAVE};line-height:1.5;white-space:nowrap">
-        <b style="color:${TEXTO}">${b.conversas}</b> conversas <span>(média ${b.mediaConversas.toLocaleString("pt-BR")})</span><br>
-        ${brl(b.custo)} por conversa <span>(média ${brl(b.mediaCusto)})</span>
+        <b style="color:${TEXTO}">${b.conversas}</b> ${ROTULO_RESULTADO[b.tipo ?? "mensagens"].varios} <span>(média ${b.mediaConversas.toLocaleString("pt-BR")})</span><br>
+        ${brl(b.custo)} por ${ROTULO_RESULTADO[b.tipo ?? "mensagens"].um} <span>(média ${brl(b.mediaCusto)})</span>
       </td>
     </tr>`;
 

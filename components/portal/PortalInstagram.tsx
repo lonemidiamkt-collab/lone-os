@@ -14,6 +14,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import { clsx } from "clsx";
 import { cn } from "@/lib/utils";
 import { formatarNumero, formatarPct, taxaEngajamento } from "@/lib/portal/formatos";
+import { resumoInstagram } from "@/lib/portal/formatDelta";
 import PublicoCard from "./PublicoCard";
 import { Cartao, CabecalhoSecao, entrada } from "./ui";
 
@@ -128,6 +129,10 @@ export default function PortalInstagram({ token, clientId, period }: { token: st
     { rotulo: "Posts no período", valor: nf(r?.postsNoPeriodo ?? null) },
   ];
   const impar = kpis.length % 2 === 1;
+  // "Sua semana em uma frase" (N34) também na aba do Instagram. Leitura pública: sem alcance e sem
+  // seguidores ganhos (a Meta não entrega) — a frase fica só com os posts.
+  const dias = IG_PERIODOS.find((p) => p.valor === period)?.dias ?? 7;
+  const frase = resumoInstagram(dias, isPublico ? { postsNoPeriodo: r?.postsNoPeriodo } : r);
   const temAudiencia = !!a && (a.generoMascPct != null || a.idades.length > 0 || a.cidades.length > 0);
   const melhores = posts.slice(0, MELHORES_POSTS);
 
@@ -139,6 +144,13 @@ export default function PortalInstagram({ token, clientId, period }: { token: st
           titulo={<>Instagram{data?.conta?.username && <span className="text-lone-body font-normal text-muted-foreground">@{data.conta.username}</span>}</>}
           descricao="Números do perfil no período escolhido"
         />
+
+        {!loading && frase && (
+          <Cartao className="px-4 py-3.5">
+            <p className="text-lone-eyebrow uppercase text-muted-foreground">Em uma frase</p>
+            <p className="mt-1 text-sm font-medium text-foreground sm:text-base">{frase}</p>
+          </Cartao>
+        )}
 
         <div className={cn("grid grid-cols-2 gap-3 sm:gap-4", kpis.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-4")}>
           {kpis.map((k, i) => (

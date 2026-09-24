@@ -18,6 +18,7 @@ import FichaViva360Tab from "@/components/fichaviva/FichaViva360Tab";
 import { useClientsStore } from "@/stores/useClientsStore";
 import type { ClientPatch } from "@/stores/useClientsStore";
 import CreativeWallet from "./CreativeWallet";
+import FichaUmaPagina from "./FichaUmaPagina";
 import { Secao, Vazio } from "./Secao";
 import { SECAO } from "./abas";
 import type { FichaCtx } from "./tipos";
@@ -35,8 +36,15 @@ export default function AbaMarca({ ctx, dadosCompletos, updateClientData, onNavi
   const podeEditarMarca = ["admin", "manager", "social", "designer", "traffic"].includes(role);
   const temDossie = !!(c.toneOfVoice || c.instagramUser || c.driveLink || c.fixedBriefing || c.campaignBriefing);
 
+  const arquivo = (c.nomeFantasia || c.name).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
   return (
     <div className="space-y-8">
+      <Secao id={SECAO.umaPagina} titulo="Ficha de uma página"
+        descricao="Posicionamento, tom, o que nunca dizer, produtos, regras e a marca — numa folha, para quem vai criar.">
+        <FichaUmaPagina clientId={c.id} nomeArquivo={arquivo} />
+      </Secao>
+
       <Secao id={SECAO.identidade} titulo="Identidade visual e materiais" semCard
         descricao="Logo (todas as versões), links de Figma/Drive e o que o designer precisa baixar.">
         <DadosTab parte="identidade" client={c} role={role} currentUser={currentUser}

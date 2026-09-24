@@ -6,6 +6,7 @@ import { useClientsStore } from "@/stores/useClientsStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { OperationalKpisPanel } from "@/components/ceo/OperationalKpisPanel";
 import CoberturaReunioes from "@/components/CoberturaReunioes";
+import CargaPorPessoa from "@/components/equipe/CargaPorPessoa";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
 import { getAttentionColor, getAttentionLabel, getStatusColor, getStatusLabel, todaySP, spDateStr } from "@/lib/utils";
@@ -1274,89 +1275,11 @@ export default function CEOPage() {
 
           {activeSection === "workload" && (
             <div className="space-y-6 animate-fade-in">
-              <p className="text-muted-foreground text-sm">Visão de capacidade e carga de trabalho por colaborador.</p>
+              <p className="text-muted-foreground text-sm">Carga real de cada pessoa: o que está aberto agora, contra o limite do papel.</p>
 
-              {(() => {
-                const CAPACITY_PER_WEEK = 8; // max cards/tasks per week
-                const members = [...new Set([
-                  ...clients.map((c) => c.assignedSocial),
-                  ...clients.map((c) => c.assignedTraffic),
-                  ...clients.map((c) => c.assignedDesigner),
-                ])].sort();
-
-                return (
-                  <div className="space-y-4">
-                    {members.map((name) => {
-                      const memberTasks = tasks.filter((t) => t.assignedTo === name && t.status !== "done");
-                      const memberCards = contentCards.filter((c) => c.socialMedia === name && !statusNaEtapa(c.status, "no_ar"));
-                      const memberDesign = designRequests.filter((r) => clients.some((c) => c.assignedDesigner === name && c.id === r.clientId) && r.status !== "done");
-                      const totalActive = memberTasks.length + memberCards.length + memberDesign.length;
-                      const utilPct = Math.round((totalActive / CAPACITY_PER_WEEK) * 100);
-                      const isOverloaded = utilPct > 120;
-                      const isHigh = utilPct > 80;
-
-                      const memberClients = [...new Set([
-                        ...clients.filter((c) => c.assignedSocial === name || c.assignedTraffic === name || c.assignedDesigner === name).map((c) => c.name)
-                      ])];
-
-                      return (
-                        <div key={name} className={`card border ${isOverloaded ? "border-destructive/30" : isHigh ? "border-lone-warning-border" : "border-border"}`}>
-                          <div className="flex items-center gap-4 mb-3">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${
-                              isOverloaded ? "bg-destructive/15 text-destructive" : isHigh ? "bg-lone-warning-bg text-lone-warning" : "bg-primary/15 text-primary"
-                            }`}>
-                              {name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-semibold text-foreground text-sm">{name}</p>
-                              <p className="text-[10px] text-muted-foreground">{memberClients.slice(0, 3).join(", ")}{memberClients.length > 3 ? ` +${memberClients.length - 3}` : ""}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className={`text-lg font-bold ${isOverloaded ? "text-destructive" : isHigh ? "text-lone-warning" : "text-foreground"}`}>
-                                {utilPct}%
-                              </p>
-                              <p className="text-[10px] text-muted-foreground">{totalActive}/{CAPACITY_PER_WEEK} itens</p>
-                            </div>
-                          </div>
-
-                          {/* Capacity bar */}
-                          <div className="h-2.5 bg-muted rounded-full overflow-hidden mb-3">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                isOverloaded ? "bg-destructive" : isHigh ? "bg-lone-warning" : "bg-primary"
-                              }`}
-                              style={{ width: `${Math.min(utilPct, 100)}%` }}
-                            />
-                          </div>
-
-                          {/* Breakdown */}
-                          <div className="grid grid-cols-3 gap-2">
-                            <div className="text-center p-2 rounded-lg bg-muted/30">
-                              <p className="text-xs font-bold text-foreground">{memberTasks.length}</p>
-                              <p className="text-[9px] text-muted-foreground">Tarefas</p>
-                            </div>
-                            <div className="text-center p-2 rounded-lg bg-muted/30">
-                              <p className="text-xs font-bold text-foreground">{memberCards.length}</p>
-                              <p className="text-[9px] text-muted-foreground">Cards</p>
-                            </div>
-                            <div className="text-center p-2 rounded-lg bg-muted/30">
-                              <p className="text-xs font-bold text-foreground">{memberDesign.length}</p>
-                              <p className="text-[9px] text-muted-foreground">Design</p>
-                            </div>
-                          </div>
-
-                          {isOverloaded && (
-                            <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/20">
-                              <AlertTriangle size={12} className="text-destructive shrink-0" />
-                              <span className="text-[10px] text-destructive font-medium">Sobrecarregado — considere redistribuir tarefas</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+              {/* Leva 7C (N30): itens abertos por pessoa contra o limite do PAPEL — saiu a capacidade
+                  fixa de 8/semana para todo mundo (lib/carga/por-pessoa.ts). */}
+              <CargaPorPessoa />
             </div>
           )}
 

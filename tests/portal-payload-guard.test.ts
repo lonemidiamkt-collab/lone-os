@@ -145,3 +145,55 @@ describe("portal: o snapshot público só leva campos permitidos", () => {
     }
   });
 });
+
+// ── Leva 7D: agenda do mês (N36) e histórico do material enviado (N37) ─────────────────────────
+// Mesmas regras: lista de campos PERMITIDOS e palavras proibidas. O banco devolve mais do que o
+// portal pode mostrar (briefing, observação do time, social, quem abriu o arquivo, caminho no storage).
+
+const { montarAgenda } = await import("@/lib/portal/agenda");
+const { montarMateriais } = await import("@/lib/portal/materiais");
+
+const PERMITIDOS_AGENDA = new Set([
+  "mes", "proximos", "doMes",
+  "id", "titulo", "formato", "dia", "hora", "situacao", "imagem", "link", "podeAlterar",
+]);
+const PERMITIDOS_MATERIAIS = new Set([
+  "id", "nome", "tipo", "tamanhoKb", "observacao", "enviadoPor", "enviadoEm", "recebido", "recebidoEm", "url",
+  "uso", "titulo", "dia", "situacao", "link",
+]);
+
+describe("portal: agenda e material enviado só levam campos permitidos", () => {
+  const cardsDoBanco = [
+    { id: "c1", title: "Promoção", format: "Reels", status: "scheduled", due_date: "2026-09-25", due_time: "18:00",
+      briefing: "cliente difícil, cobrar pagamento", observations: "nota interna do social", social_media: "Carlos",
+      design_request_id: "dr1", alteracao_motivo: "designer errou a cor", image_url: "https://cdn/a.jpg" },
+    { id: "c2", title: "Pauta interna", status: "ideas", due_date: "2026-09-26", briefing: "segredo da pauta" },
+    { id: "c3", title: "No ar", status: "published", publish_verified_at: "2026-09-20T15:00:00Z", ig_media_id: "m1",
+      publish_verified_by: "Instagram (automático)" },
+  ];
+
+  it("agenda: nenhum campo fora da lista, nada interno no JSON, pauta não aparece", () => {
+    const r = montarAgenda({ cards: cardsDoBanco as never, hoje: "2026-09-24", mes: "2026-09", links: new Map([["m1", "https://instagram.com/p/x"]]) });
+    const todas = [...chaves(r)];
+    expect(todas.filter((k) => !PERMITIDOS_AGENDA.has(k)), "campo novo na agenda pública — o cliente pode ver isso?").toEqual([]);
+    expect(todas.filter((k) => PROIBIDO.test(k))).toEqual([]);
+    const json = JSON.stringify(r);
+    for (const segredo of ["cliente difícil", "nota interna", "Carlos", "dr1", "designer errou", "segredo da pauta", "Pauta interna", "automático"]) {
+      expect(json, segredo).not.toContain(segredo);
+    }
+  });
+
+  it("material enviado: sem quem do time abriu, sem caminho no storage", () => {
+    const itens = montarMateriais({
+      uploads: [{ id: "u1", file_name: "foto.jpg", mime_type: "image/jpeg", size_bytes: 1000, observacao: "fotos novas",
+        enviado_por: "Ana", created_at: "2026-09-20T12:00:00Z", visto_em: "2026-09-20T13:00:00Z",
+        visto_por: "julio@lone", storage_path: "cliente-x/2026-09-20/abc.jpg", card_id: "c1" }],
+      cards: new Map([["c1", cardsDoBanco[0] as never]]),
+    });
+    const todas = [...chaves(itens)];
+    expect(todas.filter((k) => !PERMITIDOS_MATERIAIS.has(k))).toEqual([]);
+    expect(todas.filter((k) => PROIBIDO.test(k))).toEqual([]);
+    const json = JSON.stringify(itens);
+    for (const segredo of ["julio@lone", "cliente-x/2026-09-20", "cliente difícil", "Carlos"]) expect(json, segredo).not.toContain(segredo);
+  });
+});

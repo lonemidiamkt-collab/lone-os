@@ -2,14 +2,14 @@
 
 // components/client/ficha/AbaRelacionamento.tsx — RELACIONAMENTO: a conversa com o cliente.
 // Reuniões (agendar, pauta, registro), o NPS que ele deu depois delas, os check-ins do Agente, o
-// humor dele sobre os resultados e a linha do tempo. Juntou Reuniões, Histórico Operacional e o
-// feedback do cliente (que ficava dentro de Crescimento).
+// humor dele sobre os resultados e a linha do tempo única (Leva 7C, N20). Juntou Reuniões, Histórico
+// Operacional e o feedback do cliente (que ficava dentro de Crescimento).
 
 import FeedbackCliente from "@/components/client-tabs/FeedbackCliente";
 import ReunioesCliente from "@/components/ReunioesCliente";
 import WhatsAppTemplates from "@/components/WhatsAppTemplates";
 import HistoricoNps from "./HistoricoNps";
-import HistoricoOperacional from "./HistoricoOperacional";
+import LinhaDoTempo from "./LinhaDoTempo";
 import { Secao, Vazio } from "./Secao";
 import { SECAO } from "./abas";
 import { dataCurta } from "./rotulos";
@@ -65,8 +65,9 @@ export default function AbaRelacionamento({ ctx }: { ctx: FichaCtx }) {
         </Secao>
       )}
 
-      <Secao id={SECAO.historico} titulo="Histórico">
-        <HistoricoOperacional clientId={c.id} clientName={c.name} currentUser={currentUser} />
+      <Secao id={SECAO.historico} titulo="Linha do tempo"
+        descricao="Conversas, reuniões, produção, pedidos e mudanças de status — numa lista só.">
+        <LinhaDoTempo clientId={c.id} clientName={c.name} currentUser={currentUser} />
       </Secao>
     </div>
   );

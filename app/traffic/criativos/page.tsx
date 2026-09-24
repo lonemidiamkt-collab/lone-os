@@ -6,6 +6,8 @@ import { chamar } from "@/lib/api/chamar";
 import { useRole } from "@/lib/context/RoleContext";
 import OperacaoCriativa from "@/components/traffic/OperacaoCriativa";
 import PadroesCriativos from "@/components/traffic/PadroesCriativos";
+import RankingCriativos from "@/components/trafego/criativos/RankingCriativos";
+import { HeartPulse, Trophy } from "lucide-react";
 
 // /traffic/criativos — SAÚDE DOS CRIATIVOS, em sombra. O motor avalia todo dia; o gestor diz se
 // concorda. Enquanto a precisão não passar de 80%, nada disto vira recomendação nem aviso.
@@ -54,6 +56,11 @@ export default function CriativosPage() {
   const [criadas, setCriadas] = useState<Record<string, { demandaId: string; designer: string | null; prazo: string }>>({});
   const [livre, setLivre] = useState<Record<string, string>>({});
   const [previa, setPrevia] = useState<Record<string, { url?: string; erro?: string; ocupado?: boolean }>>({});
+  // Leva 7A (N5): a tela ganhou o Ranking (por cliente e nicho). ?aba=ranking abre nele.
+  const [vista, setVista] = useState<"saude" | "ranking">("saude");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("aba") === "ranking") setVista("ranking");
+  }, []);
 
   // Prévia por IA (1 imagem com os elementos travados) — rascunho pro gestor decidir antes de mandar.
   async function verPrevia(adId: string, v: { nome: string; muda: string; mantem: string }) {
@@ -107,8 +114,32 @@ export default function CriativosPage() {
     .sort((a, b) => ORDEM.indexOf(a.estado) - ORDEM.indexOf(b.estado) || b.severidade - a.severidade);
   const rotulados = itens.filter((i) => i.rotulo).length;
 
+  const abas = (
+    <div role="tablist" aria-label="Criativos" className="flex gap-1 border-b border-border">
+      {([["saude", "Saúde (sombra)", HeartPulse], ["ranking", "Ranking", Trophy]] as const).map(([chave, rotulo, Icone]) => (
+        <button key={chave} role="tab" aria-selected={vista === chave} onClick={() => setVista(chave)}
+          className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${vista === chave ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+          <Icone size={14} aria-hidden="true" /> {rotulo}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (vista === "ranking") {
+    return (
+      <div className="mx-auto max-w-6xl space-y-6 p-6">
+        <header className="space-y-3">
+          <h1 className="text-lone-h1 tracking-tight text-foreground">Criativos</h1>
+          {abas}
+        </header>
+        <RankingCriativos />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
+      <div>{abas}</div>
       <header>
         <h1 className="text-2xl font-bold text-foreground">Saúde dos criativos</h1>
         <p className="text-sm text-muted-foreground">

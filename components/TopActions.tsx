@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { create } from "zustand";
-import { Bell, ChevronDown, LogOut, Moon, Plus, Search, Settings, Sun } from "lucide-react";
+import { Bell, ChevronDown, ChevronRight, LogOut, Moon, Plus, Search, Settings, Sun } from "lucide-react";
 import { ExpandableTabs, type ExpandableItem } from "@/components/ui/expandable-tabs";
 import { FotoPessoa } from "@/components/ui/FotoPessoa";
 import {
@@ -14,19 +14,29 @@ import {
 import { useRole } from "@/lib/context/RoleContext";
 import { useTheme } from "@/lib/context/ThemeContext";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
+import { casarRota, menuDoPapel } from "@/lib/navegacao/menu";
 
-// A barra mora no <Header> das telas que o usam; nas outras, o AppShell a mostra flutuando no
-// canto. Este contador diz ao AppShell se há um Header montado, para ela não aparecer duas vezes.
+// A barra mora no <Header> das telas que o usam; nas outras, o AppShell põe uma FAIXA própria no
+// topo do conteúdo (FaixaTopActions). Este contador diz ao AppShell se há um Header montado, para ela
+// não aparecer duas vezes.
+//
+// Leva 7A: antes, nas telas sem Header, a barra FLUTUAVA (fixed) no canto por cima da página — em
+// Contas & Verba cobria os botões do próprio cabeçalho ("Alertas por…" cortado), e cada tela tinha
+// que lembrar de reservar o canto (o Comercial usava pr-12). Agora o espaço é reservado no fluxo.
 const useTopo = create<{ headers: number; entrar: () => void; sair: () => void }>((set) => ({
   headers: 0,
   entrar: () => set((s) => ({ headers: s.headers + 1 })),
   sair: () => set((s) => ({ headers: Math.max(0, s.headers - 1) })),
 }));
 
+// Layout effect: o Header se registra ANTES da pintura, então a faixa do AppShell some no mesmo
+// quadro — com useEffect ela piscava (e empurrava a tela 64px) em toda tela que tem Header.
+const useEfeitoAntesDePintar = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
 export function useRegistrarHeader() {
   const entrar = useTopo((s) => s.entrar);
   const sair = useTopo((s) => s.sair);
-  useEffect(() => { entrar(); return sair; }, [entrar, sair]);
+  useEfeitoAntesDePintar(() => { entrar(); return sair; }, [entrar, sair]);
 }
 
 export const ABRIR_BUSCA = "lone:abrir-busca";
@@ -45,15 +55,43 @@ function useAtalhoBusca(): string {
   return atalho;
 }
 
-export default function TopActions({ flutuante = false }: { flutuante?: boolean }) {
+/**
+ * Telas sem <Header> (Contas & Verba, Comercial, Processos, Configurações…): a barra ganha uma faixa
+ * do mesmo tamanho do Header no topo do conteúdo, só no computador (no celular a barra não existe —
+ * a navegação é a barra inferior). Com o conteúdo começando embaixo dela, nada da página fica coberto.
+ */
+export function FaixaTopActions() {
+  const headers = useTopo((s) => s.headers);
+  const pathname = usePathname();
+  const { role } = useRole();
+  if (headers > 0) return null;
+  const casou = casarRota(menuDoPapel(role), pathname);
+  return (
+    <div className="hidden h-16 shrink-0 items-center gap-4 border-b border-border bg-background px-6 lg:flex">
+      <nav aria-label="Você está em" className="min-w-0 flex-1">
+        {casou && (
+          <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="truncate">{casou.grupo.rotulo}</span>
+            {casou.item.rotulo !== casou.grupo.rotulo && (
+              <>
+                <ChevronRight size={12} className="shrink-0" aria-hidden="true" />
+                <span className="truncate font-medium text-foreground">{casou.item.rotulo}</span>
+              </>
+            )}
+          </p>
+        )}
+      </nav>
+      <TopActions />
+    </div>
+  );
+}
+
+export default function TopActions() {
   const pathname = usePathname();
   const atalhoBusca = useAtalhoBusca();
-  const headers = useTopo((s) => s.headers);
   const { currentProfile, role, roleLabel, logout } = useRole();
   const { theme, toggleTheme } = useTheme();
   const naoLidas = useNotificationsStore((s) => s.notifications.filter((n) => !n.read).length);
-
-  if (flutuante && headers > 0) return null;
 
   const items: ExpandableItem[] = [
     { key: "busca", label: `Buscar (${atalhoBusca})`, icon: Search, onClick: () => window.dispatchEvent(new Event(ABRIR_BUSCA)) },
@@ -66,7 +104,7 @@ export default function TopActions({ flutuante = false }: { flutuante?: boolean 
   ];
 
   return (
-    <div className={flutuante ? "fixed right-4 top-3 z-30 hidden lg:flex items-center gap-2" : "hidden lg:flex items-center gap-2 shrink-0"}>
+    <div className="hidden lg:flex items-center gap-2 shrink-0">
       <ExpandableTabs items={items} />
       {/* Menu da conta: tudo que é da pessoa (perfil, tema, sair) mora aqui, não na barra de ações. */}
       <DropdownMenu>

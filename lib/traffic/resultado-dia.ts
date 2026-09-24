@@ -9,11 +9,15 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { clienteDoHoje, type ClienteHojeRow } from "@/lib/traffic/hoje/montar";
+import { lerMetricasDiarias } from "@/lib/traffic/hoje/carregar";
+import { ROTULO_RESULTADO, comoTipoResultado, type TipoResultadoConta } from "@/lib/meta/resultado";
 
 export interface DiaConta {
   metric_date: string;
   spend: number;
+  /** Resultado pelo objetivo (Leva 7A): conversas, leads ou compras. */
   conversions: number;
+  tipo?: TipoResultadoConta | null;
 }
 
 export interface FoiBem {
@@ -24,8 +28,10 @@ export interface FoiBem {
   custo: number | null;
   mediaCusto: number | null;
   gasto: number;
-  /** "conversas subiram 45%", "custo por conversa caiu 30%" — um ou os dois. */
+  /** "conversas subiram 45%", "custo por conversa caiu 30%" — um ou os dois (ou leads/compras). */
   motivos: string[];
+  /** O que `conversas` conta (Leva 7A): conversas, leads, compras ou misto. */
+  tipo?: TipoResultadoConta;
   /** Pra ordenar: o maior ganho percentual. */
   ganho: number;
 }
@@ -43,6 +49,8 @@ const media = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.
  */
 export function avaliarDia(ontem: DiaConta, anteriores: DiaConta[]): Omit<FoiBem, "clientId" | "nome"> | null {
   if (anteriores.length < MIN_DIAS_BASE || ontem.conversions < MIN_CONVERSAS) return null;
+  const tipo: TipoResultadoConta = ontem.tipo ?? "mensagens";
+  const rot = ROTULO_RESULTADO[tipo];
 
   const mediaConversas = media(anteriores.map((d) => d.conversions));
   const gastoBase = anteriores.reduce((a, d) => a + d.spend, 0);
@@ -55,13 +63,13 @@ export function avaliarDia(ontem: DiaConta, anteriores: DiaConta[]): Omit<FoiBem
 
   if (mediaConversas > 0 && ontem.conversions >= mediaConversas * 1.3 && ontem.conversions - mediaConversas >= 2) {
     const p = Math.round((ontem.conversions / mediaConversas - 1) * 100);
-    motivos.push(`conversas subiram ${p}%`);
+    motivos.push(`${rot.varios} subiram ${p}%`);
     ganho = Math.max(ganho, p);
   }
   const gastoMedio = media(anteriores.map((d) => d.spend));
   if (mediaCusto && custo !== null && custo <= mediaCusto * 0.75 && ontem.spend >= gastoMedio * 0.5) {
     const p = Math.round((1 - custo / mediaCusto) * 100);
-    motivos.push(`custo por conversa caiu ${p}%`);
+    motivos.push(`${rot.custo} caiu ${p}%`);
     ganho = Math.max(ganho, p);
   }
   if (!motivos.length) return null;
@@ -74,6 +82,7 @@ export function avaliarDia(ontem: DiaConta, anteriores: DiaConta[]): Omit<FoiBem
     gasto: Math.round(ontem.spend * 100) / 100,
     motivos,
     ganho,
+    tipo,
   };
 }
 
@@ -90,17 +99,19 @@ export async function carregarQuemFoiBem(excluir: Set<string>, agora: Date = new
   const [{ data: clientes }, { data: dias }] = await Promise.all([
     supabaseAdmin.from("clients")
       .select("id, name, nome_fantasia, logo, doc_logo, active, churned_at, draft_status, paused_at, paused_until, service_type, assigned_traffic, meta_ad_account_id"),
-    supabaseAdmin.from("metric_snapshots")
-      .select("client_id, metric_date, spend, conversions")
-      .gte("metric_date", inicio).lte("metric_date", ontem),
+    // Resultado pelo objetivo quando já gravado (results); senão, as conversas de sempre.
+    lerMetricasDiarias(inicio, ontem),
   ]);
 
   const porCliente = new Map<string, DiaConta[]>();
   for (const d of dias ?? []) {
     const id = d.client_id as string;
     if (!porCliente.has(id)) porCliente.set(id, []);
+    const res = d.results != null && d.results !== "" ? Number(d.results) : null;
     porCliente.get(id)!.push({
-      metric_date: d.metric_date as string, spend: Number(d.spend) || 0, conversions: Number(d.conversions) || 0,
+      metric_date: d.metric_date as string, spend: Number(d.spend) || 0,
+      conversions: (res != null && Number.isFinite(res) ? res : Number(d.conversions)) || 0,
+      tipo: comoTipoResultado(d.result_kind),
     });
   }
 

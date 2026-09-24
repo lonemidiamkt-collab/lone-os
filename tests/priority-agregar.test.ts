@@ -60,3 +60,22 @@ describe("uma recomendação por problema", () => {
     expect(r.find((x) => x.owner === "Thiago")!.titulo).toBe("Thiago: 3 tarefas vencidas (5 dias)");
   });
 });
+
+describe("pedidos esperando ok/não continuam decidíveis no feed (Leva 7C, N25)", () => {
+  const pedido = (codigo: string, dias: number): ItemBruto => ({
+    fonte: "cs", clientId: "imp", cliente: "Império", entityRef: codigo, motivo: "sugestao_sem_decisao",
+    titulo: `Império: pedido "arte ${codigo}" espera ok/não há ${dias} dias`, fato: ["O agente pegou"],
+    recomendacao: "Decidir aqui", acaoProposta: { tipo: "decidir_demanda", codigo },
+    severidade: 40, urgencia: 50, confianca: 0.9, exposicaoRs: null, reversivel: true, ownerRole: "social", owner: "Carlos Augusto", nivelPolicy: "C",
+  });
+
+  it("o agregado leva TODOS os códigos e segue como decidir_demanda (antes virava abrir_board)", () => {
+    const r = agregar([pedido("a1", 2), pedido("b2", 5), pedido("c3", 3)]);
+    expect(r).toHaveLength(1);
+    expect(r[0].acaoProposta).toMatchObject({ tipo: "decidir_demanda", codigos: ["a1", "b2", "c3"], itens: 3 });
+  });
+
+  it("card atrasado agregado continua abrindo o quadro", () => {
+    expect(agregar([card("A", 11), card("B", 12)])[0].acaoProposta).toMatchObject({ tipo: "abrir_board", itens: 2 });
+  });
+});

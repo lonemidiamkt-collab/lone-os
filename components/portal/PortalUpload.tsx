@@ -13,7 +13,12 @@ import { chamar } from "@/lib/api/chamar";
 
 const MAX_MB = 25;
 
-export default function PortalUpload({ token, clientName }: { token: string; clientName: string }) {
+export default function PortalUpload({ token, clientName, onEnviado }: {
+  token: string;
+  clientName: string;
+  /** Chamado depois de um envio que deu certo (o histórico "Seus envios" recarrega). */
+  onEnviado?: () => void;
+}) {
   const [observacao, setObservacao] = useState("");
   const [enviadoPor, setEnviadoPor] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -49,6 +54,7 @@ export default function PortalUpload({ token, clientName }: { token: string; cli
       if (ok.length) {
         setEnviados((prev) => [...ok, ...prev].slice(0, 12));
         setObservacao("");
+        onEnviado?.();
       }
     } catch {
       setErro("Falha de conexão. Tente de novo.");
@@ -56,7 +62,7 @@ export default function PortalUpload({ token, clientName }: { token: string; cli
       setEnviando(false);
       if (inputRef.current) inputRef.current.value = "";
     }
-  }, [token, observacao, enviadoPor]);
+  }, [token, observacao, enviadoPor, onEnviado]);
 
   return (
     <section className="rounded-xl p-4 sm:p-5 bg-card border border-border">

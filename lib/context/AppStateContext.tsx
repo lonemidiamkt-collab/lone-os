@@ -315,7 +315,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   // ---------- Load from Supabase when authenticated (takes priority over localStorage) ----------
   // SÓ ONDE ALGUÉM LÊ (16/09). Este contexto legado baixava 22 tabelas pelo navegador (PostgREST via
   // Cloudflare → nginx → Kong) em TODA página, e ninguém usava: as telas leem os stores (/api/data/*).
-  // Consumidores que sobraram: /goals (useOKRMetrics, useSnapshots, useCollaboratorScores); /calendar
+  // Consumidores que sobraram: /goals (useCollaboratorScores — as metas vêm do servidor desde a Leva 7D); /calendar
   // usa só reminders (locais, sem banco). Fora do /goals, o
   // carregamento pesado não roda — nem as assinaturas de realtime abaixo (o container está desligado
   // e cada aba tentava o websocket a cada 10 s). Era boa parte da lentidão no Social/Design e a

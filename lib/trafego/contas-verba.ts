@@ -61,6 +61,92 @@ export function ritmoDoMes(p: { verba: number | null | undefined; gasto: number 
   };
 }
 
+// ─── Leitura do ritmo (Leva 7A) ─────────────────────────────────────────────
+// A coluna "Ritmo do mês" era uma barra fina com um tracinho e um texto pequeno ("No ritmo
+// esperado"); o CEO não conseguia ler. Esta é a leitura que a barra nova desenha: quanto saiu, onde
+// devia estar hoje, onde o mês fecha no ritmo RECENTE (média dos últimos 3 dias — é o que a conta está
+// fazendo agora, não a média do mês) e uma frase com o que fazer caso não esteja no ritmo.
+
+export type TomRitmo = "no_ritmo" | "acima" | "abaixo" | "travada" | "sem_dados" | "sem_verba";
+
+export interface LeituraRitmo {
+  tom: TomRitmo;
+  /** "No ritmo" · "Acima do ritmo — estoura dia 24" · "Abaixo do ritmo" · "Travada — sem gasto no mês". */
+  titulo: string;
+  /** Linha de apoio (projeção). */
+  detalhe: string | null;
+  /** 0–100: onde o gasto deveria estar hoje num mês linear (o marcador "hoje"). */
+  pctHoje: number;
+  /** 0–100: gasto até agora sobre a verba (barra cheia). */
+  pctGasto: number | null;
+  /** Gasto projetado no fim do mês sobre a verba — pode passar de 100. */
+  pctProjetado: number | null;
+  projetadoFim: number | null;
+  /** Dia em que a verba acaba no ritmo recente, quando cai dentro do mês. */
+  diaEstouro: number | null;
+  /** R$/dia usado na projeção. */
+  ritmoDia: number | null;
+  /** De onde veio o ritmo: média dos últimos 3 dias (sync) ou, sem ela, a média do mês. */
+  fonteRitmo: "3d" | "mes" | null;
+}
+
+const brl0 = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+
+export function lerRitmo(r: RitmoMes, media3d: number | null | undefined): LeituraRitmo {
+  const base = { pctHoje: r.pctMes, pctGasto: r.pctGasto, pctProjetado: null, projetadoFim: null, diaEstouro: null, ritmoDia: null, fonteRitmo: null } as const;
+  if (r.status === "sem_verba") {
+    return { ...base, tom: "sem_verba", titulo: "Sem verba definida", detalhe: r.gasto != null ? `${brl0(r.gasto)} gastos no mês` : null };
+  }
+  if (r.gasto == null || r.status === "sem_dados" || r.verba == null) {
+    return { ...base, tom: "sem_dados", titulo: "Sem dados de gasto", detalhe: "A leitura do gasto do mês falhou ou ainda não rodou." };
+  }
+  const verba = r.verba;
+  const gasto = r.gasto;
+  const m3 = media3d != null && Number.isFinite(media3d) && media3d >= 0 ? media3d : null;
+  const ritmoDia = m3 ?? r.mediaDia;
+  const fonteRitmo: "3d" | "mes" | null = m3 != null ? "3d" : r.mediaDia != null ? "mes" : null;
+  const restantes = Math.max(0, r.diasNoMes - r.dia);
+  const projetadoFim = ritmoDia != null ? gasto + ritmoDia * restantes : null;
+  const pctProjetado = projetadoFim != null ? (projetadoFim / verba) * 100 : null;
+  let diaEstouro: number | null = null;
+  if (gasto >= verba) diaEstouro = r.dia;
+  else if (ritmoDia != null && ritmoDia > 0) {
+    const d = r.dia + Math.ceil((verba - gasto) / ritmoDia);
+    diaEstouro = d <= r.diasNoMes ? d : null;
+  }
+  const comuns = { pctHoje: r.pctMes, pctGasto: r.pctGasto, pctProjetado, projetadoFim, diaEstouro, ritmoDia, fonteRitmo };
+  const projecao = projetadoFim != null && pctProjetado != null
+    ? `Fecha o mês em ~${brl0(projetadoFim)} (${Math.round(pctProjetado)}% da verba)`
+    : null;
+
+  // Travada: nada saiu no mês (depois do dia 2) ou a conta parou de gastar nos últimos 3 dias.
+  if (r.status === "parado") {
+    return { ...comuns, tom: "travada", titulo: "Travada — sem gasto no mês", detalhe: "Confira pagamento, reprovação ou campanhas pausadas." };
+  }
+  if (m3 === 0 && gasto > 0 && r.dia > 3) {
+    return { ...comuns, tom: "travada", titulo: "Travada — sem gasto há 3 dias", detalhe: `${brl0(gasto)} gastos até agora; nada nos últimos 3 dias.` };
+  }
+  // Acima: o mês até aqui passou do ritmo, ou o ritmo de agora acaba a verba antes do último dia
+  // (com folga de 10%: fechar em 104% não é alarme).
+  const estouraAntes = diaEstouro != null && diaEstouro < r.diasNoMes;
+  const acimaPeloMes = r.status === "warning" || r.status === "critical";
+  if (acimaPeloMes || (estouraAntes && (pctProjetado ?? 0) > 110)) {
+    const titulo = gasto >= verba
+      ? "Verba estourada"
+      : estouraAntes ? `Acima do ritmo — estoura dia ${diaEstouro}` : "Acima do ritmo";
+    return { ...comuns, tom: "acima", titulo, detalhe: projecao };
+  }
+  if (r.status === "slow") {
+    return { ...comuns, tom: "abaixo", titulo: "Abaixo do ritmo", detalhe: projecao };
+  }
+  return { ...comuns, tom: "no_ritmo", titulo: "No ritmo", detalhe: projecao };
+}
+
+/** Conta fora do ritmo = acima, abaixo ou travada (é o card "Fora do ritmo" e o filtro dele). */
+export function foraDoRitmo(l: LeituraRitmo): boolean {
+  return l.tom === "acima" || l.tom === "abaixo" || l.tom === "travada";
+}
+
 export type AvisoAporte = { tipo: "vencido" | "hoje" | "proximo" | "boleto_80"; texto: string } | null;
 
 /** Aviso de pagamento da conta: aporte vencido/próximo (Pix/Boleto) ou boleto com 80% da verba usada. */

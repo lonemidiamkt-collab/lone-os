@@ -13,6 +13,7 @@ import type { OnboardingItem } from "@/lib/types";
 import CicloDeVida from "./CicloDeVida";
 import ContaMetaAds from "./ContaMetaAds";
 import OnboardingChecklist from "./OnboardingChecklist";
+import RadarRenovacao from "@/components/client/RadarRenovacao";
 import { Secao } from "./Secao";
 import { SECAO } from "./abas";
 import { dataCurta } from "./rotulos";
@@ -68,6 +69,8 @@ export default function AbaAdmin({ ctx, onboarding, dadosCompletos, updateClient
 
       {isAdmin && (
         <Secao id={SECAO.contrato} titulo="Contrato" semCard>
+          {/* Leva 7C (N22): fim do contrato e se a renovação já anda — só datas. */}
+          <RadarRenovacao clientId={c.id} linha />
           <ContractGenerator client={c} currentUser={currentUser} />
         </Secao>
       )}

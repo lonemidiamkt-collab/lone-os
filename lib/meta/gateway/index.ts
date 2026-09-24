@@ -41,7 +41,11 @@ export interface InsightEntidade {
   frequency?: number;
   /** Só na leitura agregada (sem time_increment): pessoas únicas alcançadas no período. */
   reach?: number;
+  /** Resultado pelo objetivo da campanha (lib/meta/resultado.ts): conversas, leads ou compras. */
   conversions: number;
+  /** Que resultado `conversions` conta (Leva 7A). Ausente = conversas. */
+  tipoResultado?: "mensagens" | "leads" | "compras";
+  objetivo?: string;
 }
 
 export type NivelEntidade = "campaign" | "adset" | "ad";

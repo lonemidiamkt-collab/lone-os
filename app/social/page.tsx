@@ -9,6 +9,8 @@ import ContentCardModal from "@/components/ContentCardModal";
 import CsAgentInbox from "@/components/cs/CsAgentInbox";
 import DailyClosePanel from "@/components/social/DailyClosePanel";
 import ResultadosTab from "@/components/social/ResultadosTab";
+import LegendasEmLote from "@/components/social/LegendasEmLote";
+import LacunasDePauta from "@/components/planejamento/LacunasDePauta";
 import ArchivedDemandsModal from "@/components/ArchivedDemandsModal";
 import MateriaisResumo from "@/components/clients/MateriaisResumo";
 import { MarkdownEditor } from "@/components/Markdown";
@@ -26,7 +28,7 @@ import {
   Check, Plus, ChevronDown,
   Key, Eye, EyeOff, Save,
   Download, CheckCircle, ShieldCheck, AlertCircle, Layers, Trash2, Copy, Archive,
-  Palette, Lock, UsersRound, Music, FolderOpen, FileText,
+  Palette, Lock, UsersRound, Music, FolderOpen, FileText, Captions,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
@@ -1050,6 +1052,7 @@ export default function SocialPage() {
   const [verifyChecks, setVerifyChecks] = useState({ postLive: false, copyCorrect: false });
   const [showBatchCreate, setShowBatchCreate] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [showLegendas, setShowLegendas] = useState(false);
 
   const { role, currentUser, hydrated } = useRole();
 
@@ -1433,6 +1436,7 @@ export default function SocialPage() {
           onClose={() => setShowBatchCreate(false)}
         />
       )}
+      {showLegendas && <LegendasEmLote clientes={filteredClients} onClose={() => setShowLegendas(false)} />}
       {showArchived && (
         <ArchivedDemandsModal
           workspace={activeWorkspace}
@@ -1600,6 +1604,15 @@ export default function SocialPage() {
               >
                 <Layers size={13} /> Criar em lote
               </button>
+              {!isReadOnly && (
+                <button
+                  onClick={() => setShowLegendas(true)}
+                  title="A IA escreve as legendas da semana de um cliente; você revisa antes de salvar"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all shrink-0"
+                >
+                  <Captions size={13} /> Legendas da semana
+                </button>
+              )}
               <button
                 onClick={() => setShowArchived(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all shrink-0"
@@ -1616,6 +1629,10 @@ export default function SocialPage() {
             </div>
 
             <DailyClosePanel cards={filteredCards} clientes={filteredClients.map((c) => ({ id: c.id, name: c.nomeFantasia || c.name }))} />
+
+            {/* Dias de post vazios das próximas 2 semanas, na cadência de cada cliente (N10). Olha os
+                cards de TODO o time: card do cliente criado por outra pessoa também cobre a lacuna. */}
+            <LacunasDePauta clientes={filteredClients} cards={contentCards} />
 
             <CsAgentInbox cards={filteredCards} onOpen={setSelectedCard} />
 

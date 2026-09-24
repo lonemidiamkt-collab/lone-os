@@ -95,9 +95,12 @@ function rotasAntigas(role: Role): Set<string> {
 //  - /agente?view=desempenho (Leva 6A): a parte "painel" do Agente Lone virou vista; a área abre no Hoje.
 const MINHA_CARTEIRA = ["/clients?resp=mine", "/clients"];
 const LEVA_6A_GESTAO = ["/saude", "/agente?view=desempenho"];
+//  - /mapa-postagem (Leva 7D, N32): tela NOVA da gestão (postado × contratado por semana) — a rota
+//    não existia; só admin e manager (a API também exige gestão).
+const LEVA_7D_GESTAO = ["/mapa-postagem"];
 const ACRESCIMOS: Record<Role, string[]> = {
-  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO],
-  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO],
+  admin:     ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO],
+  manager:   ["/settings", "/broadcasts", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", "/clients?resp=mine", ...LEVA_6A_GESTAO, ...LEVA_7D_GESTAO],
   traffic:   ["/settings", "/integrations", "/conexao-meta", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
   social:    ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA, "/saude"],
   designer:  ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda", ...MINHA_CARTEIRA],
@@ -211,6 +214,15 @@ describe("menu — ninguém ganha nem perde tela", () => {
     const contas = telasParaBusca("traffic").find((t) => t.id === "tela-trafego-saldos")!;
     expect(contas.texto).toContain("investimento");
     expect(contas.texto).toContain("verba");
+  });
+
+  it("Leva 7D: Mapa de postagem na Gestão, só para a gestão, e achável por \"postagem\"", () => {
+    for (const r of ["admin", "manager"] as Role[]) {
+      const gestao = menuDoPapel(r).find((g) => g.id === "gestao")!;
+      expect(gestao.itens.find((i) => i.id === "mapa-postagem")).toMatchObject({ href: "/mapa-postagem" });
+    }
+    for (const r of ["traffic", "social", "designer", "comercial"] as Role[]) expect(papelVe(r, "/mapa-postagem")).toBe(false);
+    expect(telasParaBusca("manager").some((t) => t.href === "/mapa-postagem" && t.texto.includes("contratado"))).toBe(true);
   });
 
   it("Área CEO continua só do admin; Prospecção só da gestão", () => {

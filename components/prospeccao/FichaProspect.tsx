@@ -4,7 +4,8 @@
 // detalhado, quality gate, conversa (timeline) e as ações do Roberto.
 
 import { useEffect, useState } from "react";
-import { X, RefreshCw, Send, PauseCircle, PlayCircle, UserCog, CheckCircle2, Ban, ArrowRight, CalendarPlus, Gift } from "lucide-react";
+import { X, RefreshCw, Send, PauseCircle, PlayCircle, UserCog, CheckCircle2, Ban, ArrowRight, CalendarPlus, Gift, FileDown } from "lucide-react";
+import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { toast } from "sonner";
 import { chamar } from "@/lib/api/chamar";
 import { Button } from "@/components/ui/button";
@@ -85,6 +86,30 @@ export default function FichaProspect({ id, onClose, onChange }: { id: string; o
     await carregar(); onChange?.();
   };
 
+  // Proposta em PDF a partir do diagnóstico (Leva 7C, N29) — sem R$; conta só a DATA de envio.
+  const baixarProposta = async () => {
+    setOcupado("Gerando proposta");
+    try {
+      const res = await authedFetch(`/api/crm/proposta?prospectId=${id}`);
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `erro ${res.status}`);
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url; a.download = `proposta-${(f?.prospect.nome ?? "prospect").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-")}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(`Não consegui gerar a proposta: ${e instanceof Error ? e.message : "erro"}`);
+    } finally { setOcupado(null); }
+  };
+  const marcarPropostaEnviada = async () => {
+    setOcupado("Registrando proposta");
+    const r = await chamar<{ avisos: string[] }>("/api/crm/proposta", { prospectId: id });
+    setOcupado(null);
+    if (!r.ok) { toast.error(r.erro ?? "Não consegui registrar"); return; }
+    if (r.data?.avisos.length) toast.warning(r.data.avisos.join(" · ")); else toast.success("Proposta registrada como enviada");
+    await carregar(); onChange?.();
+  };
+
   const salvarEdicao = async () => {
     const ok = await acao({ acao: "editar", campos }, "Dados salvos");
     if (ok) { setEditando(false); setCampos({}); }
@@ -127,6 +152,12 @@ export default function FichaProspect({ id, onClose, onChange }: { id: string; o
           <>
             <Button size="sm" disabled={!!ocupado} onClick={() => acao({ acao: "resultado_reuniao", resultado: "realizada", nota: prompt("Como foi a reunião? (opcional)") ?? undefined }, "Reunião realizada")}>Realizada</Button>
             <Button size="sm" variant="secondary" disabled={!!ocupado} onClick={() => acao({ acao: "resultado_reuniao", resultado: "no_show" }, "No-show registrado")}>No-show</Button>
+          </>
+        )}
+        {["reuniao_agendada", "handoff", "reuniao_realizada", "proposta"].includes(p.estagio) && (
+          <>
+            <Button size="sm" variant="secondary" disabled={!!ocupado || !p.diagnostico} title={p.diagnostico ? "Proposta do diagnóstico, sem valores" : "Sem diagnóstico: pesquise de novo antes"} onClick={baixarProposta}><FileDown size={14} /> Proposta (PDF)</Button>
+            {p.estagio !== "proposta" && <Button size="sm" variant="ghost" disabled={!!ocupado} onClick={marcarPropostaEnviada}>Proposta enviada</Button>}
           </>
         )}
         <Button size="sm" variant="ghost" disabled={!!ocupado} onClick={reenriquecer}><RefreshCw size={14} /> Pesquisar de novo</Button>

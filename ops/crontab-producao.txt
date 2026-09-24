@@ -77,3 +77,9 @@
 0 11-23/2 * * * /opt/loneos/scripts/cron-call.sh sync-saldos POST >> /var/log/loneos-sync-saldos.log 2>&1
 5 * * * * /opt/loneos/scripts/cron-call.sh automacoes/vigia POST >> /var/log/loneos-vigia.log 2>&1
 15 12-20 * * 1-5 /opt/loneos/scripts/cron-call.sh cs-nps POST >> /var/log/loneos-cs-nps.log 2>&1
+# Leva 7D (26/09/2026): revisão semanal de operação (nasce desligada na Central) e fechamento do mês das metas
+15 12 * * 1 /opt/loneos/scripts/cron-call.sh revisao-semanal POST >> /var/log/loneos-revisao-semanal.log 2>&1
+0 10 1 * * /opt/loneos/scripts/cron-call.sh metas-fechamento POST >> /var/log/loneos-metas-fechamento.log 2>&1
+# Leva 7A (25/09/2026): vigia de entrega às 11h05 (nasce desligado na Central) e o retrato diário das campanhas às 0h10
+5 14 * * * /opt/loneos/scripts/cron-call.sh vigia-entrega POST >> /var/log/loneos-vigia-entrega.log 2>&1
+10 3 * * * /opt/loneos/scripts/cron-call.sh estado-campanhas POST >> /var/log/loneos-estado-campanhas.log 2>&1

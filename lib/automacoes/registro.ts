@@ -161,6 +161,13 @@ export const AUTOMACOES: Automacao[] = [
     nome: "Clientes pedindo atenção", descricao: "Clientes em risco, em atenção ou que esfriaram, numa seção por responsável e com o porquê de cada um.",
     familia: "CS / time", destino: "grupo do time", cron: "30 12 * * 1", agendaBRT: "segunda, 9h30", maxSilencioHoras: 8 * 24, ensaio: "dry=1",
   }),
+  // Leva 7D (N31). NASCE DESLIGADO (migration 20260926120000 grava enabled=false) e a rota exige o job
+  // ligado explicitamente: sem linha na Central, não manda nada.
+  ep("revisao-semanal", {
+    nome: "Revisão semanal de operação (PDF)",
+    descricao: "A semana que fechou numa folha: posts planejados × no ar × registrados, atrasos, reuniões e as pendências de cada responsável. PDF no grupo interno com legenda curta.",
+    familia: "CS / time", destino: "grupo do time", cron: "15 12 * * 1", agendaBRT: "segunda, 9h15", maxSilencioHoras: 8 * 24, ensaio: "dry=1",
+  }),
   ep("cs-autoavaliacao", {
     nome: "Acurácia do agente", descricao: "Mede quantas sugestões do agente o time aprovou ou recusou nos últimos 7 dias.",
     familia: "CS / time", destino: "grupo do time", cron: "0 13 * * 1", agendaBRT: "segunda, 10h", maxSilencioHoras: 8 * 24, ensaio: "dry=1",
@@ -255,6 +262,16 @@ export const AUTOMACOES: Automacao[] = [
   ep("traffic-policy", {
     nome: "Política de tráfego por cliente", descricao: "Deriva a meta de custo de cada cliente da mediana do próprio histórico.",
     familia: "Tráfego", destino: "sistema", cron: "0 9 1 * *", agendaBRT: "dia 1º de cada mês, 6h", maxSilencioHoras: 32 * 24, ensaio: "dry=1",
+  }),
+  // Leva 7A (N1). NASCE DESLIGADO (migração 20260925120000 grava enabled=false): manda no grupo de tráfego.
+  ep("vigia-entrega", {
+    nome: "Vigia de entrega da conta", descricao: "Às 11h: conta ativa que vinha gastando e não gastou nada hoje — uma mensagem no grupo de tráfego marcando o gestor de cada conta.",
+    familia: "Tráfego", destino: "grupo de tráfego", cron: "5 14 * * *", agendaBRT: "todo dia, 11h05", maxSilencioHoras: 26, ensaio: "dry=1",
+  }),
+  // Leva 7A (N2): o retrato diário de status e orçamento de campanhas e conjuntos. Só grava.
+  ep("estado-campanhas", {
+    nome: "Retrato diário das campanhas", descricao: "Grava status e orçamento de cada campanha e conjunto logo depois da meia-noite — é o que a aba \"O que mudou\" compara.",
+    familia: "Tráfego", destino: "sistema", cron: "10 3 * * *", agendaBRT: "todo dia, 0h10", maxSilencioHoras: 26, ensaio: "dry=1",
   }),
 
   // ── Criativos ───────────────────────────────────────────────────────────────────────────────
@@ -353,6 +370,11 @@ export const AUTOMACOES: Automacao[] = [
   ep("sync-posts", {
     nome: "Postagens do mês + No ar", descricao: "Recalcula posts do mês e último post de cada cliente a partir do Instagram real, e fecha como \"No ar\" o card planejado que casou com um post real (mesmo cliente, ±1 dia, mesmo formato primeiro).",
     familia: "Dados e sync", destino: "sistema", cron: "30 9 * * *", agendaBRT: "todo dia, 6h30", maxSilencioHoras: 26, ensaio: "dry=1",
+  }),
+  // Leva 7D (N33): o histórico das metas. Só grava — não manda mensagem.
+  ep("metas-fechamento", {
+    nome: "Fechamento do mês das metas", descricao: "Calcula cada meta de Metas & OKRs sobre o mês que acabou, da fonte, e grava o histórico (valor, alvo do trimestre e status).",
+    familia: "Dados e sync", destino: "sistema", cron: "0 10 1 * *", agendaBRT: "dia 1º de cada mês, 7h", maxSilencioHoras: 32 * 24, ensaio: "dry=1",
   }),
   ep("warmup-snapshots", {
     nome: "Aquecer relatórios públicos", descricao: "Gera o cache dos relatórios públicos (semana, 2 semanas, mês) de quem tem link ativo.",

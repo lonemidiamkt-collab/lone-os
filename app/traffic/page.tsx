@@ -36,7 +36,10 @@ import DefesaAtiva from "@/components/trafego/defesa/DefesaAtiva";
 // Leva 4: Anúncios Meta lê o que o servidor já buscou da Meta; a conexão mora em Sistema › Conexão Meta.
 import AnunciosMeta from "@/components/trafego/AnunciosMeta";
 import RetornoConexaoMeta from "@/components/trafego/RetornoConexaoMeta";
-import { Sun } from "lucide-react";
+import { Sun, History, ShoppingBag, DatabaseZap } from "lucide-react";
+import OQueMudou from "@/components/trafego/mudancas/OQueMudou";
+import VendasCarteira from "@/components/trafego/vendas/VendasCarteira";
+import CoberturaDados from "@/components/trafego/cobertura/CoberturaDados";
 import { segundaDaSemana } from "@/components/traffic/investimento";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -50,7 +53,7 @@ const STATUS_COLUMNS = [
   { id: "at_risk", title: "Resultados Ruins", color: "bg-destructive" },
 ];
 
-type TabType = "hoje" | "defesa" | "status" | "anuncios";
+type TabType = "hoje" | "defesa" | "status" | "anuncios" | "mudancas" | "vendas" | "cobertura";
 
 export default function TrafficPage() {
   const router = useRouter();
@@ -121,7 +124,7 @@ export default function TrafficPage() {
   // apagar o de outra página fazia a busca abrir a tela certa na aba errada.
   useEffect(() => {
     if (!pendingTab) return;
-    const VALID: TabType[] = ["hoje","defesa","status","anuncios"];
+    const VALID: TabType[] = ["hoje","defesa","status","anuncios","mudancas","vendas","cobertura"];
     // A aba Investimento saiu (Leva 4): verba e ritmo do mês moram em Tráfego › Contas & Verba.
     if (pendingTab === "investimento") { setPendingTab(""); router.push("/traffic/budgets"); return; }
     // "rotina" é o nome antigo do Hoje (Leva 4): link, favorito ou ⌘K antigo cai no Hoje.
@@ -170,6 +173,10 @@ export default function TrafficPage() {
     { key: "defesa", label: "Defesa Ativa", icon: <ShieldAlert size={14} /> },
     { key: "status", label: "Status dos Clientes", icon: <Users size={14} /> },
     { key: "anuncios", label: "Anúncios Meta", icon: <Megaphone size={14} /> },
+    // Leva 7A: o que mexeram ontem (N2), vendas × investimento (N9) e onde falta dado da Meta (N7).
+    { key: "mudancas", label: "O que mudou", icon: <History size={14} /> },
+    { key: "vendas", label: "Vendas", icon: <ShoppingBag size={14} /> },
+    { key: "cobertura", label: "Cobertura de dados", icon: <DatabaseZap size={14} /> },
   ];
 
   return (
@@ -328,6 +335,17 @@ export default function TrafficPage() {
                 )}
               />
             </div>
+          )}
+
+          {/* Leva 7A */}
+          {activeTab === "mudancas" && (
+            <OQueMudou clientIds={effectiveFilter === "all" ? undefined : filteredClients.map((c) => c.id)} currentUser={currentUser} />
+          )}
+          {activeTab === "vendas" && (
+            <VendasCarteira clientes={filteredClients.filter((c) => emOperacao(c)).map((c) => ({ id: c.id, nome: c.nomeFantasia || c.name }))} />
+          )}
+          {activeTab === "cobertura" && (
+            <CoberturaDados clientIds={effectiveFilter === "all" ? undefined : filteredClients.map((c) => c.id)} currentUser={currentUser} />
           )}
 
           {/* Anúncios Meta — lidos pelo servidor (components/trafego/AnunciosMeta.tsx) */}

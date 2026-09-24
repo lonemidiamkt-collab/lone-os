@@ -26,6 +26,7 @@ export const SECAO = {
   proximaAcao: "proxima-acao",
   pendente: "pendente-agora",
   // Marca & Briefing
+  umaPagina: "ficha-uma-pagina",
   identidade: "identidade-visual",
   materiais: "materiais",
   briefing: "briefing",
@@ -38,6 +39,7 @@ export const SECAO = {
   instagram: "instagram",
   datas: "datas-do-mes",
   // Resultados
+  entregasMes: "entregas-do-mes",
   anuncios: "anuncios",
   crescimento: "crescimento",
   provaSocial: "prova-social",

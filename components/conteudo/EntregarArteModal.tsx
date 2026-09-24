@@ -20,8 +20,9 @@ import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { chamar } from "@/lib/api/chamar";
 import { trilha } from "@/lib/obs/trilha";
 import { entregarArte, novoOperationId } from "@/lib/ops/entregar-arte";
+import { aplicarEntregaNoStore, depoisDaEntrega } from "@/components/conteudo/entrega";
 import { infoEtapa, statusNaEtapa } from "@/lib/conteudo/etapas";
-import type { CardAttachment, ContentCard, DesignRequest } from "@/lib/types";
+import type { CardAttachment, ContentCard } from "@/lib/types";
 
 export default function EntregarArteModal({ card, onClose }: { card: ContentCard; onClose: () => void }) {
   const clients = useClientsStore((s) => s.clients);
@@ -97,25 +98,11 @@ export default function EntregarArteModal({ card, onClose }: { card: ContentCard
       if (!r.ok || !r.data?.card) throw new Error(r.erro ?? r.data?.error ?? "não entregou");
       const estado = r.data;
       operationIdRef.current = null;
-      marcarMutacao();
-      useContentStore.setState((s) => ({
-        contentCards: s.contentCards.map((c) => c.id === card.id ? {
-          ...c,
-          status: (estado.card.status as ContentCard["status"]) ?? c.status,
-          designerDeliveredAt: estado.card.designer_delivered_at ?? undefined,
-          designerDeliveredBy: estado.card.designer_delivered_by ?? undefined,
-          alteracaoPendenteEm: undefined, alteracaoMotivo: undefined,
-          imageUrl: estado.card.image_url ?? c.imageUrl,
-        } : c),
-        designRequests: estado.demanda
-          ? s.designRequests.map((d) => d.id === estado.demanda!.id ? { ...d, status: estado.demanda!.status as DesignRequest["status"], attachments: estado.demanda!.attachments } : d)
-          : s.designRequests,
-      }));
+      aplicarEntregaNoStore(card, estado);
       trilha("entregar:ok", { card: card.id, artes: estado.delivery.urls.length });
       pushNotification("content", "Arte entregue pelo Designer", `"${card.title}" (${card.clientName}) — arte pronta para conferir.`, card.clientId, card.id);
-      // Revisão automática por IA contra o briefing (preço, texto, regras). Best-effort.
-      void chamar("/api/cs/revisar-entrega", { cardId: card.id });
-      import("@/lib/audio").then((m) => m.playNotificationSound()).catch(() => {});
+      // Revisão automática por IA contra o briefing (preço, texto, regras) e o som. Best-effort.
+      depoisDaEntrega(card);
       toast.success(statusNaEtapa(estado.card.status, "revisao") && !statusNaEtapa(card.status, "revisao")
         ? `Arte entregue — "${card.title}" foi pra ${infoEtapa("revisao").rotulo}.`
         : `Arte entregue em "${card.title}".`);

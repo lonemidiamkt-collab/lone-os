@@ -4,6 +4,12 @@
 // numa tela só — antes eram "Saldos, Verba & Alertas" aqui e a aba "Investimento" no /traffic, que
 // editava a verba num SEGUNDO lugar e guardava o próximo aporte só no navegador.
 //
+// Leva 7A (pedido do CEO): a tela foi modernizada. O ritmo do mês virou uma barra que se lê de
+// relance (gasto × verba, o marcador de "hoje", a projeção do fim do mês e um status com cor e ícone
+// — components/trafego/contas/CelulaRitmo.tsx); a tabela ganhou hierarquia (cliente em destaque, id
+// da conta quieto), chips de status e de forma de pagamento, números alinhados, cabeçalho fixo, e
+// vira cartões no celular. Os quatro cards do topo filtram a lista.
+//
 // Verba, forma de pagamento, próximo aporte e limite de saldo se editam num lugar só: o modal
 // "Verba e alertas" (POST /api/traffic/budget-rules). Alertas por cliente (liga/desliga, destino,
 // grupo) seguem em Tráfego › Grupos dos Clientes — o link está no cabeçalho.
@@ -12,12 +18,13 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  RefreshCw, Settings2, MessageCircle, AlertTriangle, CheckCircle,
+  RefreshCw, Settings2, MessageCircle, AlertTriangle, CheckCircle, CheckCircle2,
   Wifi, WifiOff, Filter, X, Loader2, Plus, Search, EyeOff, Eye, BellRing, CalendarClock,
+  Wallet, OctagonAlert, Gauge, CircleAlert, CirclePause, QrCode, Barcode, CreditCard,
+  type LucideIcon,
 } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 import {
-  formatDaysRemaining,
   getBalanceSeverity,
   type BalanceSeverity,
 } from "@/lib/meta/account-balance";
@@ -28,10 +35,16 @@ import {
 } from "@/lib/budgets/display";
 import { metaAccountStatus } from "@/lib/budgets/account-status";
 import { cn, todaySP } from "@/lib/utils";
-import { ritmoDoMes, avisoAporte, aportesParaMigrar, syncAtrasado, CHAVE_LOCAL_INVESTIMENTO, type RitmoMes, type AvisoAporte } from "@/lib/trafego/contas-verba";
+import {
+  ritmoDoMes, lerRitmo, foraDoRitmo, avisoAporte, aportesParaMigrar, syncAtrasado, CHAVE_LOCAL_INVESTIMENTO,
+  type RitmoMes, type LeituraRitmo, type AvisoAporte,
+} from "@/lib/trafego/contas-verba";
 import type { EstadoConexao } from "@/lib/trafego/anuncios";
-import CelulaRitmo from "@/components/trafego/contas/CelulaRitmo";
+import CelulaRitmo, { BarraRitmo } from "@/components/trafego/contas/CelulaRitmo";
 import AvisoConexaoMeta from "@/components/trafego/AvisoConexaoMeta";
+import CalendarioRecargas from "@/components/trafego/contas/CalendarioRecargas";
+import { Button } from "@/components/ui/button";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -79,6 +92,7 @@ interface EnrichedAccount extends AdAccountRow {
   criticalThreshold: number | null;
   display: BalanceDisplay;
   ritmo: RitmoMes;
+  leitura: LeituraRitmo;
   aporte: AvisoAporte;
 }
 
@@ -148,8 +162,11 @@ function enrichAccount(a: AdAccountRow, hoje: string): EnrichedAccount {
   const display = getBalanceDisplay(enriched);
   // Ritmo do mês: a MESMA verba que o alerta usa (ad_accounts.monthly_budget) contra o gasto sincronizado.
   const ritmo = ritmoDoMes({ verba: a.monthly_budget, gasto: a.current_month_spend, hoje });
+  // Projeção pelo ritmo dos últimos 3 dias (Insights, gravado no sync). O legado (daily_spend_3d sem
+  // os zeros) não serve aqui: esconderia justamente a conta que parou de gastar.
+  const leitura = lerRitmo(ritmo, a.last_3d_avg_spend);
   const aporte = avisoAporte({ forma: a.clients?.payment_method, proximo: a.clients?.next_payment_date, hoje, pctGasto: ritmo.pctGasto });
-  return { ...enriched, display, ritmo, aporte };
+  return { ...enriched, display, ritmo, leitura, aporte };
 }
 
 const DISPLAY_SEVERITY_ORDER: Record<DisplaySeverity, number> = {
@@ -173,14 +190,20 @@ function sortAccounts(accounts: EnrichedAccount[]): EnrichedAccount[] {
   });
 }
 
-/** Fora do ritmo = acima, acabando rápido ou parado. (Abaixo do ritmo é conta travada — também conta.) */
-function foraDoRitmo(r: RitmoMes): boolean {
-  return r.status === "critical" || r.status === "warning" || r.status === "parado" || r.status === "slow";
-}
-
 function formatCurrency(n: number | null | undefined, currency = "BRL"): string {
   if (n === null || n === undefined) return "—";
   return n.toLocaleString("pt-BR", { style: "currency", currency });
+}
+
+const brl0 = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+
+/** "3,2 dias", "~6h", "> 1 ano" — vírgula de decimal, como o resto da tela. */
+function formatarDias(dias: number | null): string {
+  if (dias === null) return "—";
+  if (dias < 0) return "Negativo";
+  if (dias > 365) return "> 1 ano";
+  if (dias < 1) return `~${Math.max(1, Math.round(dias * 24))}h`;
+  return `${dias.toLocaleString("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: dias < 10 ? 1 : 0 })} dias`;
 }
 
 function timeSince(iso: string | null): string {
@@ -192,41 +215,124 @@ function timeSince(iso: string | null): string {
   return `há ${Math.floor(diff / 86400)} d`;
 }
 
-const COLUNAS = "grid-cols-[24px_minmax(0,1.3fr)_100px_130px_64px_88px_minmax(150px,1fr)_96px]";
+// Colunas da tabela (a partir de md). No xl cabem todas; entre md e xl o status desce para baixo do
+// nome e "dias · gasto/dia" para baixo do saldo — sem rolagem lateral. Abaixo de md viram cartões.
+const COLUNAS = cn(
+  "grid-cols-[minmax(0,1.2fr)_minmax(150px,0.8fr)_minmax(210px,1.25fr)_112px]",
+  "xl:grid-cols-[minmax(0,1.35fr)_128px_minmax(150px,0.9fr)_84px_100px_minmax(240px,1.35fr)_112px]",
+);
 
-// ── Componentes de célula ─────────────────────────────────────
+// ── Peças de célula ───────────────────────────────────────────
 
-function SeverityDot({ severity }: { severity: DisplaySeverity }) {
-  const styles: Record<DisplaySeverity, string> = {
-    critical: "bg-destructive",
-    warning:  "bg-lone-warning",
-    review:   "bg-lone-warning-bg",
-    ok:       "bg-lone-success-bg",
-    paused:   "bg-muted",
-  };
-  return <span className={cn("inline-block w-2 h-2 rounded-full shrink-0", styles[severity])} />;
-}
+const STATUS_CONTA: Record<DisplaySeverity, { rotulo: string | null; cls: string; icone: LucideIcon; faixa: string | null }> = {
+  critical: { rotulo: "Crítico", cls: "bg-lone-danger-bg text-lone-danger border-lone-danger-border",    icone: OctagonAlert,  faixa: "bg-destructive" },
+  warning:  { rotulo: "Atenção", cls: "bg-lone-warning-bg text-lone-warning border-lone-warning-border", icone: AlertTriangle, faixa: "bg-lone-warning" },
+  // Em análise / pendência: o rótulo vem do status da Meta (display.primary).
+  review:   { rotulo: null,      cls: "bg-lone-warning-bg text-lone-warning border-lone-warning-border", icone: CircleAlert,   faixa: "bg-lone-warning-border" },
+  ok:       { rotulo: "Ativa",   cls: "bg-lone-success-bg text-lone-success border-lone-success-border", icone: CheckCircle2,  faixa: null },
+  paused:   { rotulo: null,      cls: "bg-muted text-muted-foreground border-border",                    icone: CirclePause,   faixa: null },
+};
 
-function StatusBadge({ display, syncError }: { display: BalanceDisplay; syncError: string | null }) {
-  if (syncError) {
+function ChipStatus({ account }: { account: EnrichedAccount }) {
+  if (account.sync_error) {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
-        <WifiOff size={9} /> Erro sync
+      <span
+        className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+        title={account.last_error_message ?? account.sync_error}
+      >
+        <WifiOff size={12} className="shrink-0" aria-hidden="true" />
+        <span className="truncate">Leitura falhou</span>
       </span>
     );
   }
-  const config: Record<DisplaySeverity, { label: string; cls: string }> = {
-    critical: { label: "Crítico",     cls: "bg-lone-danger-bg text-destructive border-lone-danger-border"   },
-    warning:  { label: "Atenção",     cls: "bg-lone-warning-bg text-lone-warning border-lone-warning-border" },
-    review:   { label: display.primary, cls: "bg-lone-warning-bg text-lone-warning border-lone-warning-border"                     },
-    ok:       { label: "Ativa",       cls: "bg-lone-success-bg text-lone-success border-lone-success-border"                 },
-    paused:   { label: display.primary, cls: "bg-muted text-muted-foreground border-border"                              },
-  };
-  const c = config[display.severity];
+  const c = STATUS_CONTA[account.display.severity];
+  const Icone = c.icone;
   return (
-    <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-medium", c.cls)}>
-      {c.label}
+    <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium", c.cls)}>
+      <Icone size={12} className="shrink-0" aria-hidden="true" />
+      <span className="truncate">{c.rotulo ?? account.display.primary}</span>
     </span>
+  );
+}
+
+/** Pix / Boleto / Cartão — a forma de pagamento decide se existe saldo que acaba. */
+function formaDePagamento(a: EnrichedAccount): { rotulo: string; icone: LucideIcon; cartao: boolean } {
+  const f = a.clients?.payment_method;
+  if (f === "pix") return { rotulo: "Pix", icone: QrCode, cartao: false };
+  if (f === "boleto") return { rotulo: "Boleto", icone: Barcode, cartao: false };
+  if (f === "cartao") return { rotulo: "Cartão", icone: CreditCard, cartao: true };
+  return a.is_prepaid
+    ? { rotulo: "Pré-pago", icone: Wallet, cartao: false }
+    : { rotulo: "Cartão", icone: CreditCard, cartao: true };
+}
+
+function CelulaSaldo({ account, comDias = false }: { account: EnrichedAccount; comDias?: boolean }) {
+  const forma = formaDePagamento(account);
+  const Icone = forma.icone;
+  const sev = account.display.severity;
+  const soCartao = account.display.primary === "Cartão";
+  return (
+    <div className="min-w-0">
+      <p className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+        <Icone size={12} className="shrink-0" aria-hidden="true" />
+        {forma.rotulo}
+      </p>
+      {soCartao ? (
+        <p className="mt-0.5 text-sm font-medium text-muted-foreground">Cobrado no cartão</p>
+      ) : (
+        <p className={cn(
+          "mt-0.5 text-base font-semibold leading-tight tabular-nums",
+          sev === "critical" ? "text-lone-danger"
+            : sev === "warning" ? "text-lone-warning"
+            : sev === "paused" || sev === "review" ? "text-muted-foreground"
+            : "text-foreground",
+        )}>
+          {account.display.primary}
+        </p>
+      )}
+      <p className="mt-0.5 truncate text-[11px] text-muted-foreground" title={account.display.secondary}>{account.display.secondary}</p>
+      {account.warningThreshold != null && (
+        <p className="text-[11px] text-muted-foreground" title="Limite do aviso de saldo baixo (Verba e alertas)">
+          Avisa abaixo de {formatCurrency(account.warningThreshold)}
+        </p>
+      )}
+      {comDias && (account.daysRemaining !== null || account.avgDailySpend !== null) && (
+        <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
+          {account.daysRemaining !== null && (
+            <span className={cn(account.daysRemaining <= 1 ? "font-medium text-lone-danger" : account.daysRemaining <= 3 ? "font-medium text-lone-warning" : "text-foreground")}>
+              {formatarDias(account.daysRemaining)}
+            </span>
+          )}
+          {account.daysRemaining !== null && account.avgDailySpend !== null && " · "}
+          {account.avgDailySpend !== null && <>{brl0(account.avgDailySpend)}/dia</>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CelulaDias({ dias }: { dias: number | null }) {
+  return (
+    <p className={cn(
+      "text-right text-sm tabular-nums",
+      dias === null ? "text-muted-foreground"
+        : dias <= 1 ? "font-semibold text-lone-danger"
+        : dias <= 3 ? "font-semibold text-lone-warning"
+        : "font-medium text-foreground",
+    )}>
+      {formatarDias(dias)}
+    </p>
+  );
+}
+
+function CelulaGastoDia({ valor }: { valor: number | null }) {
+  return (
+    <div className="text-right">
+      <p className={cn("text-sm tabular-nums", valor === null ? "text-muted-foreground" : "text-foreground")}>
+        {valor !== null ? brl0(valor) : "—"}
+      </p>
+      {valor !== null && <p className="text-[11px] text-muted-foreground">média 3 dias</p>}
+    </div>
   );
 }
 
@@ -811,8 +917,11 @@ export default function ContasVerbaPage() {
   const porFiltro = filtro === "all"
     ? visiveis
     : filtro === "ritmo"
-      ? visiveis.filter((a) => foraDoRitmo(a.ritmo))
-      : visiveis.filter((a) => a.display.severity === filtro);
+      ? visiveis.filter((a) => foraDoRitmo(a.leitura))
+      // O card "Atenção" conta saldo baixo E pendência na conta (review): o filtro mostra os dois.
+      : filtro === "warning"
+        ? visiveis.filter((a) => a.display.severity === "warning" || a.display.severity === "review")
+        : visiveis.filter((a) => a.display.severity === filtro);
   const q = clientSearch.trim().toLowerCase();
   const filtered = q
     ? porFiltro.filter((a) => a.clientName.toLowerCase().includes(q) || a.meta_account_id.toLowerCase().includes(q))
@@ -822,7 +931,7 @@ export default function ContasVerbaPage() {
   const warningCount   = visiveis.filter((a) => a.display.severity === "warning").length;
   const reviewCount    = visiveis.filter((a) => a.display.severity === "review").length;
   const comVerba       = visiveis.filter((a) => a.ritmo.status !== "sem_verba").length;
-  const foraRitmoCount = visiveis.filter((a) => foraDoRitmo(a.ritmo)).length;
+  const foraRitmoCount = visiveis.filter((a) => foraDoRitmo(a.leitura)).length;
 
   // Sync atrasado: o servidor sincroniza de 2 em 2 horas das 8h às 20h (sync-saldos). O antigo
   // "mais de 30 min" acendia o dia inteiro e ninguém mais olhava.
@@ -847,184 +956,251 @@ export default function ContasVerbaPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex flex-1 items-center justify-center py-24" role="status" aria-label="Carregando contas">
         <Loader2 size={20} className="animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  const linha = (account: EnrichedAccount, oculta = false) => {
-    const isCritical = account.display.severity === "critical";
-    const isWarning  = account.display.severity === "warning";
-    const isReview   = account.display.severity === "review";
-    const isPaused   = account.display.severity === "paused";
+
+  // ── Ações da conta (linha e cartão) ───────────────────────
+  const acoes = (account: EnrichedAccount, oculta: boolean, comRotulo = false) => {
     const waLink = buildWaLink(account);
-
+    const critico = account.display.severity === "critical" && !oculta;
+    const botao = cn(
+      "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border text-muted-foreground transition-colors",
+      "hover:border-primary/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      comRotulo ? "px-2.5 text-xs" : "w-8",
+    );
     return (
-      <div
-        key={account.id}
-        className={cn(
-          "grid gap-3 px-4 py-3 border-b border-border last:border-b-0 items-center transition-colors hover:bg-muted/40",
-          COLUNAS,
-          // Crítico é o mais alto: fundo tintado + borda cheia; atenção só a borda.
-          !oculta && isCritical && "bg-lone-danger-bg border-l-4 border-l-destructive",
-          !oculta && isWarning  && "border-l-[3px] border-l-lone-warning",
-          !oculta && isReview   && "border-l-[3px] border-l-lone-warning-border",
-          (isPaused || oculta) && "opacity-60",
+      <div className={cn("flex items-center gap-1.5", comRotulo ? "flex-wrap" : "justify-end")}>
+        {waLink ? (
+          <a
+            href={waLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`WhatsApp financeiro — ${account.clientName}`}
+            aria-label={`WhatsApp financeiro — ${account.clientName}`}
+            className={cn(
+              botao,
+              critico
+                ? "border-lone-danger-border text-lone-danger hover:bg-lone-danger-bg hover:text-lone-danger"
+                : "hover:border-lone-success-border hover:text-lone-success",
+            )}
+          >
+            <MessageCircle size={14} aria-hidden="true" />
+            {comRotulo && "WhatsApp"}
+          </a>
+        ) : (
+          <button
+            type="button"
+            disabled
+            title="Cadastre o telefone financeiro em Verba e alertas"
+            aria-label="WhatsApp financeiro indisponível: falta o telefone"
+            className={cn(botao, "cursor-not-allowed opacity-50 hover:border-border hover:text-muted-foreground")}
+          >
+            <MessageCircle size={14} aria-hidden="true" />
+            {comRotulo && "WhatsApp"}
+          </button>
         )}
-      >
-        {/* Dot */}
-        <div className="flex items-center justify-center">
-          <SeverityDot severity={account.display.severity} />
-        </div>
-
-        {/* Cliente / Conta */}
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground truncate">{account.clientName}</p>
-          <div className="flex items-center gap-2 mt-0.5">
-            <p className="text-[10px] text-muted-foreground font-mono truncate">{account.meta_account_id}</p>
-            <button
-              onClick={(e) => handleToggleBillingType(account, e)}
-              disabled={togglingId === account.id}
-              title={`${account.is_prepaid ? "Pré-pago" : "Pós-pago"} · definido ${account.billing_type_source === "manual" ? "manualmente" : "automaticamente"} · clique pra trocar`}
-              className={cn(
-                "text-[9px] px-1.5 py-0.5 rounded border transition-all cursor-pointer hover:opacity-70 disabled:opacity-40",
-                account.is_prepaid
-                  ? "text-primary border-primary/20 bg-primary/[0.06]"
-                  : "text-chart-4 border-chart-4/20 bg-chart-4/5",
-              )}
-            >
-              {account.is_prepaid ? "pré" : "pós"}
-              {account.billing_type_source === "manual" && " (manual)"}
-            </button>
-          </div>
-          {account.aporte && (
-            <p className={cn(
-              "mt-0.5 flex items-center gap-1 text-[10px]",
-              account.aporte.tipo === "vencido" ? "text-destructive" : "text-lone-warning",
-            )}>
-              <CalendarClock size={10} /> {account.aporte.texto}
-            </p>
-          )}
-        </div>
-
-        {/* Status */}
-        <div>
-          <StatusBadge display={account.display} syncError={account.sync_error} />
-          {account.sync_error && (
-            <p
-              className="text-[9px] text-muted-foreground mt-0.5 truncate cursor-help max-w-24"
-              title={account.last_error_message ?? account.sync_error}
-            >
-              {account.sync_error}
-            </p>
-          )}
-        </div>
-
-        {/* Saldo disponível */}
-        <div>
-          <p className={cn(
-            "text-[15px] font-semibold leading-tight",
-            isCritical ? "text-destructive"
-              : isWarning ? "text-lone-warning"
-              : account.display.primary === "Ativa" ? "text-lone-success"
-              : isPaused || isReview ? "text-muted-foreground"
-              : "text-foreground",
-          )}>
-            {account.display.primary}
-          </p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">{account.display.secondary}</p>
-          {account.warningThreshold != null && (
-            <p className="text-[10px] text-muted-foreground" title="Limite do aviso de saldo baixo (Verba e alertas)">
-              limite {formatCurrency(account.warningThreshold)}
-            </p>
-          )}
-        </div>
-
-        {/* Dias restantes */}
-        <div>
-          <p className={cn(
-            "text-sm font-medium",
-            account.daysRemaining !== null && account.daysRemaining <= 1
-              ? "text-destructive"
-              : "text-foreground",
-          )}>
-            {formatDaysRemaining(account.daysRemaining)}
-          </p>
-        </div>
-
-        {/* Gasto médio */}
-        <div>
-          <p className="text-sm text-foreground">
-            {account.avgDailySpend !== null ? formatCurrency(account.avgDailySpend) : "—"}
-          </p>
-          {account.avgDailySpend !== null && (
-            <p className="text-[10px] text-muted-foreground">/dia (3d)</p>
-          )}
-        </div>
-
-        {/* Ritmo do mês */}
-        <CelulaRitmo ritmo={account.ritmo} onDefinirVerba={() => setModalAccount(account)} />
-
-        {/* Ações */}
-        <div className="flex items-center gap-1.5">
-          {waLink ? (
-            <a
-              href={waLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={`WhatsApp financeiro — ${account.clientName}`}
-              className={cn(
-                "p-1.5 rounded-lg border transition-all",
-                isCritical && !oculta
-                  ? "text-destructive border-lone-danger-border hover:bg-lone-danger-bg"
-                  : "text-muted-foreground border-border hover:text-lone-success hover:border-lone-success-border",
-              )}
-            >
-              <MessageCircle size={13} />
-            </a>
-          ) : (
-            <button
-              disabled
-              title="Cadastre o telefone financeiro em Verba e alertas"
-              className="p-1.5 rounded-lg border border-border text-muted-foreground cursor-not-allowed"
-            >
-              <MessageCircle size={13} />
-            </button>
-          )}
-          <button
-            onClick={() => setModalAccount(account)}
-            title="Verba e alertas"
-            aria-label={`Verba e alertas — ${account.clientName}`}
-            className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
-          >
-            <Settings2 size={13} />
-          </button>
-          <button
-            onClick={() => alternarOculta(account)}
-            title={oculta ? "Mostrar de novo nas telas do tráfego" : "Ocultar das telas do tráfego (Início, Hoje, Anúncios)"}
-            aria-label={oculta ? `Mostrar ${account.clientName}` : `Ocultar ${account.clientName}`}
-            className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
-          >
-            {oculta ? <Eye size={13} /> : <EyeOff size={13} />}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setModalAccount(account)}
+          title="Verba e alertas"
+          aria-label={`Verba e alertas — ${account.clientName}`}
+          className={botao}
+        >
+          <Settings2 size={14} aria-hidden="true" />
+          {comRotulo && "Verba e alertas"}
+        </button>
+        <button
+          type="button"
+          onClick={() => alternarOculta(account)}
+          title={oculta ? "Mostrar de novo nas telas do tráfego" : "Ocultar das telas do tráfego (Início, Hoje, Anúncios)"}
+          aria-label={oculta ? `Mostrar ${account.clientName}` : `Ocultar ${account.clientName}`}
+          className={botao}
+        >
+          {oculta ? <Eye size={14} aria-hidden="true" /> : <EyeOff size={14} aria-hidden="true" />}
+          {comRotulo && (oculta ? "Mostrar" : "Ocultar")}
+        </button>
       </div>
     );
   };
 
-  const cards: { chave: Filtro; label: string; value: number; sub: string; color: string }[] = [
-    { chave: "all", label: "Contas", value: visiveis.length, sub: "monitoradas", color: "text-foreground" },
-    { chave: "warning", label: "Atenção", value: warningCount + reviewCount, sub: "saldo baixo ou pendência na conta", color: "text-lone-warning" },
-    { chave: "critical", label: "Críticos", value: criticalCount, sub: "ação imediata", color: "text-destructive" },
-    { chave: "ritmo", label: "Fora do ritmo", value: foraRitmoCount, sub: `gasto do mês × verba · ${comVerba} com verba definida`, color: foraRitmoCount > 0 ? "text-lone-warning" : "text-foreground" },
+  // Id da conta (quieto) + pré/pós, que troca no clique.
+  const metaConta = (account: EnrichedAccount) => (
+    <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+      <span className="truncate font-mono">{account.meta_account_id}</span>
+      <span aria-hidden="true">·</span>
+      <button
+        type="button"
+        onClick={(e) => handleToggleBillingType(account, e)}
+        disabled={togglingId === account.id}
+        title={`${account.is_prepaid ? "Pré-pago" : "Pós-pago"} · definido ${account.billing_type_source === "manual" ? "manualmente" : "automaticamente"} · clique pra trocar`}
+        className="shrink-0 whitespace-nowrap rounded underline-offset-2 transition-colors hover:text-primary hover:underline disabled:opacity-40"
+      >
+        {account.is_prepaid ? "pré-pago" : "pós-pago"}
+        {account.billing_type_source === "manual" && " (manual)"}
+      </button>
+    </div>
+  );
+
+  const avisos = (account: EnrichedAccount) => (
+    <>
+      {account.aporte && (
+        <p className={cn(
+          "mt-1.5 flex items-center gap-1 text-[11px] font-medium",
+          account.aporte.tipo === "vencido" ? "text-lone-danger" : "text-lone-warning",
+        )}>
+          <CalendarClock size={12} className="shrink-0" aria-hidden="true" /> {account.aporte.texto}
+        </p>
+      )}
+      {account.sync_error && (
+        <p className="mt-1 truncate text-[11px] text-muted-foreground" title={account.last_error_message ?? account.sync_error}>
+          {account.sync_error}
+        </p>
+      )}
+    </>
+  );
+
+  // Faixa colorida à esquerda (sem deslocar o conteúdo): crítico e atenção se acham de relance.
+  const faixa = (account: EnrichedAccount, oculta: boolean) => {
+    const f = oculta ? null : STATUS_CONTA[account.display.severity].faixa;
+    return f ? <span className={cn("absolute inset-y-0 left-0 w-[3px]", f)} aria-hidden="true" /> : null;
+  };
+
+  const linha = (account: EnrichedAccount, oculta = false) => {
+    const apagada = oculta || account.display.severity === "paused";
+    return (
+      <div
+        key={account.id}
+        role="row"
+        className={cn(
+          "relative grid items-center gap-4 border-b border-border px-4 py-3.5 transition-colors last:border-b-0 hover:bg-muted/40",
+          COLUNAS,
+          !oculta && account.display.severity === "critical" && "bg-lone-danger-bg",
+          apagada && "opacity-60",
+        )}
+      >
+        {faixa(account, oculta)}
+
+        {/* Cliente / conta */}
+        <div role="cell" className="min-w-0">
+          <p className="truncate text-sm font-medium text-foreground" title={account.clientName}>{account.clientName}</p>
+          {metaConta(account)}
+          <div className="mt-1.5 xl:hidden"><ChipStatus account={account} /></div>
+          {avisos(account)}
+        </div>
+
+        {/* Status (xl) */}
+        <div role="cell" className="hidden min-w-0 xl:block"><ChipStatus account={account} /></div>
+
+        {/* Saldo (com dias · gasto/dia embaixo antes do xl) */}
+        <div role="cell" className="min-w-0">
+          <div className="xl:hidden"><CelulaSaldo account={account} comDias /></div>
+          <div className="hidden xl:block"><CelulaSaldo account={account} /></div>
+        </div>
+
+        <div role="cell" className="hidden xl:block"><CelulaDias dias={account.daysRemaining} /></div>
+        <div role="cell" className="hidden xl:block"><CelulaGastoDia valor={account.avgDailySpend} /></div>
+
+        {/* Ritmo do mês */}
+        <div role="cell" className="min-w-0">
+          <CelulaRitmo ritmo={account.ritmo} leitura={account.leitura} onDefinirVerba={() => setModalAccount(account)} />
+        </div>
+
+        <div role="cell">{acoes(account, oculta)}</div>
+      </div>
+    );
+  };
+
+  // Celular: um cartão por conta, na mesma ordem de leitura da linha.
+  const cartao = (account: EnrichedAccount, oculta = false) => (
+    <article
+      key={account.id}
+      aria-label={account.clientName}
+      className={cn(
+        "relative overflow-hidden rounded-xl border border-border bg-card p-4",
+        !oculta && account.display.severity === "critical" && "border-lone-danger-border",
+        (oculta || account.display.severity === "paused") && "opacity-60",
+      )}
+    >
+      {faixa(account, oculta)}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-foreground">{account.clientName}</p>
+          {metaConta(account)}
+        </div>
+        <div className="shrink-0"><ChipStatus account={account} /></div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <CelulaSaldo account={account} />
+        <div className="space-y-2 text-right">
+          <div>
+            <p className="text-[11px] font-medium text-muted-foreground">Dura</p>
+            <CelulaDias dias={account.daysRemaining} />
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-muted-foreground">Gasto/dia</p>
+            <p className="text-sm tabular-nums text-foreground">{account.avgDailySpend !== null ? brl0(account.avgDailySpend) : "—"}</p>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 border-t border-border pt-3">
+        <p className="mb-1 text-[11px] font-medium text-muted-foreground">Ritmo do mês</p>
+        <CelulaRitmo ritmo={account.ritmo} leitura={account.leitura} onDefinirVerba={() => setModalAccount(account)} />
+      </div>
+      {avisos(account)}
+      <div className="mt-3">{acoes(account, oculta, true)}</div>
+    </article>
+  );
+
+  const cabecalhoTabela = (
+    <div role="row" className={cn("sticky top-0 z-10 grid gap-4 border-b border-border bg-card px-4 py-2.5", COLUNAS)}>
+      {([
+        ["Cliente / conta", ""],
+        ["Status", "hidden xl:block"],
+        ["Saldo", ""],
+        ["Dura", "hidden xl:block text-right"],
+        ["Gasto/dia", "hidden xl:block text-right"],
+        ["Ritmo do mês", ""],
+        ["Ações", "text-right"],
+      ] as const).map(([h, cls]) => (
+        <p key={h} role="columnheader" className={cn("text-lone-eyebrow uppercase text-muted-foreground", cls)}>{h}</p>
+      ))}
+    </div>
+  );
+
+  const lista = (contas: EnrichedAccount[], oculta = false) => (
+    <>
+      {/* Tabela (md+): rola por dentro, com o cabeçalho preso no topo. */}
+      <div
+        role="table"
+        aria-label={oculta ? "Contas ocultas" : "Contas de anúncio"}
+        className={cn("hidden md:block", !oculta && "max-h-[calc(100dvh-8rem)] overflow-y-auto")}
+      >
+        {cabecalhoTabela}
+        <div role="rowgroup">{contas.map((a) => linha(a, oculta))}</div>
+      </div>
+      {/* Cartões (celular) */}
+      <div className={cn("space-y-3 md:hidden", oculta && "p-3")}>{contas.map((a) => cartao(a, oculta))}</div>
+    </>
+  );
+
+  const cards: { chave: Filtro; label: string; value: number; sub: string; color: string; icone: LucideIcon }[] = [
+    { chave: "all", label: "Contas", value: visiveis.length, sub: "monitoradas", color: "text-foreground", icone: Wallet },
+    { chave: "warning", label: "Atenção", value: warningCount + reviewCount, sub: "saldo baixo ou pendência na conta", color: warningCount + reviewCount > 0 ? "text-lone-warning" : "text-foreground", icone: AlertTriangle },
+    { chave: "critical", label: "Críticos", value: criticalCount, sub: "ação imediata", color: criticalCount > 0 ? "text-lone-danger" : "text-foreground", icone: OctagonAlert },
+    { chave: "ritmo", label: "Fora do ritmo", value: foraRitmoCount, sub: `acima, abaixo ou travadas · ${comVerba} com verba`, color: foraRitmoCount > 0 ? "text-lone-warning" : "text-foreground", icone: Gauge },
   ];
+  const filtroAtivo = cards.find((c) => c.chave === filtro);
 
   return (
-    <div className="flex flex-col flex-1 overflow-auto bg-background">
-      <div className="max-w-[1400px] w-full mx-auto px-6 py-6 space-y-5">
+    <TooltipProvider delayDuration={150}>
+    <div className="flex flex-1 flex-col bg-background">
+      <div className="mx-auto w-full max-w-[1400px] space-y-5 px-4 py-6 sm:px-6">
         {loadError && (
-          <div className="text-[12px] text-lone-danger bg-lone-danger-bg border border-lone-danger-border rounded-lg px-3 py-2">
+          <div role="alert" className="rounded-lg border border-lone-danger-border bg-lone-danger-bg px-3 py-2 text-xs text-lone-danger">
             {loadError}
           </div>
         )}
@@ -1036,108 +1212,110 @@ export default function ContasVerbaPage() {
           />
         )}
 
-        {/* Header */}
+        {/* Cabeçalho */}
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-lone-h1 tracking-tight text-foreground">Contas &amp; Verba</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Saldo, limite e ritmo do mês de cada conta de anúncio.</p>
-            <div className="flex items-center gap-1.5 mt-1">
+            <p className="mt-0.5 text-sm text-muted-foreground">Saldo, limite e ritmo do mês de cada conta de anúncio.</p>
+            <p className={cn("mt-1.5 flex items-center gap-1.5 text-xs", syncStale ? "text-lone-warning" : "text-muted-foreground")}>
+              {syncStale ? <WifiOff size={12} className="shrink-0" aria-hidden="true" /> : <Wifi size={12} className="shrink-0" aria-hidden="true" />}
               {syncStale
-                ? <WifiOff size={11} className="text-lone-warning" />
-                : <Wifi size={11} className="text-muted-foreground" />}
-              <p className={cn("text-[11px]", syncStale ? "text-lone-warning" : "text-muted-foreground")}>
-                {syncStale
-                  ? `Última sincronização ${timeSince(lastSyncAt)} — o servidor sincroniza de 2 em 2 horas (8h–20h); confira a Conexão Meta ou clique em Sincronizar`
-                  : `Última sincronização com a Meta ${timeSince(lastSyncAt)}`}
-              </p>
-            </div>
+                ? `Última sincronização ${timeSince(lastSyncAt)} — o servidor sincroniza de 2 em 2 horas (8h–20h); confira a Conexão Meta ou clique em Sincronizar`
+                : `Última sincronização com a Meta ${timeSince(lastSyncAt)}`}
+            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <Link
-              href="/settings/grupos"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground hover:border-primary/30 hover:text-primary transition-all"
-            >
-              <BellRing size={12} />
-              Alertas por cliente
-            </Link>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground hover:border-primary/30 hover:text-primary transition-all"
-            >
-              <Plus size={12} />
-              Adicionar Conta
-            </button>
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground hover:border-primary/30 hover:text-primary transition-all disabled:opacity-50"
-            >
-              <RefreshCw size={12} className={syncing ? "animate-spin" : ""} />
-              {syncing ? "Sincronizando..." : "Sincronizar"}
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="secondary" size="sm">
+              <Link href="/settings/grupos"><BellRing size={14} aria-hidden="true" /> Alertas por cliente</Link>
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setShowAddModal(true)}>
+              <Plus size={14} aria-hidden="true" /> Adicionar conta
+            </Button>
+            <Button size="sm" onClick={handleSync} disabled={syncing}>
+              <RefreshCw size={14} className={syncing ? "animate-spin" : ""} aria-hidden="true" />
+              {syncing ? "Sincronizando…" : "Sincronizar"}
+            </Button>
           </div>
         </div>
 
-        {/* Cards de resumo */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {cards.map((card) => (
-            <button
-              key={card.label}
-              onClick={() => setFiltro(filtro === card.chave && card.chave !== "all" ? "all" : card.chave)}
-              className={cn(
-                "text-left p-4 rounded-xl border transition-all",
-                filtro === card.chave
-                  ? "bg-primary/5 border-primary/25"
-                  : "bg-card border-border hover:border-primary/20",
-              )}
-            >
-              <p className="text-lone-eyebrow uppercase text-muted-foreground mb-1.5">{card.label}</p>
-              <p className={cn("text-2xl font-semibold tabular-nums", card.color)}>{card.value}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">{card.sub}</p>
-            </button>
-          ))}
+        {/* Cards de resumo — cada um filtra a lista (clicar de novo limpa). */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {cards.map((card) => {
+            const ativo = filtro === card.chave;
+            const Icone = card.icone;
+            return (
+              <button
+                key={card.label}
+                type="button"
+                aria-pressed={ativo}
+                onClick={() => setFiltro(ativo && card.chave !== "all" ? "all" : card.chave)}
+                className={cn(
+                  "group rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  ativo ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:border-primary/25",
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-lone-eyebrow uppercase text-muted-foreground">{card.label}</p>
+                  <Icone size={16} className={cn("shrink-0", ativo ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+                </div>
+                <p className={cn("mt-2 text-lone-hero tabular-nums tracking-tight", card.color)}>{card.value}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{card.sub}</p>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Busca por cliente */}
-        <div className="relative">
-          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={clientSearch}
-            onChange={(e) => setClientSearch(e.target.value)}
-            placeholder="Buscar cliente por nome ou ID da conta…"
-            className="w-full rounded-lg border border-border bg-card pl-9 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
-          />
-          {clientSearch && (
-            <button
-              onClick={() => setClientSearch("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label="Limpar busca"
-            >
-              <X size={14} />
-            </button>
+        {/* Leva 7A (N3): quem precisa recarregar Pix/boleto e até quando, com rascunho do lembrete. */}
+        <CalendarioRecargas
+          hoje={todaySP()}
+          contas={visiveis.map((a) => ({
+            id: a.id, clientName: a.clientName, forma: a.clients?.payment_method ?? null, isPrepaid: a.is_prepaid,
+            saldo: a.is_prepaid ? a.availableBalance : null, ritmoDia: a.last_3d_avg_spend ?? a.avgDailySpend,
+            proximoAporte: a.clients?.next_payment_date ?? null, pixKey: a.clients?.client_pix_key ?? null,
+            telefone: a.clients?.client_finance_phone ?? null,
+          }))}
+        />
+
+        {/* Busca + filtro ativo */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <input
+              type="search"
+              value={clientSearch}
+              onChange={(e) => setClientSearch(e.target.value)}
+              placeholder="Buscar cliente por nome ou ID da conta…"
+              aria-label="Buscar cliente por nome ou ID da conta"
+              className="h-9 w-full rounded-lg border border-input bg-card pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+            {clientSearch && (
+              <button
+                type="button"
+                onClick={() => setClientSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Limpar busca"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {filtro !== "all" && (
+            <span className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 text-xs text-foreground">
+              <Filter size={12} className="text-primary" aria-hidden="true" />
+              Só {filtroAtivo?.label.toLowerCase() ?? filtro}
+              <span className="tabular-nums text-muted-foreground">({filtered.length})</span>
+              <button type="button" onClick={() => setFiltro("all")} aria-label="Limpar filtro" className="text-muted-foreground hover:text-foreground">
+                <X size={12} />
+              </button>
+            </span>
           )}
         </div>
 
-        {/* Filtro ativo */}
-        {filtro !== "all" && (
-          <div className="flex items-center gap-2">
-            <Filter size={12} className="text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">
-              Mostrando apenas:
-              <span className="ml-1 font-medium text-foreground">{cards.find((c) => c.chave === filtro)?.label ?? filtro}</span>
-            </span>
-            <button onClick={() => setFiltro("all")} aria-label="Limpar filtro" className="text-muted-foreground hover:text-foreground transition-colors">
-              <X size={12} />
-            </button>
-          </div>
-        )}
-
-        {/* Tabela */}
+        {/* Lista */}
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <CheckCircle size={24} className="mb-2 text-muted-foreground" />
-            <p className="text-sm">
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-16 text-center text-muted-foreground">
+            <CheckCircle size={22} className="mb-2" aria-hidden="true" />
+            <p className="text-sm text-foreground">
               {accounts.length === 0
                 ? "Nenhuma conta Meta cadastrada ainda"
                 : q
@@ -1145,58 +1323,57 @@ export default function ContasVerbaPage() {
                 : "Nenhuma conta nessa categoria"}
             </p>
             {accounts.length === 0 && (
-              <p className="text-xs mt-1">Adicione o ID da conta Meta em cada cliente para começar o monitoramento</p>
+              <p className="mt-1 text-xs">Clique em Adicionar conta para vincular uma conta do Meta Ads a um cliente.</p>
             )}
           </div>
         ) : (
-          <div className="rounded-xl border border-border overflow-x-auto">
-            <div className="min-w-[980px]">
-              {/* Cabeçalho */}
-              <div className={cn("grid gap-3 px-4 py-2.5 bg-card border-b border-border", COLUNAS)}>
-                {["", "Cliente / Conta", "Status", "Saldo disponível", "Dias", "Gasto/dia", "Ritmo do mês", "Ações"].map((h, i) => (
-                  <p key={i} className="text-lone-eyebrow uppercase text-muted-foreground">{h}</p>
-                ))}
-              </div>
-              {filtered.map((a) => linha(a))}
-            </div>
+          <div className="md:overflow-hidden md:rounded-xl md:border md:border-border md:bg-card">
+            {lista(filtered)}
           </div>
         )}
 
         {/* Contas ocultas */}
         {escondidas.length > 0 && (
-          <div className="rounded-xl border border-border">
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
             <button
+              type="button"
+              aria-expanded={verOcultas}
               onClick={() => setVerOcultas((v) => !v)}
-              className="flex w-full items-center justify-between px-4 py-2.5 text-left text-xs text-muted-foreground hover:text-foreground"
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
-              <span className="flex items-center gap-1.5"><EyeOff size={12} /> {escondidas.length} conta(s) oculta(s) — não aparecem no Início, no Hoje nem nos Anúncios</span>
-              <span>{verOcultas ? "Esconder" : "Ver"}</span>
+              <span className="flex items-center gap-1.5"><EyeOff size={13} aria-hidden="true" /> {escondidas.length} conta(s) oculta(s) — não aparecem no Início, no Hoje nem nos Anúncios</span>
+              <span className="shrink-0 font-medium">{verOcultas ? "Esconder" : "Ver"}</span>
             </button>
-            {verOcultas && (
-              <div className="overflow-x-auto border-t border-border">
-                <div className="min-w-[980px]">{escondidas.map((a) => linha(a, true))}</div>
-              </div>
-            )}
+            {verOcultas && <div className="border-t border-border">{lista(escondidas, true)}</div>}
           </div>
         )}
 
         {/* Legenda */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[10px] text-muted-foreground pt-1">
-          {[
-            { color: "bg-destructive",  label: "Crítico — saldo abaixo do limite, <1d ou pagamento falhou" },
-            { color: "bg-lone-warning",  label: "Atenção — saldo baixo ou <3d" },
-            { color: "bg-lone-warning-bg",  label: "Em análise — pendência na conta Meta" },
-            { color: "bg-lone-success-bg",label: "Ativa — saldo OK ou cartão sem limite" },
-            { color: "bg-muted",   label: "Desativada / fora de operação" },
-          ].map((item) => (
-            <div key={item.label} className="flex items-center gap-1.5">
-              <span className={cn("w-2 h-2 rounded-full shrink-0", item.color)} />
-              {item.label}
-            </div>
-          ))}
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-0.5 rounded-full bg-foreground" aria-hidden="true" />
-            Ritmo do mês: a barra é o gasto sobre a verba; o traço é o dia de hoje
+        <div className="grid gap-4 rounded-xl border border-border bg-card p-4 text-[11px] text-muted-foreground md:grid-cols-2">
+          <div>
+            <p className="mb-2 text-lone-eyebrow uppercase">Ritmo do mês</p>
+            <BarraRitmo leitura={{ tom: "no_ritmo", pctGasto: 42, pctProjetado: 88, pctHoje: 50 }} className="max-w-[260px]" />
+            <ul className="mt-2.5 space-y-1">
+              <li className="flex items-center gap-2"><span className="h-2 w-5 rounded-full bg-lone-success" aria-hidden="true" /> Barra cheia: o que já saiu da verba do mês</li>
+              <li className="flex items-center gap-2"><span className="h-2 w-5 rounded-full" style={{ background: "color-mix(in srgb, var(--lone-success) 30%, transparent)" }} aria-hidden="true" /> Parte clara: onde o mês fecha no ritmo dos últimos 3 dias</li>
+              <li className="flex items-center gap-2"><span className="ml-2 mr-2 h-3.5 w-[3px] rounded-full bg-foreground" aria-hidden="true" /> Traço: onde o gasto deveria estar hoje</li>
+            </ul>
+            <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              <span className="text-lone-success">No ritmo</span>
+              <span className="text-lone-warning">Acima (estoura antes do fim)</span>
+              <span className="text-lone-info">Abaixo</span>
+              <span className="text-lone-danger">Travada</span>
+            </p>
+          </div>
+          <div>
+            <p className="mb-2 text-lone-eyebrow uppercase">Status da conta</p>
+            <ul className="space-y-1">
+              <li className="flex items-center gap-2"><OctagonAlert size={12} className="shrink-0 text-lone-danger" aria-hidden="true" /> Crítico — saldo abaixo do limite, menos de 1 dia ou pagamento falhou</li>
+              <li className="flex items-center gap-2"><AlertTriangle size={12} className="shrink-0 text-lone-warning" aria-hidden="true" /> Atenção — saldo baixo ou menos de 3 dias</li>
+              <li className="flex items-center gap-2"><CircleAlert size={12} className="shrink-0 text-lone-warning" aria-hidden="true" /> Em análise — pendência na conta Meta</li>
+              <li className="flex items-center gap-2"><CheckCircle2 size={12} className="shrink-0 text-lone-success" aria-hidden="true" /> Ativa — saldo OK ou cartão sem limite</li>
+              <li className="flex items-center gap-2"><CirclePause size={12} className="shrink-0" aria-hidden="true" /> Desativada / fora de operação</li>
+            </ul>
           </div>
         </div>
       </div>
@@ -1219,5 +1396,6 @@ export default function ContasVerbaPage() {
         />
       )}
     </div>
+    </TooltipProvider>
   );
 }

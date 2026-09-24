@@ -6,6 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { aplicarAjusteNoCard } from "@/lib/cs/card";
 import { estaPausado } from "@/lib/clients/pausa";
 import { criarLimite } from "@/lib/portal/limite";
+import { FRASE_SEM_ALTERACAO, motivoSemAlteracao } from "@/lib/portal/agenda";
 
 // POST /api/portal/[token]/approve — o CLIENTE aprova (ou pede ajuste em) uma arte entregue, pelo
 // próprio link do portal. Valida token + que o card é DELE. Aprovar → client_approved_at + notifica o
@@ -55,10 +56,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   // O card TEM que ser deste cliente (não dá pra aprovar arte de outro).
   const { data: card } = await supabaseAdmin
-    .from("content_cards").select("id, title, designer_delivered_at, client_approved_at")
+    .from("content_cards").select("id, title, status, archived_at, designer_delivered_at, client_approved_at")
     .eq("id", cardId).eq("client_id", client.id as string).maybeSingle();
   if (!card) return NextResponse.json({ error: "Arte não encontrada" }, { status: 404 });
-  if (!card.designer_delivered_at) return NextResponse.json({ error: "Essa arte ainda não foi entregue." }, { status: 409 });
+  if (action === "approve" && !card.designer_delivered_at) return NextResponse.json({ error: "Essa arte ainda não foi entregue." }, { status: 409 });
+  // N35: o pedido de alteração vale para arte entregue, aprovada ou agendada — não só para a que
+  // espera aprovação. Post no ar, card encerrado e arte ainda em produção têm a frase certa.
+  const semAlteracao = action === "ajuste" ? motivoSemAlteracao(card) : null;
+  if (semAlteracao) return NextResponse.json({ error: FRASE_SEM_ALTERACAO[semAlteracao] }, { status: 409 });
 
   const nome = (client.nome_fantasia as string) || (client.name as string) || "Cliente";
   const titulo = (card.title as string) || "arte";
@@ -83,7 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   // designer_delivered_at). O pedido do cliente morria ali. Agora usa exatamente o mesmo caminho do
   // WhatsApp: volta pro designer, reabre a demanda e registra o motivo no briefing.
   const ok = await aplicarAjusteNoCard({
-    cardId, correcao: comment, clientId: client.id as string, clienteNome: nome,
+    cardId, correcao: comment, clientId: client.id as string, clienteNome: nome, canal: "portal",
   });
   await supabaseAdmin.from("card_comments").insert({
     card_id: cardId, author: nome, role: "client", text: `(pelo portal) ${comment}`,

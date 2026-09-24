@@ -12,6 +12,9 @@ import {
 } from "@/lib/defense/detect";
 import { buscarInsightHoje } from "@/lib/defense/insights-hoje";
 import { podeReceber } from "@/lib/clients/pausa";
+import { temLeadOuCompra, contarPorTipo, type ResultadoSomado } from "@/lib/meta/resultado";
+import { resultadosPorDia } from "@/lib/meta/resultado-server";
+import { faltaNoBanco } from "@/lib/trafego/anuncios-server";
 
 /**
  * POST /api/system/defense-scan
@@ -85,6 +88,10 @@ export async function POST(req: NextRequest) {
     const results: Array<{ client: string; snapshot: boolean; anomalies: number; error?: string }> = [];
     let totalAnomalies = 0;
     let totalAlertsNew = 0;
+    // Leva 7A (N4): metric_snapshots ganhou leads/purchases/results/result_kind (migração
+    // 20260925120000). Antes dela existir, grava só as colunas de sempre — sem quebrar o scan.
+    const colunasResultado = { ok: true };
+    let contasPorObjetivo = 0;
 
     // Ex-cliente e cliente pausado não são vigiados — pausado não gasta de propósito.
     const vigiados = ((clients ?? []) as Record<string, unknown>[]).filter((c) => podeReceber(c));
@@ -112,11 +119,35 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        // Resultado pelo OBJETIVO (Leva 7A, N4): conta que teve lead ou compra na janela ganha a
+        // leitura por campanha — o resultado do dia soma o evento do objetivo de cada campanha
+        // (formulário conta lead; venda conta compra). Conta só de WhatsApp segue nas conversas,
+        // sem chamada extra. Falha nessa leitura cai nas conversas (o de antes), nunca em zero.
+        let porObjetivo: Map<string, ResultadoSomado> | null = null;
+        if (insights.length && insights.some((i) => temLeadOuCompra(i.actions))) {
+          try {
+            const desde = insights.map((i) => i.date_start).sort()[0];
+            porObjetivo = await resultadosPorDia(accountId, token, desde, todayStr);
+            contasPorObjetivo++;
+          } catch (e) {
+            console.warn(`[defense-scan] ${clientName}: resultado por objetivo falhou, usando conversas:`, e instanceof Error ? e.message : e);
+          }
+        }
+        const resultadoDoDia = (i: typeof insights[0]) => {
+          const r = porObjetivo?.get(i.date_start);
+          return r ? { valor: r.resultados, tipo: r.tipo } : { valor: countMessagesFromActions(i.actions), tipo: "mensagens" as const };
+        };
+        const extras = new Map<string, { leads: number; purchases: number; results: number; result_kind: string }>();
+
         const buildMetric = (i: typeof insights[0]): HistoricalMetric => {
           const spend = asNumber(i.spend);
           const clicks = parseInt(i.clicks || "0", 10);
           const impressions = parseInt(i.impressions || "0", 10);
-          const conversions = countMessagesFromActions(i.actions);
+          const res = resultadoDoDia(i);
+          const tipos = contarPorTipo(i.actions);
+          extras.set(i.date_start, { leads: tipos.leads, purchases: tipos.compras, results: res.valor, result_kind: res.tipo });
+          // A detecção (queda, custo por resultado) usa o resultado do objetivo.
+          const conversions = res.valor;
           return {
             metric_date: i.date_start,
             spend,
@@ -129,6 +160,9 @@ export async function POST(req: NextRequest) {
             cpl: conversions > 0 ? spend / conversions : null,
           };
         };
+        // O que vai pro banco: `conversions`/`cpl` continuam sendo CONVERSAS (relatórios dos clientes
+        // dizem "conversas"); o resultado pelo objetivo vai em `results`/`result_kind`.
+        const conversasDe = new Map(insights.map((i) => [i.date_start, countMessagesFromActions(i.actions)]));
 
         const history: HistoricalMetric[] = insights.map(buildMetric);
         const current: CurrentMetric =
@@ -151,11 +185,24 @@ export async function POST(req: NextRequest) {
         // fechado é regravado a cada scan porque a Meta ainda ajusta a atribuição dele.
         const fechados = passado.map(buildMetric);
         const ultimoFechado = fechados[fechados.length - 1] ?? null;
-        const linha = (h: HistoricalMetric) => ({
-          client_id: clientId, meta_ad_account_id: accountId, metric_date: h.metric_date,
-          spend: h.spend, impressions: h.impressions, clicks: h.clicks,
-          conversions: h.conversions, ctr: h.ctr, cpm: h.cpm, cpc: h.cpc, cpl: h.cpl,
-        });
+        const linha = (h: HistoricalMetric) => {
+          const conversas = conversasDe.get(h.metric_date) ?? h.conversions;
+          return {
+            client_id: clientId, meta_ad_account_id: accountId, metric_date: h.metric_date,
+            spend: h.spend, impressions: h.impressions, clicks: h.clicks,
+            conversions: conversas, ctr: h.ctr, cpm: h.cpm, cpc: h.cpc, cpl: conversas > 0 ? h.spend / conversas : null,
+            ...(colunasResultado.ok ? extras.get(h.metric_date) ?? {} : {}),
+          };
+        };
+        // Grava; se a migração das colunas novas ainda não rodou, desliga as colunas e tenta de novo.
+        const gravar = async <T,>(op: () => PromiseLike<{ data?: T | null; error: { code?: string; message: string } | null }>) => {
+          let r = await op();
+          if (r.error && colunasResultado.ok && faltaNoBanco(r.error)) {
+            colunasResultado.ok = false;
+            r = await op();
+          }
+          return r;
+        };
 
         if (fechados.length) {
           const { data: jaTem, error: jaTemErr } = await supabaseAdmin.from("metric_snapshots")
@@ -168,7 +215,8 @@ export async function POST(req: NextRequest) {
             .filter((h) => h.metric_date !== ultimoFechado?.metric_date && !datasGravadas.has(h.metric_date))
             .map(linha);
           if (faltando.length) {
-            const { error: insErr } = await supabaseAdmin.from("metric_snapshots").insert(faltando);
+            const { error: insErr } = await gravar(() => supabaseAdmin.from("metric_snapshots").insert(
+              fechados.filter((h) => h.metric_date !== ultimoFechado?.metric_date && !datasGravadas.has(h.metric_date)).map(linha)));
             if (insErr) throw new Error(`histórico em metric_snapshots: ${insErr.message}`);
           }
         }
@@ -177,14 +225,14 @@ export async function POST(req: NextRequest) {
         // mesmo número). Atualiza no lugar e só insere se não havia linha: nunca apaga antes de ter
         // gravado, e funciona com ou sem índice único.
         if (ultimoFechado) {
-          const { data: atualizadas, error: updErr } = await supabaseAdmin.from("metric_snapshots")
+          const { data: atualizadas, error: updErr } = await gravar<{ id: string }[]>(() => supabaseAdmin.from("metric_snapshots")
             .update(linha(ultimoFechado))
             .eq("client_id", clientId)
             .eq("metric_date", ultimoFechado.metric_date)
-            .select("id");
+            .select("id"));
           if (updErr) throw new Error(`snapshot do dia: ${updErr.message}`);
           if (!atualizadas?.length) {
-            const { error: insErr } = await supabaseAdmin.from("metric_snapshots").insert(linha(ultimoFechado));
+            const { error: insErr } = await gravar(() => supabaseAdmin.from("metric_snapshots").insert(linha(ultimoFechado)));
             if (insErr) throw new Error(`snapshot do dia: ${insErr.message}`);
           }
         }
@@ -248,6 +296,9 @@ export async function POST(req: NextRequest) {
       success: true,
       elapsed_fraction: elapsedFraction,
       clients_scanned: results.length,
+      // Contas lidas pelo objetivo (lead/compra) e se as colunas novas existem no banco.
+      contas_por_objetivo: contasPorObjetivo,
+      colunas_resultado: colunasResultado.ok,
       total_anomalies_detected: totalAnomalies,
       new_alerts_created: totalAlertsNew,
       results,

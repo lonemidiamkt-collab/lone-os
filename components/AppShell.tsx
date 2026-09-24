@@ -20,7 +20,7 @@ import { Menu } from "lucide-react";
 import NotificationToast from "@/components/NotificationToast";
 import ErroCliente from "@/components/ErroCliente";
 import NotificationCenter from "@/components/NotificationCenter";
-import TopActions from "@/components/TopActions";
+import { FaixaTopActions } from "@/components/TopActions";
 import ScheduledNoticePopup from "@/components/ScheduledNoticePopup";
 import GlobalSearch from "@/components/GlobalSearch";
 import KeyboardShortcuts from "@/components/KeyboardShortcuts";
@@ -119,8 +119,6 @@ function MainLayout({ children }: { children: React.ReactNode }) {
       {/* Double Sidebar */}
       <Sidebar />
 
-      {/* Ações globais: dentro do Header quando a tela tem um; senão flutuando no canto. */}
-      <TopActions flutuante />
       <NotificationCenter semBotao />
 
       {/* Main content — shifts right when secondary is open */}
@@ -133,6 +131,9 @@ function MainLayout({ children }: { children: React.ReactNode }) {
           contentOffset,
         ].join(" ")}
       >
+        {/* Ações globais: dentro do Header quando a tela tem um; senão numa faixa própria no topo do
+            conteúdo (Leva 7A — antes flutuavam por cima do cabeçalho da página). */}
+        <FaixaTopActions />
         <ErrorBoundary>
           {children}
         </ErrorBoundary>

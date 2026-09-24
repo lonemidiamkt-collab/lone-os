@@ -14,6 +14,7 @@ import { useClientsStore } from "@/stores/useClientsStore";
 import { ROTULO_RESULTADO_ANUNCIO, TITULO_RESULTADO_ANUNCIO } from "@/lib/scores/resultado-anuncio";
 import { temTrafego } from "@/lib/clients/servico";
 import type { ClientStatus } from "@/lib/types";
+import EntregasDoMes from "./EntregasDoMes";
 import PainelAnuncios from "./PainelAnuncios";
 import ProvaSocial from "./ProvaSocial";
 import { Secao, Vazio } from "./Secao";
@@ -28,9 +29,19 @@ export default function AbaResultados({ ctx }: { ctx: FichaCtx }) {
   const patchClientLocal = useClientsStore((s) => s.patchClientLocal);
   const veNegocio = role !== "designer";
   const comTrafego = temTrafego({ service_type: c.serviceType });
+  // Quem fecha o mês com o cliente (a rota tem o mesmo recorte).
+  const fechaMes = ["admin", "manager", "social", "traffic"].includes(role);
+  const arquivo = (c.nomeFantasia || c.name).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
   return (
     <div className="space-y-8">
+      {fechaMes && (
+        <Secao id={SECAO.entregasMes} titulo="O que entregamos no mês"
+          descricao="Posts no ar, artes, anúncios contra a meta, reuniões e criativos vencedores — em PDF e com o rascunho da mensagem.">
+          <EntregasDoMes clientId={c.id} nomeArquivo={arquivo} />
+        </Secao>
+      )}
+
       {veNegocio && (
         <Secao id={SECAO.anuncios} titulo="Anúncios" semCard
           descricao={comTrafego ? "Conversas, investimento e custo — o mesmo número que o cliente vê no portal." : undefined}

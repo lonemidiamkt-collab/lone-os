@@ -1,7 +1,8 @@
 "use client";
 
 // Seção de artes do portal do cliente. Mostra as artes ENTREGUES; nas mais novas, o cliente pode
-// PEDIR AJUSTE por escrito. A aprovação é no WhatsApp com o time (decisão de 31/08) — o botão de
+// PEDIR AJUSTE por escrito — e, desde a Leva 7D (N35), também nas já aprovadas ou agendadas que ainda
+// não foram ao ar ("Pedir alteração" na galeria). A aprovação é no WhatsApp com o time (decisão de 31/08) — o botão de
 // aprovar só aparece com PORTAL_APROVACAO_CLIENTE=on.
 //
 // Período (24/09): "Conteúdo entregue" mostrava uma arte de 29/jul na visão de 7 dias. Agora segue o
@@ -15,12 +16,15 @@ import { chamar } from "@/lib/api/chamar";
 import { dentroDaJanela, diaEmSP, rotuloDia } from "@/lib/portal/formatos";
 import Skeleton from "@/components/ui/Skeleton";
 import { Cartao, CabecalhoSecao, entrada } from "./ui";
+import PedirAlteracao from "./PedirAlteracao";
 
 interface Item {
   id: string; title: string; format: string; status: string; imageUrl: string; date: string | null;
   /** Quando o time entregou a arte (ausente em resposta antiga da rota). */
   entregueEm?: string | null;
   pendente: boolean; aprovada: boolean;
+  /** N35: aceita "Pedir alteração" (entregue/aprovada/agendada, ainda não no ar). Ausente em resposta antiga. */
+  podeAlterar?: boolean;
 }
 
 const ULTIMAS_ENTREGAS = 4;
@@ -184,6 +188,11 @@ export default function PortalContent({ token, aprovacaoLigada = false, dias = 7
                   <p className="mt-0.5 truncate text-lone-caption text-muted-foreground">
                     {[it.format, it.entregueEm ? `entregue ${rotuloData(it.entregueEm)}` : rotuloData(it.date)].filter(Boolean).join(" · ")}
                   </p>
+                  {it.podeAlterar && (
+                    <div className="mt-2">
+                      <PedirAlteracao token={token} cardId={it.id} titulo={it.title} compacto />
+                    </div>
+                  )}
                 </div>
               </Cartao>
             ))}

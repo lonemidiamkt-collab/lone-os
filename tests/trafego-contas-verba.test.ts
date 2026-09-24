@@ -100,3 +100,68 @@ describe("migração do aporte que ficou no navegador", () => {
     expect(aportesParaMigrar(JSON.stringify({ c1: { nextPaymentDate: "amanhã" } }), contas, "2026-09-24")).toEqual([]);
   });
 });
+
+// Leva 7A: a leitura que a barra nova desenha (gasto, "hoje", projeção no ritmo recente e a frase).
+import { lerRitmo, foraDoRitmo } from "@/lib/trafego/contas-verba";
+
+describe("leitura do ritmo (barra de Contas & Verba)", () => {
+  it("no ritmo: projeção pelo ritmo dos últimos 3 dias e o marcador de hoje", () => {
+    const l = lerRitmo(ritmoDoMes({ verba: 3000, gasto: 1000, hoje: "2026-09-10" }), 100);
+    expect(l.tom).toBe("no_ritmo");
+    expect(l.titulo).toBe("No ritmo");
+    expect(l.pctHoje).toBeCloseTo(33.33, 1);
+    expect(l.projetadoFim).toBe(3000);
+    expect(l.pctProjetado).toBe(100);
+    expect(l.diaEstouro).toBe(30); // acaba no último dia: é o ritmo certo
+    expect(l.fonteRitmo).toBe("3d");
+    expect(foraDoRitmo(l)).toBe(false);
+  });
+
+  it("acima: diz o dia em que a verba acaba", () => {
+    const l = lerRitmo(ritmoDoMes({ verba: 3000, gasto: 1500, hoje: "2026-09-10" }), 150);
+    expect(l.tom).toBe("acima");
+    expect(l.diaEstouro).toBe(20);
+    expect(l.titulo).toBe("Acima do ritmo — estoura dia 20");
+    expect(l.pctProjetado).toBe(150);
+    expect(foraDoRitmo(l)).toBe(true);
+  });
+
+  it("mês no ritmo, mas o ritmo de agora estoura antes do fim: vira acima; 4% de folga não", () => {
+    const acelerou = lerRitmo(ritmoDoMes({ verba: 3000, gasto: 1000, hoje: "2026-09-10" }), 140);
+    expect(acelerou.tom).toBe("acima");
+    expect(acelerou.titulo).toBe("Acima do ritmo — estoura dia 25");
+    const quase = lerRitmo(ritmoDoMes({ verba: 3000, gasto: 1000, hoje: "2026-09-10" }), 106);
+    expect(quase.tom).toBe("no_ritmo");
+  });
+
+  it("verba já estourada", () => {
+    const l = lerRitmo(ritmoDoMes({ verba: 1000, gasto: 1200, hoje: "2026-09-10" }), 120);
+    expect(l.tom).toBe("acima");
+    expect(l.titulo).toBe("Verba estourada");
+    expect(l.diaEstouro).toBe(10);
+  });
+
+  it("abaixo do ritmo", () => {
+    const l = lerRitmo(ritmoDoMes({ verba: 3000, gasto: 500, hoje: "2026-09-10" }), 50);
+    expect(l.tom).toBe("abaixo");
+    expect(l.titulo).toBe("Abaixo do ritmo");
+    expect(l.projetadoFim).toBe(1500);
+  });
+
+  it("travada: nada no mês, ou nada nos últimos 3 dias", () => {
+    expect(lerRitmo(ritmoDoMes({ verba: 3000, gasto: 0, hoje: "2026-09-10" }), 0).tom).toBe("travada");
+    const parou = lerRitmo(ritmoDoMes({ verba: 3000, gasto: 1000, hoje: "2026-09-10" }), 0);
+    expect(parou.tom).toBe("travada");
+    expect(parou.titulo).toBe("Travada — sem gasto há 3 dias");
+  });
+
+  it("sem média de 3 dias usa a média do mês; sem verba e sem dados não inventam", () => {
+    const l = lerRitmo(ritmoDoMes({ verba: 3000, gasto: 1000, hoje: "2026-09-10" }), null);
+    expect(l.fonteRitmo).toBe("mes");
+    expect(l.projetadoFim).toBe(3000);
+    expect(lerRitmo(ritmoDoMes({ verba: null, gasto: 500, hoje: "2026-09-10" }), 50).tom).toBe("sem_verba");
+    const sd = lerRitmo(ritmoDoMes({ verba: 3000, gasto: null, hoje: "2026-09-10" }), 50);
+    expect(sd.tom).toBe("sem_dados");
+    expect(foraDoRitmo(sd)).toBe(false);
+  });
+});

@@ -20,6 +20,8 @@ import MobileFAB from "./MobileFAB";
 import PortalContent from "./PortalContent";
 import PortalInstagram, { IG_PERIODOS, type IgPeriodo } from "./PortalInstagram";
 import PortalUpload from "@/components/portal/PortalUpload";
+import PortalAgenda from "./PortalAgenda";
+import PortalMateriais from "./PortalMateriais";
 import EvolucaoDiaria from "./EvolucaoDiaria";
 import PublicoCard from "./PublicoCard";
 import AnunciosAtivos from "./AnunciosAtivos";
@@ -87,6 +89,8 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
     initialData ? null : "Não consegui carregar seus resultados agora.",
   );
   const [igPeriod, setIgPeriod] = useState<IgPeriodo>("7d");
+  // Sobe depois de um envio de material: o histórico "Seus envios" (N37) recarrega.
+  const [versaoEnvios, setVersaoEnvios] = useState(0);
   const [montado, setMontado]   = useState(false);
   useEffect(() => setMontado(true), []);
 
@@ -262,9 +266,13 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
               ) : (
                 <PortalInstagram token={token} clientId={clientId} period={igPeriod} />
               )}
+              {/* Próximos posts e calendário do mês (N36): só Agendado, No ar e aprovado pelo cliente. */}
+              <PortalAgenda token={token} />
               <PortalContent token={token} aprovacaoLigada={aprovacaoLigada}
                 dias={IG_PERIODOS.find((p) => p.valor === igPeriod)?.dias ?? 7} />
-              <PortalUpload token={token} clientName={clientName} />
+              <PortalUpload token={token} clientName={clientName} onEnviado={() => setVersaoEnvios((v) => v + 1)} />
+              {/* O que o cliente já mandou, se o time recebeu e onde foi usado (N37). */}
+              <PortalMateriais token={token} versao={versaoEnvios} />
             </div>
           )}
 

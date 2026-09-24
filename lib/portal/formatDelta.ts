@@ -103,3 +103,47 @@ export function resumoConversas(conversas: number | null, deltaPercent: number |
   if (Math.abs(deltaPercent) <= THRESHOLD) return `${base}, parecido com ${ANTERIOR[period]}.`;
   return `${base}, ${pct(deltaPercent)} ${deltaPercent > 0 ? "a mais" : "a menos"} que ${ANTERIOR[period]}.`;
 }
+
+// ── Instagram em uma frase (N34, aba "Crescimento nas redes") ────────────────
+// A aba de anúncios já abre com a frase do período (resumoConversas). Quem tem só social — ou abre a
+// aba do Instagram — não tinha frase nenhuma: via quatro números soltos e tinha que montar a leitura
+// sozinho. Sem comparação com o período anterior: a Meta não entrega o anterior do perfil, e inventar
+// seta seria pior que não ter.
+
+const ABERTURA_DIAS: Record<number, string> = {
+  7: "Nos últimos 7 dias",
+  14: "Nas últimas 2 semanas",
+  30: "Nos últimos 30 dias",
+};
+
+const juntarPartes = (p: string[]) => (p.length <= 1 ? p.join("") : `${p.slice(0, -1).join(", ")} e ${p[p.length - 1]}`);
+const nBR = (n: number) => Math.round(n).toLocaleString("pt-BR");
+
+/**
+ * "Nos últimos 7 dias: 3 posts publicados, 4.210 pessoas alcançadas e 18 seguidores novos."
+ *
+ * O alcance só entra quando a janela dele é a mesma do período (a Meta só dá alcance único em 7 ou
+ * 28 dias — no seletor de 14 ele viria de outra janela). null quando não há resumo.
+ */
+export function resumoInstagram(
+  dias: number,
+  r: { postsNoPeriodo?: number | null; alcance?: number | null; alcanceJanelaDias?: number | null; seguidoresGanhos?: number | null } | null | undefined,
+): string | null {
+  if (!r || r.postsNoPeriodo == null) return null;
+  const abertura = ABERTURA_DIAS[dias] ?? `Nos últimos ${dias} dias`;
+  const partes: string[] = [];
+  const posts = r.postsNoPeriodo;
+  partes.push(posts === 0 ? "nenhum post publicado" : `${nBR(posts)} ${posts === 1 ? "post publicado" : "posts publicados"}`);
+  const janelaCerta = r.alcanceJanelaDias == null || r.alcanceJanelaDias === dias;
+  if (r.alcance != null && r.alcance > 0 && janelaCerta) {
+    partes.push(`${nBR(r.alcance)} ${r.alcance === 1 ? "pessoa alcançada" : "pessoas alcançadas"}`);
+  }
+  const g = r.seguidoresGanhos;
+  if (g != null && g !== 0) {
+    const abs = Math.abs(g);
+    partes.push(g > 0
+      ? `${nBR(abs)} ${abs === 1 ? "seguidor novo" : "seguidores novos"}`
+      : `${nBR(abs)} ${abs === 1 ? "seguidor a menos" : "seguidores a menos"}`);
+  }
+  return `${abertura}: ${juntarPartes(partes)}.`;
+}

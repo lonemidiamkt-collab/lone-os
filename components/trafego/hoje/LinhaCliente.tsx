@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { estiloDasIniciais, iniciais } from "@/lib/notificacoes/visual";
 import type { LinhaHoje, NivelAlerta, ProblemaHoje } from "@/lib/traffic/hoje/tipos";
 import { COR, duracao, pct, quando, reais, variacao } from "./formato";
+import { ROTULO_RESULTADO } from "@/lib/meta/resultado";
+import { compararComNicho } from "@/lib/traffic/referencia-nicho";
 
 const ICONE: Record<NivelAlerta, typeof Info> = { critical: AlertOctagon, warning: AlertTriangle, info: Info };
 
@@ -44,13 +46,32 @@ function Chip({ p }: { p: ProblemaHoje }) {
 }
 
 /** Um número com rótulo e uma linha de apoio. */
-function Numero({ rotulo, valor, apoio, tom }: { rotulo: string; valor: React.ReactNode; apoio?: React.ReactNode; tom?: string }) {
+function Numero({ rotulo, valor, apoio, extra, tom }: { rotulo: string; valor: React.ReactNode; apoio?: React.ReactNode; extra?: React.ReactNode; tom?: string }) {
   return (
     <div className="min-w-0">
       <dt className="truncate text-lone-caption text-muted-foreground">{rotulo}</dt>
       <dd className={cn("truncate text-lone-body font-medium tabular-nums text-foreground", tom)}>{valor}</dd>
       {apoio && <dd className="truncate text-lone-caption tabular-nums text-muted-foreground">{apoio}</dd>}
+      {extra && <dd className="truncate text-lone-caption tabular-nums text-muted-foreground">{extra}</dd>}
     </div>
+  );
+}
+
+/** Leva 7A (N6): a mediana anônima do nicho ao lado do custo do cliente (30 dias). */
+function ReferenciaDoNicho({ n, um }: { n: LinhaHoje["numeros"]; um: string }) {
+  const ref = n.referenciaNicho;
+  if (!ref || ref.custo == null) return null;
+  const meu = n.proprio30d?.custo ?? null;
+  const comp = compararComNicho(meu, ref.custo);
+  const pctFmt = (v: number | null | undefined) => (v == null ? "—" : `${v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`);
+  const titulo = `Mediana de ${ref.clientes} clientes de ${ref.nicho}, últimos 30 dias (anônima).\n` +
+    `Custo por ${um}: nicho ${reais(ref.custo, 2)} · este cliente ${reais(meu, 2)}\n` +
+    `CTR: nicho ${pctFmt(ref.ctr)} · este cliente ${pctFmt(n.proprio30d?.ctr)}\n` +
+    `CPM: nicho ${reais(ref.cpm, 2)} · este cliente ${reais(n.proprio30d?.cpm ?? null, 2)}`;
+  return (
+    <span title={titulo} className={cn("cursor-help", comp === "acima" ? "text-lone-warning" : comp === "abaixo" ? "text-lone-success" : undefined)}>
+      nicho {reais(ref.custo, 2)}{comp === "acima" ? " · acima" : comp === "abaixo" ? " · abaixo" : ""}
+    </span>
   );
 }
 
@@ -67,6 +88,8 @@ function Variacao({ v, subirEhBom }: { v: number | null; subirEhBom: boolean }) 
 
 function Numeros({ l }: { l: LinhaHoje }) {
   const n = l.numeros;
+  // Leva 7A (N4): o resultado segue o objetivo — conta de formulário mostra leads; de venda, compras.
+  const rotuloResultado = ROTULO_RESULTADO[n.tipoResultado ?? "mensagens"].varios;
   const alertaConta = l.problemas.find((p) => p.tipo === "conta");
   const leituraFalhou = !!alertaConta && alertaConta.titulo === "Leitura da Meta falhou";
   const saldo = n.statusConta
@@ -85,11 +108,12 @@ function Numeros({ l }: { l: LinhaHoje }) {
         apoio={n.gastoMedio3d !== null ? `média 3d ${reais(n.gastoMedio3d)}` : undefined}
       />
       <Numero
-        rotulo="Conversas ontem"
+        rotulo={`${rotuloResultado.charAt(0).toUpperCase()}${rotuloResultado.slice(1)} ontem`}
         valor={n.conversasOntem === null ? "—" : <>{n.conversasOntem}<Variacao v={variacao(n.conversasOntem, n.conversasMedia7d)} subirEhBom /></>}
         apoio={n.custoOntem !== null || n.custoMedio7d !== null
           ? <>{reais(n.custoOntem, 2)} cada<Variacao v={variacao(n.custoOntem, n.custoMedio7d)} subirEhBom={false} /></>
           : n.conversasMedia7d !== null ? `média 7d ${n.conversasMedia7d.toFixed(1).replace(".", ",")}/dia` : undefined}
+        extra={n.referenciaNicho?.custo != null ? <ReferenciaDoNicho n={n} um={ROTULO_RESULTADO[n.tipoResultado ?? "mensagens"].um} /> : undefined}
       />
     </dl>
   );

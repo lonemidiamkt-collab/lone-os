@@ -8,6 +8,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { escolherProvider, type NivelEntidade } from "@/lib/meta/gateway";
 import { guardarCriativos } from "@/lib/meta/criativos";
 import { toBRTDateStr } from "@/lib/meta/timezone";
+import { faltaNoBanco } from "@/lib/trafego/anuncios-server";
 
 // POST /api/system/meta-granular — coleta desempenho por CAMPANHA, CONJUNTO e ANÚNCIO.
 //
@@ -50,6 +51,9 @@ export async function POST(req: NextRequest) {
   const { provider, capacidade } = await escolherProvider(token);
 
   let linhas = 0, contasLidas = 0, criativos = 0, periodos = 0;
+  // Leva 7A (N4): `conversions` agora é o resultado do objetivo (conversa, lead ou compra) e
+  // `result_kind` diz qual. Antes da migração 20260925120000 a coluna não existe: grava sem ela.
+  let comTipo = true;
   // Falha por cliente/nível/etapa, para o log dizer exatamente o que ficou sem dado.
   const falhas: { clienteId: string; cliente: string; nivel: string; etapa: string; erro: string }[] = [];
   const falhou = (c: { id: unknown; name: unknown }, nivel: string, etapa: string, e: unknown) =>
@@ -78,13 +82,16 @@ export async function POST(req: NextRequest) {
           // Sem conversa, o custo por conversa é INDEFINIDO, não zero. Gravar zero faria o anúncio
           // que não converteu nada parecer o mais barato da conta.
           cost_per_conversion: r.conversions > 0 ? r.spend / r.conversions : null,
+          result_kind: r.tipoResultado ?? "mensagens",
         }));
 
         if (registros.length && !dry) {
           // upsert: reler o passado recente CORRIGE o número, porque a Meta reatribui conversão por
           // alguns dias depois do clique.
-          const { error: e } = await supabaseAdmin.from("meta_entity_snapshots")
-            .upsert(registros, { onConflict: "entity_id,metric_date" });
+          const gravar = () => supabaseAdmin.from("meta_entity_snapshots")
+            .upsert(comTipo ? registros : registros.map(({ result_kind: _rk, ...resto }) => resto), { onConflict: "entity_id,metric_date" });
+          let { error: e } = await gravar();
+          if (e && comTipo && faltaNoBanco(e)) { comTipo = false; ({ error: e } = await gravar()); }
           if (e) falhou(c, nivel, "gravar", e.message);
         }
         linhas += registros.length;

@@ -11,6 +11,9 @@ import SignedImage from "@/components/shared/SignedImage";
 import CsAgentInbox from "@/components/cs/CsAgentInbox";
 import ContentCardModal from "@/components/ContentCardModal";
 import QuadroProducao from "@/components/conteudo/QuadroProducao";
+import ModoFoco from "@/components/design/ModoFoco";
+import { CargaDosDesigners } from "@/components/conteudo/Cronometro";
+import { cargaPorDesigner } from "@/lib/conteudo/capacidade";
 import KanbanErrorBoundary from "@/components/KanbanErrorBoundary";
 import MonthObservancesAlert from "@/components/MonthObservancesAlert";
 import { MarkdownEditor } from "@/components/Markdown";
@@ -22,7 +25,7 @@ import { chamar } from "@/lib/api/chamar";
 import { useNotificationsStore } from "@/stores/useNotificationsStore";
 import { spDateStr, todaySP } from "@/lib/utils";
 import {
-  Clock, CheckCircle, Loader, X, AlertTriangle, ImageIcon, ChevronDown, Plus, Calendar, RotateCcw, Palette,
+  Clock, CheckCircle, Loader, X, AlertTriangle, ImageIcon, ChevronDown, Plus, Calendar, RotateCcw, Palette, Focus,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
@@ -127,6 +130,8 @@ export default function DesignPage() {
 
   const [detailCard, setDetailCard] = useState<ContentCard | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  // Modo foco (Leva 7B, N19): um card por vez, em tela cheia, com a entrega por colar.
+  const [focoAberto, setFocoAberto] = useState(false);
 
   // ?card=<id> (Meu Trabalho, avisos) abre o card; ?vista= escolhe a vista do quadro.
   const cardDoLinkRef = useRef<string | null>(null);
@@ -210,6 +215,14 @@ export default function DesignPage() {
     it.estado === "entregue" && statusNaEtapa(it.card.status, "revisao", "com_cliente") && it.card.dueDate && diasEntre(hoje, it.card.dueDate) <= 0).length;
   const alteracoesPendentes = itens.filter((it) => it.estado === "alteracao").length;
   const proximos = [...devendo].filter((it) => it.prazoArte).sort(compararItens).slice(0, 6);
+
+  // Carga diária do time (Leva 7B, N18): todos os designers, não só o quadro ativo — quem distribui
+  // precisa ver quem está livre, e o designer vê a linha dele marcada.
+  const cargas = useMemo(() => {
+    const todos = montarItens(contentCards, designRequests, clients.map((c) => ({ id: c.id, assignedDesigner: c.assignedDesigner })));
+    const nomes = [...new Set(clients.map((c) => (c.assignedDesigner ?? "").trim()).filter(Boolean))];
+    return cargaPorDesigner(todos, hoje, { designers: nomes });
+  }, [contentCards, designRequests, clients, hoje]);
 
   return (
     <div className="flex flex-col flex-1 overflow-auto">
@@ -296,12 +309,22 @@ export default function DesignPage() {
           <div className="space-y-5">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">O pedido de arte é uma etapa do card: pegue, entregue e responda alterações no próprio card.</p>
-              <button
-                onClick={() => setNewTaskOpen(true)}
-                className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity shrink-0"
-              >
-                <Plus size={12} /> Nova tarefa
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setFocoAberto(true)}
+                  disabled={needsArt === 0}
+                  title={needsArt ? "Um card por vez, em tela cheia: cole a arte (Ctrl+V) e Enter entrega; → próximo, Esc sai" : "Nada na fila"}
+                  className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:border-primary/40 transition-colors disabled:opacity-40"
+                >
+                  <Focus size={12} /> Modo foco{needsArt ? ` (${needsArt})` : ""}
+                </button>
+                <button
+                  onClick={() => setNewTaskOpen(true)}
+                  className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
+                >
+                  <Plus size={12} /> Nova tarefa
+                </button>
+              </div>
             </div>
 
             <CsAgentInbox cards={myContentCards} onOpen={setDetailCard} titulo="CS Agente — pra produzir" />
@@ -334,6 +357,8 @@ export default function DesignPage() {
                 </div>
               </div>
             )}
+
+            <CargaDosDesigners cargas={cargas} hoje={hoje} destaque={role === "designer" ? currentUser : null} />
 
             <KanbanErrorBoundary context="Quadro de produção (Designer)">
               <QuadroProducao
@@ -506,6 +531,7 @@ export default function DesignPage() {
 
       {/* O card aberto: briefing, arte (pedido, entrega, alterações) e comentários — o mesmo do Social. */}
       {detailCard && <ContentCardModal card={detailCard} onClose={() => setDetailCard(null)} />}
+      {focoAberto && <ModoFoco pessoa={quadroAtivo} onClose={() => setFocoAberto(false)} onAbrirCard={setDetailCard} />}
 
       {/* ═══ NOVA TAREFA ═══ */}
       {newTaskOpen && (

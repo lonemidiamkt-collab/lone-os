@@ -18,7 +18,7 @@ import {
   Instagram, CalendarClock, Palette, Layers, Columns3, UserCheck, History, BarChart2, ShieldCheck,
   AlertTriangle, Target, FileSignature,
   Radar, ListOrdered, Building2, MessageSquare, Settings2, BarChart3,
-  Lock, Zap, Info,
+  Lock, Zap, Info, CalendarCheck, ShoppingBag, DatabaseZap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/types";
@@ -126,6 +126,14 @@ export const MENU: readonly GrupoMenu[] = [
               termos: ["anomalia", "alertas", "queda"] },
             { id: "trafego-status", rotulo: "Status dos Clientes", icone: Users2, href: "/traffic", aba: "status" },
             { id: "trafego-anuncios", rotulo: "Anúncios Meta", icone: Megaphone, href: "/traffic", aba: "anuncios" },
+            // Leva 7A: o que mexeram (retrato diário de status e orçamento), vendas × investimento e
+            // onde falta dado da Meta.
+            { id: "trafego-mudancas", rotulo: "O que mudou", icone: History, href: "/traffic", aba: "mudancas",
+              termos: ["mudanças", "mudancas", "o que mexeram", "orçamento", "orcamento", "pausou", "histórico"] },
+            { id: "trafego-vendas", rotulo: "Vendas", icone: ShoppingBag, href: "/traffic", aba: "vendas",
+              termos: ["vendas", "custo por venda", "roas", "retorno", "faturamento do cliente"] },
+            { id: "trafego-cobertura", rotulo: "Cobertura de dados", icone: DatabaseZap, href: "/traffic", aba: "cobertura",
+              termos: ["cobertura", "sem dados", "buraco", "falha de leitura", "dados da meta"] },
           ] },
         ] },
       // Leva 4: "Saldos, Verba & Alertas" + a aba Investimento viraram uma tela só (saldo, limite e ritmo
@@ -134,7 +142,7 @@ export const MENU: readonly GrupoMenu[] = [
         descricao: "Saldo, limite e ritmo do mês de cada conta; verba e alertas",
         termos: ["saldo", "saldos", "budget", "verba", "investimento", "ritmo", "aporte", "alertas de verba"] },
       { id: "trafego-criativos", rotulo: "Saúde dos Criativos", icone: HeartPulse, href: "/traffic/criativos", papeis: TRAFEGO,
-        descricao: "Criativos cansados e o que replicar", termos: ["criativo", "fadiga"] },
+        descricao: "Criativos cansados, o que replicar e o ranking por cliente e nicho", termos: ["criativo", "fadiga", "ranking", "melhores criativos", "nicho"] },
       { id: "grupos-clientes", rotulo: "Grupos dos Clientes", icone: MessageCircle, href: "/settings/grupos", papeis: TRAFEGO,
         descricao: "Grupos de WhatsApp e envio de relatórios", termos: ["whatsapp"] },
     ],
@@ -267,6 +275,10 @@ export const MENU: readonly GrupoMenu[] = [
     itens: [
       { id: "metas", rotulo: "Metas & OKRs", icone: Target, href: "/goals", papeis: GESTAO,
         descricao: "Objetivos do time", termos: ["okr", "objetivos"] },
+      // Leva 7D (N32): postado no Instagram × contratado (seg/qua/sex), cliente por semana.
+      { id: "mapa-postagem", rotulo: "Mapa de postagem", icone: CalendarCheck, href: "/mapa-postagem", papeis: GESTAO,
+        descricao: "Postado no Instagram × contratado, cliente por semana",
+        termos: ["postagem", "posts", "contratado", "seg qua sex", "frequência", "frequencia", "grade", "semana"] },
       { id: "area-ceo", rotulo: "Área CEO", icone: Lock, href: "/ceo", papeis: ["admin"],
         descricao: "Visão da diretoria", termos: ["diretoria"] },
       { id: "comunicados", rotulo: "Comunicados", icone: Megaphone, href: "/broadcasts", papeis: GESTAO,

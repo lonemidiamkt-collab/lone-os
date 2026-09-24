@@ -20,6 +20,11 @@ import EtapaDesign from "@/components/conteudo/EtapaDesign";
 import EntregarArteModal from "@/components/conteudo/EntregarArteModal";
 import MotivoModal from "@/components/conteudo/MotivoModal";
 import { useProducao, type Pendencia } from "@/components/conteudo/useProducao";
+import PreviaInstagram from "@/components/conteudo/PreviaInstagram";
+import ParaAgendar from "@/components/conteudo/ParaAgendar";
+import KitDaMarca from "@/components/conteudo/KitDaMarca";
+import CobrarCliente from "@/components/conteudo/CobrarCliente";
+import { artesParaAgendar, legendaCompleta } from "@/lib/conteudo/previa";
 import { ETAPAS, ROTULO_BLOQUEADO, corDoStatus, estaBloqueado, etapaDoStatus, infoDoStatus, statusNaEtapa, type Etapa } from "@/lib/conteudo/etapas";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
@@ -98,6 +103,9 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
   const [movendo, setMovendo] = useState(false);
   const [attachments, setAttachments] = useState<CardAttachment[] | null>(null); // null = carregando
   const [erroAnexos, setErroAnexos] = useState<string | null>(null);
+  // O que a prévia do Instagram mostra: começa nos anexos carregados e acompanha o upload/remoção
+  // (a grade de artes guarda o próprio estado e só avisa pelo onAttachmentsChange).
+  const [artesPrevia, setArtesPrevia] = useState<CardAttachment[] | null>(null);
   const [tentativaAnexos, setTentativaAnexos] = useState(0);
   const [salvando, setSalvando] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -214,7 +222,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
   // Falha NÃO vira lista vazia: "Nenhuma arte ainda" levava a pessoa a pedir de novo uma arte que existia.
   useEffect(() => {
     let alive = true;
-    setAttachments(null); setErroAnexos(null);
+    setAttachments(null); setErroAnexos(null); setArtesPrevia(null);
     chamar<{ attachments?: CardAttachment[] }>(`/api/cards/${card.id}/attachments`).then((r) => {
       if (!alive) return;
       if (!r.ok) { trilha("modal:anexos:erro", { id: card.id, status: r.status }); setErroAnexos(r.erro); return; }
@@ -228,6 +236,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
   // Reflete a mudança de arte no board na hora (capa = 1ª arte; sem arte = sem capa).
   const handleAttachmentsChange = (next: CardAttachment[]) => {
     const real = next.filter((a) => a.id !== "legacy");
+    setArtesPrevia(real);
     const cover = next[0]?.url; // 1ª arte visível (real ou capa legada)
     marcarMutacao();
     useContentStore.setState((s) => ({
@@ -477,6 +486,12 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
             {/* A arte do card: pedido, designer, prazo, entregas, alterações — e as ações. */}
             <EtapaDesign card={card} briefingIa={designBrief} />
 
+            {/* Kit da marca ao lado da tarefa de arte (Leva 7B, N16): logo, paleta, tom, o que não usar
+                e as últimas aprovadas — o designer não precisa sair do card. */}
+            {(role === "designer" || role === "admin" || role === "manager") && (
+              <KitDaMarca clientId={card.clientId} cardId={card.id} compacto={role !== "designer"} />
+            )}
+
             {/* Posting date — OBRIGATÓRIA (o agente CS acompanha a pauta por ela) */}
             <div>
               <Label className="flex items-center gap-1.5 mb-2">
@@ -601,6 +616,31 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
               />
             </div>
 
+            {/* Prévia no Instagram (N13) e o que o mLabs pede (N14): legenda completa e as artes em .zip. */}
+            {(() => {
+              const cl = clients.find((c) => c.id === card.clientId);
+              const imagens = artesParaAgendar(artesPrevia ?? attachments ?? [], card.imageUrl).map((a) => a.url);
+              const legendaAoVivo = legendaCompleta(caption, hashtags);
+              const salva = legendaCompleta(card.caption, card.hashtags);
+              return (
+                <details className="rounded-xl border border-border bg-muted/20" open={statusNaEtapa(card.status, "revisao", "com_cliente", "agendado")}>
+                  <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-foreground">Prévia no Instagram e agendamento</summary>
+                  <div className="px-4 pb-4 flex flex-col sm:flex-row gap-4 items-start">
+                    <PreviaInstagram imagens={imagens} legenda={legendaAoVivo} usuario={cl?.instagramUser} avatar={cl?.logo} />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        A moldura é a do feed (4:5). O Instagram mostra só o começo da legenda — o gancho precisa estar antes do “mais”.
+                      </p>
+                      <ParaAgendar cardId={card.id} caption={caption} hashtags={hashtags} temArte={imagens.length > 0} />
+                      {legendaAoVivo !== salva && (
+                        <p className="text-[11px] text-lone-warning">A legenda mudou e não foi salva — o .zip leva a versão salva. Salve antes de baixar.</p>
+                      )}
+                    </div>
+                  </div>
+                </details>
+              );
+            })()}
+
             {/* Observations */}
             <div>
               <Label className="block mb-2">Observações / Notas</Label>
@@ -712,6 +752,11 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                 {etapaAtual.rotulo}
               </span>
             </div>
+
+            {/* Com o cliente há 24h/48h: rascunho de cobrança para copiar (N11). Nunca é enviado daqui. */}
+            {role !== "designer" && (
+              <CobrarCliente card={card} contato={clients.find((c) => c.id === card.clientId)?.contactName} variante="card" />
+            )}
 
             {/* Drive link if available */}
             {card.imageUrl && card.imageUrl.includes("drive.google.com") && (

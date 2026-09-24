@@ -7,6 +7,7 @@
 import { Suspense } from "react";
 import Header from "@/components/Header";
 import SaudeDaCarteira from "@/components/saude/SaudeDaCarteira";
+import RadarRenovacao from "@/components/client/RadarRenovacao";
 
 export default function SaudeDaCarteiraPage() {
   return (
@@ -16,6 +17,10 @@ export default function SaudeDaCarteiraPage() {
       <Suspense fallback={null}>
         <SaudeDaCarteira />
       </Suspense>
+      {/* Leva 7C (N22): contratos perto do fim sem renovação — só gestão (o componente some para os outros). */}
+      <div className="mx-auto w-full max-w-6xl px-4 pb-6 sm:px-6">
+        <RadarRenovacao />
+      </div>
     </div>
   );
 }

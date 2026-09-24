@@ -68,6 +68,12 @@ export interface NumerosHoje {
   custoMedio7d: number | null;
   /** Gasto médio dos últimos 3 dias (ordena por dinheiro em jogo). */
   gastoMedio3d: number | null;
+  /** Leva 7A (N4): o que "conversasOntem" conta — conversas, leads, compras ou misto (pelo objetivo). */
+  tipoResultado?: "mensagens" | "leads" | "compras" | "misto";
+  /** Leva 7A (N6): mediana do nicho (anônima) para comparar. Null = nicho sem clientes suficientes. */
+  referenciaNicho?: { nicho: string; custo: number | null; ctr: number | null; cpm: number | null; clientes: number } | null;
+  /** Custo, CTR e CPM do próprio cliente na mesma janela da referência (30 dias). */
+  proprio30d?: { custo: number | null; ctr: number | null; cpm: number | null } | null;
 }
 
 export type EstadoLinha = "aberto" | "visto" | "em_dia";

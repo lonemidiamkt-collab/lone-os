@@ -35,7 +35,7 @@ export async function DELETE(
   // Busca attachment — valida que pertence ao card correto
   const { data: attachment, error: fetchErr } = await supabaseAdmin
     .from("card_attachments")
-    .select("id, path")
+    .select("id, path, delivery_id")
     .eq("id", attachmentId)
     .eq("card_id", cardId)
     .maybeSingle();
@@ -47,10 +47,15 @@ export async function DELETE(
     return NextResponse.json({ error: "Attachment não encontrado" }, { status: 404 });
   }
 
+  // Arte que já foi ENTREGUE (faz parte de uma versão em creative_deliveries) sai do card, mas o
+  // arquivo fica no Storage: é ele que a comparação de versões da revisão mostra (Leva 7B, N17 —
+  // o designer apaga a V1 para subir a V2, e o social precisa ver as duas lado a lado).
+  const guardarArquivo = !!attachment.delivery_id;
+
   // Storage delete PRIMEIRO — se falhar, banco não é tocado
-  const { error: storageErr } = await supabaseAdmin.storage
-    .from(BUCKET)
-    .remove([attachment.path]);
+  const { error: storageErr } = guardarArquivo
+    ? { error: null }
+    : await supabaseAdmin.storage.from(BUCKET).remove([attachment.path]);
 
   if (storageErr) {
     console.error("[delete-attachment] storage delete failed:", storageErr);

@@ -47,7 +47,12 @@ function juntar(grupo: ItemBruto[], chaveTexto: string, porPessoa: boolean): Ite
     confianca: Math.min(...grupo.map((g) => g.confianca)),
     exposicaoRs: grupo.some((g) => g.exposicaoRs) ? grupo.reduce((a, g) => a + (g.exposicaoRs ?? 0), 0) : null,
     reversivel: grupo.every((g) => g.reversivel),
-    acaoProposta: { ...(base.acaoProposta ?? {}), tipo: base.fonte === "tarefa" ? "abrir_tarefa" : "abrir_board", itens: n },
+    // Pedidos esperando ok/não continuam DECIDÍVEIS no feed (Leva 7C, N25): o item leva todos os
+    // códigos, e o "Decidir" abre um por um. Antes o agregado virava "abrir_board" e a decisão só
+    // voltava a ser possível no grupo do WhatsApp.
+    acaoProposta: base.motivo === "sugestao_sem_decisao"
+      ? { ...(base.acaoProposta ?? {}), tipo: "decidir_demanda", codigos: grupo.map((g) => g.entityRef).filter(Boolean), itens: n }
+      : { ...(base.acaoProposta ?? {}), tipo: base.fonte === "tarefa" ? "abrir_tarefa" : "abrir_board", itens: n },
   };
 }
 

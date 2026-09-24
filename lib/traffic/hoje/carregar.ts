@@ -17,6 +17,8 @@ import {
   type AnomaliaHojeRow, type ClienteHojeRow, type ConfigHojeRow, type ContaHojeRow, type ItemDiagnosticoHoje, type MetricaDiaRow,
 } from "./montar";
 import { carregarVistos } from "./vistos";
+import { carregarReferencias, type ReferenciasCarregadas } from "@/lib/traffic/referencia-nicho-server";
+import { faltaNoBanco } from "@/lib/trafego/anuncios-server";
 
 const COLS_CLIENTE = "id, name, nome_fantasia, logo, doc_logo, active, churned_at, draft_status, paused_at, paused_until, service_type, assigned_traffic, meta_ad_account_id";
 const COLS_CONTA = "id, client_id, meta_account_id, account_status, sync_error, last_balance, is_prepaid, monthly_budget, current_month_spend, last_3d_avg_spend, last_synced_at";
@@ -41,6 +43,30 @@ async function diagnosticoDoDia(agora: Date): Promise<ItemDiagnosticoHoje[]> {
   return itens;
 }
 
+/**
+ * metric_snapshots com o resultado pelo objetivo (results/result_kind, Leva 7A). Antes da migração
+ * dessas colunas, lê só as de sempre — o Hoje continua funcionando, contando conversas.
+ */
+export async function lerMetricasDiarias(desde: string, ate: string): Promise<Resultado<MetricaDiaRow>> {
+  const consulta = (cols: string) => supabaseAdmin.from("metric_snapshots").select(cols)
+    .gte("metric_date", desde).lte("metric_date", ate).limit(5000);
+  const r = await consulta("client_id, metric_date, spend, conversions, results, result_kind");
+  if (r.error && faltaNoBanco(r.error)) {
+    return (await consulta("client_id, metric_date, spend, conversions")) as unknown as Resultado<MetricaDiaRow>;
+  }
+  return r as unknown as Resultado<MetricaDiaRow>;
+}
+
+// A referência muda devagar (30 dias fechados): guarda por 30 min em vez de reler a cada abertura.
+const REF_TTL_MS = 30 * 60_000;
+let cacheReferencias: { em: number; ontem: string; dados: ReferenciasCarregadas } | null = null;
+async function referenciasDoDia(ontem: string): Promise<ReferenciasCarregadas> {
+  if (cacheReferencias && cacheReferencias.ontem === ontem && Date.now() - cacheReferencias.em < REF_TTL_MS) return cacheReferencias.dados;
+  const dados = await carregarReferencias(ontem);
+  cacheReferencias = { em: Date.now(), ontem, dados };
+  return dados;
+}
+
 export async function carregarHoje(email: string, agora = new Date()): Promise<RespostaHoje> {
   const falhas: string[] = [];
   const ler = async <T,>(rotulo: string, q: PromiseLike<Resultado<T>>): Promise<T[]> => {
@@ -56,7 +82,7 @@ export async function carregarHoje(email: string, agora = new Date()): Promise<R
 
   const ontem = ontemSP(agora);
   const db = supabaseAdmin;
-  const [clientesRes, time, contas, configs, anomalias, metricas, ajustesRows, vistos, diagnostico] = await Promise.all([
+  const [clientesRes, time, contas, configs, anomalias, metricas, ajustesRows, vistos, diagnostico, referencias] = await Promise.all([
     db.from("clients").select(COLS_CLIENTE).or("active.is.null,active.eq.true") as unknown as PromiseLike<Resultado<ClienteHojeRow>>,
     ler<{ name: string; email: string | null; role: string | null; is_active: boolean | null; deleted_at: string | null }>("equipe",
       db.from("team_members").select("name, email, role, is_active, deleted_at") as never),
@@ -65,8 +91,7 @@ export async function carregarHoje(email: string, agora = new Date()): Promise<R
     ler<AnomaliaHojeRow>("quedas de resultado", db.from("anomaly_alerts").select("client_id, metric, severity, percent_change")
       .is("acknowledged_at", null).in("severity", ["critical", "high"])
       .gte("detected_at", new Date(agora.getTime() - 2 * 86_400_000).toISOString()).limit(500) as never),
-    ler<MetricaDiaRow>("resultados diários", db.from("metric_snapshots").select("client_id, metric_date, spend, conversions")
-      .gte("metric_date", somarDias(ontem, -7)).lte("metric_date", ontem).limit(5000) as never),
+    ler<MetricaDiaRow>("resultados diários", lerMetricasDiarias(somarDias(ontem, -7), ontem) as never),
     ler<{ key: string; value: string | null }>("ajustes", db.from("agency_settings").select("key, value")
       .in("key", ["traffic_alert_warning_pct", "traffic_alert_critical_pct", "hidden_ad_accounts"]) as never),
     carregarVistos(),
@@ -74,6 +99,12 @@ export async function carregarHoje(email: string, agora = new Date()): Promise<R
       console.error("[trafego/hoje] diagnóstico:", err instanceof Error ? err.message : err);
       falhas.push("diagnóstico diário");
       return [] as ItemDiagnosticoHoje[];
+    }),
+    // Leva 7A (N6): mediana anônima do nicho (30 dias) para pôr ao lado do custo de cada cliente.
+    referenciasDoDia(ontem).catch((err) => {
+      console.error("[trafego/hoje] referência por nicho:", err instanceof Error ? err.message : err);
+      falhas.push("referência por nicho");
+      return null;
     }),
   ]);
 
@@ -101,6 +132,18 @@ export async function carregarHoje(email: string, agora = new Date()): Promise<R
     eu: canon(eu) ?? eu,
     canon,
   });
+
+  if (referencias) {
+    for (const l of linhas) {
+      const meu = referencias.porCliente.get(l.clientId);
+      if (!meu) continue;
+      l.numeros.proprio30d = { custo: meu.m.custo, ctr: meu.m.ctr, cpm: meu.m.cpm };
+      const ref = meu.nicho ? referencias.porNicho.get(meu.nicho) : undefined;
+      l.numeros.referenciaNicho = ref && meu.rotuloNicho
+        ? { nicho: meu.rotuloNicho, custo: ref.custo[meu.m.tipo]?.valor ?? null, ctr: ref.ctr, cpm: ref.cpm, clientes: ref.clientes }
+        : null;
+    }
+  }
 
   const sincronizadoEm = contas.map((a) => a.last_synced_at).filter((x): x is string => !!x).sort().pop() ?? null;
 

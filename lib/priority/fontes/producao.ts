@@ -57,7 +57,7 @@ export async function itensDaProducao(clientes: { porNome: Map<string, ClienteRe
       entityRef: p.codigo, motivo: "sugestao_sem_decisao",
       titulo: `${c?.nome ?? p.cliente}: pedido "${p.resumo.slice(0, 60)}" espera ok/não há ${p.dias} dia${p.dias === 1 ? "" : "s"}`,
       fato: [`O agente pegou "${p.resumo.slice(0, 80)}" (${p.tipo}) no grupo há ${p.dias} dia${p.dias === 1 ? "" : "s"} e ninguém decidiu`, "Sem decisão, expira em 14 dias e o cliente fica sem resposta"],
-      recomendacao: `Responder no grupo interno: ok ${p.codigo} para criar, ou não ${p.codigo}`,
+      recomendacao: `Decidir aqui (criar o card ou descartar) — ou responder ok ${p.codigo} / não ${p.codigo} no grupo interno`,
       acaoProposta: { tipo: "decidir_demanda", codigo: p.codigo },
       severidade: clamp(30 + p.dias * 5), urgencia: clamp(40 + p.dias * 5), confianca: 0.9, exposicaoRs: null,
       reversivel: true, ownerRole: "social", owner: p.responsavel ?? c?.assignedSocial ?? null, nivelPolicy: "C",

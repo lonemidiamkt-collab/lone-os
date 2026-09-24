@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { ETAPAS_FINAIS, statusNaEtapa } from "@/lib/conteudo/etapas";
+import { capasDosAnexos, podePedirAlteracao } from "@/lib/portal/agenda";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { estaPausado } from "@/lib/clients/pausa";
@@ -53,16 +54,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       .from("card_attachments").select("card_id, url, position, tipo")
       .in("card_id", semCapa).order("position", { ascending: true });
     // A capa é a ARTE, nunca a referência: "referencia" é o print/foto que o social mandou pro designer
-    // (às vezes do próprio cliente, às vezes de concorrente). Preferência: entrega > sem tipo (legado).
-    const peso = (t: unknown) => (t === "entrega" ? 0 : t == null ? 1 : 9);
-    const melhor = new Map<string, { url: string; peso: number }>();
-    for (const a of anexos ?? []) {
-      const cid = a.card_id as string; const w = peso(a.tipo);
-      if (w === 9 || !(a.url as string)) continue;
-      const atual = melhor.get(cid);
-      if (!atual || w < atual.peso) melhor.set(cid, { url: a.url as string, peso: w });
+    // (às vezes do próprio cliente, às vezes de concorrente). Regra em lib/portal/agenda.ts.
+    for (const [cid, url] of capasDosAnexos((anexos ?? []) as { card_id: string; url: string; tipo: string | null }[])) {
+      capaDeAnexo.set(cid, url);
     }
-    for (const [cid, m] of melhor) capaDeAnexo.set(cid, m.url);
   }
 
   const items = visiveis
@@ -90,6 +85,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         // (antes uma arte de 29/jul aparecia na visão de 7 dias, porque não havia filtro nenhum).
         entregueEm: (c.designer_delivered_at as string) || null,
         pendente, aprovada,
+        // N35: arte entregue, aprovada ou agendada (e ainda não no ar) aceita "Pedir alteração" —
+        // o pedido vira demanda do time pelo mesmo caminho do WhatsApp (ver /approve).
+        podeAlterar: podePedirAlteracao(c),
       };
     })
     .sort((a, b) => Number(b.pendente) - Number(a.pendente) || (b.date ?? "").localeCompare(a.date ?? "")); // pendentes primeiro, depois mais recente

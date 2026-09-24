@@ -15,6 +15,7 @@ import { chamar } from "@/lib/api/chamar";
 import { useClientsStore } from "@/stores/useClientsStore";
 import CalendarioEstrategico from "@/components/client-tabs/CalendarioEstrategico";
 import RadarOportunidades from "@/components/planejamento/RadarOportunidades";
+import MixDeConteudo from "@/components/planejamento/MixDeConteudo";
 import { Button } from "@/components/ui/button";
 
 interface Recente { jobId: string; clientId: string; cliente: string; periodo: string; modo: string; nPecas: number; createdAt: string }
@@ -89,6 +90,9 @@ export default function PlanejamentoPage() {
           {ativos.map((c) => <option key={c.id} value={c.id}>{c.nomeFantasia || c.name}</option>)}
         </select>
       </div>
+
+      {/* O que esse feed já tem (e o que o plano promete) antes de decidir o calendário (N15). */}
+      {clientId && <MixDeConteudo clientId={clientId} />}
 
       {clientId && <CalendarioEstrategico clientId={clientId} />}
 
