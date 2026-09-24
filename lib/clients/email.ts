@@ -19,7 +19,7 @@ export const ROTULO_CAMPO_CLIENTE: Record<string, string> = {
   assignedTraffic: "gestor de tráfego", perfilConteudo: "perfil de conteúdo",
 };
 
-export function mensagemDadosInvalidos(caminhos: (string | number | undefined)[]): string {
+export function mensagemDadosInvalidos(caminhos: readonly unknown[]): string {
   const campos = [...new Set(caminhos.map((c) => ROTULO_CAMPO_CLIENTE[String(c)] ?? String(c ?? "campo")))];
   return campos.length ? `Dados inválidos: ${campos.join(", ")}` : "Dados inválidos";
 }
