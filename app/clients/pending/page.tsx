@@ -13,7 +13,8 @@ import type { Client } from "@/lib/types";
 import {
   Check, X, Loader2, Clock, Send, ArrowLeft, FileText, Download,
   Eye, User, Building2, Shield, ExternalLink, Users as UsersIcon,
-  Upload, AlertTriangle,
+  Upload, AlertTriangle, Rocket, TrendingUp, Smartphone, Palette,
+  Facebook, Instagram, Search,
 } from "lucide-react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
@@ -368,7 +369,7 @@ export default function PendingClientsPage() {
 
   // ─── Reject ───────────────────────────────────
   const handleReject = async () => {
-    if (!selected || !confirm("Rejeitar este cadastro? Os dados serao removidos permanentemente.")) return;
+    if (!selected || !confirm("Rejeitar este cadastro? Os dados serão removidos permanentemente.")) return;
     const r = await chamar("/api/onboarding", { action: "reject", clientId: selected.id });
     if (!r.ok) { toast.error(`Não consegui rejeitar: ${r.erro}`); return; }
     setDrafts((prev) => prev.filter((d) => d.id !== selected.id));
@@ -497,7 +498,7 @@ export default function PendingClientsPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-foreground">{getDisplayName(selected, sub)}</h2>
                   {getContactDisplay(selected, sub) && (
-                    <p className="text-xs text-muted-foreground mt-0.5">Responsavel: {getContactDisplay(selected, sub)}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Responsável: {getContactDisplay(selected, sub)}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -554,7 +555,7 @@ export default function PendingClientsPage() {
                 {uploadError && (
                   <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
                     <AlertTriangle size={11} /> {uploadError}
-                    <button onClick={() => setUploadError(null)} className="ml-auto text-destructive/50 hover:text-destructive">✕</button>
+                    <button onClick={() => setUploadError(null)} className="ml-auto text-destructive/50 hover:text-destructive" aria-label="Fechar"><X size={12} /></button>
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
@@ -638,7 +639,7 @@ export default function PendingClientsPage() {
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5"><Label>Nome Fantasia</Label><Input value={editForm.nomeFantasia} onChange={(e) => setEdit("nomeFantasia", e.target.value)} /></div>
-                  <div className="space-y-1.5"><Label>Razao Social</Label><Input value={editForm.razaoSocial} onChange={(e) => setEdit("razaoSocial", e.target.value)} /></div>
+                  <div className="space-y-1.5"><Label>Razão Social</Label><Input value={editForm.razaoSocial} onChange={(e) => setEdit("razaoSocial", e.target.value)} /></div>
                   <div className="space-y-1.5"><Label>CNPJ</Label><Input value={editForm.cnpj} onChange={(e) => setEdit("cnpj", e.target.value)} /></div>
                   <div className="space-y-1.5">
                     <Label>Segmento</Label>
@@ -647,34 +648,34 @@ export default function PendingClientsPage() {
                       <SelectContent>{(editForm.industry && !INDUSTRIES.includes(editForm.industry) ? [editForm.industry, ...INDUSTRIES] : INDUSTRIES).map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5 col-span-2"><Label>Endereco</Label><Input value={editForm.endereco} onChange={(e) => setEdit("endereco", e.target.value)} /></div>
+                  <div className="space-y-1.5 col-span-2"><Label>Endereço</Label><Input value={editForm.endereco} onChange={(e) => setEdit("endereco", e.target.value)} /></div>
                 </div>
               </div>
 
               {/* ═══ SERVICO & EQUIPE (editavel) ═══ */}
               <div className="rounded-xl border border-border bg-card p-4 space-y-4">
                 <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-                  <Shield size={10} className="text-primary" /> Servico & Equipe
+                  <Shield size={10} className="text-primary" /> Serviço & Equipe
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    { value: "lone_growth", label: "Lone Growth", icon: "\u{1F680}" },
-                    { value: "assessoria_trafego", label: "Assessoria Trafego", icon: "\u{1F3AF}" },
-                    { value: "assessoria_social", label: "Assessoria Social", icon: "\u{1F4F1}" },
-                    { value: "assessoria_design", label: "Assessoria Design", icon: "\u{1F3A8}" },
+                    { value: "lone_growth", label: "Lone Growth", icon: Rocket },
+                    { value: "assessoria_trafego", label: "Assessoria Tráfego", icon: TrendingUp },
+                    { value: "assessoria_social", label: "Assessoria Social", icon: Smartphone },
+                    { value: "assessoria_design", label: "Assessoria Design", icon: Palette },
                   ]).map((opt) => (
                     <button key={opt.value} type="button" onClick={() => setEdit("serviceType", opt.value)}
                       className={`flex items-center gap-2 p-2.5 rounded-lg border text-left transition-all text-xs ${
                         editForm.serviceType === opt.value ? "border-primary/50 bg-primary/[0.06] text-foreground" : "border-border text-muted-foreground hover:border-border"
                       }`}>
-                      <span>{opt.icon}</span> {opt.label}
+                      <opt.icon size={13} className="shrink-0" /> {opt.label}
                     </button>
                   ))}
                 </div>
                 <div className="space-y-3 pt-2">
                   {needsTraffic && (
                     <div className="space-y-1.5">
-                      <Label className="flex items-center gap-1"><UsersIcon size={10} /> Gestor de Trafego</Label>
+                      <Label className="flex items-center gap-1"><UsersIcon size={10} /> Gestor de Tráfego</Label>
                       <Select value={editForm.assignedTraffic} onValueChange={(v) => setEdit("assignedTraffic", v)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>{team.forField("assignedTraffic").map((m) => <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>)}</SelectContent>
@@ -710,19 +711,19 @@ export default function PendingClientsPage() {
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {[
-                      { label: "Meta Ads", login: sub.meta_login, status: sub.meta_status, icon: "📘" },
-                      { label: "Instagram", login: sub.instagram_login, status: sub.instagram_status, icon: "📷" },
-                      { label: "Google", login: sub.google_login, status: sub.google_status, icon: "🔍" },
+                      { label: "Meta Ads", login: sub.meta_login, status: sub.meta_status, icon: Facebook },
+                      { label: "Instagram", login: sub.instagram_login, status: sub.instagram_status, icon: Instagram },
+                      { label: "Google", login: sub.google_login, status: sub.google_status, icon: Search },
                     ].map((acc) => (
                       <div key={acc.label} className="p-3 rounded-lg bg-card border border-border space-y-1">
-                        <p className="text-xs text-muted-foreground font-medium flex items-center gap-1">{acc.icon} {acc.label}</p>
+                        <p className="text-xs text-muted-foreground font-medium flex items-center gap-1"><acc.icon size={12} className="shrink-0" /> {acc.label}</p>
                         {acc.login ? (
                           <p className="text-xs text-muted-foreground truncate">{acc.login}</p>
                         ) : (
                           <p className="text-[10px] text-lone-warning">
-                            {acc.status === "waiting_client" ? "Cliente nao tem acesso" :
+                            {acc.status === "waiting_client" ? "Cliente não tem acesso" :
                              acc.status === "partner_invite" ? "Via convite Partner" :
-                             "Nao informado"}
+                             "Não informado"}
                           </p>
                         )}
                       </div>
@@ -734,14 +735,14 @@ export default function PendingClientsPage() {
               {/* Observacoes */}
               {sub?.notes && (
                 <div className="rounded-xl border border-border bg-card p-4">
-                  <p className="text-xs text-muted-foreground font-medium mb-2">Observacoes do Cliente</p>
+                  <p className="text-xs text-muted-foreground font-medium mb-2">Observações do Cliente</p>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">{sub.notes}</p>
                 </div>
               )}
 
               {/* Review Checklist */}
               <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Checklist de Revisao</p>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Checklist de Revisão</p>
                 {([
                   { key: "data" as const, label: "Dados pessoais e empresariais conferidos" },
                   { key: "access" as const, label: "Acessos das plataformas verificados" },

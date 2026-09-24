@@ -5,7 +5,7 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, BarChart, Bar, Cell,
 } from "recharts";
-import { ImageIcon } from "lucide-react";
+import { ImageIcon, Palette, Wallet, Pause, Zap, Pin, Film, BarChart3, TrendingUp, Star, type LucideIcon } from "lucide-react";
 import type { SnapshotData, PeriodKind } from "@/lib/portal/types";
 import MobileFAB from "./MobileFAB";
 import PortalContent from "./PortalContent";
@@ -33,11 +33,11 @@ const METRICS = [
 ] as const;
 type MetricKey = typeof METRICS[number]["key"];
 
-const ICON_MAP: Record<string, string> = {
-  new_creative:  "🎨",
-  budget_change: "💰",
-  pause:         "⏸️",
-  optimization:  "⚡",
+const ICON_MAP: Record<string, LucideIcon> = {
+  new_creative:  Palette,
+  budget_change: Wallet,
+  pause:         Pause,
+  optimization:  Zap,
 };
 
 function fmt(n: number): string {
@@ -80,7 +80,7 @@ function Thumbnail({ url, path, name }: { url: string | null; path: string | nul
       <div
         className="w-14 h-14 rounded-lg shrink-0 flex flex-col items-center justify-center gap-0.5 bg-border border border-border"
       >
-        <span style={{ fontSize: 18 }}>{isVideo ? "🎬" : "🖼️"}</span>
+        {isVideo ? <Film size={18} className="text-lone-text-tertiary" aria-hidden="true" /> : <ImageIcon size={18} className="text-lone-text-tertiary" aria-hidden="true" />}
         <span className="text-[8px] text-center px-1 text-lone-text-tertiary" style={{ lineHeight: 1.2 }}>
           {isVideo ? "Vídeo" : "Arte"}
         </span>
@@ -288,10 +288,10 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
         {/* Seletor: Anúncios × Crescimento nas redes (só quando o pacote tem os dois) */}
         {showToggle && (
           <div className="flex gap-1.5 mb-6 p-1.5 rounded-2xl bg-card border border-border">
-            {([["ads", "📊", "Anúncios"], ["social", "📈", "Crescimento nas redes"]] as const).map(([v, ic, l]) => (
+            {([["ads", BarChart3, "Anúncios"], ["social", TrendingUp, "Crescimento nas redes"]] as const).map(([v, Ic, l]) => (
               <button key={v} onClick={() => setView(v)}
                 className={`flex-1 rounded-xl py-3 px-2 text-sm font-semibold transition-all flex items-center justify-center gap-2 min-h-[48px] ${view === v ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
-                <span>{ic}</span><span className="whitespace-nowrap">{l}</span>
+                <Ic size={16} className="shrink-0" aria-hidden="true" /><span className="whitespace-nowrap">{l}</span>
               </button>
             ))}
           </div>
@@ -303,14 +303,14 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
               abriu "Instagram ainda não conectado" + upload). Aqui o cliente lê o que vem, não o que falta. */}
           {comecando ? (
             <div className="rounded-2xl px-5 py-5 mb-4 lg:mb-6 bg-card border border-border">
-              <p className="text-base font-semibold text-foreground">Estamos começando 🚀</p>
+              <p className="text-base font-semibold text-foreground">Estamos começando</p>
               <p className="text-sm mt-1 text-muted-foreground">
                 {desde ? `Sua conta com a Lone foi aberta em ${desde.split("-").reverse().join("/")}. ` : ""}Esta página vai ser o seu painel de resultados — assim que a operação estiver rodando, você acompanha aqui:
               </p>
               <ul className="mt-3 space-y-1.5 text-sm text-secondary-foreground">
-                <li>📊 <b>Anúncios</b> — investimento, conversas e custo por conversa, semana a semana</li>
-                <li>📈 <b>Instagram</b> — seguidores, alcance e os posts que mais renderam</li>
-                <li>🎨 <b>Conteúdo</b> — as artes que a equipe entregou para você</li>
+                <li><b>Anúncios</b> — investimento, conversas e custo por conversa, semana a semana</li>
+                <li><b>Instagram</b> — seguidores, alcance e os posts que mais renderam</li>
+                <li><b>Conteúdo</b> — as artes que a equipe entregou para você</li>
               </ul>
               <p className="text-sm mt-3 text-muted-foreground">Enquanto isso, o que mais ajuda é mandar o material da loja aqui embaixo — logo, fotos, tabela de preço, vídeo.</p>
             </div>
@@ -529,8 +529,8 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                                 <div className="flex items-start gap-1.5 flex-wrap">
                                   <p className="text-sm font-semibold leading-snug break-words">{c.name}</p>
                                   {c.is_winner && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 whitespace-nowrap bg-primary/[.13] text-primary border border-primary/[.27]">
-                                      ⭐ Top
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 whitespace-nowrap bg-primary/[.13] text-primary border border-primary/[.27] inline-flex items-center gap-0.5">
+                                      <Star size={9} aria-hidden="true" /> Top
                                     </span>
                                   )}
                                 </div>
@@ -581,7 +581,7 @@ export default function PortalDashboard({ token, clientId, clientName, whatsappP
                     : actions.map((a) => (
                         <Card key={a.id} className="p-3">
                           <div className="flex items-start gap-2.5">
-                            <span className="text-lg shrink-0">{ICON_MAP[a.icon ?? ""] ?? "📌"}</span>
+                            {(() => { const Icone = ICON_MAP[a.icon ?? ""] ?? Pin; return <Icone size={18} className="shrink-0 mt-0.5 text-primary" aria-hidden="true" />; })()}
                             <div className="min-w-0">
                               <p className="text-[11px] mb-0.5 text-lone-text-tertiary">{fmtDate(a.action_date)}</p>
                               <p className="text-sm font-medium">{a.title}</p>

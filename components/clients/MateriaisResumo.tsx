@@ -45,7 +45,7 @@ export default function MateriaisResumo({ clientId, clientName }: { clientId: st
   const ficha = `/clients/${clientId}?tab=inteligencia`;
 
   return (
-    <div className={`rounded-lg border p-2.5 text-[10px] ${temAlgo ? "border-border bg-card/[0.03]" : "border-lone-warning-border/[0.2] bg-lone-warning-bg/[0.05]"}`}>
+    <div className={`rounded-lg border p-2.5 text-[10px] ${temAlgo ? "border-border bg-card/[0.03]" : "border-lone-warning-border bg-lone-warning-bg"}`}>
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
           {d?.capa && !/\.pdf(\?|$)/i.test(d.capa) ? <img src={d.capa} alt="" className="h-full w-full object-contain" /> : d?.capa ? <span className="text-[9px] font-medium text-muted-foreground">PDF</span> : <ImageIcon size={14} className="text-muted-foreground" />}

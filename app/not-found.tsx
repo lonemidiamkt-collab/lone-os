@@ -5,7 +5,7 @@ export default function NotFound() {
     <div className="flex items-center justify-center min-h-screen bg-background relative overflow-hidden">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-primary/[0.04] rounded-full blur-[150px] pointer-events-none" />
       <div className="text-center relative z-10 space-y-4">
-        <h1 className="text-7xl font-black text-primary text-glow">404</h1>
+        <h1 className="text-7xl font-semibold text-primary">404</h1>
         <p className="text-muted-foreground text-sm">Página não encontrada</p>
         <Link
           href="/"

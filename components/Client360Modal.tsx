@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import {
-  Instagram, Link as LinkIcon, Smile,
+  Instagram, Link as LinkIcon, Smile, Meh, Angry,
   MessageCircle, Sparkles, Megaphone,
   ChevronRight, Key, Palette,
 } from "lucide-react";
@@ -21,17 +21,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
-const HEALTH_CONFIG: Record<string, { label: string; icon: string; variant: "success" | "warning" | "danger" | "secondary" }> = {
-  good:       { label: "On Fire",    icon: "🟢", variant: "success" },
-  average:    { label: "Atenção",    icon: "🟡", variant: "warning" },
-  at_risk:    { label: "Crítico",    icon: "🔴", variant: "danger" },
-  onboarding: { label: "Onboarding", icon: "🆕", variant: "secondary" },
+const HEALTH_CONFIG: Record<string, { label: string; variant: "success" | "warning" | "danger" | "secondary" }> = {
+  good:       { label: "On Fire",    variant: "success" },
+  average:    { label: "Atenção",    variant: "warning" },
+  at_risk:    { label: "Crítico",    variant: "danger" },
+  onboarding: { label: "Onboarding", variant: "secondary" },
 };
 
 const MOOD_CONFIG = {
-  happy:   { emoji: "😄", label: "Satisfeito", color: "text-primary" },
-  neutral: { emoji: "😐", label: "Neutro",     color: "text-primary" },
-  angry:   { emoji: "😠", label: "Irritado",   color: "text-destructive" },
+  happy:   { icon: Smile, label: "Satisfeito", color: "text-primary" },
+  neutral: { icon: Meh,   label: "Neutro",     color: "text-primary" },
+  angry:   { icon: Angry, label: "Irritado",   color: "text-destructive" },
 };
 
 const TONE_LABELS: Record<string, string> = {
@@ -81,7 +81,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
             <div className="flex items-center gap-2 mb-0.5">
               <DialogTitle>{client.name}</DialogTitle>
               <Badge variant={health.variant}>
-                {health.icon} {health.label}
+                {health.label}
               </Badge>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
@@ -137,7 +137,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
             <div className="space-y-4">
               {/* Dossier */}
               <Card className="p-4 bg-primary/10 border-primary/20">
-                <p className="text-xs font-medium text-primary mb-3">📋 Dossiê da Marca</p>
+                <p className="text-xs font-medium text-primary mb-3">Dossiê da Marca</p>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Nicho</span>
@@ -176,10 +176,10 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
                 const access = clientAccess[client.id];
                 if (!access) return null;
                 const fields = [
-                  { key: "instagramLogin", label: "Instagram", icon: "📸" },
-                  { key: "facebookLogin", label: "Facebook", icon: "👥" },
-                  { key: "tiktokLogin", label: "TikTok", icon: "🎵" },
-                  { key: "mlabsLogin", label: "mLabs", icon: "📊" },
+                  { key: "instagramLogin", label: "Instagram" },
+                  { key: "facebookLogin", label: "Facebook" },
+                  { key: "tiktokLogin", label: "TikTok" },
+                  { key: "mlabsLogin", label: "mLabs" },
                 ].filter((f) => (access as unknown as Record<string, string | undefined>)[f.key]);
                 if (fields.length === 0) return null;
                 return (
@@ -191,7 +191,6 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
                     <div className="space-y-1.5">
                       {fields.map((f) => (
                         <div key={f.key} className="flex items-center gap-2 text-xs">
-                          <span>{f.icon}</span>
                           <span className="text-muted-foreground">{f.label}</span>
                           <span className="text-foreground font-medium">{(access as unknown as Record<string, string>)[f.key]}</span>
                         </div>
@@ -299,7 +298,7 @@ export default function Client360Modal({ client, onClose, onOpenIdeas, onOpenCam
                       const cfg = MOOD_CONFIG[entry.mood];
                       return (
                         <div key={entry.id} className="flex items-center gap-2">
-                          <span>{cfg.emoji}</span>
+                          <cfg.icon size={14} className={`${cfg.color} shrink-0`} aria-hidden="true" />
                           <div className="flex-1">
                             <div className="flex items-center gap-1">
                               <span className={`text-xs font-medium ${cfg.color}`}>{cfg.label}</span>

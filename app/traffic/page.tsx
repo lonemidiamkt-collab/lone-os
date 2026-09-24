@@ -164,17 +164,18 @@ export default function TrafficPage() {
   const [showDesignModal, setShowDesignModal] = useState(false);
   const { currentUser, role } = useRole();
   const isAdmin = role === "admin" || role === "manager";
-  const { pendingTab, setPendingTab, setCurrentTab } = useNav();
+  const { pendingTab, setPendingTab, setCurrentTab, secondaryOpen } = useNav();
   const [activeTab, setActiveTab] = useState<TabType>("rotina");
 
-  // Consume pendingTab from secondary sidebar navigation
+  // Aba pedida pelo painel lateral ou pela busca ⌘K. Só consome (e apaga) o pedido que é DESTA tela:
+  // apagar o de outra página fazia a busca abrir a tela certa na aba errada.
   useEffect(() => {
     if (!pendingTab) return;
     const VALID: TabType[] = ["rotina","status","anuncios","investimento"];
     if (VALID.includes(pendingTab as TabType)) {
       setActiveTab(pendingTab as TabType);
+      setPendingTab("");
     }
-    setPendingTab("");
   }, [pendingTab, setPendingTab]);
 
   // Keep NavContext in sync so sidebar can highlight active item
@@ -231,10 +232,11 @@ export default function TrafficPage() {
     ? tasks.filter((t) => t.role === "traffic")
     : tasks.filter((t) => t.role === "traffic" && t.assignedTo === effectiveFilter);
 
+  // Mesmos nomes do painel lateral (lib/navegacao/menu.ts).
   const tabs: { key: TabType; label: string; icon?: React.ReactNode }[] = [
     { key: "rotina", label: "Rotina Diária", icon: <ClipboardCheck size={14} /> },
-    { key: "status", label: "Status Clientes" },
-    { key: "anuncios", label: "Anúncios", icon: <Megaphone size={14} /> },
+    { key: "status", label: "Status dos Clientes", icon: <Users size={14} /> },
+    { key: "anuncios", label: "Anúncios Meta", icon: <Megaphone size={14} /> },
     { key: "investimento", label: "Investimento", icon: <Wallet size={14} /> },
   ];
 
@@ -305,9 +307,10 @@ export default function TrafficPage() {
         {/* Inteligência Criativa — resumo do dia + atalho (a ação fica em /traffic/criativos) */}
         <AtalhoCriativos />
 
-        {/* Tabs */}
+        {/* Abas: uma navegação por tela. Com o painel lateral aberto (computador), as abas moram lá;
+            no celular, ou com o painel fechado, aparecem aqui. */}
         <div>
-          <div className="flex gap-1 mb-5 border-b border-border overflow-x-auto">
+          <div className={`flex gap-1 mb-5 border-b border-border overflow-x-auto ${secondaryOpen ? "lg:hidden" : ""}`}>
             {tabs.map((tab) => (
               <button
                 key={tab.key}
@@ -375,7 +378,7 @@ export default function TrafficPage() {
                       : "border-border hover:border-primary/30"
                   }`}>
                     <div className="flex items-center gap-2 mb-2">
-                      <div className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold ${
+                      <div className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-semibold ${
                         client.status === "at_risk" ? "bg-destructive/20 text-destructive" : "bg-primary/20 text-primary"
                       }`}>
                         {client.name[0]}
@@ -477,7 +480,7 @@ export default function TrafficPage() {
 // ══════════════════════════════════════════════════════════════
 
 const AD_FORMATS = [
-  "Video Selfie (9:16)", "Video Demonstracao (9:16)", "Reel Bastidores (9:16)",
+  "Vídeo Selfie (9:16)", "Vídeo Demonstração (9:16)", "Reel Bastidores (9:16)",
   "Post Feed (1:1)", "Post Feed (4:5)", "Carrossel (1:1)", "Story (9:16)",
   "Banner Display", "Antes/Depois", "Outro",
 ];
@@ -636,42 +639,42 @@ function TrafficDesignRequestModal({
 const OBJECTIVE_LABELS: Record<string, string> = {
   messages: "Mensagens (WhatsApp/DM)",
   traffic: "Visitas ao Perfil/Site",
-  conversions: "Conversoes",
+  conversions: "Conversões",
   reach: "Alcance/Visibilidade",
   engagement: "Engajamento",
-  leads: "Geracao de Leads",
+  leads: "Geração de Leads",
 };
 
 const SMART_SUGGESTIONS: Record<string, { format: string; description: string }[]> = {
   messages: [
-    { format: "Video Selfie (9:16)", description: "Dono do negocio falando direto com a camera, CTA forte para WhatsApp" },
-    { format: "Carrossel Prova Social", description: "4-5 slides com depoimentos reais + botao de mensagem no final" },
+    { format: "Vídeo Selfie (9:16)", description: "Dono do negócio falando direto com a câmera, CTA forte para WhatsApp" },
+    { format: "Carrossel Prova Social", description: "4-5 slides com depoimentos reais + botão de mensagem no final" },
     { format: "Story Interativo", description: "Enquete/Quiz nos stories com link de contato no swipe up" },
   ],
   traffic: [
-    { format: "Post Estatico Premium", description: "Imagem de alto valor visual com curiosidade/gancho irresistivel" },
-    { format: "Reel Bastidores (9:16)", description: "Video mostrando o dia-a-dia, autenticidade gera cliques" },
-    { format: "Carrossel Educativo", description: "5 dicas rapidas com CTA de 'saiba mais no perfil'" },
+    { format: "Post Estático Premium", description: "Imagem de alto valor visual com curiosidade/gancho irresistível" },
+    { format: "Reel Bastidores (9:16)", description: "Vídeo mostrando o dia a dia, autenticidade gera cliques" },
+    { format: "Carrossel Educativo", description: "5 dicas rápidas com CTA de 'saiba mais no perfil'" },
   ],
   conversions: [
-    { format: "Video Demonstracao", description: "Produto/servico em acao com oferta limitada e CTA urgente" },
-    { format: "Antes/Depois", description: "Transformacao visual do resultado com prova social" },
-    { format: "Reel Oferta Flash", description: "Contagem regressiva + beneficio claro + link de compra" },
+    { format: "Vídeo Demonstração", description: "Produto/serviço em ação com oferta limitada e CTA urgente" },
+    { format: "Antes/Depois", description: "Transformação visual do resultado com prova social" },
+    { format: "Reel Oferta Flash", description: "Contagem regressiva + benefício claro + link de compra" },
   ],
   reach: [
-    { format: "Reel Viral (9:16)", description: "Conteudo de entretenimento/educacao com gancho nos 3 primeiros segundos" },
-    { format: "Post Carrossel Valor", description: "Informacao gratuita de alto valor que as pessoas compartilham" },
+    { format: "Reel Viral (9:16)", description: "Conteúdo de entretenimento/educação com gancho nos 3 primeiros segundos" },
+    { format: "Post Carrossel Valor", description: "Informação gratuita de alto valor que as pessoas compartilham" },
     { format: "Meme Contextual", description: "Humor relacionado ao nicho com branding sutil" },
   ],
   engagement: [
-    { format: "Post Pergunta", description: "Imagem provocativa com pergunta que gera debate nos comentarios" },
-    { format: "Reel Tutorial Rapido", description: "Dica pratica em 15 segundos que gera saves e shares" },
-    { format: "Carrossel Controverso", description: "Opiniao forte do nicho que polariza e gera engajamento" },
+    { format: "Post Pergunta", description: "Imagem provocativa com pergunta que gera debate nos comentários" },
+    { format: "Reel Tutorial Rápido", description: "Dica prática em 15 segundos que gera saves e shares" },
+    { format: "Carrossel Controverso", description: "Opinião forte do nicho que polariza e gera engajamento" },
   ],
   leads: [
-    { format: "Video Isca Digital", description: "Preview de material gratuito (PDF, aula) com CTA para cadastro" },
-    { format: "Carrossel Case Study", description: "Resultado de um cliente com formulario de 'quero igual'" },
-    { format: "Story Urgencia", description: "Vagas limitadas + timer + swipe para formulario" },
+    { format: "Vídeo Isca Digital", description: "Preview de material gratuito (PDF, aula) com CTA para cadastro" },
+    { format: "Carrossel Case Study", description: "Resultado de um cliente com formulário de 'quero igual'" },
+    { format: "Story Urgência", description: "Vagas limitadas + timer + swipe para formulário" },
   ],
 };
 
@@ -706,13 +709,13 @@ function CreativeRequestModal({
       `Campanha: ${campaign.name}`,
       `Objetivo: ${objectiveLabel}`,
       ``,
-      `Metricas atuais:`,
+      `Métricas atuais:`,
       `  CTR: ${campaign.ctr.toFixed(2)}%  |  CPC: R$${campaign.cpc.toFixed(2)}  |  CPM: R$${campaign.cpm.toFixed(2)}`,
       campaign.costPerResult ? `  Custo/Resultado: R$${campaign.costPerResult.toFixed(2)}` : null,
       campaign.spend > 0 ? `  Investimento: R$${campaign.spend.toFixed(2)}` : null,
       ``,
-      suggestion ? `Sugestao IA: ${suggestion.format} — ${suggestion.description}` : null,
-      observations ? `\nObservacoes do Gestor:\n${observations}` : null,
+      suggestion ? `Sugestão IA: ${suggestion.format} — ${suggestion.description}` : null,
+      observations ? `\nObservações do Gestor:\n${observations}` : null,
     ].filter(Boolean).join("\n");
 
     setEnviando(true);
@@ -738,7 +741,7 @@ function CreativeRequestModal({
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
                 <Sparkles size={18} className="text-primary" />
                 Solicitar Reforço Criativo
               </h2>
@@ -790,7 +793,7 @@ function CreativeRequestModal({
                       active ? "border-primary/40 bg-primary/[0.05]" : "border-border hover:border-border"
                     }`}>
                     <div className="flex items-center gap-2">
-                      <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                      <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-semibold shrink-0 ${
                         active ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"
                       }`}>{i + 1}</span>
                       <div>
@@ -845,7 +848,7 @@ function CreativeRequestModal({
           <div className="p-3 rounded-xl bg-card border border-border">
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Preview no board do Designer</p>
             <div className="flex items-center gap-2">
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive border border-destructive/20 font-bold">TRAFEGO</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive border border-destructive/20 font-semibold">TRAFEGO</span>
               <span className="text-xs text-foreground font-medium">Criativo — {campaign.name}</span>
             </div>
             <p className="text-[10px] text-muted-foreground mt-1">
@@ -978,12 +981,12 @@ function RoutineTab({
                 <Brain size={16} className="text-primary" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-foreground">Briefing Diário da AI</h3>
+                <h3 className="text-sm font-semibold text-foreground">Briefing Diário da AI</h3>
                 <p className="text-[10px] text-muted-foreground">Contas que precisam de atenção hoje — máx. 5 por dia</p>
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold ml-1">AI</span>
               {isUsingRealData && (
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-bold uppercase tracking-wider ml-auto">Dados reais</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-semibold uppercase tracking-wider ml-auto">Dados reais</span>
               )}
             </div>
             <div className="space-y-2.5">
@@ -996,7 +999,7 @@ function RoutineTab({
                       : "border-primary/15 bg-primary/5"
                   }`}
                 >
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-black ${
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-semibold ${
                     alert.urgency === "critical"
                       ? "bg-destructive/10 text-destructive"
                       : "bg-primary/10 text-primary"
@@ -1005,7 +1008,7 @@ function RoutineTab({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-sm font-bold text-foreground">{alert.clientName}</p>
+                      <p className="text-sm font-semibold text-foreground">{alert.clientName}</p>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
                         alert.urgency === "critical"
                           ? "bg-destructive/10 text-destructive border border-destructive/20"
@@ -1083,7 +1086,7 @@ function RoutineTab({
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <p className="text-2xl font-bold text-foreground">{supportCompleted.length}/{activeClients.length}</p>
+              <p className="text-2xl font-semibold text-foreground">{supportCompleted.length}/{activeClients.length}</p>
               <p className="text-xs text-muted-foreground">clientes atendidos</p>
             </div>
             <div className="w-14 h-14 rounded-full border-4 border-muted flex items-center justify-center relative">
@@ -1091,7 +1094,7 @@ function RoutineTab({
                 <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" className="text-muted" strokeWidth="3" />
                 <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" className="text-primary" strokeWidth="3" strokeDasharray={`${supportPct} ${100 - supportPct}`} strokeLinecap="round" />
               </svg>
-              <span className="text-xs font-bold text-primary">{supportPct}%</span>
+              <span className="text-xs font-semibold text-primary">{supportPct}%</span>
             </div>
           </div>
         </div>
@@ -1104,7 +1107,7 @@ function RoutineTab({
             </p>
             {supportFailed.map((client) => (
               <div key={client.id} className="flex items-center gap-3 bg-card border border-destructive/30 rounded-lg px-3 py-2.5">
-                <div className="w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold bg-lone-danger-bg text-destructive">
+                <div className="w-7 h-7 rounded-md flex items-center justify-center text-xs font-semibold bg-lone-danger-bg text-destructive">
                   {client.name[0]}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1203,7 +1206,7 @@ function RoutineTab({
                     <input
                       value={analysisNote[client.id] || ""}
                       onChange={(e) => setAnalysisNote((p) => ({ ...p, [client.id]: e.target.value }))}
-                      placeholder="Ex: CPC subiu 10%, ajustei segmentacao..."
+                      placeholder="Ex.: CPC subiu 10%, ajustei segmentação…"
                       className="flex-1 bg-muted rounded-lg px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none"
                     />
                     <button onClick={() => handleAnalysis(client)} className="text-xs text-primary hover:underline whitespace-nowrap">Registrar</button>
@@ -1245,7 +1248,7 @@ function RoutineTab({
                     <textarea
                       value={feedbackNote[client.id] || ""}
                       onChange={(e) => setFeedbackNote((p) => ({ ...p, [client.id]: e.target.value }))}
-                      placeholder="Descreva: resultados da semana, problemas, acoes tomadas, plano para proxima semana..."
+                      placeholder="Descreva: resultados da semana, problemas, ações tomadas, plano para a próxima semana…"
                       rows={3}
                       className="w-full bg-muted rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none resize-none"
                     />
@@ -2035,7 +2038,7 @@ function AdAnalyticsTab({
               </p>
               {meta.exchangeFailed && (
                 <p className="text-[10px] text-destructive mt-0.5 font-medium">
-                  ⚠️ Upgrade para token longo falhou — token expira em ~85min. Verifique META_APP_SECRET ou reconecte.
+                  Upgrade para token longo falhou — token expira em ~85min. Verifique META_APP_SECRET ou reconecte.
                 </p>
               )}
               {isTokenShort && !meta.exchangeFailed && (
@@ -2105,7 +2108,7 @@ function AdAnalyticsTab({
                   { label: "Impressões", value: formatNumber(portfolioAgg.impressions), color: "text-muted-foreground" },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="bg-muted/40 rounded-lg p-3 text-center border border-border/50">
-                    <p className={`text-lg font-bold ${color}`}>{value}</p>
+                    <p className={`text-lg font-semibold ${color}`}>{value}</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
                   </div>
                 ))}
@@ -2546,7 +2549,7 @@ function AdAnalyticsTab({
         <div className="flex items-start gap-2.5 px-4 py-3 bg-lone-warning-bg border border-lone-warning-border rounded-xl text-xs text-lone-warning animate-fade-in">
           <AlertTriangle size={13} className="mt-0.5 shrink-0" />
           <span className="flex-1">{exportAllError}</span>
-          <button onClick={() => setExportAllError(null)} className="text-lone-warning hover:text-lone-warning transition-colors">✕</button>
+          <button onClick={() => setExportAllError(null)} aria-label="Fechar aviso" className="text-lone-warning hover:opacity-80 transition-opacity"><X size={13} /></button>
         </div>
       )}
 
@@ -2599,21 +2602,21 @@ function AdAnalyticsTab({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-2">
                   <Brain size={16} className="text-primary" />
-                  <h3 className="text-sm font-bold text-foreground uppercase tracking-wide">Análise Inteligente</h3>
+                  <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Análise Inteligente</h3>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold">AI</span>
                 </div>
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                   <div className="bg-card/60 border border-border rounded-xl p-3">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Campanhas</p>
-                    <p className="text-lg font-black text-foreground tabular-nums">{aiAnalysis.activeCampaigns}<span className="text-xs font-normal text-muted-foreground">/{aiAnalysis.totalCampaigns}</span></p>
+                    <p className="text-lg font-semibold text-foreground tabular-nums">{aiAnalysis.activeCampaigns}<span className="text-xs font-normal text-muted-foreground">/{aiAnalysis.totalCampaigns}</span></p>
                     <p className="text-[10px] text-muted-foreground">ativas</p>
                   </div>
                   <div className="bg-card/60 border border-border rounded-xl p-3">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Tendência Gasto</p>
                     <div className="flex items-center gap-1.5 mt-1">
                       {aiAnalysis.spendTrend === "up" ? <ArrowUpRight size={16} className="text-destructive" /> : aiAnalysis.spendTrend === "down" ? <ArrowDownRight size={16} className="text-primary" /> : <Minus size={16} className="text-muted-foreground" />}
-                      <span className={`text-lg font-black tabular-nums ${aiAnalysis.spendTrend === "up" ? "text-destructive" : aiAnalysis.spendTrend === "down" ? "text-primary" : "text-foreground"}`}>
+                      <span className={`text-lg font-semibold tabular-nums ${aiAnalysis.spendTrend === "up" ? "text-destructive" : aiAnalysis.spendTrend === "down" ? "text-primary" : "text-foreground"}`}>
                         {aiAnalysis.spendTrend === "up" ? "Alta" : aiAnalysis.spendTrend === "down" ? "Queda" : "Estável"}
                       </span>
                     </div>
@@ -2622,7 +2625,7 @@ function AdAnalyticsTab({
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Performance</p>
                     <div className="flex items-center gap-1.5 mt-1">
                       {aiAnalysis.performanceTrend === "improving" ? <TrendingUp size={16} className="text-primary" /> : aiAnalysis.performanceTrend === "declining" ? <TrendingDown size={16} className="text-destructive" /> : <Activity size={16} className="text-muted-foreground" />}
-                      <span className={`text-lg font-black tabular-nums ${aiAnalysis.performanceTrend === "improving" ? "text-primary" : aiAnalysis.performanceTrend === "declining" ? "text-destructive" : "text-foreground"}`}>
+                      <span className={`text-lg font-semibold tabular-nums ${aiAnalysis.performanceTrend === "improving" ? "text-primary" : aiAnalysis.performanceTrend === "declining" ? "text-destructive" : "text-foreground"}`}>
                         {aiAnalysis.performanceTrend === "improving" ? "Melhorando" : aiAnalysis.performanceTrend === "declining" ? "Em Queda" : "Estável"}
                       </span>
                     </div>
@@ -2630,9 +2633,9 @@ function AdAnalyticsTab({
                   <div className="bg-card/60 border border-border rounded-xl p-3">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Alertas</p>
                     <div className="flex items-center gap-2 mt-1">
-                      {criticalInsights.length > 0 && <span className="text-lg font-black text-destructive tabular-nums">{criticalInsights.length}<span className="text-[10px] font-normal"> críticos</span></span>}
-                      {warningInsights.length > 0 && <span className="text-lg font-black text-primary tabular-nums">{warningInsights.length}<span className="text-[10px] font-normal"> atenção</span></span>}
-                      {criticalInsights.length === 0 && warningInsights.length === 0 && <span className="text-lg font-black text-primary">Nenhum</span>}
+                      {criticalInsights.length > 0 && <span className="text-lg font-semibold text-destructive tabular-nums">{criticalInsights.length}<span className="text-[10px] font-normal"> críticos</span></span>}
+                      {warningInsights.length > 0 && <span className="text-lg font-semibold text-primary tabular-nums">{warningInsights.length}<span className="text-[10px] font-normal"> atenção</span></span>}
+                      {criticalInsights.length === 0 && warningInsights.length === 0 && <span className="text-lg font-semibold text-primary">Nenhum</span>}
                     </div>
                   </div>
                 </div>
@@ -2644,7 +2647,7 @@ function AdAnalyticsTab({
                       <Star size={12} className="text-primary" />
                       <span className="text-muted-foreground">Melhor:</span>
                       <span className="text-foreground font-semibold">{aiAnalysis.topPerformer.name}</span>
-                      <span className="text-primary font-bold">{aiAnalysis.topPerformer.value}</span>
+                      <span className="text-primary font-semibold">{aiAnalysis.topPerformer.value}</span>
                     </div>
                   )}
                   {aiAnalysis.worstPerformer && (
@@ -2652,7 +2655,7 @@ function AdAnalyticsTab({
                       <ShieldAlert size={12} className="text-destructive" />
                       <span className="text-muted-foreground">Revisar:</span>
                       <span className="text-foreground font-semibold">{aiAnalysis.worstPerformer.name}</span>
-                      <span className="text-destructive font-bold">{aiAnalysis.worstPerformer.value}</span>
+                      <span className="text-destructive font-semibold">{aiAnalysis.worstPerformer.value}</span>
                     </div>
                   )}
                 </div>
@@ -2671,7 +2674,7 @@ function AdAnalyticsTab({
                 <Zap size={16} className="text-primary" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-foreground">Insights & Alertas</h3>
+                <h3 className="text-sm font-semibold text-foreground">Insights & Alertas</h3>
                 <p className="text-[10px] text-muted-foreground">{activeInsights.length} recomendações da análise inteligente</p>
               </div>
             </div>
@@ -2695,7 +2698,7 @@ function AdAnalyticsTab({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-xs font-bold text-foreground">{insight.title}</p>
+                      <p className="text-xs font-semibold text-foreground">{insight.title}</p>
                       {insight.campaignName && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground border border-border">{insight.campaignName}</span>
                       )}
@@ -2788,7 +2791,7 @@ function AdAnalyticsTab({
                   "text-primary"
                 } />
               </div>
-              <p className={`text-xl font-black tabular-nums ${
+              <p className={`text-xl font-semibold tabular-nums ${
                 kpiClass === "kpi-danger" ? "text-destructive" :
                 kpiClass === "kpi-warning" ? "text-lone-warning" :
                 "text-foreground"
@@ -2857,7 +2860,7 @@ function AdAnalyticsTab({
                 <div key={clientId}>
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-md bg-primary/20 text-primary flex items-center justify-center text-xs font-bold">
+                      <div className="w-6 h-6 rounded-md bg-primary/20 text-primary flex items-center justify-center text-xs font-semibold">
                         {data.name[0]}
                       </div>
                       <span className="text-sm font-medium text-foreground">{data.name}</span>
@@ -2895,7 +2898,7 @@ function AdAnalyticsTab({
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Brain size={16} className="text-primary" />
-            <h3 className="text-sm font-bold text-foreground">Relatório AI por Conta</h3>
+            <h3 className="text-sm font-semibold text-foreground">Relatório AI por Conta</h3>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold">AI</span>
           </div>
           {clientBreakdown.map(([clientId, data]) => {
@@ -2915,7 +2918,7 @@ function AdAnalyticsTab({
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
-                        <h4 className="text-sm font-bold text-foreground">{report.accountName}</h4>
+                        <h4 className="text-sm font-semibold text-foreground">{report.accountName}</h4>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
                           report.urgency === "critical" ? "bg-destructive/10 text-destructive border border-destructive/20" :
                           report.urgency === "warning" ? "bg-primary/10 text-primary border border-primary/15" :
@@ -3007,8 +3010,8 @@ function AdAnalyticsTab({
                       <p className="text-sm font-semibold text-foreground truncate">{camp.name}</p>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${statusInfo?.cls}`}>{statusInfo?.label}</span>
                       {insightFalhou(camp) ? (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-bold uppercase tracking-wider" title="A Meta não respondeu os números desta campanha">Sem dados — falha na Meta</span>
-                      ) : camp.hasData === false && <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border font-bold uppercase tracking-wider">Sem dados</span>}
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-semibold uppercase tracking-wider" title="A Meta não respondeu os números desta campanha">Sem dados — falha na Meta</span>
+                      ) : camp.hasData === false && <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border font-semibold uppercase tracking-wider">Sem dados</span>}
                       {budgetPct > 90 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-semibold">Verba {budgetPct.toFixed(0)}%</span>}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
@@ -3021,19 +3024,19 @@ function AdAnalyticsTab({
                   </div>
                   <div className="flex items-center gap-5 text-xs shrink-0">
                     <div className="text-right">
-                      <p className="font-bold text-foreground tabular-nums">{insightFalhou(camp) ? "—" : `R$ ${formatCurrency(camp.spend)}`}</p>
+                      <p className="font-semibold text-foreground tabular-nums">{insightFalhou(camp) ? "—" : `R$ ${formatCurrency(camp.spend)}`}</p>
                       <p className="text-[10px] text-muted-foreground">Gasto</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-foreground tabular-nums">{formatNumber(camp.impressions)}</p>
+                      <p className="font-semibold text-foreground tabular-nums">{formatNumber(camp.impressions)}</p>
                       <p className="text-[10px] text-muted-foreground">Impr</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-foreground tabular-nums">{Math.round(camp.conversions)}</p>
+                      <p className="font-semibold text-foreground tabular-nums">{Math.round(camp.conversions)}</p>
                       <p className="text-[10px] text-muted-foreground">Conv</p>
                     </div>
                     <div className="text-right">
-                      <p className={`font-bold tabular-nums ${camp.ctr >= 2 ? "text-primary" : camp.ctr < 0.5 ? "text-destructive" : "text-foreground"}`}>{camp.ctr.toFixed(2)}%</p>
+                      <p className={`font-semibold tabular-nums ${camp.ctr >= 2 ? "text-primary" : camp.ctr < 0.5 ? "text-destructive" : "text-foreground"}`}>{camp.ctr.toFixed(2)}%</p>
                       <p className="text-[10px] text-muted-foreground">CTR</p>
                     </div>
                     {isExpanded ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
@@ -3059,7 +3062,7 @@ function AdAnalyticsTab({
                       ].map((item) => (
                         <div key={item.label} className="bg-card border border-border rounded-lg p-2.5 text-center">
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{item.label}</p>
-                          <p className="text-sm font-bold text-foreground tabular-nums mt-0.5">{item.value}</p>
+                          <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">{item.value}</p>
                         </div>
                       ))}
                     </div>
@@ -3338,19 +3341,19 @@ function InvestmentControlTab({
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Investimento Total / Mês</p>
-          <p className="text-xl font-bold text-foreground tabular-nums">R$ {fmtBRL(totalMonthly)}</p>
+          <p className="text-xl font-semibold text-foreground tabular-nums">R$ {fmtBRL(totalMonthly)}</p>
           <p className="text-xs text-muted-foreground mt-1">{clients.length} clientes</p>
         </div>
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Gasto Total (Meta)</p>
           {monthSpendFalhou ? (
             <>
-              <p className="text-xl font-bold tabular-nums text-muted-foreground">—</p>
+              <p className="text-xl font-semibold tabular-nums text-muted-foreground">—</p>
               <p className="text-xs text-lone-warning mt-1">Sem dados — sincronização falhou</p>
             </>
           ) : (
             <>
-              <p className="text-xl font-bold tabular-nums text-primary">
+              <p className="text-xl font-semibold tabular-nums text-primary">
                 R$ {fmtBRL(totalSpend)}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -3362,7 +3365,7 @@ function InvestmentControlTab({
         </div>
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Saldo Restante</p>
-          <p className="text-xl font-bold text-primary tabular-nums">{monthSpendFalhou ? "—" : `R$ ${fmtBRL(Math.max(0, totalMonthly - totalSpend))}`}</p>
+          <p className="text-xl font-semibold text-primary tabular-nums">{monthSpendFalhou ? "—" : `R$ ${fmtBRL(Math.max(0, totalMonthly - totalSpend))}`}</p>
           {/* Total pacing bar with time marker */}
           <div className="mt-1.5 relative h-1.5 bg-muted rounded-full overflow-visible">
             <div
@@ -3407,7 +3410,7 @@ function InvestmentControlTab({
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                    <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-semibold shrink-0 ${
                       isSelected ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
                     }`}>
                       {c.name[0]}
@@ -3445,11 +3448,11 @@ function InvestmentControlTab({
             {/* Panel header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold bg-primary/15 text-primary">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-semibold bg-primary/15 text-primary">
                   {selectedClient.name[0]}
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-foreground">{selectedClient.name}</h3>
+                  <h3 className="text-sm font-semibold text-foreground">{selectedClient.name}</h3>
                   <p className="text-[10px] text-muted-foreground">
                     {selectedClient.metaAdAccountName ?? "Sem conta Meta vinculada"} · {selectedClient.assignedTraffic}
                   </p>
@@ -3457,7 +3460,7 @@ function InvestmentControlTab({
               </div>
               <div className="flex items-center gap-2">
                 {isUsingRealData && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-bold uppercase tracking-wider">
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-semibold uppercase tracking-wider">
                     Meta API
                   </span>
                 )}
@@ -3562,7 +3565,7 @@ function InvestmentControlTab({
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${pacingUi.texto} ${pacingUi.borda} ${pacingUi.fundo}`}>
                       {pacingLabel}
                     </span>
-                    <span className={`text-xs font-bold tabular-nums ${pacingUi.texto}`}>
+                    <span className={`text-xs font-semibold tabular-nums ${pacingUi.texto}`}>
                       {monthlySpendOuNull === null ? "—" : `${spendPct.toFixed(1)}%`}
                     </span>
                   </div>
@@ -3586,7 +3589,7 @@ function InvestmentControlTab({
                   />
                   {/* Day label on the marker */}
                   <div
-                    className="absolute -top-5 text-[9px] font-bold text-foreground -translate-x-1/2 whitespace-nowrap"
+                    className="absolute -top-5 text-[9px] font-semibold text-foreground -translate-x-1/2 whitespace-nowrap"
                     style={{ left: `${timePctBar}%` }}
                   >
                     dia {currentDay}
@@ -3610,19 +3613,19 @@ function InvestmentControlTab({
                 <div className="grid grid-cols-3 gap-2 mt-1">
                   <div className="bg-muted/40 rounded-lg p-2.5 text-center border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Diária Ideal</p>
-                    <p className="text-sm font-bold tabular-nums mt-0.5 text-foreground">R$ {fmtBRL(idealDailyBudget)}</p>
+                    <p className="text-sm font-semibold tabular-nums mt-0.5 text-foreground">R$ {fmtBRL(idealDailyBudget)}</p>
                     <p className="text-[9px] text-muted-foreground">{monthlyBudget > 0 ? `÷ ${daysInMonth} dias` : "—"}</p>
                   </div>
                   <div className="bg-muted/40 rounded-lg p-2.5 text-center border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Diária Real (Meta)</p>
-                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${avgDailyBurn > idealDailyBudget * 1.15 ? "text-destructive" : avgDailyBurn < idealDailyBudget * 0.85 ? "text-lone-info" : pacingUi.texto}`}>
+                    <p className={`text-sm font-semibold tabular-nums mt-0.5 ${avgDailyBurn > idealDailyBudget * 1.15 ? "text-destructive" : avgDailyBurn < idealDailyBudget * 0.85 ? "text-lone-info" : pacingUi.texto}`}>
                       R$ {fmtBRL(avgDailyBurn)}
                     </p>
                     <p className="text-[9px] text-muted-foreground">média {currentDay}d</p>
                   </div>
                   <div className="bg-muted/40 rounded-lg p-2.5 text-center border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Projeção Fim</p>
-                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${projectedEndDay < 25 ? "text-destructive" : projectedEndDay <= daysInMonth ? "text-foreground" : "text-primary"}`}>
+                    <p className={`text-sm font-semibold tabular-nums mt-0.5 ${projectedEndDay < 25 ? "text-destructive" : projectedEndDay <= daysInMonth ? "text-foreground" : "text-primary"}`}>
                       {avgDailyBurn > 0 ? `Dia ~${Math.min(projectedEndDay, 99)}` : "—"}
                     </p>
                     <p className="text-[9px] text-muted-foreground">
@@ -3635,19 +3638,19 @@ function InvestmentControlTab({
                 <div className="grid grid-cols-3 gap-2">
                   <div className="bg-muted/50 rounded-lg p-2.5 text-center border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Gasto Mês</p>
-                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${pacingUi.texto}`}>
+                    <p className={`text-sm font-semibold tabular-nums mt-0.5 ${pacingUi.texto}`}>
                       {monthlySpendOuNull === null ? "—" : `R$ ${fmtBRL(monthlySpend)}`}
                     </p>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-2.5 text-center border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Saldo</p>
-                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${remaining > 0 ? "text-primary" : "text-destructive"}`}>
+                    <p className={`text-sm font-semibold tabular-nums mt-0.5 ${remaining > 0 ? "text-primary" : "text-destructive"}`}>
                       R$ {fmtBRL(remaining)}
                     </p>
                   </div>
                   <div className="bg-muted/50 rounded-lg p-2.5 text-center border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Hoje</p>
-                    <p className={`text-sm font-bold tabular-nums mt-0.5 ${todaySpend > idealDailyBudget * 1.15 ? "text-destructive" : "text-foreground"}`}>
+                    <p className={`text-sm font-semibold tabular-nums mt-0.5 ${todaySpend > idealDailyBudget * 1.15 ? "text-destructive" : "text-foreground"}`}>
                       R$ {fmtBRL(todaySpend)}
                     </p>
                   </div>

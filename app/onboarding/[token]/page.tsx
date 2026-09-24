@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import {
   User, FileText, Shield, Upload, Camera, Check, Loader2,
   Eye, EyeOff, AlertTriangle, Building2, ChevronRight, MapPin, RefreshCw,
+  Facebook, Instagram, Search, type LucideIcon,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { chamar } from "@/lib/api/chamar";
@@ -224,8 +225,8 @@ function FileUpload({ label, docType, clientId, token, onUploaded, uploaded, pre
   );
 }
 
-function AccessField({ platform, icon, login, password, status, onLogin, onPassword, onStatus }: {
-  platform: string; icon: string; login: string; password: string; status: AccessStatus;
+function AccessField({ platform, icon: Icone, login, password, status, onLogin, onPassword, onStatus }: {
+  platform: string; icon: LucideIcon; login: string; password: string; status: AccessStatus;
   onLogin: (v: string) => void; onPassword: (v: string) => void; onStatus: (v: AccessStatus) => void;
 }) {
   const [showPw, setShowPw] = useState(false);
@@ -235,17 +236,17 @@ function AccessField({ platform, icon, login, password, status, onLogin, onPassw
       status === "partner_invite" ? "border-primary/20 bg-primary/[0.03]" :
       "border-border bg-card"
     }`}>
-      <p className="text-sm font-medium text-foreground flex items-center gap-2"><span>{icon}</span> {platform}</p>
+      <p className="text-sm font-medium text-foreground flex items-center gap-2"><Icone size={15} className="text-muted-foreground shrink-0" aria-hidden="true" /> {platform}</p>
       <div className="flex gap-1.5">
         {([
-          { v: "fill_now" as const, label: "Preencher", icon: "📥" },
-          { v: "waiting_client" as const, label: "Não tenho", icon: "⏳" },
-          { v: "partner_invite" as const, label: "Convite Partner", icon: "🤝" },
+          { v: "fill_now" as const, label: "Preencher" },
+          { v: "waiting_client" as const, label: "Não tenho" },
+          { v: "partner_invite" as const, label: "Convite Partner" },
         ]).map((opt) => (
           <button key={opt.v} type="button" onClick={() => onStatus(opt.v)}
             className={`flex-1 text-xs py-2 rounded-lg border transition-all ${
               status === opt.v ? "border-primary/50 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
-            }`}>{opt.icon} {opt.label}</button>
+            }`}>{opt.label}</button>
         ))}
       </div>
       {status === "fill_now" && (
@@ -262,7 +263,7 @@ function AccessField({ platform, icon, login, password, status, onLogin, onPassw
         </div>
       )}
       {status === "waiting_client" && (
-        <div className="flex items-center gap-2 text-xs text-lone-warning/80"><AlertTriangle size={12} /><span>Será marcado como pendência</span></div>
+        <div className="flex items-center gap-2 text-xs text-lone-warning"><AlertTriangle size={12} /><span>Será marcado como pendência</span></div>
       )}
       {status === "partner_invite" && (
         <p className="text-xs text-primary">Nós adicionaremos como parceiro via Business Manager.</p>
@@ -558,7 +559,7 @@ export default function ExternalOnboardingPage() {
   if (submitted) return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center space-y-6 animate-fade-in">
-        <div className="w-20 h-20 rounded-full bg-lone-success-icon-bg flex items-center justify-center mx-auto">
+        <div className="w-20 h-20 rounded-full bg-lone-success-bg flex items-center justify-center mx-auto">
           <Check size={40} className="text-lone-success" />
         </div>
         <h1 className="text-2xl font-bold text-foreground">Tudo certo!</h1>
@@ -604,7 +605,7 @@ export default function ExternalOnboardingPage() {
     <div className="min-h-screen bg-background">
       {/* Upload success toast (ephemeral) */}
       {uploadToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-xl bg-lone-success-icon-bg border border-lone-success-border text-lone-success text-xs font-medium shadow-lg animate-fade-in">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-xl bg-lone-success-bg border border-lone-success-border text-lone-success text-xs font-medium shadow-lg animate-fade-in">
           <Check size={14} /> {uploadToast}
         </div>
       )}
@@ -762,11 +763,11 @@ export default function ExternalOnboardingPage() {
         {step === "acessos" && (
           <div className="space-y-4 animate-fade-in">
             <p className="text-xs text-muted-foreground">Informe os acessos das plataformas. Se não tiver agora, selecione &quot;Não tenho&quot;.</p>
-            <AccessField platform="Facebook / Meta Ads" icon="📘" login={metaLogin} password={metaPassword} status={metaStatus}
+            <AccessField platform="Facebook / Meta Ads" icon={Facebook} login={metaLogin} password={metaPassword} status={metaStatus}
               onLogin={setMetaLogin} onPassword={setMetaPassword} onStatus={setMetaStatus} />
-            <AccessField platform="Instagram" icon="📷" login={instaLogin} password={instaPassword} status={instaStatus}
+            <AccessField platform="Instagram" icon={Instagram} login={instaLogin} password={instaPassword} status={instaStatus}
               onLogin={setInstaLogin} onPassword={setInstaPassword} onStatus={setInstaStatus} />
-            <AccessField platform="Google Ads / Gmail" icon="🔍" login={googleLogin} password={googlePassword} status={googleStatus}
+            <AccessField platform="Google Ads / Gmail" icon={Search} login={googleLogin} password={googlePassword} status={googleStatus}
               onLogin={setGoogleLogin} onPassword={setGooglePassword} onStatus={setGoogleStatus} />
           </div>
         )}

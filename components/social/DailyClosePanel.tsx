@@ -110,13 +110,13 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
   const tudoPronto = pendentes.length === 0;
 
   return (
-    <div className={`card border ${tudoPronto ? "border-lone-success-border/40" : "border-lone-warning/30"}`}>
+    <div className={`card border ${tudoPronto ? "border-lone-success-border" : "border-lone-warning-border"}`}>
       <button
         type="button"
         onClick={() => setAberto((v) => !v)}
         className="w-full flex items-center gap-3 text-left"
       >
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${tudoPronto ? "bg-lone-success-bg text-lone-success" : "bg-lone-warning/10 text-lone-warning"}`}>
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${tudoPronto ? "bg-lone-success-bg text-lone-success" : "bg-lone-warning-bg text-lone-warning"}`}>
           {tudoPronto ? <CheckCircle2 size={18} /> : <CalendarCheck size={18} />}
         </div>
         <div className="flex-1 min-w-0">
@@ -141,7 +141,7 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
 
       {tudoPronto && !aberto && (
         <p className="mt-2.5 text-xs text-lone-success flex items-center gap-1.5">
-          <CheckCircle2 size={13} /> Tudo pronto! Todos os clientes com post hoje já têm arte. 🎉
+          <CheckCircle2 size={13} /> Tudo pronto! Todos os clientes com post hoje já têm arte.
         </p>
       )}
 
@@ -149,7 +149,7 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
         <div className="mt-3 space-y-1.5">
           {pendentes.length === 0 ? (
             <p className="text-xs text-lone-success flex items-center gap-1.5">
-              <CheckCircle2 size={13} /> Todos os {comPost} clientes com post hoje já têm arte. 🎉
+              <CheckCircle2 size={13} /> Todos os {comPost} clientes com post hoje já têm arte.
             </p>
           ) : (
             <>
@@ -158,7 +158,7 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
                 <div key={c.clientId} className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border ${
                   c.total === 0
                     ? "bg-destructive/[0.08] border-destructive/30"
-                    : "bg-lone-warning/[0.06] border-lone-warning/20"
+                    : "bg-lone-warning-bg border-lone-warning-border"
                 }`}>
                   <span className="text-xs font-medium text-foreground truncate">{c.clientName}</span>
                   <span className="text-[11px] text-lone-warning flex items-center gap-1 shrink-0">
@@ -175,7 +175,7 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
                 Adiantados ({adiantados})
               </p>
               {lista.filter((c) => c.total === 0 && c.proxima).map((c) => (
-                <div key={c.clientId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-lone-success/[0.06] border border-lone-success/20 mb-1.5">
+                <div key={c.clientId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-lone-success-bg border border-lone-success-border mb-1.5">
                   <span className="text-xs font-medium text-foreground truncate">{c.clientName}</span>
                   <span className="text-[11px] text-lone-success shrink-0">
                     já agendado p/ {c.proxima!.split("-").reverse().slice(0, 2).join("/")}
@@ -190,7 +190,7 @@ export default function DailyClosePanel({ cards, clientes }: { cards: ContentCar
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium pt-1.5">Prontos</p>
               <div className="flex flex-wrap gap-1.5">
                 {lista.filter((c) => c.prontas >= c.total).map((c) => (
-                  <span key={c.clientId} className="text-[11px] px-2 py-1 rounded-lg bg-lone-success-bg text-lone-success border border-lone-success-border/40 flex items-center gap-1">
+                  <span key={c.clientId} className="text-[11px] px-2 py-1 rounded-lg bg-lone-success-bg text-lone-success border border-lone-success-border flex items-center gap-1">
                     <CheckCircle2 size={11} /> {c.clientName}
                   </span>
                 ))}

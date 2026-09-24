@@ -403,7 +403,7 @@ export default function BriefingTab({ clientId }: { clientId: string }) {
         {/* ── Operação ──────────────────────────────────────── */}
         <div className="card space-y-4">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Operação</h3>
-          <div>{label("Horários preferidos de publicação")}{inp("horarios_preferidos", "Ex: Seg-Sex 18h, Sab 10h")}</div>
+          <div>{label("Horários preferidos de publicação")}{inp("horarios_preferidos", "Ex: Seg-Sex 18h, Sáb 10h")}</div>
           <div>{label("Produtos em destaque agora (um por linha)")}{ta("produtos_destaque_atual", 3)}</div>
           <div>{label("Concorrentes a não mencionar (um por linha)")}{ta("concorrentes_evitar_mencionar", 2)}</div>
         </div>

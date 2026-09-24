@@ -136,7 +136,7 @@ export default function FichaVivaClient({ token, scope }: { token: string; scope
       <div className="max-w-2xl mx-auto px-4 py-8 sm:py-10 space-y-6">
         <header className="space-y-1">
           <p className="text-lone-eyebrow text-primary">Lone Mídia</p>
-          <h1 className="text-lone-h1 font-semibold">Olá, {data.clientName} 👋</h1>
+          <h1 className="text-lone-h1 font-semibold">Olá, {data.clientName}</h1>
           <p className="text-lone-body text-muted-foreground">
             {data.welcomeMessage || (data.scope === "raiox"
               ? "Responda o raio-x comercial rapidinho — leva uns 3 minutos."

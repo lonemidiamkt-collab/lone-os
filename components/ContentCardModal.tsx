@@ -135,7 +135,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
       });
       const d = await r.json().catch(() => ({}));
       if (r.ok && d.ok) {
-        toast.success(`Enviei ${d.enviadas}/${d.total} arte(s) pro grupo de ${card.clientName} aprovar. 🎉`);
+        toast.success(`Enviei ${d.enviadas}/${d.total} arte(s) pro grupo de ${card.clientName} aprovar.`);
       } else {
         toast.error(d.error || d.falhas?.join("; ") || "Não deu pra enviar pro cliente.");
       }
@@ -304,7 +304,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
     // Notifica cada pessoa marcada pra ela ver rápido (notificação global, mas endereçada).
     mentions.forEach((name) => {
       // Com o card: quem foi marcado abre o comentário, não a ficha do cliente.
-      pushNotification("content", `📌 ${name}, você foi marcado`, `${currentUser} te marcou em "${card.title}" (${card.clientName}): "${body.slice(0, 80)}${body.length > 80 ? "..." : ""}"`, card.clientId, card.id);
+      pushNotification("content", `${name}, você foi marcado`, `${currentUser} te marcou em "${card.title}" (${card.clientName}): "${body.slice(0, 80)}${body.length > 80 ? "..." : ""}"`, card.clientId, card.id);
     });
     setCommentText("");
     setMentions([]);
@@ -430,7 +430,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                   className="w-full flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg bg-lone-success-bg border border-lone-success-border hover:brightness-105 transition-all text-xs font-semibold text-lone-success disabled:opacity-50"
                   title="O CS manda as artes deste card no grupo do WhatsApp do cliente com uma mensagem pedindo aprovação"
                 >
-                  <Send size={13} /> {enviandoCliente ? "Enviando…" : "📤 Enviar pro cliente"}
+                  <Send size={13} /> {enviandoCliente ? "Enviando…" : "Enviar pro cliente"}
                 </button>
               </div>
             )}
@@ -581,7 +581,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                     className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors disabled:opacity-50"
                     title="A IA escreve a legenda no tom do cliente, usando o briefing"
                   >
-                    <MessageSquare size={11} /> {genLegenda ? "Gerando…" : "✍️ Gerar legenda (IA)"}
+                    <MessageSquare size={11} /> {genLegenda ? "Gerando…" : "Gerar legenda (IA)"}
                   </button>
                 )}
               </div>
@@ -589,7 +589,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                 value={caption}
                 onChange={(e) => setCaption(e.target.value)}
                 rows={4}
-                placeholder="Digite a legenda que será publicada… ou use o ✍️ Gerar legenda (IA)"
+                placeholder="Digite a legenda que será publicada… ou use o Gerar legenda (IA)"
               />
             </div>
 
@@ -794,7 +794,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                       onClick={() => { setCaption(revisaoPost.legenda_corrigida!); setRevisaoPost({ ...revisaoPost, legenda_corrigida: null }); }}
                       className="mt-2 w-full px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[11px] font-medium hover:bg-primary/80 transition-all"
                     >
-                      ✍️ Aplicar legenda corrigida (revise e salve)
+                      Aplicar legenda corrigida (revise e salve)
                     </button>
                   )}
                   <p className="mt-1.5 text-[10px] text-muted-foreground">Sugestão da IA — a decisão é sua.</p>
@@ -864,7 +864,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-primary">Abrir Drive — {cl.name}</p>
-                  <p className="text-[10px] text-muted-foreground">Acesse logos, fotos e arquivos em alta resolucao</p>
+                  <p className="text-[10px] text-muted-foreground">Acesse logos, fotos e arquivos em alta resolução</p>
                 </div>
               </a>
             </div>
@@ -876,7 +876,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
           <div className="px-6 pb-3">
             <div className="rounded-lg border border-primary/20 bg-primary/[0.04] p-3">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-semibold text-primary">🎨 Briefing da arte (IA) — revise antes de enviar</span>
+                <span className="text-xs font-semibold text-primary">Briefing da arte (IA) — revise antes de enviar</span>
                 <button type="button" onClick={() => setDesignBrief(null)} className="text-[10px] text-muted-foreground hover:text-foreground">descartar</button>
               </div>
               <Textarea
@@ -901,12 +901,12 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
               title="A Lone monta o briefing da arte (objetivo, texto na arte, elementos visuais, o que não pode) pro designer executar sem perguntar nada"
               onClick={gerarBriefingDesignIA}
             >
-              {genBrief ? "Gerando…" : "🎨 Briefing pro designer (IA)"}
+              {genBrief ? "Gerando…" : "Briefing pro designer (IA)"}
             </Button>
             <Button
               variant="outline"
               disabled={sendingDesign}
-              className="flex items-center gap-2 text-[var(--chart-4)] border-[var(--chart-4)]/30 hover:bg-[var(--chart-4)]/10"
+              className="flex items-center gap-2 text-chart-4 border-chart-4/30 hover:bg-chart-4/10"
               onClick={() => {
                 trilha("solicitar-design:clique", { id: card.id, data: dueDate || null, enviando: sendingDesign });
                 if (sendingDesign) return;          // anti-duplo-clique: evita demanda duplicada
@@ -954,7 +954,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
           {/* Designer sees "Enviar Arte" instead */}
           {role === "designer" && !card.designerDeliveredAt && (
             <span className="mr-auto text-xs text-primary flex items-center gap-1.5">
-              <Upload size={12} /> Use o botao "Enviar Arte" no kanban
+              <Upload size={12} /> Use o botão "Enviar Arte" no kanban
             </span>
           )}
           {role !== "designer" && card.designRequestId && !card.designerDeliveredAt && (
@@ -964,7 +964,7 @@ export default function ContentCardModal({ card: cardProp, onClose }: Props) {
           )}
           {card.clientApprovedAt && role !== "designer" && (
             <span className="mr-auto flex items-center gap-1.5 text-sm font-semibold text-lone-success px-2.5 py-1 rounded-lg bg-lone-success-bg border border-lone-success-border">
-              🎉 Cliente aprovou — pode agendar/postar!
+              <CheckCircle size={14} aria-hidden="true" /> Cliente aprovou — pode agendar/postar!
             </span>
           )}
           {card.designerDeliveredAt && !card.socialConfirmedAt && role !== "designer" && (

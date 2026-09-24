@@ -5,6 +5,7 @@
 // aprovar só aparece com PORTAL_APROVACAO_CLIENTE=on.
 
 import { useState, useEffect, useCallback } from "react";
+import { Check, Palette, Pencil, Sparkles } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 
 interface Item { id: string; title: string; format: string; status: string; imageUrl: string; date: string | null; pendente: boolean; aprovada: boolean }
@@ -53,7 +54,7 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
       }
       setItems((prev) => (prev ?? []).map((it) => it.id === id
         ? { ...it, pendente: false, aprovada: action === "approve" ? true : it.aprovada } : it));
-      setFlash({ id, msg: action === "approve" ? "Aprovada! ✅ Avisamos o time." : "Ajuste enviado! ✏️ Já vamos cuidar." });
+      setFlash({ id, msg: action === "approve" ? "Aprovada! Avisamos o time." : "Ajuste enviado! Já vamos cuidar." });
       setAjusteOpen(null); setAjusteText("");
       setTimeout(() => setFlash(null), 4000);
     } finally { setBusy(null); }
@@ -62,7 +63,7 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
   if (erroCarga) {
     return (
       <div className="mb-6 lg:mb-8 rounded-xl px-4 py-3.5 flex flex-wrap items-center gap-3 text-sm bg-lone-warning-bg border border-lone-warning-border text-lone-warning" role="alert">
-        <span className="flex-1 min-w-[200px]">🎨 {erroCarga}</span>
+        <span className="flex-1 min-w-[200px]">{erroCarga}</span>
         <button onClick={() => setTentativa((t) => t + 1)}
           className="rounded-lg px-3.5 py-2 text-sm font-semibold min-h-[44px] bg-card border border-border text-foreground">
           Tentar de novo
@@ -82,7 +83,7 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
       {pendentes.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">🆕</span>
+            <Sparkles size={18} className="text-primary shrink-0" aria-hidden="true" />
             <h2 className="text-base font-bold">Artes do mês</h2>
             <span className="text-xs font-semibold rounded-full px-2 py-0.5 bg-primary/[.13] text-lone-brand-soft">{pendentes.length}</span>
           </div>
@@ -112,9 +113,9 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
                   ) : (
                     <div className="flex gap-2">
                       {aprovacaoLigada && <button disabled={busy === it.id} onClick={() => act(it.id, "approve")}
-                        className="flex-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 min-h-[44px] flex items-center justify-center gap-1.5 bg-lone-success text-background">✅ Aprovar</button>}
+                        className="flex-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 min-h-[44px] flex items-center justify-center gap-1.5 bg-lone-success text-background"><Check size={16} aria-hidden="true" /> Aprovar</button>}
                       <button disabled={busy === it.id} onClick={() => setAjusteOpen(it.id)}
-                        className="flex-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 min-h-[44px] bg-card text-secondary-foreground border border-border">✏️ Pedir ajuste</button>
+                        className="flex-1 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 min-h-[44px] flex items-center justify-center gap-1.5 bg-card text-secondary-foreground border border-border"><Pencil size={15} aria-hidden="true" /> Pedir ajuste</button>
                     </div>
                   )}
                 </div>
@@ -128,7 +129,7 @@ export default function PortalContent({ token, aprovacaoLigada = false }: { toke
       {entregues.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">🎨</span>
+            <Palette size={18} className="text-primary shrink-0" aria-hidden="true" />
             <h2 className="text-base font-bold">Conteúdo entregue</h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">

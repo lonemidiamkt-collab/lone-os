@@ -10,6 +10,7 @@ import {
   Building2, Shield, FileText, Eye, EyeOff, Download, Upload,
   Pencil, Check, Loader2, AlertTriangle, Send, ExternalLink,
   Link as LinkIcon, Clock, CheckCircle, Mail, Settings,
+  Facebook, Instagram, Search, Smartphone,
 } from "lucide-react";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import MarcaDoCliente from "@/components/clients/MarcaDoCliente";
@@ -263,9 +264,9 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
   const copyToClip = (text: string) => { navigator.clipboard.writeText(text).catch(() => {}); };
 
   const accessCards = [
-    { platform: "Meta / Facebook Ads", icon: "📘", loginKey: "facebookLogin", pwKey: "facebookPassword", testUrl: "https://business.facebook.com", roles: ["admin", "manager", "traffic"] },
-    { platform: "Instagram", icon: "📷", loginKey: "instagramLogin", pwKey: "instagramPassword", testUrl: "https://www.instagram.com/accounts/login/", roles: ["admin", "manager", "social"] },
-    { platform: "Google Ads", icon: "🔍", loginKey: "googleAdsLogin", pwKey: "googleAdsPassword", testUrl: "https://ads.google.com", roles: ["admin", "manager", "traffic"] },
+    { platform: "Meta / Facebook Ads", icon: Facebook, loginKey: "facebookLogin", pwKey: "facebookPassword", testUrl: "https://business.facebook.com", roles: ["admin", "manager", "traffic"] },
+    { platform: "Instagram", icon: Instagram, loginKey: "instagramLogin", pwKey: "instagramPassword", testUrl: "https://www.instagram.com/accounts/login/", roles: ["admin", "manager", "social"] },
+    { platform: "Google Ads", icon: Search, loginKey: "googleAdsLogin", pwKey: "googleAdsPassword", testUrl: "https://ads.google.com", roles: ["admin", "manager", "traffic"] },
   ].filter(({ roles }) => roles.includes(role));
 
   // Pendencies
@@ -343,7 +344,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           )}
           <div>
             <p className="text-sm font-medium text-foreground">{companyName}</p>
-            <p className="text-[10px] text-muted-foreground">QG de Informacoes</p>
+            <p className="text-[10px] text-muted-foreground">QG de Informações</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -351,7 +352,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             <button onClick={generateOnboardingLink} disabled={generatingLink}
               className="btn-ghost text-xs flex items-center gap-1.5 border border-border hover:border-lone-warning-border hover:text-lone-warning">
               {generatingLink ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-              Link de Correcao
+              Link de Correção
             </button>
           )}
           {isAdmin && editing ? (
@@ -359,7 +360,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
               <button onClick={() => { setForm(initForm()); setEditing(false); }} className="btn-ghost text-xs border border-border">Cancelar</button>
               <button onClick={handleSave} disabled={saving}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground text-xs font-medium transition-colors disabled:opacity-50">
-                {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Salvar Alteracoes
+                {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Salvar Alterações
               </button>
             </>
           ) : isAdmin ? (
@@ -413,7 +414,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       {missing.length > 0 && (
         <div className="rounded-xl border border-lone-warning-border bg-lone-warning-bg p-4">
           <p className="text-xs font-medium text-lone-warning flex items-center gap-1.5 mb-2">
-            <AlertTriangle size={12} /> {missing.length} {missing.length === 1 ? "pendencia" : "pendencias"}
+            <AlertTriangle size={12} /> {missing.length} {missing.length === 1 ? "pendência" : "pendências"}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {missing.map((m) => <span key={m} className="text-[10px] px-2 py-1 rounded-lg bg-lone-warning-bg text-lone-warning border border-lone-warning-border">{m}</span>)}
@@ -442,7 +443,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
           <div className="flex-1 min-w-0">
             <p className="text-base font-semibold text-foreground truncate">{companyName}</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              {client.docLogo ? "Disponivel para equipe social e design" : "Solicite ao cliente via link de correcao"}
+              {client.docLogo ? "Disponível para equipe social e design" : "Solicite ao cliente via link de correção"}
             </p>
             <div className="flex items-center gap-2 mt-3 flex-wrap">
               {client.docLogo && (
@@ -490,7 +491,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
              <FileText size={18} className="text-muted-foreground" />}
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Status Juridico</p>
+            <p className="text-xs text-muted-foreground">Status Jurídico</p>
             <p className="text-sm font-medium text-foreground">
               {!latestContract ? "Nenhum contrato" :
                latestContract.status === "active" ? `Contrato Ativo (V${latestContract.version})` :
@@ -510,7 +511,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       {form.phone && (
         <div className="rounded-xl border border-border bg-card p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-lone-success-bg flex items-center justify-center"><span className="text-lg">📱</span></div>
+            <div className="w-10 h-10 rounded-xl bg-lone-success-bg flex items-center justify-center"><Smartphone size={18} className="text-lone-success" aria-hidden="true" /></div>
             <div>
               <p className="text-xs text-muted-foreground">WhatsApp do Cliente</p>
               <p className="text-sm font-medium text-foreground">{form.phone}</p>
@@ -530,9 +531,9 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
         </p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-3">
           {([
-            { key: "nomeFantasia", label: "Nome Fantasia" }, { key: "razaoSocial", label: "Razao Social" },
+            { key: "nomeFantasia", label: "Nome Fantasia" }, { key: "razaoSocial", label: "Razão Social" },
             { key: "cnpj", label: "CNPJ" }, { key: "nicho", label: "Ramo / Nicho" },
-            { key: "contactName", label: "Responsavel" }, { key: "cpfCnpj", label: "CPF" },
+            { key: "contactName", label: "Responsável" }, { key: "cpfCnpj", label: "CPF" },
             { key: "phone", label: "WhatsApp" }, { key: "emailCorporativo", label: "E-mail" },
             { key: "enderecoCep", label: "CEP" }, { key: "enderecoRua", label: "Rua / Logradouro" },
             { key: "enderecoNumero", label: "Número" }, { key: "enderecoBairro", label: "Bairro" },
@@ -559,13 +560,13 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             {!isAdmin && <span className="text-[10px] text-muted-foreground normal-case font-normal ml-2">Mostrando apenas plataformas do seu departamento</span>}
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {accessCards.map(({ platform, icon, loginKey, pwKey, testUrl }) => {
+            {accessCards.map(({ platform, icon: IconePlataforma, loginKey, pwKey, testUrl }) => {
               const hasLogin = !!form[loginKey];
               const hasPw = !!form[pwKey];
               return (
                 <div key={loginKey} className={`rounded-xl border p-4 space-y-3 ${hasLogin ? "border-border bg-surface" : "border-lone-warning-border bg-lone-warning-bg"}`}>
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium text-foreground flex items-center gap-1.5"><span>{icon}</span> {platform}</p>
+                    <p className="text-xs font-medium text-foreground flex items-center gap-1.5"><IconePlataforma size={12} className="text-muted-foreground shrink-0" aria-hidden="true" /> {platform}</p>
                     <div className="flex items-center gap-1.5">
                       {hasLogin && (
                         <a href={testUrl} target="_blank" rel="noopener noreferrer"
@@ -610,7 +611,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                               showPw[pwKey] ? form[pwKey] : "••••••••"
                             ) : (
                               <span className="text-muted-foreground italic font-sans text-[11px]">
-                                {revealingPw === pwKey ? "Descriptografando..." : semSenha[pwKey] ? "Nenhuma senha no cofre" : "🔒 Clique no olho pra revelar"}
+                                {revealingPw === pwKey ? "Descriptografando..." : semSenha[pwKey] ? "Nenhuma senha no cofre" : "Clique no olho pra revelar"}
                               </span>
                             )}
                           </p>
@@ -727,51 +728,51 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
       {isAdmin && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-            <Settings size={11} className="text-primary" /> Configuracao Operacional
+            <Settings size={11} className="text-primary" /> Configuração Operacional
           </p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3">
             <div className="space-y-1 col-span-2">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tipo de Servico</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tipo de Serviço</p>
               {editing ? (
                 <select value={form.serviceType || ""} onChange={(e) => setForm((p) => ({ ...p, serviceType: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
-                  <option value="">Nao definido</option>
-                  <option value="lone_growth">Lone Growth (Trafego + Social + Design)</option>
-                  <option value="assessoria_trafego">Assessoria de Trafego</option>
+                  <option value="">Não definido</option>
+                  <option value="lone_growth">Lone Growth (Tráfego + Social + Design)</option>
+                  <option value="assessoria_trafego">Assessoria de Tráfego</option>
                   <option value="assessoria_social">Assessoria de Social</option>
                   <option value="assessoria_design">Assessoria de Design</option>
                 </select>
               ) : (
                 <p className="text-sm text-foreground">
                   {form.serviceType === "lone_growth" ? "Lone Growth" :
-                   form.serviceType === "assessoria_trafego" ? "Assessoria de Trafego" :
+                   form.serviceType === "assessoria_trafego" ? "Assessoria de Tráfego" :
                    form.serviceType === "assessoria_social" ? "Assessoria de Social" :
                    form.serviceType === "assessoria_design" ? "Assessoria de Design" :
-                   <span className="text-muted-foreground italic">Nao definido</span>}
+                   <span className="text-muted-foreground italic">Não definido</span>}
                 </p>
               )}
             </div>
             <div className="space-y-1 col-span-2">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Perfil de Conteudo</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Perfil de Conteúdo</p>
               {editing ? (
                 <select value={form.perfilConteudo || ""} onChange={(e) => setForm((p) => ({ ...p, perfilConteudo: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
-                  <option value="">Nao definido</option>
-                  <option value="so_arte">So Arte</option>
-                  <option value="video">Video (grava videos - quarta e dia de Reels)</option>
-                  <option value="completo">Completo (video + arte + stories)</option>
+                  <option value="">Não definido</option>
+                  <option value="so_arte">Só Arte</option>
+                  <option value="video">Vídeo (grava vídeos — quarta é dia de Reels)</option>
+                  <option value="completo">Completo (vídeo + arte + stories)</option>
                 </select>
               ) : (
                 <p className="text-sm text-foreground">
-                  {form.perfilConteudo === "video" ? "Video (faz Reels)" :
+                  {form.perfilConteudo === "video" ? "Vídeo (faz Reels)" :
                    form.perfilConteudo === "completo" ? "Completo" :
-                   form.perfilConteudo === "so_arte" ? "So Arte" :
-                   <span className="text-muted-foreground italic">Nao definido</span>}
+                   form.perfilConteudo === "so_arte" ? "Só Arte" :
+                   <span className="text-muted-foreground italic">Não definido</span>}
                 </p>
               )}
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Responsavel Trafego</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Responsável Tráfego</p>
               {editing ? (
                 <select value={form.assignedTraffic || ""} onChange={(e) => setForm((p) => ({ ...p, assignedTraffic: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
@@ -779,11 +780,11 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                   {team.forField("assignedTraffic").map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
               ) : (
-                <p className="text-sm text-foreground">{form.assignedTraffic || <span className="text-muted-foreground italic">Nao atribuido</span>}</p>
+                <p className="text-sm text-foreground">{form.assignedTraffic || <span className="text-muted-foreground italic">Não atribuído</span>}</p>
               )}
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Responsavel Social</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Responsável Social</p>
               {editing ? (
                 <select value={form.assignedSocial || ""} onChange={(e) => setForm((p) => ({ ...p, assignedSocial: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
@@ -791,11 +792,11 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                   {team.forField("assignedSocial").map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
               ) : (
-                <p className="text-sm text-foreground">{form.assignedSocial || <span className="text-muted-foreground italic">Nao atribuido</span>}</p>
+                <p className="text-sm text-foreground">{form.assignedSocial || <span className="text-muted-foreground italic">Não atribuído</span>}</p>
               )}
             </div>
             <div className="space-y-1 col-span-2">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Designer Responsavel</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Designer Responsável</p>
               {editing ? (
                 <select value={form.assignedDesigner || ""} onChange={(e) => setForm((p) => ({ ...p, assignedDesigner: e.target.value }))}
                   className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
@@ -803,18 +804,18 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
                   {team.forField("assignedDesigner").map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
               ) : (
-                <p className="text-sm text-foreground">{form.assignedDesigner || <span className="text-muted-foreground italic">Nao atribuido</span>}</p>
+                <p className="text-sm text-foreground">{form.assignedDesigner || <span className="text-muted-foreground italic">Não atribuído</span>}</p>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Acoes do Sistema */}
+      {/* Ações do Sistema */}
       {isAdmin && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-            <Mail size={11} className="text-primary" /> Acoes do Sistema
+            <Mail size={11} className="text-primary" /> Ações do Sistema
           </p>
           <div className="flex items-center gap-3">
             <button onClick={handleResendWelcome} disabled={emailSending}
@@ -833,7 +834,7 @@ export default function DadosTab({ client, role, currentUser, updateClientData, 
             return (
               <div className="flex items-center justify-between pt-3 border-t border-border">
                 <div>
-                  <p className="text-xs font-medium text-foreground">🤖 Agente CS</p>
+                  <p className="text-xs font-medium text-foreground">Agente CS</p>
                   <p className="text-[10px] text-muted-foreground">
                     {agenteAtivo ? "Ativo — capta demanda e vigia o fluxo deste cliente" : "Pausado — o agente ignora este cliente"}
                   </p>

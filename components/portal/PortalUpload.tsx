@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { Paperclip } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 
 // O cliente manda material pelo painel (Roberto, 31/08). Hoje foto de produto, logo e tabela de
@@ -101,7 +102,7 @@ export default function PortalUpload({ token, clientName }: { token: string; cli
         className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold cursor-pointer min-h-[48px] transition-opacity text-primary-foreground ${enviando ? "bg-border" : "bg-primary"}`}
         style={{ opacity: enviando ? 0.7 : 1 }}
       >
-        {enviando ? "Enviando…" : "📎 Escolher arquivos"}
+        {enviando ? "Enviando…" : <><Paperclip size={16} aria-hidden="true" /> Escolher arquivos</>}
       </label>
 
       {erro && <p className="text-xs mt-3 text-lone-warning">{erro}</p>}

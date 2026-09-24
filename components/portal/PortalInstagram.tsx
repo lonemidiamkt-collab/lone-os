@@ -5,6 +5,7 @@
 // Lê do cache (rota /api/meta/instagram/[clientId]?token=&period=).
 
 import { useState, useEffect } from "react";
+import { Camera, Heart, MessageCircle, Play } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 
 interface Post { id: string; tipo: string; thumb: string | null; permalink: string | null; curtidas: number | null; comentarios: number | null; views: number | null; alcance: number | null; engajamento: number }
@@ -119,7 +120,7 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
     <div className="mb-6 lg:mb-8">
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div className="flex items-center gap-2">
-          <span className="text-lg">📸</span>
+          <Camera size={18} className="text-primary shrink-0" aria-hidden="true" />
           <h2 className="text-base font-bold">Instagram</h2>
           {data?.conta?.username && <span className="text-xs text-lone-text-tertiary">@{data.conta.username}</span>}
         </div>
@@ -142,7 +143,7 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
 
       {isPublico && (
         <p className="text-xs mb-4 text-lone-text-tertiary">
-          📊 Alcance, seguidores ganhos e público (gênero/idade/cidades) ficam disponíveis quando o perfil é conectado ao nosso Business Manager.
+Alcance, seguidores ganhos e público (gênero/idade/cidades) ficam disponíveis quando o perfil é conectado ao nosso Business Manager.
         </p>
       )}
 
@@ -208,9 +209,9 @@ export default function PortalInstagram({ token, clientId }: { token: string; cl
                   ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={p.thumb} alt="" className="w-full aspect-square object-cover" loading="lazy" />
                   : <div className="w-full aspect-square bg-border" />}
                 <div className="p-2 flex items-center gap-3 text-xs flex-wrap">
-                  <span>❤️ {nf(p.curtidas)}</span>
-                  <span>💬 {nf(p.comentarios)}</span>
-                  {p.views != null && <span>▶️ {nf(p.views)}</span>}
+                  <span className="inline-flex items-center gap-1" title="Curtidas"><Heart size={12} aria-hidden="true" />{nf(p.curtidas)}</span>
+                  <span className="inline-flex items-center gap-1" title="Comentários"><MessageCircle size={12} aria-hidden="true" />{nf(p.comentarios)}</span>
+                  {p.views != null && <span className="inline-flex items-center gap-1" title="Visualizações"><Play size={12} aria-hidden="true" />{nf(p.views)}</span>}
                 </div>
               </a>
             ))}

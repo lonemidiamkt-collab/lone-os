@@ -31,7 +31,7 @@ const LISTAS: [keyof BriefingEstruturado, string][] = [
   ["produtos", "Produtos/serviços"], ["produtos_destaque_atual", "Destaque atual"],
   ["ganchos", "Ganchos"], ["ctas", "CTAs"],
   ["palavras_proibidas", "Palavras proibidas"], ["concorrentes_evitar_mencionar", "Concorrentes a evitar"],
-  ["hashtags_padrao", "Hashtags padrão"], ["campos_faltando", "⚠️ Falta coletar (o time preenche)"],
+  ["hashtags_padrao", "Hashtags padrão"], ["campos_faltando", "Falta coletar (o time preenche)"],
 ];
 
 export default function BriefingEstrategico({ clientId }: { clientId: string }) {

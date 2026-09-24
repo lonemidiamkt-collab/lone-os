@@ -37,7 +37,7 @@ export default function CsAgentInbox({
         <span className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center">
           <Bot size={15} className="text-primary" />
         </span>
-        <h3 className="text-sm font-semibold text-foreground">🤖 {titulo}</h3>
+        <h3 className="text-sm font-semibold text-foreground">{titulo}</h3>
         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-medium">
           {doAgente.length} {doAgente.length === 1 ? "pedido" : "pedidos"}
         </span>
@@ -55,7 +55,7 @@ export default function CsAgentInbox({
             >
               <div className="flex items-start justify-between gap-2 mb-1">
                 <span className="text-xs font-medium text-foreground leading-tight line-clamp-2">{c.title}</span>
-                {prioAlta && <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">⚡ alta</span>}
+                {prioAlta && <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">alta</span>}
               </div>
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                 <span className="truncate">{c.clientName}</span>

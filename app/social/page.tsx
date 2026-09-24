@@ -30,7 +30,7 @@ import {
   TrendingUp, Hash, Check, Plus, ChevronDown,
   Key, Eye, EyeOff, Save,
   Download, CheckCircle, FileWarning, ShieldCheck, AlertCircle, Layers, Trash2, Copy, Archive,
-  Palette, Search,
+  Palette, Search, Meh, Frown, Lock, UsersRound, Music, FolderOpen, FileText,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
@@ -103,9 +103,9 @@ const HEALTH_CONFIG: Record<string, { label: string; led: string; color: string;
 };
 
 const MOOD_CONFIG = {
-  happy:   { emoji: "😄", label: "Satisfeito", color: "text-primary" },
-  neutral: { emoji: "😐", label: "Neutro",     color: "text-muted-foreground" },
-  angry:   { emoji: "😠", label: "Irritado",   color: "text-destructive" },
+  happy:   { icone: Smile, label: "Satisfeito", color: "text-primary" },
+  neutral: { icone: Meh,   label: "Neutro",     color: "text-muted-foreground" },
+  angry:   { icone: Frown, label: "Irritado",   color: "text-destructive" },
 };
 
 const TONE_LABELS: Record<string, string> = {
@@ -115,10 +115,10 @@ const TONE_LABELS: Record<string, string> = {
 const CONTENT_COLUMNS = [
   { id: "ideas",          title: "Ideias",             color: STATUS_COR.ideas },
   { id: "script",         title: "Roteiro",            color: STATUS_COR.script },
-  { id: "in_production",  title: "Em Producao",        color: STATUS_COR.in_production },
+  { id: "in_production",  title: "Em Produção",        color: STATUS_COR.in_production },
   { id: "blocked",        title: "Bloqueado (Design)", color: STATUS_COR.blocked },
   { id: "approval",       title: "Aprovação Social Media",  color: STATUS_COR.approval },
-  { id: "client_approval",title: "Aprovacao Cliente",  color: STATUS_COR.client_approval },
+  { id: "client_approval",title: "Aprovação Cliente",  color: STATUS_COR.client_approval },
   { id: "scheduled",      title: "Agendado",           color: STATUS_COR.scheduled },
   { id: "published",      title: "Publicado",          color: STATUS_COR.published },
 ];
@@ -174,8 +174,8 @@ function OnboardingCompleteModal({ client, onMoveActive, onMoveActiveAndIdeas, o
       <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-6 animate-fade-in">
         <div className="text-center mb-5">
-          <div className="text-4xl mb-3">🎉</div>
-          <h3 className="text-lg font-bold text-foreground mb-2">Onboarding Concluído!</h3>
+          <CheckCircle size={32} className="mx-auto mb-3 text-primary" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">Onboarding Concluído!</h3>
           <p className="text-sm text-muted-foreground">
             Deseja mover <span className="text-foreground font-semibold">{client.name}</span> para Ativo e gerar as primeiras pautas com IA?
           </p>
@@ -251,7 +251,7 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
       {/* Greeting */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold text-foreground tracking-tight">
+          <h2 className="text-lg font-semibold text-foreground tracking-tight">
             Bom dia, {firstName}
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -259,7 +259,7 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
           </p>
         </div>
         <div className="text-right">
-          <p className="text-2xl font-bold text-primary tracking-tight">{myCards.length}</p>
+          <p className="text-2xl font-semibold text-primary tracking-tight">{myCards.length}</p>
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total cards</p>
         </div>
       </div>
@@ -280,17 +280,17 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
           </div>
           {overdue.length > 0 ? (
             <div>
-              <p className="text-xl font-bold text-destructive tracking-tight">{overdue.length}</p>
+              <p className="text-xl font-semibold text-destructive tracking-tight">{overdue.length}</p>
               <p className="text-[10px] text-destructive/70">vencido(s)</p>
             </div>
           ) : dueSoon.length > 0 ? (
             <div>
-              <p className="text-xl font-bold text-primary tracking-tight">{dueSoon.length}</p>
+              <p className="text-xl font-semibold text-primary tracking-tight">{dueSoon.length}</p>
               <p className="text-[10px] text-muted-foreground">até amanhã</p>
             </div>
           ) : (
             <div>
-              <p className="text-xl font-bold text-muted-foreground tracking-tight">0</p>
+              <p className="text-xl font-semibold text-muted-foreground tracking-tight">0</p>
               <p className="text-[10px] text-muted-foreground">tudo em dia</p>
             </div>
           )}
@@ -304,7 +304,7 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
             <AlertTriangle size={13} className={slaAlerts.length > 0 ? "text-lone-warning" : "text-muted-foreground"} />
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Gargalos</span>
           </div>
-          <p className={`text-xl font-bold tracking-tight ${slaAlerts.length > 0 ? "text-lone-warning" : "text-muted-foreground"}`}>
+          <p className={`text-xl font-semibold tracking-tight ${slaAlerts.length > 0 ? "text-lone-warning" : "text-muted-foreground"}`}>
             {slaAlerts.length}
           </p>
           <p className="text-[10px] text-muted-foreground">card(s) parado(s) 24h+</p>
@@ -318,7 +318,7 @@ function PersonalDashboard({ userName, cards, clients, moodHistory }: PersonalDa
             <Smile size={13} className={noCheckin.length > 0 ? "text-primary" : "text-muted-foreground"} />
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Check-in</span>
           </div>
-          <p className={`text-xl font-bold tracking-tight ${noCheckin.length > 0 ? "text-primary" : "text-muted-foreground"}`}>
+          <p className={`text-xl font-semibold tracking-tight ${noCheckin.length > 0 ? "text-primary" : "text-muted-foreground"}`}>
             {noCheckin.length}
           </p>
           <p className="text-[10px] text-muted-foreground">sem check-in 3+ dias</p>
@@ -385,7 +385,7 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
     >
       {/* Row 1: Avatar + Name + Status LED */}
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-bold text-primary shrink-0 tracking-tight">
+        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-semibold text-primary shrink-0 tracking-tight">
           {client.name.split(" ").map(w => w[0]).join("").slice(0, 2)}
         </div>
         <div className="flex-1 min-w-0">
@@ -425,7 +425,7 @@ function ClientCard({ client, moodEntries, onboarding, onMood, onIdeas, onOpen36
         <div className="text-right">
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Humor</span>
           {mood ? (
-            <span className="text-xs text-muted-foreground mt-1 block">{mood.emoji} {mood.label}</span>
+            <span className="text-xs text-muted-foreground mt-1 inline-flex items-center gap-1"><mood.icone size={12} className={mood.color} /> {mood.label}</span>
           ) : (
             <span className="text-xs text-muted-foreground mt-1 block">—</span>
           )}
@@ -519,7 +519,7 @@ function MoodModal({ clientName, onSave, onClose }: MoodModalProps) {
                     : "border-border text-muted-foreground hover:border-muted hover:text-foreground"
                 }`}
               >
-                <span className="text-2xl">{cfg.emoji}</span>
+                <cfg.icone size={24} className={cfg.color} />
                 <span className="text-xs font-medium">{cfg.label}</span>
               </button>
             );
@@ -931,7 +931,7 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
                 <Layers size={18} className="text-primary" />
                 Criacao em Batch
               </h2>
@@ -972,7 +972,7 @@ function BatchCreateModal({ clients, onClose }: { clients: Client[]; onClose: ()
           {/* Rows */}
           <div className="space-y-2">
             <div className="grid grid-cols-[1fr_100px_120px_70px_32px] gap-2 text-[10px] text-muted-foreground uppercase tracking-wider px-1">
-              <span>Titulo</span>
+              <span>Título</span>
               <span>Formato</span>
               <span>Data</span>
               <span>Hora</span>
@@ -1268,17 +1268,17 @@ function AccessTab({ clients, clientAccess, onSave, isAdmin }: AccessTabProps) {
   };
 
   const FIELDS = [
-    { key: "instagramLogin", label: "Instagram Login", icon: "📸" },
-    { key: "instagramPassword", label: "Instagram Senha", icon: "🔒", isPassword: true },
-    { key: "facebookLogin", label: "Facebook Login", icon: "👥" },
-    { key: "facebookPassword", label: "Facebook Senha", icon: "🔒", isPassword: true },
-    { key: "tiktokLogin", label: "TikTok Login", icon: "🎵" },
-    { key: "tiktokPassword", label: "TikTok Senha", icon: "🔒", isPassword: true },
-    { key: "mlabsLogin", label: "mLabs Login", icon: "📊" },
-    { key: "mlabsPassword", label: "mLabs Senha", icon: "🔒", isPassword: true },
-    { key: "canvaLink", label: "Canva Link", icon: "🎨" },
-    { key: "driveLink", label: "Drive Link", icon: "📁" },
-    { key: "otherNotes", label: "Observações", icon: "📝" },
+    { key: "instagramLogin", label: "Instagram Login", icon: Instagram },
+    { key: "instagramPassword", label: "Instagram Senha", icon: Lock, isPassword: true },
+    { key: "facebookLogin", label: "Facebook Login", icon: UsersRound },
+    { key: "facebookPassword", label: "Facebook Senha", icon: Lock, isPassword: true },
+    { key: "tiktokLogin", label: "TikTok Login", icon: Music },
+    { key: "tiktokPassword", label: "TikTok Senha", icon: Lock, isPassword: true },
+    { key: "mlabsLogin", label: "mLabs Login", icon: BarChart2 },
+    { key: "mlabsPassword", label: "mLabs Senha", icon: Lock, isPassword: true },
+    { key: "canvaLink", label: "Canva Link", icon: Palette },
+    { key: "driveLink", label: "Drive Link", icon: FolderOpen },
+    { key: "otherNotes", label: "Observações", icon: FileText },
   ];
 
   const startEdit = (clientId: string) => {
@@ -1322,7 +1322,7 @@ function AccessTab({ clients, clientAccess, onSave, isAdmin }: AccessTabProps) {
         return (
           <div key={client.id} className="card border border-border">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-bold text-primary shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
                 {client.name[0]}
               </div>
               <div className="flex-1 min-w-0">
@@ -1363,8 +1363,8 @@ function AccessTab({ clients, clientAccess, onSave, isAdmin }: AccessTabProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {FIELDS.map((field) => (
                   <div key={field.key}>
-                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">
-                      {field.icon} {field.label}
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <field.icon size={11} /> {field.label}
                     </label>
                     <div className="relative">
                       <input
@@ -1393,7 +1393,7 @@ function AccessTab({ clients, clientAccess, onSave, isAdmin }: AccessTabProps) {
                   const val = (access as unknown as Record<string, string | undefined>)[field.key] ?? "";
                   return (
                     <div key={field.key} className="flex items-center gap-2 text-xs bg-muted/50 rounded-lg px-3 py-2 border border-border/50">
-                      <span>{field.icon}</span>
+                      <field.icon size={12} className="shrink-0 text-muted-foreground" />
                       <span className="text-muted-foreground">{field.label}:</span>
                       <span className="text-foreground font-medium truncate">
                         {field.isPassword ? "••••••" : val}
@@ -1560,7 +1560,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                   : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-border"
               }`}
             >
-              <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-semibold shrink-0 ${
                 isActive ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
               }`}>
                 {client.name.split(" ").map(w => w[0]).join("").slice(0, 2)}
@@ -1700,14 +1700,14 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                   <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border/60 flex-wrap">
                     {!card.designerDeliveredAt && card.status !== "published" && card.status !== "scheduled" && (
                       card.designRequestId ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--chart-4)]/15 text-[var(--chart-4)] flex items-center gap-0.5">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-chart-4/15 text-[var(--chart-4)] flex items-center gap-0.5">
                           <Palette size={9} /> A fazer · na fila
                         </span>
                       ) : !isReadOnly && (
                         <button
                           onClick={(e) => { e.stopPropagation(); onSendToDesigner(card); }}
                           title="Marca como 'A fazer' e envia automaticamente pro designer"
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--chart-4)]/15 text-[var(--chart-4)] hover:bg-[var(--chart-4)]/25 transition-colors flex items-center gap-0.5"
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-chart-4/15 text-[var(--chart-4)] hover:bg-chart-4/25 transition-colors flex items-center gap-0.5"
                         >
                           <Palette size={9} /> A fazer
                         </button>
@@ -1738,7 +1738,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                     )}
                     {card.clientApprovedAt && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-lone-success-bg text-lone-success border border-lone-success-border flex items-center gap-0.5 font-semibold">
-                        🎉 Cliente aprovou
+                        <CheckCircle size={9} /> Cliente aprovou
                       </span>
                     )}
                     {card.nonDeliveryReason ? (
@@ -1761,8 +1761,8 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                     const isOvertime = timeMs >= OVERTIME_THRESHOLD_MS;
                     return (
                       <div className={`flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/40 text-[10px] ${isOvertime ? "text-lone-warning" : "text-muted-foreground"}`}>
-                        <span>{isOvertime ? "⚠️" : "⏱️"}</span>
-                        <span className={isOvertime ? "font-bold" : ""}>{formatTimeSpent(timeMs)}</span>
+                        {isOvertime ? <AlertTriangle size={10} aria-hidden="true" /> : <Clock size={10} aria-hidden="true" />}
+                        <span className={isOvertime ? "font-semibold" : ""}>{formatTimeSpent(timeMs)}</span>
                         {isOvertime && <span className="text-[9px] ml-auto font-medium">OVER-TIME</span>}
                       </div>
                     );
@@ -1809,9 +1809,9 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
             // miniatura aparecia igual à de uma arte antiga e ninguém sabia o que tinha chegado.
             const novas = cards.filter((c) => c.designerDeliveredAt && !c.socialConfirmedAt).length;
             return (
-              <div key={client.id} className={`w-72 shrink-0 flex flex-col bg-muted/20 border rounded-xl ${novas > 0 ? "border-[var(--chart-4)]/50" : "border-border"}`}>
+              <div key={client.id} className={`w-72 shrink-0 flex flex-col bg-muted/20 border rounded-xl ${novas > 0 ? "border-chart-4/50" : "border-border"}`}>
                 <div className="flex items-center gap-2 p-3 border-b border-border rounded-t-xl bg-muted/40">
-                  <div className="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                  <div className="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
                     {client.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -1821,7 +1821,7 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                   {novas > 0 && (
                     <span
                       title={`${novas} arte(s) que o designer entregou e você ainda não conferiu`}
-                      className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[var(--chart-4)]/20 text-[var(--chart-4)]"
+                      className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-chart-4/20 text-[var(--chart-4)]"
                     >
                       <Palette size={10} /> {novas} nova{novas > 1 ? "s" : ""}
                     </span>
@@ -1852,14 +1852,14 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                       key={card.id}
                       onClick={() => onCardClick(card)}
                       className={`bg-card border rounded-lg overflow-hidden transition-colors cursor-pointer ${
-                        arteNova ? "border-[var(--chart-4)] ring-1 ring-[var(--chart-4)]/40" : "border-border hover:border-primary/40"
+                        arteNova ? "border-[var(--chart-4)] ring-1 ring-chart-4/40" : "border-border hover:border-primary/40"
                       }`}
                     >
                       {card.imageUrl && (
                         <div className="aspect-square w-full overflow-hidden bg-muted relative">
                           <SignedImage src={card.imageUrl!} alt={card.title} className="w-full h-full object-cover" />
                           {arteNova && (
-                            <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-chart-4 text-background shadow">
+                            <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-chart-4 text-background shadow">
                               <Palette size={10} /> ARTE NOVA
                             </span>
                           )}
@@ -1878,14 +1878,14 @@ function KanbanByClient({ clients, allClients, contentCards, designRequests, onC
                         {!card.designerDeliveredAt && card.status !== "published" && card.status !== "scheduled" && (
                           <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
                             {card.designRequestId ? (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--chart-4)]/15 text-[var(--chart-4)] inline-flex items-center gap-0.5">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-chart-4/15 text-[var(--chart-4)] inline-flex items-center gap-0.5">
                                 <Palette size={9} /> A fazer · na fila
                               </span>
                             ) : !isReadOnly && (
                               <button
                                 onClick={() => onSendToDesigner(card)}
                                 title="Marca como 'A fazer' e envia automaticamente pro designer"
-                                className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--chart-4)]/15 text-[var(--chart-4)] hover:bg-[var(--chart-4)]/25 transition-colors inline-flex items-center gap-0.5"
+                                className="text-[10px] px-1.5 py-0.5 rounded bg-chart-4/15 text-[var(--chart-4)] hover:bg-chart-4/25 transition-colors inline-flex items-center gap-0.5"
                               >
                                 <Palette size={9} /> A fazer
                               </button>
@@ -2012,7 +2012,7 @@ export default function SocialPage() {
   }, [refreshContent]);
 
   // ── NavContext: secondary sidebar tab navigation ──────────────
-  const { pendingTab, setPendingTab, setCurrentTab } = useNav();
+  const { pendingTab, setPendingTab, setCurrentTab, secondaryOpen } = useNav();
   const VALID_SOCIAL_TABS = ["carteira","kanban","onboarding","acessos","metricas","entregas","aprovacao"] as const;
   type SocialTab = typeof VALID_SOCIAL_TABS[number];
   // Links antigos: "relatorios" era a aba da fila de aprovação; chat/calendário saíram.
@@ -2021,10 +2021,12 @@ export default function SocialPage() {
   useEffect(() => {
     if (!pendingTab) return;
     const alvo = ABAS_ANTIGAS[pendingTab] ?? pendingTab;
+    // Só consome (e apaga) o pedido que é DESTA tela: apagar o de outra página fazia a busca ⌘K
+    // abrir a tela certa na aba errada.
     if ((VALID_SOCIAL_TABS as readonly string[]).includes(alvo)) {
       setActiveTab(alvo as SocialTab);
+      setPendingTab("");
     }
-    setPendingTab("");
   }, [pendingTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -2425,7 +2427,7 @@ export default function SocialPage() {
                   onChange={(e) => setAdminWorkspace(e.target.value)}
                   className="bg-card border border-border rounded-lg px-4 py-2 text-sm text-foreground outline-none focus:border-primary appearance-none cursor-pointer pr-8"
                 >
-                  <option value="Todos">Visao Geral</option>
+                  <option value="Todos">Visão Geral</option>
                   {workspaceOptions.map((name) => (
                     <option key={name} value={name}>{name}</option>
                   ))}
@@ -2494,12 +2496,14 @@ export default function SocialPage() {
           </div>
         )}
 
-        <div className="flex gap-1 border-b border-border overflow-x-auto">
-          {(["carteira", "kanban", "onboarding", "acessos", "metricas", "entregas", "aprovacao"] as const).map((tab) => {
+        {/* Abas: uma navegação por tela. Com o painel lateral aberto (computador), as abas moram lá
+            com os mesmos nomes e a mesma ordem; no celular, ou com o painel fechado, aparecem aqui. */}
+        <div className={`flex gap-1 border-b border-border overflow-x-auto ${secondaryOpen ? "lg:hidden" : ""}`}>
+          {(["carteira", "kanban", "aprovacao", "metricas", "entregas", "onboarding", "acessos"] as const).map((tab) => {
             const LABELS: Record<typeof tab, string> = {
-              carteira: "Carteira", kanban: "Board",
-              onboarding: "Onboarding", acessos: "Acessos", metricas: "Métricas",
-              entregas: "Entregas", aprovacao: "Inbox de Aprovação",
+              carteira: "Carteira", kanban: "Board de Produção", aprovacao: "Inbox de Aprovação",
+              metricas: "Métricas", entregas: "Entregas Mensais",
+              onboarding: "Onboarding", acessos: "Acessos & Senhas",
             };
             // Live badge counts per tab
             const pendingKanban = filteredCards.filter((c) => !["scheduled","published"].includes(c.status)).length;
@@ -2570,7 +2574,7 @@ export default function SocialPage() {
                     <div className={stat.led} />
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{stat.label}</span>
                   </div>
-                  <p className={`text-2xl font-bold tracking-tight ${healthFilter === stat.key ? "text-primary" : "text-foreground"}`}>
+                  <p className={`text-2xl font-semibold tracking-tight ${healthFilter === stat.key ? "text-primary" : "text-foreground"}`}>
                     {stat.count}
                   </p>
                 </button>
@@ -2625,8 +2629,8 @@ export default function SocialPage() {
                 <div className="mb-4 rounded-xl border border-lone-warning-border bg-lone-warning-bg p-4 animate-fade-in">
                   <div className="flex items-center gap-2 mb-3">
                     <ShieldCheck size={16} className="text-lone-warning" />
-                    <h3 className="text-sm font-bold text-foreground">Verificação de Publicação</h3>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-bold">
+                    <h3 className="text-sm font-semibold text-foreground">Verificação de Publicação</h3>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-lone-warning-bg text-lone-warning border border-lone-warning-border font-semibold">
                       {scheduledCards.length} pendente{scheduledCards.length > 1 ? "s" : ""}
                     </span>
                   </div>
@@ -2707,14 +2711,14 @@ export default function SocialPage() {
               onMoveCard={(cardId, toStatus) => {
                 // Designer read-only: cannot move cards
                 if (isReadOnly) {
-                  pushNotification("system", "Modo leitura", "Voce esta visualizando o quadro como Designer. Apenas Social Media pode mover cards.");
+                  pushNotification("system", "Modo leitura", "Você está visualizando o quadro como Designer. Apenas Social Media pode mover cards.");
                   return;
                 }
                 const card = contentCards.find((c) => c.id === cardId);
                 if (!card) return;
                 // Block scheduling/publishing without art confirmation
                 if ((toStatus === "scheduled" || toStatus === "published") && card.designRequestId && !card.socialConfirmedAt) {
-                  pushNotification("sla", "Arte nao confirmada", `O card "${card.title}" precisa ter a arte confirmada antes de ser ${toStatus === "scheduled" ? "agendado" : "publicado"}.`, card.clientId);
+                  pushNotification("sla", "Arte não confirmada", `O card "${card.title}" precisa ter a arte confirmada antes de ser ${toStatus === "scheduled" ? "agendado" : "publicado"}.`, card.clientId);
                   return;
                 }
                 const now = new Date().toISOString();
@@ -2792,7 +2796,7 @@ export default function SocialPage() {
               return (
                 <div key={client.id} className="card">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center text-sm font-bold text-primary">
+                    <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center text-sm font-semibold text-primary">
                       {client.name[0]}
                     </div>
                     <div className="flex-1">
@@ -2800,7 +2804,7 @@ export default function SocialPage() {
                       <p className="text-xs text-muted-foreground">Social: {client.assignedSocial}</p>
                     </div>
                     <div className="text-right">
-                      <span className="text-lg font-bold text-primary">{pct}%</span>
+                      <span className="text-lg font-semibold text-primary">{pct}%</span>
                       <p className="text-xs text-muted-foreground">{done}/{items.length} etapas</p>
                     </div>
                   </div>
@@ -2810,7 +2814,7 @@ export default function SocialPage() {
 
                   {pct === 100 && (
                     <div className="mb-4 p-3 bg-card border border-primary/20 rounded-lg text-center">
-                      <p className="text-sm font-semibold text-primary">🎉 Onboarding concluído!</p>
+                      <p className="text-sm font-semibold text-primary inline-flex items-center gap-1.5"><CheckCircle size={14} /> Onboarding concluído!</p>
                       <p className="text-xs text-primary/70 mt-0.5">Todas as etapas foram finalizadas.</p>
                     </div>
                   )}
@@ -2831,7 +2835,7 @@ export default function SocialPage() {
                           {item.completed && item.completedBy && (
                             <div className="flex items-center gap-2 mt-1.5">
                               <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-                                <span className="text-[8px] font-bold text-primary">
+                                <span className="text-[8px] font-semibold text-primary">
                                   {item.completedBy.split(" ").map((w: string) => w[0]).join("").slice(0, 2)}
                                 </span>
                               </div>
@@ -2882,7 +2886,7 @@ export default function SocialPage() {
                 ].map((kpi) => (
                   <div key={kpi.label} className="bg-card border border-border rounded-xl p-4">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{kpi.label}</p>
-                    <p className={`text-2xl font-bold tracking-tight ${kpi.color}`}>{kpi.value}</p>
+                    <p className={`text-2xl font-semibold tracking-tight ${kpi.color}`}>{kpi.value}</p>
                   </div>
                 ));
               })()}
@@ -3002,7 +3006,7 @@ export default function SocialPage() {
                     return (
                       <div key={fmt} className="bg-muted/50 rounded-xl p-3 border border-border/50">
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{fmt}</p>
-                        <p className="text-xl font-bold text-foreground tracking-tight">{count}</p>
+                        <p className="text-xl font-semibold text-foreground tracking-tight">{count}</p>
                         <p className="text-[10px] text-muted-foreground">{pct}%</p>
                       </div>
                     );
@@ -3219,15 +3223,15 @@ function MonthlyDeliveriesTab({
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Meta Total</p>
-          <p className="text-2xl font-bold text-foreground">{totalGoal}</p>
+          <p className="text-2xl font-semibold text-foreground">{totalGoal}</p>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Entregues</p>
-          <p className="text-2xl font-bold text-primary">{totalDelivered}</p>
+          <p className="text-2xl font-semibold text-primary">{totalDelivered}</p>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Taxa</p>
-          <p className="text-2xl font-bold text-foreground">{overallRate}%</p>
+          <p className="text-2xl font-semibold text-foreground">{overallRate}%</p>
         </div>
       </div>
 
@@ -3250,7 +3254,7 @@ function MonthlyDeliveriesTab({
                   <p className="text-xs text-muted-foreground">Responsável: {report.socialMedia}</p>
                 </div>
                 <div className="text-right">
-                  <p className={`text-xl font-bold ${rateColor}`}>{report.completionRate}%</p>
+                  <p className={`text-xl font-semibold ${rateColor}`}>{report.completionRate}%</p>
                   <p className="text-xs text-muted-foreground">{report.postsDelivered}/{report.postsGoal} posts</p>
                 </div>
               </div>

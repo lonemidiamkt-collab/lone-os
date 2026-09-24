@@ -138,23 +138,23 @@ export default function ClientesDesativados({ aba }: { aba: "encerrando" | "desa
                     <span className={`text-[9.5px] px-1.5 py-0.5 rounded border ${l.temTermo
                       ? "bg-lone-success-bg text-lone-success border-lone-success-border"
                       : "bg-lone-warning-bg text-lone-warning border-lone-warning-border"}`}>
-                      {l.temTermo ? "✅ termo" : "⚠️ sem termo"}
+                      {l.temTermo ? "termo" : "sem termo"}
                     </span>
                     {l.enviado && (
                       <span className={`text-[9.5px] px-1.5 py-0.5 rounded border ${l.confirmado
                         ? "bg-lone-success-bg text-lone-success border-lone-success-border"
                         : "bg-lone-warning-bg text-lone-warning border-lone-warning-border"}`}>
-                        {l.confirmado ? "✅ confirmado" : "⚠️ sem confirmação"}
+                        {l.confirmado ? "confirmado" : "sem confirmação"}
                       </span>
                     )}
                     {l.financeiroOk === false && (
                       <span className="text-[9.5px] px-1.5 py-0.5 rounded border bg-lone-danger-bg text-lone-danger border-lone-danger-border">
-                        🔴 pendência financeira
+                        pendência financeira
                       </span>
                     )}
                     {l.financeiroOk === true && (
                       <span className="text-[9.5px] px-1.5 py-0.5 rounded border bg-lone-success-bg text-lone-success border-lone-success-border">
-                        ✅ sem pendências
+                        sem pendências
                       </span>
                     )}
                   </>

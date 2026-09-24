@@ -23,6 +23,7 @@ import {
   AlertTriangle, Zap, LayoutList, Columns3, Upload, Download,
   ImageIcon, Eye, ChevronDown, User, Users, FileText, FileWarning, FolderOpen,
   ExternalLink, BarChart2, Plus, Calendar, ArrowRight, XCircle, RotateCcw, Search, Sparkles,
+  ThumbsUp, ThumbsDown, Instagram,
 } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { imagensDoPaste, imagensDoDrop } from "@/lib/upload/imagens-coladas";
@@ -41,7 +42,7 @@ import CatalogoProdutos from "@/components/clients/CatalogoProdutos";
 
 const DESIGNER_COLUMNS = [
   { id: "queue",     title: "Fila / Pra Fazer",           color: "bg-muted",   statuses: ["ideas", "script"] },
-  { id: "doing",     title: "Em Producao",                color: "bg-primary",    statuses: ["in_production"] },
+  { id: "doing",     title: "Em Produção",                color: "bg-primary",    statuses: ["in_production"] },
   { id: "blocked",   title: "Bloqueado / Devolvido",      color: "bg-destructive",    statuses: ["blocked"] },
   { id: "delivered", title: "Aprovação",                  color: "bg-primary",  statuses: ["approval", "client_approval", "scheduled", "published"] },
 ];
@@ -57,10 +58,10 @@ const DESIGNER_COL_TO_STATUS: Record<string, string> = {
 const BLOCK_REASONS = [
   "Falta de dados / briefing incompleto",
   "Texto/copy muito longo ou inadequado",
-  "Referencia visual ruim ou ausente",
-  "Aguardando aprovacao previa",
-  "Assets do cliente nao recebidos",
-  "Formato/dimensao indefinido",
+  "Referência visual ruim ou ausente",
+  "Aguardando aprovação prévia",
+  "Assets do cliente não recebidos",
+  "Formato/dimensão indefinido",
 ];
 
 // ── Design request columns ───────────────────────────────────────────────────
@@ -357,7 +358,7 @@ function UploadArtModal({
             )}
             {initialRefs.length > 0 && (
               <div className="pt-1.5 border-t border-border mt-1.5 space-y-1.5">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">🖼️ Referência do social ({initialRefs.length})</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Referência do social ({initialRefs.length})</p>
                 <div className="grid grid-cols-3 gap-1.5">
                   {initialRefs.map((ref, i) => (
                     <a key={ref.id} href={ref.url} target="_blank" rel="noopener noreferrer"
@@ -500,9 +501,9 @@ export default function DesignPage() {
   };
   const [tab, setTab] = useState<TabView>("kanbans");
   const [kanbanGroupBy, setKanbanGroupBy] = useState<"person" | "client">("person"); // agrupar por pessoa ou por cliente (visão unificada)
-  const { pendingTab, setPendingTab, setCurrentTab } = useNav();
+  const { pendingTab, setPendingTab, setCurrentTab, secondaryOpen } = useNav();
 
-  // NavContext wiring — sidebar tab switching
+  // Aba pedida pelo painel lateral ou pela busca ⌘K (só consome o pedido que é desta tela).
   useEffect(() => {
     if (pendingTab && ["kanbans", "requests", "performance", "history", "clientes"].includes(pendingTab)) {
       setTab(pendingTab as TabView);
@@ -824,7 +825,7 @@ export default function DesignPage() {
 
   return (
     <div className="flex flex-col flex-1 overflow-auto">
-      <Header title="Área do Designer" subtitle="Produção de artes — kanbans por social media" />
+      <Header title="Designer" subtitle="Produção de artes — kanbans por social media" />
 
       <div className="p-6 space-y-6 animate-fade-in">
         {/* Uma linha só: o bloco do mês inteiro (com feriado de cidade que não é de ninguém) era o
@@ -867,8 +868,9 @@ export default function DesignPage() {
           </div>
         )}
 
-        {/* Tab selector */}
-        <div className="flex items-center gap-3 flex-wrap">
+        {/* Abas: uma navegação por tela. Com o painel lateral aberto (computador), as abas moram lá
+            com os mesmos nomes; no celular, ou com o painel fechado, aparecem aqui. */}
+        <div className={`flex items-center gap-3 flex-wrap ${secondaryOpen ? "lg:hidden" : ""}`}>
           <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
             <button
               onClick={() => setTab("kanbans")}
@@ -892,7 +894,7 @@ export default function DesignPage() {
                 tab === "clientes" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Users size={13} /> Meus Clientes
+              <Users size={13} /> Clientes do Quadro
             </button>
             <button
               onClick={() => setTab("performance")}
@@ -908,7 +910,7 @@ export default function DesignPage() {
                 tab === "history" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Clock size={13} /> Historico
+              <Clock size={13} /> Histórico
             </button>
           </div>
         </div>
@@ -920,7 +922,7 @@ export default function DesignPage() {
               <ImageIcon size={18} className={needsArt > 0 ? "text-primary" : "text-muted-foreground"} />
             </div>
             <div>
-              <p className={`text-2xl font-bold ${needsArt > 0 ? "text-primary" : "text-foreground"}`}>{needsArt}</p>
+              <p className={`text-2xl font-semibold ${needsArt > 0 ? "text-primary" : "text-foreground"}`}>{needsArt}</p>
               <p className="text-xs text-muted-foreground">Precisam de arte</p>
             </div>
           </div>
@@ -929,7 +931,7 @@ export default function DesignPage() {
               <Loader size={18} className="text-primary" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{totalInProduction}</p>
+              <p className="text-2xl font-semibold text-foreground">{totalInProduction}</p>
               <p className="text-xs text-muted-foreground">Em produção</p>
             </div>
           </div>
@@ -938,7 +940,7 @@ export default function DesignPage() {
               <CheckCircle size={18} className="text-primary" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{totalDone}</p>
+              <p className="text-2xl font-semibold text-foreground">{totalDone}</p>
               <p className="text-xs text-muted-foreground">Designs concluídos</p>
             </div>
           </div>
@@ -947,7 +949,7 @@ export default function DesignPage() {
               <AlertTriangle size={18} className={urgentCards > 0 ? "text-destructive" : "text-muted-foreground"} />
             </div>
             <div>
-              <p className={`text-2xl font-bold ${urgentCards > 0 ? "text-destructive" : "text-foreground"}`}>{urgentCards}</p>
+              <p className={`text-2xl font-semibold ${urgentCards > 0 ? "text-destructive" : "text-foreground"}`}>{urgentCards}</p>
               <p className="text-xs text-muted-foreground">Urgentes</p>
               {aguardandoTerceiro > 0 && (
                 <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -961,7 +963,7 @@ export default function DesignPage() {
               <RotateCcw size={18} className={alteracoesPendentes > 0 ? "text-destructive" : "text-muted-foreground"} />
             </div>
             <div>
-              <p className={`text-2xl font-bold ${alteracoesPendentes > 0 ? "text-destructive" : "text-foreground"}`}>{alteracoesPendentes}</p>
+              <p className={`text-2xl font-semibold ${alteracoesPendentes > 0 ? "text-destructive" : "text-foreground"}`}>{alteracoesPendentes}</p>
               <p className="text-xs text-muted-foreground">Alterações</p>
             </div>
           </div>
@@ -1165,14 +1167,14 @@ export default function DesignPage() {
                           {/* Client risk + budget indicator */}
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {isAtRisk && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive border border-destructive/20 font-bold">RISCO</span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-destructive/15 text-destructive border border-destructive/20 font-semibold">RISCO</span>
                             )}
                             {budgetTier === "high" && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-bold">$$$$</span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-semibold">$$$$</span>
                             )}
                             {item.requestedByTraffic && (
                               <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-medium flex items-center gap-0.5">
-                                <Zap size={8} /> TRAFEGO
+                                <Zap size={8} /> TRÁFEGO
                               </span>
                             )}
                           </div>
@@ -1378,7 +1380,7 @@ export default function DesignPage() {
                   return (
                     <div key={client.id} className="w-64 shrink-0 flex flex-col bg-muted/20 border border-border rounded-xl">
                       <div className="flex items-center gap-2 p-3 border-b border-border rounded-t-xl bg-muted/40">
-                        <div className="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                        <div className="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
                           {client.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
                         </div>
                         <div className="min-w-0">
@@ -1453,7 +1455,7 @@ export default function DesignPage() {
           />
         )}
 
-        {/* ═══ MEUS CLIENTES TAB ═══ */}
+        {/* ═══ CLIENTES DO QUADRO TAB ═══ */}
         {tab === "clientes" && (
           <ClientesView
             clients={clients.filter((c) => !myClientIds || myClientIds.has(c.id))}
@@ -1471,26 +1473,26 @@ export default function DesignPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="card">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Entregues</p>
-              <p className="text-2xl font-bold text-foreground">{myContentCards.filter((c) => c.designerDeliveredAt).length}</p>
+              <p className="text-2xl font-semibold text-foreground">{myContentCards.filter((c) => c.designerDeliveredAt).length}</p>
               <p className="text-xs text-muted-foreground">artes finalizadas</p>
             </div>
             <div className="card">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">No Prazo</p>
-              <p className="text-2xl font-bold text-primary">
+              <p className="text-2xl font-semibold text-primary">
                 {myContentCards.filter((c) => c.designerDeliveredAt && c.dueDate && spDateStr(c.designerDeliveredAt) <= c.dueDate).length}
               </p>
               <p className="text-xs text-muted-foreground">entregas antes do deadline</p>
             </div>
             <div className="card">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Atrasadas</p>
-              <p className="text-2xl font-bold text-destructive">
+              <p className="text-2xl font-semibold text-destructive">
                 {myContentCards.filter((c) => c.designerDeliveredAt && c.dueDate && spDateStr(c.designerDeliveredAt) > c.dueDate).length}
               </p>
               <p className="text-xs text-muted-foreground">entregas após deadline</p>
             </div>
             <div className="card">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pendentes</p>
-              <p className="text-2xl font-bold text-lone-warning">{needsArt}</p>
+              <p className="text-2xl font-semibold text-lone-warning">{needsArt}</p>
               <p className="text-xs text-muted-foreground">aguardando arte</p>
             </div>
           </div>
@@ -1557,7 +1559,7 @@ export default function DesignPage() {
       {/* ═══ HISTORY TAB ═══ */}
       {tab === "history" && (
         <div className="px-6 pb-6 space-y-4 animate-fade-in">
-          <p className="text-xs text-muted-foreground">Cards entregues e aprovados — historico completo de producao.</p>
+          <p className="text-xs text-muted-foreground">Cards entregues e aprovados — histórico completo de produção.</p>
           <div className="space-y-2">
             {myContentCards
               .filter((c) => c.designerDeliveredAt || c.status === "published" || c.status === "scheduled")
@@ -1613,7 +1615,7 @@ export default function DesignPage() {
             {myContentCards.filter((c) => c.designerDeliveredAt || c.status === "published" || c.status === "scheduled").length === 0 && (
               <div className="text-center py-12">
                 <Clock size={24} className="text-muted-foreground mx-auto mb-3" />
-                <p className="text-xs text-muted-foreground">Nenhuma entrega no historico ainda.</p>
+                <p className="text-xs text-muted-foreground">Nenhuma entrega no histórico ainda.</p>
               </div>
             )}
           </div>
@@ -1701,7 +1703,7 @@ export default function DesignPage() {
                   pushNotification(
                     "sla",
                     "Arte Devolvida pelo Designer",
-                    `"${blockingCard.title}" (${blockingCard.clientName}) — Motivo: ${blockReason}. Ajuste necessario.`,
+                    `"${blockingCard.title}" (${blockingCard.clientName}) — Motivo: ${blockReason}. Ajuste necessário.`,
                     blockingCard.clientId
                   );
                   // Audio ping
@@ -1733,8 +1735,8 @@ export default function DesignPage() {
                   "Briefing incompleto",
                   "Aguardando assets do cliente",
                   "Fila sobrecarregada",
-                  "Refacao pendente (aguardando feedback)",
-                  "Problema tecnico",
+                  "Refação pendente (aguardando feedback)",
+                  "Problema técnico",
                   "Outro",
                 ].map((reason) => (
                   <button
@@ -1836,8 +1838,8 @@ export default function DesignPage() {
                 return (
                   <div className={`p-3 rounded-lg border ${score >= 75 ? "bg-lone-success-bg border-lone-success-border" : score >= 50 ? "bg-lone-warning-bg border-lone-warning-border" : "bg-destructive/10 border-destructive/20"}`}>
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Saude do Briefing</p>
-                      <span className={`text-xs font-bold ${score >= 75 ? "text-lone-success" : score >= 50 ? "text-lone-warning" : "text-destructive"}`}>{score}%</span>
+                      <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Saúde do Briefing</p>
+                      <span className={`text-xs font-semibold ${score >= 75 ? "text-lone-success" : score >= 50 ? "text-lone-warning" : "text-destructive"}`}>{score}%</span>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       {checks.map((c) => (
@@ -1937,7 +1939,7 @@ export default function DesignPage() {
                 if (refs.length === 0) return null;
                 return (
                   <div className="space-y-1.5">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">🖼️ Arte de referência ({refs.length})</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Arte de referência ({refs.length})</p>
                     <div className="grid grid-cols-2 gap-2">
                       {refs.map((url, i) => {
                         const isImg = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
@@ -2019,7 +2021,7 @@ export default function DesignPage() {
 
               {/* Caixinha de comentário do designer — pedir ajuste no briefing / avisar o social */}
               <div className="space-y-1.5 pt-1">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">💬 Comentário do designer</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Comentário do designer</p>
                 <textarea
                   value={designerNoteText}
                   onChange={(e) => setDesignerNoteText(e.target.value)}
@@ -2191,14 +2193,14 @@ export default function DesignPage() {
                         className="ml-2 rounded-md border border-primary/30 px-2 py-0.5 text-[10px] text-primary hover:bg-primary/10 disabled:opacity-50"
                         title="Gera propostas com a logo, as artes recentes, o estilo lido e os textos exatos do cliente. Vira referência, não entrega."
                       >
-                        {gerandoIa ? "Gerando (≈30 s)…" : briefingReq.parentAdId ? "✨ Gerar variações (IA)" : "✨ Proposta de arte (IA)"}
+                        {gerandoIa ? "Gerando (≈30 s)…" : briefingReq.parentAdId ? "Gerar variações (IA)" : "Proposta de arte (IA)"}
                       </button>
                     )}
                     {geracaoIa && (
                       <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
                         Serviu?
-                        <button onClick={() => void feedbackIa("serviu")} className="rounded border border-border px-1.5 hover:bg-lone-success-bg" title="A proposta ajudou">👍</button>
-                        <button onClick={() => setMotivoIa("")} className="rounded border border-border px-1.5 hover:bg-destructive/10" title="Não ajudou — diga o porquê">👎</button>
+                        <button onClick={() => void feedbackIa("serviu")} className="rounded border border-border px-1.5 hover:bg-lone-success-bg" title="A proposta ajudou" aria-label="A proposta ajudou"><ThumbsUp size={10} /></button>
+                        <button onClick={() => setMotivoIa("")} className="rounded border border-border px-1.5 hover:bg-destructive/10" title="Não ajudou — diga o porquê" aria-label="Não ajudou"><ThumbsDown size={10} /></button>
                       </span>
                     )}
                     {geracaoIa && motivoIa !== null && (
@@ -2383,7 +2385,7 @@ function RequestsView({
               // designer reentrega (alteracaoPendente zera). Fica em 1º pra saltar aos olhos.
               {
                 id: "alteracoes",
-                title: "🔄 Alterações",
+                title: "Alterações",
                 color: "bg-destructive",
                 items: filtered.filter((r) => alteracaoDoReq(r)).map(toItem),
               },
@@ -2414,8 +2416,8 @@ function RequestsView({
               </div>
               <div className="flex items-center gap-1.5 pt-1.5 border-t border-border">
                 {currentUser && item.requestedBy === currentUser ? (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 font-medium flex-1 text-center">
-                    ⚡ Auto-iniciada
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 font-medium flex-1 inline-flex items-center justify-center gap-0.5">
+                    <Zap size={8} aria-hidden="true" /> Auto-iniciada
                   </span>
                 ) : (
                   <p className="text-[10px] text-muted-foreground flex-1">por {item.requestedBy}</p>
@@ -2472,7 +2474,7 @@ function RequestsView({
                       <span className="text-xs text-muted-foreground">{req.format}</span>
                       <span className="text-muted-foreground/50">·</span>
                       {currentUser && req.requestedBy === currentUser ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 font-medium">⚡ Auto-iniciada</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 font-medium inline-flex items-center gap-0.5"><Zap size={8} aria-hidden="true" /> Auto-iniciada</span>
                       ) : (
                         <span className="text-xs text-muted-foreground">por {req.requestedBy}</span>
                       )}
@@ -2584,7 +2586,7 @@ function ClientesView({
                   <img src={c.docLogo} alt="" className="w-11 h-11 rounded-lg border border-border object-contain bg-muted shrink-0" />
                 ) : (
                   <div className="w-11 h-11 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                    <span className="text-sm font-bold text-primary">
+                    <span className="text-sm font-semibold text-primary">
                       {(c.nomeFantasia || c.name).charAt(0).toUpperCase()}
                     </span>
                   </div>
@@ -2714,7 +2716,7 @@ function ClientDrawer({
               <img src={client.docLogo} alt="" className="w-9 h-9 rounded-lg border border-border object-contain bg-muted shrink-0" />
             ) : (
               <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-                <span className="text-xs font-bold text-primary">{(client.nomeFantasia || client.name).charAt(0).toUpperCase()}</span>
+                <span className="text-xs font-semibold text-primary">{(client.nomeFantasia || client.name).charAt(0).toUpperCase()}</span>
               </div>
             )}
             <div className="min-w-0">
@@ -2731,15 +2733,15 @@ function ClientDrawer({
           {/* Stats rápidas */}
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-lg bg-muted/40 border border-border p-3 text-center">
-              <p className="text-xl font-bold text-foreground">{delivered}</p>
+              <p className="text-xl font-semibold text-foreground">{delivered}</p>
               <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Entregues</p>
             </div>
             <div className="rounded-lg bg-muted/40 border border-border p-3 text-center">
-              <p className="text-xl font-bold text-lone-warning">{openRequests.length}</p>
+              <p className="text-xl font-semibold text-lone-warning">{openRequests.length}</p>
               <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Pendentes</p>
             </div>
             <div className="rounded-lg bg-muted/40 border border-border p-3 text-center">
-              <p className="text-xl font-bold text-foreground">{contentCards.length}</p>
+              <p className="text-xl font-semibold text-foreground">{contentCards.length}</p>
               <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Total</p>
             </div>
           </div>
@@ -2832,7 +2834,7 @@ function ClientDrawer({
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-muted-foreground mb-1 block">Briefing da campanha (temporario)</label>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Briefing da campanha (temporário)</label>
                     <MarkdownEditor
                       value={briefingForm.campaignBriefing}
                       onChange={(v) => setBriefingForm((p) => ({ ...p, campaignBriefing: v }))}
@@ -2895,7 +2897,7 @@ function ClientDrawer({
               {client.instagramUser && (
                 <a href={`https://instagram.com/${client.instagramUser.replace(/^@/, "")}`} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/40 border border-border text-xs text-foreground hover:border-primary/30 transition-colors">
-                  <span className="text-primary">📷</span>
+                  <Instagram size={12} className="text-primary shrink-0" />
                   <span className="flex-1 truncate">@{client.instagramUser.replace(/^@/, "")}</span>
                   <ExternalLink size={10} className="text-muted-foreground" />
                 </a>

@@ -179,7 +179,7 @@ export default function GoalsPage() {
       kpiToOkr("tr-3", "Novos leads/mês > 500", leadsKpi),
     ]},
     { team: "Social Media", icon: Instagram, color: "var(--primary)", okrs: [
-      kpiToOkr("so-1", "Posts entregues/mes > 96", metrics.social.postsDelivered),
+      kpiToOkr("so-1", "Posts entregues/mês > 96", metrics.social.postsDelivered),
       kpiToOkr("so-3", "SLA de entrega < 48h", metrics.social.deliverySLA, true),
     ]},
     { team: "Design", icon: Palette, color: "var(--chart-4)", okrs: [

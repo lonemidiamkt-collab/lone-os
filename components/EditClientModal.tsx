@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   Pencil, Building2, Users, Instagram, FileText, Facebook,
   Check, Loader2, User, Shield, MapPin, Phone, Mail, CreditCard, Briefcase,
+  Rocket, TrendingUp, Smartphone, Palette, Search,
 } from "lucide-react";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { chamar } from "@/lib/api/chamar";
@@ -177,11 +178,11 @@ export default function EditClientModal({ client, onClose }: Props) {
   };
 
   const TABS: { key: Tab; label: string; icon: typeof User }[] = [
-    { key: "pf", label: "Pessoa Fisica", icon: User },
+    { key: "pf", label: "Pessoa Física", icon: User },
     { key: "pj", label: "Empresa", icon: Building2 },
-    { key: "servico", label: "Servico", icon: Briefcase },
+    { key: "servico", label: "Serviço", icon: Briefcase },
     { key: "acessos", label: "Acessos", icon: Shield },
-    { key: "social", label: "Dossie", icon: Instagram },
+    { key: "social", label: "Dossiê", icon: Instagram },
   ];
 
   return (
@@ -216,7 +217,7 @@ export default function EditClientModal({ client, onClose }: Props) {
           {tab === "pf" && (
             <div className="space-y-4 animate-fade-in">
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5"><Label>Nome Completo</Label><Input value={form.contactName} onChange={(e) => set("contactName", e.target.value)} placeholder="Ex: Joao Silva" /></div>
+                <div className="space-y-1.5"><Label>Nome Completo</Label><Input value={form.contactName} onChange={(e) => set("contactName", e.target.value)} placeholder="Ex: João Silva" /></div>
                 <div className="space-y-1.5"><Label>CPF</Label><Input value={form.cpfCnpj} onChange={(e) => set("cpfCnpj", e.target.value)} placeholder="000.000.000-00" /></div>
               </div>
               <div className="grid grid-cols-3 gap-3">
@@ -232,7 +233,7 @@ export default function EditClientModal({ client, onClose }: Props) {
             <div className="space-y-4 animate-fade-in">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label>Nome Fantasia</Label><Input value={form.nomeFantasia} onChange={(e) => set("nomeFantasia", e.target.value)} /></div>
-                <div className="space-y-1.5"><Label>Razao Social</Label><Input value={form.razaoSocial} onChange={(e) => set("razaoSocial", e.target.value)} /></div>
+                <div className="space-y-1.5"><Label>Razão Social</Label><Input value={form.razaoSocial} onChange={(e) => set("razaoSocial", e.target.value)} /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label>CNPJ</Label><Input value={form.cnpj} onChange={(e) => set("cnpj", e.target.value)} placeholder="00.000.000/0000-00" /></div>
@@ -244,7 +245,7 @@ export default function EditClientModal({ client, onClose }: Props) {
                   </Select>
                 </div>
               </div>
-              <div className="space-y-1.5"><Label className="flex items-center gap-1"><MapPin size={10} /> Endereco</Label><Input value={form.endereco} onChange={(e) => set("endereco", e.target.value)} placeholder="Rua, numero, bairro, cidade" /></div>
+              <div className="space-y-1.5"><Label className="flex items-center gap-1"><MapPin size={10} /> Endereço</Label><Input value={form.endereco} onChange={(e) => set("endereco", e.target.value)} placeholder="Rua, número, bairro, cidade" /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label className="flex items-center gap-1"><Mail size={10} /> E-mail Corporativo</Label><Input type="email" value={form.emailCorporativo} onChange={(e) => set("emailCorporativo", e.target.value)} /></div>
                 <div className="space-y-1.5">
@@ -252,15 +253,15 @@ export default function EditClientModal({ client, onClose }: Props) {
                   <Select value={form.leadSource} onValueChange={(v) => set("leadSource", v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="indicacao">Indicacao</SelectItem>
-                      <SelectItem value="trafego">Trafego Pago</SelectItem>
-                      <SelectItem value="organico">Organico</SelectItem>
+                      <SelectItem value="indicacao">Indicação</SelectItem>
+                      <SelectItem value="trafego">Tráfego Pago</SelectItem>
+                      <SelectItem value="organico">Orgânico</SelectItem>
                       <SelectItem value="outros">Outros</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              <div className="space-y-1.5"><Label>Observacoes</Label><Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={2} placeholder="Contexto, expectativas..." /></div>
+              <div className="space-y-1.5"><Label>Observações</Label><Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={2} placeholder="Contexto, expectativas..." /></div>
             </div>
           )}
 
@@ -269,16 +270,16 @@ export default function EditClientModal({ client, onClose }: Props) {
             <div className="space-y-4 animate-fade-in">
               <div className="grid grid-cols-2 gap-2">
                 {([
-                  { value: "lone_growth", label: "Lone Growth", icon: "\u{1F680}" },
-                  { value: "assessoria_trafego", label: "Assessoria Trafego", icon: "\u{1F3AF}" },
-                  { value: "assessoria_social", label: "Assessoria Social", icon: "\u{1F4F1}" },
-                  { value: "assessoria_design", label: "Assessoria Design", icon: "\u{1F3A8}" },
+                  { value: "lone_growth", label: "Lone Growth", icon: Rocket },
+                  { value: "assessoria_trafego", label: "Assessoria Tráfego", icon: TrendingUp },
+                  { value: "assessoria_social", label: "Assessoria Social", icon: Smartphone },
+                  { value: "assessoria_design", label: "Assessoria Design", icon: Palette },
                 ]).map((opt) => (
                   <button key={opt.value} type="button" onClick={() => set("serviceType", opt.value)}
                     className={`flex items-center gap-2 p-2.5 rounded-lg border text-left transition-all text-xs ${
                       form.serviceType === opt.value ? "border-primary/50 bg-primary/[0.06] text-foreground" : "border-border text-muted-foreground hover:border-border"
                     }`}>
-                    <span>{opt.icon}</span> {opt.label}
+                    <opt.icon size={13} className="shrink-0" aria-hidden="true" /> {opt.label}
                   </button>
                 ))}
               </div>
@@ -291,18 +292,18 @@ export default function EditClientModal({ client, onClose }: Props) {
                     <SelectContent>
                       <SelectItem value="pix">Pix</SelectItem>
                       <SelectItem value="boleto">Boleto</SelectItem>
-                      <SelectItem value="cartao">Cartao</SelectItem>
-                      <SelectItem value="transferencia">Transferencia</SelectItem>
+                      <SelectItem value="cartao">Cartão</SelectItem>
+                      <SelectItem value="transferencia">Transferência</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5"><Label>Fim do Contrato</Label><Input type="date" value={form.contractEnd} onChange={(e) => set("contractEnd", e.target.value)} /></div>
               </div>
 
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider pt-2">Equipe Responsavel</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider pt-2">Equipe Responsável</p>
               {needsTraffic && (
                 <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1"><Users size={10} /> Gestor de Trafego</Label>
+                  <Label className="flex items-center gap-1"><Users size={10} /> Gestor de Tráfego</Label>
                   <Select value={form.assignedTraffic} onValueChange={(v) => set("assignedTraffic", v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{team.forField("assignedTraffic").map((m) => <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>)}</SelectContent>
@@ -355,12 +356,12 @@ export default function EditClientModal({ client, onClose }: Props) {
                 <Shield size={10} className="text-primary" /> Cofre de Acessos
               </p>
               {([
-                { platform: "Facebook / Meta Ads", icon: "\u{1F4D8}", loginKey: "facebookLogin", passKey: "facebookPassword" },
-                { platform: "Instagram", icon: "\u{1F4F7}", loginKey: "instagramLogin", passKey: "instagramPassword" },
-                { platform: "Google Ads / Gmail", icon: "\u{1F50D}", loginKey: "googleAdsLogin", passKey: "googleAdsPassword" },
+                { platform: "Facebook / Meta Ads", icon: Facebook, loginKey: "facebookLogin", passKey: "facebookPassword" },
+                { platform: "Instagram", icon: Instagram, loginKey: "instagramLogin", passKey: "instagramPassword" },
+                { platform: "Google Ads / Gmail", icon: Search, loginKey: "googleAdsLogin", passKey: "googleAdsPassword" },
               ] as const).map((acc) => (
                 <div key={acc.platform} className="rounded-lg border border-border bg-card p-3 space-y-2">
-                  <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">{acc.icon} {acc.platform}</p>
+                  <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><acc.icon size={12} className="shrink-0" aria-hidden="true" /> {acc.platform}</p>
                   <div className="grid grid-cols-2 gap-2">
                     <Input
                       value={form[acc.loginKey]}
@@ -378,7 +379,7 @@ export default function EditClientModal({ client, onClose }: Props) {
                   </div>
                 </div>
               ))}
-              <p className="text-[9px] text-muted-foreground">Senhas sao armazenadas de forma segura no banco de dados.</p>
+              <p className="text-[9px] text-muted-foreground">Senhas são armazenadas de forma segura no banco de dados.</p>
             </div>
           )}
 
@@ -394,8 +395,8 @@ export default function EditClientModal({ client, onClose }: Props) {
                     <SelectContent>
                       <SelectItem value="_none">Nenhum</SelectItem>
                       <SelectItem value="formal">Formal</SelectItem>
-                      <SelectItem value="funny">Engracado</SelectItem>
-                      <SelectItem value="authoritative">Autoritario</SelectItem>
+                      <SelectItem value="funny">Engraçado</SelectItem>
+                      <SelectItem value="authoritative">Autoritário</SelectItem>
                       <SelectItem value="casual">Casual</SelectItem>
                     </SelectContent>
                   </Select>
@@ -403,10 +404,10 @@ export default function EditClientModal({ client, onClose }: Props) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label className="flex items-center gap-1"><FileText size={10} /> Drive / Canva</Label><Input value={form.driveLink} onChange={(e) => set("driveLink", e.target.value)} placeholder="https://..." /></div>
-                <div className="space-y-1.5"><Label>Meta de Posts/Mes</Label><Input type="number" value={form.postsGoal} onChange={(e) => set("postsGoal", e.target.value)} /></div>
+                <div className="space-y-1.5"><Label>Meta de Posts/Mês</Label><Input type="number" value={form.postsGoal} onChange={(e) => set("postsGoal", e.target.value)} /></div>
               </div>
               <div className="space-y-1.5"><Label>Briefing Fixo (cores, fontes, regras)</Label><Textarea value={form.fixedBriefing} onChange={(e) => set("fixedBriefing", e.target.value)} rows={2} placeholder="Cores de marca, fontes, regras de identidade visual..." /></div>
-              <div className="space-y-1.5"><Label>Briefing de Campanha</Label><Textarea value={form.campaignBriefing} onChange={(e) => set("campaignBriefing", e.target.value)} rows={2} placeholder="Objetivo atual, publico-alvo, tom de comunicacao..." /></div>
+              <div className="space-y-1.5"><Label>Briefing de Campanha</Label><Textarea value={form.campaignBriefing} onChange={(e) => set("campaignBriefing", e.target.value)} rows={2} placeholder="Objetivo atual, público-alvo, tom de comunicação..." /></div>
             </div>
           )}
         </div>
@@ -415,7 +416,7 @@ export default function EditClientModal({ client, onClose }: Props) {
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button onClick={handleSave} disabled={saving} className="flex items-center gap-2">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-            Salvar Alteracoes
+            Salvar Alterações
           </Button>
         </DialogFooter>
       </DialogContent>

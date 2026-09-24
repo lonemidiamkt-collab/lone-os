@@ -85,7 +85,7 @@ export default function IntegrationsPage() {
                 <>
                   <button
                     onClick={() => meta.connect()}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-muted-foreground text-xs font-medium hover:text-foreground hover:bg-hover transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-muted-foreground text-xs font-medium hover:text-foreground hover:bg-accent transition-all"
                   >
                     <RefreshCw size={12} /> Reconectar
                   </button>
@@ -120,7 +120,7 @@ export default function IntegrationsPage() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setConfirmarDesconexao(false)}
-                className="flex-1 px-4 py-2 rounded-lg bg-muted text-muted-foreground text-xs font-medium hover:text-foreground hover:bg-hover transition-all"
+                className="flex-1 px-4 py-2 rounded-lg bg-muted text-muted-foreground text-xs font-medium hover:text-foreground hover:bg-accent transition-all"
               >
                 Cancelar
               </button>

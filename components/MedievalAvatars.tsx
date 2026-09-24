@@ -47,7 +47,7 @@ export const AVATAR_OPTIONS: { type: AvatarType; label: string; adminOnly?: bool
   { type: "knight", label: "Cavaleiro" },
   { type: "archer", label: "Arqueiro" },
   { type: "mage", label: "Mago" },
-  { type: "dragon", label: "Dragao" },
+  { type: "dragon", label: "Dragão" },
   { type: "orc", label: "Orc" },
   { type: "rogue", label: "Ladino" },
   { type: "smith", label: "Ferreiro" },

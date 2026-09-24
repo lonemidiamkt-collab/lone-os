@@ -31,7 +31,7 @@ export default function OperacaoCriativa() {
   if (!d) return null;
   return (
     <section className="rounded-xl border border-border bg-muted/20 p-4">
-      <h2 className="text-sm font-semibold text-foreground">📊 Operação criativa — últimos {d.periodo}</h2>
+      <h2 className="text-sm font-semibold text-foreground">Operação criativa — últimos {d.periodo}</h2>
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
         <Tile label="Demandas pedidas" value={d.demandas.pedidas} sub={`${d.demandas.viaIa} via replicação`} />
         <Tile label="Entregues" value={d.demandas.entregues} sub={d.demandas.tempoMedioDias != null ? `${d.demandas.tempoMedioDias} dias em média` : undefined} />

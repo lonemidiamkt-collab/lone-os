@@ -132,11 +132,11 @@ export default function GruposPage() {
         <div>
           <h1 className="text-lg font-semibold text-foreground">Grupos dos Clientes (WhatsApp)</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Vincule cada cliente ao seu grupo. ⚠️ Confira os de confiança baixa/sem match — o relatório vai
+            Vincule cada cliente ao seu grupo. Confira os de confiança baixa/sem match — o relatório vai
             pro grupo escolhido aqui. {mappedCount}/{rows.length} vinculados.
           </p>
           <p className="text-[11px] text-muted-foreground mt-1">
-            💡 A coluna <b className="text-foreground">Verba mín</b> vem <b className="text-foreground">sincronizada</b> do Controle de Investimento. Alerta em 2 níveis: <b className="text-foreground">{warnPct}%</b> (baixa) e <b className="text-foreground">{critPct}%</b> (crítica) da verba mensal. Só preencha pra exceções.
+            A coluna <b className="text-foreground">Verba mín</b> vem <b className="text-foreground">sincronizada</b> do Controle de Investimento. Alerta em 2 níveis: <b className="text-foreground">{warnPct}%</b> (baixa) e <b className="text-foreground">{critPct}%</b> (crítica) da verba mensal. Só preencha pra exceções.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -180,7 +180,7 @@ export default function GruposPage() {
             <div key={r.clientId} className={`grid grid-cols-[1.1fr_1.3fr_100px_95px_210px_70px] gap-3 px-4 py-2.5 border-b border-border last:border-0 items-center ${isDup ? "bg-destructive/5" : needsReview ? "bg-lone-warning-bg" : ""}`}>
               <p className="text-sm text-foreground truncate" title={r.metaAccountId}>
                 {r.clientName}
-                {isDup && <span title="Grupo repetido — confira" className="ml-1.5 text-[9px] text-destructive font-medium whitespace-nowrap">⚠️ repetido</span>}
+                {isDup && <span title="Grupo repetido — confira" className="ml-1.5 inline-flex items-center gap-0.5 text-[9px] text-destructive font-medium whitespace-nowrap"><AlertTriangle size={9} aria-hidden="true" /> repetido</span>}
               </p>
               <select
                 value={sel[r.clientId] ?? ""}

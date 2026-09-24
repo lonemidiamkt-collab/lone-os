@@ -85,7 +85,7 @@ export default function KPICard({
       </div>
 
       {/* Value */}
-      <p className="text-[28px] font-extrabold leading-none tracking-[-0.02em] text-foreground">
+      <p className="text-[28px] font-semibold leading-none tracking-[-0.02em] text-foreground">
         {value}
       </p>
 

@@ -39,7 +39,7 @@ import {
   BarChart2, PenLine, Star, Upload, Image as ImageIcon,
   Link as LinkIcon, Mic, Palette, Award, Plus, Download, Pencil,
   Facebook, Settings, Link2, Unlink, Check, Loader2, ExternalLink,
-  Archive,
+  Archive, Smartphone,
 } from "lucide-react";
 import EditClientModal from "@/components/EditClientModal";
 import dynamic from "next/dynamic";
@@ -436,7 +436,7 @@ export default function ClientDetailPage() {
           </span>
           {client.serviceType && client.serviceType !== "lone_growth" && (
             <span className="badge border text-xs text-muted-foreground bg-muted border-border">
-              {client.serviceType === "assessoria_trafego" ? "Assessoria Trafego" :
+              {client.serviceType === "assessoria_trafego" ? "Assessoria Tráfego" :
                client.serviceType === "assessoria_social" ? "Assessoria Social" :
                client.serviceType === "assessoria_design" ? "Assessoria Design" : "Lone Growth"}
             </span>
@@ -646,11 +646,11 @@ export default function ClientDetailPage() {
                     <p className="text-xs text-muted-foreground mb-1">Dossiê da Marca</p>
                     <div className="flex flex-wrap gap-2">
                       <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-lg font-medium">
-                        📌 Nicho: {client.industry}
+                        Nicho: {client.industry}
                       </span>
                       {client.toneOfVoice && (
                         <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-lg font-medium">
-                          🗣 Tom: {TONE_LABELS[client.toneOfVoice]}
+                          Tom: {TONE_LABELS[client.toneOfVoice]}
                         </span>
                       )}
                       {client.instagramUser && (
@@ -1198,8 +1198,8 @@ export default function ClientDetailPage() {
               {obItems.length === 0 ? (
                 <div className="card text-center py-10 text-muted-foreground">
                   {client.status === "onboarding"
-                    ? "Checklist de onboarding nao iniciado."
-                    : "Este cliente ja concluiu o onboarding."}
+                    ? "Checklist de onboarding não iniciado."
+                    : "Este cliente já concluiu o onboarding."}
                 </div>
               ) : (
                 <>
@@ -1220,21 +1220,22 @@ export default function ClientDetailPage() {
                   {/* 3 department blocks */}
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                     {([
-                      { dept: "traffic", title: "Setup de Trafego", icon: "🛡️", member: client.assignedTraffic },
-                      { dept: "design", title: "Setup de Design", icon: "🎨", member: client.assignedDesigner },
-                      { dept: "social", title: "Setup de Social", icon: "📱", member: client.assignedSocial },
+                      { dept: "traffic", title: "Setup de Tráfego", icon: TrendingUp, member: client.assignedTraffic },
+                      { dept: "design", title: "Setup de Design", icon: Palette, member: client.assignedDesigner },
+                      { dept: "social", title: "Setup de Social", icon: Smartphone, member: client.assignedSocial },
                     ] as const).map((block) => {
                       const deptItems = obItems.filter((it) => (it as any).department === block.dept || (!((it as any).department) && block.dept === "social"));
                       const deptDone = deptItems.filter((it) => it.completed).length;
                       const deptTotal = deptItems.length;
+                      const IconeDept = block.icon;
                       return (
                         <div key={block.dept} className="card space-y-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="text-lg">{block.icon}</span>
+                              <IconeDept size={16} className="text-muted-foreground shrink-0" />
                               <div>
                                 <h4 className="text-xs font-semibold text-foreground">{block.title}</h4>
-                                <p className="text-[10px] text-muted-foreground">{block.member || "Nao atribuido"}</p>
+                                <p className="text-[10px] text-muted-foreground">{block.member || "Não atribuído"}</p>
                               </div>
                             </div>
                             <span className={`text-[10px] font-bold tabular-nums ${deptDone === deptTotal && deptTotal > 0 ? "text-lone-success" : "text-muted-foreground"}`}>

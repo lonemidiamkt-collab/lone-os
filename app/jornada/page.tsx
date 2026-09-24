@@ -5,6 +5,7 @@
 // relacionamento. SEM financeiro. Reaproveita health + sentimento + esfriando + cards atrasados.
 
 import { useEffect, useMemo, useState } from "react";
+import { ArrowRight, ClipboardList, Hourglass } from "lucide-react";
 import { chamar } from "@/lib/api/chamar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,7 +130,7 @@ export default function JornadaPage() {
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-5">
       <div>
-        <h1 className="text-xl font-semibold">Jornada do cliente (CS)</h1>
+        <h1 className="text-xl font-semibold">Jornada CS</h1>
         <p className="text-sm text-muted-foreground">Saúde, risco, pendências e a próxima ação de cada cliente — num lugar só.</p>
       </div>
 
@@ -165,12 +166,12 @@ export default function JornadaPage() {
                     <span className="font-medium">{f.nome}</span>
                     <span className={`text-[11px] px-1.5 py-0.5 rounded ${RISCO_COR[f.risco.nivel] || "bg-muted"}`}>{RISCO_LABEL[f.risco.nivel] || f.risco.nivel}</span>
                     <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{f.estado}</span>
-                    {f.cardsAtrasados > 0 && <span className="text-[11px] text-lone-high">⏳ {f.cardsAtrasados} atrasado(s)</span>}
-                    {f.pendenciasCliente.length > 0 && <span className="text-[11px] text-lone-warning">📋 {f.pendenciasCliente.length} do cliente</span>}
-                    {!f.percebeValor && <span className="text-[11px] text-muted-foreground">⚠️ valor</span>}
+                    {f.cardsAtrasados > 0 && <span className="inline-flex items-center gap-1 text-[11px] text-lone-high"><Hourglass size={11} aria-hidden="true" />{f.cardsAtrasados} atrasado(s)</span>}
+                    {f.pendenciasCliente.length > 0 && <span className="inline-flex items-center gap-1 text-[11px] text-lone-warning"><ClipboardList size={11} aria-hidden="true" />{f.pendenciasCliente.length} do cliente</span>}
+                    {!f.percebeValor && <span className="text-[11px] text-muted-foreground">não percebe valor</span>}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {f.temProximaAcao ? <>➡️ <span className="text-foreground">{f.proximaAcao}</span>{f.responsavel ? ` · ${f.responsavel}` : ""}{f.prazo ? ` · até ${f.prazo}` : ""}</> : <span className="text-lone-high">Sem próxima ação definida</span>}
+                    {f.temProximaAcao ? <><ArrowRight size={11} className="inline -mt-px mr-1" aria-hidden="true" /><span className="text-foreground">{f.proximaAcao}</span>{f.responsavel ? ` · ${f.responsavel}` : ""}{f.prazo ? ` · até ${f.prazo}` : ""}</> : <span className="text-lone-high">Sem próxima ação definida</span>}
                   </p>
                   {f.risco.motivos.length > 0 && <p className="text-[11px] text-muted-foreground mt-0.5">{f.risco.motivos.join(" · ")}</p>}
                 </div>

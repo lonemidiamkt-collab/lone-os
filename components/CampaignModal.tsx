@@ -68,19 +68,19 @@ function generateCampaignContent(briefing: string, client: Client): GeneratedCon
       method: "AIDA",
       steps: [
         {
-          label: "🔴 Atenção (0–3s)",
+          label: "Atenção (0–3s)",
           content: `[GANCHO VISUAL — corte rápido]\nVoz/texto: "Você ainda ${niche === "Fitness" ? "luta para ter resultado na academia" : niche === "Gastronomia" ? "não encontrou o restaurante ideal" : niche === "Educação" ? "não conseguiu mudar de carreira" : "perde tempo com isso todo dia"}? Para tudo. Olha isso."`,
         },
         {
-          label: "🟡 Interesse (3–15s)",
+          label: "Interesse (3–15s)",
           content: `Mostrar o problema de forma visual.\nVoz: "A maioria das pessoas ${niche === "Fitness" ? "treina errado por anos sem perceber" : niche === "Gastronomia" ? "fica de restaurante em restaurante sem experiência real" : "estuda muito mas não aplica o que aprendeu"}. E o resultado? ${mainTopic}."`,
         },
         {
-          label: "🟢 Desejo (15–45s)",
+          label: "Desejo (15–45s)",
           content: `Apresentar a solução com prova social.\nVoz: "Com o nosso método/serviço, você consegue [benefício principal]. [Nome de cliente/caso real] saiu de [situação antes] para [resultado em X dias/semanas]. Sem enrolação."`,
         },
         {
-          label: "🔵 Ação (45–60s)",
+          label: "Ação (45–60s)",
           content: `[TELA FINAL COM CTA]\nVoz: "${cta} — link na bio. Vagas/disponibilidade limitada. Não espera para amanhã o que você pode resolver hoje."`,
         },
       ],
@@ -190,7 +190,7 @@ export default function CampaignModal({ client, onClose }: Props) {
                       activeSection === s ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {s === "art" ? "🎨 Descrições de Arte" : s === "video" ? "🎬 Roteiro de Vídeo" : s === "caption" ? "📝 Copy de Legenda" : "🎯 Sugestão de Tráfego"}
+                    {s === "art" ? "Descrições de Arte" : s === "video" ? "Roteiro de Vídeo" : s === "caption" ? "Copy de Legenda" : "Sugestão de Tráfego"}
                   </button>
                 ))}
               </div>

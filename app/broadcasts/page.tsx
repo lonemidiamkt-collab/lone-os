@@ -9,7 +9,7 @@ import { authedFetch } from "@/lib/supabase/authed-fetch";
 import { chamar } from "@/lib/api/chamar";
 import {
   Send, Loader2, Check, AlertCircle, Bold, Italic, List, Link as LinkIcon,
-  Mail, Users, Megaphone, Plus, X, CheckCircle, XCircle,
+  Mail, Users, Megaphone, Plus, X, CheckCircle, XCircle, CalendarDays,
 } from "lucide-react";
 
 interface Broadcast {
@@ -262,7 +262,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
     e?.stopPropagation();
     if (!validate()) return;
     const total = audienceCount;
-    if (!window.confirm(`Enviar este comunicado para ${total} cliente(s)? Essa acao nao pode ser desfeita.`)) return;
+    if (!window.confirm(`Enviar este comunicado para ${total} cliente(s)? Essa ação não pode ser desfeita.`)) return;
 
     setSending(true);
     try {
@@ -319,7 +319,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
             <input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="Ex: Novidades da Lone Midia — IA chegando ao trafego"
+              placeholder="Ex: Novidades da Lone Mídia — IA chegando ao tráfego"
               className="w-full bg-muted border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors"
             />
           </div>
@@ -327,7 +327,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
           {/* Editor toolbar */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-muted-foreground">Conteudo</label>
+              <label className="text-xs font-medium text-muted-foreground">Conteúdo</label>
               <span className="text-[10px] text-muted-foreground">
                 Use <code className="bg-muted px-1 rounded">{"{{nome_cliente}}"}</code> para personalizar
               </span>
@@ -335,7 +335,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
             <div className="rounded-lg border border-border overflow-hidden">
               <div className="flex items-center gap-1 bg-muted px-2 py-1.5 border-b border-border">
                 <ToolbarButton icon={Bold} onClick={() => exec("bold")} title="Negrito" />
-                <ToolbarButton icon={Italic} onClick={() => exec("italic")} title="Italico" />
+                <ToolbarButton icon={Italic} onClick={() => exec("italic")} title="Itálico" />
                 <ToolbarButton icon={List} onClick={() => exec("insertUnorderedList")} title="Lista" />
                 <ToolbarButton icon={LinkIcon} onClick={insertLink} title="Link" />
               </div>
@@ -363,7 +363,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
                 <Users size={14} className="text-primary" />
                 <div className="flex-1">
                   <p className="text-xs font-medium text-foreground">Todos os ativos</p>
-                  <p className="text-[10px] text-muted-foreground">Clientes em operacao (exclui rascunhos e at risk)</p>
+                  <p className="text-[10px] text-muted-foreground">Clientes em operação (exclui rascunhos e at risk)</p>
                 </div>
               </label>
               {sectors.map((sec) => {
@@ -385,7 +385,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
               })}
             </div>
             <p className="text-[10px] text-muted-foreground mt-1">
-              Publico atual: <span className="text-primary font-semibold">{audienceCount} destinatario(s)</span>
+              Público atual: <span className="text-primary font-semibold">{audienceCount} destinatário(s)</span>
             </p>
           </div>
 
@@ -400,7 +400,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
               />
               <div className="flex-1">
                 <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                  📅 Incluir calendário de feriados e datas comemorativas
+                  <CalendarDays size={13} className="text-muted-foreground shrink-0" /> Incluir calendário de feriados e datas comemorativas
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
                   Calendário do mês embutido no fim do email. Personalizado por nicho/cidade do cliente.
@@ -448,7 +448,7 @@ function ComposerModal({ onClose, onSent, clients, adminEmail }: { onClose: () =
             placeholder={adminEmail || "seu@email.com"}
             className="mt-1 w-full bg-muted border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50 transition-colors"
           />
-          <p className="text-[10px] text-muted-foreground mt-1">O teste sera enviado pra esse email. Padrao: seu email de admin.</p>
+          <p className="text-[10px] text-muted-foreground mt-1">O teste será enviado pra esse e-mail. Padrão: seu e-mail de admin.</p>
         </div>
 
         {/* Footer actions */}

@@ -209,9 +209,9 @@ export default function PortalManagementCard({ client, onUpdate }: Props) {
 
           {/* O que o cliente vai ver */}
           {prontidao && (
-            <div className={`rounded-lg border px-3 py-2 text-[11px] ${prontidao.pronto ? "border-border bg-surface" : "border-lone-warning-border/40 bg-lone-warning-bg/[0.06]"}`}>
+            <div className={`rounded-lg border px-3 py-2 text-[11px] ${prontidao.pronto ? "border-border bg-surface" : "border-lone-warning-border bg-lone-warning-bg"}`}>
               <p className={`font-medium ${prontidao.pronto ? "text-foreground" : "text-lone-warning"}`}>
-                {prontidao.pronto ? "O que o cliente vê ao abrir" : "⚠️ O portal vai abrir vazio — não envie ainda"}
+                {prontidao.pronto ? "O que o cliente vê ao abrir" : "O portal vai abrir vazio — não envie ainda"}
               </p>
               <ul className="mt-1 space-y-0.5 text-muted-foreground">
                 {prontidao.itens.map((i) => <li key={i.chave}>{i.ok ? "✓" : "✗"} {i.texto}</li>)}

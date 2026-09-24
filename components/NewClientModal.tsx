@@ -5,6 +5,7 @@ import {
   UserPlus, Building2, Users, Check, Loader2,
   ExternalLink, Phone, Mail, Upload, Camera,
   CreditCard, Eye, EyeOff, Shield, Briefcase, MapPin,
+  Rocket, TrendingUp, Smartphone, Palette,
 } from "lucide-react";
 import { useClientsStore } from "@/stores/useClientsStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
@@ -42,7 +43,7 @@ function DocUpload({ label, onUploaded, uploaded }: { label: string; onUploaded:
   const ref = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
-    if (file.size > 10 * 1024 * 1024) { setError("Maximo 10MB."); return; }
+    if (file.size > 10 * 1024 * 1024) { setError("Máximo 10MB."); return; }
     setError(""); setUploading(true);
     try {
       const fd = new FormData();
@@ -59,7 +60,7 @@ function DocUpload({ label, onUploaded, uploaded }: { label: string; onUploaded:
 
   if (uploaded) {
     return (
-      <div className="flex items-center gap-2 p-2.5 rounded-lg border border-lone-success-border bg-lone-success-bg/[0.03]">
+      <div className="flex items-center gap-2 p-2.5 rounded-lg border border-lone-success-border bg-lone-success-bg">
         <Check size={12} className="text-lone-success shrink-0" />
         <span className="text-xs text-lone-success truncate">{label} enviado</span>
       </div>
@@ -161,10 +162,10 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
   const set = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const SERVICE_OPTIONS = [
-    { value: "lone_growth", label: "Lone Growth", icon: "\u{1F680}", desc: "Trafego + Social + Design" },
-    { value: "assessoria_trafego", label: "Assessoria de Trafego", icon: "\u{1F3AF}", desc: "Apenas Trafego" },
-    { value: "assessoria_social", label: "Assessoria de Social", icon: "\u{1F4F1}", desc: "Apenas Social" },
-    { value: "assessoria_design", label: "Assessoria de Design", icon: "\u{1F3A8}", desc: "Apenas Design" },
+    { value: "lone_growth", label: "Lone Growth", icon: Rocket, desc: "Tráfego + Social + Design" },
+    { value: "assessoria_trafego", label: "Assessoria de Tráfego", icon: TrendingUp, desc: "Apenas Tráfego" },
+    { value: "assessoria_social", label: "Assessoria de Social", icon: Smartphone, desc: "Apenas Social" },
+    { value: "assessoria_design", label: "Assessoria de Design", icon: Palette, desc: "Apenas Design" },
   ] as const;
 
   const needsTraffic = form.serviceType === "lone_growth" || form.serviceType === "assessoria_trafego";
@@ -208,7 +209,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
   // ─── Manual Submit ────────────────────────────
   const handleSubmit = async () => {
     const name = form.nomeFantasia.trim() || form.razaoSocial.trim();
-    if (!name) { setError("Nome Fantasia ou Razao Social e obrigatorio."); return; }
+    if (!name) { setError("Nome Fantasia ou Razão Social é obrigatório."); return; }
 
     const newClient = await addClient({
       name,
@@ -271,9 +272,9 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
 
   // ─── Phases ───────────────────────────────────
   const PHASES: { key: Phase; label: string; icon: typeof UserPlus }[] = [
-    { key: "pf", label: "Pessoa Fisica", icon: UserPlus },
+    { key: "pf", label: "Pessoa Física", icon: UserPlus },
     { key: "pj", label: "Empresa", icon: Building2 },
-    { key: "servico", label: "Servico & Equipe", icon: Briefcase },
+    { key: "servico", label: "Serviço & Equipe", icon: Briefcase },
   ];
   const currentIdx = PHASES.findIndex((p) => p.key === phase);
   const goNext = () => { if (currentIdx < PHASES.length - 1) setPhase(PHASES[currentIdx + 1].key); };
@@ -329,7 +330,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
             <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center"><UserPlus size={18} className="text-primary" /></div>
             <div>
               <DialogTitle>Novo Cliente</DialogTitle>
-              <DialogDescription>Cadastro em 3 fases + onboarding automatico</DialogDescription>
+              <DialogDescription>Cadastro em 3 fases + onboarding automático</DialogDescription>
             </div>
           </div>
         </DialogHeader>
@@ -352,7 +353,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           {/* ═══ FASE 1: PESSOA FISICA ═══ */}
           {phase === "pf" && (
             <div className="space-y-4 animate-fade-in">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><Shield size={10} className="text-primary" /> Dados do Responsavel (PF)</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><Shield size={10} className="text-primary" /> Dados do Responsável (PF)</p>
 
               <div className="space-y-1.5">
                 <Label>Nome da Empresa <span className="text-muted-foreground font-normal">(para o link)</span></Label>
@@ -377,7 +378,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Nome Completo <span className="text-destructive">*</span></Label>
-                  <Input value={form.contactName} onChange={(e) => { set("contactName", e.target.value); setError(""); }} placeholder="Ex: Joao da Silva" />
+                  <Input value={form.contactName} onChange={(e) => { set("contactName", e.target.value); setError(""); }} placeholder="Ex: João da Silva" />
                 </div>
                 <div className="space-y-1.5">
                   <Label>CPF</Label>
@@ -403,7 +404,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><Building2 size={10} className="text-primary" /> Dados Empresariais (PJ)</p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Razao Social</Label>
+                  <Label>Razão Social</Label>
                   <Input value={form.razaoSocial} onChange={(e) => set("razaoSocial", e.target.value)} placeholder="Ex: Empresa X Ltda" />
                 </div>
                 <div className="space-y-1.5">
@@ -425,8 +426,8 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label className="flex items-center gap-1"><MapPin size={10} /> Endereco</Label>
-                <Input value={form.endereco} onChange={(e) => set("endereco", e.target.value)} placeholder="Rua, numero, bairro, cidade - UF" />
+                <Label className="flex items-center gap-1"><MapPin size={10} /> Endereço</Label>
+                <Input value={form.endereco} onChange={(e) => set("endereco", e.target.value)} placeholder="Rua, número, bairro, cidade - UF" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -438,9 +439,9 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
                   <Select value={form.leadSource} onValueChange={(v) => set("leadSource", v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="indicacao">Indicacao</SelectItem>
-                      <SelectItem value="trafego">Trafego Pago</SelectItem>
-                      <SelectItem value="organico">Organico</SelectItem>
+                      <SelectItem value="indicacao">Indicação</SelectItem>
+                      <SelectItem value="trafego">Tráfego Pago</SelectItem>
+                      <SelectItem value="organico">Orgânico</SelectItem>
                       <SelectItem value="outros">Outros</SelectItem>
                     </SelectContent>
                   </Select>
@@ -457,7 +458,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
               </div>
 
               <div className="space-y-1.5">
-                <Label>Observacoes <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+                <Label>Observações <span className="text-muted-foreground font-normal">(opcional)</span></Label>
                 <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={2} placeholder="Contexto, expectativas..." />
               </div>
             </div>
@@ -466,7 +467,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           {/* ═══ FASE 3: SERVICO & EQUIPE ═══ */}
           {phase === "servico" && (
             <div className="space-y-4 animate-fade-in">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><Briefcase size={10} className="text-primary" /> Servico Contratado & Equipe</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><Briefcase size={10} className="text-primary" /> Serviço Contratado & Equipe</p>
 
               <div className="grid grid-cols-2 gap-2">
                 {SERVICE_OPTIONS.map((opt) => (
@@ -474,7 +475,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
                     className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
                       form.serviceType === opt.value ? "border-primary/50 bg-primary/[0.06]" : "border-border bg-card/[0.02] hover:border-border"
                     }`}>
-                    <span className="text-base">{opt.icon}</span>
+                    <opt.icon size={16} className="shrink-0 text-muted-foreground" aria-hidden="true" />
                     <div className="min-w-0">
                       <p className={`text-xs font-medium ${form.serviceType === opt.value ? "text-foreground" : "text-muted-foreground"}`}>{opt.label}</p>
                       <p className="text-[9px] text-muted-foreground truncate">{opt.desc}</p>
@@ -491,17 +492,17 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
                     <SelectContent>
                       <SelectItem value="pix">Pix</SelectItem>
                       <SelectItem value="boleto">Boleto</SelectItem>
-                      <SelectItem value="cartao">Cartao</SelectItem>
-                      <SelectItem value="transferencia">Transferencia</SelectItem>
+                      <SelectItem value="cartao">Cartão</SelectItem>
+                      <SelectItem value="transferencia">Transferência</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider pt-2">Equipe Responsavel</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider pt-2">Equipe Responsável</p>
               <div className="space-y-3">
                 {([
-                  { key: "assignedTraffic" as const, label: "Gestor de Trafego", members: team.forField("assignedTraffic"), show: needsTraffic },
+                  { key: "assignedTraffic" as const, label: "Gestor de Tráfego", members: team.forField("assignedTraffic"), show: needsTraffic },
                   { key: "assignedSocial" as const, label: "Social Media", members: team.forField("assignedSocial"), show: needsSocial },
                   { key: "assignedDesigner" as const, label: "Designer", members: team.forField("assignedDesigner"), show: needsDesigner },
                 ]).filter((f) => f.show).map((field) => (
@@ -570,7 +571,7 @@ export default function NewClientModal({ onClose, onSuccess }: Props) {
           <div className="flex items-center gap-2">
             <Button variant="ghost" onClick={onClose}>Cancelar</Button>
             {currentIdx < PHASES.length - 1 ? (
-              <Button onClick={goNext}>Proximo</Button>
+              <Button onClick={goNext}>Próximo</Button>
             ) : (
               <Button onClick={handleSubmit} className="flex items-center gap-2"><Check size={14} /> Cadastrar Cliente</Button>
             )}

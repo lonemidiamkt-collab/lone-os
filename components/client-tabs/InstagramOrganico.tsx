@@ -66,7 +66,7 @@ export default function InstagramOrganico({ clientId }: { clientId: string }) {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "automap" }),
       });
       const d = await r.json().catch(() => ({}));
-      if (r.ok) setAutomap({ loading: false, msg: d.total > 0 ? `✅ ${d.total} cliente(s) mapeado(s) automaticamente: ${d.mapeados.map((m: { cliente: string }) => m.cliente).join(", ")}` : "Nenhum novo casou pelo @ (os que faltam não têm @ cadastrado ou a conta não está visível pro token)." });
+      if (r.ok) setAutomap({ loading: false, msg: d.total > 0 ? `${d.total} cliente(s) mapeado(s) automaticamente: ${d.mapeados.map((m: { cliente: string }) => m.cliente).join(", ")}` : "Nenhum novo casou pelo @ (os que faltam não têm @ cadastrado ou a conta não está visível pro token)." });
       else setAutomap({ loading: false, msg: d.error || "Falha ao auto-mapear." });
       load();
     } catch { setAutomap({ loading: false, msg: "Falha de conexão." }); }

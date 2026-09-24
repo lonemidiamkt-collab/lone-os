@@ -374,8 +374,12 @@ export default function ReunioesCliente(
           { r: "No mês", v: `${saude.realizadas}`, s: `meta ${saude.meta}` },
           {
             r: "Status",
-            v: saude.status === "realizada" ? "🟢 Realizada"
-              : saude.status === "agendada" ? "🟡 Agendada" : "🔴 Sem reunião",
+            v: (
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${saude.status === "realizada" ? "bg-lone-success" : saude.status === "agendada" ? "bg-lone-warning" : "bg-lone-danger"}`} />
+                {saude.status === "realizada" ? "Realizada" : saude.status === "agendada" ? "Agendada" : "Sem reunião"}
+              </span>
+            ),
             s: saude.metaAtingida ? "meta atingida"
               : saude.status === "realizada" ? `falta ${saude.meta - saude.realizadas}` : "",
           },

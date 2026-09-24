@@ -162,7 +162,7 @@ export function HealthScoreRing({ score, label, size = 120 }: { score: number; l
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-black text-foreground tabular-nums">{score}</span>
+        <span className="text-2xl font-semibold text-foreground tabular-nums">{score}</span>
         <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{label}</span>
       </div>
     </div>

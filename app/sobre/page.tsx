@@ -368,7 +368,7 @@ function ModuleAccordion({ module: m, expanded, onToggle }: { module: Module; ex
               <ul className="space-y-1.5">
                 {m.tips.map((t, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs text-lone-success bg-lone-success-bg border border-lone-success-border rounded-lg p-2">
-                    <span className="shrink-0">💡</span>
+                    <Lightbulb size={13} className="shrink-0 mt-px" aria-hidden="true" />
                     <span className="leading-relaxed">{t}</span>
                   </li>
                 ))}
@@ -715,13 +715,13 @@ const MODULES: Module[] = [
       "Escolhe: tipo de serviço (Lone Growth, Tráfego, Social), valor mensal, duração (3/6/12 ou personalizado), dia de pagamento.",
       "Marca se terá reajuste após período inicial — se sim, informa novo valor (vira cláusula 2.7 automática no contrato).",
       "Sistema gera PDF preliminar e salva o contrato no cofre do cliente.",
-      "Admin clica 'Baixar DOCX Oficial' → recebe contrato oficial preenchido (template Lone Midia com merge de dados).",
+      "Admin clica 'Baixar DOCX Oficial' → recebe contrato oficial preenchido (template Lone Mídia com merge de dados).",
       "Admin sobe manualmente no painel D4Sign e envia pra assinatura — D4Sign cuida do resto (email pro cliente, assinatura, certificado).",
       "9h da manhã todo dia, cron verifica contratos vencendo em 30 dias e cria rascunho V2 automático.",
       "Admin abre o rascunho, revisa, baixa o DOCX V2 e repete o fluxo de assinatura.",
     ],
     features: [
-      "Template oficial Lone Midia (3 tipos: Tráfego, Social, Lone Growth) com merge de dados do cliente",
+      "Template oficial Lone Mídia (3 tipos: Tráfego, Social, Lone Growth) com merge de dados do cliente",
       "Cláusula de reajuste condicional (só aparece se habilitada na geração)",
       "Nicho customizado na cláusula 1.1 dos contratos de Tráfego/Lone Growth",
       "Valores por extenso automáticos (real/reais/centavos) gerados pela lib extenso",
@@ -746,7 +746,7 @@ const MODULES: Module[] = [
       },
       {
         q: "Por que upload manual no D4Sign ao invés de automação?",
-        a: "O plano atual do D4Sign da Lone Midia não expõe API de template. O sistema gera o DOCX já preenchido (economizando todo o trabalho de digitação) e o admin sobe uma vez no painel pra disparar a assinatura. A validade jurídica do D4Sign é mantida 100%.",
+        a: "O plano atual do D4Sign da Lone Mídia não expõe API de template. O sistema gera o DOCX já preenchido (economizando todo o trabalho de digitação) e o admin sobe uma vez no painel pra disparar a assinatura. A validade jurídica do D4Sign é mantida 100%.",
       },
       {
         q: "Se o cliente não assinar em 7 dias, o que acontece?",

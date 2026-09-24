@@ -29,7 +29,7 @@ interface LogoProps {
 
 export function Logo({
   className = "w-8 h-8",
-  alt = "Lone Midia",
+  alt = "Lone Mídia",
   priority = false,
 }: LogoProps) {
   return (

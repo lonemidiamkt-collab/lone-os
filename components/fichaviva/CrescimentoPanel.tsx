@@ -629,7 +629,7 @@ export default function CrescimentoPanel({ clientId, onGerarLink }: Props) {
               {goalProgress.aguardando
                 ? `O veredito sai quando ${mLabel(goal.month)} fechar e o faturamento do mês for lançado aqui. Último mês registrado: ${brl(goalProgress.latest)}.`
                 : goalProgress.batido
-                  ? `Meta batida! 🎉 ${mLabel(goal.month)} fechou em ${brl(goalProgress.latest)}. Hora de propor um novo patamar.`
+                  ? `Meta batida! ${mLabel(goal.month)} fechou em ${brl(goalProgress.latest)}. Hora de propor um novo patamar.`
                   : `Meta não batida em ${mLabel(goal.month)}: fechou em ${brl(goalProgress.latest)}, alvo era ${brl(goal.value)}.`}
             </p>
           </div>

@@ -368,14 +368,14 @@ export default function CEOPage() {
   if (!hydrated) {
     return (
       <div className="flex flex-col flex-1 overflow-auto">
-        <Header title="Diretoria" subtitle="Carregando…" />
+        <Header title="Área CEO" subtitle="Carregando…" />
       </div>
     );
   }
   if (!permitido) {
     return (
       <div className="flex flex-col flex-1 overflow-auto">
-        <Header title="Diretoria" subtitle="Acesso restrito" />
+        <Header title="Área CEO" subtitle="Acesso restrito" />
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="max-w-xs w-full text-center">
             <Lock size={20} className="text-muted-foreground mx-auto mb-3" />
@@ -404,7 +404,7 @@ export default function CEOPage() {
 
   return (
     <div className="flex flex-col flex-1 overflow-auto">
-      <Header title="Área da Diretoria" subtitle="Visão confidencial da operação" />
+      <Header title="Área CEO" subtitle="Visão confidencial da operação" />
 
       <div className="p-6 space-y-6 animate-fade-in">
         {/* KPIs */}
@@ -847,7 +847,7 @@ export default function CEOPage() {
                               />
                             </svg>
                             <div className="absolute inset-0 flex items-center justify-center">
-                              <span className={`text-lg font-black ${levelConfig.color}`}>{member.overallScore ?? "—"}</span>
+                              <span className={`text-lg font-semibold ${levelConfig.color}`}>{member.overallScore ?? "—"}</span>
                             </div>
                           </div>
                         </div>

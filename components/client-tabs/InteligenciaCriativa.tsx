@@ -93,7 +93,7 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
       </section>
 
       <section className="rounded-xl border border-border bg-card p-4">
-        <h4 className="text-sm font-semibold text-foreground">🏆 Vencedores agora {vencedores.length ? `(${vencedores.length})` : ""}</h4>
+        <h4 className="text-sm font-semibold text-foreground">Vencedores agora {vencedores.length ? `(${vencedores.length})` : ""}</h4>
         <p className="mb-2 text-[11px] text-muted-foreground">Pela régua deste cliente: custo por conversa bem abaixo da meta, conversas mínimas e gasto de decisão. Cada vencedor traz 2 variações que mudam UMA coisa — <b>Criar arte</b> manda a demanda travada pro designer do cliente.</p>
         {vencedores.length === 0 && <p className="text-xs text-muted-foreground">{d ? "Nenhum vencedor com amostra suficiente nesta semana — sem vencedor não há o que replicar. Para um pedido comum, use Social › Novo Conteúdo." : "Carregando…"}</p>}
         <ul className="grid gap-2 lg:grid-cols-2">
@@ -123,10 +123,10 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
                           {feita || aberta ? (
                             <span className="text-[10px] text-lone-success">✓ Demanda {feita ? "criada" : "já aberta"}{feita?.designer ? ` para ${feita.designer}` : ""}{feita?.prazo ? ` · prazo ${feita.prazo.split("-").reverse().join("/")}` : ""} · <a href="/design" className="underline">abrir quadro</a></span>
                           ) : podeCriarArte ? (
-                            <button onClick={() => void criarArte(c.ad_id, v)} disabled={criando === chave} className="rounded-lg bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">{criando === chave ? "Criando…" : "🧬 Criar arte com essa variação"}</button>
+                            <button onClick={() => void criarArte(c.ad_id, v)} disabled={criando === chave} className="rounded-lg bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">{criando === chave ? "Criando…" : "Criar arte com essa variação"}</button>
                           ) : <span className="text-[10px] text-muted-foreground">Gestor de tráfego ou admin cria a arte.</span>}
                           {podeCriarArte && d?.iaImagem && !feita && !aberta && (
-                            <button onClick={() => void verPrevia(c.ad_id, v)} disabled={pv?.ocupado} className="rounded-lg border border-border px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-50">{pv?.ocupado ? "Gerando…" : urlPrevia ? "👁 Outra prévia" : "👁 Prévia (IA)"}</button>
+                            <button onClick={() => void verPrevia(c.ad_id, v)} disabled={pv?.ocupado} className="rounded-lg border border-border px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-50">{pv?.ocupado ? "Gerando…" : urlPrevia ? "Outra prévia" : "Prévia (IA)"}</button>
                           )}
                         </div>
                         {(erroArte[chave] || pv?.erro) && <p className="mt-1 text-[10px] text-destructive">{erroArte[chave] || pv?.erro}</p>}
@@ -142,7 +142,7 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
 
       {problemas.length > 0 && (
         <section className="rounded-xl border border-border bg-card p-4">
-          <h4 className="text-sm font-semibold text-foreground">⚠️ Precisam de atenção ({problemas.length})</h4>
+          <h4 className="text-sm font-semibold text-foreground">Precisam de atenção ({problemas.length})</h4>
           <ul className="mt-2 space-y-1.5">
             {problemas.map((c) => (
               <li key={c.ad_id} className="flex gap-2 text-[11px]">
@@ -155,7 +155,7 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
       )}
 
       <section className="rounded-xl border border-border bg-card p-4">
-        <h4 className="text-sm font-semibold text-foreground">🧬 Testes de variação {d?.testes.length ? `(${d.testes.length})` : ""}</h4>
+        <h4 className="text-sm font-semibold text-foreground">Testes de variação {d?.testes.length ? `(${d.testes.length})` : ""}</h4>
         {d && d.testes.length === 0 && <p className="mt-1 text-xs text-muted-foreground">Nenhuma variação replicada ainda. Quando houver vencedor, o gestor escolhe a hipótese e a demanda nasce travada para o designer.</p>}
         <ul className="mt-2 divide-y divide-border text-[11px]">
           {d?.testes.map((t) => (
@@ -172,7 +172,7 @@ export default function InteligenciaCriativa({ clientId, role }: { clientId: str
 
       <div className="grid gap-4 md:grid-cols-2">
         <section className="rounded-xl border border-border bg-card p-4">
-          <h4 className="text-sm font-semibold text-foreground">📚 Aprendizados deste cliente</h4>
+          <h4 className="text-sm font-semibold text-foreground">Aprendizados deste cliente</h4>
           <p className="mb-2 text-[11px] text-muted-foreground">Só o que foi testado e medido — hipótese validada ou refutada. Nada de "achamos que".</p>
           {d && d.aprendizados.length === 0 && <p className="text-xs text-muted-foreground">Ainda nenhum veredito. O primeiro chega quando um teste de variação tiver gasto de decisão.</p>}
           <ul className="space-y-1 text-[11px]">

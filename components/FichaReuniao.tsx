@@ -13,7 +13,7 @@
 // outra. Misturar faria a pessoa desconfiar das duas.
 
 import { useEffect, useState, useCallback } from "react";
-import { X, Check, Loader2, Paperclip, Trash2, Download, Clock, User, AlertTriangle } from "lucide-react";
+import { X, Check, Loader2, Paperclip, Trash2, Download, Clock, User, AlertTriangle, CheckCircle2, XCircle, type LucideIcon } from "lucide-react";
 import { authedFetch } from "@/lib/supabase/authed-fetch";
 
 export interface ReuniaoResumida {
@@ -35,11 +35,11 @@ interface Detalhe {
   anexos: { id: string; nome: string; tamanho: number | null; url: string | null; enviadoPor: string | null; em: string }[];
 }
 
-const ROTULO: Record<string, { txt: string; cor: string }> = {
-  agendada:  { txt: "🕐 Agendada",             cor: "text-primary" },
-  realizada: { txt: "✅ Realizada",             cor: "text-lone-success" },
-  no_show:   { txt: "⚠️ Cliente não compareceu", cor: "text-lone-warning" },
-  cancelada: { txt: "❌ Cancelada",             cor: "text-muted-foreground" },
+const ROTULO: Record<string, { txt: string; icone: LucideIcon; cor: string }> = {
+  agendada:  { txt: "Agendada",                icone: Clock,         cor: "text-primary" },
+  realizada: { txt: "Realizada",               icone: CheckCircle2,  cor: "text-lone-success" },
+  no_show:   { txt: "Cliente não compareceu",  icone: AlertTriangle, cor: "text-lone-warning" },
+  cancelada: { txt: "Cancelada",               icone: XCircle,       cor: "text-muted-foreground" },
 };
 
 const dataBR = (iso: string) =>
@@ -140,7 +140,7 @@ export default function FichaReuniao({ reuniao, onFechar, onMudou }: {
         <div className="sticky top-0 bg-card border-b border-border p-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-[15px] font-semibold text-foreground truncate">Reunião — {reuniao.cliente}</h2>
-            <p className={`text-[12px] mt-0.5 ${rot.cor}`}>{rot.txt}</p>
+            <p className={`text-[12px] mt-0.5 flex items-center gap-1 ${rot.cor}`}><rot.icone size={12} aria-hidden="true" /> {rot.txt}</p>
           </div>
           <button onClick={onFechar} className="text-muted-foreground hover:text-foreground shrink-0">
             <X size={16} />

@@ -62,6 +62,11 @@
     --secondary-rgb: 29 32 41;
     --muted-rgb: 29 32 41;
     --destructive-rgb: 239 68 68;
+    --muted-foreground-rgb: 156 163 180;
+    --accent-rgb: 37 41 54;
+    /* Borda: canais + alfa próprio (no claro a borda é preto translúcido). */
+    --border-rgb: 39 43 54;
+    --border-alpha: 1;
 
     /* Charts */
     --chart-1: #2b3cff;
@@ -69,6 +74,11 @@
     --chart-3: #06b6d4;
     --chart-4: #8b5cf6;
     --chart-5: #26d07c;
+    --chart-1-rgb: 43 60 255;
+    --chart-2-rgb: 90 104 255;
+    --chart-3-rgb: 6 182 212;
+    --chart-4-rgb: 139 92 246;
+    --chart-5-rgb: 38 208 124;
 
     /* Sidebar */
     --sidebar: #0e1014;
@@ -167,6 +177,10 @@
     --secondary-rgb: 238 240 244;
     --muted-rgb: 238 240 244;
     --destructive-rgb: 239 68 68;
+    --muted-foreground-rgb: 95 101 116;
+    --accent-rgb: 233 235 240;
+    --border-rgb: 0 0 0;
+    --border-alpha: 0.08; /* = rgba(0, 0, 0, 0.08) do --border */
     --card-foreground: #18181b;
     --popover: #ffffff;
     --popover-foreground: #18181b;
@@ -244,6 +258,11 @@
     --chart-3: #0891b2;
     --chart-4: #7c3aed;
     --chart-5: #16a34a;
+    --chart-1-rgb: 43 60 255;
+    --chart-2-rgb: 90 104 255;
+    --chart-3-rgb: 8 145 178;
+    --chart-4-rgb: 124 58 237;
+    --chart-5-rgb: 22 163 74;
 
     --overlay:            rgba(24, 24, 27, 0.45);
     --overlay-strong:     rgba(9, 9, 11, 0.88);
@@ -437,18 +456,6 @@
 
   .text-glow { /* removed — no glow in sober mode */ }
 
-  .bg-grid {
-    background-image:
-      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
-    background-size: 56px 56px;
-  }
-  .light .bg-grid {
-    background-image:
-      linear-gradient(rgba(0,0,0,0.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,0,0,0.025) 1px, transparent 1px);
-    background-size: 56px 56px;
-  }
 
   .border-gradient { /* removed — no gradient borders in sober mode */ }
 }

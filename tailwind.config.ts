@@ -33,17 +33,18 @@ const config: Config = {
         },
         muted: {
           DEFAULT: "rgb(var(--muted-rgb) / <alpha-value>)",
-          foreground: "var(--muted-foreground)",
+          foreground: "rgb(var(--muted-foreground-rgb) / <alpha-value>)",
         },
         accent: {
-          DEFAULT: "var(--accent)",
+          DEFAULT: "rgb(var(--accent-rgb) / <alpha-value>)",
           foreground: "var(--accent-foreground)",
         },
         destructive: {
           DEFAULT: "rgb(var(--destructive-rgb) / <alpha-value>)",
           foreground: "var(--destructive-foreground)",
         },
-        border: "var(--border)",
+        // --border-alpha: no claro a borda é preto a 8%; o /50 multiplica esse alfa.
+        border: "rgb(var(--border-rgb) / calc(<alpha-value> * var(--border-alpha)))",
         input: "var(--input)",
         ring: "var(--ring)",
         surface: "var(--muted)",
@@ -95,12 +96,13 @@ const config: Config = {
           foreground: "var(--overlay-foreground)",
         },
         whatsapp: "var(--whatsapp)",
+        // Channelizado (bg-chart-4/15 funciona); o var(--chart-N) segue valendo em prop de recharts/SVG.
         chart: {
-          1: "var(--chart-1)",
-          2: "var(--chart-2)",
-          3: "var(--chart-3)",
-          4: "var(--chart-4)",
-          5: "var(--chart-5)",
+          1: "rgb(var(--chart-1-rgb) / <alpha-value>)",
+          2: "rgb(var(--chart-2-rgb) / <alpha-value>)",
+          3: "rgb(var(--chart-3-rgb) / <alpha-value>)",
+          4: "rgb(var(--chart-4-rgb) / <alpha-value>)",
+          5: "rgb(var(--chart-5-rgb) / <alpha-value>)",
         },
 
         sidebar: {
@@ -113,6 +115,10 @@ const config: Config = {
           border: "var(--sidebar-border)",
           ring: "var(--sidebar-ring)",
         },
+      },
+      // Passo de 8% (tinta suave) — o `bg-primary/8` não gerava CSS porque 8 não existe na escala padrão.
+      opacity: {
+        8: "0.08",
       },
       borderRadius: {
         lg: "var(--radius)",

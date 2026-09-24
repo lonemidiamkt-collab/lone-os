@@ -69,7 +69,7 @@ export default function EstiloVisual({ clientId, podeEditar = true }: { clientId
     <div>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h4 className="text-sm font-semibold text-foreground">🎨 Estilo visual da marca</h4>
+          <h4 className="text-sm font-semibold text-foreground">Estilo visual da marca</h4>
           <p className="text-[11px] text-muted-foreground">Lido sozinho das artes que a Lone entregou (as publicadas e aprovadas primeiro) — e relido quando chegam artes novas. Vai pro briefing de toda variação e pra prévia de imagem. Prints do Instagram são complemento.</p>
         </div>
         {podeEditar && (

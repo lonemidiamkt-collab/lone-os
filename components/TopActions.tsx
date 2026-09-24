@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { create } from "zustand";
 import { Bell, LogOut, Moon, Plus, Search, Settings, Sun } from "lucide-react";
@@ -29,8 +29,20 @@ export const ABRIR_NOTIFICACOES = "lone:abrir-notificacoes";
 
 const PODE_CRIAR_CONTEUDO = new Set(["admin", "manager", "social"]);
 
+/** "⌘K" no Mac, "Ctrl+K" no resto. Começa em ⌘K nos dois lados (servidor e cliente) para não
+ *  quebrar a hidratação, e só troca depois de montar. */
+function useAtalhoBusca(): string {
+  const [atalho, setAtalho] = useState("⌘K");
+  useEffect(() => {
+    const plataforma = (typeof navigator !== "undefined" && (navigator.platform || navigator.userAgent)) || "";
+    if (!/Mac|iPhone|iPad|iPod/i.test(plataforma)) setAtalho("Ctrl+K");
+  }, []);
+  return atalho;
+}
+
 export default function TopActions({ flutuante = false }: { flutuante?: boolean }) {
   const pathname = usePathname();
+  const atalhoBusca = useAtalhoBusca();
   const headers = useTopo((s) => s.headers);
   const { currentProfile, role, roleLabel, logout } = useRole();
   const { theme, toggleTheme } = useTheme();
@@ -39,7 +51,7 @@ export default function TopActions({ flutuante = false }: { flutuante?: boolean 
   if (flutuante && headers > 0) return null;
 
   const items: ExpandableItem[] = [
-    { key: "busca", label: "Buscar (⌘K)", icon: Search, onClick: () => window.dispatchEvent(new Event(ABRIR_BUSCA)) },
+    { key: "busca", label: `Buscar (${atalhoBusca})`, icon: Search, onClick: () => window.dispatchEvent(new Event(ABRIR_BUSCA)) },
     ...(PODE_CRIAR_CONTEUDO.has(role)
       ? [{ key: "novo", label: "Novo conteúdo", icon: Plus, href: "/social?action=new-content" }]
       : []),

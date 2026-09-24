@@ -1,0 +1,278 @@
+// Menu de 9 áreas (Leva 3): nenhuma tela some, nenhum papel ganha ou perde tela.
+//
+// O retrato do menu ANTIGO (24 itens soltos + subitens do painel) está congelado abaixo. Se um
+// teste daqui falhar depois de mexer em lib/navegacao/menu.ts, a pergunta é: alguém perdeu acesso a
+// uma tela que tinha no menu, ou ganhou uma que não tinha?
+
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { describe, it, expect } from "vitest";
+import type { Role } from "@/lib/types";
+import {
+  MENU, TODOS, menuDoPapel, rotasDoPapel, casarRota, grupoTemPainel, temPainelFixo, ROTAS_COM_PAINEL_FIXO,
+  telasParaBusca, atalhosMobile, papelVe, pontuarHref, normalizar,
+} from "@/lib/navegacao/menu";
+
+const PAPEIS: Role[] = [...TODOS];
+
+// ─── O menu de antes (components/Sidebar.tsx até set/2026) ─────────────────
+const OP: Role[] = ["admin", "manager", "traffic", "social", "designer"];
+const ANTIGO_PRIMARIO: { href: string; roles: Role[] }[] = [
+  { href: "/",              roles: OP },
+  { href: "/my-work",       roles: OP },
+  { href: "/tarefas",       roles: [...OP, "comercial"] },
+  { href: "/processos",     roles: [...OP, "comercial"] },
+  { href: "/calendar",      roles: OP },
+  { href: "/traffic",       roles: ["admin", "manager", "traffic"] },
+  { href: "/social",        roles: ["admin", "manager", "social", "designer"] },
+  { href: "/meus-clientes", roles: ["traffic", "social", "designer"] },
+  { href: "/planejamento",  roles: ["admin", "manager", "social", "designer"] },
+  { href: "/design",        roles: ["admin", "manager", "designer", "social"] },
+  { href: "/defesa",        roles: ["admin", "manager", "traffic"] },
+  { href: "/clients",       roles: ["admin", "manager"] },
+  { href: "/crm",           roles: ["admin", "manager", "comercial"] },
+  { href: "/prospeccao",    roles: ["admin", "manager"] },
+  { href: "/contratos",     roles: ["admin", "manager"] },
+  { href: "/churn",         roles: ["admin", "manager"] },
+  { href: "/jornada",       roles: ["admin", "manager", "social"] },
+  { href: "/carteira",      roles: ["admin", "manager"] },
+  { href: "/sobre",         roles: OP },
+  { href: "/automations",   roles: ["admin", "manager"] },
+  { href: "/agente",        roles: ["admin", "manager"] },
+  { href: "/goals",         roles: ["admin", "manager"] },
+  { href: "/ceo",           roles: ["admin"] },
+];
+// Subitens do painel: herdavam o papel do item principal.
+const ANTIGO_SECUNDARIO: Record<string, { rotas: string[]; abas: string[] }> = {
+  "/traffic":    { rotas: ["/traffic/budgets", "/traffic/criativos", "/settings/grupos"], abas: ["rotina", "status", "anuncios"] },
+  "/social":     { rotas: [], abas: ["carteira", "kanban", "aprovacao", "metricas", "entregas", "onboarding", "acessos"] },
+  "/design":     { rotas: [], abas: ["kanbans", "requests", "clientes", "performance", "history"] },
+  "/clients":    { rotas: ["/clients", "/clients?filter=at_risk", "/clients?filter=goals"], abas: [] },
+  "/prospeccao": { rotas: [], abas: ["visao", "fila", "prospects", "conversas", "agenda", "configuracao", "relatorios"] },
+  "/crm":        { rotas: [], abas: ["hoje", "dashboard", "funil", "agenda", "relatorios"] },
+};
+
+function rotasAntigas(role: Role): Set<string> {
+  const out = new Set<string>();
+  for (const it of ANTIGO_PRIMARIO) {
+    if (!it.roles.includes(role)) continue;
+    out.add(it.href);
+    ANTIGO_SECUNDARIO[it.href]?.rotas.forEach((r) => out.add(r));
+  }
+  return out;
+}
+
+// Entradas NOVAS no menu — todas telas que o papel já abria por outro caminho, sem ganho de acesso:
+//  - /settings: a engrenagem da barra do topo já levava todo papel pra lá;
+//  - /broadcasts: a página só abre pra gestão (checa o papel) e já existia fora do menu;
+//  - /integrations: já estava na busca ⌘K pra esses mesmos papéis;
+//  - /my-work?view=…: as novas vistas do Meu Trabalho (conteúdo de /tarefas e /calendar, que já eram do papel).
+const ACRESCIMOS: Record<Role, string[]> = {
+  admin:     ["/settings", "/broadcasts", "/integrations", "/my-work?view=tarefas", "/my-work?view=agenda"],
+  manager:   ["/settings", "/broadcasts", "/integrations", "/my-work?view=tarefas", "/my-work?view=agenda"],
+  traffic:   ["/settings", "/integrations", "/my-work?view=tarefas", "/my-work?view=agenda"],
+  social:    ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda"],
+  designer:  ["/settings", "/my-work?view=tarefas", "/my-work?view=agenda"],
+  comercial: ["/settings", "/"], // Início por papel (Leva 3): o comercial ganhou o dele
+};
+
+function abasDoPapel(role: Role): Set<string> {
+  const out = new Set<string>();
+  for (const g of menuDoPapel(role)) {
+    for (const it of g.itens) {
+      for (const s of it.secoes ?? []) for (const sub of s.itens) if (sub.aba) out.add(`${sub.href.split("?")[0]}#${sub.aba}`);
+    }
+  }
+  return out;
+}
+
+describe("menu — estrutura", () => {
+  it("o rail tem as 9 áreas, nesta ordem", () => {
+    expect(MENU.map((g) => g.rotulo)).toEqual([
+      "Início", "Meu Trabalho", "Tráfego", "Conteúdo", "Clientes", "Comercial", "Agente Lone", "Gestão", "Sistema",
+    ]);
+  });
+
+  it("ids únicos em todo o menu (itens e abas)", () => {
+    const ids: string[] = [];
+    for (const g of MENU) for (const it of g.itens) {
+      ids.push(it.id);
+      for (const s of it.secoes ?? []) for (const sub of s.itens) ids.push(sub.id);
+    }
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("toda rota é absoluta e toda área aparece para ao menos um papel", () => {
+    for (const g of MENU) {
+      for (const it of g.itens) expect(it.href.startsWith("/")).toBe(true);
+      expect(PAPEIS.some((r) => menuDoPapel(r).some((x) => x.id === g.id))).toBe(true);
+    }
+  });
+
+  it.each(PAPEIS)("nenhuma área vazia para %s (área sem tela visível some)", (role) => {
+    const grupos = menuDoPapel(role);
+    expect(grupos.length).toBeGreaterThan(0);
+    expect(grupos.length).toBeLessThanOrEqual(9);
+    for (const g of grupos) {
+      expect(g.itens.length).toBeGreaterThan(0);
+      for (const it of g.itens) for (const s of it.secoes ?? []) expect(s.itens.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("menu — ninguém ganha nem perde tela", () => {
+  it.each(PAPEIS)("%s: toda rota do menu antigo continua no menu novo", (role) => {
+    const novas = rotasDoPapel(role);
+    const faltando = [...rotasAntigas(role)].filter((r) => !novas.has(r));
+    expect(faltando).toEqual([]);
+  });
+
+  it.each(PAPEIS)("%s: o que é novo no menu é só o que já abria por outro caminho", (role) => {
+    const antigas = rotasAntigas(role);
+    const extras = [...rotasDoPapel(role)].filter((r) => !antigas.has(r)).sort();
+    expect(extras).toEqual([...ACRESCIMOS[role]].sort());
+  });
+
+  it.each(PAPEIS)("%s: toda aba interna do painel antigo continua no painel", (role) => {
+    const novas = abasDoPapel(role);
+    const faltando: string[] = [];
+    for (const it of ANTIGO_PRIMARIO) {
+      if (!it.roles.includes(role)) continue;
+      for (const aba of ANTIGO_SECUNDARIO[it.href]?.abas ?? []) {
+        if (!novas.has(`${it.href}#${aba}`)) faltando.push(`${it.href}#${aba}`);
+      }
+    }
+    expect(faltando).toEqual([]);
+  });
+
+  it("papéis sem a tela não recebem as abas dela", () => {
+    expect([...abasDoPapel("comercial")].every((a) => a.startsWith("/crm#"))).toBe(true);
+    expect([...abasDoPapel("traffic")].every((a) => a.startsWith("/traffic#"))).toBe(true);
+  });
+
+  it("Área CEO continua só do admin; Prospecção só da gestão", () => {
+    expect(papelVe("admin", "/ceo")).toBe(true);
+    expect(papelVe("manager", "/ceo")).toBe(false);
+    expect(papelVe("comercial", "/prospeccao")).toBe(false);
+    expect(papelVe("manager", "/prospeccao")).toBe(true);
+  });
+
+  it("/tarefas vira vista do Meu Trabalho, menos pro comercial (que não tem Meu Trabalho)", () => {
+    for (const r of OP) expect(papelVe(r, "/my-work?view=tarefas")).toBe(true);
+    expect(papelVe("comercial", "/my-work?view=tarefas")).toBe(false);
+    expect(papelVe("comercial", "/tarefas")).toBe(true);
+  });
+});
+
+describe("menu — qual área acende", () => {
+  const onde = (role: Role, url: string) => {
+    const [p, q = ""] = url.split("?");
+    const c = casarRota(menuDoPapel(role), p, q);
+    return c ? `${c.grupo.id}/${c.item.id}` : null;
+  };
+
+  it("subrota acende a área e a subtela certas", () => {
+    expect(onde("admin", "/")).toBe("inicio/inicio");
+    expect(onde("admin", "/traffic")).toBe("trafego/trafego-pago");
+    expect(onde("admin", "/traffic/budgets")).toBe("trafego/trafego-saldos");
+    expect(onde("traffic", "/defesa")).toBe("trafego/defesa");
+    expect(onde("admin", "/clients/abc-123")).toBe("clientes/clientes");
+    expect(onde("admin", "/clients?filter=at_risk")).toBe("clientes/clientes");
+    expect(onde("social", "/planejamento")).toBe("conteudo/planejamento");
+    expect(onde("designer", "/design")).toBe("conteudo/designer");
+    expect(onde("admin", "/processos/algum-processo")).toBe("meu-trabalho/processos");
+    expect(onde("admin", "/goals")).toBe("gestao/metas");
+    expect(onde("admin", "/automations")).toBe("sistema/automacoes");
+  });
+
+  it("vistas do Meu Trabalho e endereços antigos", () => {
+    expect(onde("social", "/my-work")).toBe("meu-trabalho/meu-trabalho-hoje");
+    expect(onde("social", "/my-work?view=tarefas")).toBe("meu-trabalho/meu-trabalho-tarefas");
+    expect(onde("social", "/my-work?view=agenda&d=2026-09-10")).toBe("meu-trabalho/meu-trabalho-agenda");
+    expect(onde("social", "/calendar")).toBe("meu-trabalho/meu-trabalho-agenda");
+    expect(onde("admin", "/tarefas")).toBe("meu-trabalho/meu-trabalho-tarefas");
+    expect(onde("comercial", "/tarefas")).toBe("meu-trabalho/tarefas-comercial");
+  });
+
+  it("caminho mais específico vence: /settings/grupos é Tráfego pra quem vê Tráfego", () => {
+    expect(onde("traffic", "/settings/grupos")).toBe("trafego/grupos-clientes");
+    expect(onde("social", "/settings/grupos")).toBe("sistema/configuracoes");
+    expect(onde("social", "/settings")).toBe("sistema/configuracoes");
+  });
+
+  it("tela que o papel não vê não acende nada", () => {
+    expect(onde("traffic", "/clients/abc")).toBeNull();
+    expect(onde("comercial", "/traffic")).toBeNull();
+  });
+
+  it("pontuarHref: prefixo só por segmento inteiro", () => {
+    expect(pontuarHref("/traffic", "/trafficx")).toBe(-1);
+    expect(pontuarHref("/", "/traffic")).toBe(-1);
+    expect(pontuarHref("/clients?filter=goals", "/clients", "filter=at_risk")).toBe(-1);
+  });
+});
+
+describe("menu — painel secundário", () => {
+  it("comercial: Comercial tem painel (abas do funil); Sistema é link direto", () => {
+    const g = menuDoPapel("comercial");
+    expect(g.map((x) => x.id)).toEqual(["inicio", "meu-trabalho", "comercial", "sistema"]);
+    expect(grupoTemPainel(g.find((x) => x.id === "comercial")!)).toBe(true);
+    expect(grupoTemPainel(g.find((x) => x.id === "sistema")!)).toBe(false);
+  });
+
+  it("painel ancorado nas mesmas rotas em que o AppShell reserva espaço", () => {
+    const shell = readFileSync(path.resolve(__dirname, "../components/AppShell.tsx"), "utf8");
+    if (!/ROTAS_COM_PAINEL_FIXO/.test(shell)) {
+      const m = shell.match(/SECONDARY_ROUTES\s*=\s*\[([^\]]*)\]/);
+      expect(m).not.toBeNull();
+      const rotas = [...m![1].matchAll(/"([^"]+)"/g)].map((x) => x[1]).sort();
+      expect(rotas).toEqual([...ROTAS_COM_PAINEL_FIXO].sort());
+    }
+    expect(temPainelFixo("/traffic/budgets")).toBe(true);
+    expect(temPainelFixo("/my-work")).toBe(false);
+  });
+});
+
+describe("busca ⌘K — telas do menu, filtradas pelo papel", () => {
+  const hrefs = (role: Role) => new Set(telasParaBusca(role).map((t) => t.href));
+
+  it("ninguém acha pela busca uma tela que não vê no menu", () => {
+    for (const role of PAPEIS) {
+      const menu = rotasDoPapel(role);
+      for (const t of telasParaBusca(role)) {
+        if (t.aba) continue;
+        expect(menu.has(t.href)).toBe(true);
+      }
+    }
+    expect(hrefs("traffic").has("/clients")).toBe(false);
+    expect(hrefs("manager").has("/ceo")).toBe(false);
+    expect(hrefs("admin").has("/ceo")).toBe(true);
+  });
+
+  it("inclui as abas internas (ex.: Board de Produção) e acha sem acento", () => {
+    const telas = telasParaBusca("social");
+    const board = telas.find((t) => t.id === "tela-social-board");
+    expect(board).toMatchObject({ href: "/social", aba: "kanban" });
+    const q = normalizar("calendario");
+    expect(telas.some((t) => t.href === "/my-work?view=agenda" && t.texto.includes(q))).toBe(true);
+  });
+});
+
+describe("barra inferior do celular", () => {
+  it.each(PAPEIS)("%s: de 1 a 4 atalhos, todos visíveis pro papel, sem repetir", (role) => {
+    const itens = atalhosMobile(role);
+    expect(itens.length).toBeGreaterThan(0);
+    expect(itens.length).toBeLessThanOrEqual(4);
+    expect(new Set(itens.map((i) => i.href)).size).toBe(itens.length);
+    const visiveis = rotasDoPapel(role);
+    for (const i of itens) expect(visiveis.has(i.href)).toBe(true);
+  });
+
+  it("cada papel abre pelo que mais usa", () => {
+    expect(atalhosMobile("comercial")[0].href).toBe("/crm");
+    expect(atalhosMobile("traffic").map((i) => i.href)).toContain("/traffic");
+    expect(atalhosMobile("social").map((i) => i.href)).toContain("/social");
+    expect(atalhosMobile("designer").map((i) => i.href)).toContain("/design");
+    expect(atalhosMobile("admin").map((i) => i.href)).toEqual(["/", "/traffic", "/social", "/clients"]);
+  });
+});

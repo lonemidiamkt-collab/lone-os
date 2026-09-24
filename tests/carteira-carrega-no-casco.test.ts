@@ -26,7 +26,9 @@ describe("carteira de clientes carrega no casco do app", () => {
 });
 
 describe("o modal do calendário não culpa o cadastro enquanto carrega", () => {
-  const CAL = readFileSync("app/calendar/page.tsx", "utf8");
+  // A agenda saiu de app/calendar/page.tsx (hoje só redireciona pra /my-work?view=agenda) e mora em
+  // app/calendar/Agenda.tsx, usada pela vista Agenda do Meu Trabalho. O modal é o mesmo.
+  const CAL = readFileSync("app/calendar/Agenda.tsx", "utf8");
 
   it("distingue carregando, falhou e vazio de verdade", () => {
     expect(CAL).toMatch(/Carregando sua carteira/);

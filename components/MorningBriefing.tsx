@@ -126,10 +126,10 @@ export default function MorningBriefing({ clients }: Props) {
           <div className="flex items-center gap-2">
             <Shield size={14} className={criticalCount > 0 ? "text-destructive" : "text-lone-warning"} />
             <h3 className="text-xs font-semibold text-foreground">
-              Alertas Criticos
+              Alertas Críticos
               {criticalCount > 0 && (
                 <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-bold">
-                  {criticalCount} critico(s)
+                  {criticalCount} crítico(s)
                 </span>
               )}
             </h3>
@@ -141,7 +141,7 @@ export default function MorningBriefing({ clients }: Props) {
                 className={`flex items-start gap-2.5 p-2.5 rounded-lg ${
                   alert.severity === "critico"
                     ? "bg-destructive/[0.04] border border-destructive/[0.1]"
-                    : "bg-lone-warning-bg/[0.04] border border-lone-warning-border/[0.1]"
+                    : "bg-lone-warning-bg border border-lone-warning-border"
                 }`}>
                 <AlertTriangle size={12} className={`mt-0.5 shrink-0 ${
                   alert.severity === "critico" ? "text-destructive" : "text-lone-warning"
@@ -215,7 +215,7 @@ export default function MorningBriefing({ clients }: Props) {
                   <div key={i} className={`flex items-start gap-2.5 p-3 rounded-xl ${
                     item.severity === "critico"
                       ? "bg-destructive/[0.04] border border-destructive/[0.1]"
-                      : "bg-lone-warning-bg/[0.04] border border-lone-warning-border/[0.1]"
+                      : "bg-lone-warning-bg border border-lone-warning-border"
                   }`}>
                     <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${
                       item.severity === "critico" ? "text-destructive" : "text-lone-warning"
@@ -242,7 +242,7 @@ export default function MorningBriefing({ clients }: Props) {
                   <TrendingUp size={10} /> Oportunidades
                 </p>
                 {briefing.opportunities.map((item, i) => (
-                  <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-lone-success-bg/[0.03] border border-lone-success-border/[0.08]">
+                  <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-lone-success-bg border border-lone-success-border">
                     <TrendingUp size={12} className="text-lone-success mt-0.5 shrink-0" />
                     <div>
                       <p className="text-[11px] font-medium text-foreground">
@@ -260,7 +260,7 @@ export default function MorningBriefing({ clients }: Props) {
             {briefing.stable.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
                 <CheckCircle size={10} className="text-muted-foreground" />
-                <span className="text-[10px] text-muted-foreground">Estavel:</span>
+                <span className="text-[10px] text-muted-foreground">Estável:</span>
                 {briefing.stable.map((name, i) => (
                   <span key={i} className="text-[10px] px-2 py-0.5 rounded-md bg-card/[0.03] text-muted-foreground border border-border">
                     {name}

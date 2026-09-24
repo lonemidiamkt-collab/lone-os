@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { RoleProvider, useRole } from "@/lib/context/RoleContext";
 import { AppStateProvider } from "@/lib/context/AppStateContext";
 import { NavProvider, useNav } from "@/lib/context/NavContext";
@@ -11,6 +11,7 @@ import { useContentStore } from "@/stores/useContentStore";
 import { useOperationalStore } from "@/stores/useOperationalStore";
 import { useTrafficStore } from "@/stores/useTrafficStore";
 import Sidebar from "@/components/Sidebar";
+import { ROTAS_COM_PAINEL_FIXO } from "@/lib/navegacao/menu";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import LoginScreen from "@/components/LoginScreen";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -27,7 +28,6 @@ import OnboardingTour from "@/components/OnboardingTour";
 import SessionTimeout from "@/components/SessionTimeout";
 
 // Routes that have a secondary sidebar (240px extra)
-const SECONDARY_ROUTES = ["/traffic", "/social", "/design", "/clients", "/crm", "/prospeccao"];
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, hydrated } = useRole();
@@ -48,15 +48,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const { role } = useRole();
   const { secondaryOpen, sidebarExpanded, mobileOpen, setMobileOpen } = useNav();
 
-  // O comercial (SDR) só trabalha no /crm e nem tem item de menu na Home. Ao cair em '/'
-  // (login/atalho), manda direto pro funil — antes aterrissava numa dashboard que não é dele.
-  useEffect(() => {
-    if (role === "comercial" && pathname === "/") router.replace("/crm");
-  }, [role, pathname, router]);
   // Meta token expiry check is handled by useMetaConnection (Supabase-backed)
 
   // Notificações do sino — ninguém carregava o histórico do banco, então cada usuário só via o
@@ -98,7 +91,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   }, [initNotifs, refreshNotifs, initClients, initContent, initOps, initTraffic]);
 
   // Secondary sidebar is 240px; primary is 72px (200px com o menu expandido)
-  const hasSecondaryRoute = SECONDARY_ROUTES.some(
+  const hasSecondaryRoute = ROTAS_COM_PAINEL_FIXO.some(
     (r) => pathname === r || pathname.startsWith(r + "/")
   );
   const showSecondary = hasSecondaryRoute && secondaryOpen;

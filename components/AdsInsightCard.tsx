@@ -23,10 +23,10 @@ interface AnalysisResult {
 }
 
 const STATUS_CONFIG = {
-  otimo:   { color: "text-lone-success", bg: "bg-lone-success-bg/[0.08]", border: "border-lone-success-border/[0.15]", label: "Otimo" },
+  otimo:   { color: "text-lone-success", bg: "bg-lone-success-bg", border: "border-lone-success-border", label: "Ótimo" },
   bom:     { color: "text-primary", bg: "bg-primary/[0.08]", border: "border-primary/[0.15]", label: "Bom" },
-  atencao: { color: "text-lone-warning", bg: "bg-lone-warning-bg/[0.08]", border: "border-lone-warning-border/[0.15]", label: "Atencao" },
-  critico: { color: "text-destructive", bg: "bg-destructive/[0.08]", border: "border-destructive/[0.15]", label: "Critico" },
+  atencao: { color: "text-lone-warning", bg: "bg-lone-warning-bg", border: "border-lone-warning-border", label: "Atenção" },
+  critico: { color: "text-destructive", bg: "bg-destructive/[0.08]", border: "border-destructive/[0.15]", label: "Crítico" },
 };
 
 const INSIGHT_ICONS = {
@@ -132,7 +132,7 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
               <AlertCircle size={18} className="text-destructive" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-foreground">Erro na analise</h3>
+              <h3 className="text-sm font-semibold text-foreground">Erro na análise</h3>
               <p className="text-[10px] text-destructive">{error}</p>
             </div>
           </div>
@@ -169,7 +169,7 @@ export default function AdsInsightCard({ clientName, clientId, campaigns, period
         </div>
         <button onClick={analyze} disabled={loading}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground border border-border hover:border-primary/30 transition-all disabled:opacity-30">
-          <RefreshCw size={11} className={loading ? "animate-spin" : ""} /> Nova Analise
+          <RefreshCw size={11} className={loading ? "animate-spin" : ""} /> Nova Análise
         </button>
       </div>
 

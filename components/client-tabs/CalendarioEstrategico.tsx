@@ -152,9 +152,9 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
                   {d && <span className="rounded px-1.5 py-0.5 bg-muted">funil: {d.posicaoFunil}</span>}
                 </div>
                 <p className="font-medium">{p.titulo}{p.duracao ? ` · ${p.duracao}` : ""}</p>
-                {p.objetivo_peca && <p className="text-sm text-muted-foreground">🎯 {p.objetivo_peca}</p>}
-                {p.narrativa && <p className="text-xs text-muted-foreground">📐 {p.narrativa}</p>}
-                {p.conceito_visual && <p className="text-xs text-muted-foreground">🎨 {p.conceito_visual}</p>}
+                {p.objetivo_peca && <p className="text-sm text-muted-foreground"><span className="font-medium">Objetivo:</span> {p.objetivo_peca}</p>}
+                {p.narrativa && <p className="text-xs text-muted-foreground"><span className="font-medium">Narrativa:</span> {p.narrativa}</p>}
+                {p.conceito_visual && <p className="text-xs text-muted-foreground"><span className="font-medium">Conceito visual:</span> {p.conceito_visual}</p>}
                 <div className="space-y-2">
                   {p.blocos?.map((b, bi) => (
                     <div key={bi} className="rounded-md bg-muted/40 p-2 text-sm space-y-1">
@@ -163,7 +163,7 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
                       {b.headline && <div className="font-medium">{b.headline}</div>}
                       {b.corpo && <div className="text-muted-foreground">{b.corpo}</div>}
                       {b.topicos?.length > 0 && <ul className="list-disc list-inside text-muted-foreground">{b.topicos.map((t, ti) => <li key={ti}>{t}</li>)}</ul>}
-                      {b.direcao_arte && <div className="text-xs mt-1 rounded bg-primary/5 p-1.5"><span className="text-primary text-[10px] font-semibold">🎨 DIREÇÃO DE ARTE</span> {b.direcao_arte}</div>}
+                      {b.direcao_arte && <div className="text-xs mt-1 rounded bg-primary/5 p-1.5"><span className="text-primary text-[10px] font-semibold">DIREÇÃO DE ARTE</span> {b.direcao_arte}</div>}
                     </div>
                   ))}
                 </div>
@@ -172,7 +172,7 @@ export default function CalendarioEstrategico({ clientId }: { clientId: string }
                   <summary className="cursor-pointer text-muted-foreground">Legenda</summary>
                   <p className="mt-1 whitespace-pre-wrap">{p.legenda}</p>
                 </details>
-                {d && <p className="text-xs text-muted-foreground border-t border-border pt-2">💡 <span className="font-medium">Por que agora:</span> {d.porQueAgora}</p>}
+                {d && <p className="text-xs text-muted-foreground border-t border-border pt-2"><span className="font-medium">Por que agora:</span> {d.porQueAgora}</p>}
               </div>
             );
           })}

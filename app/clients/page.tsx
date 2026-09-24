@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import NewClientModal from "@/components/NewClientModal";
 import { useClientsStore } from "@/stores/useClientsStore";
@@ -87,15 +87,6 @@ export default function ClientsPage() {
   }, []);
   const [responsibleFilter, setResponsibleFilter] = useState("mine");
 
-  // Read URL filter on mount (avoids useSearchParams Suspense requirement)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const filter = params.get("filter");
-    if (filter === "at_risk" || filter === "onboarding") {
-      setStatusFilter(filter);
-      setResponsibleFilter("all");
-    }
-  }, []);
   const [showNewModal, setShowNewModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
@@ -416,7 +407,15 @@ export default function ClientsPage() {
       )}
 
       <div className="flex flex-col flex-1 overflow-auto">
-        <Header title="Gestão de Clientes" subtitle="Base completa de clientes e seus dados" />
+        <Header title="Clientes" subtitle="Base completa de clientes e seus dados" />
+        <Suspense fallback={null}>
+          <FiltroDaUrl
+            aoMudar={(f) => {
+              setStatusFilter(f ?? "all");
+              if (f) setResponsibleFilter("all");
+            }}
+          />
+        </Suspense>
 
         <div className="flex flex-1 overflow-hidden">
           {/* Client List */}
@@ -507,9 +506,9 @@ export default function ClientsPage() {
                 className="bg-card border border-border text-sm text-foreground rounded-lg px-3 py-2 outline-none focus:border-primary"
               >
                 <option value="all">Reunião: todos</option>
-                <option value="sem_reuniao">🔴 Sem reunião no mês</option>
-                <option value="agendada">🟡 Só agendada</option>
-                <option value="realizada">🟢 Reunião realizada</option>
+                <option value="sem_reuniao">Sem reunião no mês</option>
+                <option value="agendada">Só agendada</option>
+                <option value="realizada">Reunião realizada</option>
                 <option value="meta_nao_batida">Meta não batida</option>
                 <option value="mais_de_30d">Última há +30 dias</option>
               </select>
@@ -644,9 +643,9 @@ export default function ClientsPage() {
                             {/* PAUSA (23/09): o cliente continua na carteira — o selo existe para
                                 ninguém cobrar post de quem está pausado. */}
                             {rotuloPausa(client as never) && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full border bg-lone-warning-bg text-lone-warning border-lone-warning-border whitespace-nowrap"
+                              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border bg-lone-warning-bg text-lone-warning border-lone-warning-border whitespace-nowrap"
                                     title={client.pausedBy ? `Pausado por ${client.pausedBy}` : undefined}>
-                                ⏸️ {rotuloPausa(client as never)}
+                                <Pause size={10} aria-hidden="true" /> {rotuloPausa(client as never)}
                               </span>
                             )}
                             {/* O SEMÁFORO DA REUNIÃO. Verde é reunião que ACONTECEU; amarelo é
@@ -767,4 +766,21 @@ export default function ClientsPage() {
       </div>
     </>
   );
+}
+
+// ?filter=at_risk|onboarding vindo do menu ou de um link. Reage também quando a URL muda com a
+// tela já aberta (clicar "Em Risco" estando em Clientes); sem filtro depois de um, volta pra "all".
+function FiltroDaUrl({ aoMudar }: { aoMudar: (f: "at_risk" | "onboarding" | null) => void }) {
+  const bruto = useSearchParams().get("filter");
+  const filtro = bruto === "at_risk" || bruto === "onboarding" ? bruto : null;
+  const anterior = useRef<string | null>(null);
+  useEffect(() => {
+    if (filtro === anterior.current) return;
+    const tinha = anterior.current;
+    anterior.current = filtro;
+    if (filtro || tinha) aoMudar(filtro);
+    // aoMudar é recriado a cada render da página; só a mudança de filtro importa aqui.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtro]);
+  return null;
 }

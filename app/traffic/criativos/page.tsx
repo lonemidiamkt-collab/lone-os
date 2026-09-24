@@ -110,7 +110,7 @@ export default function CriativosPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
       <header>
-        <h1 className="text-2xl font-bold text-foreground">🎨 Saúde dos criativos</h1>
+        <h1 className="text-2xl font-bold text-foreground">Saúde dos criativos</h1>
         <p className="text-sm text-muted-foreground">
           Em <span className="font-medium text-foreground">sombra</span>: o motor avalia todo dia às 07:20 e ninguém é avisado. Você diz se concorda. Quando a precisão passar de 80%, entra no feed.
           {dados?.dia && <> · Avaliação de <span className="font-medium text-foreground">{dados.dia.split("-").reverse().join("/")}</span></>}
@@ -121,7 +121,7 @@ export default function CriativosPage() {
               {ESTADO[e].rotulo} {porEstado[e] ?? 0}
             </button>
           ))}
-          <button onClick={() => setFiltro(filtro === "vencedores" ? "todos" : "vencedores")} className={`rounded-full bg-primary/10 px-2.5 py-1 text-primary ${filtro === "vencedores" ? "ring-2 ring-primary/40" : ""}`}>🏆 Vencedores {vencedores}</button>
+          <button onClick={() => setFiltro(filtro === "vencedores" ? "todos" : "vencedores")} className={`rounded-full bg-primary/10 px-2.5 py-1 text-primary ${filtro === "vencedores" ? "ring-2 ring-primary/40" : ""}`}>Vencedores {vencedores}</button>
           <span className="ml-auto rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
             Rotulados hoje: {rotulados}/{itens.length}
             {dados?.precisao && <> · Precisão acumulada: <span className={`font-medium ${dados.precisao.taxa >= 80 ? "text-lone-success" : "text-foreground"}`}>{dados.precisao.taxa}%</span> ({dados.precisao.concordo}/{dados.precisao.total})</>}
@@ -134,14 +134,14 @@ export default function CriativosPage() {
 
       {dados?.brief && (
         <details className="rounded-xl border border-border bg-card p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-foreground">📋 Brief de segunda ({dados.brief.semana.split("-").reverse().join("/")}) {dados.brief.enviado_whatsapp ? "· enviado no grupo" : "· só no painel (sombra)"}{dados.brief.proposta ? ` · proposta ${dados.brief.estado}` : ""}</summary>
+          <summary className="cursor-pointer text-sm font-semibold text-foreground">Brief de segunda ({dados.brief.semana.split("-").reverse().join("/")}) {dados.brief.enviado_whatsapp ? "· enviado no grupo" : "· só no painel (sombra)"}{dados.brief.proposta ? ` · proposta ${dados.brief.estado}` : ""}</summary>
           <pre className="mt-2 whitespace-pre-wrap font-sans text-[11px] text-foreground/90">{dados.brief.texto}</pre>
         </details>
       )}
 
       {dados?.testes && dados.testes.length > 0 && (
         <section className="rounded-xl border border-border bg-card p-4">
-          <h2 className="text-sm font-semibold text-foreground">🧬 Testes de variação ({dados.testes.length})</h2>
+          <h2 className="text-sm font-semibold text-foreground">Testes de variação ({dados.testes.length})</h2>
           <p className="mb-2 text-[11px] text-muted-foreground">Cada linha é um filho de um vencedor, com UMA variável. O veredito só sai com gasto de decisão; até lá, "medindo".</p>
           <ul className="divide-y divide-border text-[11px]">
             {dados.testes.map((t) => {
@@ -178,7 +178,7 @@ export default function CriativosPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className={`rounded px-1.5 py-0.5 text-[10px] ${est.cls}`}>{est.rotulo}</span>
-                  {i.vencedor && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">🏆 vencedor</span>}
+                  {i.vencedor && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">vencedor</span>}
                   <span className="truncate text-xs font-medium text-foreground">{i.cliente}</span>
                   <span className="ml-auto font-mono text-[10px] text-muted-foreground" title="confiança">{Math.round(i.confianca * 100)}%</span>
                 </div>
@@ -213,7 +213,7 @@ export default function CriativosPage() {
                               if (ok) setLivre((prev) => ({ ...prev, [i.ad_id]: "" }));
                             }}
                             className="rounded-lg border border-border px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-50">
-                            {replicando === `${i.ad_id}|${(livre[i.ad_id] ?? "").trim().slice(0, 60)}` ? "Criando…" : "🧬 Replicar com essa"}
+                            {replicando === `${i.ad_id}|${(livre[i.ad_id] ?? "").trim().slice(0, 60)}` ? "Criando…" : "Replicar com essa"}
                           </button>
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
@@ -232,7 +232,7 @@ export default function CriativosPage() {
                                   ) : (
                                     <button onClick={() => replicar(i.ad_id, v)} disabled={replicando !== null}
                                       className="mt-1 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
-                                      {replicando === chave ? "Criando…" : "🧬 Replicar: mandar pro designer"}
+                                      {replicando === chave ? "Criando…" : "Replicar: mandar pro designer"}
                                     </button>
                                   );
                                 })()}
@@ -246,7 +246,7 @@ export default function CriativosPage() {
                                       {url && <a href={url} target="_blank" rel="noreferrer" className="block w-24 overflow-hidden rounded border border-border bg-muted" title="Prévia gerada por IA — rascunho, não é a arte"><img src={url} alt="" className="w-full" /></a>}
                                       {dados?.iaImagem && (
                                         <button onClick={() => verPrevia(i.ad_id, v)} disabled={st?.ocupado} className="mt-1 rounded-lg border border-border px-2 py-0.5 text-muted-foreground hover:text-foreground disabled:opacity-50">
-                                          {st?.ocupado ? "Gerando prévia…" : url ? "👁 Gerar outra prévia (IA)" : "👁 Ver prévia (IA) antes de mandar"}
+                                          {st?.ocupado ? "Gerando prévia…" : url ? "Gerar outra prévia (IA)" : "Ver prévia (IA) antes de mandar"}
                                         </button>
                                       )}
                                       {st?.erro && <p className="mt-0.5 text-destructive">{st.erro}</p>}

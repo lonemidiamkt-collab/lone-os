@@ -39,11 +39,11 @@ export default function PadroesCriativos({ clientId }: { clientId?: string }) {
       .catch(() => setFalhou("Não consegui carregar os padrões."));
   }, [clientId]);
   // Antes voltava null e a caixa ficava vazia sem explicação (print do Roberto, 14/09).
-  if (!d) return <div><h4 className="text-sm font-semibold text-foreground">🔍 Padrão dos vencedores — três níveis</h4><p className="mt-1 text-xs text-muted-foreground">{falhou ?? "Carregando…"}</p></div>;
+  if (!d) return <div><h4 className="text-sm font-semibold text-foreground">Padrão dos vencedores — três níveis</h4><p className="mt-1 text-xs text-muted-foreground">{falhou ?? "Carregando…"}</p></div>;
   return (
     <section className="space-y-2">
       <div>
-        <h4 className="text-sm font-semibold text-foreground">🔍 Padrão dos vencedores — três níveis</h4>
+        <h4 className="text-sm font-semibold text-foreground">Padrão dos vencedores — três níveis</h4>
         <p className="text-[11px] text-muted-foreground">{d.atributosLidos} anúncios com atributos lidos. O que os vencedores têm em comum contra os demais; "×2" = o dobro da frequência. É correlação — vira hipótese de teste, não regra. Segmento e Lone mostram só contagens, nunca o dado de outro cliente.</p>
       </div>
       <div className="grid gap-2 md:grid-cols-3">

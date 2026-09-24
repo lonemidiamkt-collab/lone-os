@@ -485,7 +485,7 @@ export default function CardArtAttachments({
               )}
               {/* Dica de ampliar (canto inferior direito) */}
               <span className="absolute bottom-1 right-1 text-[8px] bg-overlay text-overlay-foreground rounded px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                🔍 ampliar
+                ampliar
               </span>
               {/* Position badge */}
               {art.id !== LEGACY_ID && (
@@ -545,7 +545,7 @@ export default function CardArtAttachments({
           </div>
         )}
         {attachments.length > 0 && (
-          <p className="mt-1 text-[10px] text-muted-foreground">💡 Clique na arte pra ver em <b>tamanho grande</b> · passe o mouse pra <b>baixar</b>.</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">Clique na arte pra ver em <b>tamanho grande</b> · passe o mouse pra <b>baixar</b>.</p>
         )}
 
         {/* Global error */}

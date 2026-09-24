@@ -13,43 +13,43 @@ interface TourStep {
 const STEPS: TourStep[] = [
   {
     title: "Bem-vindo ao Lone OS!",
-    description: "Seu sistema de gestao operacional. Vamos fazer um tour rapido pelas principais funcionalidades.",
+    description: "Seu sistema de gestão operacional. Vamos fazer um tour rápido pelas principais funcionalidades.",
     position: "center",
     icon: Sparkles,
   },
   {
     title: "Barra Lateral",
-    description: "Navegue entre as areas do sistema: Dashboard, Trafego, Social Media, Design, Clientes e mais. O menu se adapta ao seu papel.",
+    description: "Navegue entre as áreas do sistema: Dashboard, Tráfego, Social Media, Design, Clientes e mais. O menu se adapta ao seu papel.",
     position: "bottom-left",
     icon: Briefcase,
   },
   {
     title: "Busca Global (Cmd+K)",
-    description: "Encontre rapidamente clientes, tarefas e conteudos. Use o atalho Cmd+K para abrir a busca de qualquer lugar.",
+    description: "Encontre rapidamente clientes, tarefas e conteúdos. Use o atalho Cmd+K para abrir a busca de qualquer lugar.",
     position: "top-center",
     icon: Search,
   },
   {
-    title: "Notificacoes",
-    description: "Fique por dentro de tudo: alertas de SLA, mudancas de status, conteudo pendente e mais. Filtre por tipo para encontrar o que precisa.",
+    title: "Notificações",
+    description: "Fique por dentro de tudo: alertas de SLA, mudanças de status, conteúdo pendente e mais. Filtre por tipo para encontrar o que precisa.",
     position: "top-right",
     icon: Bell,
   },
   {
-    title: "Acoes Rapidas",
-    description: "Crie rapidamente novos clientes, conteudos ou inicie um chat da equipe usando o botao + no topo.",
+    title: "Ações Rápidas",
+    description: "Crie rapidamente novos clientes, conteúdos ou inicie um chat da equipe usando o botão + no topo.",
     position: "top-right",
     icon: Plus,
   },
   {
     title: "Meu Trabalho",
-    description: "Acesse todas as suas tarefas, lembretes e conteudos atribuidos a voce em um so lugar. Sua central de produtividade.",
+    description: "Acesse todas as suas tarefas, lembretes e conteúdos atribuídos a você em um só lugar. Sua central de produtividade.",
     position: "bottom-left",
     icon: Briefcase,
   },
   {
     title: "Pronto!",
-    description: "Voce esta preparado para usar o Lone OS! Pode refazer este tour a qualquer momento nas Configuracoes.",
+    description: "Você está preparado para usar o Lone OS! Pode refazer este tour a qualquer momento nas Configurações.",
     position: "center",
     icon: CheckCircle,
   },
@@ -221,7 +221,7 @@ export default function OnboardingTour() {
                   onClick={next}
                   className="flex items-center gap-1 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/80 transition-all"
                 >
-                  {isLast ? "Comecar!" : "Proximo"} <ChevronRight size={14} />
+                  {isLast ? "Começar!" : "Próximo"} <ChevronRight size={14} />
                 </button>
               </div>
             </div>
